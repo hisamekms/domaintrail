@@ -10,6 +10,7 @@ export const KIND_LABEL: Record<string, string> = {
     primitive: 'Domain Primitive',
     enum: 'Enum',
     valueObject: 'Value Object',
+    union: 'Union',
     entity: 'Entity',
     aggregate: 'Aggregate',
     event: 'Event',
@@ -24,6 +25,7 @@ export const KIND_GROUPS: { kind: ElementKind; title: string }[] = [
     { kind: 'aggregate', title: '集約' },
     { kind: 'entity', title: 'Entity' },
     { kind: 'valueObject', title: 'Value Object' },
+    { kind: 'union', title: 'Union' },
     { kind: 'primitive', title: 'Domain Primitive' },
     { kind: 'id', title: 'ID' },
     { kind: 'enum', title: 'Enum' },
@@ -67,7 +69,7 @@ export function transitionText(agg: ElementModel, c: CommandModel): string {
 }
 
 /** Kinds that are drawn in the Structure View. */
-export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject';
+export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 
 /** Kinds shown in the Primitives catalog. */
 export const inCatalog = (kind: string): boolean => kind === 'primitive' || kind === 'id' || kind === 'enum';

@@ -117,13 +117,24 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const assets = await loadAssets(options.webDir ?? defaultWebDir());
     const host = options.host ?? '127.0.0.1';
     const allowedHost = hostAllowList(host);
-    const http = createServer((req, res) => {
-        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-        if (pathname === '/api/state') {
+    const http = createServer(async (req, res) => {
+        const url = new URL(req.url ?? '/', 'http://localhost');
+        if (url.pathname === '/api/state') {
             if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
             return send(res, 200, 'application/json', JSON.stringify(session.state));
         }
-        const asset = req.method === 'GET' || req.method === 'HEAD' ? assets.get(pathname) : undefined;
+        // `?contexts=A,B&overview=1`: Structure View of those bounded contexts with their dependencies as stubs
+        if (url.pathname === '/api/focus') {
+            if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
+            const contexts = (url.searchParams.get('contexts') ?? '').split(',').filter(Boolean);
+            try {
+                const graph = await session.focusGraph(contexts, url.searchParams.get('overview') === '1');
+                return graph ? send(res, 200, 'application/json', JSON.stringify(graph)) : send(res, 404, 'text/plain', 'No such contexts');
+            } catch {
+                return send(res, 500, 'text/plain', 'Layout failed');
+            }
+        }
+        const asset = req.method === 'GET' || req.method === 'HEAD' ? assets.get(url.pathname) : undefined;
         if (!asset) return send(res, 404, 'text/plain', 'Not found');
         send(res, 200, asset.type, asset.body);
     });

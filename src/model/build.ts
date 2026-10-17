@@ -9,6 +9,7 @@ import {
     isOwnsField,
     isPrimitiveDecl,
     isReferenceField,
+    isUnionDecl,
     isValueObject,
     type Command,
     type ContextElement,
@@ -20,9 +21,9 @@ import {
 } from '../language/generated/ast.js';
 import { LabelResolver, docComment } from '../core/labels.js';
 import { cardinality } from '../core/types.js';
-import { commandsOf, commonFields, fieldsOf, invariantsOf, primitiveInvariants, statesOf, type FieldLike, type ModelIndex } from '../core/model-index.js';
+import { commandsOf, commonFields, discriminatorOf, fieldsOf, invariantsOf, primitiveInvariants, statesOf, type FieldLike, type ModelIndex } from '../core/model-index.js';
 import { commandId, elementId, stateId } from './ids.js';
-import type { CommandModel, Described, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, StateModel, TermModel, TypeExpr } from './model.js';
+import type { CommandModel, Described, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
 
 export type FileResolver = (uri: string) => string;
 
@@ -62,6 +63,21 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
             base.values = el.values.map((v) => v.name);
             const valueLabels = Object.fromEntries(el.values.filter((v) => v.label).map((v) => [v.name, v.label!]));
             if (Object.keys(valueLabels).length) base.valueLabels = valueLabels;
+        } else if (isUnionDecl(el)) {
+            base.discriminator = discriminatorOf(el);
+            const bound = el.tagType?.ref;
+            if (bound) base.tagType = elementId(bound.$container.name, bound.name);
+            base.variants = el.variants.map((v): VariantModel => {
+                // A variant without a label uses the label of the enum value it stands for.
+                const label = v.label ?? bound?.values.find((x) => x.name === v.name)?.label;
+                return {
+                    name: v.name,
+                    ...optional('label', label),
+                    ...optional('doc', docComment(v)),
+                    fields: fieldsOf(v.members).map(field),
+                    invariants: invariantsOf(v.members).map(invariant),
+                };
+            });
         } else if (isAggregate(el)) {
             base.fields = commonFields(el).map(field);
             base.invariants = invariantsOf(el.members).map(invariant);
@@ -96,6 +112,7 @@ function kindOf(el: ContextElement): ElementKind {
     if (isPrimitiveDecl(el)) return 'primitive';
     if (isEnumDecl(el)) return 'enum';
     if (isValueObject(el)) return 'valueObject';
+    if (isUnionDecl(el)) return 'union';
     if (isEntity(el)) return 'entity';
     if (isAggregate(el)) return 'aggregate';
     if (isEventDecl(el)) return 'event';

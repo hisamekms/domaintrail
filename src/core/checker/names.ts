@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isEnumDecl, type Aggregate } from '../../language/generated/ast.js';
+import { isAggregate, isEnumDecl, isUnionDecl, type Aggregate } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { commandsOf, commonFields, fieldsOf, invariantsOf, statesOf, type ModelIndex } from '../model-index.js';
 
@@ -17,6 +17,12 @@ export function checkNames(index: ModelIndex, sink: DiagnosticSink): void {
             checkAggregate(el, sink);
         } else if (isEnumDecl(el)) {
             unique(el.values, (v) => `Enum value '${v.name}' is declared more than once in '${el.name}'.`, sink);
+        } else if (isUnionDecl(el)) {
+            unique(el.variants, (v) => `Variant '${v.name}' is declared more than once in '${el.name}'.`, sink);
+            for (const v of el.variants) {
+                unique(fieldsOf(v.members), (f) => `Field '${f.name}' is declared more than once in variant '${el.name}.${v.name}'.`, sink);
+                unique(invariantsOf(v.members), (i) => `Invariant '${i.name}' is declared more than once in variant '${el.name}.${v.name}'.`, sink);
+            }
         } else if ('members' in el) {
             const members = el.members;
             unique(fieldsOf(members), (f) => `Field '${f.name}' is declared more than once in '${el.name}'.`, sink);

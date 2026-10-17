@@ -4,29 +4,35 @@ import {
     isIdType,
     isOwnsField,
     isReferenceField,
+    isUnionDecl,
     isValueObject,
     type Aggregate,
     type Entity,
     type OwnsField,
+    type UnionDecl,
     type ValueObject,
 } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
-import { commandsOf, commonFields, fieldsOf, identityField, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
+import { commandsOf, commonFields, fieldsOf, identityField, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
 
-type Owner = Aggregate | Entity | ValueObject;
+type Owner = Aggregate | Entity | ValueObject | UnionDecl;
 
-/** Fields of an element including state-specific fields of aggregates. */
+/** Fields of an element including state-specific fields of aggregates and the fields of every union variant. */
 function allFields(el: Owner): FieldLike[] {
     if (isAggregate(el)) return [...commonFields(el), ...statesOf(el).flatMap((s) => fieldsOf(s.members))];
+    if (isUnionDecl(el)) return variantFields(el);
     return fieldsOf(el.members);
 }
+
+/** Value types that hold fields: value objects and unions. */
+const isValueType = (decl: unknown): decl is ValueObject | UnionDecl => isValueObject(decl) || isUnionDecl(decl);
 
 /**
  * M003 (unique owning aggregate), M004 (no ownership across aggregate boundaries),
  * M005 (reference ID types), M012 (no ownership cycles), M013 (identity fields).
  */
 export function checkStructure(index: ModelIndex, sink: DiagnosticSink): void {
-    const owners: Owner[] = [...index.aggregates, ...index.entities, ...index.valueObjects];
+    const owners: Owner[] = [...index.aggregates, ...index.entities, ...index.valueObjects, ...index.unions];
 
     for (const el of owners) {
         for (const f of allFields(el)) checkFieldKind(el, f, sink);
@@ -44,17 +50,17 @@ function checkFieldKind(owner: Owner, f: FieldLike, sink: DiagnosticSink): void 
         return;
     }
     if (isOwnsField(f)) {
-        if (!decl || (!isEntity(decl) && !isValueObject(decl))) {
+        if (!decl || (!isEntity(decl) && !isValueType(decl))) {
             const what = f.type?.primitive ?? (decl ? `${decl.$type} '${decl.name}'` : undefined);
             if (decl && isAggregate(decl)) {
                 sink.error('M004', `'${owner.name}' cannot own aggregate '${decl.name}'; aggregates are referenced by ID ('references').`, f, 'type');
             } else if (what) {
-                sink.error('M004', `'owns' requires an Entity or Value Object, but '${f.name}' has type ${what}.`, f, 'type');
+                sink.error('M004', `'owns' requires an Entity, Value Object or Union, but '${f.name}' has type ${what}.`, f, 'type');
             }
             return;
         }
-        if (isValueObject(owner) && isEntity(decl)) {
-            sink.error('M004', `Value Object '${owner.name}' cannot own entity '${decl.name}'.`, f, 'type');
+        if (isValueType(owner) && isEntity(decl)) {
+            sink.error('M004', `${isUnionDecl(owner) ? 'Union' : 'Value Object'} '${owner.name}' cannot own entity '${decl.name}'.`, f, 'type');
         }
         if (decl.$container.name !== owner.$container.name && isEntity(decl)) {
             sink.error('M004', `Entity '${decl.$container.name}.${decl.name}' belongs to another context and cannot be owned by '${owner.name}'.`, f, 'type');
@@ -137,7 +143,7 @@ function checkOwningAggregates(index: ModelIndex, sink: DiagnosticSink): void {
                     sites.set(agg, [...(sites.get(agg) ?? []), f]);
                     ownedBy.set(decl, sites);
                 }
-                if (isEntity(decl) || isValueObject(decl)) visit(decl, seen);
+                if (isEntity(decl) || isValueType(decl)) visit(decl, seen);
             }
         };
         visit(agg, new Set());
@@ -168,7 +174,7 @@ function checkCycles(owners: Owner[], sink: DiagnosticSink): void {
         for (const f of allFields(el)) {
             if (isReferenceField(f)) continue;
             const decl = f.type?.decl?.ref;
-            if (!isEntity(decl) && !isValueObject(decl)) continue;
+            if (!isEntity(decl) && !isValueType(decl)) continue;
             if (state.get(decl) === 'visiting') {
                 if (!reported.has(f)) {
                     reported.add(f);

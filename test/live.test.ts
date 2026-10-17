@@ -56,6 +56,20 @@ describe('Live View', () => {
         expect(lines[order.endLine - 1].trim()).toBe('}');
     });
 
+    test('serves the Context Map and focused Structure Views on request', async () => {
+        const state = (await (await fetch(`${server.url}api/state`)).json()) as ViewPayload;
+        expect(state.focusContexts).toEqual(['Billing', 'Sales']);
+        expect(state.contextMap?.edges.map((e) => e.id)).toEqual(['Billing|Sales']);
+        const focus = await fetch(`${server.url}api/focus?contexts=Billing,Unknown&overview=1`);
+        expect(focus.status).toBe(200);
+        const graph = (await focus.json()) as { id: string; nodeLayout: Record<string, unknown> };
+        expect(graph.id).toBe('structure-focus:Billing:overview');
+        expect(Object.keys(graph.nodeLayout)).toContain('Billing.Invoice');
+        expect((await fetch(`${server.url}api/focus?contexts=Common`)).status).toBe(404);
+        const rebound = await fetch(`${server.url}api/focus?contexts=Billing`, { headers: { Host: 'attacker.example' } });
+        expect(rebound.status).toBe(403);
+    });
+
     test('rejects cross-origin WebSocket connections and unexpected Host headers', async () => {
         const wsUrl = server.url.replace('http', 'ws') + 'ws';
         const evil = new WebSocket(wsUrl, { headers: { Origin: 'https://evil.example' } } as never);

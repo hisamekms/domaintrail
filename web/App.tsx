@@ -12,9 +12,10 @@ import { inCatalog, inStructure, nameIn, resolve } from './model-utils';
 import { findShapeForElement, ownerElement, renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
 import { CopyLocation, SourceView, locationOf, type SourceFocus } from './source';
+import { ContextPicker } from './context-picker';
 import { useViewSocket } from './useViewSocket';
 
-type View = { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' } | { kind: 'source' };
+type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' } | { kind: 'source' };
 
 /**
  * Initial zoom never goes below this (in units of normal-size text), so text stays readable;
@@ -39,7 +40,7 @@ function fitReadable(editor: Editor, textScale = 1): void {
 
 const MODE_LABEL: Record<DisplayMode, string> = { ja: '日本語', en: 'English', both: '両方' };
 const viewKey = (v: View): string => (v.kind === 'states' ? `states:${v.aggregateId}` : v.kind);
-const isCanvas = (v: View): boolean => v.kind === 'structure' || v.kind === 'states';
+const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'states';
 
 const STATUS_LABEL = {
     ok: '正常',
@@ -56,6 +57,10 @@ export function App() {
     const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.displayMode', 'both');
     /** Structure View: all fields (detail) or names only in larger text (overview). */
     const [structureMode, setStructureMode] = usePersistentState<'detail' | 'overview'>('domaintrail.structureMode', 'detail');
+    /** Structure View: only these bounded contexts, with their dependencies as stubs (empty = every context). */
+    const [focusContexts, setFocusContexts] = usePersistentState<string[]>('domaintrail.structureFocusContexts', []);
+    /** Context Map: also show shared and ID-only contexts. */
+    const [mapAll, setMapAll] = usePersistentState('domaintrail.contextMapAll', false);
 
     // Layout (remembered per browser)
     const [explorerOpen, setExplorerOpen] = usePersistentState('domaintrail.layout.explorer', true);
@@ -80,16 +85,46 @@ export function App() {
     const lastAggregate = useRef<string | undefined>(undefined);
     if (view.kind === 'states') lastAggregate.current = view.aggregateId;
 
-    const graphFor = (p: typeof current, v: View): LaidOutGraph | null | undefined =>
-        !p || !isCanvas(v)
-            ? null
-            : v.kind === 'structure'
-              ? structureMode === 'overview'
-                  ? p.overview
-                  : p.structure
-              : p.states[(v as { aggregateId: string }).aggregateId];
-    /** Camera key: each view (and each Structure mode) keeps its own camera. */
-    const cameraKey = (v: View): string => (v.kind === 'structure' ? `structure:${structureMode}` : viewKey(v));
+    /** The focused contexts that can still be drawn, in model order. */
+    const focused = useMemo(() => (current?.focusContexts ?? []).filter((c) => focusContexts.includes(c)), [current?.focusContexts, focusContexts]);
+    const focusKey = focused.length ? `${focused.join('+')}|${structureMode}` : '';
+    /** The focused Structure View is laid out on request by the server. */
+    const [focusGraph, setFocusGraph] = useState<{ key: string; graph: LaidOutGraph } | null>(null);
+    useEffect(() => {
+        if (!focusKey || view.kind !== 'structure') return;
+        let cancelled = false;
+        const params = new URLSearchParams({ contexts: focused.join(','), overview: structureMode === 'overview' ? '1' : '0' });
+        fetch(`/api/focus?${params}`)
+            .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
+            .then((graph) => {
+                if (!cancelled && graph) setFocusGraph({ key: focusKey, graph });
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+        // re-fetch when the model changes, not on every diagnostics update
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focusKey, current?.modelVersion, view.kind]);
+
+    const graphFor = (p: typeof current, v: View): LaidOutGraph | null | undefined => {
+        if (!p || !isCanvas(v)) return null;
+        if (v.kind === 'contextMap') return mapAll ? p.contextMapAll : p.contextMap;
+        if (v.kind === 'structure') {
+            if (focusKey) return focusGraph?.key === focusKey ? focusGraph.graph : undefined;
+            return structureMode === 'overview' ? p.overview : p.structure;
+        }
+        return p.states[(v as { aggregateId: string }).aggregateId];
+    };
+    /** Camera key: each view (and each Structure mode and focus) keeps its own camera. */
+    const cameraKey = (v: View): string =>
+        v.kind === 'structure'
+            ? focusKey
+                ? `structure:focus:${focusKey}`
+                : `structure:${structureMode}`
+            : v.kind === 'contextMap'
+              ? `contextMap:${mapAll}`
+              : viewKey(v);
     const graph = graphFor(current, view);
 
     // Draw the current graph; keep the camera of each view, fit only the first time a view is shown.
@@ -99,11 +134,13 @@ export function App() {
         if (shownView.current && shownView.current !== key) cameras.current.set(shownView.current, editor.getCamera());
         const switched = shownView.current !== key;
         if (!graph) {
+            // not marked as shown, so that the graph is fitted once it arrives (focused views load on request)
             withWriteAccess(editor, () => editor.deleteShapes([...editor.getCurrentPageShapeIds()]));
-            shownView.current = key;
             return;
         }
-        renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: graphFor(previous, view) ?? undefined, mode });
+        // ghosts of removed elements need the previous version of the same graph; focused graphs are not kept
+        const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(previous, view) ?? undefined);
+        renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode });
         if (switched) {
             const saved = cameras.current.get(key);
             if (saved) editor.setCamera(saved);
@@ -112,7 +149,7 @@ export function App() {
         }
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, previous, view, mode, structureMode]);
+    }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll]);
 
     // If the aggregate of the State View disappears, fall back to the Structure View.
     useEffect(() => {
@@ -168,7 +205,9 @@ export function App() {
     const reveal = useCallback(
         (target: RevealTarget, id: string) => {
             let next: View;
-            if (target === 'states') {
+            if (target === 'contextMap') {
+                next = { kind: 'contextMap' };
+            } else if (target === 'states') {
                 const owner = ownerElement(id);
                 next = { kind: 'states', aggregateId: model?.elements[owner]?.kind === 'aggregate' ? owner : id };
             } else {
@@ -298,7 +337,7 @@ export function App() {
                 )}
                 <section className="center">
                     <div className="view-tabs" role="tablist">
-                        {(['structure', 'states', 'primitives', 'source'] as const).map((k) => (
+                        {(['contextMap', 'structure', 'states', 'primitives', 'source'] as const).map((k) => (
                             <button
                                 key={k}
                                 role="tab"
@@ -309,7 +348,7 @@ export function App() {
                                     setView(k === 'states' ? { kind: 'states', aggregateId: lastAggregate.current ?? aggregates[0]?.id ?? '' } : { kind: k })
                                 }
                             >
-                                {{ structure: 'Structure', states: 'States', primitives: 'Primitives', source: 'Source' }[k]}
+                                {{ contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives', source: 'Source' }[k]}
                             </button>
                         ))}
                         <div className="view-toolbar">
@@ -321,6 +360,21 @@ export function App() {
                                         </option>
                                     ))}
                                 </select>
+                            )}
+                            {view.kind === 'contextMap' && (
+                                <label className="check small">
+                                    <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
+                                    共有・外部の BC も表示
+                                </label>
+                            )}
+                            {view.kind === 'structure' && (
+                                <ContextPicker
+                                    contexts={current?.focusContexts ?? []}
+                                    labels={model?.contextLabels ?? {}}
+                                    selected={focused}
+                                    mode={mode}
+                                    onChange={setFocusContexts}
+                                />
                             )}
                             {view.kind === 'structure' && (
                                 <div className="segmented small" role="group" aria-label="Structure の表示">
@@ -342,9 +396,11 @@ export function App() {
                     </div>
                     <div className="view-area">
                         <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
-                        {graph && isCanvas(view) && <Legend view={view.kind === 'states' ? 'states' : 'structure'} />}
+                        {graph && isCanvas(view) && <Legend view={view.kind === 'states' ? 'states' : view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'} />}
                         {current && !graph && isCanvas(view) && (
-                            <div className="empty">{current.status === 'empty' ? '.dt ファイルがありません' : '表示できる図がありません'}</div>
+                            <div className="empty">
+                                {current.status === 'empty' ? '.dt ファイルがありません' : focusKey && view.kind === 'structure' ? '読み込み中…' : '表示できる図がありません'}
+                            </div>
                         )}
                         {view.kind === 'source' && current && (
                             <SourceView
@@ -383,6 +439,10 @@ export function App() {
                                 onTab={setInspectorTab}
                                 onSelect={(id) => select(id)}
                                 onReveal={reveal}
+                                onFocusContext={(ctx) => {
+                                    setFocusContexts([ctx]);
+                                    setView({ kind: 'structure' });
+                                }}
                                 canBack={history.index > 0}
                                 canForward={history.index < history.stack.length - 1}
                                 onBack={() => goHistory(-1)}

@@ -10,10 +10,16 @@ export type NodeKind =
     | 'aggregate'
     | 'entity'
     | 'valueObject'
+    | 'union'
+    /** An element of another context, shown by name only (focused Structure View). */
+    | 'stub'
+    /** A bounded context as one node (Context Map). */
+    | 'boundedContext'
     | 'state'
     | 'initial';
 
-export type EdgeKind = 'owns' | 'value' | 'references' | 'transition';
+/** `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). */
+export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn';
 
 /** How names are shown in the Live View. */
 export type DisplayMode = 'ja' | 'en' | 'both';

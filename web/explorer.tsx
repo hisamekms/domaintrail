@@ -46,7 +46,10 @@ export function Explorer(props: ExplorerProps) {
     for (const id of props.diff.changed) mark(id, { change: 'changed' });
 
     const selectedRef = useRef<HTMLDivElement | null>(null);
-    useEffect(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), [props.selected]);
+    // braces: scrollIntoView returns a Promise in recent browsers, and an effect must not return anything but a cleanup
+    useEffect(() => {
+        selectedRef.current?.scrollIntoView({ block: 'nearest' });
+    }, [props.selected]);
 
     const item = (id: string, text: string, depth: number, extra?: { toggle?: () => void; open?: boolean; kind?: string }) => {
         const m = marks.get(id);

@@ -12,7 +12,7 @@ export interface Usage {
 type Named = { name: string; label?: string };
 const englishName = (x: Named): string => x.name;
 
-/** Where a type is used: fields of elements and states, and command parameters. `name` formats each part. */
+/** Where a type is used: fields of elements, states and union variants, and command parameters. `name` formats each part. */
 export function usagesOf(model: DomainModel, id: string, name: (x: Named) => string = englishName): Usage[] {
     const uses: Usage[] = [];
     const typed = (f: FieldModel) => f.type.kind === 'ref' && f.type.ref === id;
@@ -21,6 +21,11 @@ export function usagesOf(model: DomainModel, id: string, name: (x: Named) => str
         for (const s of el.states ?? []) {
             for (const f of s.fields.filter(typed)) {
                 uses.push({ key: `${s.id}.${f.name}`, target: s.id, context: el.context, text: `${name(el)}.${name(s)}.${name(f)}` });
+            }
+        }
+        for (const v of el.variants ?? []) {
+            for (const f of v.fields.filter(typed)) {
+                uses.push({ key: `${el.id}.${v.name}.${f.name}`, target: el.id, context: el.context, text: `${name(el)}.${name(v)}.${name(f)}` });
             }
         }
         for (const c of el.commands ?? []) {

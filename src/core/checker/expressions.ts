@@ -18,6 +18,7 @@ import {
     isQuantifierExpr,
     isEntity,
     isStringLiteral,
+    isUnionDecl,
     isValueObject,
     type Aggregate,
     type DataMember,
@@ -25,11 +26,13 @@ import {
     type Expression,
     type Invariant,
     type MatchesExpr,
+    type UnionDecl,
 } from '../../language/generated/ast.js';
 import { GrammarUtils } from 'langium';
 import type { DiagnosticSink } from '../diagnostics.js';
 import {
     commonFields,
+    discriminatorOf,
     fieldsOf,
     invariantsOf,
     primitiveInvariants,
@@ -64,10 +67,25 @@ export function checkInvariants(index: ModelIndex, sink: DiagnosticSink): void {
             for (const inv of invariantsOf(members)) {
                 checkInvariant(inv, { ctx, fields, stateOnly: new Map(), lambdas: [], present: new Set() }, index, sink);
             }
+        } else if (isUnionDecl(el)) {
+            // Variant invariants see the fields of their own variant.
+            for (const v of el.variants) {
+                const fields = new Map(fieldsOf(v.members).map((f) => [f.name, f]));
+                for (const inv of invariantsOf(v.members)) {
+                    checkInvariant(inv, { ctx, fields, stateOnly: new Map(), lambdas: [], present: new Set() }, index, sink);
+                }
+            }
         } else if (isIdType(el) || isPrimitiveDecl(el)) {
             checkPrimitive(el, ctx, index, sink);
         }
     }
+}
+
+/** Type of a union's discriminator and of its tags: the bound enum, or the union's own tag type. */
+function tagOf(u: UnionDecl): Ty {
+    const bound = u.tagType?.ref;
+    if (u.tagType && !bound) return ERROR; // unresolved, reported as M001
+    return bound ? { k: 'enum', decl: bound } : { k: 'tag', decl: u };
 }
 
 /** Domain primitive invariants see a single name, `value`, of the base primitive type. */
@@ -131,7 +149,7 @@ class ExprChecker {
 
     check(e: Expression, scope: Scope): Ty {
         const t = this.infer(e, scope);
-        if (t.k === 'enumType' || t.k === 'ctx') {
+        if (t.k === 'enumType' || t.k === 'unionType' || t.k === 'ctx') {
             this.sink.error('M009', `'${showType(t)}' is not a value.`, e);
             return ERROR;
         }
@@ -246,8 +264,9 @@ class ExprChecker {
         }
         const field = scope.fields.get(name);
         if (field) return narrow(memberType(field), name, scope);
-        const enumDecl = this.index.lookupVisible(scope.ctx, name);
-        if (enumDecl && isEnumDecl(enumDecl)) return { k: 'enumType', decl: enumDecl };
+        const decl = this.index.lookupVisible(scope.ctx, name);
+        if (decl && isEnumDecl(decl)) return { k: 'enumType', decl };
+        if (decl && isUnionDecl(decl)) return { k: 'unionType', decl };
         if (this.index.contextNames.includes(name)) return { k: 'ctx', name };
         const states = scope.stateOnly.get(name);
         if (states) {
@@ -268,13 +287,33 @@ class ExprChecker {
             case 'ctx': {
                 const el = this.index.lookup(`${recv.name}.${m}`);
                 if (el && isEnumDecl(el)) return { k: 'enumType', decl: el };
-                this.sink.error('M001', `Context '${recv.name}' has no enum named '${m}'.`, e, 'member');
+                if (el && isUnionDecl(el)) return { k: 'unionType', decl: el };
+                this.sink.error('M001', `Context '${recv.name}' has no enum or union named '${m}'.`, e, 'member');
                 return ERROR;
             }
             case 'enumType':
                 if (recv.decl.values.some((v) => v.name === m)) return { k: 'enum', decl: recv.decl as EnumDecl };
                 this.sink.error('M001', `Enum '${recv.decl.name}' has no value '${m}'.`, e, 'member');
                 return ERROR;
+            case 'unionType':
+                if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
+                this.sink.error('M001', `Union '${recv.decl.name}' has no variant '${m}'.`, e, 'member');
+                return ERROR;
+            case 'union': {
+                if (m === discriminatorOf(recv.decl)) return tagOf(recv.decl);
+                const variants = recv.decl.variants.filter((v) => fieldsOf(v.members).some((f) => f.name === m)).map((v) => v.name);
+                if (variants.length) {
+                    this.sink.error(
+                        'M009',
+                        `'${m}' exists only in variant ${variants.map((v) => `'${v}'`).join(', ')} of union '${recv.decl.name}'; only '${discriminatorOf(recv.decl)}' is accessible from outside.`,
+                        e,
+                        'member',
+                    );
+                } else {
+                    this.sink.error('M001', `Union '${recv.decl.name}' has no field '${m}'.`, e, 'member');
+                }
+                return ERROR;
+            }
             case 'struct': {
                 const f = fieldsOf(recv.decl.members).find((x) => x.name === m);
                 if (f) return narrow(memberType(f), pathOf(e) ?? '', scope);

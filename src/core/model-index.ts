@@ -9,6 +9,7 @@ import {
     isInvariant,
     isPrimitiveDecl,
     isState,
+    isUnionDecl,
     isValueObject,
     type Aggregate,
     type Command,
@@ -28,6 +29,7 @@ import {
     type PrimitiveDecl,
     type ReferenceField,
     type State,
+    type UnionDecl,
     type ValueObject,
 } from '../language/generated/ast.js';
 
@@ -89,6 +91,9 @@ export class ModelIndex {
     get aggregates(): Aggregate[] {
         return this.elements.filter(isAggregate);
     }
+    get unions(): UnionDecl[] {
+        return this.elements.filter(isUnionDecl);
+    }
     get entities(): Entity[] {
         return this.elements.filter(isEntity);
     }
@@ -123,6 +128,14 @@ export const commonFields = (agg: Aggregate): FieldLike[] =>
 
 export const statesOf = (agg: Aggregate): State[] => agg.members.filter(isState);
 export const commandsOf = (agg: Aggregate): Command[] => agg.members.filter(isCommand);
+
+/** Discriminator property of a union declared without `by`. */
+export const DEFAULT_DISCRIMINATOR = 'kind';
+
+export const discriminatorOf = (u: UnionDecl): string => u.discriminator ?? DEFAULT_DISCRIMINATOR;
+
+/** Fields of every variant of a union. */
+export const variantFields = (u: UnionDecl): FieldLike[] => u.variants.flatMap((v) => fieldsOf(v.members));
 
 export type DomainPrimitive = IdType | PrimitiveDecl;
 

@@ -1,5 +1,6 @@
-import type { CommandModel, DomainModel, ElementModel, FieldModel, TypeExpr } from '../model/model.js';
-import { elementList } from '../model/model.js';
+import type { CommandModel, DomainModel, ElementModel, FieldModel, TypeExpr, VariantModel } from '../model/model.js';
+import { contextDependencies, representative, supportingContexts } from '../model/dependencies.js';
+import { allFieldsOf, elementList } from '../model/model.js';
 import {
     CHAR_WIDTH,
     DISPLAY_MODES,
@@ -25,7 +26,16 @@ const STEREOTYPES: Partial<Record<ElementModel['kind'], string>> = {
     aggregate: '«aggregate root»',
     entity: '«entity»',
     valueObject: '«value object»',
+    union: '«union»',
 };
+
+/** Indent of variant fields under their variant row (no-break spaces, which HTML does not collapse). */
+export const VARIANT_INDENT = '\u00a0\u00a0';
+
+/** Element kinds drawn as nodes in the Structure View. */
+const STRUCTURE_KINDS = new Set<ElementModel['kind']>(['aggregate', 'entity', 'valueObject', 'union']);
+/** Value types and entities: what a field can hold inside an aggregate. */
+const HELD_KINDS = new Set<ElementModel['kind']>(['entity', 'valueObject', 'union']);
 
 /** Type name as written in `ctx`: own and shared-context types by simple name, others qualified. */
 /** Japanese names of built-in types, used in the 日本語 display mode. */
@@ -57,8 +67,8 @@ export function named(name: string, label: string | undefined, both = (l: string
 const lookupLabel = (model: DomainModel, qname: string): string | undefined => model.elements[qname]?.label;
 
 /** A field row in every display mode: key `◆ 明細` / `◆ items`, value `注文明細[0..*]` / `OrderItem[0..*]`. */
-export function fieldLine(f: FieldModel, ctx: string, model: DomainModel): GraphLine {
-    const marker = f.kind === 'owns' ? '◆ ' : f.kind === 'references' ? '→ ' : '';
+export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent = ''): GraphLine {
+    const marker = indent + (f.kind === 'owns' ? '◆ ' : f.kind === 'references' ? '→ ' : '');
     const en = typeText(f.type, ctx, model.sharedContexts);
     const ja = f.type.kind === 'ref' ? (lookupLabel(model, f.type.ref) ?? en) : PRIMITIVE_JA[f.type.name];
     return {
@@ -87,7 +97,7 @@ function bodyUnits(lines: GraphLine[]): number {
     );
 }
 
-function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphNode {
+export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphNode {
     const longest = Math.max(maxUnits(n.label) + 2, n.stereotype ? textUnits(n.stereotype) : 0, bodyUnits(n.lines));
     return {
         ...n,
@@ -103,20 +113,26 @@ function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphNode {
  */
 export const STRUCTURE_OVERVIEW_GRAPH_ID = 'structure-overview';
 
+/** Structure View of some bounded contexts, with the elements they depend on and that depend on them as stubs. */
+export const focusGraphId = (contexts: readonly string[], overview = false): string =>
+    `structure-focus:${[...contexts].sort().join('+')}${overview ? ':overview' : ''}`;
+
 /**
  * Structure View. With `overview`, nodes show only their names (no field rows) in larger text,
- * to see the whole model at a glance.
+ * to see the whole model at a glance. With `focus`, only those contexts are drawn (see `focusStubs`).
  */
-export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean } = {}): Graph {
+export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean; focus?: readonly string[] } = {}): Graph {
     const scale = opts.overview ? OVERVIEW_TEXT_SCALE : 1;
     const elements = elementList(model);
-    const shown = elements.filter((e) => e.kind === 'aggregate' || e.kind === 'entity' || e.kind === 'valueObject');
+    const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
+    const shown = elements.filter((e) => STRUCTURE_KINDS.has(e.kind) && (!focus || focus.has(e.context)));
     const byId = new Map(elements.map((e) => [e.id, e]));
     const owners = owningAggregates(shown, byId);
+    const stubs = focus ? focusStubs(model, focus, new Set(shown.map((e) => e.id))) : undefined;
 
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
-    const usedContexts = new Set(shown.map((e) => e.context));
+    const usedContexts = new Set([...shown, ...(stubs?.elements ?? [])].map((e) => e.context));
     for (const ctx of model.contexts) {
         if (!usedContexts.has(ctx)) continue;
         const shared = model.sharedContexts.includes(ctx);
@@ -140,6 +156,13 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
         }
         const owner = el.kind === 'aggregate' ? el.id : soleOwner(owners.get(el.id), el.context);
         const lines = opts.overview ? [] : el.fields.map((f) => fieldLine(f, el.context, model));
+        if (!opts.overview && el.kind === 'union') {
+            // One row per variant (the discriminator value), followed by its fields.
+            for (const v of el.variants ?? []) {
+                lines.push({ key: named(`${el.discriminator}: ${v.name}`, v.label && `${v.label}`, (l, n) => `${l} (${n})`) });
+                lines.push(...v.fields.map((f) => fieldLine(f, el.context, model, VARIANT_INDENT)));
+            }
+        }
         if (!opts.overview && el.kind === 'aggregate' && el.states?.length) {
             const en = el.states.map((s) => s.name).join(' | ');
             const ja = el.states.map((s) => s.label ?? s.name).join(' | ');
@@ -157,34 +180,101 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             }, scale),
         );
 
-        const fields = [...el.fields, ...(el.states ?? []).flatMap((s) => s.fields)];
+        const fields: [FieldModel, VariantModel | undefined][] = [
+            ...[...el.fields, ...(el.states ?? []).flatMap((s) => s.fields)].map((f): [FieldModel, undefined] => [f, undefined]),
+            ...(el.variants ?? []).flatMap((v) => v.fields.map((f): [FieldModel, VariantModel] => [f, v])),
+        ];
         const seen = new Set<string>();
-        for (const f of fields) {
-            const edge = fieldEdge(el, f, byId);
+        for (const [f, variant] of fields) {
+            const edge = fieldEdge(el, f, byId, variant);
+            // in a focused view, dependencies between contexts are drawn from the context dependencies instead
+            if (edge && focus && byId.get(edge.target)?.context !== el.context) continue;
             if (edge && !seen.has(edge.id)) {
                 seen.add(edge.id);
                 edges.push(edge);
             }
         }
     }
+    if (stubs) {
+        for (const el of stubs.elements) {
+            nodes.push(
+                sized({ id: el.id, kind: 'stub', label: named(el.name, el.label), stereotype: STUB_STEREOTYPES[el.kind], lines: [], parent: el.context, elementId: el.id }, scale),
+            );
+        }
+        edges.push(...stubs.edges);
+        const id = focusGraphId(opts.focus!, opts.overview);
+        return opts.overview ? { id, nodes, edges, textScale: scale } : { id, nodes, edges };
+    }
     return opts.overview ? { id: STRUCTURE_OVERVIEW_GRAPH_ID, nodes, edges, textScale: scale } : { id: STRUCTURE_GRAPH_ID, nodes, edges };
 }
 
-function fieldEdge(el: ElementModel, f: FieldModel, byId: Map<string, ElementModel>): GraphEdge | undefined {
+const STUB_STEREOTYPES: Record<ElementModel['kind'], string> = {
+    aggregate: '«aggregate»',
+    entity: '«entity»',
+    valueObject: '«value object»',
+    union: '«union»',
+    enum: '«enum»',
+    primitive: '«primitive»',
+    id: '«id»',
+    event: '«event»',
+    error: '«error»',
+};
+
+/**
+ * Dependencies of the focused contexts, both ways: elements of other contexts that they use, and elements of other
+ * contexts that use them, drawn as stubs (name only) in their own context. Dependencies between two focused contexts
+ * are drawn between their elements. An ID stands for the aggregate or entity it identifies, and an element that the
+ * Structure View does not draw (an enum, a domain primitive) appears as a stub. Shared and ID-only contexts are left
+ * out, and so are uses inside events and errors (they repeat the aggregate's fields). One edge per pair of elements,
+ * labeled with the fields.
+ */
+function focusStubs(model: DomainModel, focus: ReadonlySet<string>, shownIds: Set<string>): { elements: ElementModel[]; edges: GraphEdge[] } {
+    const hidden = supportingContexts(model);
+    const stubs = new Map<string, ElementModel>();
+    const pairs = new Map<string, { source: string; target: string; type: boolean; paths: string[] }>();
+    for (const d of contextDependencies(model)) {
+        if ((!focus.has(d.from) && !focus.has(d.to)) || hidden.has(d.from) || hidden.has(d.to)) continue;
+        const source = model.elements[d.source];
+        const target = representative(model, d.target);
+        if (!source || !target || source.kind === 'event' || source.kind === 'error') continue;
+        for (const el of [source, target]) if (!shownIds.has(el.id)) stubs.set(el.id, el);
+        const key = `${source.id}=>${target.id}`;
+        const pair = pairs.get(key) ?? { source: source.id, target: target.id, type: false, paths: [] };
+        pair.type ||= d.kind === 'type';
+        if (!pair.paths.includes(d.path)) pair.paths.push(d.path);
+        pairs.set(key, pair);
+    }
+    const edges = [...pairs.entries()].map(([id, p]): GraphEdge => {
+        const shown = p.paths.slice(0, 2).join(', ');
+        const more = p.paths.length - 2;
+        return {
+            id,
+            kind: p.type ? 'value' : 'references',
+            source: p.source,
+            target: p.target,
+            label: { en: more > 0 ? `${shown} +${more}` : shown, ja: more > 0 ? `${shown} 他${more}` : shown, both: more > 0 ? `${shown} 他${more}` : shown },
+        };
+    });
+    return { elements: [...stubs.values()], edges };
+}
+
+/** Edge for a field that holds or references another element; fields of a union variant are prefixed with the variant. */
+function fieldEdge(el: ElementModel, f: FieldModel, byId: Map<string, ElementModel>, variant?: VariantModel): GraphEdge | undefined {
+    const id = variant ? `${el.id}.${variant.name}.${f.name}` : `${el.id}.${f.name}`;
+    const label = (suffix = ''): Texts => {
+        const field = named(f.name, f.label, (l, n) => `${l} ${n}`, suffix);
+        if (!variant) return field;
+        const v = named(variant.name, variant.label, (l, n) => `${l} ${n}`);
+        return { en: `${v.en}.${field.en}`, ja: `${v.ja}.${field.ja}`, both: `${v.both}.${field.both}` };
+    };
     if (f.kind === 'references') {
         if (!f.target || byId.get(f.target)?.kind !== 'aggregate') return undefined;
-        return { id: `${el.id}.${f.name}`, kind: 'references', source: el.id, target: f.target, label: named(f.name, f.label, (l, n) => `${l} ${n}`) };
+        return { id, kind: 'references', source: el.id, target: f.target, label: label() };
     }
     if (f.type.kind !== 'ref') return undefined;
     const target = byId.get(f.type.ref);
-    if (!target || (target.kind !== 'entity' && target.kind !== 'valueObject')) return undefined;
-    return {
-        id: `${el.id}.${f.name}`,
-        kind: f.kind === 'owns' ? 'owns' : 'value',
-        source: el.id,
-        target: target.id,
-        label: named(f.name, f.label, (l, n) => `${l} ${n}`, f.multiplicity),
-    };
+    if (!target || !HELD_KINDS.has(target.kind)) return undefined;
+    return { id, kind: f.kind === 'owns' ? 'owns' : 'value', source: el.id, target: target.id, label: label(f.multiplicity) };
 }
 
 /** Aggregates that (transitively) hold each entity / value object. */
@@ -197,10 +287,10 @@ function owningAggregates(shown: ElementModel[], byId: Map<string, ElementModel>
             const el = stack.pop()!;
             if (seen.has(el.id)) continue;
             seen.add(el.id);
-            for (const f of [...el.fields, ...(el.states ?? []).flatMap((s) => s.fields)]) {
+            for (const f of allFieldsOf(el)) {
                 if (f.kind === 'references' || f.type.kind !== 'ref') continue;
                 const t = byId.get(f.type.ref);
-                if (!t || (t.kind !== 'entity' && t.kind !== 'valueObject')) continue;
+                if (!t || !HELD_KINDS.has(t.kind)) continue;
                 const set = owners.get(t.id) ?? new Set<string>();
                 set.add(agg.id);
                 owners.set(t.id, set);

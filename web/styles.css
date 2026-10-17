@@ -206,6 +206,10 @@ code.block {
     background: #e3f6ec;
     color: #1a7a45;
 }
+.kind-union {
+    background: #e0f4f2;
+    color: #146b63;
+}
 .kind-event {
     background: #fff1d6;
     color: #8a5a00;
@@ -330,6 +334,24 @@ code.block {
     border-color: #2f9a5f;
     background: #f1fbf5;
     border-radius: 16px;
+}
+.dn-union {
+    border-color: #2f9a8a;
+    border-style: dashed;
+    background: #f0faf8;
+    border-radius: 16px;
+}
+.dn-boundedContext {
+    border-color: #4a37b8;
+    border-width: 2px;
+    background: #faf9ff;
+    border-radius: 10px;
+}
+.dn-stub {
+    border-color: #9a9aac;
+    border-style: dotted;
+    background: #f6f6f9;
+    opacity: 0.85;
 }
 .dn-state {
     border-color: #8a4fd6;
@@ -459,6 +481,17 @@ code.block {
 }
 .de-references .de-head {
     fill: #3a6fd8;
+}
+.de-dependsOn .de-line {
+    stroke: #4a37b8;
+    stroke-width: 2;
+}
+.de-dependsOn .de-head {
+    fill: #4a37b8;
+}
+.de-dependsOn .de-label {
+    fill: #4a37b8;
+    font-weight: 600;
 }
 .de-transition .de-line {
     stroke: #8a4fd6;
@@ -1029,6 +1062,10 @@ select,
     background: #2f9a5f;
     border-radius: 50%;
 }
+.dot-union {
+    background: #2f9a8a;
+    border-radius: 50%;
+}
 .dot-primitive,
 .dot-id,
 .dot-enum {
@@ -1286,4 +1323,61 @@ select,
 }
 .view-toolbar .segmented button:last-child {
     border-right: none;
+}
+
+.check {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+details.deps > summary {
+    cursor: pointer;
+    padding: 2px 0;
+}
+details.deps > .sub {
+    padding-left: 16px;
+}
+.dep-kind {
+    margin-left: 6px;
+    font-size: 11px;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+.dep-id {
+    background: #e0f0ff;
+    color: #1c5fa8;
+}
+.dep-type {
+    background: #e8e3ff;
+    color: #4a37b8;
+}
+
+.context-picker {
+    position: relative;
+}
+.context-picker-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 20;
+    min-width: 240px;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 8px;
+    background: #fff;
+    border: 1px solid #d8d8e0;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.context-picker-menu .check {
+    padding: 2px 4px;
+    white-space: nowrap;
+}
+.context-picker-actions {
+    border-top: 1px solid #ececf2;
+    margin-top: 4px;
+    padding-top: 6px;
 }

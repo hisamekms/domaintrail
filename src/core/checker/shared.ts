@@ -1,14 +1,14 @@
 import { AstUtils, type AstNode } from 'langium';
-import { isContext, isEnumDecl, isPrimitiveDecl, isTypeRef, isValueObject, type ContextElement } from '../../language/generated/ast.js';
+import { isContext, isEnumDecl, isPrimitiveDecl, isTypeRef, isUnionDecl, isValueObject, type ContextElement } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import type { ModelIndex } from '../model-index.js';
 
-const ALLOWED = 'domain primitives, enums, value objects and terms';
+const ALLOWED = 'domain primitives, enums, value objects, unions and terms';
 
 /**
  * M014: shared contexts (shared kernel).
  *   - every fragment of a context agrees on `shared`
- *   - a shared context holds only value types (domain primitives, enums, value objects) and terms
+ *   - a shared context holds only value types (domain primitives, enums, value objects, unions) and terms
  *   - a shared context depends only on shared contexts
  *   - a simple name is defined by at most one shared context (error), and shadowing it in a context is a warning
  */
@@ -27,7 +27,7 @@ export function checkShared(index: ModelIndex, sink: DiagnosticSink): void {
     for (const el of index.elements) {
         const ctx = el.$container.name;
         if (!shared.has(ctx)) continue;
-        if (!isPrimitiveDecl(el) && !isEnumDecl(el) && !isValueObject(el)) {
+        if (!isPrimitiveDecl(el) && !isEnumDecl(el) && !isValueObject(el) && !isUnionDecl(el)) {
             sink.error('M014', `Shared context '${ctx}' can only contain ${ALLOWED}; found ${kind(el)} '${el.name}'.`, el, 'name');
         }
         for (const ref of AstUtils.streamAllContents(el).filter(isTypeRef)) {
