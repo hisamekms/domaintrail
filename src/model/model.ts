@@ -5,7 +5,7 @@
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
-export type ElementKind = 'id' | 'primitive' | 'enum' | 'valueObject' | 'entity' | 'aggregate' | 'event' | 'error';
+export type ElementKind = 'id' | 'primitive' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error';
 
 export type TypeExpr =
     | { kind: 'primitive'; name: PrimitiveName }
@@ -57,6 +57,13 @@ export interface StateModel extends Described {
     location: Location;
 }
 
+/** A variant of a union: its name is the discriminator value. */
+export interface VariantModel extends Described {
+    name: string;
+    fields: FieldModel[];
+    invariants: InvariantModel[];
+}
+
 export interface CommandModel extends Described {
     id: string;
     name: string;
@@ -85,6 +92,10 @@ export interface ElementModel extends Described {
     valueLabels?: Record<string, string>;
     fields: FieldModel[];
     invariants: InvariantModel[];
+    /** Unions only: the discriminator property, the enum it is bound to (qualified name), and the variants. */
+    discriminator?: string;
+    tagType?: string;
+    variants?: VariantModel[];
     /** Aggregates only. */
     states?: StateModel[];
     commands?: CommandModel[];
@@ -112,3 +123,10 @@ export const elementsIn = (model: DomainModel, ctx: string): ElementModel[] =>
     Object.values(model.elements).filter((e) => e.context === ctx);
 
 export const elementList = (model: DomainModel): ElementModel[] => Object.values(model.elements);
+
+/** Fields of an element, including state-specific fields of aggregates and the fields of every union variant. */
+export const allFieldsOf = (el: ElementModel): FieldModel[] => [
+    ...el.fields,
+    ...(el.states ?? []).flatMap((s) => s.fields),
+    ...(el.variants ?? []).flatMap((v) => v.fields),
+];

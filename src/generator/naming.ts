@@ -33,6 +33,7 @@ const KIND_LABELS: Record<string, string> = {
     PrimitiveDecl: 'primitive',
     EnumDecl: 'enum',
     ValueObject: 'value object',
+    UnionDecl: 'union',
     Entity: 'entity',
     EventDecl: 'event',
     ErrorDecl: 'error',

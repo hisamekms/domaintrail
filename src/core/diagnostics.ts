@@ -4,13 +4,13 @@ import { elementIdOf } from '../model/ids.js';
 export type Severity = 'error' | 'warning';
 
 /**
- * Rule IDs from the spec (M001–M012), plus M013 (identity field), M014 (shared contexts), L001–L003 (Japanese names)
+ * Rule IDs from the spec (M001–M012), plus M013 (identity field), M014 (shared contexts), M015 (unions), L001–L003 (Japanese names)
  * and SYNTAX for lexer/parser errors.
  */
 export type RuleId =
     | 'SYNTAX'
     | 'M001' | 'M002' | 'M003' | 'M004' | 'M005' | 'M006'
-    | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014'
+    | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015'
     | 'L001' | 'L002' | 'L003';
 
 export interface Position {

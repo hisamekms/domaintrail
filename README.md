@@ -131,6 +131,30 @@ enum CancelReason { Requested Other }                       // a closed set of l
   `Make<Name> = (value) => Result<Name, Invalid<Name>>` (just `(value) => Name` without invariants) to implement by hand,
   e.g. `examples/shop/src/primitives.ts`.
 
+### Unions
+
+A union is a value whose shape depends on a kind fixed when it is made: a tagged union of variants. Use a union for a
+classification that never changes, and aggregate states for a lifecycle that commands move through
+(see [ADR 0005](docs/adr/0005-unions.md)).
+
+```text
+union Actor "行為者" {                                      // discriminator `kind` by default
+  INTERNAL_USER "社内ユーザー" { userId: UserId }
+  EXTERNAL_PARTY "社外" { name: ActorName  contractorId: ContractorId? }
+}
+union SpecificationDetails by type: ProcessType {          // `by name`, optionally bound to an enum
+  DELIVERY { details: DeliverySpecification }              // exactly the enum's values (M015)
+  TRANSPORT { details: TransportSpecification }
+}
+```
+
+- A union is a value type: usable like a value object (fields, `owns`, parameters, payloads, shared contexts).
+  Variants hold value fields and invariants (seeing their own fields); entities and aggregates are not allowed.
+- In invariants, `actor.kind` compares with `Actor.EXTERNAL_PARTY` (or with the bound enum's values); variant fields
+  are not accessible from outside the union.
+- Generated: `export type Actor = { readonly kind: 'INTERNAL_USER'; readonly userId: UserId } | { ... }`.
+  A variant without a label takes the label of its enum value.
+
 ### Shared contexts
 
 ```text
@@ -147,7 +171,7 @@ context Sales {
 
 - Elements of a shared context are usable by simple name from every context (`Common.Money` also works).
   A context's own element with the same name wins, with an M014 warning.
-- A shared context holds only domain primitives, enums, value objects and terms, and depends only on shared contexts.
+- A shared context holds only domain primitives, enums, value objects, unions and terms, and depends only on shared contexts.
 - Its `terms` apply to fields of every context that has no term of its own for the name.
 
 ### Japanese names (表示名)
@@ -197,6 +221,7 @@ context Sales "販売" {
 | M012 | the ownership graph has no cycles |
 | M013 | aggregates and entities have an `id` field of their own ID type |
 | M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
+| M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -226,7 +251,13 @@ The screen is laid out like an IDE; every pane can be toggled from the header an
   their states and commands — and the `.dt` files with error/warning counts. Click selects; double-click opens the
   item in the view that suits it.
 - **Main (center)**: tabs with a view-specific toolbar.
-  - *Structure*: contexts, aggregate boundaries, entities, value objects, `owns` / `references`.
+  - *Context Map*: one node per bounded context and one edge per dependency between contexts, labeled with the
+    number of ID references and borrowed types (solid when types are borrowed). Shared contexts and contexts that
+    only declare IDs are hidden unless 「共有・外部の BC も表示」 is checked. Selecting a context lists every use in
+    the inspector (依存先 / 依存元). See [ADR 0006](docs/adr/0006-context-map.md).
+  - *Structure*: contexts, aggregate boundaries, entities, value objects, unions, `owns` / `references`. Pick bounded
+    contexts in the toolbar (any number) to draw only them, with the elements they use and the elements that use them
+    as stubs; 詳細 / 概観 works in both.
   - *States*: states and command transitions of one aggregate (`new` marks factory commands).
   - *Primitives*: domain primitives per context (shared first) with base type, invariants and usages.
   - *Source*: one file, read-only, syntax-coloured, diagnostics in the gutter; clicking a declaration selects it.

@@ -25,6 +25,11 @@ export interface ViewPayload {
     overview: LaidOutGraph | null;
     /** State View graphs keyed by aggregate ID. */
     states: Record<string, LaidOutGraph>;
+    /** Contexts that can be focused in the Structure View (the graphs are served on request at /api/focus). */
+    focusContexts: string[];
+    /** Context Map without shared / ID-only contexts, and with every context. */
+    contextMap: LaidOutGraph | null;
+    contextMapAll: LaidOutGraph | null;
     diagnostics: Diagnostic[];
     /** Current text of every .dt file (even when it does not parse). */
     sources: { path: string; text: string }[];

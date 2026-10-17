@@ -4,9 +4,11 @@ import { analyze } from '../core/analyze.js';
 import { DEFAULT_SOURCES } from '../core/config.js';
 import { loadWorkspace } from '../core/files.js';
 import { buildStateGraph, buildStructureGraph } from '../graph/build.js';
+import { buildContextMapGraph } from '../graph/context-map.js';
 import { EMPTY_DIFF, diffModels, fingerprints, type ModelDiff } from '../graph/diff.js';
 import { graphSignature, type Graph, type LaidOutGraph } from '../graph/ir.js';
 import type { LayoutEngine } from '../layout/engine.js';
+import { supportingContexts } from '../model/dependencies.js';
 import type { DomainModel } from '../model/model.js';
 import type { ViewPayload } from './protocol.js';
 
@@ -23,6 +25,16 @@ interface LayoutFile {
  * Holds the state of one Live View workspace: re-analyzes on demand, keeps the last drawable
  * model while sources do not parse, computes diffs, and caches layouts (persisted separately from the DSL).
  */
+/** Number of focused Structure View layouts kept in memory. */
+const FOCUS_LAYOUT_CACHE = 20;
+
+/** Contexts that can be focused in the Structure View: domain contexts with something to draw. */
+export function focusableContexts(model: DomainModel): string[] {
+    const supporting = supportingContexts(model);
+    const drawn = new Set(['aggregate', 'entity', 'valueObject', 'union']);
+    return model.contexts.filter((c) => !supporting.has(c) && Object.values(model.elements).some((e) => e.context === c && drawn.has(e.kind)));
+}
+
 export class ViewSession {
     private version = 0;
     private current: ViewPayload;
@@ -31,6 +43,8 @@ export class ViewSession {
     private modelVersion = 0;
     private lastDiff: ModelDiff = EMPTY_DIFF;
     private layouts = new Map<string, LaidOutGraph>();
+    /** Layouts of focused Structure Views (see `focusGraph`), least recently used first. */
+    private readonly focusLayouts = new Map<string, LaidOutGraph>();
     private layoutsLoaded = false;
     private queue: Promise<unknown> = Promise.resolve();
     private warnedUnsafeLayoutDir = false;
@@ -40,7 +54,20 @@ export class ViewSession {
         private readonly engine: LayoutEngine,
         private readonly sources: readonly string[] = DEFAULT_SOURCES,
     ) {
-        this.current = this.payload({ files: [], sources: [], status: 'empty', stale: false, model: null, structure: null, overview: null, states: {}, diagnostics: [] });
+        this.current = this.payload({
+            files: [],
+            sources: [],
+            status: 'empty',
+            stale: false,
+            model: null,
+            structure: null,
+            overview: null,
+            states: {},
+            focusContexts: [],
+            contextMap: null,
+            contextMapAll: null,
+            diagnostics: [],
+        });
     }
 
     get state(): ViewPayload {
@@ -61,7 +88,20 @@ export class ViewSession {
         const files = sources.map((s) => s.path);
 
         if (sources.length === 0) {
-            this.current = this.payload({ files, sources, status: 'empty', stale: false, model: null, structure: null, overview: null, states: {}, diagnostics: [] });
+            this.current = this.payload({
+                files,
+                sources,
+                status: 'empty',
+                stale: false,
+                model: null,
+                structure: null,
+                overview: null,
+                states: {},
+                focusContexts: [],
+                contextMap: null,
+                contextMapAll: null,
+                diagnostics: [],
+            });
             return this.current;
         }
         if (!analysis.model) {
@@ -87,13 +127,16 @@ export class ViewSession {
         }
 
         const structure = await this.layout(buildStructureGraph(model));
+        const focusContexts = focusableContexts(model);
+        const contextMap = await this.layout(buildContextMapGraph(model));
+        const contextMapAll = await this.layout(buildContextMapGraph(model, { all: true }));
         const overview = await this.layout(buildStructureGraph(model, { overview: true }));
         const states: Record<string, LaidOutGraph> = {};
         for (const el of Object.values(model.elements)) {
             if (el.kind === 'aggregate') states[el.id] = await this.layout(buildStateGraph(el, model));
         }
         // Forget layouts of graphs that no longer exist (e.g. removed aggregates).
-        const live = new Set([structure.id, overview.id, ...Object.values(states).map((g) => g.id)]);
+        const live = new Set([structure.id, overview.id, contextMap.id, contextMapAll.id, ...Object.values(states).map((g) => g.id)]);
         for (const id of [...this.layouts.keys()]) if (!live.has(id)) this.layouts.delete(id);
         await this.saveLayouts();
 
@@ -106,12 +149,17 @@ export class ViewSession {
             structure,
             overview,
             states,
+            focusContexts,
+            contextMap,
+            contextMapAll,
             diagnostics: analysis.diagnostics,
         });
         return this.current;
     }
 
-    private payload(p: Pick<ViewPayload, 'files' | 'sources' | 'status' | 'stale' | 'model' | 'structure' | 'overview' | 'states' | 'diagnostics'>): ViewPayload {
+    private payload(
+        p: Pick<ViewPayload, 'files' | 'sources' | 'status' | 'stale' | 'model' | 'structure' | 'overview' | 'states' | 'focusContexts' | 'contextMap' | 'contextMapAll' | 'diagnostics'>,
+    ): ViewPayload {
         return {
             type: 'update',
             version: ++this.version,
@@ -125,11 +173,36 @@ export class ViewSession {
             structure: p.structure,
             overview: p.overview,
             states: p.states,
+            focusContexts: p.focusContexts,
+            contextMap: p.contextMap,
+            contextMapAll: p.contextMapAll,
             diagnostics: p.diagnostics,
             modelVersion: this.modelVersion,
             diff: this.lastDiff,
             layoutEngine: this.engine.name,
         };
+    }
+
+    /**
+     * Structure View of some bounded contexts with their dependencies as stubs, laid out on request (any combination
+     * of contexts can be asked for, so these are not part of the pushed state). Unknown contexts are ignored.
+     */
+    async focusGraph(contexts: readonly string[], overview: boolean): Promise<LaidOutGraph | null> {
+        const model = this.current.model;
+        if (!model) return null;
+        const focusable = new Set(focusableContexts(model));
+        const focus = [...new Set(contexts.filter((c) => focusable.has(c)))].sort();
+        if (focus.length === 0) return null;
+        const graph = buildStructureGraph(model, { focus, overview });
+        const signature = graphSignature(graph);
+        const cached = this.focusLayouts.get(graph.id);
+        if (cached && cached.signature === signature) return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };
+        const laid = await this.engine.layout(graph);
+        // keep the most recently used layouts only
+        this.focusLayouts.delete(graph.id);
+        this.focusLayouts.set(graph.id, laid);
+        if (this.focusLayouts.size > FOCUS_LAYOUT_CACHE) this.focusLayouts.delete(this.focusLayouts.keys().next().value!);
+        return laid;
     }
 
     /** Reuses the cached layout when the graph's shape is unchanged; otherwise lays it out again. */

@@ -120,6 +120,9 @@ class ContextEmitter {
                     this.jsdoc([...describedLines(el), ...invariantLines(el.invariants)]);
                     this.iface(el.name, undefined, [], el.fields);
                     break;
+                case 'union':
+                    this.union(el);
+                    break;
                 case 'event':
                 case 'error':
                     this.jsdoc(describedLines(el));
@@ -165,6 +168,32 @@ class ContextEmitter {
         this.out.push('');
         this.jsdoc([`Creates a ${p.name}, checking its invariants. Implement by hand.`]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);
+    }
+
+    /** A union: one type alias over object types tagged with the discriminator. */
+    private union(u: ElementModel): void {
+        const tag = u.discriminator ?? 'kind';
+        this.jsdoc(describedLines(u));
+        const variants = u.variants ?? [];
+        if (variants.length === 0) {
+            this.line(`export type ${u.name} = never;`);
+            return;
+        }
+        this.line(`export type ${u.name} =`);
+        variants.forEach((v, i) => {
+            const end = i === variants.length - 1 ? ';' : '';
+            const doc = [...describedLines(v), ...invariantLines(v.invariants)].flatMap((l) => comment(l).split('\n'));
+            if (doc.length === 1) this.line(`    /** ${doc[0]} */`);
+            else if (doc.length > 1) this.out.push('    /**', ...doc.map((l) => `     * ${l}`.trimEnd()), '     */');
+            const head = `readonly ${tag}: '${v.name}';`;
+            if (v.fields.length === 0) {
+                this.line(`    | { ${head} }${end}`);
+                return;
+            }
+            this.line('    | {');
+            for (const l of [head, ...v.fields.flatMap((f) => this.property(f))]) this.line(`          ${l}`);
+            this.line(`      }${end}`);
+        });
     }
 
     private aggregate(agg: ElementModel): void {

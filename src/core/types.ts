@@ -3,6 +3,7 @@ import {
     isEnumDecl,
     isIdType,
     isPrimitiveDecl,
+    isUnionDecl,
     isValueObject,
     isReferenceField,
     type Entity,
@@ -13,6 +14,7 @@ import {
     type PrimitiveDecl,
     type PrimitiveType,
     type TypeRef,
+    type UnionDecl,
     type ValueObject,
 } from '../language/generated/ast.js';
 import type { FieldLike } from './model-index.js';
@@ -26,10 +28,15 @@ export type Ty =
     | { k: 'dp'; decl: PrimitiveDecl }
     | { k: 'enum'; decl: EnumDecl }
     | { k: 'struct'; decl: Entity | ValueObject }
+    | { k: 'union'; decl: UnionDecl }
+    /** The discriminator of a union not bound to an enum, and its values (`Actor.EXTERNAL_PARTY`). */
+    | { k: 'tag'; decl: UnionDecl }
     | { k: 'list'; elem: Ty }
     | { k: 'opt'; inner: Ty }
     /** The name of an enum type used in value position, e.g. `CancelReason` in `CancelReason.Other`. */
     | { k: 'enumType'; decl: EnumDecl }
+    /** The name of a union type used in value position, e.g. `Actor` in `Actor.EXTERNAL_PARTY`. */
+    | { k: 'unionType'; decl: UnionDecl }
     /** A context name used as a qualifier, e.g. `Sales` in `Sales.Status.Open`. */
     | { k: 'ctx'; name: string }
     /** Already reported; suppresses cascading diagnostics. */
@@ -59,6 +66,7 @@ export function baseType(ref: TypeRef | undefined): Ty {
     if (isPrimitiveDecl(decl)) return { k: 'dp', decl };
     if (isEnumDecl(decl)) return { k: 'enum', decl };
     if (isEntity(decl) || isValueObject(decl)) return { k: 'struct', decl };
+    if (isUnionDecl(decl)) return { k: 'union', decl };
     return ERROR; // aggregates are not values; reported by M004
 }
 
@@ -84,13 +92,18 @@ export function showType(t: Ty): string {
         case 'dp':
         case 'enum':
         case 'struct':
+        case 'union':
             return t.decl.name;
+        case 'tag':
+            return `tag of ${t.decl.name}`;
         case 'list':
             return `${showType(t.elem)}[0..*]`;
         case 'opt':
             return `${showType(t.inner)}?`;
         case 'enumType':
             return `enum ${t.decl.name}`;
+        case 'unionType':
+            return `union ${t.decl.name}`;
         case 'ctx':
             return `context ${t.name}`;
         case 'error':
@@ -119,7 +132,10 @@ export function sameType(a: Ty, b: Ty): boolean {
         case 'dp':
         case 'enum':
         case 'struct':
+        case 'union':
+        case 'tag':
         case 'enumType':
+        case 'unionType':
             return a.decl === (b as typeof a).decl;
         case 'list':
             return sameType(a.elem, (b as typeof a).elem);

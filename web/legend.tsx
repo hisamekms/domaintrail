@@ -1,13 +1,24 @@
 /** Key for the edges of the canvas views; every edge points from the dependent to its dependency. */
-export function Legend({ view }: { view: 'structure' | 'states' }) {
+export function Legend({ view }: { view: 'contextMap' | 'structure' | 'focus' | 'states' }) {
     const rows =
-        view === 'structure'
+        view === 'contextMap'
             ? [
-                  { kind: 'owns', text: '所有（集約の内部）' },
-                  { kind: 'references', text: '参照（ID で別の集約へ）' },
-                  { kind: 'value', text: '値（Value Object を持つ）' },
+                  { kind: 'references', text: 'ID だけで依存（ID 参照の件数）' },
+                  { kind: 'dependsOn', text: '型も借りて依存（型の借用の件数）' },
               ]
-            : [{ kind: 'transition', text: 'Command による遷移（⇒ 発生させる Event）' }];
+            : view === 'focus'
+              ? [
+                    { kind: 'owns', text: '所有（集約の内部）' },
+                    { kind: 'references', text: '参照（ID で別の集約・BC へ）' },
+                    { kind: 'value', text: '値・型の借用（Value Object / Union / Enum など）' },
+                ]
+              : view === 'structure'
+                ? [
+                      { kind: 'owns', text: '所有（集約の内部）' },
+                      { kind: 'references', text: '参照（ID で別の集約へ）' },
+                      { kind: 'value', text: '値（Value Object / Union を持つ）' },
+                  ]
+                : [{ kind: 'transition', text: 'Command による遷移（⇒ 発生させる Event）' }];
     return (
         <div className="legend">
             {rows.map((r) => (
@@ -20,6 +31,7 @@ export function Legend({ view }: { view: 'structure' | 'states' }) {
                     <span>{r.text}</span>
                 </div>
             ))}
+            {view === 'focus' && <div className="legend-note">点線枠の小さな箱は別の BC の要素（スタブ）</div>}
             <div className="legend-note">矢印の先が依存先</div>
         </div>
     );

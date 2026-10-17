@@ -3,6 +3,8 @@ import type { DisplayMode } from '../src/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
 import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantModel, Location } from '../src/model/model';
+import { dependencyCounts } from '../src/graph/context-map';
+import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { highlight } from './highlight';
 import { KIND_GROUPS, KIND_LABEL, namer, resolve, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
@@ -13,7 +15,7 @@ export type InspectorTab = 'structure' | 'behavior' | 'references' | 'source';
 const TAB_LABEL: Record<InspectorTab, string> = { structure: '構造', behavior: '振る舞い', references: '参照', source: 'ソース' };
 
 /** Where the selected item can be shown in the main area. */
-export type RevealTarget = 'structure' | 'states' | 'primitives' | 'source';
+export type RevealTarget = 'contextMap' | 'structure' | 'states' | 'primitives' | 'source';
 
 /** Display names in the current mode (日本語 / English / 両方). */
 const NamerContext = createContext<Namer>(namer('both', null));
@@ -30,6 +32,8 @@ export interface InspectorProps {
     onTab: (tab: InspectorTab) => void;
     onSelect: Select;
     onReveal: (target: RevealTarget, id: string) => void;
+    /** Shows one bounded context in the Structure View, with its dependencies as stubs. */
+    onFocusContext: (ctx: string) => void;
     canBack: boolean;
     canForward: boolean;
     onBack: () => void;
@@ -54,17 +58,19 @@ function tabsFor(r: Resolved): InspectorTab[] {
 function revealTargets(r: Resolved): RevealTarget[] {
     const out: RevealTarget[] = [];
     if (r.kind === 'element') {
-        if (r.el.kind === 'aggregate' || r.el.kind === 'entity' || r.el.kind === 'valueObject') out.push('structure');
+        if (r.el.kind === 'aggregate' || r.el.kind === 'entity' || r.el.kind === 'valueObject' || r.el.kind === 'union') out.push('structure');
         if (r.el.kind === 'aggregate') out.push('states');
         if (r.el.kind === 'primitive' || r.el.kind === 'id' || r.el.kind === 'enum') out.push('primitives');
         out.push('source');
+    } else if (r.kind === 'context') {
+        out.push('contextMap', 'structure');
     } else if (r.kind === 'state' || r.kind === 'command') {
         out.push('states', 'source');
     }
     return out;
 }
 
-const REVEAL_LABEL: Record<RevealTarget, string> = { structure: '構造図', states: '状態遷移', primitives: 'Primitives', source: 'ソース' };
+const REVEAL_LABEL: Record<RevealTarget, string> = { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'Primitives', source: 'ソース' };
 
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
@@ -176,7 +182,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         return loc ? <SourceSnippet loc={loc} sources={props.sources} onOpen={() => props.onReveal('source', props.selected!)} /> : null;
     }
 
-    if (r.kind === 'context') return <ContextBody model={model} ctx={r.name} onSelect={onSelect} />;
+    if (r.kind === 'context') return <ContextBody model={model} ctx={r.name} onSelect={onSelect} onFocus={props.onFocusContext} />;
 
     if (r.kind === 'state') {
         const { agg, state } = r;
@@ -262,7 +268,25 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                     </div>
                 </Section>
             )}
-            {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'enum' && (
+            {el.kind === 'union' && (
+                <>
+                    <p>
+                        判別子: <code>{el.discriminator}</code>
+                        {el.tagType && (
+                            <>
+                                {' '}／ 値: <a onClick={() => onSelect(el.tagType!)}>{names.id(el.tagType)}</a>
+                            </>
+                        )}
+                    </p>
+                    {(el.variants ?? []).map((v) => (
+                        <div key={v.name} title={v.doc}>
+                            <Fields title={`${names.of(v)}`} fields={v.fields} ctx={el.context} onSelect={onSelect} empty="フィールドはありません。" />
+                            <Invariants items={v.invariants} title={`Invariant（${names.of(v)}）`} />
+                        </div>
+                    ))}
+                </>
+            )}
+            {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'enum' && el.kind !== 'union' && (
                 <Fields
                     title={el.states?.length ? '共通フィールド' : el.kind === 'event' || el.kind === 'error' ? 'ペイロード' : 'フィールド'}
                     fields={el.fields}
@@ -289,12 +313,46 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     );
 }
 
-function ContextBody({ model, ctx, onSelect }: { model: DomainModel; ctx: string; onSelect: Select }) {
+/** Dependencies of a context on others (or of others on it), one collapsible group per context with every use. */
+function Dependencies({ title, groups, other, onSelect }: { title: string; groups: ContextDependency[]; other: (g: ContextDependency) => string; onSelect: Select }) {
+    const names = useNames();
+    if (groups.length === 0) return null;
+    return (
+        <Section title={`${title}（${groups.length}）`}>
+            {groups.map((g) => (
+                <details key={other(g)} className="deps">
+                    <summary>
+                        <a onClick={() => onSelect(other(g))}>{names.id(other(g))}</a>
+                        <span className="muted small"> {dependencyCounts(g.ids, g.types)[names.mode]}</span>
+                    </summary>
+                    {g.uses.map((u, i) => (
+                        <div key={i} className="sub small">
+                            <a onClick={() => onSelect(u.source)}>{names.id(u.source)}</a>
+                            <span className="muted">.{u.path} → </span>
+                            <a onClick={() => onSelect(u.target)}>{names.id(u.target)}</a>
+                            <span className={`dep-kind dep-${u.kind}`}>{u.kind === 'id' ? 'ID' : '型'}</span>
+                        </div>
+                    ))}
+                </details>
+            ))}
+        </Section>
+    );
+}
+
+function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ctx: string; onSelect: Select; onFocus: (ctx: string) => void }) {
     const names = useNames();
     const els = Object.values(model.elements).filter((e) => e.context === ctx);
     const terms = model.terms[ctx] ?? [];
+    const groups = groupByContext(contextDependencies(model));
     return (
         <>
+            {!supportingContexts(model).has(ctx) && (
+                <p>
+                    <button onClick={() => onFocus(ctx)}>この BC だけを構造図で見る</button>
+                </p>
+            )}
+            <Dependencies title="依存先（この BC が使う）" groups={groups.filter((g) => g.from === ctx)} other={(g) => g.to} onSelect={onSelect} />
+            <Dependencies title="依存元（この BC を使う）" groups={groups.filter((g) => g.to === ctx)} other={(g) => g.from} onSelect={onSelect} />
             {KIND_GROUPS.map(({ kind, title }) => {
                 const items = els.filter((e) => e.kind === kind);
                 if (!items.length) return null;

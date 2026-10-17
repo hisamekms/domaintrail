@@ -1,8 +1,8 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isEntity, isEnumDecl, isValueObject, type Parameter } from '../../language/generated/ast.js';
+import { isAggregate, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Parameter } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { LabelResolver } from '../labels.js';
-import { commandsOf, commonFields, fieldsOf, invariantsOf, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
+import { commandsOf, commonFields, fieldsOf, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
 
 /**
  * Japanese names (all warnings, except duplicate terms):
@@ -75,6 +75,12 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
     for (const el of index.elements) {
         if (isEnumDecl(el)) {
             sameLabel(el.values.map((v) => ({ node: v, name: v.name, label: v.label })), `enum '${el.name}'`, sink);
+        } else if (isUnionDecl(el)) {
+            sameLabel(el.variants.map((v) => ({ node: v, name: v.name, label: v.label })), `union '${el.name}'`, sink);
+            for (const v of el.variants) {
+                fieldScope(fieldsOf(v.members), `variant '${el.name}.${v.name}'`);
+                sameLabel(invariantsOf(v.members).map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}.${v.name}'`, sink);
+            }
         } else if (isAggregate(el)) {
             const common = commonFields(el);
             const states = statesOf(el);
@@ -127,6 +133,8 @@ function allFields(index: ModelIndex): (FieldLike | Parameter)[] {
     for (const el of index.elements) {
         if (isAggregate(el)) {
             out.push(...commonFields(el), ...statesOf(el).flatMap((s) => fieldsOf(s.members)), ...commandsOf(el).flatMap((c) => c.params));
+        } else if (isUnionDecl(el)) {
+            out.push(...variantFields(el));
         } else if ('members' in el) {
             out.push(...fieldsOf(el.members));
         }

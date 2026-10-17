@@ -12,6 +12,7 @@ import { checkNames } from './checker/names.js';
 import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
+import { checkUnions } from './checker/unions.js';
 import { DiagnosticSink, compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from './diagnostics.js';
 import { ModelIndex } from './model-index.js';
 
@@ -86,6 +87,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkNames(index, sink);
         checkShared(index, sink);
         checkStructure(index, sink);
+        checkUnions(index, sink);
         checkCommands(index, sink);
         checkInvariants(index, sink);
         checkTsNames(index, sink);

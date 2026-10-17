@@ -72,6 +72,14 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         routes: {
             '/': index,
             '/api/state': (req) => (isTrusted(req, allowedHost) ? Response.json(session.state) : forbidden()),
+            // `?contexts=A,B&overview=1`: Structure View of those bounded contexts with their dependencies as stubs
+            '/api/focus': async (req) => {
+                if (!isTrusted(req, allowedHost)) return forbidden();
+                const params = new URL(req.url).searchParams;
+                const contexts = (params.get('contexts') ?? '').split(',').filter(Boolean);
+                const graph = await session.focusGraph(contexts, params.get('overview') === '1');
+                return graph ? Response.json(graph) : new Response('No such contexts', { status: 404 });
+            },
         },
         fetch(req, srv) {
             if (new URL(req.url).pathname !== '/ws') return new Response('Not found', { status: 404 });

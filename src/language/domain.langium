@@ -15,10 +15,10 @@ TermEntry:
     name=FeatureName ':' label=STRING;
 
 ContextElement:
-    IdType | PrimitiveDecl | EnumDecl | ValueObject | Entity | Aggregate | EventDecl | ErrorDecl;
+    IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl;
 
 // Types that may appear on the right-hand side of a field declaration.
-type TypeDecl = IdType | PrimitiveDecl | EnumDecl | ValueObject | Entity | Aggregate;
+type TypeDecl = IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate;
 
 // Domain primitives: a single value wrapping a primitive type, with optional invariants on `value`.
 // An ID is a domain primitive that identifies an aggregate or entity.
@@ -40,6 +40,15 @@ EnumValue:
 
 ValueObject:
     'value' name=ID label=STRING? ('{' members+=DataMember* '}')?;
+
+// A value whose shape depends on a fixed kind: a tagged union of variants. The discriminator is `kind` unless
+// named with `by`; `by name: Enum` binds its values to an enum.
+UnionDecl:
+    'union' name=ID label=STRING? ('by' discriminator=FeatureName (':' tagType=[EnumDecl:QualifiedName])?)?
+    '{' variants+=Variant* '}';
+
+Variant:
+    name=ID label=STRING? ('{' members+=DataMember* '}')?;
 
 Entity:
     'entity' name=ID label=STRING? '{' members+=DataMember* '}';
@@ -136,7 +145,7 @@ LambdaParam:
     name=FeatureName;
 
 FeatureName returns string:
-    ID | 'id' | 'value';
+    ID | 'id' | 'value' | 'by';
 
 QualifiedName returns string:
     ID ('.' ID)*;
