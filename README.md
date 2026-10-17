@@ -255,3 +255,7 @@ bun test
 | `src/generator` | TypeScript generator and naming |
 | `src/graph`, `src/layout` | Graph IR, diff, ELK layout |
 | `src/server`, `web` | Live View server and React + tldraw client |
+
+## License
+
+MIT — see [LICENSE](LICENSE).
