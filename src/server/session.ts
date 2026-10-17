@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyze } from '../core/analyze.js';
 import { DEFAULT_SOURCES } from '../core/config.js';
@@ -33,6 +33,7 @@ export class ViewSession {
     private layouts = new Map<string, LaidOutGraph>();
     private layoutsLoaded = false;
     private queue: Promise<unknown> = Promise.resolve();
+    private warnedUnsafeLayoutDir = false;
 
     constructor(
         readonly root: string,
@@ -163,7 +164,18 @@ export class ViewSession {
             file.graphs[id] = { signature: g.signature, nodeLayout: g.nodeLayout, edgeLayout: g.edgeLayout };
         }
         const target = path.join(this.root, LAYOUT_FILE);
-        await mkdir(path.dirname(target), { recursive: true });
-        await writeFile(target, `${JSON.stringify(file, null, 2)}\n`);
+        const dir = path.dirname(target);
+        // A checked-out repository may contain `.domaintrail` (or the layout file) as a symlink; never write through it.
+        const existing = await lstat(dir).catch(() => undefined);
+        if (existing && (existing.isSymbolicLink() || !existing.isDirectory())) {
+            if (!this.warnedUnsafeLayoutDir) console.warn(`Not saving layouts: ${dir} is not a plain directory.`);
+            this.warnedUnsafeLayoutDir = true;
+            return;
+        }
+        await mkdir(dir, { recursive: true });
+        // write a new file and rename it into place: rename replaces a symlinked layout.json instead of following it
+        const temp = path.join(dir, `.layout-${process.pid}-${Date.now()}.tmp`);
+        await writeFile(temp, `${JSON.stringify(file, null, 2)}\n`, { flag: 'wx' });
+        await rename(temp, target);
     }
 }

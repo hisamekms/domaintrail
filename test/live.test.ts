@@ -142,3 +142,38 @@ describe('Live View', () => {
         expect(p.modelVersion).toBe(before.modelVersion);
     });
 });
+
+describe('layout persistence', () => {
+    test('never writes through a symlinked layout directory or file', async () => {
+        const { mkdtemp, symlink, writeFile: write, readFile: read, mkdir: mk, readlink, rm: remove } = await import('node:fs/promises');
+        const { tmpdir } = await import('node:os');
+        const { ViewSession } = await import('../src/server/session.js');
+        const { ElkLayoutEngine } = await import('../src/layout/elk.js');
+        const base = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
+        const outside = path.join(base, 'outside');
+        await mk(outside);
+        await write(path.join(outside, 'victim.txt'), 'keep me');
+        const engine = new ElkLayoutEngine();
+        try {
+            // 1. the layout directory is a symlink -> nothing is written
+            const a = path.join(base, 'a');
+            await mk(a);
+            await write(path.join(a, 'm.dt'), 'context S { id AId: UUID aggregate A { id: AId } }');
+            await symlink(outside, path.join(a, '.domaintrail'));
+            await new ViewSession(a, engine).refresh();
+            expect((await import('node:fs')).existsSync(path.join(outside, 'layout.json'))).toBe(false);
+
+            // 2. layout.json is a symlink -> it is replaced, the target is untouched
+            const b = path.join(base, 'b');
+            await mk(path.join(b, '.domaintrail'), { recursive: true });
+            await write(path.join(b, 'm.dt'), 'context S { id AId: UUID aggregate A { id: AId } }');
+            await symlink(path.join(outside, 'victim.txt'), path.join(b, '.domaintrail', 'layout.json'));
+            await new ViewSession(b, engine).refresh();
+            expect(await read(path.join(outside, 'victim.txt'), 'utf8')).toBe('keep me');
+            expect(await readlink(path.join(b, '.domaintrail', 'layout.json')).catch(() => 'replaced')).toBe('replaced');
+        } finally {
+            engine.dispose();
+            await remove(base, { recursive: true, force: true });
+        }
+    });
+});
