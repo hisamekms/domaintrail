@@ -3,31 +3,60 @@
   "version": "0.1.0",
   "description": "Domain Modeling DSL — type-checkable domain models shared by humans and AI",
   "license": "MIT",
+  "author": "hisamekms",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hisamekms/domaintrail.git"
+  },
+  "homepage": "https://github.com/hisamekms/domaintrail#readme",
+  "bugs": {
+    "url": "https://github.com/hisamekms/domaintrail/issues"
+  },
+  "keywords": [
+    "ddd",
+    "domain-driven-design",
+    "domain-modeling",
+    "dsl",
+    "typescript",
+    "codegen"
+  ],
   "type": "module",
-  "private": true,
   "bin": {
-    "dmtr": "./bin/dmtr.ts"
+    "dmtr": "./dist/dmtr.js"
+  },
+  "files": [
+    "dist",
+    "schema"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
   },
   "scripts": {
     "langium:generate": "langium generate",
+    "build": "bun run langium:generate && bun ./scripts/build.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
-    "dmtr": "bun ./bin/dmtr.ts"
+    "dmtr": "bun ./bin/dmtr.ts",
+    "prepack": "bun run build"
   },
   "dependencies": {
     "chokidar": "5.0.0",
     "commander": "15.0.0",
     "elkjs": "0.12.0",
     "langium": "4.4.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "tldraw": "5.5.2"
+    "picomatch": "4.0.7",
+    "ws": "8.22.0"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
+    "@types/picomatch": "4.0.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/ws": "8.18.2",
     "langium-cli": "4.4.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tldraw": "5.5.2",
     "typescript": "7.0.2"
   }
 }

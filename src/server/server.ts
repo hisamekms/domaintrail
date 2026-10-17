@@ -1,6 +1,11 @@
+import { existsSync } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
+import { createServer, type IncomingHttpHeaders, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { watch, type FSWatcher } from 'chokidar';
-import index from '../../web/index.html';
+import { WebSocket, WebSocketServer } from 'ws';
 import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from '../core/config.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
@@ -15,6 +20,8 @@ export interface ViewServerOptions {
     /** Debounce for bursts of file events (e.g. an AI saving several files). */
     debounceMs?: number;
     engine?: LayoutEngine;
+    /** Built Live View page (default: see `defaultWebDir`). */
+    webDir?: string;
     log?: (line: string) => void;
 }
 
@@ -26,8 +33,43 @@ export interface ViewServer {
     stop(): Promise<void>;
 }
 
-const TOPIC = 'model';
 const LOOPBACK = ['127.0.0.1', 'localhost', '[::1]'];
+const CONTENT_TYPES: Record<string, string> = {
+    '.html': 'text/html;charset=utf-8',
+    '.js': 'text/javascript;charset=utf-8',
+    '.css': 'text/css;charset=utf-8',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+};
+
+/** The page built by `bun run build`: next to the bundled CLI when installed, `dist/web` when running from source. */
+function defaultWebDir(): string {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const bundled = path.join(here, 'web');
+    return existsSync(path.join(bundled, 'index.html')) ? bundled : path.resolve(here, '../../dist/web');
+}
+
+interface Asset {
+    type: string;
+    body: Buffer;
+}
+
+/** Loads the whole page up front; only these files are ever served, so no request path reaches the file system. */
+async function loadAssets(dir: string): Promise<Map<string, Asset>> {
+    if (!existsSync(path.join(dir, 'index.html'))) throw new Error(`Live View page not found in ${dir} (run \`bun run build\`)`);
+    const assets = new Map<string, Asset>();
+    for (const entry of await readdir(dir, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const file = path.join(entry.parentPath, entry.name);
+        const urlPath = '/' + path.relative(dir, file).split(path.sep).join('/');
+        assets.set(urlPath, { type: CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream', body: await readFile(file) });
+    }
+    assets.set('/', assets.get('/index.html')!);
+    return assets;
+}
 
 /**
  * Host names the server answers to; anything else (e.g. a DNS-rebinding domain) is rejected.
@@ -42,10 +84,15 @@ function hostAllowList(bind: string): (hostname: string) => boolean {
  * The model may be confidential: reject requests whose Host is unexpected (DNS rebinding) and cross-origin
  * browser requests (browsers do not apply the same-origin policy to WebSockets). Non-browser clients send no Origin.
  */
-function isTrusted(req: Request, allowedHost: (hostname: string) => boolean): boolean {
-    const host = req.headers.get('host');
-    if (!host || !allowedHost(new URL(`http://${host}`).hostname)) return false;
-    const origin = req.headers.get('origin');
+function isTrusted(headers: IncomingHttpHeaders, allowedHost: (hostname: string) => boolean): boolean {
+    const host = headers.host;
+    if (!host) return false;
+    try {
+        if (!allowedHost(new URL(`http://${host}`).hostname)) return false;
+    } catch {
+        return false;
+    }
+    const origin = headers.origin;
     if (!origin) return true;
     try {
         return new URL(origin).host === host;
@@ -54,7 +101,10 @@ function isTrusted(req: Request, allowedHost: (hostname: string) => boolean): bo
     }
 }
 
-const forbidden = (): Response => new Response('Forbidden', { status: 403 });
+function send(res: ServerResponse, status: number, type: string, body: string | Buffer): void {
+    res.writeHead(status, { 'content-type': type, 'x-content-type-options': 'nosniff' });
+    res.end(body);
+}
 
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServer> {
     const log = options.log ?? (() => {});
@@ -64,29 +114,36 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const session = new ViewSession(options.root, engine, sources);
     await session.refresh();
 
-    const allowedHost = hostAllowList(options.host ?? '127.0.0.1');
-    const server = Bun.serve({
-        port: options.port ?? 4321,
-        hostname: options.host ?? '127.0.0.1',
-        development: false,
-        routes: {
-            '/': index,
-            '/api/state': (req) => (isTrusted(req, allowedHost) ? Response.json(session.state) : forbidden()),
-        },
-        fetch(req, srv) {
-            if (new URL(req.url).pathname !== '/ws') return new Response('Not found', { status: 404 });
-            if (!isTrusted(req, allowedHost)) return forbidden();
-            if (srv.upgrade(req, { data: undefined })) return undefined;
-            return new Response('Upgrade failed', { status: 400 });
-        },
-        websocket: {
-            open(ws) {
-                ws.subscribe(TOPIC);
-                ws.send(JSON.stringify(session.state));
-            },
-            message() {},
-        },
+    const assets = await loadAssets(options.webDir ?? defaultWebDir());
+    const host = options.host ?? '127.0.0.1';
+    const allowedHost = hostAllowList(host);
+    const http = createServer((req, res) => {
+        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        if (pathname === '/api/state') {
+            if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
+            return send(res, 200, 'application/json', JSON.stringify(session.state));
+        }
+        const asset = req.method === 'GET' || req.method === 'HEAD' ? assets.get(pathname) : undefined;
+        if (!asset) return send(res, 404, 'text/plain', 'Not found');
+        send(res, 200, asset.type, asset.body);
     });
+    const wss = new WebSocketServer({ noServer: true });
+    http.on('upgrade', (req, socket, head) => {
+        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        if (pathname !== '/ws' || !isTrusted(req.headers, allowedHost)) {
+            socket.end(`HTTP/1.1 ${pathname === '/ws' ? '403 Forbidden' : '404 Not Found'}\r\nConnection: close\r\n\r\n`);
+            return;
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => ws.send(JSON.stringify(session.state)));
+    });
+    const publish = (message: string): void => {
+        for (const ws of wss.clients) if (ws.readyState === WebSocket.OPEN) ws.send(message);
+    };
+    await new Promise<void>((resolve, reject) => {
+        http.once('error', reject);
+        http.listen(options.port ?? 4321, host, () => resolve());
+    });
+    const { port } = http.address() as AddressInfo;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const onChange = (event: string, file: string): void => {
@@ -94,7 +151,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         clearTimeout(timer);
         timer = setTimeout(async () => {
             const payload = await session.refresh();
-            server.publish(TOPIC, JSON.stringify(payload));
+            publish(JSON.stringify(payload));
             const errors = payload.diagnostics.filter((d) => d.severity === 'error').length;
             const d = payload.diff;
             log(`v${payload.version} ${payload.status}: ${errors} error(s); +${d.added.length} ~${d.changed.length} -${d.removed.length}`);
@@ -111,13 +168,16 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const ready = new Promise<void>((resolve) => watcher.once('ready', () => resolve()));
 
     return {
-        url: server.url.toString(),
+        url: `http://${host.includes(':') ? `[${host}]` : host}:${port}/`,
         session,
         ready,
         async stop() {
             clearTimeout(timer);
             await watcher.close();
-            await server.stop(true);
+            for (const ws of wss.clients) ws.terminate();
+            wss.close();
+            http.closeAllConnections();
+            await new Promise<void>((resolve) => http.close(() => resolve()));
             (engine as { dispose?: () => void }).dispose?.();
         },
     };

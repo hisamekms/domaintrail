@@ -7,32 +7,33 @@ contracts, never business logic.
 
 ## Setup
 
-Requires [Bun](https://bun.sh) (version pinned in `mise.toml`).
+Requires Node.js 22.12 or later.
 
 ```bash
-bun install
+npm install -D domaintrail   # then: npx dmtr <command>
+npx domaintrail <command>    # or run it without installing
 ```
 
 ## CLI
 
 ```bash
-bun run dmtr -r <root> check             # validate syntax, references, types and DDD rules
-bun run dmtr -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
-bun run dmtr -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host)
+dmtr -r <root> check             # validate syntax, references, types and DDD rules
+dmtr -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
+dmtr -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host)
 ```
 
 `<root>` defaults to the current directory; every `*.dt` file below it (except `node_modules`, `.git`, `.dt`)
-belongs to the workspace. `bun link` makes the `dmtr` command available globally.
+belongs to the workspace.
 
 `check` prints diagnostics as `file:line:col - error M00X: message` and exits non-zero on errors.
 `generate ts` runs `check` first and generates nothing if there are errors.
 
-Try it with the example:
+Try it with the example in this repository (see [Development](#development)):
 
 ```bash
 bun run dmtr -r examples/shop check
 bun run dmtr -r examples/shop generate ts   # then examples/shop/src/order-commands.ts type-checks against it
-bun run dmtr -r examples/shop view
+bun run build && bun run dmtr -r examples/shop view
 ```
 
 ## Configuration
@@ -241,11 +242,20 @@ See [docs/adr/0001-mvp-implementation-decisions.md](docs/adr/0001-mvp-implementa
 
 ## Development
 
+Requires [Bun](https://bun.sh) (version pinned in `mise.toml`). `bun run dmtr` runs the CLI from source.
+
 ```bash
+bun install
 bun run langium:generate   # after editing src/language/domain.langium
 bun run typecheck
 bun test
+bun run build              # dist/: the CLI bundled for Node and the Live View page (needed by `view` and the tests)
 ```
+
+### Release
+
+Bump `version` in `package.json`, commit, and push a matching tag (`v0.2.0` for `0.2.0`).
+The Release workflow tests, builds and publishes to npm with provenance through npm trusted publishing.
 
 | Path | Contents |
 |---|---|

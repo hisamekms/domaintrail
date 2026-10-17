@@ -1,8 +1,22 @@
+import { createRequire } from 'node:module';
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk-api.js';
 import { CONTAINER_PADDING, graphSignature, maxUnits, type Graph, type LaidOutGraph, type NodeLayout, type Point } from '../graph/ir.js';
 import type { LayoutEngine } from './engine.js';
 
 const ROOT = '__root__';
+const IS_BUN = 'Bun' in globalThis;
+const WORKER_SCRIPT = 'elkjs/lib/elk-worker.min.js';
+
+/**
+ * elk.bundled.js mis-detects Bun as a web worker (global `self`), so on Bun ELK runs in a real Worker.
+ * Node has no Web Worker; there ELK runs in-process through the worker script's own fake Worker.
+ */
+function createWorker(url?: string): never {
+    if (IS_BUN) return new Worker(import.meta.resolve(WORKER_SCRIPT)) as never;
+    const { Worker: FakeWorker } = createRequire(import.meta.url)(WORKER_SCRIPT) as { Worker: new (url?: string) => unknown };
+    return new FakeWorker(url) as never;
+}
+
 /** Approximate width of one character of an edge label (13px sans-serif). */
 const LABEL_CHAR_WIDTH = 7.6;
 
@@ -32,14 +46,11 @@ const DIRECTION: Record<string, string> = {
 export class ElkLayoutEngine implements LayoutEngine {
     readonly name = 'elk';
     readonly version = 7;
-    // elk.bundled.js mis-detects Bun as a web worker (global `self`), so ELK runs in a real Worker.
-    private readonly elk = new ELK({
-        workerFactory: () => new Worker(import.meta.resolve('elkjs/lib/elk-worker.min.js')) as never,
-    });
+    private readonly elk = new ELK({ workerFactory: createWorker });
 
-    /** Stops the layout worker so the process can exit. */
+    /** Stops the layout worker so the process can exit (the in-process fake Worker has nothing to stop). */
     dispose(): void {
-        this.elk.terminateWorker();
+        if (IS_BUN) this.elk.terminateWorker();
     }
 
     async layout(graph: Graph): Promise<LaidOutGraph> {

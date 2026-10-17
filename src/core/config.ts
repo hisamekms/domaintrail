@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
+import picomatch from 'picomatch';
 
 /** Config file names, in order of preference within one directory. */
 export const CONFIG_FILES = ['domaintrail.jsonc', 'domaintrail.json'] as const;
@@ -139,11 +140,12 @@ export const IGNORED_DIRS = new Set(['node_modules', '.git', '.domaintrail']);
 
 /** Matches root-relative paths against `sources` (`!` patterns exclude). */
 export function sourceMatcher(sources: readonly string[]): (relPath: string) => boolean {
-    const include = sources.filter((s) => !s.startsWith('!')).map((s) => new Bun.Glob(s));
-    const exclude = sources.filter((s) => s.startsWith('!')).map((s) => new Bun.Glob(s.slice(1)));
+    const glob = (s: string) => picomatch(s, { dot: true });
+    const include = sources.filter((s) => !s.startsWith('!')).map(glob);
+    const exclude = sources.filter((s) => s.startsWith('!')).map((s) => glob(s.slice(1)));
     return (rel) => {
         const p = rel.split(path.sep).join('/');
         if (p.split('/').some((seg) => IGNORED_DIRS.has(seg))) return false;
-        return include.some((g) => g.match(p)) && !exclude.some((g) => g.match(p));
+        return include.some((m) => m(p)) && !exclude.some((m) => m(p));
     };
 }
