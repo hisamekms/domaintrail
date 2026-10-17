@@ -1,0 +1,87 @@
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import { runCli } from '../src/cli/main.js';
+import { tempCopyOfExamples } from './helpers.js';
+
+const dirs: string[] = [];
+afterEach(async () => {
+    for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
+});
+
+async function run(...args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) });
+    return { code, out, err };
+}
+
+describe('dmtr check', () => {
+    test('exits 0 for a valid workspace', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        const r = await run('-r', dir, 'check');
+        expect(r.code).toBe(0);
+        expect(r.out).toEqual(['4 file(s) checked: 0 error(s), 0 warning(s).']);
+    });
+
+    test('exits non-zero with file position and rule ID for each problem', async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        await writeFile(
+            path.join(dir, 'order.dt'),
+            `context Sales {
+  id OrderId: UUID
+  aggregate Order {
+    id: OrderId
+    total: Money
+    state Draft
+    invariant positive { count(total) > 0 }
+    command confirm() from Draft to Shipped
+  }
+  value Money { amount: Decimal owns order: Order }
+}
+`,
+        );
+        const r = await run('-r', dir, 'check');
+        expect(r.code).toBe(1);
+        expect(r.err).toEqual([
+            "order.dt:7:32 - error M009: count() requires a collection, but got 'Money'.",
+            "order.dt:8:37 - error M006: Cannot resolve state 'Shipped' in this aggregate.",
+            "order.dt:10:45 - error M004: 'Money' cannot own aggregate 'Order'; aggregates are referenced by ID ('references').",
+            '1 file(s) checked: 3 error(s), 0 warning(s).',
+        ]);
+    });
+
+    test('exits non-zero when there are no .dt files', async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        expect((await run('-r', dir, 'check')).code).toBe(1);
+    });
+});
+
+describe('dmtr generate ts', () => {
+    test('writes one module per context, a runtime and an index', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        const r = await run('-r', dir, 'generate', 'ts', '--out', 'gen');
+        expect(r.code).toBe(0);
+        expect((await readdir(path.join(dir, 'gen'))).sort()).toEqual(['Billing.ts', 'Common.ts', 'Sales.ts', '_runtime.ts', 'index.ts']);
+        expect(await readFile(path.join(dir, 'gen', 'Billing.ts'), 'utf8')).toContain("import type * as Sales from './Sales.js';");
+    });
+
+    test('refuses to generate from an invalid model', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        await writeFile(path.join(dir, 'broken.dt'), 'context Sales { value Broken { x: Nope } }');
+        const r = await run('-r', dir, 'generate', 'ts', '--out', 'gen');
+        expect(r.code).toBe(1);
+        expect(r.err.at(-1)).toBe('Generation skipped because the model has errors.');
+        expect(await readdir(dir)).not.toContain('gen');
+    });
+
+    test('rejects unknown targets', async () => {
+        expect((await run('generate', 'rust')).code).toBe(2);
+    });
+});
