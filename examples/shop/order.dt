@@ -1,0 +1,88 @@
+context Sales "販売" {
+  terms {
+    /// 顧客が注文を確定した日時。キャンセル可否の判定に使う。
+    confirmedAt: "確定日時"
+    at: "日時"
+    orderId: "注文ID"
+    reason: "取消理由"
+    note: "備考"
+  }
+
+  id OrderId "注文ID": UUID
+  id OrderItemId "注文明細ID": UUID
+
+  enum CancelReason "取消理由" { Requested "顧客都合" Other "その他" }
+
+  primitive Quantity "数量": Int { value in 1..999 }
+
+  /// 英大文字3桁-数字4桁の商品コード。
+  primitive Sku "商品コード": String { matches(value, "^[A-Z]{3}-\d{4}$") }
+
+  /// 顧客からの購入依頼。確定後は明細を変更できない。
+  aggregate Order "注文" {
+    id: OrderId
+    owns items: OrderItem[0..*] "明細"
+    references customer: CustomerId -> Customer
+    note: String?
+
+    invariant quantitiesPositive "数量は正の値" {
+      all(items, item => item.quantity > 0)
+    }
+
+    create command place(customer: CustomerId) "注文する"
+      to Draft
+      emits OrderPlaced
+
+    state Draft "下書き"
+
+    state Confirmed "確定済み" {
+      confirmedAt: Timestamp
+      invariant hasItems "明細が1件以上" { count(items) > 0 }
+    }
+
+    state Cancelled "取消済み" {
+      reason: CancelReason
+      /// 「その他」で取り消す場合は理由を備考に残す。
+      invariant otherNeedsNote "その他の取消には備考が必要" { reason == CancelReason.Other implies exists(note) }
+    }
+
+    command addItem(item: OrderItem "追加する明細") "明細を追加する"
+      from Draft
+      to Draft
+
+    command confirm(at: Timestamp) "注文を確定する"
+      from Draft
+      to Confirmed
+      emits OrderConfirmed
+      errors EmptyOrder
+
+    command cancel(reason: CancelReason) "注文を取り消す"
+      from Draft | Confirmed
+      to Cancelled
+      emits OrderCancelled
+  }
+
+  entity OrderItem "注文明細" {
+    id: OrderItemId
+    sku: Sku
+    quantity: Quantity
+    owns unitPrice: Money "単価"
+  }
+
+  event OrderPlaced "注文受付" {
+    orderId: OrderId
+  }
+
+  event OrderConfirmed "注文確定" {
+    orderId: OrderId
+    confirmedAt: Timestamp
+  }
+
+  event OrderCancelled "注文取消" {
+    orderId: OrderId
+    reason: CancelReason
+  }
+
+  /// 明細が1件もない注文は確定できない。
+  error EmptyOrder "明細なし"
+}

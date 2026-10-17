@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schema/domaintrail.schema.json",
+  // DSL files of this example (paths are relative to this file)
+  "sources": ["**/*.dt"],
+  "generate": {
+    // src/*.ts import the generated contracts from here
+    "ts": { "out": "generated/domain" }
+  },
+  "view": { "port": 4321 }
+}

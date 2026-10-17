@@ -1,0 +1,24 @@
+context Sales {
+  terms {
+    name: "氏名"
+    customerId: "顧客ID"
+  }
+
+  id CustomerId "顧客ID": UUID
+
+
+  aggregate Customer "顧客" {
+    id: CustomerId
+    name: String
+    email: EmailAddress
+
+    create command register(name: String, email: EmailAddress) "顧客を登録する"
+      emits CustomerRegistered
+
+    command rename(name: String) "氏名を変更する"
+  }
+
+  event CustomerRegistered "顧客登録" {
+    customerId: CustomerId
+  }
+}

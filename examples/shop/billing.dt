@@ -1,0 +1,38 @@
+context Billing "請求" {
+  terms {
+    paidAt: "支払日時"
+    invoiceId: "請求書ID"
+    at: "日時"
+  }
+
+  id InvoiceId "請求書ID": UUID
+
+  aggregate Invoice "請求書" {
+    id: InvoiceId
+    references order: Sales.OrderId -> Sales.Order
+    billedAmount: Money "請求金額"
+
+    state Open "未払い"
+    state Paid "支払済み" {
+      paidAt: Timestamp
+    }
+
+    create command issue(order: Sales.OrderId, billedAmount: Money "請求金額") "請求書を発行する"
+      to Open
+
+    command pay(at: Timestamp) "支払う"
+      from Open
+      to Paid
+      emits InvoicePaid
+      errors AlreadyPaid
+  }
+
+  event InvoicePaid "支払完了" {
+    invoiceId: InvoiceId
+    paidAt: Timestamp
+  }
+
+  error AlreadyPaid "支払済み" {
+    paidAt: Timestamp
+  }
+}

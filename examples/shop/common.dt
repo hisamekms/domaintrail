@@ -1,0 +1,24 @@
+/// どの Context からも名前だけで使える値の型（Shared Kernel）。
+shared context Common "共通" {
+  terms {
+    amount: "額"
+    currency: "通貨"
+  }
+
+  enum Currency "通貨" { JPY "日本円" USD "米ドル" }
+
+  /// 通貨を含まない金額の数値部分。返金なども正の額で表し、符号に意味を持たせない。
+  primitive Amount "額": Decimal {
+    invariant nonNegative "0以上" { value >= 0 }
+  }
+
+  value Money "金額" {
+    amount: Amount
+    currency: Currency
+  }
+
+  primitive EmailAddress "メールアドレス": String {
+    invariant format "形式" { matches(value, "^[^@\s]+@[^@\s]+$") }
+    invariant maxLength "254文字以内" { length(value) <= 254 }
+  }
+}
