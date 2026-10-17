@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
@@ -68,6 +68,14 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
                 return;
             }
             const outDir = path.resolve(cfg.root, opts.out ?? cfg.tsOut);
+            // An output directory from the config must not leave the project through a symlink
+            // (an explicit --out is the user's own choice).
+            const linked = opts.out === undefined ? await symlinkOnPath(cfg.root, outDir) : undefined;
+            if (linked) {
+                io.err(`Generation skipped: ${linked} is a symlink; the output directory from the config must be a plain directory inside ${cfg.root}.`);
+                exitCode = 1;
+                return;
+            }
             const files = generateTypeScript(a.model);
             const foreign = await foreignFiles(outDir, files.map((f) => f.path));
             if (foreign.length) {
@@ -76,9 +84,7 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
                 return;
             }
             await cleanGenerated(outDir);
-            for (const f of files) {
-                await writeFile(path.join(outDir, f.path), f.content);
-            }
+            for (const f of files) await writeNew(path.join(outDir, f.path), f.content);
             io.out(`TypeScript written to ${path.relative(process.cwd(), outDir) || '.'}`);
         });
 
@@ -118,14 +124,40 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
     return exitCode;
 }
 
-/** Existing files with the names about to be written that were not written by the generator. */
+/**
+ * Existing entries with the names about to be written that the generator may not replace:
+ * anything that is not a regular file written by the generator (symlinks included, even dangling ones).
+ */
 async function foreignFiles(outDir: string, names: string[]): Promise<string[]> {
     const out: string[] = [];
     for (const name of names) {
-        const text = await readFile(path.join(outDir, name), 'utf8').catch(() => undefined);
-        if (text !== undefined && !text.startsWith(GENERATED_MARKER)) out.push(name);
+        const file = path.join(outDir, name);
+        const stat = await lstat(file).catch(() => undefined);
+        if (!stat) continue;
+        if (!stat.isFile() || !(await readFile(file, 'utf8')).startsWith(GENERATED_MARKER)) out.push(name);
     }
     return out;
+}
+
+/** The first existing path component between `root` (exclusive) and `target` that is a symlink, if any. */
+async function symlinkOnPath(root: string, target: string): Promise<string | undefined> {
+    const rel = path.relative(root, target);
+    if (rel.startsWith('..') || path.isAbsolute(rel)) return target;
+    let current = root;
+    for (const part of rel.split(path.sep).filter(Boolean)) {
+        current = path.join(current, part);
+        const stat = await lstat(current).catch(() => undefined);
+        if (!stat) return undefined;
+        if (stat.isSymbolicLink()) return current;
+    }
+    return undefined;
+}
+
+/** Writes via a fresh temp file and rename, so an existing symlink is replaced rather than followed. */
+async function writeNew(file: string, content: string): Promise<void> {
+    const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+    await writeFile(temp, content, { flag: 'wx' });
+    await rename(temp, file);
 }
 
 /**

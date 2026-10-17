@@ -70,7 +70,14 @@ export function generateTypeScript(model: DomainModel): GeneratedFile[] {
 }
 
 /** Text that is safe inside a block comment. */
-const comment = (s: string): string => s.replace(/\*\//g, '* /');
+/** JavaScript line terminators: any of them ends a `//` comment. */
+const LINE_TERMINATORS = /\r\n|[\n\r\u2028\u2029]/g;
+
+/** Text that is safe inside a block comment (line breaks normalized to `\n`, `*\/` defused). */
+const comment = (s: string): string => s.replace(LINE_TERMINATORS, '\n').replace(/\*\//g, '* /');
+
+/** Text that is safe inside a `//` line comment or on one line of a block comment. */
+const oneLine = (s: string): string => comment(s).replace(/\n+/g, ' ');
 
 /** Japanese name and description lines of a declaration. */
 const describedLines = (d: Described): string[] => [d.label, d.doc].filter((x): x is string => !!x);
@@ -102,7 +109,7 @@ class ContextEmitter {
                         this.line(`export type ${el.name} =`);
                         el.values.forEach((v, i) => {
                             const label = el.valueLabels?.[v];
-                            this.line(`    | '${v}'${i === el.values!.length - 1 ? ';' : ''}${label ? ` // ${label}` : ''}`);
+                            this.line(`    | '${v}'${i === el.values!.length - 1 ? ';' : ''}${label ? ` // ${oneLine(label)}` : ''}`);
                         });
                     } else {
                         this.line(`export type ${el.name} = ${el.values.map((v) => `'${v}'`).join(' | ')};`);
@@ -188,7 +195,7 @@ class ContextEmitter {
             this.jsdoc([`Command contracts of ${agg.name}. Implement this interface by hand.`]);
             this.line(`export interface ${commandsInterfaceName(agg)} {`);
             for (const c of commands) {
-                if (c.label) this.line(`    /** ${comment(c.label)} */`);
+                if (c.label) this.line(`    /** ${oneLine(c.label)} */`);
                 this.line(`    readonly ${c.name}: ${commandTypeName(agg, c)};`);
             }
             this.line('}');
@@ -232,7 +239,7 @@ class ContextEmitter {
 
     private property(f: FieldModel): string[] {
         const doc = [f.label, f.doc].filter(Boolean).join(' — ');
-        const prefix = doc ? [`/** ${comment(doc).replace(/\n/g, ' ')} */`] : [];
+        const prefix = doc ? [`/** ${oneLine(doc)} */`] : [];
         const ref = f.kind === 'references' && f.target ? ` // -> ${f.target}` : '';
         if (f.cardinality === 'optional') return [...prefix, `readonly ${f.name}?: ${this.fieldType(f)};${ref}`];
         return [...prefix, `readonly ${f.name}: ${this.fieldType(f)};${ref}`];

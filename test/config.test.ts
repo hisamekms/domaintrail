@@ -136,3 +136,44 @@ describe('CLI with a config', () => {
         expect(r.err[0]).toBe(`${path.join(dir, 'domaintrail.json')}: unknown key 'sourcez'`);
     });
 });
+
+describe('generated output safety', () => {
+    test('labels cannot break out of comments in generated code', async () => {
+        const { check } = await import('./helpers.js');
+        const { generateTypeScript } = await import('../src/generator/typescript.js');
+        const evil = 'x\\nexport const injected = 1;';
+        const a = await check({
+            'a.dt': `context S {
+  enum E { A "${evil}" B "y\u2028export const injected2 = 2;" }
+  primitive P: Int { invariant i "${evil}" { value > 0 } }
+  id AId: UUID
+  aggregate X "${evil}" { id: AId note: String "${evil}" command go() "${evil}" }
+}`,
+        });
+        expect(a.ok).toBe(true);
+        const code = generateTypeScript(a.model!).find((f) => f.path === 'S.ts')!.content;
+        const lines = code.split(/\r\n|[\n\r\u2028\u2029]/);
+        expect(lines.filter((l) => /^\s*export const injected/.test(l))).toEqual([]);
+        expect(code).toContain("| 'A' // x export const injected = 1;");
+    });
+
+    test('generate refuses symlinks in the output (dangling ones included) and symlinked output directories', async () => {
+        const { symlink } = await import('node:fs/promises');
+        const { existsSync } = await import('node:fs');
+        const outside = await project({ 'keep.txt': 'keep' });
+        const dir = await project({ 'domaintrail.json': '{ "generate": { "ts": { "out": "gen" } } }', 's.dt': MODEL });
+        await mkdir(path.join(dir, 'gen'));
+        await symlink(path.join(outside, 'created-by-attack.ts'), path.join(dir, 'gen', 'index.ts'));
+        const r = await run('-r', dir, 'generate', 'ts');
+        expect(r.code).toBe(1);
+        expect(r.err.at(-1)).toContain('index.ts');
+        expect(existsSync(path.join(outside, 'created-by-attack.ts'))).toBe(false);
+
+        const dir2 = await project({ 'domaintrail.json': '{ "generate": { "ts": { "out": "gen" } } }', 's.dt': MODEL });
+        await symlink(outside, path.join(dir2, 'gen'));
+        const r2 = await run('-r', dir2, 'generate', 'ts');
+        expect(r2.code).toBe(1);
+        expect(r2.err.at(-1)).toContain('is a symlink');
+        expect((await readdir(outside)).sort()).toEqual(['keep.txt']);
+    });
+});
