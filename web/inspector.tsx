@@ -1,3 +1,4 @@
+import { PanelRightClose } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
@@ -38,6 +39,7 @@ export interface InspectorProps {
     canForward: boolean;
     onBack: () => void;
     onForward: () => void;
+    onClose: () => void;
 }
 
 /** Tabs that make sense for a selected item, in display order. */
@@ -82,15 +84,26 @@ export function Inspector(props: InspectorProps) {
             <button disabled={!props.canForward} onClick={props.onForward} title="進む" aria-label="進む">
                 →
             </button>
+            <button className="icon-button" onClick={props.onClose} title="インスペクタを閉じる" aria-label="インスペクタを閉じる">
+                <PanelRightClose size={16} aria-hidden />
+            </button>
         </div>
     );
-    if (!model) return <div className="inspector-empty muted">モデルがまだありません。</div>;
+    if (!model)
+        return (
+            <div className="inspector">
+                <div className="inspector-head">
+                    <div className="inspector-row">{history}</div>
+                    <p className="muted">モデルがまだありません。</p>
+                </div>
+            </div>
+        );
     const r = selected ? resolve(model, selected) : undefined;
     if (!selected || !r) {
         return (
             <div className="inspector">
                 <div className="inspector-head">
-                    {history}
+                    <div className="inspector-row">{history}</div>
                     <p className="muted">{selected ? `${selected} は現在のモデルにありません。` : 'エクスプローラや図で要素を選ぶと、ここに詳細が出ます。'}</p>
                 </div>
             </div>

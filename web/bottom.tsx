@@ -1,3 +1,4 @@
+import { PanelBottomClose, PanelBottomOpen } from 'lucide-react';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
 import type { DomainModel } from '../src/model/model';
@@ -41,15 +42,19 @@ export function BottomPanel(props: {
                 <button className={props.open && props.tab === 'changes' ? 'active' : ''} onClick={() => pick('changes')}>
                     変更 {changes > 0 ? <span className="count">{changes}</span> : <span className="muted">0</span>}
                 </button>
-                <button className="bottom-toggle" onClick={props.onToggle} title={props.open ? '閉じる' : '開く'} aria-label={props.open ? '閉じる' : '開く'}>
-                    {props.open ? '▾' : '▴'}
+                <button
+                    className="icon-button bottom-toggle"
+                    onClick={props.onToggle}
+                    title={props.open ? '問題・変更を閉じる' : '問題・変更を開く'}
+                    aria-label={props.open ? '問題・変更を閉じる' : '問題・変更を開く'}
+                >
+                    {props.open ? <PanelBottomClose size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
                 </button>
             </div>
-            {props.open && (
-                <div className="bottom-body">
-                    {props.tab === 'problems' ? <Problems items={props.diagnostics} onLocate={props.onLocate} /> : <Changes {...props} />}
-                </div>
-            )}
+            {/* kept while closed, so that it slides out with the pane */}
+            <div className="bottom-body" inert={!props.open}>
+                {props.tab === 'problems' ? <Problems items={props.diagnostics} onLocate={props.onLocate} /> : <Changes {...props} />}
+            </div>
         </div>
     );
 }

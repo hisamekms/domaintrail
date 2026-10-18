@@ -1,3 +1,4 @@
+import { PanelLeftClose } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
@@ -19,6 +20,7 @@ export interface ExplorerProps {
     /** Double-click: show the item in the view that suits it best. */
     onOpen: (id: string) => void;
     onOpenFile: (file: string) => void;
+    onClose: () => void;
 }
 
 type Mark = { severity?: 'error' | 'warning'; change?: 'added' | 'changed' };
@@ -90,7 +92,12 @@ export function Explorer(props: ExplorerProps) {
     const model = props.model;
     return (
         <div className="explorer">
-            <div className="pane-title">モデル</div>
+            <div className="pane-title pane-title-row">
+                モデル
+                <button className="icon-button" onClick={props.onClose} title="エクスプローラを閉じる" aria-label="エクスプローラを閉じる">
+                    <PanelLeftClose size={16} aria-hidden />
+                </button>
+            </div>
             <div className="tree">
                 {!model && <p className="muted small pad">モデルがまだありません。</p>}
                 {model &&

@@ -246,7 +246,8 @@ other files in the output directory are never deleted, and generation stops inst
 ## Live View
 
 `dmtr view` watches the workspace, re-validates on every save and pushes updates over WebSocket.
-The screen is laid out like an IDE; every pane can be toggled from the header and resized by dragging (remembered per browser).
+The screen is laid out like an IDE; every pane is closed and opened with the icon button at its top (a closed side
+pane leaves a narrow rail with the button that opens it) and resized by dragging (remembered per browser).
 
 - **Explorer (left)**: model tree — shared contexts first, then each context grouped by kind; aggregates expand to
   their states and commands — and the `.dt` files with error/warning counts. Click selects; double-click opens the

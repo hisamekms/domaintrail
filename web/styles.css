@@ -1038,11 +1038,46 @@ select,
     background: var(--panel);
     font-size: 14px;
 }
-.pane-left {
+/* A side pane slides between its width and a 28px rail (RAIL_WIDTH in App.tsx) with the button that opens it. */
+.side {
+    flex: none;
+    position: relative;
+    overflow: hidden;
+    background: var(--panel);
+    transition: width 180ms ease;
+}
+.side-left {
     border-right: 1px solid var(--border);
 }
-.pane-right {
+.side-right {
     border-left: 1px solid var(--border);
+}
+.side > .pane,
+.side > .rail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    transition: opacity 180ms ease;
+}
+.side-left > * {
+    left: 0;
+}
+.side-right > * {
+    right: 0;
+}
+.side > .pane {
+    height: 100%;
+}
+.side:not(.open) > .pane,
+.side.open > .rail {
+    opacity: 0;
+}
+.rail {
+    width: 28px;
+    padding-top: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 .center {
     flex: 1;
@@ -1069,25 +1104,6 @@ select,
 .resizer:hover,
 .resizer:active {
     background: var(--resizer);
-}
-.pane-toggles {
-    display: flex;
-    gap: 4px;
-}
-.pane-toggles button {
-    font: inherit;
-    font-size: 13px;
-    padding: 3px 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--panel);
-    color: var(--muted);
-    cursor: pointer;
-}
-.pane-toggles button.active {
-    color: var(--accent);
-    border-color: var(--violet-border);
-    background: var(--violet-soft);
 }
 .pad {
     padding: 10px 14px;
@@ -1173,6 +1189,13 @@ select,
     font-weight: 700;
     color: var(--muted);
     letter-spacing: 0.04em;
+}
+.pane-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 6px;
+    padding-right: 6px;
 }
 .tree-item,
 .tree-group {
@@ -1287,9 +1310,6 @@ select,
     flex-direction: column;
     min-height: 0;
 }
-.inspector-empty {
-    padding: 14px;
-}
 .inspector-head {
     padding: 12px 14px 8px;
     border-bottom: 1px solid var(--border);
@@ -1383,8 +1403,25 @@ select,
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
     border-top: 1px solid var(--border);
     background: var(--panel);
+    transition: height 180ms ease;
+}
+/* no animation while dragging a resizer, nor when the OS asks for less motion */
+.resizing .side,
+.resizing .bottom-wrap {
+    transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .side,
+    .side > .pane,
+    .side > .rail,
+    .bottom-wrap,
+    .legend,
+    .legend-tab {
+        transition: none;
+    }
 }
 .bottom {
     flex: 1;
@@ -1393,6 +1430,8 @@ select,
     min-height: 0;
 }
 .bottom-bar {
+    flex: none;
+    height: 32px; /* with the pane's border, BOTTOM_BAR_HEIGHT in App.tsx */
     display: flex;
     align-items: center;
     gap: 2px;
@@ -1468,6 +1507,54 @@ select,
     border: 1px solid var(--border);
     border-radius: 8px;
     pointer-events: none;
+    transform-origin: left bottom;
+    transition:
+        transform 180ms ease,
+        opacity 180ms ease;
+}
+/* closed, it shrinks into the tab on the canvas's bottom edge */
+.legend-closed {
+    transform: scale(0.2);
+    opacity: 0;
+}
+.legend-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: -4px -8px 2px 0;
+    font-weight: 700;
+    color: var(--muted);
+}
+.legend .icon-button {
+    pointer-events: auto;
+}
+.legend-tab {
+    position: absolute;
+    left: 12px;
+    bottom: 0;
+    z-index: 5;
+    width: 40px;
+    height: 14px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: var(--legend-bg);
+    color: var(--muted);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+}
+.legend-tab.shown {
+    opacity: 1;
+    pointer-events: auto;
+}
+.legend-tab:hover {
+    color: var(--text);
+    background: var(--hover);
 }
 .legend-row {
     display: flex;
@@ -1556,7 +1643,12 @@ details.deps > .sub {
 .context-picker-row.context-hidden .check {
     color: var(--muted);
 }
-.context-picker-menu .icon-button {
+/* icon-only buttons (outweighing the toolbar's and the bottom bar's button styles) */
+.context-picker-menu .icon-button,
+.legend .icon-button,
+.pane .icon-button,
+.rail .icon-button,
+.bottom-bar .icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1568,11 +1660,19 @@ details.deps > .sub {
     background: none;
     color: var(--muted);
 }
-.context-picker-menu .icon-button:hover:not(:disabled) {
+.context-picker-menu .icon-button:hover:not(:disabled),
+.legend .icon-button:hover:not(:disabled),
+.pane .icon-button:hover:not(:disabled),
+.rail .icon-button:hover:not(:disabled),
+.bottom-bar .icon-button:hover:not(:disabled) {
     background: var(--hover);
     color: inherit;
 }
-.context-picker-menu .icon-button:disabled {
+.context-picker-menu .icon-button:disabled,
+.legend .icon-button:disabled,
+.pane .icon-button:disabled,
+.rail .icon-button:disabled,
+.bottom-bar .icon-button:disabled {
     opacity: 0.35;
     cursor: default;
 }

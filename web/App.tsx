@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { DisplayMode, LaidOutGraph } from '../src/graph/ir';
@@ -39,6 +40,12 @@ function fitReadable(editor: Editor, textScale = 1): void {
     });
 }
 
+/** Width of the rail a closed side pane leaves, and height of the bottom pane's tab bar (with its border); see styles.css. */
+const RAIL_WIDTH = 28;
+const BOTTOM_BAR_HEIGHT = 33;
+/** The inspector can be widened until the canvas is this narrow. */
+const MIN_CANVAS_WIDTH = 320;
+
 const MODE_LABEL: Record<DisplayMode, string> = { ja: '日本語', en: 'English', both: '両方' };
 const THEME_LABEL: Record<ThemePreference, string> = { auto: '自動', light: 'ライト', dark: 'ダーク' };
 const viewKey = (v: View): string => (v.kind === 'states' ? `states:${v.aggregateId}` : v.kind);
@@ -76,6 +83,7 @@ export function App() {
     const [inspectorWidth, setInspectorWidth] = usePersistentState('domaintrail.layout.inspectorWidth', 420);
     const [bottomHeight, setBottomHeight] = usePersistentState('domaintrail.layout.bottomHeight', 220);
     const [bottomTab, setBottomTab] = usePersistentState<BottomTab>('domaintrail.layout.bottomTab', 'problems');
+    const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
 
     // Selection with back/forward history
@@ -303,17 +311,6 @@ export function App() {
         <div className="app">
             <header>
                 <div className="brand">DomainTrail</div>
-                <div className="pane-toggles" role="group" aria-label="ペインの表示">
-                    <button className={explorerOpen ? 'active' : ''} onClick={() => setExplorerOpen(!explorerOpen)} title="エクスプローラ">
-                        ◧ エクスプローラ
-                    </button>
-                    <button className={bottomOpen ? 'active' : ''} onClick={() => setBottomOpen(!bottomOpen)} title="問題・変更">
-                        ⬓ 問題・変更
-                    </button>
-                    <button className={inspectorOpen ? 'active' : ''} onClick={() => setInspectorOpen(!inspectorOpen)} title="インスペクタ">
-                        ◨ インスペクタ
-                    </button>
-                </div>
                 <div className="segmented" role="group" aria-label="表示名">
                     {(Object.keys(MODE_LABEL) as DisplayMode[]).map((m) => (
                         <button key={m} className={mode === m ? 'active' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
@@ -343,9 +340,14 @@ export function App() {
                 </div>
             )}
             <div className="workspace">
-                {explorerOpen && (
-                    <>
-                        <aside className="pane pane-left" style={{ width: explorerWidth }}>
+                {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
+                <div className={`side side-left${explorerOpen ? ' open' : ''}`} style={{ width: explorerOpen ? explorerWidth : RAIL_WIDTH }}>
+                    <div className="rail" inert={explorerOpen}>
+                        <button className="icon-button" onClick={() => setExplorerOpen(true)} title="エクスプローラを開く" aria-label="エクスプローラを開く">
+                            <PanelLeftOpen size={16} aria-hidden />
+                        </button>
+                    </div>
+                    <aside className="pane" style={{ width: explorerWidth }} inert={!explorerOpen}>
                             <Explorer
                                 model={model}
                                 files={current?.files ?? []}
@@ -356,15 +358,15 @@ export function App() {
                                 activeFile={view.kind === 'source' ? activeFile : undefined}
                                 onSelect={(id) => select(id)}
                                 onOpen={openBest}
+                                onClose={() => setExplorerOpen(false)}
                                 onOpenFile={(f) => {
                                     setSourceFile(f);
                                     setView({ kind: 'source' });
                                 }}
                             />
-                        </aside>
-                        <Resizer direction="x" size={explorerWidth} min={180} max={480} onResize={setExplorerWidth} />
-                    </>
-                )}
+                    </aside>
+                </div>
+                {explorerOpen && <Resizer direction="x" size={explorerWidth} min={180} max={480} onResize={setExplorerWidth} />}
                 <section className="center">
                     <div className="view-tabs" role="tablist">
                         {(['contextMap', 'structure', 'states', 'primitives', 'source'] as const).map((k) => (
@@ -428,7 +430,13 @@ export function App() {
                     </div>
                     <div className="view-area">
                         <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
-                        {graph && isCanvas(view) && <Legend view={view.kind === 'states' ? 'states' : view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'} />}
+                        {graph && isCanvas(view) && (
+                            <Legend
+                                view={view.kind === 'states' ? 'states' : view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'}
+                                open={legendOpen}
+                                onToggle={() => setLegendOpen(!legendOpen)}
+                            />
+                        )}
                         {current && !graph && isCanvas(view) && (
                             <div className="empty">
                                 {current.status === 'empty'
@@ -460,10 +468,21 @@ export function App() {
                         )}
                     </div>
                 </section>
-                {inspectorOpen && (
-                    <>
-                        <Resizer direction="x" size={inspectorWidth} min={300} max={720} invert onResize={setInspectorWidth} />
-                        <aside className="pane pane-right" style={{ width: inspectorWidth }}>
+                {inspectorOpen && <Resizer
+                        direction="x"
+                        size={inspectorWidth}
+                        min={300}
+                        max={() => window.innerWidth - (explorerOpen ? explorerWidth : RAIL_WIDTH) - MIN_CANVAS_WIDTH}
+                        invert
+                        onResize={setInspectorWidth}
+                    />}
+                <div className={`side side-right${inspectorOpen ? ' open' : ''}`} style={{ width: inspectorOpen ? inspectorWidth : RAIL_WIDTH }}>
+                    <div className="rail" inert={inspectorOpen}>
+                        <button className="icon-button" onClick={() => setInspectorOpen(true)} title="インスペクタを開く" aria-label="インスペクタを開く">
+                            <PanelRightOpen size={16} aria-hidden />
+                        </button>
+                    </div>
+                    <aside className="pane" style={{ width: inspectorWidth }} inert={!inspectorOpen}>
                             <Inspector
                                 model={model}
                                 mode={mode}
@@ -483,13 +502,13 @@ export function App() {
                                 canForward={history.index < history.stack.length - 1}
                                 onBack={() => goHistory(-1)}
                                 onForward={() => goHistory(1)}
+                                onClose={() => setInspectorOpen(false)}
                             />
-                        </aside>
-                    </>
-                )}
+                    </aside>
+                </div>
             </div>
             {bottomOpen && <Resizer direction="y" size={bottomHeight} min={120} max={600} invert onResize={setBottomHeight} />}
-            <div className="bottom-wrap" style={{ height: bottomOpen ? bottomHeight : undefined }}>
+            <div className="bottom-wrap" style={{ height: bottomOpen ? bottomHeight : BOTTOM_BAR_HEIGHT }}>
                 <BottomPanel
                     tab={bottomTab}
                     mode={mode}
