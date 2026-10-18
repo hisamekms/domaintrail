@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
-import { DISPLAY_MODES, type DisplayMode, type LaidOutGraph } from '../src/graph/ir';
+import type { DisplayMode, LaidOutGraph } from '../src/graph/ir';
 import { BottomPanel, type BottomTab } from './bottom';
 import { Catalog } from './catalog';
 import { fitReadable, highlightElement, usePointerCursor } from './canvas';
@@ -15,7 +15,7 @@ import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
 import { locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
-import { SettingsMenu } from './settings-menu';
+import { SettingsDialog } from './settings-dialog';
 import { StatesCanvas } from './states-canvas';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
@@ -250,16 +250,6 @@ export function App() {
         <div className="app">
             <header>
                 <div className="brand">DomainTrail</div>
-                <div className="header-group">
-                    <span className="header-caption">{t.nameDisplay}</span>
-                    <div className="segmented" role="group" aria-label={t.nameDisplay}>
-                        {DISPLAY_MODES.map((m) => (
-                            <button key={m} className={mode === m ? 'active' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
-                                {t.modes[m]}
-                            </button>
-                        ))}
-                    </div>
-                </div>
                 <div className="status">
                     {current && <span className={`pill pill-${current.status}`}>{t.status[current.status]}</span>}
                     <span className="muted">
@@ -267,7 +257,9 @@ export function App() {
                     </span>
                     <span className={`conn conn-${connection}`} title={`WebSocket: ${connection}`} />
                 </div>
-                <SettingsMenu
+                <SettingsDialog
+                    mode={mode}
+                    onMode={setMode}
                     themePreference={themePreference}
                     theme={theme}
                     onTheme={setThemePreference}

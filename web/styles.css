@@ -215,45 +215,67 @@ header {
 .brand {
     font-weight: 700;
 }
-.header-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.header-caption {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--muted);
-}
-/* rarely changed settings (the theme), behind the gear at the right end of the header */
-.settings-menu {
-    position: relative;
-}
-.settings-menu-panel {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 30;
-    padding: 10px 12px;
+/* the settings, in a modal dialog opened from the gear at the right end of the header */
+.settings-dialog {
+    width: min(720px, calc(100vw - 32px));
+    min-height: min(420px, calc(100vh - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 0;
     background: var(--panel);
+    color: var(--text);
     border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px var(--shadow);
-    font-size: 14px;
+    border-radius: 10px;
+    box-shadow: 0 12px 40px var(--shadow);
+    font-size: 15px;
+}
+.settings-dialog[open] {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+}
+.settings-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+}
+.settings-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+}
+.settings-dialog-header h2 {
+    margin: 0;
+    font-size: 18px;
+}
+.settings-dialog-body {
+    overflow: auto;
+    padding: 4px 20px 16px;
 }
 .settings-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    white-space: nowrap;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
 }
-/* the same width in every row, so that the controls line up */
+.settings-row:last-child {
+    border-bottom: none;
+}
 .settings-caption {
-    min-width: 5em;
+    font-weight: 600;
+}
+.settings-hint {
+    margin-top: 4px;
+    font-size: 13px;
     color: var(--muted);
+}
+/* roomier choices than the toolbar's, as the dialog is there to change them */
+.settings-row .segmented {
+    flex-shrink: 0;
+}
+.settings-row .segmented button {
+    min-width: 5.5em;
+    padding: 6px 14px;
 }
 .status {
     margin-left: auto;
@@ -1883,7 +1905,7 @@ details.deps > .sub {
 }
 /* icon-only buttons (outweighing the toolbar's and the bottom bar's button styles) */
 .context-picker-menu .icon-button,
-.settings-menu .icon-button,
+.settings .icon-button,
 .legend .icon-button,
 .pane .icon-button,
 .rail .icon-button,
@@ -1900,7 +1922,7 @@ details.deps > .sub {
     color: var(--muted);
 }
 .context-picker-menu .icon-button:hover:not(:disabled),
-.settings-menu .icon-button:hover:not(:disabled),
+.settings .icon-button:hover:not(:disabled),
 .legend .icon-button:hover:not(:disabled),
 .pane .icon-button:hover:not(:disabled),
 .rail .icon-button:hover:not(:disabled),
@@ -1909,7 +1931,7 @@ details.deps > .sub {
     color: inherit;
 }
 .context-picker-menu .icon-button:disabled,
-.settings-menu .icon-button:disabled,
+.settings .icon-button:disabled,
 .legend .icon-button:disabled,
 .pane .icon-button:disabled,
 .rail .icon-button:disabled,

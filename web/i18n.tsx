@@ -27,14 +27,18 @@ const ja = {
 
     // header
     nameDisplay: '名前の表示',
+    nameDisplayHint: 'モデルの要素を、ラベル（日本語名など）と名前のどちらで表示するか',
     modes: { label: 'ラベル', name: '名前', both: '両方' } as Record<DisplayMode, string>,
     status: { ok: '正常', invalid: '検証エラー', 'syntax-error': '構文エラー', empty: '.dt なし' } as Record<string, string>,
     settings: '設定',
+    closeSettings: '設定を閉じる',
     theme: 'テーマ',
     themes: { auto: '自動', light: 'ライト', dark: 'ダーク' },
     themeAuto: (now: string) => `OS の設定に従う（いまは${now}）`,
+    themeHint: '画面の配色',
     language: '言語',
     langAuto: (now: string) => `ブラウザの設定に従う（いまは${now}）`,
+    langHint: '画面の表示言語（モデルのラベルは変わりません）',
     stale: (problems: ReactNode): ReactNode => <>構文エラーのため、最後に解析できた図を表示しています。{problems}から該当箇所へ移動できます。</>,
 
     // panes
@@ -200,14 +204,18 @@ const en: Messages = {
     noDtFiles: 'No .dt files',
 
     nameDisplay: 'Names',
+    nameDisplayHint: 'Whether model elements are shown by their labels, their names or both',
     modes: { label: 'Label', name: 'Name', both: 'Both' },
     status: { ok: 'OK', invalid: 'Invalid', 'syntax-error': 'Syntax error', empty: 'No .dt' },
     settings: 'Settings',
+    closeSettings: 'Close the settings',
     theme: 'Theme',
     themes: { auto: 'Auto', light: 'Light', dark: 'Dark' },
     themeAuto: (now) => `Follows the OS (now ${now})`,
+    themeHint: 'The colors of the screen',
     language: 'Language',
     langAuto: (now) => `Follows the browser (now ${now})`,
+    langHint: 'The language of the screen (model labels stay as written)',
     stale: (problems) => <>Showing the last diagram that could be parsed, because of a syntax error. See {problems} for where it is.</>,
 
     openExplorer: 'Open the explorer',
