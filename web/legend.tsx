@@ -5,7 +5,7 @@ import { useT } from './i18n';
  * Key for the edges of the canvas views; every edge points from the dependent to its dependency. Closed, it leaves a
  * flat tab on the bottom edge of the canvas that opens it.
  */
-export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structure' | 'focus' | 'states'; open: boolean; onToggle: () => void }) {
+export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states'; open: boolean; onToggle: () => void }) {
     const t = useT();
     const words = t.legendRows;
     const rows =
@@ -14,13 +14,18 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
                   { kind: 'references', text: words.mapReferences },
                   { kind: 'dependsOn', text: words.mapDependsOn },
               ]
-            : view === 'focus'
+            : view === 'structureFocus'
               ? [
                     { kind: 'owns', text: words.owns },
                     { kind: 'references', text: words.focusReferences },
                     { kind: 'value', text: words.focusValue },
                 ]
-              : view === 'structure'
+              : view === 'aggregates' || view === 'aggregatesFocus'
+                ? [
+                      { kind: 'references', text: words.aggregateReferences },
+                      { kind: 'value', text: words.aggregateValue },
+                  ]
+                : view === 'structure'
                 ? [
                       { kind: 'owns', text: words.owns },
                       { kind: 'references', text: words.references },
@@ -46,7 +51,8 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
                         <span>{r.text}</span>
                     </div>
                 ))}
-                {view === 'focus' && <div className="legend-note">{t.stubNote}</div>}
+                {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
+                {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
                 <div className="legend-note">{t.arrowNote}</div>
             </div>
             <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} title={t.openLegend} aria-label={t.openLegend}>

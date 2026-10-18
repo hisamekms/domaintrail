@@ -113,6 +113,8 @@ export interface DomainModel {
     contexts: string[];
     /** Japanese names of contexts. */
     contextLabels: Record<string, string>;
+    /** Descriptions of contexts (`///` comments). */
+    contextDocs: Record<string, string>;
     /** Shared contexts (shared kernel), whose elements are usable by name from every context. */
     sharedContexts: string[];
     /** Glossary of field / parameter names per context. */

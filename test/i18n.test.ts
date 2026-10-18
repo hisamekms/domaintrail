@@ -60,8 +60,9 @@ describe('i18n', () => {
         const graphs: Graph[] = [
             buildContextMapGraph(model, { all: true }),
             buildStructureGraph(model),
+            buildStructureGraph(model, { level: 'aggregates' }),
             // stubs of the other contexts
-            ...contexts.map((c) => buildStructureGraph(model, { focus: [c] })),
+            ...contexts.flatMap((c) => [buildStructureGraph(model, { focus: [c] }), buildStructureGraph(model, { focus: [c], level: 'aggregates' })]),
             ...Object.values(model.elements)
                 .filter((e) => e.kind === 'aggregate')
                 .map((agg) => buildStateGraph(agg, model)),

@@ -48,6 +48,7 @@ describe('Live View', () => {
         expect(state.status).toBe('ok');
         expect(state.files).toEqual(['billing.dt', 'common.dt', 'customer.dt', 'order.dt']);
         expect(state.structure?.nodes.length).toBeGreaterThan(0);
+        expect(state.aggregates?.nodes.filter((n) => n.kind === 'aggregate').map((n) => n.id)).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
         expect(Object.keys(state.states).sort()).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
         expect(state.sources.map((x) => x.path)).toEqual(state.files);
         const order = state.model!.elements['Sales.Order'].location;
@@ -65,6 +66,9 @@ describe('Live View', () => {
         const graph = (await focus.json()) as { id: string; nodeLayout: Record<string, unknown> };
         expect(graph.id).toBe('structure-focus:Billing:overview');
         expect(Object.keys(graph.nodeLayout)).toContain('Billing.Invoice');
+        const aggregates = (await (await fetch(`${server.url}api/focus?contexts=Billing&level=aggregates`)).json()) as { id: string; nodeLayout: Record<string, unknown> };
+        expect(aggregates.id).toBe('structure-focus:Billing:aggregates');
+        expect(Object.keys(aggregates.nodeLayout).sort()).toEqual(['Billing', 'Billing.Invoice', 'Sales', 'Sales.Order']);
         const hidden = (await (await fetch(`${server.url}api/focus?contexts=Billing&hide=Sales,Billing,Unknown`)).json()) as { id: string };
         expect(hidden.id).toBe('structure-focus:Billing:hide=Sales');
         expect((await fetch(`${server.url}api/focus?contexts=Common`)).status).toBe(404);

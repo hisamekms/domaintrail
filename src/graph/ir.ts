@@ -53,7 +53,7 @@ export interface GraphNode {
     label: Texts;
     /** Small caption shown above the label, e.g. «aggregate». */
     stereotype?: Texts;
-    /** Body rows (fields, etc.), drawn as aligned key / value columns. */
+    /** Body rows (fields, etc.), drawn as aligned key / value columns; for a context, its description under the label. */
     lines: GraphLine[];
     /** Containing node, if nested. */
     parent?: string;
@@ -85,8 +85,15 @@ export interface Graph {
     textScale?: number;
 }
 
-/** Text scale of the Structure overview (names only, no field rows). */
+/** Text scale of the Structure overview (names only, no field rows) and of the aggregates level. */
 export const OVERVIEW_TEXT_SCALE = 1.5;
+
+/**
+ * How much the Structure View shows: every field (detail), the elements' names only (overview), or the aggregates
+ * and the dependencies between them only (aggregates).
+ */
+export type StructureLevel = 'detail' | 'overview' | 'aggregates';
+export const STRUCTURE_LEVELS: StructureLevel[] = ['detail', 'overview', 'aggregates'];
 
 export interface Point {
     x: number;

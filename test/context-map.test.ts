@@ -170,7 +170,7 @@ describe('focused Structure View', () => {
     });
 
     test('the overview of focused contexts has names only, in larger text', async () => {
-        const g = buildStructureGraph(await model(), { focus: ['Billing'], overview: true });
+        const g = buildStructureGraph(await model(), { focus: ['Billing'], level: 'overview' });
         expect(g.id).toBe('structure-focus:Billing:overview');
         expect(g.textScale).toBeGreaterThan(1);
         expect(g.nodes.every((n) => n.lines.length === 0)).toBe(true);

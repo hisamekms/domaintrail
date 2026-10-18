@@ -91,13 +91,16 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
         elements[id] = base;
     }
     const contextLabels: Record<string, string> = {};
+    const contextDocs: Record<string, string> = {};
     const terms: Record<string, TermModel[]> = {};
     for (const ctx of index.contextNames) {
         const label = labels.contextLabel(ctx);
         if (label) contextLabels[ctx] = label;
+        const doc = labels.contextDoc(ctx);
+        if (doc) contextDocs[ctx] = doc;
         terms[ctx] = [...labels.termsOf(ctx).values()].map((t) => ({ name: t.name, label: t.label, ...optional('doc', docComment(t)) }));
     }
-    return { contexts: index.contextNames, contextLabels, sharedContexts: index.sharedContexts, terms, elements };
+    return { contexts: index.contextNames, contextLabels, contextDocs, sharedContexts: index.sharedContexts, terms, elements };
 }
 
 /** Label and `///` description of a declaration, omitting absent values. */

@@ -58,7 +58,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         const marks = { change: isGroup ? ('none' as const) : change(n.elementId), diag: isGroup ? ('none' as const) : (severity.get(n.elementId) ?? 'none') };
         const base = { id: nodeShapeId(n.id), x: l.x, y: l.y, meta: { elementId: n.elementId, graphNode: n.id } };
         if (isGroup) {
-            groups.push({ ...base, type: 'domain-group', props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), scale, ...marks } });
+            groups.push({ ...base, type: 'domain-group', props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), lines: n.lines.map((r) => textOf(r.key, opts)), scale, ...marks } });
         } else {
             nodes.push({
                 ...base,

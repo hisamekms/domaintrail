@@ -6,7 +6,7 @@ import { loadWorkspace } from '../core/files.js';
 import { buildStateGraph, buildStructureGraph } from '../graph/build.js';
 import { buildContextMapGraph } from '../graph/context-map.js';
 import { EMPTY_DIFF, diffModels, fingerprints, type ModelDiff } from '../graph/diff.js';
-import { graphSignature, type Graph, type LaidOutGraph } from '../graph/ir.js';
+import { graphSignature, type Graph, type LaidOutGraph, type StructureLevel } from '../graph/ir.js';
 import type { LayoutEngine } from '../layout/engine.js';
 import { supportingContexts } from '../model/dependencies.js';
 import type { DomainModel } from '../model/model.js';
@@ -62,6 +62,7 @@ export class ViewSession {
             model: null,
             structure: null,
             overview: null,
+            aggregates: null,
             states: {},
             focusContexts: [],
             contextMap: null,
@@ -96,6 +97,7 @@ export class ViewSession {
                 model: null,
                 structure: null,
                 overview: null,
+                aggregates: null,
                 states: {},
                 focusContexts: [],
                 contextMap: null,
@@ -130,13 +132,14 @@ export class ViewSession {
         const focusContexts = focusableContexts(model);
         const contextMap = await this.layout(buildContextMapGraph(model));
         const contextMapAll = await this.layout(buildContextMapGraph(model, { all: true }));
-        const overview = await this.layout(buildStructureGraph(model, { overview: true }));
+        const overview = await this.layout(buildStructureGraph(model, { level: 'overview' }));
+        const aggregates = await this.layout(buildStructureGraph(model, { level: 'aggregates' }));
         const states: Record<string, LaidOutGraph> = {};
         for (const el of Object.values(model.elements)) {
             if (el.kind === 'aggregate') states[el.id] = await this.layout(buildStateGraph(el, model));
         }
         // Forget layouts of graphs that no longer exist (e.g. removed aggregates).
-        const live = new Set([structure.id, overview.id, contextMap.id, contextMapAll.id, ...Object.values(states).map((g) => g.id)]);
+        const live = new Set([structure.id, overview.id, aggregates.id, contextMap.id, contextMapAll.id, ...Object.values(states).map((g) => g.id)]);
         for (const id of [...this.layouts.keys()]) if (!live.has(id)) this.layouts.delete(id);
         await this.saveLayouts();
 
@@ -148,6 +151,7 @@ export class ViewSession {
             model,
             structure,
             overview,
+            aggregates,
             states,
             focusContexts,
             contextMap,
@@ -158,7 +162,7 @@ export class ViewSession {
     }
 
     private payload(
-        p: Pick<ViewPayload, 'files' | 'sources' | 'status' | 'stale' | 'model' | 'structure' | 'overview' | 'states' | 'focusContexts' | 'contextMap' | 'contextMapAll' | 'diagnostics'>,
+        p: Pick<ViewPayload, 'files' | 'sources' | 'status' | 'stale' | 'model' | 'structure' | 'overview' | 'aggregates' | 'states' | 'focusContexts' | 'contextMap' | 'contextMapAll' | 'diagnostics'>,
     ): ViewPayload {
         return {
             type: 'update',
@@ -172,6 +176,7 @@ export class ViewSession {
             model: p.model,
             structure: p.structure,
             overview: p.overview,
+            aggregates: p.aggregates,
             states: p.states,
             focusContexts: p.focusContexts,
             contextMap: p.contextMap,
@@ -188,13 +193,13 @@ export class ViewSession {
      * of contexts can be asked for, so these are not part of the pushed state). The dependencies on and from the
      * `hidden` contexts are left out. Unknown contexts are ignored.
      */
-    async focusGraph(contexts: readonly string[], overview: boolean, hidden: readonly string[] = []): Promise<LaidOutGraph | null> {
+    async focusGraph(contexts: readonly string[], level: StructureLevel, hidden: readonly string[] = []): Promise<LaidOutGraph | null> {
         const model = this.current.model;
         if (!model) return null;
         const focusable = new Set(focusableContexts(model));
         const focus = [...new Set(contexts.filter((c) => focusable.has(c)))].sort();
         if (focus.length === 0) return null;
-        const graph = buildStructureGraph(model, { focus, overview, hidden: [...new Set(hidden.filter((c) => focusable.has(c)))] });
+        const graph = buildStructureGraph(model, { focus, level, hidden: [...new Set(hidden.filter((c) => focusable.has(c)))] });
         const signature = graphSignature(graph);
         const cached = this.focusLayouts.get(graph.id);
         if (cached && cached.signature === signature) return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };

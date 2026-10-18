@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { watch, type FSWatcher } from 'chokidar';
 import { WebSocket, WebSocketServer } from 'ws';
 import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from '../core/config.js';
+import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
 import { ViewSession } from './session.js';
@@ -101,6 +102,13 @@ function isTrusted(headers: IncomingHttpHeaders, allowedHost: (hostname: string)
     }
 }
 
+/** The Structure View level asked for: `level=…`, or `overview=1` as asked before there were three levels. */
+function structureLevel(params: URLSearchParams): StructureLevel {
+    const level = params.get('level');
+    if (STRUCTURE_LEVELS.includes(level as StructureLevel)) return level as StructureLevel;
+    return params.get('overview') === '1' ? 'overview' : 'detail';
+}
+
 function send(res: ServerResponse, status: number, type: string, body: string | Buffer): void {
     res.writeHead(status, { 'content-type': type, 'x-content-type-options': 'nosniff' });
     res.end(body);
@@ -123,14 +131,14 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
             if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
             return send(res, 200, 'application/json', JSON.stringify(session.state));
         }
-        // `?contexts=A,B&overview=1&hide=C`: Structure View of those bounded contexts with their dependencies as stubs,
-        // except those on and from C
+        // `?contexts=A,B&level=overview&hide=C`: Structure View of those bounded contexts with their dependencies as stubs,
+        // except those on and from C (`overview=1` is still accepted for `level=overview`)
         if (url.pathname === '/api/focus') {
             if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
             const contexts = (url.searchParams.get('contexts') ?? '').split(',').filter(Boolean);
             try {
                 const hidden = (url.searchParams.get('hide') ?? '').split(',').filter(Boolean);
-                const graph = await session.focusGraph(contexts, url.searchParams.get('overview') === '1', hidden);
+                const graph = await session.focusGraph(contexts, structureLevel(url.searchParams), hidden);
                 return graph ? send(res, 200, 'application/json', JSON.stringify(graph)) : send(res, 404, 'text/plain', 'No such contexts');
             } catch {
                 return send(res, 500, 'text/plain', 'Layout failed');

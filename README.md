@@ -266,7 +266,10 @@ pane leaves a narrow rail with the button that opens it) and resized by dragging
     contexts in the toolbar (any number) to draw only them, with the elements they use and the elements that use them
     as stubs; the eye next to each other context hides its stubs and the edges to and from them (the toolbar shows how
     many are hidden). The first row, 「すべての BC」, checks or unchecks every context and shows or hides every stub.
-    詳細 / 概観 works in both.
+    Three levels work in both, switched by the icons in the toolbar: 詳細 (every field), 概観 (the elements' names
+    only) and 集約 (only the aggregates with their descriptions, and one edge per pair of aggregates that depend on
+    each other, also through the entities, value objects and IDs they hold; shared contexts are left out, and a
+    context without aggregates stays as a frame with its description).
   - *Catalog*: cards to look over the model, one section per kind; for now the domain primitives per context (shared
     first) with base type, invariants and usages.
 - **Inspector (right)**: the selected item — name, description, location (copy `file:line-line` for AI feedback),

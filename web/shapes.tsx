@@ -38,6 +38,8 @@ declare module '@tldraw/tlschema' {
             h: number;
             kind: string;
             label: string;
+            /** Description rows under the label (contexts at the aggregates level). */
+            lines: string[];
             scale: number;
             change: ChangeMark;
             diag: DiagMark;
@@ -127,12 +129,13 @@ export class DomainGroupUtil extends BaseBoxShapeUtil<DomainGroupShape> {
         kind: T.string,
         scale: T.number,
         label: T.string,
+        lines: T.arrayOf(T.string),
         change: changeMark,
         diag: diagMark,
     };
 
     getDefaultProps(): DomainGroupShape['props'] {
-        return { w: 200, h: 100, kind: 'context', label: '', scale: 1, change: 'none', diag: 'none' };
+        return { w: 200, h: 100, kind: 'context', label: '', lines: [], scale: 1, change: 'none', diag: 'none' };
     }
 
     override canResize = () => false;
@@ -145,6 +148,13 @@ export class DomainGroupUtil extends BaseBoxShapeUtil<DomainGroupShape> {
         return (
             <HTMLContainer className={`dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`} style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}>
                 <div className="dg-label">{p.label}</div>
+                {p.lines.length > 0 && (
+                    <div className="dg-desc">
+                        {p.lines.map((l, i) => (
+                            <div key={i}>{l}</div>
+                        ))}
+                    </div>
+                )}
             </HTMLContainer>
         );
     }
