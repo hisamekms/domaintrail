@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
-import { catalogSections, commandsWithOutcome, inCatalog } from '../web/model-utils.js';
+import { catalogSections, commandsWithOutcome, filterCatalog, inCatalog, isCatalogFiltered, matchesQuery, type CatalogFilter } from '../web/model-utils.js';
 import { EXAMPLES } from './helpers.js';
 
 async function shopModel() {
@@ -34,5 +34,54 @@ describe('catalog', () => {
         const model = await shopModel();
         expect(commandsWithOutcome(model, 'Sales.OrderConfirmed').map((c) => c.command.name)).toEqual(['confirm']);
         expect(commandsWithOutcome(model, 'Sales.EmptyOrder').map((c) => `${c.agg.name}.${c.command.name}`)).toEqual(['Order.confirm']);
+    });
+
+    describe('filter', () => {
+        const none: CatalogFilter = { query: '', sections: [], contexts: null };
+        const shown = (sections: ReturnType<typeof filterCatalog>) => sections.flatMap((s) => s.groups.flatMap((g) => g.items.map((e) => e.id)));
+
+        test('keeps everything when nothing is set', async () => {
+            const sections = catalogSections(await shopModel());
+            expect(isCatalogFiltered(none)).toBe(false);
+            expect(isCatalogFiltered({ ...none, query: '  ' })).toBe(false);
+            const all = filterCatalog(sections, none);
+            expect(all.map((s) => s.shown)).toEqual(sections.map((s) => s.count));
+        });
+
+        test('matches the label, name or description, ignoring case', () => {
+            const el = { name: 'OrderPlaced', label: '注文確定', doc: 'Raised when the CUSTOMER pays' } as Parameters<typeof matchesQuery>[0];
+            expect(matchesQuery(el, 'orderplaced')).toBe(true);
+            expect(matchesQuery(el, '確定')).toBe(true);
+            expect(matchesQuery(el, 'customer')).toBe(true);
+            expect(matchesQuery(el, ' placed ')).toBe(true);
+            expect(matchesQuery(el, 'shipped')).toBe(false);
+            expect(matchesQuery({ name: 'Sku' } as Parameters<typeof matchesQuery>[0], 'sku')).toBe(true);
+        });
+
+        test('narrows by text, keeping each section total and counting the matches', async () => {
+            const model = await shopModel();
+            const sections = filterCatalog(catalogSections(model), { ...none, query: 'order' });
+            const ids = shown(sections);
+            expect(ids.length).toBeGreaterThan(0);
+            expect(ids.every((id) => matchesQuery(model.elements[id], 'order'))).toBe(true);
+            for (const s of sections) {
+                expect(s.count).toBe(catalogSections(model).find((x) => x.key === s.key)!.count);
+                expect(s.shown).toBe(s.groups.reduce((n, g) => n + g.items.length, 0));
+                expect(s.groups.every((g) => g.items.length > 0)).toBe(true);
+            }
+        });
+
+        test('narrows by kind of section and by context, all of them combined', async () => {
+            const model = await shopModel();
+            const byKind = filterCatalog(catalogSections(model), { ...none, sections: ['events', 'errors'] });
+            expect(byKind.filter((s) => s.shown > 0).map((s) => s.key)).toEqual(['events', 'errors']);
+            const byContext = filterCatalog(catalogSections(model), { ...none, contexts: ['Common'] });
+            expect(shown(byContext).every((id) => model.elements[id].context === 'Common')).toBe(true);
+            expect(shown(byContext).length).toBeGreaterThan(0);
+            expect(shown(filterCatalog(catalogSections(model), { ...none, contexts: [] }))).toEqual([]);
+            const combined = filterCatalog(catalogSections(model), { query: 'order', sections: ['events'], contexts: ['Sales'] });
+            expect(shown(combined).every((id) => model.elements[id].kind === 'event' && model.elements[id].context === 'Sales')).toBe(true);
+            expect(shown(filterCatalog(catalogSections(model), { ...none, query: 'no-such-element' }))).toEqual([]);
+        });
     });
 });

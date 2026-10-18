@@ -1,11 +1,23 @@
-import { useEffect, useRef } from 'react';
+import { Search, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
 import type { DisplayMode } from '../src/graph/ir';
 import type { DomainModel, ElementModel, FieldModel, InvariantModel } from '../src/model/model';
 import { useT } from './i18n';
 import { PersistenceBadge } from './behavior';
-import { catalogSections, commandsWithOutcome, namer, type CatalogSection, type Namer } from './model-utils';
+import { ContextPicker } from './context-picker';
+import {
+    catalogSections,
+    commandsWithOutcome,
+    filterCatalog,
+    isCatalogFiltered,
+    namer,
+    orderedContexts,
+    type CatalogSection,
+    type CatalogSectionKey,
+    type Namer,
+} from './model-utils';
 import { ownerElement } from './render';
 import { usagesOf } from './usages';
 
@@ -18,12 +30,23 @@ interface CatalogProps {
     onSelect: (id: string) => void;
 }
 
-/** Cards to look over the model's elements, one section per kind of element, with links to jump to each section. */
+/**
+ * Cards to look over the model's elements, one section per kind of element, with links to jump to each section.
+ * The filter (text, kinds and contexts) hides what does not match, sections included.
+ */
 export function Catalog(props: CatalogProps) {
     const { model } = props;
     const t = useT();
     const root = useRef<HTMLDivElement>(null);
-    const sections = catalogSections(model);
+    // the filter is not remembered, so that a reload never hides elements without saying so
+    const [query, setQuery] = useState('');
+    const [kinds, setKinds] = useState<CatalogSectionKey[]>([]);
+    const [contexts, setContexts] = useState<string[] | null>(null);
+    const filter = { query, sections: kinds, contexts };
+    const filtering = isCatalogFiltered(filter);
+    const all = catalogSections(model);
+    const sections = filterCatalog(all, filter).filter((s) => !filtering || s.shown > 0);
+    const contextList = orderedContexts(model);
     const names = namer(props.mode, model);
     const shared = new Set(model.sharedContexts);
     const severity = new Map<string, 'error' | 'warning'>();
@@ -42,27 +65,82 @@ export function Catalog(props: CatalogProps) {
 
     return (
         <div className="catalog" ref={root}>
-            <nav className="catalog-jump">
-                {sections.map((s) => (
-                    <button key={s.key} className={s.count ? '' : 'muted'} onClick={() => jump(s.key)}>
-                        {t.catalogSections[s.key]} <span className="catalog-count">{s.count}</span>
-                    </button>
-                ))}
-            </nav>
+            <div className="catalog-top">
+                <div className="catalog-filter-row">
+                    <div className="explorer-filter catalog-filter">
+                        <Search size={14} aria-hidden />
+                        <input
+                            value={query}
+                            placeholder={t.filter}
+                            aria-label={t.filter}
+                            onChange={(e) => setQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Escape') setQuery('');
+                            }}
+                        />
+                        {query && (
+                            <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
+                                <X size={14} aria-hidden />
+                            </button>
+                        )}
+                    </div>
+                    <ContextPicker
+                        contexts={contextList}
+                        labels={model.contextLabels}
+                        selected={contexts ?? contextList}
+                        mode={props.mode}
+                        onChange={(cs) => setContexts(cs.length === contextList.length ? null : cs)}
+                    />
+                </div>
+                <div className="catalog-kinds" role="group" aria-label={t.catalogKinds}>
+                    {all.map((s) => (
+                        <button
+                            key={s.key}
+                            className={`catalog-kind kind-${s.kinds[0]}${kinds.length && !kinds.includes(s.key) ? ' off' : ''}`}
+                            aria-pressed={kinds.includes(s.key)}
+                            onClick={() => setKinds(kinds.includes(s.key) ? kinds.filter((k) => k !== s.key) : all.map((x) => x.key).filter((k) => k === s.key || kinds.includes(k)))}
+                        >
+                            {t.catalogSections[s.key]}
+                        </button>
+                    ))}
+                </div>
+                {sections.length > 0 && (
+                    <nav className="catalog-jump">
+                        {sections.map((s) => (
+                            <button key={s.key} className={s.count ? '' : 'muted'} onClick={() => jump(s.key)}>
+                                {t.catalogSections[s.key]} <span className="catalog-count">{filtering ? `${s.shown}/${s.count}` : s.count}</span>
+                            </button>
+                        ))}
+                    </nav>
+                )}
+            </div>
+            {sections.length === 0 && <p className="muted">{t.catalogNoMatches}</p>}
             {sections.map((s) => (
-                <Section key={s.key} section={s} {...props} names={names} shared={shared} severity={severity} />
+                <Section key={s.key} section={s} hits={filtering ? `${s.shown}/${s.count}` : undefined} {...props} names={names} shared={shared} severity={severity} />
             ))}
         </div>
     );
 }
 
 /** One kind of element, per context; shared contexts come first. */
-function Section(props: CatalogProps & { section: CatalogSection; names: Namer; shared: Set<string>; severity: Map<string, 'error' | 'warning'> }) {
+function Section(
+    props: CatalogProps & {
+        section: CatalogSection;
+        /** While filtering: matches / all. */
+        hits?: string;
+        names: Namer;
+        shared: Set<string>;
+        severity: Map<string, 'error' | 'warning'>;
+    },
+) {
     const { section, model, names } = props;
     const t = useT();
     return (
         <section className="catalog-section" id={`catalog-${section.key}`}>
-            <h1>{t.catalogSections[section.key]}</h1>
+            <h1>
+                {t.catalogSections[section.key]}
+                {props.hits && <span className="catalog-count">{props.hits}</span>}
+            </h1>
             {section.groups.length === 0 && <p className="muted">{t.catalogEmpty}</p>}
             {section.groups.map(({ context, items }) => (
                 <section key={context} className={`catalog-context${props.shared.has(context) ? ' catalog-shared' : ''}`}>
@@ -99,7 +177,22 @@ function Card(props: {
     return (
         <button className={classes.filter(Boolean).join(' ')} data-card={el.id} onClick={() => props.onSelect(el.id)} title={el.doc}>
             <div className="card-head">
-                <span className="card-name">{names.of(el)}</span>
+                {names.mode === 'both' && el.label ? (
+                    <span className="card-title">
+                        <span className="card-name" title={el.label}>
+                            {el.label}
+                        </span>
+                        <span className="card-subname" title={el.name}>
+                            {el.name}
+                        </span>
+                    </span>
+                ) : (
+                    <span className="card-title">
+                        <span className="card-name" title={names.of(el)}>
+                            {names.of(el)}
+                        </span>
+                    </span>
+                )}
                 <span className="card-tags">
                     {el.kind === 'event' && <PersistenceBadge persistent={!!el.persistent} tx={t} />}
                     <span className={`kind kind-${el.kind} tiny`}>{t.kinds[el.kind]}</span>
