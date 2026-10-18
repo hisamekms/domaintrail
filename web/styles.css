@@ -1416,6 +1416,25 @@ select,
     padding: 0;
     overflow: hidden;
 }
+.states-canvas {
+    position: relative;
+    height: 100%;
+}
+.canvas-toolbar {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+}
+.canvas-toolbar button {
+    font: inherit;
+    font-size: 13px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    cursor: pointer;
+}
 .source-view {
     height: 100%;
     overflow: auto;

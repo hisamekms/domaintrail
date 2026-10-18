@@ -40,8 +40,7 @@ const ja = {
     closeBottom: '問題・変更を閉じる',
 
     // views and their toolbar
-    views: { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'プリミティブ' },
-    aggregate: '集約',
+    views: { contextMap: 'コンテキストマップ', structure: '構造図', primitives: 'プリミティブ' },
     showAllContexts: '共有・外部の BC も表示',
     structureMode: 'Structure の表示',
     detail: '詳細',
@@ -115,8 +114,8 @@ const ja = {
 
     // inspector
     counted: (title: string, n: number) => `${title}（${n}）`,
-    tabs: { structure: '構造', behavior: '振る舞い', references: '参照', source: 'ソース' },
-    reveal: { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'プリミティブ' },
+    tabs: { structure: '構造', states: '状態遷移', behavior: '振る舞い', references: '参照', source: 'ソース' },
+    reveal: { contextMap: 'コンテキストマップ', structure: '構造図', primitives: 'プリミティブ' },
     back: '戻る',
     forward: '進む',
     notInModel: (id: string) => `${id} は現在のモデルにありません。`,
@@ -193,8 +192,7 @@ const en: Messages = {
     openBottom: 'Open problems and changes',
     closeBottom: 'Close problems and changes',
 
-    views: { contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives' },
-    aggregate: 'Aggregate',
+    views: { contextMap: 'Context Map', structure: 'Structure', primitives: 'Primitives' },
     showAllContexts: 'Also show shared and external BCs',
     structureMode: 'Structure view',
     detail: 'Detail',
@@ -261,8 +259,8 @@ const en: Messages = {
     copy: (text) => `Copy ${text}`,
 
     counted: (title, n) => `${title} (${n})`,
-    tabs: { structure: 'Structure', behavior: 'Behavior', references: 'References', source: 'Source' },
-    reveal: { contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives' },
+    tabs: { structure: 'Structure', states: 'States', behavior: 'Behavior', references: 'References', source: 'Source' },
+    reveal: { contextMap: 'Context Map', structure: 'Structure', primitives: 'Primitives' },
     back: 'Back',
     forward: 'Forward',
     notInModel: (id) => `${id} is not in the current model.`,

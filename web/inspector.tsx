@@ -12,10 +12,10 @@ import { ownerElement } from './render';
 import { CopyLocation, SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
 
-export type InspectorTab = 'structure' | 'behavior' | 'references' | 'source';
+export type InspectorTab = 'structure' | 'states' | 'behavior' | 'references' | 'source';
 
 /** Where the selected item can be shown in the main area. */
-export type RevealTarget = 'contextMap' | 'structure' | 'states' | 'primitives';
+export type RevealTarget = 'contextMap' | 'structure' | 'primitives';
 
 /** Display names in the current mode (ラベル / 名前 / 両方). */
 const NamerContext = createContext<Namer>(namer('both', null));
@@ -30,6 +30,8 @@ export interface InspectorProps {
     sources: { path: string; text: string }[];
     /** Where the source tab (or a selected file) scrolls to. */
     sourceFocus: SourceFocus | undefined;
+    /** The state diagram of an aggregate (the 状態遷移 tab). */
+    statesView: (aggregateId: string) => ReactNode;
     tab: InspectorTab;
     onTab: (tab: InspectorTab) => void;
     onSelect: Select;
@@ -49,11 +51,11 @@ function tabsFor(r: Resolved): InspectorTab[] {
         case 'context':
             return ['structure'];
         case 'state':
-            return ['structure', 'behavior', 'source'];
+            return ['structure', 'states', 'behavior', 'source'];
         case 'command':
-            return ['structure', 'behavior', 'source'];
+            return ['structure', 'states', 'behavior', 'source'];
         case 'element':
-            return r.el.kind === 'aggregate' ? ['structure', 'behavior', 'references', 'source'] : ['structure', 'references', 'source'];
+            return r.el.kind === 'aggregate' ? ['structure', 'states', 'behavior', 'references', 'source'] : ['structure', 'references', 'source'];
     }
 }
 
@@ -62,12 +64,9 @@ function revealTargets(r: Resolved): RevealTarget[] {
     const out: RevealTarget[] = [];
     if (r.kind === 'element') {
         if (r.el.kind === 'aggregate' || r.el.kind === 'entity' || r.el.kind === 'valueObject' || r.el.kind === 'union') out.push('structure');
-        if (r.el.kind === 'aggregate') out.push('states');
         if (r.el.kind === 'primitive' || r.el.kind === 'id' || r.el.kind === 'enum') out.push('primitives');
     } else if (r.kind === 'context') {
         out.push('contextMap', 'structure');
-    } else if (r.kind === 'state' || r.kind === 'command') {
-        out.push('states');
     }
     return out;
 }
@@ -183,7 +182,7 @@ export function Inspector(props: InspectorProps) {
                     ))}
                 </div>
             )}
-            <div className={`inspector-body${tab === 'source' ? ' inspector-body-full' : ''}`}>
+            <div className={`inspector-body${tab === 'source' || tab === 'states' ? ' inspector-body-full' : ''}`}>
                 <Body {...props} r={r} tab={tab} />
             </div>
         </div>
@@ -216,6 +215,9 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         const focus = props.sourceFocus?.file === loc.file ? props.sourceFocus : loc;
         return <SourceView sources={props.sources} diagnostics={props.diagnostics} model={model} file={loc.file} focus={focus} onSelect={onSelect} />;
     }
+
+    // the same aggregate's diagram for the aggregate, its states and its commands, so it stays while they are picked in it
+    if (tab === 'states') return props.statesView(r.kind === 'element' ? r.el.id : r.kind === 'context' ? r.name : r.agg.id);
 
     if (r.kind === 'context') return <ContextBody model={model} ctx={r.name} onSelect={onSelect} onFocus={props.onFocusContext} />;
 

@@ -1,46 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
-import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
+import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import { DISPLAY_MODES, type DisplayMode, type LaidOutGraph } from '../src/graph/ir';
 import { BottomPanel, type BottomTab } from './bottom';
 import { PrimitiveCatalog } from './catalog';
+import { fitReadable, highlightElement, usePointerCursor } from './canvas';
 import { Explorer } from './explorer';
 import { Legend } from './legend';
 import { Inspector, type InspectorTab, type RevealTarget } from './inspector';
 import { Resizer, usePersistentState } from './layout';
-import { fileSelection, inCatalog, inStructure, nameIn, resolve, selectedFile } from './model-utils';
-import { findShapeForElement, ownerElement, renderGraph, shapeElementId, withWriteAccess } from './render';
+import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from './model-utils';
+import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
 import { locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
 import { SettingsMenu } from './settings-menu';
+import { StatesCanvas } from './states-canvas';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
 import { useViewSocket } from './useViewSocket';
 
-type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' };
-
-/**
- * Initial zoom never goes below this (in units of normal-size text), so text stays readable;
- * large diagrams are shown from the top-left.
- */
-const MIN_INITIAL_ZOOM = 0.9;
-
-function fitReadable(editor: Editor, textScale = 1): void {
-    const minZoom = MIN_INITIAL_ZOOM / textScale;
-    editor.zoomToFit();
-    if (editor.getZoomLevel() >= minZoom) return;
-    const bounds = editor.getCurrentPageBounds();
-    if (!bounds) return;
-    const screen = editor.getViewportScreenBounds();
-    const margin = 24;
-    editor.setCamera({ ...editor.getCamera(), z: minZoom });
-    editor.centerOnPoint({
-        x: Math.min(bounds.center.x, bounds.x + screen.w / minZoom / 2 - margin),
-        y: Math.min(bounds.center.y, bounds.y + screen.h / minZoom / 2 - margin),
-    });
-}
+type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'primitives' };
 
 /** Width of the rail a closed side pane leaves, and height of the bottom pane's tab bar (with its border); see styles.css. */
 const RAIL_WIDTH = 28;
@@ -57,8 +38,7 @@ function savedDisplayMode(): DisplayMode {
         return 'both';
     }
 }
-const viewKey = (v: View): string => (v.kind === 'states' ? `states:${v.aggregateId}` : v.kind);
-const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'states';
+const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure';
 
 export function App() {
     const { current, previous, connection } = useViewSocket();
@@ -98,10 +78,6 @@ export function App() {
 
     const cameras = useRef(new Map<string, TLCamera>());
     const shownView = useRef<string | null>(null);
-
-    const aggregates = useMemo(() => Object.values(model?.elements ?? {}).filter((e) => e.kind === 'aggregate'), [model]);
-    const lastAggregate = useRef<string | undefined>(undefined);
-    if (view.kind === 'states') lastAggregate.current = view.aggregateId;
 
     /** The checked contexts that can still be drawn, in model order. */
     const checked = useMemo(
@@ -145,17 +121,11 @@ export function App() {
             if (focusKey) return focusGraph?.key === focusKey ? focusGraph.graph : undefined;
             return structureMode === 'overview' ? p.overview : p.structure;
         }
-        return p.states[(v as { aggregateId: string }).aggregateId];
+        return null;
     };
     /** Camera key: each view (and each Structure mode and focus) keeps its own camera. */
     const cameraKey = (v: View): string =>
-        v.kind === 'structure'
-            ? focusKey
-                ? `structure:focus:${focusKey}`
-                : `structure:${structureMode}`
-            : v.kind === 'contextMap'
-              ? `contextMap:${mapAll}`
-              : viewKey(v);
+        v.kind === 'structure' ? (focusKey ? `structure:focus:${focusKey}` : `structure:${structureMode}`) : `${v.kind}:${mapAll}`;
     const graph = graphFor(current, view);
 
     // Draw the current graph; keep the camera of each view, fit only the first time a view is shown.
@@ -186,23 +156,10 @@ export function App() {
         applyTheme(theme, editor);
     }, [theme, editor]);
 
-    // If the aggregate of the State View disappears, fall back to the Structure View.
-    useEffect(() => {
-        if (view.kind === 'states' && model && !model.elements[view.aggregateId]) setView({ kind: 'structure' });
-    }, [model, view]);
-
     /** Highlights `id` in the current view if it is shown there; never switches views. */
     const highlight = useCallback(
         (id: string, v: View = view) => {
-            if (!editor || !isCanvas(v)) return;
-            const shape = findShapeForElement(editor, id);
-            if (!shape) {
-                editor.selectNone();
-                return;
-            }
-            editor.select(shape);
-            const b = editor.getShapePageBounds(shape);
-            if (b && !editor.getViewportPageBounds().contains(b)) editor.centerOnPoint(b.center, { animation: { duration: 200 } });
+            if (editor && isCanvas(v)) highlightElement(editor, id);
         },
         [editor, view],
     );
@@ -231,34 +188,30 @@ export function App() {
     /** Shows `id` in a specific view (explicit user action). */
     const reveal = useCallback(
         (target: RevealTarget, id: string) => {
-            let next: View;
-            if (target === 'contextMap') {
-                next = { kind: 'contextMap' };
-            } else if (target === 'states') {
-                const owner = ownerElement(id);
-                next = { kind: 'states', aggregateId: model?.elements[owner]?.kind === 'aggregate' ? owner : id };
-            } else {
-                next = { kind: target };
-            }
+            const next: View = { kind: target };
             setView(next);
             if (isCanvas(next)) requestAnimationFrame(() => requestAnimationFrame(() => highlight(id, next)));
         },
-        [model, highlight],
+        [highlight],
     );
+
+    const openInspector = (tab: InspectorTab) => {
+        setInspectorTab(tab);
+        setInspectorOpen(true);
+    };
 
     /** Double-click in the explorer: the view that suits the item best. */
     const openBest = (id: string) => {
         select(id, { highlight: false });
         const r = model ? resolve(model, id) : undefined;
         if (!r) return;
-        if (r.kind === 'state' || r.kind === 'command') reveal('states', id);
+        if (r.kind === 'state' || r.kind === 'command') openInspector('states');
         else if (r.kind === 'context') reveal('structure', id);
-        else if (inStructure(r.el.kind)) reveal('structure', id);
-        else if (inCatalog(r.el.kind)) reveal('primitives', id);
-        else {
-            setInspectorTab('source');
-            setInspectorOpen(true);
-        }
+        else if (inStructure(r.el.kind)) {
+            reveal('structure', id);
+            if (r.el.kind === 'aggregate') openInspector('states');
+        } else if (inCatalog(r.el.kind)) reveal('primitives', id);
+        else openInspector('source');
     };
 
     const locate = (d: Diagnostic) => {
@@ -282,19 +235,7 @@ export function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedOnCanvas]);
 
-    // tldraw hit-tests shapes itself (DOM hover never reaches them) and resets the cursor on its own state changes
-    // (e.g. after a click), so the pointer cursor is re-derived whenever the hover target or the cursor changes.
-    useEffect(() => {
-        if (!editor) return;
-        return react('pointer cursor', () => {
-            const id = editor.getHoveredShapeId();
-            const shape = id ? editor.getShape(id) : undefined;
-            const clickable = !!shape && !(shape.meta as { ghost?: boolean }).ghost;
-            const cursor = editor.getInstanceState().cursor.type;
-            if (clickable && cursor === 'default') editor.setCursor({ type: 'pointer', rotation: 0 });
-            else if (!clickable && cursor === 'pointer') editor.setCursor({ type: 'default', rotation: 0 });
-        });
-    }, [editor]);
+    usePointerCursor(editor);
 
     const onMount = useCallback((e: Editor) => {
         e.updateInstanceState({ isReadonly: true });
@@ -369,31 +310,13 @@ export function App() {
                 <section className="center">
                     <div className="view-tabs">
                         <div className="view-tab-list" role="tablist">
-                        {(['contextMap', 'structure', 'states', 'primitives'] as const).map((k) => (
-                            <button
-                                key={k}
-                                role="tab"
-                                aria-selected={view.kind === k}
-                                className={view.kind === k ? 'active' : ''}
-                                disabled={k === 'states' && aggregates.length === 0}
-                                onClick={() =>
-                                    setView(k === 'states' ? { kind: 'states', aggregateId: lastAggregate.current ?? aggregates[0]?.id ?? '' } : { kind: k })
-                                }
-                            >
+                        {(['contextMap', 'structure', 'primitives'] as const).map((k) => (
+                            <button key={k} role="tab" aria-selected={view.kind === k} className={view.kind === k ? 'active' : ''} onClick={() => setView({ kind: k })}>
                                 {t.views[k]}
                             </button>
                         ))}
                         </div>
                         <div className="view-toolbar">
-                            {view.kind === 'states' && (
-                                <select value={view.aggregateId} onChange={(e) => setView({ kind: 'states', aggregateId: e.target.value })} aria-label={t.aggregate}>
-                                    {aggregates.map((a) => (
-                                        <option key={a.id} value={a.id}>
-                                            {nameIn(mode, a.id, a.label)}
-                                        </option>
-                                    ))}
-                                </select>
-                            )}
                             {view.kind === 'contextMap' && (
                                 <label className="check small">
                                     <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
@@ -427,7 +350,7 @@ export function App() {
                         <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
                         {graph && isCanvas(view) && (
                             <Legend
-                                view={view.kind === 'states' ? 'states' : view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'}
+                                view={view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'}
                                 open={legendOpen}
                                 onToggle={() => setLegendOpen(!legendOpen)}
                             />
@@ -476,6 +399,22 @@ export function App() {
                                 diff={current?.diff ?? empty}
                                 sources={current?.sources ?? []}
                                 sourceFocus={sourceFocus}
+                                statesView={(aggregateId) => (
+                                    <StatesCanvas
+                                        aggregateId={aggregateId}
+                                        graph={current?.states[aggregateId]}
+                                        previous={previous?.states[aggregateId]}
+                                        diff={current?.diff ?? empty}
+                                        diagnostics={current?.diagnostics ?? []}
+                                        mode={mode}
+                                        lang={lang}
+                                        theme={theme}
+                                        selected={selected}
+                                        onSelect={(id) => select(id)}
+                                        legendOpen={legendOpen}
+                                        onLegendToggle={() => setLegendOpen(!legendOpen)}
+                                    />
+                                )}
                                 tab={inspectorTab}
                                 onTab={setInspectorTab}
                                 onSelect={(id) => select(id)}
