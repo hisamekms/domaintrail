@@ -20,7 +20,7 @@
       "additionalProperties": false,
       "properties": {
         "ts": {
-          "description": "TypeScript types and command contracts (dmtr generate ts).",
+          "description": "TypeScript types and command contracts (dt generate ts).",
           "type": "object",
           "additionalProperties": false,
           "properties": {
@@ -34,7 +34,7 @@
       }
     },
     "view": {
-      "description": "Live View server (dmtr view).",
+      "description": "Live View server (dt view).",
       "type": "object",
       "additionalProperties": false,
       "properties": {

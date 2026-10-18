@@ -10,17 +10,20 @@ contracts, never business logic.
 Requires Node.js 22.12 or later.
 
 ```bash
-npm install -D domaintrail   # then: npx dmtr <command>
+npm install -D domaintrail   # then: npx dt <command>
 npx domaintrail <command>    # or run it without installing
 ```
 
 ## CLI
 
 ```bash
-dmtr -r <root> check             # validate syntax, references, types and DDD rules
-dmtr -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
-dmtr -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host)
+dt -r <root> check             # validate syntax, references, types and DDD rules
+dt -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
+dt -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host)
 ```
+
+The package installs the same command under two names: `dt` for everyday use and `domaintrail`, its full name, for
+when `dt` clashes with another command or a script should spell it out (CI, for example).
 
 `<root>` defaults to the current directory; every `*.dt` file below it (except `node_modules`, `.git`, `.dt`)
 belongs to the workspace.
@@ -31,9 +34,9 @@ belongs to the workspace.
 Try it with the example in this repository (see [Development](#development)):
 
 ```bash
-bun run dmtr -r examples/shop check
-bun run dmtr -r examples/shop generate ts   # then examples/shop/src/order-commands.ts type-checks against it
-bun run build && bun run dmtr -r examples/shop view
+bun run dt -r examples/shop check
+bun run dt -r examples/shop generate ts   # then examples/shop/src/order-commands.ts type-checks against it
+bun run build && bun run dt -r examples/shop view
 ```
 
 ## Configuration
@@ -273,7 +276,7 @@ other files in the output directory are never deleted, and generation stops inst
 
 ## Live View
 
-`dmtr view` watches the workspace, re-validates on every save and pushes updates over WebSocket.
+`dt view` watches the workspace, re-validates on every save and pushes updates over WebSocket.
 The screen is laid out like an IDE; every pane is closed and opened with the icon button at its top (a closed side
 pane leaves a narrow rail with the button that opens it) and resized by dragging (remembered per browser).
 
@@ -319,7 +322,7 @@ See [docs/adr/0001-mvp-implementation-decisions.md](docs/adr/0001-mvp-implementa
 
 ## Development
 
-Requires [Bun](https://bun.sh) (version pinned in `mise.toml`). `bun run dmtr` runs the CLI from source.
+Requires [Bun](https://bun.sh) (version pinned in `mise.toml`). `bun run dt` runs the CLI from source.
 
 ```bash
 bun install

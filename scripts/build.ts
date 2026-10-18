@@ -1,4 +1,4 @@
-// Builds the npm package into dist/: the Live View page (dist/web) and the CLI bundled for Node (dist/dmtr.js).
+// Builds the npm package into dist/: the Live View page (dist/web) and the CLI bundled for Node (dist/dt.js).
 // Dependencies stay external and are installed from package.json; the page's own dependencies are bundled.
 import { chmod, rm } from 'node:fs/promises';
 import * as path from 'node:path';
@@ -24,7 +24,7 @@ await build({
 });
 
 await build({
-    entrypoints: [path.join(ROOT, 'bin', 'dmtr.ts')],
+    entrypoints: [path.join(ROOT, 'bin', 'dt.ts')],
     outdir: DIST,
     naming: '[name].js',
     target: 'node',
@@ -32,4 +32,4 @@ await build({
     packages: 'external',
     banner: '#!/usr/bin/env node',
 });
-await chmod(path.join(DIST, 'dmtr.js'), 0o755);
+await chmod(path.join(DIST, 'dt.js'), 0o755);
