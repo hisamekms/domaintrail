@@ -1464,17 +1464,23 @@ select,
     padding-top: 6px;
     padding-right: 6px;
 }
-/* the explorer's section titles open and close their section; one closed leaves its height to the other */
+/* the explorer's section titles open and close their section; one closed leaves its height to the other.
+   They are bands across the pane, so they don't read as rows of the trees under them. */
 .explorer-section-title {
     display: flex;
     align-items: center;
     gap: 5px;
     width: 100%;
-    padding-left: 8px;
+    padding: 4px 12px 4px 8px;
     border: none;
-    background: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--neutral-tint);
     font-family: inherit;
+    font-size: 11px;
     text-align: left;
+}
+.explorer-section + .explorer-section .explorer-section-title {
+    border-top: 1px solid var(--border);
 }
 .explorer-section-title:hover {
     color: var(--text);
