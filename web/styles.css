@@ -183,6 +183,12 @@ input {
     box-sizing: border-box;
 }
 
+/* light text on a dark background looks heavier with macOS's default smoothing (it thickens the strokes) */
+:root[data-theme='dark'] body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 html,
 body,
 #root {
