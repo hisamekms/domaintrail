@@ -1,5 +1,5 @@
 import type { DisplayMode } from '../src/graph/ir';
-import { PRIMITIVE_JA, typeText } from '../src/graph/build';
+import { PRIMITIVE_LABELS, typeText } from '../src/graph/build';
 import type { CommandModel, DomainModel, ElementKind, ElementModel, StateModel, TypeExpr } from '../src/model/model';
 import { ownerElement } from './render';
 
@@ -35,12 +35,12 @@ export const KIND_GROUPS: { kind: ElementKind; title: string }[] = [
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
-/** `確定済み (Confirmed)` when a Japanese name exists, otherwise the name. */
+/** `確定済み (Confirmed)` when a label exists, otherwise the name. */
 export const withLabel = (x: { name: string; label?: string }): string => (x.label ? `${x.label} (${x.name})` : x.name);
 
 /** A name in the given display mode. */
 export const nameIn = (mode: DisplayMode, name: string, label?: string): string =>
-    mode === 'en' || !label ? name : mode === 'ja' ? label : `${label} (${name})`;
+    mode === 'name' || !label ? name : mode === 'label' ? label : `${label} (${name})`;
 
 export type Resolved =
     | { kind: 'context'; name: string; label?: string; shared: boolean }
@@ -87,7 +87,7 @@ export interface Namer {
     of(x: { name: string; label?: string }): string;
     /** A field or parameter: its resolved label (inline, term or type). */
     field(f: { name: string; label?: string }): string;
-    /** A type as written in `ctx`; in `ja` mode built-in types and labelled elements use their Japanese names. */
+    /** A type as written in `ctx`; in `label` mode built-in types and labelled elements use their labels. */
     type(t: TypeExpr, ctx: string): string;
     /** A built-in type name (e.g. the base of a domain primitive). */
     primitive(name: string): string;
@@ -110,11 +110,11 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         of,
         field: of,
         type(t, ctx) {
-            const en = typeText(t, ctx, model?.sharedContexts ?? []);
-            if (mode !== 'ja') return en;
-            return t.kind === 'primitive' ? PRIMITIVE_JA[t.name] : (model?.elements[t.ref]?.label ?? en);
+            const byName = typeText(t, ctx, model?.sharedContexts ?? []);
+            if (mode !== 'label') return byName;
+            return t.kind === 'primitive' ? PRIMITIVE_LABELS[t.name] : (model?.elements[t.ref]?.label ?? byName);
         },
-        primitive: (name) => (mode === 'ja' ? (PRIMITIVE_JA[name] ?? name) : name),
+        primitive: (name) => (mode === 'label' ? (PRIMITIVE_LABELS[name] ?? name) : name),
         state,
         transition(agg, c) {
             if (!agg.states?.length) return c.factory ? 'new' : '';

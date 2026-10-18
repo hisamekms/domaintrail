@@ -270,8 +270,10 @@ pane leaves a narrow rail with the button that opens it) and resized by dragging
 - **Problems / changes (bottom)**: diagnostics (click to locate) and additions / changes / removals since the previous model.
 - Selecting never switches the main view by itself; the item is highlighted when the current view shows it.
 - Added / changed elements are highlighted; removed ones appear as ghosts. On a syntax error the last diagram stays.
-- The theme follows the OS (自動), or is forced with ライト / ダーク in the header; the choice is remembered per browser.
-- Names follow the 日本語 / English / 両方 toggle. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
+- The theme follows the OS (自動), or is forced with ライト / ダーク in the settings menu (the gear at the right of the
+  header); the choice is remembered per browser.
+- Names follow the 名前の表示 toggle in the header: ラベル (the string after a declaration's name, falling back to the
+  name), 名前 or 両方. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 
 See [docs/adr/0001-mvp-implementation-decisions.md](docs/adr/0001-mvp-implementation-decisions.md) for the design decisions.
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState, type RefObject } from 'react';
 
 /** State kept in localStorage (per browser). Falls back to memory when storage is unavailable. */
 export function usePersistentState<T>(key: string, initial: T): [T, (value: T) => void] {
@@ -22,6 +22,25 @@ export function usePersistentState<T>(key: string, initial: T): [T, (value: T) =
         [key],
     );
     return [value, set];
+}
+
+/** Closes a dropdown on a click outside `root` or on Escape. */
+export function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: () => void): void {
+    useEffect(() => {
+        if (!open) return;
+        const onDown = (e: MouseEvent) => {
+            if (root.current && !root.current.contains(e.target as Node)) close();
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') close();
+        };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open, root, close]);
 }
 
 /**

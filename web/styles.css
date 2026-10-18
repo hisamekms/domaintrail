@@ -217,6 +217,41 @@ header {
 .brand {
     font-weight: 700;
 }
+.header-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.header-caption {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+}
+/* rarely changed settings (the theme), behind the gear at the right end of the header */
+.settings-menu {
+    position: relative;
+}
+.settings-menu-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+    font-size: 14px;
+}
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+}
+.settings-caption {
+    color: var(--muted);
+}
 .status {
     margin-left: auto;
     display: flex;
@@ -762,7 +797,7 @@ select,
     color: var(--text-soft);
     line-height: 1.5;
 }
-.en-name {
+.canonical-name {
     margin-top: 0 !important;
     font-size: 14px !important;
     font-weight: 500;
@@ -1319,7 +1354,7 @@ select,
     font-size: 19px;
     word-break: break-all;
 }
-.inspector-head .en-name {
+.inspector-head .canonical-name {
     font-size: 14px;
     color: var(--muted);
 }
@@ -1645,6 +1680,7 @@ details.deps > .sub {
 }
 /* icon-only buttons (outweighing the toolbar's and the bottom bar's button styles) */
 .context-picker-menu .icon-button,
+.settings-menu .icon-button,
 .legend .icon-button,
 .pane .icon-button,
 .rail .icon-button,
@@ -1661,6 +1697,7 @@ details.deps > .sub {
     color: var(--muted);
 }
 .context-picker-menu .icon-button:hover:not(:disabled),
+.settings-menu .icon-button:hover:not(:disabled),
 .legend .icon-button:hover:not(:disabled),
 .pane .icon-button:hover:not(:disabled),
 .rail .icon-button:hover:not(:disabled),
@@ -1669,6 +1706,7 @@ details.deps > .sub {
     color: inherit;
 }
 .context-picker-menu .icon-button:disabled,
+.settings-menu .icon-button:disabled,
 .legend .icon-button:disabled,
 .pane .icon-button:disabled,
 .rail .icon-button:disabled,

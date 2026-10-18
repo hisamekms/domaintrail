@@ -14,6 +14,7 @@ import { findShapeForElement, ownerElement, renderGraph, shapeElementId, withWri
 import { shapeUtils } from './shapes';
 import { CopyLocation, SourceView, locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
+import { SettingsMenu } from './settings-menu';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { useViewSocket } from './useViewSocket';
 
@@ -46,8 +47,17 @@ const BOTTOM_BAR_HEIGHT = 33;
 /** The inspector can be widened until the canvas is this narrow. */
 const MIN_CANVAS_WIDTH = 320;
 
-const MODE_LABEL: Record<DisplayMode, string> = { ja: '日本語', en: 'English', both: '両方' };
-const THEME_LABEL: Record<ThemePreference, string> = { auto: '自動', light: 'ライト', dark: 'ダーク' };
+const MODE_LABEL: Record<DisplayMode, string> = { label: 'ラベル', name: '名前', both: '両方' };
+
+/** The display mode saved under its former key and values (日本語 / English / 両方), if any. */
+function savedDisplayMode(): DisplayMode {
+    try {
+        const old = JSON.parse(localStorage.getItem('domaintrail.displayMode') ?? 'null') as string | null;
+        return old === 'ja' ? 'label' : old === 'en' ? 'name' : 'both';
+    } catch {
+        return 'both';
+    }
+}
 const viewKey = (v: View): string => (v.kind === 'states' ? `states:${v.aggregateId}` : v.kind);
 const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'states';
 
@@ -63,7 +73,7 @@ export function App() {
     const model = current?.model ?? null;
     const [editor, setEditor] = useState<Editor | null>(null);
     const [view, setView] = useState<View>({ kind: 'structure' });
-    const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.displayMode', 'both');
+    const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.nameDisplay', savedDisplayMode());
     const [themePreference, setThemePreference] = usePersistentState<ThemePreference>(THEME_KEY, 'auto');
     const theme = useResolvedTheme(themePreference);
     /** Structure View: all fields (detail) or names only in larger text (overview). */
@@ -311,19 +321,15 @@ export function App() {
         <div className="app">
             <header>
                 <div className="brand">DomainTrail</div>
-                <div className="segmented" role="group" aria-label="表示名">
-                    {(Object.keys(MODE_LABEL) as DisplayMode[]).map((m) => (
-                        <button key={m} className={mode === m ? 'active' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
-                            {MODE_LABEL[m]}
-                        </button>
-                    ))}
-                </div>
-                <div className="segmented" role="group" aria-label="テーマ" title={themePreference === 'auto' ? `OS の設定に従う（いまは${THEME_LABEL[theme]}）` : undefined}>
-                    {(Object.keys(THEME_LABEL) as ThemePreference[]).map((t) => (
-                        <button key={t} className={themePreference === t ? 'active' : ''} aria-pressed={themePreference === t} onClick={() => setThemePreference(t)}>
-                            {THEME_LABEL[t]}
-                        </button>
-                    ))}
+                <div className="header-group">
+                    <span className="header-caption">名前の表示</span>
+                    <div className="segmented" role="group" aria-label="名前の表示">
+                        {(Object.keys(MODE_LABEL) as DisplayMode[]).map((m) => (
+                            <button key={m} className={mode === m ? 'active' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
+                                {MODE_LABEL[m]}
+                            </button>
+                        ))}
+                    </div>
                 </div>
                 <div className="status">
                     {current && <span className={`pill pill-${current.status}`}>{STATUS_LABEL[current.status]}</span>}
@@ -332,6 +338,7 @@ export function App() {
                     </span>
                     <span className={`conn conn-${connection}`} title={`WebSocket: ${connection}`} />
                 </div>
+                <SettingsMenu themePreference={themePreference} theme={theme} onTheme={setThemePreference} />
             </header>
             {current?.stale && (
                 <div className="banner">

@@ -2,7 +2,7 @@ import { contextDependencies, groupByContext, supportingContexts } from '../mode
 import type { DomainModel, ElementKind } from '../model/model.js';
 import { elementList } from '../model/model.js';
 import { named, sized } from './build.js';
-import { maxUnits, type Graph, type GraphEdge, type GraphLine, type GraphNode, type Texts } from './ir.js';
+import { maxUnits, sameText, type Graph, type GraphEdge, type GraphLine, type GraphNode, type Texts } from './ir.js';
 
 /** Width of one character of a node label (15px bold), in pixels. */
 const LABEL_CHAR_WIDTH = 10;
@@ -19,23 +19,23 @@ export const CONTEXT_MAP_ALL_GRAPH_ID = 'context-map-all';
 export const contextNodeId = (ctx: string): string => `map:${ctx}`;
 
 /** Kinds counted on a context node, with their names. */
-const COUNTED: { kind: ElementKind; en: string; ja: string }[] = [
-    { kind: 'aggregate', en: 'aggregates', ja: '集約' },
-    { kind: 'entity', en: 'entities', ja: 'Entity' },
-    { kind: 'valueObject', en: 'value objects', ja: 'Value Object' },
-    { kind: 'union', en: 'unions', ja: 'Union' },
-    { kind: 'enum', en: 'enums', ja: 'Enum' },
-    { kind: 'primitive', en: 'primitives', ja: 'Domain Primitive' },
-    { kind: 'id', en: 'IDs', ja: 'ID' },
-    { kind: 'event', en: 'events', ja: 'Event' },
+const COUNTED: { kind: ElementKind; name: string; label: string }[] = [
+    { kind: 'aggregate', name: 'aggregates', label: '集約' },
+    { kind: 'entity', name: 'entities', label: 'Entity' },
+    { kind: 'valueObject', name: 'value objects', label: 'Value Object' },
+    { kind: 'union', name: 'unions', label: 'Union' },
+    { kind: 'enum', name: 'enums', label: 'Enum' },
+    { kind: 'primitive', name: 'primitives', label: 'Domain Primitive' },
+    { kind: 'id', name: 'IDs', label: 'ID' },
+    { kind: 'event', name: 'events', label: 'Event' },
 ];
 
 /** `ID 12 · 型 3` / `ID 12 · type 3`, leaving out zero counts. */
 export function dependencyCounts(ids: number, types: number): Texts {
     const part = (word: string, n: number): string[] => (n ? [`${word} ${n}`] : []);
-    const ja = [...part('ID', ids), ...part('型', types)].join(' · ');
-    const en = [...part('ID', ids), ...part('type', types)].join(' · ');
-    return { ja, en, both: ja };
+    const label = [...part('ID', ids), ...part('型', types)].join(' · ');
+    const name = [...part('ID', ids), ...part('type', types)].join(' · ');
+    return { label, name, both: label };
 }
 
 /**
@@ -48,9 +48,9 @@ export function buildContextMapGraph(model: DomainModel, opts: { all?: boolean }
     const shownContexts = model.contexts.filter((c) => !hidden.has(c));
     const nodes: GraphNode[] = shownContexts.map((ctx) => {
         const els = elementList(model).filter((e) => e.context === ctx);
-        const lines: GraphLine[] = COUNTED.flatMap(({ kind, en, ja }) => {
+        const lines: GraphLine[] = COUNTED.flatMap(({ kind, name, label }) => {
             const n = els.filter((e) => e.kind === kind).length;
-            return n ? [{ key: { en, ja, both: ja }, value: { en: String(n), ja: String(n), both: String(n) } }] : [];
+            return n ? [{ key: { name, label, both: label }, value: sameText(String(n)) }] : [];
         });
         const shared = model.sharedContexts.includes(ctx);
         const idOnly = !shared && els.length > 0 && els.every((e) => e.kind === 'id');

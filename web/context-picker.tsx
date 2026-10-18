@@ -1,6 +1,7 @@
 import { Eye, EyeDashed, EyeOff } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
+import { useDismiss } from './layout';
 import { nameIn } from './model-utils';
 
 /**
@@ -21,22 +22,7 @@ export function ContextPicker(props: {
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
 
-    // close on a click outside or on Escape
-    useEffect(() => {
-        if (!open) return;
-        const onDown = (e: MouseEvent) => {
-            if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOpen(false);
-        };
-        document.addEventListener('mousedown', onDown);
-        document.addEventListener('keydown', onKey);
-        return () => {
-            document.removeEventListener('mousedown', onDown);
-            document.removeEventListener('keydown', onKey);
-        };
-    }, [open]);
+    useDismiss(open, root, useCallback(() => setOpen(false), []));
 
     const name = (c: string) => nameIn(mode, c, labels[c]);
     const all = selected.length === contexts.length;

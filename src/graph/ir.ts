@@ -21,14 +21,14 @@ export type NodeKind =
 /** `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). */
 export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn';
 
-/** How names are shown in the Live View. */
-export type DisplayMode = 'ja' | 'en' | 'both';
-export const DISPLAY_MODES: DisplayMode[] = ['ja', 'en', 'both'];
+/** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
+export type DisplayMode = 'label' | 'name' | 'both';
+export const DISPLAY_MODES: DisplayMode[] = ['label', 'name', 'both'];
 
 /** A text in every display mode; layout reserves room for the widest one. */
 export type Texts = Record<DisplayMode, string>;
 
-export const sameText = (s: string): Texts => ({ ja: s, en: s, both: s });
+export const sameText = (s: string): Texts => ({ label: s, name: s, both: s });
 
 export interface GraphNode {
     id: string;

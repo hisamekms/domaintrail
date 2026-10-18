@@ -74,14 +74,14 @@ describe('Context Map', () => {
             ['map:Billing', 'boundedContext', 'Billing', '«bounded context»'],
             ['map:Sales', 'boundedContext', 'Sales', '«bounded context»'],
         ]);
-        expect(g.nodes[1].lines.map((l) => `${l.key.en} ${l.value?.en}`)).toEqual(['aggregates 1', 'value objects 1', 'enums 1', 'IDs 1', 'events 1']);
+        expect(g.nodes[1].lines.map((l) => `${l.key.name} ${l.value?.name}`)).toEqual(['aggregates 1', 'value objects 1', 'enums 1', 'IDs 1', 'events 1']);
         expect(g.edges).toEqual([
             {
                 id: 'Billing|Sales',
                 kind: 'dependsOn',
                 source: contextNodeId('Billing'),
                 target: contextNodeId('Sales'),
-                label: { en: 'ID 2 · type 2', ja: 'ID 2 · 型 2', both: 'ID 2 · 型 2' },
+                label: { name: 'ID 2 · type 2', label: 'ID 2 · 型 2', both: 'ID 2 · 型 2' },
             },
         ]);
     });
@@ -114,7 +114,7 @@ describe('focused Structure View', () => {
             'Sales.Channel stub in Sales',
             'Sales.Address stub in Sales',
         ]);
-        expect(g.edges.map((e) => [e.id, e.kind, e.label?.en])).toEqual([
+        expect(g.edges.map((e) => [e.id, e.kind, e.label?.name])).toEqual([
             ['Billing.Invoice.origin', 'value', 'origin'],
             ['Billing.Origin=>Sales.Order', 'references', 'ORDER.orderId'],
             ['Billing.Origin=>Sales.Channel', 'value', 'MANUAL.channel'],

@@ -18,7 +18,7 @@ const TAB_LABEL: Record<InspectorTab, string> = { structure: '構造', behavior:
 /** Where the selected item can be shown in the main area. */
 export type RevealTarget = 'contextMap' | 'structure' | 'states' | 'primitives' | 'source';
 
-/** Display names in the current mode (日本語 / English / 両方). */
+/** Display names in the current mode (ラベル / 名前 / 両方). */
 const NamerContext = createContext<Namer>(namer('both', null));
 const useNames = (): Namer => useContext(NamerContext);
 
@@ -129,7 +129,7 @@ export function Inspector(props: InspectorProps) {
                     {history}
                 </div>
                 <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
-                {props.mode === 'both' && head.label && <div className="en-name">{head.name}</div>}
+                {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
                 {head.doc && <p className="doc">{head.doc}</p>}
                 {head.location && (
                     <div className="inspector-loc">
@@ -242,7 +242,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                 <Fields title="パラメータ" fields={c.params} ctx={agg.context} onSelect={onSelect} empty="パラメータはありません。" />
                 <Section title="契約">
                     <code className="block">
-                        {c.factory ? 'create ' : ''}command {c.name}({c.params.map((p) => `${p.name}: ${namer('en', model).type(p.type, agg.context)}${p.multiplicity}`).join(', ')})
+                        {c.factory ? 'create ' : ''}command {c.name}({c.params.map((p) => `${p.name}: ${namer('name', model).type(p.type, agg.context)}${p.multiplicity}`).join(', ')})
                     </code>
                 </Section>
             </>
@@ -542,8 +542,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 const LABEL_SOURCE = { term: '用語', type: '型' } as const;
 
 /**
- * Fields / parameters. 両方: Japanese name, English name and type; 日本語 / English: one name column, and the type
- * in that language.
+ * Fields / parameters. 両方: label, name and type; ラベル / 名前: one name column, and the type by its label or
+ * its name.
  */
 function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields: FieldModel[]; ctx: string; onSelect: Select; empty?: string }) {
     const names = useNames();
@@ -567,7 +567,7 @@ function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields
                                     {f.labelSource && f.labelSource !== 'inline' && <span className="label-src">{LABEL_SOURCE[f.labelSource]}</span>}
                                 </td>
                             )}
-                            <td className={names.mode === 'ja' ? 'flabel' : 'fname'}>
+                            <td className={names.mode === 'label' ? 'flabel' : 'fname'}>
                                 {marker(f)}
                                 {names.mode === 'both' ? f.name : names.field(f)}
                             </td>

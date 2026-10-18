@@ -1,7 +1,7 @@
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
 import type { DisplayMode } from '../src/graph/ir';
-import { PRIMITIVE_JA } from '../src/graph/build';
+import { PRIMITIVE_LABELS } from '../src/graph/build';
 import type { DomainModel, ElementModel } from '../src/model/model';
 import { ownerElement } from './render';
 import { usagesOf } from './usages';
@@ -10,7 +10,7 @@ const KINDS: ElementModel['kind'][] = ['primitive', 'id', 'enum'];
 const KIND_LABEL: Partial<Record<ElementModel['kind'], string>> = { primitive: 'Primitive', id: 'ID', enum: 'Enum' };
 
 const nameIn = (mode: DisplayMode, name: string, label?: string): string =>
-    mode === 'en' || !label ? name : mode === 'ja' ? label : `${label} (${name})`;
+    mode === 'name' || !label ? name : mode === 'label' ? label : `${label} (${name})`;
 
 /**
  * Catalog of domain primitives (primitives, IDs, enums) per context; shared contexts come first.
@@ -84,7 +84,7 @@ function Card(props: {
                 <span className="card-name">{nameIn(mode, el.name, el.label)}</span>
                 <span className={`kind kind-${el.kind} tiny`}>{KIND_LABEL[el.kind]}</span>
             </div>
-            {el.base && <div className="card-base">{mode === 'ja' ? (PRIMITIVE_JA[el.base] ?? el.base) : el.base}</div>}
+            {el.base && <div className="card-base">{mode === 'label' ? (PRIMITIVE_LABELS[el.base] ?? el.base) : el.base}</div>}
             {el.values && (
                 <div className="chips">
                     {el.values.map((v) => (
@@ -96,7 +96,7 @@ function Card(props: {
                 <ul className="card-invariants">
                     {el.invariants.map((i) => (
                         <li key={i.name}>
-                            <span>✓ {mode === 'en' || !i.label ? i.name : i.label}</span>
+                            <span>✓ {mode === 'name' || !i.label ? i.name : i.label}</span>
                             <code>{i.source}</code>
                         </li>
                     ))}

@@ -121,18 +121,18 @@ describe('labels in views and generated code', () => {
         const m = (await check({ 'a.dt': SALES })).model!;
         const structure = buildStructureGraph(m);
         const order = structure.nodes.find((n) => n.id === 'Sales.Order')!;
-        expect(order.label).toEqual({ en: 'Order', ja: '注文', both: '注文 (Order)' });
-        expect(order.lines.find((l) => l.key.en.startsWith('→'))).toEqual({
-            key: { en: '→ customer', ja: '→ 顧客', both: '→ 顧客 customer' },
-            value: { en: 'CustomerId', ja: '顧客ID', both: 'CustomerId' },
+        expect(order.label).toEqual({ name: 'Order', label: '注文', both: '注文 (Order)' });
+        expect(order.lines.find((l) => l.key.name.startsWith('→'))).toEqual({
+            key: { name: '→ customer', label: '→ 顧客', both: '→ 顧客 customer' },
+            value: { name: 'CustomerId', label: '顧客ID', both: 'CustomerId' },
         });
-        expect(order.lines.find((l) => l.key.en === 'note')!.value).toEqual({ en: 'String?', ja: '文字列?', both: 'String?' });
-        expect(structure.nodes.find((n) => n.id === 'Sales')!.label.ja).toBe('販売');
+        expect(order.lines.find((l) => l.key.name === 'note')!.value).toEqual({ name: 'String?', label: '文字列?', both: 'String?' });
+        expect(structure.nodes.find((n) => n.id === 'Sales')!.label.label).toBe('販売');
 
         const states = buildStateGraph(m.elements['Sales.Order'], m);
-        expect(states.edges[0].label).toEqual({ en: 'confirm(at)', ja: '確定する', both: '確定する confirm(at)' });
+        expect(states.edges[0].label).toEqual({ name: 'confirm(at)', label: '確定する', both: '確定する confirm(at)' });
         expect(states.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.lines.at(-1)).toEqual({
-            key: { en: '✓ hasNote', ja: '✓ 備考あり', both: '✓ 備考あり (hasNote)' },
+            key: { name: '✓ hasNote', label: '✓ 備考あり', both: '✓ 備考あり (hasNote)' },
         });
     });
 
