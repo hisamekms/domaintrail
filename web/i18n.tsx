@@ -84,6 +84,11 @@ const ja = {
     model: 'モデル',
     files: 'ファイル',
     fileKind: 'ファイル',
+    filter: 'フィルタ',
+    clearFilter: 'フィルタを消す',
+    onlyProblems: '問題のある項目だけ表示',
+    onlyChanged: '変更された項目だけ表示',
+    noMatches: '一致する項目はありません。',
     kindGroups: {
         aggregate: '集約',
         entity: 'Entity',
@@ -234,6 +239,11 @@ const en: Messages = {
     model: 'Model',
     files: 'Files',
     fileKind: 'File',
+    filter: 'Filter',
+    clearFilter: 'Clear the filter',
+    onlyProblems: 'Show only items with problems',
+    onlyChanged: 'Show only changed items',
+    noMatches: 'Nothing matches.',
     kindGroups: {
         aggregate: 'Aggregate',
         entity: 'Entity',

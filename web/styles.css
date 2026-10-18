@@ -1205,6 +1205,56 @@ select,
 
 .explorer {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+/* the filter stays put while the trees below it scroll */
+.explorer-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 6px 6px 8px;
+    border-bottom: 1px solid var(--border);
+}
+.explorer-filter {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 2px 0 6px;
+    margin-right: 2px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+}
+.explorer-filter:focus-within {
+    border-color: var(--accent);
+}
+.explorer-filter input {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+}
+.explorer-filter .icon-button {
+    width: 18px;
+    height: 18px;
+}
+.explorer-head .icon-button[aria-pressed='true'] {
+    background: var(--violet-tint);
+    color: var(--accent);
+}
+.explorer-body {
+    flex: 1;
     overflow: auto;
     padding-bottom: 12px;
 }
@@ -1249,9 +1299,32 @@ select,
 .tree-twisty {
     width: 14px;
     flex: none;
+    display: inline-flex;
+    justify-content: center;
     color: var(--muted);
-    font-size: 13px;
-    text-align: center;
+}
+.tree-twisty svg {
+    transition: transform 180ms ease;
+}
+.tree-twisty.open svg {
+    transform: rotate(90deg);
+}
+/* children slide between no height and their own: a grid row can animate to 1fr, which height cannot do to auto */
+.tree-children {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 180ms ease;
+}
+.tree-children.open {
+    grid-template-rows: 1fr;
+}
+.tree-children-inner {
+    min-height: 0;
+    overflow: hidden;
+}
+.tree-folder {
+    flex: none;
+    color: var(--muted);
 }
 .tree-text {
     overflow: hidden;
@@ -1479,7 +1552,9 @@ select,
     .side > .rail,
     .bottom-wrap,
     .legend,
-    .legend-tab {
+    .legend-tab,
+    .tree-children,
+    .tree-twisty svg {
         transition: none;
     }
 }
