@@ -5,6 +5,7 @@ import {
     isEnumDecl,
     isErrorDecl,
     isEventDecl,
+    isFieldSet,
     isIdType,
     isInvariant,
     isPrimitiveDecl,
@@ -22,6 +23,7 @@ import {
     type ErrorDecl,
     type EventDecl,
     type Field,
+    type FieldSet,
     type IdType,
     type Invariant,
     type Model,
@@ -115,6 +117,23 @@ export class ModelIndex {
     get errors(): ErrorDecl[] {
         return this.elements.filter(isErrorDecl);
     }
+    get fieldSets(): FieldSet[] {
+        return this.elements.filter(isFieldSet);
+    }
+}
+
+/** Elements that may name field sets with `with` (only aggregates, entities and events may, see M016). */
+export type WithFieldSets = Aggregate | Entity | EventDecl | ValueObject | ErrorDecl | FieldSet;
+
+/** The field sets an element names with `with`, resolved, each once, in order. */
+export function fieldSetsOf(el: WithFieldSets): FieldSet[] {
+    return [...new Set(el.fieldSets.map((r) => r.ref).filter((f): f is FieldSet => !!f))];
+}
+
+/** The fields an element takes from its field sets, with the field set of each, before its own fields. */
+export function includedFields(el: WithFieldSets): { field: FieldLike; fieldSet: FieldSet }[] {
+    if (isFieldSet(el)) return [];
+    return fieldSetsOf(el).flatMap((fieldSet) => fieldsOf(fieldSet.members).map((field) => ({ field, fieldSet })));
 }
 
 export const fieldsOf = (members: readonly DataMember[]): FieldLike[] =>

@@ -17,7 +17,7 @@ declare module '@tldraw/tlschema' {
             /** Text size factor (1 = normal; the Structure overview uses larger text). */
             scale: number;
             /** Body rows; `v` is empty for rows without a value column. */
-            rows: { k: string; v: string }[];
+            rows: { k: string; v: string; o?: string }[];
             /** Height of the internal transitions' compartment at the bottom (0 = none); its rows are shapes of their own. */
             compartment: number;
             change: ChangeMark;
@@ -84,7 +84,8 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
         scale: T.number,
         label: T.string,
         stereotype: T.string,
-        rows: T.arrayOf(T.object({ k: T.string, v: T.string })),
+        /** `o`: the field set a field comes from, shown faded after its type. */
+        rows: T.arrayOf(T.object({ k: T.string, v: T.string, o: T.string.optional() })),
         compartment: T.number,
         change: changeMark,
         diag: diagMark,
@@ -117,7 +118,10 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
                                     r.v ? (
                                         <Fragment key={i}>
                                             <span className="dn-key">{r.k}</span>
-                                            <span className="dn-value">{r.v}</span>
+                                            <span className="dn-value">
+                                                {r.v}
+                                                {r.o && <span className="dn-origin">{r.o}</span>}
+                                            </span>
                                         </Fragment>
                                     ) : (
                                         <span key={i} className="dn-key dn-full">

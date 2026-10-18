@@ -39,7 +39,7 @@ const SALES = `context Sales "販売" {
     invariant internalOnly { actor.kind == Actor.INTERNAL_USER }
     command change(details: Details) emits Changed
   }
-  event Changed { details: Details }
+  event Changed { specId: SpecId details: Details }
 }
 `;
 

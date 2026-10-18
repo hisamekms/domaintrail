@@ -8,7 +8,7 @@ import {
     generatedNames,
 } from '../../generator/naming.js';
 import type { DiagnosticSink } from '../diagnostics.js';
-import { commandsOf, type ModelIndex } from '../model-index.js';
+import { commandsOf, includedFields, type ModelIndex } from '../model-index.js';
 
 /** M011: generated TypeScript names do not collide. */
 export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {
@@ -33,10 +33,16 @@ export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {
     }
 
     for (const el of [...index.events, ...index.errors]) {
+        const kind = el.$type === 'EventDecl' ? 'event' : 'error';
         for (const f of el.members) {
             if (f.name === EVENT_TAG) {
-                sink.error('M011', `Field '${EVENT_TAG}' is reserved for the discriminant of generated ${el.$type === 'EventDecl' ? 'event' : 'error'} types.`, f, 'name');
+                sink.error('M011', `Field '${EVENT_TAG}' is reserved for the discriminant of generated ${kind} types.`, f, 'name');
             }
+        }
+        for (const { field, fieldSet } of includedFields(el)) {
+            if (field.name !== EVENT_TAG) continue;
+            const at = el.fieldSets.findIndex((r) => r.ref === fieldSet);
+            sink.error('M011', `Field '${EVENT_TAG}' of field set '${fieldSet.name}' is reserved for the discriminant of generated ${kind} types.`, el, 'fieldSets', at);
         }
     }
 

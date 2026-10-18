@@ -38,7 +38,8 @@ const edgeShapeId = (id: string): TLShapeId => createShapeId(`e:${id}`);
 const ghostShapeId = (id: string): TLShapeId => createShapeId(`ghost:${id}`);
 const internalShapeId = (id: string): TLShapeId => createShapeId(`i:${id}`);
 
-const rowsIn = (n: GraphNode, v: Variant) => n.lines.map((l) => ({ k: textOf(l.key, v), v: l.value ? textOf(l.value, v) : '' }));
+const rowsIn = (n: GraphNode, v: Variant) =>
+    n.lines.map((l) => ({ k: textOf(l.key, v), v: l.value ? textOf(l.value, v) : '', ...(l.origin && { o: textOf(l.origin, v) }) }));
 
 /** Element that owns a state / command ID (`Sales.Order#Draft` -> `Sales.Order`). */
 export const ownerElement = (id: string): string => id.split(/[#:]/)[0];

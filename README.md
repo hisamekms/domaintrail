@@ -53,11 +53,14 @@ same text, so people and AI agents get it without leaving the terminal:
   `<context>/context.dt` (see [ADR 0009](docs/adr/0009-file-layout.md))
 - [DSL](docs/guide.md#dsl): contexts, aggregates, entities, values, states, commands, events, errors,
   [domain primitives](docs/guide.md#domain-primitives), [unions](docs/guide.md#unions),
-  [shared contexts](docs/guide.md#shared-contexts), [names (表示名)](docs/guide.md#names-labels-and-descriptions)
+  [shared contexts](docs/guide.md#shared-contexts), [field sets](docs/guide.md#field-sets),
+  [domain and technical fields](docs/guide.md#domain-fields-and-technical-fields),
+  [names (表示名)](docs/guide.md#names-labels-and-descriptions)
   and [invariant expressions](docs/guide.md#invariant-expressions)
-- [Rules](docs/guide.md#rules) (M001–M015, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
+- [Rules](docs/guide.md#rules) (M001–M017, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
-  [ADR 0011](docs/adr/0011-generated-code-boundary.md)) and [output directories](docs/guide.md#output-directories)
+  [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [output directories](docs/guide.md#output-directories) and
+  [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
 
 A taste of the DSL:
 

@@ -6,6 +6,8 @@ import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
 import type { DomainModel } from '../model/model.js';
 import { checkCommands } from './checker/commands.js';
+import { checkEventIds } from './checker/events.js';
+import { checkFieldSets } from './checker/field-sets.js';
 import { checkInvariants } from './checker/expressions.js';
 import { checkLabels } from './checker/labels.js';
 import { checkNames } from './checker/names.js';
@@ -41,6 +43,7 @@ const LINK_RULES: Record<string, RuleId> = {
     to: 'M006',
     emits: 'M007',
     errors: 'M007',
+    fieldSets: 'M016',
 };
 
 /** Parses, links and validates a set of `.dt` sources as one workspace. */
@@ -88,7 +91,9 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkShared(index, sink);
         checkStructure(index, sink);
         checkUnions(index, sink);
+        checkFieldSets(index, sink);
         checkCommands(index, sink);
+        checkEventIds(index, sink);
         checkInvariants(index, sink);
         checkTsNames(index, sink);
         checkLabels(index, sink);
@@ -112,6 +117,7 @@ const LINK_KINDS: Record<string, string> = {
     to: 'state',
     emits: 'event',
     errors: 'error',
+    fieldSets: 'field set',
     target: 'aggregate',
     decl: 'type',
 };

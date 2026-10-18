@@ -6,7 +6,7 @@ import { ownerElement } from './render';
 export type Select = (id: string) => void;
 
 /** Order of element kinds in lists and the explorer (their names: `kinds` in i18n). */
-export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'event', 'error'];
+export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'fieldSet', 'event', 'error'];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
@@ -52,7 +52,7 @@ export const selectedFile = (id: string | undefined): string | undefined => (id?
 /** Kinds that are drawn in the Structure View. */
 export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 
-export type CatalogSectionKey = 'aggregates' | 'entities' | 'values' | 'primitives' | 'events' | 'errors';
+export type CatalogSectionKey = 'aggregates' | 'entities' | 'values' | 'primitives' | 'fieldSets' | 'events' | 'errors';
 
 /** Sections of the catalog, in order, and the kinds of element each holds (in the order of its cards). */
 export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[] = [
@@ -60,6 +60,7 @@ export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[
     { key: 'entities', kinds: ['entity'] },
     { key: 'values', kinds: ['valueObject', 'union'] },
     { key: 'primitives', kinds: ['primitive', 'id', 'enum'] },
+    { key: 'fieldSets', kinds: ['fieldSet'] },
     { key: 'events', kinds: ['event'] },
     { key: 'errors', kinds: ['error'] },
 ];
@@ -129,6 +130,9 @@ export function commandsWithOutcome(model: DomainModel, id: string): { agg: Elem
     );
 }
 
+/** Elements that take on the fields of a field set (`with`). */
+export const fieldSetUsers = (model: DomainModel, id: string): ElementModel[] => Object.values(model.elements).filter((e) => e.fieldSets?.includes(id));
+
 /** Contexts with shared ones first. */
 export function orderedContexts(model: DomainModel): string[] {
     const shared = new Set(model.sharedContexts);
@@ -152,6 +156,8 @@ export interface Namer {
     transition(agg: ElementModel, c: CommandModel): string;
     /** An element, state or command by ID. */
     id(id: string): string;
+    /** A short name of an element by ID: in 両方 its label alone (the name is in a tooltip, or nearby). */
+    short(id: string): string;
 }
 
 export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
@@ -174,6 +180,11 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         transition(agg, c) {
             if (!agg.states?.length) return c.factory ? 'new' : '';
             return `${c.factory ? 'new' : c.from.map((n) => state(agg, n)).join(' | ')} → ${c.to.map((n) => state(agg, n)).join(' | ')}`;
+        },
+        short(id) {
+            const el = model?.elements[id];
+            if (!el) return shortName(id);
+            return mode === 'both' ? (el.label ?? el.name) : of(el);
         },
         id(id) {
             const r = model ? resolve(model, id) : undefined;

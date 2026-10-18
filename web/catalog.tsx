@@ -10,6 +10,7 @@ import { ContextPicker } from './context-picker';
 import {
     catalogSections,
     commandsWithOutcome,
+    fieldSetUsers,
     filterCatalog,
     isCatalogFiltered,
     namer,
@@ -292,6 +293,10 @@ function CardUses({ el, model, names, shared }: { el: ElementModel; model: Domai
         if (!commands.length) return <>{el.kind === 'event' ? t.raisedByNone : t.returnedByNone}</>;
         return <>← {commands.map(({ agg, command }) => `${names.of(agg)}.${names.of(command)}`).join(', ')}</>;
     }
+    if (el.kind === 'fieldSet') {
+        const users = fieldSetUsers(model, el.id);
+        return <>{users.length ? `← ${users.map((u) => names.of(u)).join(', ')}` : t.usedIn(0)}</>;
+    }
     // aggregates are used through their ID (`references`), never as a type
     const idType = el.kind === 'aggregate' ? el.fields.find((f) => f.name === 'id' && f.type.kind === 'ref')?.type : undefined;
     const uses = idType?.kind === 'ref' ? usagesOf(model, idType.ref).filter((u) => u.target !== el.id) : usagesOf(model, el.id);
@@ -315,6 +320,7 @@ function Fields({ fields, ctx, names }: { fields: FieldModel[]; ctx: string; nam
                         {f.kind === 'references' ? '→ ' : ''}
                         {names.type(f.type, ctx)}
                         {f.multiplicity}
+                        {f.fieldSet && <span className="field-origin">{names.short(f.fieldSet)}</span>}
                     </code>
                 </li>
             ))}

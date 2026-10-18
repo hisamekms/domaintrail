@@ -1,10 +1,13 @@
 import * as posix from 'node:path/posix';
 import type { CommandModel, Described, DomainModel, ElementModel, FieldModel, InvariantModel, PrimitiveName, TypeExpr } from '../model/model.js';
-import { elementsIn } from '../model/model.js';
+import { elementsIn, ownFields } from '../model/model.js';
 import {
+    AGGREGATE_TYPE,
+    DOMAIN_EVENT_TYPE,
     EVENT_TAG,
     PERSISTENT_EVENT_TYPE,
     STATE_TAG,
+    aggregateEventTypeName,
     aggregateParamName,
     commandTypeName,
     commandsInterfaceName,
@@ -136,7 +139,11 @@ class ContextEmitter {
                 case 'valueObject':
                 case 'entity':
                     this.jsdoc([...describedLines(el), ...invariantLines(el.invariants)]);
-                    this.iface(el.name, undefined, [], el.fields);
+                    this.iface(el.name, this.fieldSets(el), [], ownFields(el));
+                    break;
+                case 'fieldSet':
+                    this.jsdoc([...describedLines(el), `Fields taken on with \`with ${el.name}\`.`]);
+                    this.iface(el.name, [], [], el.fields);
                     break;
                 case 'union':
                     this.union(el);
@@ -144,7 +151,7 @@ class ContextEmitter {
                 case 'event':
                 case 'error':
                     this.jsdoc([...describedLines(el), ...(el.persistent ? [PERSISTENT_LINE] : [])]);
-                    this.iface(el.name, undefined, [`readonly ${EVENT_TAG}: '${el.name}';`], el.fields);
+                    this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.name}';`], ownFields(el));
                     break;
                 case 'aggregate':
                     this.aggregate(el);
@@ -153,6 +160,7 @@ class ContextEmitter {
             this.out.push('');
         }
         this.persistentEvents();
+        this.unions();
         const body = this.out.join('\n');
         const runtime = ['Decimal', 'Result', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
         const imports = [
@@ -169,6 +177,28 @@ class ContextEmitter {
         this.jsdoc([`Events of ${this.ctx} that are persisted (declared \`persistent\`).`]);
         this.line(`export type ${PERSISTENT_EVENT_TYPE} = ${events.map((e) => e.name).join(' | ')};`);
         this.out.push('');
+    }
+
+    /** Every event and every aggregate of the context, so that code handling any of them can name exactly them. */
+    private unions(): void {
+        const els = elementsIn(this.model, this.ctx);
+        const events = els.filter((el) => el.kind === 'event');
+        if (events.length) {
+            this.jsdoc([`Events of ${this.ctx}.`]);
+            this.line(`export type ${DOMAIN_EVENT_TYPE} = ${events.map((e) => e.name).join(' | ')};`);
+            this.out.push('');
+        }
+        const aggregates = els.filter((el) => el.kind === 'aggregate');
+        if (aggregates.length) {
+            this.jsdoc([`Aggregates of ${this.ctx}.`]);
+            this.line(`export type ${AGGREGATE_TYPE} = ${aggregates.map((e) => e.name).join(' | ')};`);
+            this.out.push('');
+        }
+    }
+
+    /** The field sets an element extends, as written from this context. */
+    private fieldSets(el: ElementModel): string[] {
+        return (el.fieldSets ?? []).map((f) => this.ref(f));
     }
 
     /**
@@ -228,14 +258,14 @@ class ContextEmitter {
         const states = agg.states ?? [];
         if (states.length === 0) {
             this.jsdoc([...describedLines(agg), ...invariantLines(agg.invariants)]);
-            this.iface(agg.name, undefined, [], agg.fields);
+            this.iface(agg.name, this.fieldSets(agg), [], ownFields(agg));
         } else {
             this.jsdoc([`Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`, ...invariantLines(agg.invariants)]);
-            this.iface(commonTypeName(agg), undefined, [], agg.fields);
+            this.iface(commonTypeName(agg), this.fieldSets(agg), [], ownFields(agg));
             for (const s of states) {
                 this.out.push('');
                 this.jsdoc([...describedLines(s), ...invariantLines(s.invariants)]);
-                this.iface(stateTypeName(agg, s), commonTypeName(agg), [`readonly ${STATE_TAG}: '${s.name}';`], s.fields);
+                this.iface(stateTypeName(agg, s), [commonTypeName(agg)], [`readonly ${STATE_TAG}: '${s.name}';`], s.fields);
             }
             this.out.push('');
             this.jsdoc(describedLines(agg));
@@ -256,6 +286,12 @@ class ContextEmitter {
                 this.line(`    readonly ${c.name}: ${commandTypeName(agg, c)};`);
             }
             this.line('}');
+        }
+        const events = [...new Set(commands.flatMap((c) => c.emits))];
+        if (events.length > 0) {
+            this.out.push('');
+            this.jsdoc([`Events that the commands of ${agg.name} may emit.`]);
+            this.line(`export type ${aggregateEventTypeName(agg)} = ${events.map((e) => this.ref(e)).join(' | ')};`);
         }
     }
 
@@ -282,9 +318,9 @@ class ContextEmitter {
         this.line(`) => Result<readonly [${output}, ${eventArray}], ${errors}>;`);
     }
 
-    private iface(name: string, base: string | undefined, extra: string[], fields: FieldModel[]): void {
+    private iface(name: string, bases: string[], extra: string[], fields: FieldModel[]): void {
         const lines = [...extra, ...fields.flatMap((f) => this.property(f))];
-        const ext = base ? ` extends ${base}` : '';
+        const ext = bases.length ? ` extends ${bases.join(', ')}` : '';
         if (lines.length === 0) {
             this.line(`export interface ${name}${ext} {}`);
             return;

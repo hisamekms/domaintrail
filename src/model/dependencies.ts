@@ -1,10 +1,10 @@
 import type { DomainModel, ElementModel, FieldModel } from './model.js';
-import { elementList } from './model.js';
+import { elementList, ownFields } from './model.js';
 
 /**
  * How one bounded context depends on another:
  *   id    an identifier of the other context (`references`, or a field typed with its ID)
- *   type  any other type of the other context (value object, union, enum, domain primitive, event)
+ *   type  any other type of the other context (value object, union, enum, domain primitive, event, field set)
  */
 export type DependencyKind = 'id' | 'type';
 
@@ -17,7 +17,7 @@ export interface Dependency {
     kind: DependencyKind;
     /** Element that holds the use (aggregate, entity, value object, union, event, error). */
     source: string;
-    /** Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `command ⇒ Event`. */
+    /** Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `with`, `command ⇒ Event`. */
     path: string;
     /** The element used (qualified name). */
     target: string;
@@ -36,7 +36,9 @@ export function contextDependencies(model: DomainModel): Dependency[] {
             if (f.kind === 'references' && f.target) add(f.target, path, 'id');
             else if (f.type.kind === 'ref') add(f.type.ref, path);
         };
-        for (const f of el.fields) field(f, f.name);
+        // fields taken from a field set are uses of the field set, recorded with it
+        for (const f of ownFields(el)) field(f, f.name);
+        for (const fs of el.fieldSets ?? []) add(fs, 'with');
         for (const s of el.states ?? []) for (const f of s.fields) field(f, `${s.name}.${f.name}`);
         for (const v of el.variants ?? []) for (const f of v.fields) field(f, `${v.name}.${f.name}`);
         if (el.tagType) add(el.tagType, 'by');

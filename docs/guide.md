@@ -96,7 +96,7 @@ billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { .
 - `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
   primitives and values.
 - `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several
-  of its aggregates or by none. The other files open the context without a name: `context Sales { ... }`.
+  of its aggregates or by none (field sets, for example). The other files open the context without a name: `context Sales { ... }`.
 - An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
 - Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
   `order-fulfillment/`.
@@ -179,7 +179,8 @@ context Sales {
 }
 ```
 
-- Context elements: `id`, `primitive`, `enum`, `value`, `union`, `entity`, `aggregate`, `event`, `error`.
+- Context elements: `id`, `primitive`, `enum`, `value`, `union`, `entity`, `aggregate`, `event`, `error`, and `fields`
+  (see [Field sets](#field-sets)).
 - Fields: `name: Type`, `owns name: Type` (entities and values held by the aggregate),
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
@@ -254,8 +255,88 @@ shared context Common "共通" {            // shared kernel: usable by simple n
 ```
 
 - `Money` and `Common.Money` both work in other contexts. A context's own element with the same name wins (M014 warning).
-- A shared context holds only domain primitives, enums, value objects, unions and terms, and depends only on shared
-  contexts. Its `terms` apply to fields of every context that has no term of its own for the name.
+- A shared context holds only domain primitives, enums, value objects, unions, field sets and terms, and depends only on
+  shared contexts. Its `terms` apply to fields of every context that has no term of its own for the name.
+
+### Field sets
+
+Fields that several aggregates, entities or events have for the same domain reason are written once as a field set
+and taken on with `with`.
+
+```dt
+// common/tenancy.dt
+shared context Common {
+  /// 契約者（テナント）。業務データはテナントごとに分かれる。
+  primitive TenantId "テナントID": UUID
+  fields Tenanted "テナント所属" {          // a field set: plain fields only
+    tenant: TenantId "テナント"
+  }
+}
+```
+
+```dt
+// expenses/expense.dt
+context Expenses "経費" {
+  id ExpenseId "経費申請ID": UUID
+  id StaffId "職員ID": UUID
+
+  /// 規程により、申請の受付には実施者を記録する。
+  fields Performed "実施記録" {
+    performedBy: StaffId "実施者"
+  }
+
+  aggregate Expense "経費申請" with Tenanted {   // tenant first, then its own fields
+    id: ExpenseId
+    applicant: StaffId "申請者"
+    approver: StaffId? "承認者"
+    invariant notSelfApproved "申請者は承認できない" { exists(approver) implies approver != applicant }
+
+    create command submit(applicant: StaffId "申請者") "申請する" emits ExpenseSubmitted
+    command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する" emits ExpenseApproved
+  }
+
+  event ExpenseSubmitted "申請受付" with Tenanted, Performed { expenseId: ExpenseId }
+  event ExpenseApproved "承認" with Tenanted {
+    expenseId: ExpenseId
+    approver: StaffId "承認者"          // a business role, named by the role
+    approvedAt: Timestamp "承認日時"    // when it happened in business terms
+  }
+}
+```
+
+- `fields Name "label" { ... }` holds plain fields, written like any other field (type, multiplicity, label, `///`).
+  No `owns`, `references`, invariants, `with` or `id` inside (M016).
+- `with A, B` after the name and label of an `aggregate`, `entity` or `event` (only those, M016). A field set is
+  referenced like a type: by name in its own context and from shared contexts, as `Context.Name` otherwise.
+- The fields come first, in the order of `with`, and then count as the element's own: invariants see them, and an
+  aggregate's states share them. A name may come from one place only, the element or one of its field sets (M016).
+- The identity of aggregates and entities is never a field set: every aggregate and entity declares `id` itself (M013).
+- A command's event should say which aggregate it is about: it needs a field of the aggregate's ID type, its own or
+  from a field set (M017 warning). An event emitted by several aggregates needs the ID type of each (optional fields
+  count).
+
+### Domain fields and technical fields
+
+Write a field in the DSL when **domain experts talk about it, or a business rule (an invariant, a transition, a
+command's decision) refers to it**. A field that is neither is technical: leave it out of the DSL and of the generated
+code, and add it in your own code around the generated types (see [Technical metadata](#technical-metadata)).
+
+- **Required by the kind of element** (the ID of an aggregate or entity): enforced by the language (M013), not a field
+  set.
+- **Chosen for some elements** (a tenant, a recorded performer): a field set and `with`.
+- **Technical**: event ID, the time the system recorded something (`recordedAt`), optimistic-lock `version`,
+  `createdAt` / `updatedAt`, correlation / causation IDs, the system's acting account, schema versions.
+
+Two cases look alike but are not:
+
+- **When**: the time something happened in business terms is domain — rules refer to it ("within 30 days of
+  confirmation"). Name it by its meaning (`confirmedAt: Timestamp "確定日時"`). If every event is to carry its business
+  time, say so with a field set: `fields Occurred { occurredAt: Timestamp "発生日時" }`. The time the system recorded it
+  is technical. The two differ with late entry, offline work and imports.
+- **Who**: a business role (approver, person in charge) is domain — rules refer to it ("the applicant cannot
+  approve"). Name it by the role (`approvedBy: StaffId "承認者"`), usually passed from the command's parameters to the
+  event. If regulations require recording the performer of every operation,
+  `fields Performed { performedBy: StaffId "実施者" }`. The login account, service account or IP address is technical; it differs with proxy entry and batches.
 
 ### Names (labels and descriptions)
 
@@ -328,6 +409,8 @@ context Billing {                          // other files open the context witho
 | M013 | aggregates and entities have an `id` field of their own ID type |
 | M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
 | M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
+| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
+| M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -337,7 +420,17 @@ context Billing {                          // other files open the context witho
 Per context a module (`Sales.ts`, …) with ID brands, enums, value objects, entities, unions, a discriminated union per
 stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types with a `type` tag, a function type per
 command and an `<Aggregate>Commands` interface to implement, plus `index.ts` and `_runtime.ts`. A domain primitive
-gets a branded type and a constructor contract `Make<Name>` to implement by hand.
+gets a branded type and a constructor contract `Make<Name>` to implement by hand. A field set is an interface that the
+elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its `…Common`).
+
+Unions to name groups of them, each generated only when it has a member:
+
+| Type | Members |
+|---|---|
+| `DomainEvent` | every event of the context |
+| `PersistentEvent` | the events declared `persistent` |
+| `Aggregate` | every aggregate of the context |
+| `<Aggregate>Event` (`OrderEvent`) | the events the aggregate's commands may emit (also of other contexts) |
 
 ```ts
 export type ConfirmOrder = (
@@ -366,6 +459,66 @@ export const makeQuantity: Sales.MakeQuantity = (value) =>
 
 Do not edit generated files: change the `.dt` sources and generate again. Adding properties or methods to generated
 types (declaration merging, editing the output) is not supported; write functions that take the generated types.
+
+### Technical metadata
+
+Technical fields (see [Domain fields and technical fields](#domain-fields-and-technical-fields)) are added by your code,
+around the generated types. Keep the two apart in an envelope, `{ event, meta }`, rather than an intersection
+(`E & Meta`): names cannot clash, and domain and technical fields stay separate. `dt` generates no envelope type.
+
+```ts
+// src/stored.ts — your code: metadata of stored events and aggregates
+import type { Sales } from '../generated/domain/index.js';
+
+export interface EventMeta {
+    readonly eventId: string;
+    readonly recordedAt: Date;
+    readonly correlationId?: string;
+    readonly causationId?: string;
+}
+
+/** What Sales records in addition. */
+export interface SalesEventMeta extends EventMeta {
+    readonly accountId: string;
+}
+
+export type Stored<E, M extends EventMeta = EventMeta> = { readonly event: E; readonly meta: M };
+
+export type StoredSalesEvent = Stored<Sales.PersistentEvent, SalesEventMeta>;
+
+export interface AggregateMeta {
+    readonly version: number;
+    readonly createdAt: Date;
+    readonly updatedAt: Date;
+}
+
+export type Versioned<A, M extends AggregateMeta = AggregateMeta> = { readonly aggregate: A; readonly meta: M };
+
+export interface OrderRepository {
+    load(id: Sales.OrderId): Promise<Versioned<Sales.Order> | undefined>;
+    save(order: Versioned<Sales.Order>, events: readonly Sales.OrderEvent[]): Promise<void>;
+}
+```
+
+Metadata that only some kinds of event carry can be keyed by the event's `type`:
+
+```ts
+// src/meta-by-event.ts — your code
+import type { Sales } from '../generated/domain/index.js';
+import type { EventMeta } from './stored.js';
+
+interface MetaByEvent {
+    OrderPlaced: { readonly channel: 'web' | 'store' };
+}
+
+export type MetaOf<E extends { type: string }> = EventMeta & (E['type'] extends keyof MetaByEvent ? MetaByEvent[E['type']] : {});
+
+/** One envelope per kind of event, so that a union of events gives a union of envelopes. */
+export type StoredEvent<E extends { type: string }> = E extends unknown ? { readonly event: E; readonly meta: MetaOf<E> } : never;
+
+export const channelOf = (s: StoredEvent<Sales.OrderPlaced>): 'web' | 'store' => s.meta.channel;
+export type StoredSalesEvents = StoredEvent<Sales.DomainEvent>;
+```
 
 ### Output directories
 
