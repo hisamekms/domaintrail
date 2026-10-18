@@ -1,35 +1,38 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useT } from './i18n';
 
 /**
  * Key for the edges of the canvas views; every edge points from the dependent to its dependency. Closed, it leaves a
  * flat tab on the bottom edge of the canvas that opens it.
  */
 export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structure' | 'focus' | 'states'; open: boolean; onToggle: () => void }) {
+    const t = useT();
+    const words = t.legendRows;
     const rows =
         view === 'contextMap'
             ? [
-                  { kind: 'references', text: 'ID だけで依存（ID 参照の件数）' },
-                  { kind: 'dependsOn', text: '型も借りて依存（型の借用の件数）' },
+                  { kind: 'references', text: words.mapReferences },
+                  { kind: 'dependsOn', text: words.mapDependsOn },
               ]
             : view === 'focus'
               ? [
-                    { kind: 'owns', text: '所有（集約の内部）' },
-                    { kind: 'references', text: '参照（ID で別の集約・BC へ）' },
-                    { kind: 'value', text: '値・型の借用（Value Object / Union / Enum など）' },
+                    { kind: 'owns', text: words.owns },
+                    { kind: 'references', text: words.focusReferences },
+                    { kind: 'value', text: words.focusValue },
                 ]
               : view === 'structure'
                 ? [
-                      { kind: 'owns', text: '所有（集約の内部）' },
-                      { kind: 'references', text: '参照（ID で別の集約へ）' },
-                      { kind: 'value', text: '値（Value Object / Union を持つ）' },
+                      { kind: 'owns', text: words.owns },
+                      { kind: 'references', text: words.references },
+                      { kind: 'value', text: words.value },
                   ]
-                : [{ kind: 'transition', text: 'Command による遷移（⇒ 発生させる Event）' }];
+                : [{ kind: 'transition', text: words.transition }];
     return (
         <>
             <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>
                 <div className="legend-title">
-                    凡例
-                    <button className="icon-button" onClick={onToggle} title="凡例を閉じる" aria-label="凡例を閉じる">
+                    {t.legend}
+                    <button className="icon-button" onClick={onToggle} title={t.closeLegend} aria-label={t.closeLegend}>
                         <ChevronDown size={14} aria-hidden />
                     </button>
                 </div>
@@ -43,10 +46,10 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
                         <span>{r.text}</span>
                     </div>
                 ))}
-                {view === 'focus' && <div className="legend-note">点線枠の小さな箱は別の BC の要素（スタブ）</div>}
-                <div className="legend-note">矢印の先が依存先</div>
+                {view === 'focus' && <div className="legend-note">{t.stubNote}</div>}
+                <div className="legend-note">{t.arrowNote}</div>
             </div>
-            <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} title="凡例を開く" aria-label="凡例を開く">
+            <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} title={t.openLegend} aria-label={t.openLegend}>
                 <ChevronUp size={14} aria-hidden />
             </button>
         </>

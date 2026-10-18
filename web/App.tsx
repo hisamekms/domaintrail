@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
-import type { DisplayMode, LaidOutGraph } from '../src/graph/ir';
+import { DISPLAY_MODES, type DisplayMode, type LaidOutGraph } from '../src/graph/ir';
 import { BottomPanel, type BottomTab } from './bottom';
 import { PrimitiveCatalog } from './catalog';
 import { Explorer } from './explorer';
@@ -16,6 +16,7 @@ import { CopyLocation, SourceView, locationOf, type SourceFocus } from './source
 import { ContextPicker } from './context-picker';
 import { SettingsMenu } from './settings-menu';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
+import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
 import { useViewSocket } from './useViewSocket';
 
 type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' } | { kind: 'source' };
@@ -47,8 +48,6 @@ const BOTTOM_BAR_HEIGHT = 33;
 /** The inspector can be widened until the canvas is this narrow. */
 const MIN_CANVAS_WIDTH = 320;
 
-const MODE_LABEL: Record<DisplayMode, string> = { label: 'ラベル', name: '名前', both: '両方' };
-
 /** The display mode saved under its former key and values (日本語 / English / 両方), if any. */
 function savedDisplayMode(): DisplayMode {
     try {
@@ -61,13 +60,6 @@ function savedDisplayMode(): DisplayMode {
 const viewKey = (v: View): string => (v.kind === 'states' ? `states:${v.aggregateId}` : v.kind);
 const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'states';
 
-const STATUS_LABEL = {
-    ok: '正常',
-    invalid: '検証エラー',
-    'syntax-error': '構文エラー',
-    empty: '.dt なし',
-} as const;
-
 export function App() {
     const { current, previous, connection } = useViewSocket();
     const model = current?.model ?? null;
@@ -76,6 +68,9 @@ export function App() {
     const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.nameDisplay', savedDisplayMode());
     const [themePreference, setThemePreference] = usePersistentState<ThemePreference>(THEME_KEY, 'auto');
     const theme = useResolvedTheme(themePreference);
+    const [langPreference, setLangPreference] = usePersistentState<LangPreference>(LANG_KEY, 'auto');
+    const lang = useResolvedLang(langPreference);
+    const t = MESSAGES[lang];
     /** Structure View: all fields (detail) or names only in larger text (overview). */
     const [structureMode, setStructureMode] = usePersistentState<'detail' | 'overview'>('domaintrail.structureMode', 'detail');
     /** Structure View: the bounded contexts to draw (null = every context, including ones added later). */
@@ -177,7 +172,7 @@ export function App() {
         }
         // ghosts of removed elements need the previous version of the same graph; focused graphs are not kept
         const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(previous, view) ?? undefined);
-        renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode });
+        renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
         if (switched) {
             const saved = cameras.current.get(key);
             if (saved) editor.setCamera(saved);
@@ -186,7 +181,7 @@ export function App() {
         }
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll, noneChecked]);
+    }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll, noneChecked, lang]);
 
     useEffect(() => {
         applyTheme(theme, editor);
@@ -318,39 +313,46 @@ export function App() {
     const empty = { added: [], changed: [], removed: [] };
 
     return (
+        <I18nProvider lang={lang}>
         <div className="app">
             <header>
                 <div className="brand">DomainTrail</div>
                 <div className="header-group">
-                    <span className="header-caption">名前の表示</span>
-                    <div className="segmented" role="group" aria-label="名前の表示">
-                        {(Object.keys(MODE_LABEL) as DisplayMode[]).map((m) => (
+                    <span className="header-caption">{t.nameDisplay}</span>
+                    <div className="segmented" role="group" aria-label={t.nameDisplay}>
+                        {DISPLAY_MODES.map((m) => (
                             <button key={m} className={mode === m ? 'active' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
-                                {MODE_LABEL[m]}
+                                {t.modes[m]}
                             </button>
                         ))}
                     </div>
                 </div>
                 <div className="status">
-                    {current && <span className={`pill pill-${current.status}`}>{STATUS_LABEL[current.status]}</span>}
+                    {current && <span className={`pill pill-${current.status}`}>{t.status[current.status]}</span>}
                     <span className="muted">
-                        {current ? `${current.files.length} files · v${current.version} · ${new Date(current.updatedAt).toLocaleTimeString()}` : ''}
+                        {current ? `${current.files.length} files · v${current.version} · ${new Date(current.updatedAt).toLocaleTimeString(lang)}` : ''}
                     </span>
                     <span className={`conn conn-${connection}`} title={`WebSocket: ${connection}`} />
                 </div>
-                <SettingsMenu themePreference={themePreference} theme={theme} onTheme={setThemePreference} />
+                <SettingsMenu
+                    themePreference={themePreference}
+                    theme={theme}
+                    onTheme={setThemePreference}
+                    langPreference={langPreference}
+                    lang={lang}
+                    onLang={setLangPreference}
+                />
             </header>
             {current?.stale && (
                 <div className="banner">
-                    構文エラーのため、最後に解析できた図を表示しています。
-                    <a onClick={() => setBottomOpen(true)}>問題</a>から該当箇所へ移動できます。
+                    {t.stale(<a onClick={() => setBottomOpen(true)}>{t.problems}</a>)}
                 </div>
             )}
             <div className="workspace">
                 {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
                 <div className={`side side-left${explorerOpen ? ' open' : ''}`} style={{ width: explorerOpen ? explorerWidth : RAIL_WIDTH }}>
                     <div className="rail" inert={explorerOpen}>
-                        <button className="icon-button" onClick={() => setExplorerOpen(true)} title="エクスプローラを開く" aria-label="エクスプローラを開く">
+                        <button className="icon-button" onClick={() => setExplorerOpen(true)} title={t.openExplorer} aria-label={t.openExplorer}>
                             <PanelLeftOpen size={16} aria-hidden />
                         </button>
                     </div>
@@ -375,7 +377,8 @@ export function App() {
                 </div>
                 {explorerOpen && <Resizer direction="x" size={explorerWidth} min={180} max={480} onResize={setExplorerWidth} />}
                 <section className="center">
-                    <div className="view-tabs" role="tablist">
+                    <div className="view-tabs">
+                        <div className="view-tab-list" role="tablist">
                         {(['contextMap', 'structure', 'states', 'primitives', 'source'] as const).map((k) => (
                             <button
                                 key={k}
@@ -387,12 +390,13 @@ export function App() {
                                     setView(k === 'states' ? { kind: 'states', aggregateId: lastAggregate.current ?? aggregates[0]?.id ?? '' } : { kind: k })
                                 }
                             >
-                                {{ contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives', source: 'Source' }[k]}
+                                {t.views[k]}
                             </button>
                         ))}
+                        </div>
                         <div className="view-toolbar">
                             {view.kind === 'states' && (
-                                <select value={view.aggregateId} onChange={(e) => setView({ kind: 'states', aggregateId: e.target.value })} aria-label="集約">
+                                <select value={view.aggregateId} onChange={(e) => setView({ kind: 'states', aggregateId: e.target.value })} aria-label={t.aggregate}>
                                     {aggregates.map((a) => (
                                         <option key={a.id} value={a.id}>
                                             {nameIn(mode, a.id, a.label)}
@@ -403,7 +407,7 @@ export function App() {
                             {view.kind === 'contextMap' && (
                                 <label className="check small">
                                     <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
-                                    共有・外部の BC も表示
+                                    {t.showAllContexts}
                                 </label>
                             )}
                             {view.kind === 'structure' && (
@@ -418,18 +422,18 @@ export function App() {
                                 />
                             )}
                             {view.kind === 'structure' && (
-                                <div className="segmented small" role="group" aria-label="Structure の表示">
+                                <div className="segmented small" role="group" aria-label={t.structureMode}>
                                     {(['detail', 'overview'] as const).map((m) => (
                                         <button key={m} className={structureMode === m ? 'active' : ''} aria-pressed={structureMode === m} onClick={() => setStructureMode(m)}>
-                                            {m === 'detail' ? '詳細' : '概観'}
+                                            {m === 'detail' ? t.detail : t.overview}
                                         </button>
                                     ))}
                                 </div>
                             )}
-                            {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>全体表示</button>}
+                            {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
                             {view.kind === 'source' && activeFile && (
                                 <>
-                                    <span className="muted">{activeFile}（表示専用）</span>
+                                    <span className="muted">{t.readOnly(activeFile)}</span>
                                     {sourceFocus?.file === activeFile && <CopyLocation loc={sourceFocus} />}
                                 </>
                             )}
@@ -447,10 +451,10 @@ export function App() {
                         {current && !graph && isCanvas(view) && (
                             <div className="empty">
                                 {current.status === 'empty'
-                                    ? '.dt ファイルがありません'
+                                    ? t.noDtFiles
                                     : noneChecked && view.kind === 'structure'
-                                      ? '表示する BC を選んでください'
-                                      : focusKey && view.kind === 'structure' ? '読み込み中…' : '表示できる図がありません'}
+                                      ? t.pickContexts
+                                      : focusKey && view.kind === 'structure' ? t.loading : t.noDiagram}
                             </div>
                         )}
                         {view.kind === 'source' && current && (
@@ -485,7 +489,7 @@ export function App() {
                     />}
                 <div className={`side side-right${inspectorOpen ? ' open' : ''}`} style={{ width: inspectorOpen ? inspectorWidth : RAIL_WIDTH }}>
                     <div className="rail" inert={inspectorOpen}>
-                        <button className="icon-button" onClick={() => setInspectorOpen(true)} title="インスペクタを開く" aria-label="インスペクタを開く">
+                        <button className="icon-button" onClick={() => setInspectorOpen(true)} title={t.openInspector} aria-label={t.openInspector}>
                             <PanelRightOpen size={16} aria-hidden />
                         </button>
                     </div>
@@ -530,5 +534,6 @@ export function App() {
                 />
             </div>
         </div>
+        </I18nProvider>
     );
 }

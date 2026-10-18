@@ -20,18 +20,8 @@ export const KIND_LABEL: Record<string, string> = {
     context: 'Context',
 };
 
-/** Order of element kinds in lists and the explorer, with the group titles. */
-export const KIND_GROUPS: { kind: ElementKind; title: string }[] = [
-    { kind: 'aggregate', title: '集約' },
-    { kind: 'entity', title: 'Entity' },
-    { kind: 'valueObject', title: 'Value Object' },
-    { kind: 'union', title: 'Union' },
-    { kind: 'primitive', title: 'Domain Primitive' },
-    { kind: 'id', title: 'ID' },
-    { kind: 'enum', title: 'Enum' },
-    { kind: 'event', title: 'Event' },
-    { kind: 'error', title: 'Error' },
-];
+/** Order of element kinds in lists and the explorer (group titles: `kindGroups` in i18n). */
+export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'event', 'error'];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 

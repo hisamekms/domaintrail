@@ -242,6 +242,9 @@ header {
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
     font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 .settings-row {
     display: flex;
@@ -249,7 +252,9 @@ header {
     gap: 12px;
     white-space: nowrap;
 }
+/* the same width in every row, so that the controls line up */
 .settings-caption {
+    min-width: 5em;
     color: var(--muted);
 }
 .status {
@@ -1151,14 +1156,23 @@ select,
 
 .view-tabs {
     display: flex;
+    flex-wrap: wrap; /* the toolbar goes below the tabs when they do not fit side by side */
     align-items: center;
     gap: 2px;
     padding: 0 8px;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
 }
-.view-tabs > button {
-    padding: 8px 14px;
+/* the tabs stay on one line (scrolling if the pane is narrower than them) */
+.view-tab-list {
+    display: flex;
+    gap: 2px;
+    min-width: 0;
+    overflow-x: auto;
+}
+.view-tab-list > button {
+    padding: 8px 12px;
+    white-space: nowrap;
     font: inherit;
     font-size: 14px;
     border: none;
@@ -1166,18 +1180,20 @@ select,
     background: none;
     cursor: pointer;
 }
-.view-tabs > button.active {
+.view-tab-list > button.active {
     border-bottom-color: var(--accent);
     color: var(--accent);
     font-weight: 600;
 }
-.view-tabs > button:disabled {
+.view-tab-list > button:disabled {
     opacity: 0.4;
     cursor: default;
 }
 .view-toolbar {
     margin-left: auto;
+    padding: 4px 0;
     display: flex;
+    white-space: nowrap;
     align-items: center;
     gap: 8px;
     font-size: 13px;

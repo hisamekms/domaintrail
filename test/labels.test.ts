@@ -3,6 +3,7 @@ import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { buildStateGraph, buildStructureGraph } from '../src/graph/build.js';
+import { anyLang, perLang } from '../src/graph/ir.js';
 import { EXAMPLES, check, codes, only } from './helpers.js';
 
 const SALES = `context Sales "販売" {
@@ -117,23 +118,35 @@ describe('label diagnostics', () => {
 });
 
 describe('labels in views and generated code', () => {
-    test('graph texts exist for every display mode', async () => {
+    test('graph texts exist for every language and display mode', async () => {
         const m = (await check({ 'a.dt': SALES })).model!;
         const structure = buildStructureGraph(m);
         const order = structure.nodes.find((n) => n.id === 'Sales.Order')!;
-        expect(order.label).toEqual({ name: 'Order', label: '注文', both: '注文 (Order)' });
-        expect(order.lines.find((l) => l.key.name.startsWith('→'))).toEqual({
-            key: { name: '→ customer', label: '→ 顧客', both: '→ 顧客 customer' },
-            value: { name: 'CustomerId', label: '顧客ID', both: 'CustomerId' },
+        // names and labels are the same in every language
+        expect(order.label).toEqual(anyLang({ name: 'Order', label: '注文', both: '注文 (Order)' }));
+        expect(order.lines.find((l) => l.key.en.name.startsWith('→'))).toEqual({
+            key: anyLang({ name: '→ customer', label: '→ 顧客', both: '→ 顧客 customer' }),
+            value: anyLang({ name: 'CustomerId', label: '顧客ID', both: 'CustomerId' }),
         });
-        expect(order.lines.find((l) => l.key.name === 'note')!.value).toEqual({ name: 'String?', label: '文字列?', both: 'String?' });
-        expect(structure.nodes.find((n) => n.id === 'Sales')!.label.label).toBe('販売');
+        expect(order.lines.find((l) => l.key.en.name === 'note')!.value).toEqual(anyLang({ name: 'String?', label: '文字列?', both: 'String?' }));
+        expect(structure.nodes.find((n) => n.id === 'Sales')!.label.ja.label).toBe('販売');
 
         const states = buildStateGraph(m.elements['Sales.Order'], m);
-        expect(states.edges[0].label).toEqual({ name: 'confirm(at)', label: '確定する', both: '確定する confirm(at)' });
+        expect(states.edges[0].label).toEqual(anyLang({ name: 'confirm(at)', label: '確定する', both: '確定する confirm(at)' }));
         expect(states.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.lines.at(-1)).toEqual({
-            key: { name: '✓ hasNote', label: '✓ 備考あり', both: '✓ 備考あり (hasNote)' },
+            key: anyLang({ name: '✓ hasNote', label: '✓ 備考あり', both: '✓ 備考あり (hasNote)' }),
         });
+    });
+
+    test("the Live View's own words follow the language, whatever the display mode", async () => {
+        const m = (await check({ 'a.dt': SALES })).model!;
+        const boundary = buildStructureGraph(m).nodes.find((n) => n.id === 'Sales.Order@boundary')!;
+        expect(boundary.label).toEqual({
+            ja: { name: 'Order 集約', label: '注文 集約', both: '注文 (Order) 集約' },
+            en: { name: 'Order aggregate', label: '注文 aggregate', both: '注文 (Order) aggregate' },
+        });
+        const state = buildStructureGraph(m).nodes.find((n) => n.id === 'Sales.Order')!.lines.find((l) => l.key.en.name === 'state');
+        expect(state?.key).toEqual(perLang({ ja: '状態', en: 'state' }));
     });
 
     test('wide characters reserve more width than ASCII', async () => {

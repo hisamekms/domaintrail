@@ -85,7 +85,7 @@ export class ElkLayoutEngine implements LayoutEngine {
                 id: e.id,
                 sources: [e.source],
                 targets: [e.target],
-                labels: e.label ? [{ text: e.label.name, width: Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(19 * scale) }] : [],
+                labels: e.label ? [{ text: e.label.en.name, width: Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(19 * scale) }] : [],
             }));
 
         const kind = graph.id.split(':')[0];

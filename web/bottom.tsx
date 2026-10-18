@@ -1,5 +1,6 @@
 import { PanelBottomClose, PanelBottomOpen } from 'lucide-react';
 import type { Diagnostic } from '../src/core/diagnostics';
+import { useT } from './i18n';
 import type { ModelDiff } from '../src/graph/diff';
 import type { DomainModel } from '../src/model/model';
 import type { DisplayMode } from '../src/graph/ir';
@@ -20,6 +21,7 @@ export function BottomPanel(props: {
     onLocate: (d: Diagnostic) => void;
     onSelect: Select;
 }) {
+    const t = useT();
     const errors = props.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = props.diagnostics.length - errors;
     const changes = props.diff.added.length + props.diff.changed.length + props.diff.removed.length;
@@ -34,19 +36,19 @@ export function BottomPanel(props: {
         <div className="bottom">
             <div className="bottom-bar">
                 <button className={props.open && props.tab === 'problems' ? 'active' : ''} onClick={() => pick('problems')}>
-                    問題
+                    {t.problems}
                     {errors > 0 && <span className="count count-error">{errors}</span>}
                     {warnings > 0 && <span className="count count-warning">{warnings}</span>}
                     {errors + warnings === 0 && <span className="muted"> 0</span>}
                 </button>
                 <button className={props.open && props.tab === 'changes' ? 'active' : ''} onClick={() => pick('changes')}>
-                    変更 {changes > 0 ? <span className="count">{changes}</span> : <span className="muted">0</span>}
+                    {t.changes} {changes > 0 ? <span className="count">{changes}</span> : <span className="muted">0</span>}
                 </button>
                 <button
                     className="icon-button bottom-toggle"
                     onClick={props.onToggle}
-                    title={props.open ? '問題・変更を閉じる' : '問題・変更を開く'}
-                    aria-label={props.open ? '問題・変更を閉じる' : '問題・変更を開く'}
+                    title={props.open ? t.closeBottom : t.openBottom}
+                    aria-label={props.open ? t.closeBottom : t.openBottom}
                 >
                     {props.open ? <PanelBottomClose size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
                 </button>
@@ -60,7 +62,8 @@ export function BottomPanel(props: {
 }
 
 function Problems({ items, onLocate }: { items: Diagnostic[]; onLocate: (d: Diagnostic) => void }) {
-    if (items.length === 0) return <p className="muted pad">問題はありません。</p>;
+    const t = useT();
+    if (items.length === 0) return <p className="muted pad">{t.noProblems}</p>;
     return (
         <table className="problems">
             <tbody>
@@ -83,14 +86,15 @@ function Problems({ items, onLocate }: { items: Diagnostic[]; onLocate: (d: Diag
 }
 
 function Changes({ diff, model, mode, onSelect }: { diff: ModelDiff; model: DomainModel | null; mode: DisplayMode; onSelect: Select }) {
+    const t = useT();
     if (!diff.added.length && !diff.changed.length && !diff.removed.length) {
-        return <p className="muted pad">直前の正常モデルからの変更はありません。</p>;
+        return <p className="muted pad">{t.noChanges}</p>;
     }
     const name = namer(mode, model).id;
     const groups: [keyof ModelDiff, string][] = [
-        ['added', '追加'],
-        ['changed', '変更'],
-        ['removed', '削除'],
+        ['added', t.added],
+        ['changed', t.changed],
+        ['removed', t.removed],
     ];
     return (
         <div className="changes">

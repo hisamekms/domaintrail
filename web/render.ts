@@ -1,7 +1,7 @@
 import { createShapeId, type Editor, type TLShapeId, type TLShapePartial } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
-import type { DisplayMode, GraphEdge, GraphNode, LaidOutGraph } from '../src/graph/ir';
+import type { DisplayMode, GraphEdge, GraphNode, Lang, LaidOutGraph, Texts } from '../src/graph/ir';
 import type { ChangeMark, DiagMark, EdgeTone } from './shapes';
 
 export interface RenderOptions {
@@ -10,14 +10,19 @@ export interface RenderOptions {
     /** The previously shown version of the same graph; removed nodes are drawn as ghosts at their old position. */
     previous?: LaidOutGraph;
     mode: DisplayMode;
+    lang: Lang;
 }
+
+/** Which variant of the graph's texts to show. */
+type Variant = Pick<RenderOptions, 'mode' | 'lang'>;
+const textOf = (t: Texts, v: Variant): string => t[v.lang][v.mode];
 
 const GROUP_KINDS = new Set(['context', 'sharedContext', 'aggregateBoundary']);
 const nodeShapeId = (id: string): TLShapeId => createShapeId(`n:${id}`);
 const edgeShapeId = (id: string): TLShapeId => createShapeId(`e:${id}`);
 const ghostShapeId = (id: string): TLShapeId => createShapeId(`ghost:${id}`);
 
-const rowsIn = (n: GraphNode, mode: DisplayMode) => n.lines.map((l) => ({ k: l.key[mode], v: l.value?.[mode] ?? '' }));
+const rowsIn = (n: GraphNode, v: Variant) => n.lines.map((l) => ({ k: textOf(l.key, v), v: l.value ? textOf(l.value, v) : '' }));
 
 /** Element that owns a state / command ID (`Sales.Order#Draft` -> `Sales.Order`). */
 export const ownerElement = (id: string): string => id.split(/[#:]/)[0];
@@ -53,12 +58,12 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         const marks = { change: isGroup ? ('none' as const) : change(n.elementId), diag: isGroup ? ('none' as const) : (severity.get(n.elementId) ?? 'none') };
         const base = { id: nodeShapeId(n.id), x: l.x, y: l.y, meta: { elementId: n.elementId, graphNode: n.id } };
         if (isGroup) {
-            groups.push({ ...base, type: 'domain-group', props: { w: l.width, h: l.height, kind: n.kind, label: n.label[opts.mode], scale, ...marks } });
+            groups.push({ ...base, type: 'domain-group', props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), scale, ...marks } });
         } else {
             nodes.push({
                 ...base,
                 type: 'domain-node',
-                props: { w: l.width, h: l.height, kind: n.kind, label: n.label[opts.mode], stereotype: n.stereotype ?? '', scale, rows: rowsIn(n, opts.mode), ...marks },
+                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ?? '', scale, rows: rowsIn(n, opts), ...marks },
             });
         }
     }
@@ -75,7 +80,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
                 x: l.x,
                 y: l.y,
                 meta: { elementId: n.elementId, ghost: true },
-                props: { w: l.width, h: l.height, kind: n.kind, label: n.label[opts.mode], stereotype: n.stereotype ?? '', scale, rows: rowsIn(n, opts.mode), change: 'removed', diag: 'none' },
+                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ?? '', scale, rows: rowsIn(n, opts), change: 'removed', diag: 'none' },
             });
         }
     }
@@ -83,7 +88,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
     const edges: TLShapePartial[] = [];
     for (const e of graph.edges) {
         const owner = edgeOwner(e, structure);
-        const shape = edgeShape(graph, e, opts.mode, severity.get(owner) === 'error' && !structure ? 'error' : toneOf(change(owner)));
+        const shape = edgeShape(graph, e, opts, severity.get(owner) === 'error' && !structure ? 'error' : toneOf(change(owner)));
         if (shape) edges.push(shape);
     }
 
@@ -131,7 +136,7 @@ function edgeOwner(e: GraphEdge, structure: boolean): string {
 
 const toneOf = (c: ChangeMark): EdgeTone => (c === 'added' ? 'added' : c === 'changed' ? 'changed' : 'normal');
 
-function edgeShape(graph: LaidOutGraph, e: GraphEdge, mode: DisplayMode, tone: EdgeTone): TLShapePartial | undefined {
+function edgeShape(graph: LaidOutGraph, e: GraphEdge, v: Variant, tone: EdgeTone): TLShapePartial | undefined {
     const route = graph.edgeLayout[e.id];
     if (!route || route.points.length < 2) return undefined;
     const xs = route.points.map((p) => p.x);
@@ -152,7 +157,7 @@ function edgeShape(graph: LaidOutGraph, e: GraphEdge, mode: DisplayMode, tone: E
         props: {
             points: route.points.map((p) => ({ x: p.x - ox, y: p.y - oy })),
             kind: e.kind,
-            label: e.label?.[mode] ?? '',
+            label: e.label ? textOf(e.label, v) : '',
             scale: graph.textScale ?? 1,
             lx: l ? l.x - ox : 0,
             ly: l ? l.y - oy : 0,

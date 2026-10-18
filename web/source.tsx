@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { DomainModel, Location } from '../src/model/model';
 import { highlight, type Token } from './highlight';
+import { useT } from './i18n';
 
 /** A position in the sources to show: a declaration range, or a single line (e.g. a syntax error). */
 export interface SourceFocus {
@@ -32,12 +33,13 @@ export function locationOf(model: DomainModel | null, id: string): Location | un
 
 /** Copies `file:line` (or `file:line-endLine`) for pasting into feedback to an AI. */
 export function CopyLocation({ loc }: { loc: SourceFocus }) {
+    const t = useT();
     const [copied, setCopied] = useState(false);
     const text = loc.endLine && loc.endLine !== loc.line ? `${loc.file}:${loc.line}-${loc.endLine}` : `${loc.file}:${loc.line}`;
     return (
         <button
             className="copy-button"
-            title="パスと行をコピー"
+            title={t.copyLocation}
             onClick={async () => {
                 try {
                     await navigator.clipboard.writeText(text);
@@ -48,7 +50,7 @@ export function CopyLocation({ loc }: { loc: SourceFocus }) {
                 }
             }}
         >
-            {copied ? 'コピーしました' : `${text} をコピー`}
+            {copied ? t.copied : t.copy(text)}
         </button>
     );
 }
@@ -102,6 +104,7 @@ export function SourceView(props: {
     focus: SourceFocus | undefined;
     onSelect: (elementId: string) => void;
 }) {
+    const t = useT();
     const file = props.file ?? props.sources[0]?.path;
     const source = props.sources.find((s) => s.path === file);
     const lines = useMemo(() => (source ? highlight(source.text) : []), [source]);
@@ -123,7 +126,7 @@ export function SourceView(props: {
     };
     const focus = props.focus?.file === file ? props.focus : undefined;
 
-    if (!source) return <p className="muted pad">.dt ファイルがありません。</p>;
+    if (!source) return <p className="muted pad">{t.noDtFiles}</p>;
     return (
         <div className="source-view">
             <CodeLines

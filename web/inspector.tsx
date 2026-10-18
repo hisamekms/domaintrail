@@ -7,13 +7,13 @@ import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantMode
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { highlight } from './highlight';
-import { KIND_GROUPS, KIND_LABEL, namer, resolve, type Namer, type Resolved, type Select } from './model-utils';
+import { useLang, useT } from './i18n';
+import { KIND_LABEL, KIND_ORDER, namer, resolve, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
 import { CodeLines, CopyLocation } from './source';
 import { usagesOf } from './usages';
 
 export type InspectorTab = 'structure' | 'behavior' | 'references' | 'source';
-const TAB_LABEL: Record<InspectorTab, string> = { structure: '構造', behavior: '振る舞い', references: '参照', source: 'ソース' };
 
 /** Where the selected item can be shown in the main area. */
 export type RevealTarget = 'contextMap' | 'structure' | 'states' | 'primitives' | 'source';
@@ -72,19 +72,19 @@ function revealTargets(r: Resolved): RevealTarget[] {
     return out;
 }
 
-const REVEAL_LABEL: Record<RevealTarget, string> = { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'Primitives', source: 'ソース' };
 
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
+    const tx = useT();
     const history = (
         <div className="history">
-            <button disabled={!props.canBack} onClick={props.onBack} title="戻る" aria-label="戻る">
+            <button disabled={!props.canBack} onClick={props.onBack} title={tx.back} aria-label={tx.back}>
                 ←
             </button>
-            <button disabled={!props.canForward} onClick={props.onForward} title="進む" aria-label="進む">
+            <button disabled={!props.canForward} onClick={props.onForward} title={tx.forward} aria-label={tx.forward}>
                 →
             </button>
-            <button className="icon-button" onClick={props.onClose} title="インスペクタを閉じる" aria-label="インスペクタを閉じる">
+            <button className="icon-button" onClick={props.onClose} title={tx.closeInspector} aria-label={tx.closeInspector}>
                 <PanelRightClose size={16} aria-hidden />
             </button>
         </div>
@@ -94,7 +94,7 @@ export function Inspector(props: InspectorProps) {
             <div className="inspector">
                 <div className="inspector-head">
                     <div className="inspector-row">{history}</div>
-                    <p className="muted">モデルがまだありません。</p>
+                    <p className="muted">{tx.noModel}</p>
                 </div>
             </div>
         );
@@ -104,7 +104,7 @@ export function Inspector(props: InspectorProps) {
             <div className="inspector">
                 <div className="inspector-head">
                     <div className="inspector-row">{history}</div>
-                    <p className="muted">{selected ? `${selected} は現在のモデルにありません。` : 'エクスプローラや図で要素を選ぶと、ここに詳細が出ます。'}</p>
+                    <p className="muted">{selected ? tx.notInModel(selected) : tx.pickElement}</p>
                 </div>
             </div>
         );
@@ -124,8 +124,8 @@ export function Inspector(props: InspectorProps) {
             <div className="inspector-head">
                 <div className="inspector-row">
                     <span className={`kind kind-${head.kind}`}>{KIND_LABEL[head.kind] ?? head.kind}</span>
-                    {r.kind === 'context' && r.shared && <span className="shared-badge">共有</span>}
-                    {change && <span className={`change change-${change}`}>{change === 'added' ? '追加' : '変更'}</span>}
+                    {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
+                    {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
                     {history}
                 </div>
                 <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
@@ -138,10 +138,10 @@ export function Inspector(props: InspectorProps) {
                 )}
                 {revealTargets(r).length > 0 && (
                     <div className="reveal">
-                        <span className="muted small">見る:</span>
+                        <span className="muted small">{tx.showIn}</span>
                         {revealTargets(r).map((t) => (
                             <button key={t} onClick={() => props.onReveal(t, selected)}>
-                                {REVEAL_LABEL[t]}
+                                {tx.reveal[t]}
                             </button>
                         ))}
                     </div>
@@ -160,7 +160,7 @@ export function Inspector(props: InspectorProps) {
                 <div className="subtabs" role="tablist">
                     {tabs.map((t) => (
                         <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'active' : ''} onClick={() => props.onTab(t)}>
-                            {TAB_LABEL[t]}
+                            {tx.tabs[t]}
                         </button>
                     ))}
                 </div>
@@ -189,6 +189,7 @@ function headOf(r: Resolved): { kind: string; name: string; label?: string; doc?
 function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     const { r, tab, model, onSelect } = props;
     const names = useNames();
+    const tx = useT();
     if (!model) return null;
     if (tab === 'source') {
         const loc = headOf(r).location;
@@ -204,17 +205,17 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             const outgoing = (agg.commands ?? []).filter((c) => c.from.includes(state.name));
             return (
                 <>
-                    <CommandList title="この State に入る Command" agg={agg} commands={incoming} onSelect={onSelect} />
-                    <CommandList title="この State から出る Command" agg={agg} commands={outgoing} onSelect={onSelect} />
+                    <CommandList title={tx.commandsInto} agg={agg} commands={incoming} onSelect={onSelect} />
+                    <CommandList title={tx.commandsOutOf} agg={agg} commands={outgoing} onSelect={onSelect} />
                 </>
             );
         }
         return (
             <>
-                <Fields title="State 固有フィールド" fields={state.fields} ctx={agg.context} onSelect={onSelect} empty="State 固有のフィールドはありません。" />
-                <Invariants items={state.invariants} title="Invariant（この State のみ）" labelOnly />
+                <Fields title={tx.stateFields} fields={state.fields} ctx={agg.context} onSelect={onSelect} empty={tx.noStateFields} />
+                <Invariants items={state.invariants} title={tx.stateInvariants} labelOnly />
                 <p className="muted small">
-                    共通フィールドは集約 <a onClick={() => onSelect(agg.id)}>{names.of(agg)}</a> を参照。
+                    {tx.commonFieldsAt(<a onClick={() => onSelect(agg.id)}>{names.of(agg)}</a>)}
                 </p>
             </>
         );
@@ -225,22 +226,22 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         if (tab === 'behavior') {
             return (
                 <>
-                    <Section title="遷移">
-                        <code className="block">{names.transition(agg, c) || '（State なし）'}</code>
+                    <Section title={tx.transition}>
+                        <code className="block">{names.transition(agg, c) || tx.noStates}</code>
                     </Section>
-                    <Section title="発生し得る Event（0 件以上）">
-                        {c.emits.length ? c.emits.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">なし</span>}
+                    <Section title={tx.mayRaise}>
+                        {c.emits.length ? c.emits.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
                     </Section>
-                    <Section title="返し得る Error">
-                        {c.errors.length ? c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">なし</span>}
+                    <Section title={tx.mayReturn}>
+                        {c.errors.length ? c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
                     </Section>
                 </>
             );
         }
         return (
             <>
-                <Fields title="パラメータ" fields={c.params} ctx={agg.context} onSelect={onSelect} empty="パラメータはありません。" />
-                <Section title="契約">
+                <Fields title={tx.params} fields={c.params} ctx={agg.context} onSelect={onSelect} empty={tx.noParams} />
+                <Section title={tx.contract}>
                     <code className="block">
                         {c.factory ? 'create ' : ''}command {c.name}({c.params.map((p) => `${p.name}: ${namer('name', model).type(p.type, agg.context)}${p.multiplicity}`).join(', ')})
                     </code>
@@ -253,7 +254,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     if (tab === 'behavior') {
         return (
             <>
-                <CommandList title={`Command（${el.commands?.length ?? 0}）`} agg={el} commands={el.commands ?? []} onSelect={onSelect} />
+                <CommandList title={tx.counted('Command', el.commands?.length ?? 0)} agg={el} commands={el.commands ?? []} onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="errors" onSelect={onSelect} />
             </>
@@ -266,11 +267,13 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         <>
             {el.base && (
                 <p>
-                    {el.kind === 'id' ? 'Domain Primitive（識別子）' : 'Domain Primitive'} ／ 基底型: <code>{names.primitive(el.base)}</code>
+                    {el.kind === 'id' ? tx.identifier : 'Domain Primitive'}
+                    {tx.separator}
+                    {tx.baseType}: <code>{names.primitive(el.base)}</code>
                 </p>
             )}
             {el.values && (
-                <Section title="値">
+                <Section title={tx.values}>
                     <div className="chips">
                         {el.values.map((v) => (
                             <code key={v}>
@@ -284,36 +287,37 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             {el.kind === 'union' && (
                 <>
                     <p>
-                        判別子: <code>{el.discriminator}</code>
+                        {tx.discriminator}: <code>{el.discriminator}</code>
                         {el.tagType && (
                             <>
-                                {' '}／ 値: <a onClick={() => onSelect(el.tagType!)}>{names.id(el.tagType)}</a>
+                                {tx.separator}
+                                {tx.values}: <a onClick={() => onSelect(el.tagType!)}>{names.id(el.tagType)}</a>
                             </>
                         )}
                     </p>
                     {(el.variants ?? []).map((v) => (
                         <div key={v.name} title={v.doc}>
-                            <Fields title={`${names.of(v)}`} fields={v.fields} ctx={el.context} onSelect={onSelect} empty="フィールドはありません。" />
-                            <Invariants items={v.invariants} title={`Invariant（${names.of(v)}）`} />
+                            <Fields title={`${names.of(v)}`} fields={v.fields} ctx={el.context} onSelect={onSelect} empty={tx.noFields} />
+                            <Invariants items={v.invariants} title={tx.variantInvariants(names.of(v))} />
                         </div>
                     ))}
                 </>
             )}
             {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'enum' && el.kind !== 'union' && (
                 <Fields
-                    title={el.states?.length ? '共通フィールド' : el.kind === 'event' || el.kind === 'error' ? 'ペイロード' : 'フィールド'}
+                    title={el.states?.length ? tx.commonFields : el.kind === 'event' || el.kind === 'error' ? tx.payload : tx.fields}
                     fields={el.fields}
                     ctx={el.context}
                     onSelect={onSelect}
-                    empty="フィールドはありません。"
+                    empty={tx.noFields}
                 />
             )}
             {(el.kind === 'aggregate' || el.kind === 'entity' || el.kind === 'valueObject') && (
-                <Invariants items={el.invariants} title={el.states?.length ? 'Invariant（全State共通）' : 'Invariant'} labelOnly={el.kind === 'aggregate'} />
+                <Invariants items={el.invariants} title={el.states?.length ? tx.allStateInvariants : tx.invariants} labelOnly={el.kind === 'aggregate'} />
             )}
-            {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} title="Invariant（適用: 値（value））" />}
+            {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} title={tx.valueInvariants} />}
             {el.states && el.states.length > 0 && (
-                <Section title={`State（${el.states.length}）`}>
+                <Section title={tx.counted('State', el.states.length)}>
                     {el.states.map((s) => (
                         <div key={s.id} className="sub">
                             <a onClick={() => onSelect(s.id)}>{names.of(s)}</a>
@@ -329,6 +333,8 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
 /** Dependencies of a context on others (or of others on it), one collapsible group per context with every use. */
 function Dependencies({ title, groups, other, onSelect }: { title: string; groups: ContextDependency[]; other: (g: ContextDependency) => string; onSelect: Select }) {
     const names = useNames();
+    const tx = useT();
+    const lang = useLang();
     if (groups.length === 0) return null;
     return (
         <Section title={`${title}（${groups.length}）`}>
@@ -336,14 +342,14 @@ function Dependencies({ title, groups, other, onSelect }: { title: string; group
                 <details key={other(g)} className="deps">
                     <summary>
                         <a onClick={() => onSelect(other(g))}>{names.id(other(g))}</a>
-                        <span className="muted small"> {dependencyCounts(g.ids, g.types)[names.mode]}</span>
+                        <span className="muted small"> {dependencyCounts(g.ids, g.types)[lang][names.mode]}</span>
                     </summary>
                     {g.uses.map((u, i) => (
                         <div key={i} className="sub small">
                             <a onClick={() => onSelect(u.source)}>{names.id(u.source)}</a>
                             <span className="muted">.{u.path} → </span>
                             <a onClick={() => onSelect(u.target)}>{names.id(u.target)}</a>
-                            <span className={`dep-kind dep-${u.kind}`}>{u.kind === 'id' ? 'ID' : '型'}</span>
+                            <span className={`dep-kind dep-${u.kind}`}>{u.kind === 'id' ? 'ID' : tx.typeDependency}</span>
                         </div>
                     ))}
                 </details>
@@ -354,6 +360,7 @@ function Dependencies({ title, groups, other, onSelect }: { title: string; group
 
 function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ctx: string; onSelect: Select; onFocus: (ctx: string) => void }) {
     const names = useNames();
+    const tx = useT();
     const els = Object.values(model.elements).filter((e) => e.context === ctx);
     const terms = model.terms[ctx] ?? [];
     const groups = groupByContext(contextDependencies(model));
@@ -361,16 +368,16 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
         <>
             {!supportingContexts(model).has(ctx) && (
                 <p>
-                    <button onClick={() => onFocus(ctx)}>この BC だけを構造図で見る</button>
+                    <button onClick={() => onFocus(ctx)}>{tx.focusContext}</button>
                 </p>
             )}
-            <Dependencies title="依存先（この BC が使う）" groups={groups.filter((g) => g.from === ctx)} other={(g) => g.to} onSelect={onSelect} />
-            <Dependencies title="依存元（この BC を使う）" groups={groups.filter((g) => g.to === ctx)} other={(g) => g.from} onSelect={onSelect} />
-            {KIND_GROUPS.map(({ kind, title }) => {
+            <Dependencies title={tx.dependencies} groups={groups.filter((g) => g.from === ctx)} other={(g) => g.to} onSelect={onSelect} />
+            <Dependencies title={tx.dependents} groups={groups.filter((g) => g.to === ctx)} other={(g) => g.from} onSelect={onSelect} />
+            {KIND_ORDER.map((kind) => {
                 const items = els.filter((e) => e.kind === kind);
                 if (!items.length) return null;
                 return (
-                    <Section key={kind} title={`${title}（${items.length}）`}>
+                    <Section key={kind} title={tx.counted(tx.kindGroups[kind], items.length)}>
                         {items.map((e) => (
                             <div key={e.id} className="sub">
                                 <a onClick={() => onSelect(e.id)}>{names.of(e)}</a>
@@ -380,7 +387,7 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
                 );
             })}
             {terms.length > 0 && (
-                <Section title="用語集（terms）">
+                <Section title={tx.terms}>
                     <table className="fields">
                         <tbody>
                             {terms.map((t) => (
@@ -401,17 +408,18 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
 /** Where an element is used: by fields / parameters, by references, and by commands (events, errors). */
 function References({ model, el, onSelect }: { model: DomainModel; el: ElementModel; onSelect: Select }) {
     const names = useNames();
+    const tx = useT();
     const typeUses = usagesOf(model, el.id, names.of);
     const idType = el.fields.find((f) => f.name === 'id' && f.type.kind === 'ref')?.type;
     const idUses = el.kind === 'aggregate' && idType?.kind === 'ref' ? usagesOf(model, idType.ref, names.of).filter((u) => u.target !== el.id) : [];
     const commands = Object.values(model.elements).flatMap((a) =>
         (a.commands ?? []).filter((c) => c.emits.includes(el.id) || c.errors.includes(el.id)).map((c) => ({ agg: a, c })),
     );
-    if (!typeUses.length && !idUses.length && !commands.length) return <p className="muted">どこからも参照されていません。</p>;
+    if (!typeUses.length && !idUses.length && !commands.length) return <p className="muted">{tx.unreferenced}</p>;
     return (
         <>
             {commands.length > 0 && (
-                <Section title={el.kind === 'event' ? '発生させる Command' : '返す Command'}>
+                <Section title={el.kind === 'event' ? tx.raisedBy : tx.returnedBy}>
                     {commands.map(({ agg, c }) => (
                         <div key={c.id} className="sub">
                             <a onClick={() => onSelect(c.id)}>
@@ -422,7 +430,7 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
                 </Section>
             )}
             {typeUses.length > 0 && (
-                <Section title={`型として使われている場所（${typeUses.length}）`}>
+                <Section title={tx.typeUses(typeUses.length)}>
                     {typeUses.map((u) => (
                         <div key={u.key} className="sub">
                             <a onClick={() => onSelect(u.target)}>{u.text}</a>
@@ -431,7 +439,7 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
                 </Section>
             )}
             {idUses.length > 0 && (
-                <Section title={`ID（${idType!.kind === 'ref' ? names.id(idType!.ref) : ''}）で参照している場所（${idUses.length}）`}>
+                <Section title={tx.idUses(idType!.kind === 'ref' ? names.id(idType!.ref) : '', idUses.length)}>
                     {idUses.map((u) => (
                         <div key={u.key} className="sub">
                             <a onClick={() => onSelect(u.target)}>{u.text}</a>
@@ -445,9 +453,10 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
 
 function CommandList({ title, agg, commands, onSelect }: { title: string; agg: ElementModel; commands: CommandModel[]; onSelect: Select }) {
     const names = useNames();
+    const tx = useT();
     return (
         <Section title={title}>
-            {commands.length === 0 && <span className="muted">なし</span>}
+            {commands.length === 0 && <span className="muted">{tx.none}</span>}
             {commands.map((c) => (
                 <div key={c.id} className="sub">
                     <a onClick={() => onSelect(c.id)}>
@@ -479,13 +488,14 @@ function OutcomeRow({ model, id, onSelect }: { model: DomainModel; id: string; o
 /** Events the aggregate's commands may emit (`emits`) or errors they may return (`errors`), with the commands and the payload. */
 function AggregateOutcomes({ agg, model, kind, onSelect }: { agg: ElementModel; model: DomainModel; kind: 'emits' | 'errors'; onSelect: Select }) {
     const names = useNames();
+    const tx = useT();
     const emitters = new Map<string, CommandModel[]>();
     for (const c of agg.commands ?? []) {
         for (const e of c[kind]) emitters.set(e, [...(emitters.get(e) ?? []), c]);
     }
     if (emitters.size === 0) return null;
     return (
-        <Section title={`${kind === 'emits' ? '発生させる Event' : '返し得る Error'}（${emitters.size}）`}>
+        <Section title={kind === 'emits' ? tx.raises(emitters.size) : tx.returns(emitters.size)}>
             {[...emitters].map(([id, commands]) => {
                 const ev = model.elements[id];
                 return (
@@ -512,6 +522,7 @@ const SNIPPET_LINES = 60;
 
 /** The DSL declaration of the selected item. */
 function SourceSnippet({ loc, sources, onOpen }: { loc: Location; sources: { path: string; text: string }[]; onOpen: () => void }) {
+    const tx = useT();
     const source = sources.find((s) => s.path === loc.file);
     if (!source) return null;
     const lines = highlight(source.text);
@@ -523,7 +534,7 @@ function SourceSnippet({ loc, sources, onOpen }: { loc: Location; sources: { pat
             </div>
             {to < loc.endLine && (
                 <p className="muted small">
-                    … 残り {loc.endLine - to} 行は <a onClick={onOpen}>Source ビュー</a>で確認できます。
+                    {tx.moreLines(loc.endLine - to, <a onClick={onOpen}>{tx.sourceView}</a>)}
                 </p>
             )}
         </>
@@ -539,14 +550,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     );
 }
 
-const LABEL_SOURCE = { term: '用語', type: '型' } as const;
-
 /**
  * Fields / parameters. 両方: label, name and type; ラベル / 名前: one name column, and the type by its label or
  * its name.
  */
 function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields: FieldModel[]; ctx: string; onSelect: Select; empty?: string }) {
     const names = useNames();
+    const tx = useT();
     if (fields.length === 0) {
         return empty ? (
             <Section title={title}>
@@ -564,7 +574,7 @@ function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields
                             {names.mode === 'both' && (
                                 <td className="flabel">
                                     {f.label}
-                                    {f.labelSource && f.labelSource !== 'inline' && <span className="label-src">{LABEL_SOURCE[f.labelSource]}</span>}
+                                    {f.labelSource && f.labelSource !== 'inline' && <span className="label-src">{tx.labelSources[f.labelSource]}</span>}
                                 </td>
                             )}
                             <td className={names.mode === 'label' ? 'flabel' : 'fname'}>

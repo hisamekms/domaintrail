@@ -1,6 +1,7 @@
 import { Eye, EyeDashed, EyeOff } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
+import { useT } from './i18n';
 import { useDismiss } from './layout';
 import { nameIn } from './model-utils';
 
@@ -19,6 +20,7 @@ export function ContextPicker(props: {
     onHiddenChange: (hidden: string[]) => void;
 }) {
     const { contexts, labels, selected, hidden, mode, onChange, onHiddenChange } = props;
+    const t = useT();
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
 
@@ -27,8 +29,13 @@ export function ContextPicker(props: {
     const name = (c: string) => nameIn(mode, c, labels[c]);
     const all = selected.length === contexts.length;
     const summary =
-        (all ? 'すべての BC' : selected.length === 0 ? 'なし' : selected.length <= 2 ? selected.map(name).join('、') : `${name(selected[0])} ほか ${selected.length - 1} BC`) +
-        (hidden.length ? ` · ${hidden.length} BC 非表示` : '');
+        (all
+            ? t.allContexts
+            : selected.length === 0
+              ? t.none
+              : selected.length <= 2
+                ? selected.map(name).join(t.listSeparator)
+                : t.moreContexts(name(selected[0]), selected.length - 1)) + (hidden.length ? t.hiddenContexts(hidden.length) : '');
     const toggle = (c: string) => onChange(selected.includes(c) ? selected.filter((x) => x !== c) : contexts.filter((x) => x === c || selected.includes(x)));
     const toggleHidden = (c: string) => onHiddenChange(hidden.includes(c) ? hidden.filter((x) => x !== c) : contexts.filter((x) => x === c || hidden.includes(x)));
     /** The contexts the eyes apply to: the ones drawn as stubs, so none when all or none are selected. */
@@ -42,7 +49,7 @@ export function ContextPicker(props: {
 
     return (
         <div className="context-picker" ref={root}>
-            <button aria-haspopup="listbox" aria-expanded={open} aria-label="表示する BC" onClick={() => setOpen(!open)}>
+            <button aria-haspopup="listbox" aria-expanded={open} aria-label={t.contextsToShow} onClick={() => setOpen(!open)}>
                 BC: {summary} ▾
             </button>
             {open && (
@@ -50,13 +57,13 @@ export function ContextPicker(props: {
                     <div className="context-picker-row context-picker-all">
                         <label className="check">
                             <input ref={checkAll} type="checkbox" checked={all} onChange={() => onChange(all ? [] : contexts)} />
-                            すべての BC
+                            {t.allContexts}
                         </label>
                         <button
                             className="icon-button"
                             disabled={stubs.length === 0}
-                            aria-label="スタブをまとめて表示"
-                            title={stubs.length === 0 ? undefined : hidden.length ? 'すべてスタブとして表示する' : 'すべてのスタブを表示しない'}
+                            aria-label={t.allStubs}
+                            title={stubs.length === 0 ? undefined : hidden.length ? t.showAllStubs : t.hideAllStubs}
                             onClick={() => onHiddenChange(hidden.length ? [] : stubs)}
                         >
                             {allHidden ? <EyeOff size={14} aria-hidden /> : someHidden ? <EyeDashed size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
@@ -76,8 +83,8 @@ export function ContextPicker(props: {
                                     className="icon-button"
                                     disabled={eyeDisabled}
                                     aria-pressed={!isHidden}
-                                    aria-label={`${name(c)} をスタブとして表示`}
-                                    title={eyeDisabled ? undefined : isHidden ? 'スタブとして表示する' : 'スタブを表示しない'}
+                                    aria-label={t.contextStubs(name(c))}
+                                    title={eyeDisabled ? undefined : isHidden ? t.showStubs : t.hideStubs}
                                     onClick={() => toggleHidden(c)}
                                 >
                                     {isHidden ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}

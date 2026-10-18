@@ -5,7 +5,8 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { DisplayMode } from '../src/graph/ir';
 import type { DomainModel, ElementModel } from '../src/model/model';
 import { usePersistentState } from './layout';
-import { KIND_GROUPS, nameIn, orderedContexts, type Select } from './model-utils';
+import { useT } from './i18n';
+import { KIND_ORDER, nameIn, orderedContexts, type Select } from './model-utils';
 import { ownerElement } from './render';
 
 export interface ExplorerProps {
@@ -27,6 +28,7 @@ type Mark = { severity?: 'error' | 'warning'; change?: 'added' | 'changed' };
 
 /** Left pane: model tree (shared contexts first) and the .dt files. */
 export function Explorer(props: ExplorerProps) {
+    const t = useT();
     // Collapsed nodes are remembered; everything is expanded except aggregate children by default.
     const [collapsed, setCollapsed] = usePersistentState<string[]>('domaintrail.explorer.collapsed', []);
     const [expanded, setExpanded] = usePersistentState<string[]>('domaintrail.explorer.expanded', []);
@@ -78,7 +80,7 @@ export function Explorer(props: ExplorerProps) {
                 </span>
                 {extra?.kind && <span className={`tree-dot dot-${extra.kind}`} />}
                 <span className="tree-text">{text}</span>
-                {m?.change && <span className={`tree-change tree-change-${m.change}`} title={m.change === 'added' ? '追加' : '変更'} />}
+                {m?.change && <span className={`tree-change tree-change-${m.change}`} title={m.change === 'added' ? t.added : t.changed} />}
                 {m?.severity && <span className={`tree-diag tree-diag-${m.severity}`}>{m.severity === 'error' ? '✕' : '!'}</span>}
             </div>
         );
@@ -93,13 +95,13 @@ export function Explorer(props: ExplorerProps) {
     return (
         <div className="explorer">
             <div className="pane-title pane-title-row">
-                モデル
-                <button className="icon-button" onClick={props.onClose} title="エクスプローラを閉じる" aria-label="エクスプローラを閉じる">
+                {t.model}
+                <button className="icon-button" onClick={props.onClose} title={t.closeExplorer} aria-label={t.closeExplorer}>
                     <PanelLeftClose size={16} aria-hidden />
                 </button>
             </div>
             <div className="tree">
-                {!model && <p className="muted small pad">モデルがまだありません。</p>}
+                {!model && <p className="muted small pad">{t.noModel}</p>}
                 {model &&
                     orderedContexts(model).map((ctx) => {
                         const ctxOpen = isOpen(`ctx:${ctx}`, true);
@@ -107,13 +109,13 @@ export function Explorer(props: ExplorerProps) {
                         const shared = model.sharedContexts.includes(ctx);
                         return (
                             <div key={ctx}>
-                                {item(ctx, `${nameIn(props.mode, ctx, model.contextLabels[ctx])}${shared ? ' · 共有' : ''}`, 0, {
+                                {item(ctx, `${nameIn(props.mode, ctx, model.contextLabels[ctx])}${shared ? ` · ${t.sharedTag}` : ''}`, 0, {
                                     toggle: () => toggle(`ctx:${ctx}`, true),
                                     open: ctxOpen,
                                     kind: shared ? 'shared' : 'context',
                                 })}
                                 {ctxOpen &&
-                                    KIND_GROUPS.map(({ kind, title }) => {
+                                    KIND_ORDER.map((kind) => {
                                         const items = els.filter((e) => e.kind === kind).sort((a, b) => a.name.localeCompare(b.name));
                                         if (!items.length) return null;
                                         const key = `grp:${ctx}:${kind}`;
@@ -122,7 +124,7 @@ export function Explorer(props: ExplorerProps) {
                                             <div key={kind}>
                                                 <div className="tree-group" style={{ paddingLeft: 22 }} onClick={() => toggle(key, true)}>
                                                     <span className="tree-twisty">{open ? '▾' : '▸'}</span>
-                                                    {title}
+                                                    {t.kindGroups[kind]}
                                                     <span className="muted"> {items.length}</span>
                                                 </div>
                                                 {open && items.map(elementNode)}
@@ -133,7 +135,7 @@ export function Explorer(props: ExplorerProps) {
                         );
                     })}
             </div>
-            <div className="pane-title">ファイル</div>
+            <div className="pane-title">{t.files}</div>
             <div className="tree">
                 {props.files.map((f) => {
                     const c = fileCounts(f);

@@ -25,10 +25,27 @@ export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'depends
 export type DisplayMode = 'label' | 'name' | 'both';
 export const DISPLAY_MODES: DisplayMode[] = ['label', 'name', 'both'];
 
-/** A text in every display mode; layout reserves room for the widest one. */
-export type Texts = Record<DisplayMode, string>;
+/** Language of the Live View's own words (the model's names and labels are shown as written). */
+export type Lang = 'ja' | 'en';
+export const LANGS: Lang[] = ['ja', 'en'];
 
-export const sameText = (s: string): Texts => ({ label: s, name: s, both: s });
+/** A text in every display mode. */
+export type ModeTexts = Record<DisplayMode, string>;
+/** A text in every language and display mode; layout reserves room for the widest one. */
+export type Texts = Record<Lang, ModeTexts>;
+
+/** Every (language, display mode) a text is shown in. */
+export const TEXT_VARIANTS: [Lang, DisplayMode][] = LANGS.flatMap((l) => DISPLAY_MODES.map((m): [Lang, DisplayMode] => [l, m]));
+
+/** A text with no words of the Live View's own: the same in every language. */
+export const anyLang = (t: ModeTexts): Texts => ({ ja: t, en: t });
+export const sameText = (s: string): Texts => anyLang({ label: s, name: s, both: s });
+/** Builds a text from another, variant by variant. */
+export const mapTexts = (t: Texts, f: (s: string, lang: Lang, mode: DisplayMode) => string): Texts =>
+    Object.fromEntries(LANGS.map((l) => [l, Object.fromEntries(DISPLAY_MODES.map((m) => [m, f(t[l][m], l, m)]))])) as Texts;
+/** One text per language, the same in every display mode. */
+export const perLang = (words: Record<Lang, string>): Texts =>
+    Object.fromEntries(LANGS.map((l) => [l, { label: words[l], name: words[l], both: words[l] }])) as Texts;
 
 export interface GraphNode {
     id: string;
@@ -109,7 +126,7 @@ export function textUnits(s: string): number {
 }
 
 /** Widest variant of a text, in ASCII character units. */
-export const maxUnits = (t: Texts): number => Math.max(...DISPLAY_MODES.map((m) => textUnits(t[m])));
+export const maxUnits = (t: Texts): number => Math.max(...TEXT_VARIANTS.map(([l, m]) => textUnits(t[l][m])));
 export const LINE_HEIGHT = 21;
 export const HEADER_HEIGHT = 54;
 export const CONTAINER_PADDING = { top: 46, left: 20, bottom: 20, right: 20 };
