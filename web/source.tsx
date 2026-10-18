@@ -44,7 +44,7 @@ function CopyCode({ text }: { text: string }) {
     return (
         <button
             className="icon-button src-copy"
-            title={t.copyCode}
+            data-tooltip={t.copyCode}
             aria-label={t.copyCode}
             onClick={async (e) => {
                 e.stopPropagation();
