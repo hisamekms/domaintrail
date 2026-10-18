@@ -909,6 +909,15 @@ select,
     justify-content: space-between;
     gap: 8px;
 }
+.card-tags {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+}
+.card-tags .persistence-badge {
+    margin-left: 0;
+}
 .card-name {
     font-weight: 700;
     font-size: 16px;
@@ -955,6 +964,76 @@ select,
 }
 .card-diag-warning {
     background: var(--warning);
+}
+
+/* links to the sections, kept at the top while the catalog scrolls */
+.catalog-jump {
+    position: sticky;
+    top: -20px;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: -20px -24px 20px;
+    padding: 12px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+}
+.catalog-jump button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    cursor: pointer;
+}
+.catalog-jump button.muted {
+    color: var(--muted);
+}
+.catalog-jump button:hover {
+    border-color: var(--violet-border);
+}
+.catalog-count {
+    font-size: 11px;
+    color: var(--muted);
+}
+.catalog-section {
+    margin-bottom: 12px;
+    scroll-margin-top: 72px;
+}
+.card-fields,
+.card-commands {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+}
+.card-fields li,
+.card-commands li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 2px 0;
+}
+.card-fields code {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+    word-break: break-all;
+}
+.card-commands .muted {
+    font-size: 12px;
+    text-align: right;
+}
+.card-doc {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
 }
 
 .dg-sharedContext {

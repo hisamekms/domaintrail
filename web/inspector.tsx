@@ -499,7 +499,7 @@ const payloadText = (names: Namer, ev: ElementModel): string =>
     ev.fields.map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`).join(', ');
 
 /** Whether an event is persisted by contract. */
-function PersistenceBadge({ persistent }: { persistent: boolean }) {
+export function PersistenceBadge({ persistent }: { persistent: boolean }) {
     const tx = useT();
     return (
         <span className={`persistence-badge${persistent ? ' persistent' : ''}`} title={persistent ? tx.persistentHint : tx.transientHint}>
