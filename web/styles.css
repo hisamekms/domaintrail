@@ -1112,7 +1112,7 @@ select,
     background: var(--warning);
 }
 
-/* the filter and the links to the sections, kept at the top while the catalog scrolls */
+/* the filter, kept at the top while the catalog scrolls */
 .catalog-top {
     position: sticky;
     top: -20px;
@@ -1132,6 +1132,7 @@ select,
 }
 .catalog-filter-row .catalog-filter {
     flex: 0 1 360px;
+    min-width: 120px;
     height: 28px;
     margin-right: 0;
     background: var(--panel);
@@ -1150,6 +1151,11 @@ select,
 .catalog-filter .icon-button:hover {
     background: var(--hover);
     color: inherit;
+}
+/* the filter gives way first, down to its least width; then the contexts' summary ends in an ellipsis */
+.catalog-filter-row .context-picker {
+    flex-shrink: 0;
+    max-width: calc(100% - 128px);
 }
 .catalog-filter-row .context-picker > button {
     height: 28px;
@@ -1196,37 +1202,12 @@ select,
 .catalog-kind:hover {
     opacity: 1;
 }
-.catalog-jump {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-.catalog-jump button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    font: inherit;
-    font-size: 13px;
-    color: var(--text);
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    cursor: pointer;
-}
-.catalog-jump button.muted {
-    color: var(--muted);
-}
-.catalog-jump button:hover {
-    border-color: var(--violet-border);
-}
 .catalog-count {
     font-size: 11px;
     color: var(--muted);
 }
 .catalog-section {
     margin-bottom: 12px;
-    scroll-margin-top: 150px;
 }
 .card-fields,
 .card-commands {
@@ -1592,6 +1573,8 @@ select,
 }
 .view-toolbar {
     margin-left: auto;
+    max-width: 100%;
+    min-width: 0;
     padding: 4px 0;
     display: flex;
     white-space: nowrap;
@@ -2242,6 +2225,20 @@ details.deps > .sub {
 
 .context-picker {
     position: relative;
+    /* when narrow the summary shrinks to an ellipsis, down to this width */
+    min-width: 96px;
+}
+.context-picker-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    white-space: nowrap;
+}
+.context-picker-summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .context-picker-menu {
     position: absolute;
