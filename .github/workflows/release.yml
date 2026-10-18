@@ -6,7 +6,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm trusted publishing and provenance
+  id-token: write # npm trusted publishing
 
 jobs:
   publish:
@@ -23,7 +23,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      # trusted publishing needs npm 11.5.1 or later
+      # staged publishing needs npm 11.15.0 or later
       - run: npm install -g npm@latest
 
       - name: Check that the tag matches package.json
@@ -37,4 +37,21 @@ jobs:
       - name: Smoke test on Node
         run: node dist/dt.js -r examples/shop check
 
-      - run: npm publish --provenance --access public
+      # staged: approve on npmjs.com (Staged Packages) or with `npm stage approve <id>`
+      - run: npm stage publish --access public
+
+      - name: Remind to approve the staged version
+        run: |
+          {
+            echo "## ⏳ Approve ${GITHUB_REF_NAME} to publish it"
+            echo
+            echo "domaintrail ${GITHUB_REF_NAME} is staged on npm and is **not public until approved**."
+            echo "Approve it in the package's Staged Packages tab on npmjs.com, or run:"
+            echo
+            echo '```'
+            echo 'npm stage list domaintrail'
+            echo 'npm stage approve <stage-id>'
+            echo '```'
+            echo
+            echo "See docs/releasing.md."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -138,8 +138,9 @@ bun run build              # dist/: the CLI bundled for Node and the Live View p
 
 ### Release
 
-Bump `version` in `package.json`, commit, and push a matching tag (`v0.2.0` for `0.2.0`).
-The Release workflow tests, builds and publishes to npm with provenance through npm trusted publishing.
+Run `npm version <patch|minor|major>` and `git push --follow-tags`. The Release workflow tests, builds and stages the
+package on npm; it is published only after you approve it on npmjs.com (Staged Packages) or with `npm stage approve`.
+See [docs/releasing.md](docs/releasing.md).
 
 | Path | Contents |
 |---|---|
