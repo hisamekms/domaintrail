@@ -7,7 +7,7 @@ export interface Token {
 
 const KEYWORDS = new Set([
     'shared', 'context', 'terms', 'id', 'primitive', 'enum', 'value', 'union', 'by', 'entity', 'aggregate', 'state', 'owns', 'references',
-    'create', 'command', 'from', 'to', 'emits', 'errors', 'event', 'error', 'invariant',
+    'create', 'command', 'from', 'to', 'emits', 'errors', 'persistent', 'event', 'error', 'invariant',
     'and', 'or', 'not', 'implies', 'in', 'count', 'exists', 'all', 'any', 'length', 'matches', 'true', 'false',
 ]);
 const PRIMITIVES = new Set(['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID']);

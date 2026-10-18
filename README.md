@@ -92,7 +92,8 @@ context Sales {                          // a bounded context; may be split acro
   }
 
   entity OrderItem { id: OrderItemId quantity: Int owns unitPrice: Money }
-  event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
+  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }   // persisted by contract
+  event OrderViewed { orderId: OrderId }   // not persisted (default)
   error EmptyOrder                       // payload optional: error E { field: Type }
 }
 ```
@@ -105,6 +106,8 @@ context Sales {                          // a bounded context; may be split acro
   `exists(x)` (narrows `x` on the right of `and`/`implies`), `count(c)`, `all(c, x => …)`, `any(c, x => …)`,
   enum values (`CancelReason.Other`). Only the type of an invariant is checked, not whether it holds.
 - Comments: `// …` and `/* … */`.
+- `persistent event` declares that storing the event is part of its contract; events without it are not persisted.
+  How events are stored is out of scope (see [ADR 0008](docs/adr/0008-persistent-events.md)).
 
 ### Domain primitives
 
@@ -230,7 +233,8 @@ context Sales "販売" {
 ## Generated TypeScript
 
 Per context a module with ID brands, enums, value objects, entities, a discriminated union per stateful aggregate
-(`DraftOrder | ConfirmedOrder | …`), event/error types with a `type` tag, a function type per command, and an
+(`DraftOrder | ConfirmedOrder | …`), event/error types with a `type` tag (`@persistent` in the JSDoc of persistent
+events, and a `PersistentEvent` union of them when there are any), a function type per command, and an
 `<Aggregate>Commands` interface to implement by hand:
 
 ```ts
@@ -267,7 +271,8 @@ pane leaves a narrow rail with the button that opens it) and resized by dragging
     first) with base type, invariants and usages.
 - **Inspector (right)**: the selected item — name, description, location (copy `file:line-line` for AI feedback),
   diagnostics, back/forward history, and buttons to show it in a view. Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 /
-  ソース.
+  ソース. An event shows 永続化 / 非永続 next to its kind, as it does in an aggregate's 発生させる Event list;
+  persistent events have a database icon in the explorer.
   - *状態遷移*: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate
     and its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
   - *ソース*: the whole file, read-only, syntax-coloured, diagnostics in the gutter, scrolled to the declaration;

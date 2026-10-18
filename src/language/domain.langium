@@ -84,8 +84,9 @@ Command:
 Parameter:
     name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;
 
+// `persistent` marks an event whose contract is to be persisted (stored as a fact); events are not persisted by default.
 EventDecl:
-    'event' name=ID label=STRING? ('{' members+=Field* '}')?;
+    (persistent?='persistent')? 'event' name=ID label=STRING? ('{' members+=Field* '}')?;
 
 ErrorDecl:
     'error' name=ID label=STRING? ('{' members+=Field* '}')?;
@@ -145,7 +146,7 @@ LambdaParam:
     name=FeatureName;
 
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by';
+    ID | 'id' | 'value' | 'by' | 'persistent';
 
 QualifiedName returns string:
     ID ('.' ID)*;

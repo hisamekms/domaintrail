@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isIdType, isPrimitiveDecl } from '../language/generated/ast.js';
+import { isAggregate, isEventDecl, isIdType, isPrimitiveDecl } from '../language/generated/ast.js';
 import { commandsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
@@ -27,6 +27,8 @@ export const aggregateParamName = (agg: Named): string => camel(agg.name);
 export const makeTypeName = (p: Named): string => `Make${p.name}`;
 /** Error returned when a value violates a domain primitive's invariants, e.g. `InvalidQuantity`. */
 export const invalidTypeName = (p: Named): string => `Invalid${p.name}`;
+/** Union of the events of a context that are declared `persistent`; generated only when there is one. */
+export const PERSISTENT_EVENT_TYPE = 'PersistentEvent';
 
 const KIND_LABELS: Record<string, string> = {
     IdType: 'id',
@@ -78,6 +80,8 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, node: c });
         }
     }
+    const persistent = index.elementsOf(ctx).find((el) => isEventDecl(el) && el.persistent);
+    if (persistent) out.push({ name: PERSISTENT_EVENT_TYPE, origin: 'the union of persistent events', node: persistent });
     return out;
 }
 

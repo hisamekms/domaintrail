@@ -855,6 +855,25 @@ select,
     color: var(--teal-text);
     background: var(--teal-tint);
 }
+.persistence-badge {
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    border: 1px solid var(--border);
+}
+.inspector-row .persistence-badge {
+    margin-left: 0;
+    padding: 2px 8px;
+    font-size: 12px;
+}
+.persistence-badge.persistent {
+    color: var(--teal-text);
+    background: var(--teal-tint);
+    border-color: transparent;
+}
 .cards {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1388,6 +1407,11 @@ select,
 }
 .tree-change-changed {
     background: var(--changed);
+}
+.tree-persistent {
+    display: inline-flex;
+    flex: none;
+    color: var(--teal-text);
 }
 .tree-diag {
     font-size: 11px;

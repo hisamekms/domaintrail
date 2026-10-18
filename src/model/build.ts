@@ -84,6 +84,7 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
             base.states = statesOf(el).map((s) => state(id, s, loc, field));
             base.commands = commandsOf(el).map((c) => command(id, c, loc, field));
         } else {
+            if (isEventDecl(el) && el.persistent) base.persistent = true;
             base.fields = fieldsOf(el.members).map(field);
             base.invariants = invariantsOf(el.members).map(invariant);
         }
