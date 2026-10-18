@@ -1155,16 +1155,6 @@ select,
     color: var(--doc-comment);
     font-style: italic;
 }
-.copy-button {
-    padding: 3px 8px;
-    font: inherit;
-    font-size: 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--panel);
-    cursor: pointer;
-}
-
 .event-row {
     padding: 6px 0;
     border-bottom: 1px solid var(--bg);
@@ -1596,9 +1586,6 @@ select,
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-.inspector-loc {
-    margin-top: 6px;
-}
 .reveal {
     display: flex;
     flex-wrap: wrap;
@@ -1680,6 +1667,17 @@ select,
 }
 .source-view .src-gutter {
     width: 52px;
+}
+/* stays at the visible right end of the line when the code is scrolled sideways */
+.source-view .src-copy {
+    position: sticky;
+    right: 4px;
+    flex: none;
+    align-self: center;
+    margin-left: auto;
+    height: 18px;
+    background: var(--panel);
+    box-shadow: 0 0 0 1px var(--border);
 }
 
 /* bottom panel */

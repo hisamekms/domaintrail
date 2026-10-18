@@ -9,7 +9,7 @@ import { contextDependencies, groupByContext, supportingContexts, type ContextDe
 import { useLang, useT, type ItemKind } from './i18n';
 import { KIND_ORDER, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
-import { CopyLocation, SourceView, type SourceFocus } from './source';
+import { SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
 
 export type InspectorTab = 'structure' | 'states' | 'behavior' | 'references' | 'source';
@@ -157,11 +157,6 @@ export function Inspector(props: InspectorProps) {
                 <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
                 {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
                 {head.doc && <p className="doc">{head.doc}</p>}
-                {head.location && (
-                    <div className="inspector-loc">
-                        <CopyLocation loc={head.location} />
-                    </div>
-                )}
                 {revealTargets(r).length > 0 && (
                     <div className="reveal">
                         <span className="muted small">{tx.showIn}</span>
