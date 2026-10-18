@@ -1,6 +1,21 @@
 import { createRequire } from 'node:module';
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk-api.js';
-import { CONTAINER_PADDING, LINE_HEIGHT, graphSignature, maxUnits, type Graph, type LaidOutGraph, type NodeLayout, type Point } from '../graph/ir.js';
+import {
+    CONTAINER_PADDING,
+    LINE_HEIGHT,
+    TRANSITION_LINE_HEIGHT,
+    TRANSITION_SUB_LINE_HEIGHT,
+    TRANSITION_SUB_SIZE,
+    graphSignature,
+    maxUnits,
+    transitionText,
+    type Graph,
+    type GraphEdge,
+    type LaidOutGraph,
+    type NodeLayout,
+    type Point,
+    type Texts,
+} from '../graph/ir.js';
 import type { LayoutEngine } from './engine.js';
 
 const ROOT = '__root__';
@@ -45,9 +60,17 @@ const DIRECTION: Record<string, string> = {
     states: 'DOWN',
 };
 
+/** An edge's label box; a transition's is sized for the texts the graph shows (a second, smaller line for its events). */
+function labelOf(e: GraphEdge, label: Texts, graph: Graph, scale: number): { text: string; width: number; height: number } {
+    const text: { main: Texts; sub?: Texts } = e.kind === 'transition' ? transitionText(label, e.events, graph.transitionLabels ?? 'both') : { main: label };
+    const units = Math.max(maxUnits(text.main), text.sub ? maxUnits(text.sub) * TRANSITION_SUB_SIZE : 0);
+    const height = TRANSITION_LINE_HEIGHT + (text.sub ? TRANSITION_SUB_LINE_HEIGHT : 0);
+    return { text: text.main.en.name, width: Math.ceil(units * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(height * scale) };
+}
+
 export class ElkLayoutEngine implements LayoutEngine {
     readonly name = 'elk';
-    readonly version = 9;
+    readonly version = 10;
     private readonly elk = new ELK({ workerFactory: createWorker });
 
     /** Stops the layout worker so the process can exit (the in-process fake Worker has nothing to stop). */
@@ -92,7 +115,7 @@ export class ElkLayoutEngine implements LayoutEngine {
                 id: e.id,
                 sources: [e.source],
                 targets: [e.target],
-                labels: e.label ? [{ text: e.label.en.name, width: Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(19 * scale) }] : [],
+                labels: e.label ? [labelOf(e, e.label, graph, scale)] : [],
             }));
 
         const root: ElkNode = {

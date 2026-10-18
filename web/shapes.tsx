@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import { useT } from './i18n';
+import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../src/graph/ir';
 import { BaseBoxShapeUtil, HTMLContainer, Polyline2d, SVGContainer, ShapeUtil, T, Vec, type RecordProps, type TLShape } from 'tldraw';
 
 export type ChangeMark = 'none' | 'added' | 'changed' | 'removed';
@@ -17,6 +18,20 @@ declare module '@tldraw/tlschema' {
             scale: number;
             /** Body rows; `v` is empty for rows without a value column. */
             rows: { k: string; v: string }[];
+            /** Height of the internal transitions' compartment at the bottom (0 = none); its rows are shapes of their own. */
+            compartment: number;
+            change: ChangeMark;
+            diag: DiagMark;
+        };
+        'domain-internal': {
+            w: number;
+            h: number;
+            /** The command or its events, and a smaller second line (the events under the command), if any. */
+            label: string;
+            sub: string;
+            /** The command shown in place of missing events. */
+            faded: boolean;
+            scale: number;
             change: ChangeMark;
             diag: DiagMark;
         };
@@ -25,6 +40,9 @@ declare module '@tldraw/tlschema' {
             points: { x: number; y: number }[];
             kind: string;
             label: string;
+            /** A smaller second line of the label (a transition's events), and whether the label is faded (a transition's command in place of missing events). */
+            sub: string;
+            faded: boolean;
             scale: number;
             /** Label box relative to the shape origin; w = 0 when there is no label. */
             lx: number;
@@ -50,6 +68,7 @@ declare module '@tldraw/tlschema' {
 export type DomainNodeShape = TLShape<'domain-node'>;
 export type DomainGroupShape = TLShape<'domain-group'>;
 export type DomainEdgeShape = TLShape<'domain-edge'>;
+export type DomainInternalShape = TLShape<'domain-internal'>;
 export type EdgeTone = 'normal' | 'added' | 'changed' | 'error';
 
 const changeMark = T.literalEnum('none', 'added', 'changed', 'removed');
@@ -66,12 +85,13 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
         label: T.string,
         stereotype: T.string,
         rows: T.arrayOf(T.object({ k: T.string, v: T.string })),
+        compartment: T.number,
         change: changeMark,
         diag: diagMark,
     };
 
     getDefaultProps(): DomainNodeShape['props'] {
-        return { w: 160, h: 60, kind: 'entity', label: '', stereotype: '', scale: 1, rows: [], change: 'none', diag: 'none' };
+        return { w: 160, h: 60, kind: 'entity', label: '', stereotype: '', scale: 1, rows: [], compartment: 0, change: 'none', diag: 'none' };
     }
 
     override canResize = () => false;
@@ -107,6 +127,7 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
                                 )}
                             </div>
                         )}
+                        {p.compartment > 0 && <div className="dn-compartment" style={{ height: p.compartment }} />}
                         {p.change !== 'none' && <ChangeBadge change={p.change} />}
                         {p.diag !== 'none' && <div className="dn-diag">{p.diag === 'error' ? '✕' : '!'}</div>}
                     </>
@@ -117,6 +138,45 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
 
     getIndicatorPath(shape: DomainNodeShape) {
         return roundRect(shape.props.w, shape.props.h, 8);
+    }
+}
+
+/** A command that leaves a state as it is: a row in the state's compartment (a UML internal transition). */
+export class DomainInternalUtil extends BaseBoxShapeUtil<DomainInternalShape> {
+    static override type = 'domain-internal' as const;
+    static override props: RecordProps<DomainInternalShape> = {
+        w: T.number,
+        h: T.number,
+        label: T.string,
+        sub: T.string,
+        faded: T.boolean,
+        scale: T.number,
+        change: changeMark,
+        diag: diagMark,
+    };
+
+    getDefaultProps(): DomainInternalShape['props'] {
+        return { w: 160, h: 21, label: '', sub: '', faded: false, scale: 1, change: 'none', diag: 'none' };
+    }
+
+    override canResize = () => false;
+    override hideRotateHandle = () => true;
+    override hideResizeHandles = () => true;
+    override canEdit = () => false;
+
+    component(shape: DomainInternalShape) {
+        const p = shape.props;
+        return (
+            <HTMLContainer className={`di di-change-${p.change} di-diag-${p.diag}`} style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}>
+                <div className={`di-main${p.faded ? ' di-faded' : ''}`}>↻ {p.label}</div>
+                {p.sub && <div className="di-sub">{p.sub}</div>}
+                {p.diag !== 'none' && <div className="di-diag">{p.diag === 'error' ? '✕' : '!'}</div>}
+            </HTMLContainer>
+        );
+    }
+
+    getIndicatorPath(shape: DomainInternalShape) {
+        return roundRect(shape.props.w, shape.props.h, 4);
     }
 }
 
@@ -175,6 +235,8 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
         kind: T.string,
         scale: T.number,
         label: T.string,
+        sub: T.string,
+        faded: T.boolean,
         lx: T.number,
         ly: T.number,
         lw: T.number,
@@ -183,7 +245,7 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
     };
 
     getDefaultProps(): DomainEdgeShape['props'] {
-        return { points: [], kind: 'owns', label: '', scale: 1, lx: 0, ly: 0, lw: 0, lh: 0, tone: 'normal' };
+        return { points: [], kind: 'owns', label: '', sub: '', faded: false, scale: 1, lx: 0, ly: 0, lw: 0, lh: 0, tone: 'normal' };
     }
 
     override canResize = () => false;
@@ -198,7 +260,7 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
     }
 
     component(shape: DomainEdgeShape) {
-        const { points, kind, label, lx, ly, lw, lh, tone, scale } = shape.props;
+        const { points, kind, label, sub, faded, lx, ly, lw, lh, tone, scale } = shape.props;
         if (points.length < 2) return null;
         const d = points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
         const [a, b] = [points[points.length - 2], points[points.length - 1]];
@@ -210,11 +272,7 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
                 {kind === 'owns' ? <path d={diamond(s0, s1)} className="de-head de-diamond" /> : null}
                 {/* every edge points from the dependent to its dependency */}
                 <path d={arrowHead(a, b)} className="de-head" />
-                {label && lw > 0 && (
-                    <text x={lx + lw / 2} y={ly + lh / 2} className="de-label" style={{ fontSize: 13 * scale }} textAnchor="middle" dominantBaseline="central">
-                        {label}
-                    </text>
-                )}
+                {label && lw > 0 && <EdgeLabel {...{ label, sub, faded, lx, ly, lw, lh, scale }} />}
             </SVGContainer>
         );
     }
@@ -224,6 +282,31 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
         shape.props.points.forEach((pt, i) => (i ? p.lineTo(pt.x, pt.y) : p.moveTo(pt.x, pt.y)));
         return p;
     }
+}
+
+/** An edge's label, centred in its box; a second, smaller line (a transition's events) goes under the first. */
+function EdgeLabel({ label, sub, faded, lx, ly, lw, lh, scale }: Pick<DomainEdgeShape['props'], 'label' | 'sub' | 'faded' | 'lx' | 'ly' | 'lw' | 'lh' | 'scale'>) {
+    const x = lx + lw / 2;
+    const top = ly + (lh - (TRANSITION_LINE_HEIGHT + (sub ? TRANSITION_SUB_LINE_HEIGHT : 0)) * scale) / 2;
+    return (
+        <>
+            <text x={x} y={top + (TRANSITION_LINE_HEIGHT / 2) * scale} className={`de-label${faded ? ' de-faded' : ''}`} style={{ fontSize: 13 * scale }} textAnchor="middle" dominantBaseline="central">
+                {label}
+            </text>
+            {sub && (
+                <text
+                    x={x}
+                    y={top + (TRANSITION_LINE_HEIGHT + TRANSITION_SUB_LINE_HEIGHT / 2) * scale}
+                    className="de-label de-sub"
+                    style={{ fontSize: 13 * TRANSITION_SUB_SIZE * scale }}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                >
+                    {sub}
+                </text>
+            )}
+        </>
+    );
 }
 
 type P = { x: number; y: number };
@@ -264,4 +347,4 @@ function ChangeBadge({ change }: { change: Exclude<ChangeMark, 'none'> }) {
     return <div className="dn-badge">{t[change]}</div>;
 }
 
-export const shapeUtils = [DomainNodeUtil, DomainGroupUtil, DomainEdgeUtil];
+export const shapeUtils = [DomainNodeUtil, DomainGroupUtil, DomainInternalUtil, DomainEdgeUtil];
