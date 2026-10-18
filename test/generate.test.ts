@@ -12,9 +12,13 @@ let dir: string;
 
 /** Type-checks `files` (relative to the temp project) together with the generated code. */
 function tsc(...files: string[]): { code: number; output: string } {
+    return tscIn(dir, ...files);
+}
+
+function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
     const r = Bun.spawnSync(
         [process.execPath, TSC, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM', ...files],
-        { cwd: dir },
+        { cwd },
     );
     return { code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() };
 }
@@ -108,6 +112,61 @@ const wrongId: Sales.OrderId = draft.customer;
 `,
         );
         const r = tsc('src/violations.ts');
+        expect(r.output).toBe('');
+        expect(r.code).toBe(0);
+    });
+});
+
+describe('contexts generated into different directories', () => {
+    const SHARED = 'packages/shared/src/generated';
+    let split: string;
+
+    beforeAll(async () => {
+        split = await mkdtemp(path.join(tmpdir(), 'domaintrail-split-'));
+        const a = await analyze(await loadWorkspace(EXAMPLES));
+        const dirs = { Common: SHARED, Sales: 'generated/domain', Billing: 'generated/domain' };
+        for (const f of generateTypeScript(a.model!, dirs)) {
+            await mkdir(path.dirname(path.join(split, f.path)), { recursive: true });
+            await writeFile(path.join(split, f.path), f.content);
+        }
+        await mkdir(path.join(split, 'src'));
+    });
+
+    afterAll(async () => {
+        await rm(split, { recursive: true, force: true });
+    });
+
+    test('each directory gets a runtime and an index of its own contexts; imports point across directories', async () => {
+        const read = (p: string) => readFile(path.join(split, p), 'utf8');
+        expect(await read(`${SHARED}/_runtime.ts`)).toBe(await read('generated/domain/_runtime.ts'));
+        const index = await read('generated/domain/index.ts');
+        expect(index).toContain(`export * as Sales from './Sales.js';`);
+        expect(index).not.toContain('Common');
+        expect(await read(`${SHARED}/index.ts`)).toContain(`export * as Common from './Common.js';`);
+        expect(await read('generated/domain/Billing.ts')).toContain(`import type * as Common from '../../packages/shared/src/generated/Common.js';`);
+        expect(await read('generated/domain/Billing.ts')).toContain(`import type * as Sales from './Sales.js';`);
+    });
+
+    test('compiles, and values typed by one runtime are accepted by the other', async () => {
+        await writeFile(
+            path.join(split, 'src', 'split.ts'),
+            `import * as domain from '../generated/domain/index.js';
+import * as shared from '../packages/shared/src/generated/index.js';
+import type { Billing } from '../generated/domain/index.js';
+import type { Common } from '../packages/shared/src/generated/index.js';
+
+// a Common value is what Billing expects, and the two runtimes' Decimal and Result are interchangeable
+export const issue: Billing.InvoiceCommands['issue'] = (order, billedAmount: Common.Money) =>
+    shared.ok([{ state: 'Open', id: crypto.randomUUID() as Billing.InvoiceId, order, billedAmount }, []] as const);
+export const makeAmount: Common.MakeAmount = (value: domain.Decimal) =>
+    Number(value) >= 0 ? domain.ok(value as Common.Amount) : domain.err({ type: 'InvalidAmount', value, invariant: 'nonNegative' });
+const d: shared.Decimal = '1' as domain.Decimal;
+export const back: domain.Decimal = d;
+// @ts-expect-error the brand still applies across runtimes
+export const plain: shared.Decimal = '1';
+`,
+        );
+        const r = tscIn(split, 'src/split.ts', 'generated/domain/index.ts', `${SHARED}/index.ts`);
         expect(r.output).toBe('');
         expect(r.code).toBe(0);
     });

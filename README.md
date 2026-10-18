@@ -47,15 +47,17 @@ same text, so people and AI agents get it without leaving the terminal:
 
 - [Workflow](docs/guide.md#workflow): `check` → `generate ts` → type-check your own code (`tsc --noEmit`)
 - [Output and exit codes](docs/guide.md#output-and-exit-codes)
-- [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out`, `view.port` /
-  `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
+- [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
+  `generate.ts.contexts`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
 - [File layout (recommended)](docs/guide.md#file-layout-recommended): `<context>/<aggregate>.dt` and
   `<context>/context.dt` (see [ADR 0009](docs/adr/0009-file-layout.md))
 - [DSL](docs/guide.md#dsl): contexts, aggregates, entities, values, states, commands, events, errors,
   [domain primitives](docs/guide.md#domain-primitives), [unions](docs/guide.md#unions),
   [shared contexts](docs/guide.md#shared-contexts), [names (表示名)](docs/guide.md#names-labels-and-descriptions)
   and [invariant expressions](docs/guide.md#invariant-expressions)
-- [Rules](docs/guide.md#rules) (M001–M015, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript)
+- [Rules](docs/guide.md#rules) (M001–M015, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
+  [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
+  [ADR 0011](docs/adr/0011-generated-code-boundary.md)) and [output directories](docs/guide.md#output-directories)
 
 A taste of the DSL:
 

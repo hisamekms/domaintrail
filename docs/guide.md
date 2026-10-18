@@ -46,7 +46,7 @@ warnings do not fail the check. Other failures (missing root, invalid config, po
 |---|---|
 | 0 | success (`check`: no errors; warnings are allowed) |
 | 1 | the model has errors, no `.dt` file was found, generation was refused, or the root / a file could not be read |
-| 2 | invalid configuration (`domaintrail.jsonc` / `--config`) or an unknown `generate` target |
+| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
 
 Commands that use the model look for a config file first; `--root` (`-r`, default `.`) is where that search starts.
 
@@ -62,13 +62,21 @@ Every key is optional.
   "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
   // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
   "sources": ["domain/**/*.dt", "!domain/drafts/**"],      // default: ["**/*.dt"]
-  "generate": { "ts": { "out": "src/domain/generated" } },  // default: "generated/domain"
+  "generate": {
+    "ts": {
+      "out": "src/domain/generated",                        // default: "generated/domain"
+      // contexts written elsewhere than "out" (optional)
+      "contexts": { "Common": { "out": "packages/shared/src/generated" } }
+    }
+  },
   "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
 }
 ```
 
-CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. Sources must stay inside the config
-file's directory.
+CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. `--out` replaces `generate.ts.out`
+only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories must stay
+inside the config file's directory. A name in `generate.ts.contexts` that is not a context of the model is a config
+error, reported by `generate ts` once the model has been checked.
 
 ## File layout (recommended)
 
@@ -337,6 +345,36 @@ export type ConfirmOrder = (
 ) => Result<readonly [ConfirmedOrder, readonly OrderConfirmed[]], EmptyOrder>;
 ```
 
-Do not edit generated files: change the `.dt` sources and generate again. Each run replaces the files generated before
-(recognized by their header); other files in the output directory are never deleted, and generation stops instead of
-overwriting one.
+### Generated code and your code
+
+The generated files are the **contract**, your code is the **implementation**:
+
+- Generated: types only — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`) and the
+  constructor signatures of domain primitives (`MakeQuantity`). Invariants appear as JSDoc (`@invariant`); nothing in
+  the generated code checks them.
+- Yours: everything that runs — command implementations, `Make<Name>` constructors, invariant checks — in your own
+  files, which import the generated modules (never the other way round) and are type-checked against them.
+
+```ts
+// src/primitives.ts — your code
+import { err, ok, type Sales } from '../generated/domain/index.js';
+
+export const makeQuantity: Sales.MakeQuantity = (value) =>
+    Number.isInteger(value) && value >= 1 && value <= 999 ? ok(value as Sales.Quantity) : err({ type: 'InvalidQuantity', value, invariant: 'valid' });
+```
+
+Do not edit generated files: change the `.dt` sources and generate again. Adding properties or methods to generated
+types (declaration merging, editing the output) is not supported; write functions that take the generated types.
+
+### Output directories
+
+By default every context goes to `generate.ts.out`. Contexts listed in `generate.ts.contexts` go to their own
+directory instead, e.g. a shared context into a package used by several applications. Each directory written to gets
+its own `_runtime.ts` and an `index.ts` re-exporting only the contexts in it; a module imports other contexts by
+relative path (`import type * as Common from '../../packages/shared/src/generated/Common.js'`). The runtimes are
+identical, so values typed with one are accepted where the other is expected.
+
+Each run replaces the files generated before (recognized by their header). The files written are recorded in
+`.domaintrail/generated.json` under the root, and generated files of earlier runs that are no longer written (an output
+directory moved, a context removed) are deleted, along with a directory left empty. Other files are never deleted —
+neither hand-written files nor generated files you edited — and generation stops instead of overwriting one.

@@ -1,3 +1,4 @@
+import * as posix from 'node:path/posix';
 import type { CommandModel, Described, DomainModel, ElementModel, FieldModel, InvariantModel, PrimitiveName, TypeExpr } from '../model/model.js';
 import { elementsIn } from '../model/model.js';
 import {
@@ -14,7 +15,7 @@ import {
 } from './naming.js';
 
 export interface GeneratedFile {
-    /** Path relative to the output directory. */
+    /** Path relative to the output directory (`/`-separated; below the context's directory when contexts are split). */
     path: string;
     content: string;
 }
@@ -54,20 +55,31 @@ export type Decimal = string & { readonly __brand: 'Decimal' };
 export type Timestamp = Date;
 `;
 
-/** Generates one module per bounded context plus a shared runtime and an index. Requires a model without errors. */
-export function generateTypeScript(model: DomainModel): GeneratedFile[] {
-    const files: GeneratedFile[] = [{ path: '_runtime.ts', content: RUNTIME }];
-    for (const ctx of model.contexts) {
-        files.push({ path: `${ctx}.ts`, content: new ContextEmitter(model, ctx).emit() });
+/**
+ * Generates one module per bounded context, plus a runtime and an index in every directory written to.
+ * `dirs` places contexts in directories (`/`-separated, relative to the output directory; default: the output
+ * directory itself); each index re-exports only the contexts in its directory. Requires a model without errors.
+ */
+export function generateTypeScript(model: DomainModel, dirs: Readonly<Record<string, string>> = {}): GeneratedFile[] {
+    const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
+    const files: GeneratedFile[] = [];
+    for (const dir of [...new Set(model.contexts.map(dirOf))]) {
+        const contexts = model.contexts.filter((c) => dirOf(c) === dir);
+        files.push({ path: posix.join(dir, '_runtime.ts'), content: RUNTIME });
+        for (const ctx of contexts) {
+            files.push({ path: posix.join(dir, `${ctx}.ts`), content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other)).emit() });
+        }
+        const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
+        files.push({ path: posix.join(dir, 'index.ts'), content: index });
     }
-    const index = [
-        HEADER,
-        `export * from './_runtime.js';`,
-        ...model.contexts.map((c) => `export * as ${c} from './${c}.js';`),
-        '',
-    ].join('\n');
-    files.push({ path: 'index.ts', content: index });
     return files;
+}
+
+/** Import specifier of the module of `ctx` in directory `to`, from a module in directory `from`. */
+function moduleSpecifier(from: string, to: string, ctx: string): string {
+    const rel = posix.relative(from, to);
+    if (rel === '') return `./${ctx}.js`;
+    return `${rel === '..' || rel.startsWith('../') ? '' : './'}${rel}/${ctx}.js`;
 }
 
 /** Text that is safe inside a block comment. */
@@ -96,6 +108,8 @@ class ContextEmitter {
     constructor(
         private readonly model: DomainModel,
         private readonly ctx: string,
+        /** Import specifier of another context's module. */
+        private readonly moduleOf: (ctx: string) => string,
     ) {}
 
     emit(): string {
@@ -143,7 +157,7 @@ class ContextEmitter {
         const runtime = ['Decimal', 'Result', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
-            ...[...this.imports].sort().map((c) => `import type * as ${c} from './${c}.js';`),
+            ...[...this.imports].sort().map((c) => `import type * as ${c} from '${this.moduleOf(c)}';`),
         ];
         return [HEADER, ...imports, '', body].join('\n');
     }
