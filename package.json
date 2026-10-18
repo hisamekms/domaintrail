@@ -22,8 +22,8 @@
   ],
   "type": "module",
   "bin": {
-    "dt": "./dist/dt.js",
-    "domaintrail": "./dist/dt.js"
+    "dt": "dist/dt.js",
+    "domaintrail": "dist/dt.js"
   },
   "files": [
     "dist",
