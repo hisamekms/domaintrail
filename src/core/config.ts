@@ -16,7 +16,7 @@ export interface DomainTrailConfigFile {
     $schema?: string;
     /** Globs of DSL files; `!pattern` excludes. Default: `**\/*.dt`. */
     sources?: string[];
-    generate?: { ts?: { out?: string } };
+    generate?: { ts?: { out?: string; contexts?: Record<string, { out: string }> } };
     view?: { port?: number; host?: string };
 }
 
@@ -27,6 +27,8 @@ export interface ResolvedConfig {
     file?: string;
     sources: string[];
     tsOut: string;
+    /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
+    tsContexts: Record<string, string>;
     view: { port: number; host: string };
 }
 
@@ -62,12 +64,13 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
         file,
         sources: config.sources ?? DEFAULT_SOURCES,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
+        tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).map(([ctx, c]) => [ctx, c.out])),
         view: { port: config.view?.port ?? DEFAULT_PORT, host: config.view?.host ?? DEFAULT_HOST },
     };
 }
 
 function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
-    return { sources: DEFAULT_SOURCES, tsOut: DEFAULT_TS_OUT, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+    return { sources: DEFAULT_SOURCES, tsOut: DEFAULT_TS_OUT, tsContexts: {}, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
 }
 
 /** JSON with comments and trailing commas (JSONC). */
@@ -120,10 +123,19 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
         if (typeof gen !== 'object' || gen === null) fail("'generate' must be an object");
         for (const key of Object.keys(gen!)) if (key !== 'ts') fail(`unknown generator 'generate.${key}' (supported: ts)`);
         const ts = gen!.ts as Record<string, unknown> | undefined;
-        if (ts !== undefined && (typeof ts !== 'object' || (ts.out !== undefined && typeof ts.out !== 'string'))) fail("'generate.ts.out' must be a string");
-        const out = ts?.out as string | undefined;
-        if (out !== undefined && (path.isAbsolute(out) || out.split(/[\\/]/).includes('..'))) {
-            fail(`'generate.ts.out' must stay inside the directory of the config file: '${out}'`);
+        if (ts !== undefined && (typeof ts !== 'object' || ts === null || Array.isArray(ts))) fail("'generate.ts' must be an object");
+        for (const key of Object.keys(ts ?? {})) if (!['out', 'contexts'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
+        checkOut(ts?.out, 'generate.ts.out', fail);
+        const contexts = ts?.contexts;
+        if (contexts !== undefined) {
+            if (typeof contexts !== 'object' || contexts === null || Array.isArray(contexts)) fail("'generate.ts.contexts' must be an object keyed by context name");
+            for (const [ctx, c] of Object.entries(contexts as Record<string, unknown>)) {
+                const key = `generate.ts.contexts.${ctx}`;
+                if (typeof c !== 'object' || c === null || Array.isArray(c)) fail(`'${key}' must be an object`);
+                for (const k of Object.keys(c as object)) if (k !== 'out') fail(`unknown key '${key}.${k}'`);
+                if ((c as Record<string, unknown>).out === undefined) fail(`'${key}.out' is required`);
+                checkOut((c as Record<string, unknown>).out, `${key}.out`, fail);
+            }
         }
     }
     const view = c.view as Record<string, unknown> | undefined;
@@ -133,6 +145,28 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
         if (view!.host !== undefined && typeof view!.host !== 'string') fail("'view.host' must be a string");
     }
     return c as DomainTrailConfigFile;
+}
+
+/** An output directory: a string inside the directory of the config file. */
+function checkOut(out: unknown, key: string, fail: (msg: string) => never): void {
+    if (out === undefined) return;
+    if (typeof out !== 'string') fail(`'${key}' must be a string`);
+    if (path.isAbsolute(out as string) || (out as string).split(/[\\/]/).includes('..')) {
+        fail(`'${key}' must stay inside the directory of the config file: '${out}'`);
+    }
+}
+
+/**
+ * Throws a ConfigError when `generate.ts.contexts` names a context the model does not have.
+ * Only known once the model is analyzed, so `dt generate` calls it after checking.
+ */
+export function checkTsContexts(config: ResolvedConfig, contexts: readonly string[]): void {
+    const unknown = Object.keys(config.tsContexts).filter((c) => !contexts.includes(c));
+    if (unknown.length === 0) return;
+    const where = config.file ?? 'config';
+    throw new ConfigError(
+        `${where}: 'generate.ts.contexts' names ${unknown.map((c) => `'${c}'`).join(', ')}, which ${unknown.length > 1 ? 'are not contexts' : 'is not a context'} of the model (contexts: ${contexts.join(', ') || 'none'}).`,
+    );
 }
 
 /** Directories never scanned or watched. */

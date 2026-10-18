@@ -43,7 +43,12 @@ describe('config file', () => {
     test('paths are relative to the config file; defaults apply', async () => {
         const dir = await project({ 'domaintrail.json': '{ "generate": { "ts": { "out": "src/gen" } } }', 'sub/x.txt': '' });
         const c = await loadConfig({ start: path.join(dir, 'sub') });
-        expect(c).toMatchObject({ root: dir, file: path.join(dir, 'domaintrail.json'), sources: ['**/*.dt'], tsOut: 'src/gen', view: { port: 4321, host: '127.0.0.1' } });
+        expect(c).toMatchObject({ root: dir, file: path.join(dir, 'domaintrail.json'), sources: ['**/*.dt'], tsOut: 'src/gen', tsContexts: {}, view: { port: 4321, host: '127.0.0.1' } });
+    });
+
+    test('generate.ts.contexts maps context names to output directories', async () => {
+        const dir = await project({ 'domaintrail.json': '{ "generate": { "ts": { "contexts": { "C": { "out": "shared/gen" } } } } }' });
+        expect(await loadConfig({ start: dir })).toMatchObject({ tsOut: 'generated/domain', tsContexts: { C: 'shared/gen' } });
     });
 
     test.each([
@@ -55,6 +60,11 @@ describe('config file', () => {
         ['{ "sources": [ }', 'invalid JSON'],
         ['{ "generate": { "ts": { "out": "../elsewhere" } } }', "'generate.ts.out' must stay inside the directory of the config file"],
         ['{ "generate": { "ts": { "out": "/tmp/x" } } }', "'generate.ts.out' must stay inside the directory of the config file"],
+        ['{ "generate": { "ts": { "outDir": "x" } } }', "unknown key 'generate.ts.outDir'"],
+        ['{ "generate": { "ts": { "contexts": [] } } }', "'generate.ts.contexts' must be an object keyed by context name"],
+        ['{ "generate": { "ts": { "contexts": { "C": "x" } } } }', "'generate.ts.contexts.C' must be an object"],
+        ['{ "generate": { "ts": { "contexts": { "C": {} } } } }', "'generate.ts.contexts.C.out' is required"],
+        ['{ "generate": { "ts": { "contexts": { "C": { "out": "../x" } } } } }', "'generate.ts.contexts.C.out' must stay inside the directory of the config file"],
     ])('invalid config %s', async (text, message) => {
         const dir = await project({ 'domaintrail.json': text });
         const e = await loadConfig({ start: dir }).catch((x) => x);
@@ -134,6 +144,63 @@ describe('CLI with a config', () => {
         const r = await run('-r', dir, 'check');
         expect(r.code).toBe(2);
         expect(r.err[0]).toBe(`${path.join(dir, 'domaintrail.json')}: unknown key 'sourcez'`);
+    });
+});
+
+describe('output directories per context', () => {
+    const SPLIT_MODEL = {
+        'c.dt': 'shared context C { value V { n: Int } }',
+        's.dt': 'context S { id AId: UUID aggregate A { id: AId v: V } }',
+    };
+    const config = (ts: object) => JSON.stringify({ generate: { ts } });
+    const ls = (dir: string) => readdir(dir).then((names) => names.sort());
+
+    test('listed contexts go to their own directory, the others to out; --out replaces only out', async () => {
+        const dir = await project({ 'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen' } } }), ...SPLIT_MODEL });
+        const r = await run('-r', dir, 'generate', 'ts');
+        expect(r.code).toBe(0);
+        expect(await ls(path.join(dir, 'gen'))).toEqual(['S.ts', '_runtime.ts', 'index.ts']);
+        expect(await ls(path.join(dir, 'shared', 'gen'))).toEqual(['C.ts', '_runtime.ts', 'index.ts']);
+        expect(await Bun.file(path.join(dir, 'gen', 'S.ts')).text()).toContain(`import type * as C from '../shared/gen/C.js';`);
+
+        expect((await run('-r', dir, 'generate', 'ts', '--out', 'other')).code).toBe(0);
+        expect(await ls(path.join(dir, 'other'))).toEqual(['S.ts', '_runtime.ts', 'index.ts']);
+        expect(await ls(path.join(dir, 'shared', 'gen'))).toEqual(['C.ts', '_runtime.ts', 'index.ts']);
+    });
+
+    test('a context name the model does not have is a config error (exit 2) and nothing is written', async () => {
+        const dir = await project({ 'domaintrail.json': config({ contexts: { Nope: { out: 'x' } } }), ...SPLIT_MODEL });
+        const r = await run('-r', dir, 'generate', 'ts');
+        expect(r.code).toBe(2);
+        expect(r.err.at(-1)).toBe(`${path.join(dir, 'domaintrail.json')}: 'generate.ts.contexts' names 'Nope', which is not a context of the model (contexts: C, S).`);
+        expect(await ls(dir)).toEqual(['c.dt', 'domaintrail.json', 's.dt']);
+    });
+
+    test('files of earlier runs that are no longer generated are removed; hand-written files stay', async () => {
+        const dir = await project({ 'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen' } } }), ...SPLIT_MODEL });
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        const manifest = JSON.parse(await Bun.file(path.join(dir, '.domaintrail', 'generated.json')).text());
+        expect(manifest).toEqual({ version: 1, files: ['gen/S.ts', 'gen/_runtime.ts', 'gen/index.ts', 'shared/gen/C.ts', 'shared/gen/_runtime.ts', 'shared/gen/index.ts'] });
+
+        // C moves back to out: its old directory is emptied and removed
+        await writeFile(path.join(dir, 'domaintrail.json'), config({ out: 'gen' }));
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect(await ls(path.join(dir, 'gen'))).toEqual(['C.ts', 'S.ts', '_runtime.ts', 'index.ts']);
+        expect(await ls(path.join(dir, 'shared'))).toEqual([]);
+
+        // out moves; a hand-written file in the old directory keeps it alive, an edited generated file is not deleted
+        await writeFile(path.join(dir, 'gen', 'app.ts'), 'export const handWritten = 1;\n');
+        await writeFile(path.join(dir, 'gen', 'C.ts'), 'export const edited = 1;\n');
+        await writeFile(path.join(dir, 'domaintrail.json'), config({ out: 'src/gen' }));
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect(await ls(path.join(dir, 'gen'))).toEqual(['C.ts', 'app.ts']);
+        expect(await ls(path.join(dir, 'src', 'gen'))).toEqual(['C.ts', 'S.ts', '_runtime.ts', 'index.ts']);
+
+        // a removed context
+        await rm(path.join(dir, 'c.dt'));
+        await writeFile(path.join(dir, 's.dt'), MODEL);
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect(await ls(path.join(dir, 'src', 'gen'))).toEqual(['S.ts', '_runtime.ts', 'index.ts']);
     });
 });
 
