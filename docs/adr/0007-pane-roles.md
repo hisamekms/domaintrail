@@ -28,7 +28,9 @@ Each pane has one role, and a view goes in the pane whose role it fits:
   Without a selection nothing is shown. **Files are selectable** like model items (`file:<path>`), so the files in
   the explorer and problems that belong to no element (syntax errors) still have a place to be shown.
 - **Primitives becomes the Catalog**: cards to look over the model, one section per kind of element. It stays in the
-  main pane because it shows the whole model. For now its only section is the domain primitives.
+  main pane because it shows the whole model. Its sections are aggregates, entities, value objects and unions,
+  primitives (primitives, IDs, enums), domain events and errors, each grouped by context with shared contexts first;
+  links at the top jump to each section.
 
 ## Consequences
 

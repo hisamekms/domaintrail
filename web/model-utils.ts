@@ -67,8 +67,50 @@ export const selectedFile = (id: string | undefined): string | undefined => (id?
 /** Kinds that are drawn in the Structure View. */
 export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 
-/** Kinds shown in the catalog (for now its only section, the domain primitives). */
-export const inCatalog = (kind: string): boolean => kind === 'primitive' || kind === 'id' || kind === 'enum';
+export type CatalogSectionKey = 'aggregates' | 'entities' | 'values' | 'primitives' | 'events' | 'errors';
+
+/** Sections of the catalog, in order, and the kinds of element each holds (in the order of its cards). */
+export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[] = [
+    { key: 'aggregates', kinds: ['aggregate'] },
+    { key: 'entities', kinds: ['entity'] },
+    { key: 'values', kinds: ['valueObject', 'union'] },
+    { key: 'primitives', kinds: ['primitive', 'id', 'enum'] },
+    { key: 'events', kinds: ['event'] },
+    { key: 'errors', kinds: ['error'] },
+];
+
+/** Kinds shown in the catalog. */
+export const inCatalog = (kind: string): boolean => CATALOG_SECTIONS.some((s) => s.kinds.includes(kind as ElementKind));
+
+export interface CatalogSection {
+    key: CatalogSectionKey;
+    /** Contexts with elements of the section, shared ones first. */
+    groups: { context: string; items: ElementModel[] }[];
+    count: number;
+}
+
+/** The catalog's sections with their elements per context, sorted by kind and then name. */
+export function catalogSections(model: DomainModel): CatalogSection[] {
+    const contexts = orderedContexts(model);
+    return CATALOG_SECTIONS.map(({ key, kinds }) => {
+        const groups = contexts
+            .map((context) => ({
+                context,
+                items: Object.values(model.elements)
+                    .filter((e) => e.context === context && kinds.includes(e.kind))
+                    .sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.name.localeCompare(b.name)),
+            }))
+            .filter((g) => g.items.length > 0);
+        return { key, groups, count: groups.reduce((n, g) => n + g.items.length, 0) };
+    });
+}
+
+/** Commands that may emit the event, or return the error, with their aggregates. */
+export function commandsWithOutcome(model: DomainModel, id: string): { agg: ElementModel; command: CommandModel }[] {
+    return Object.values(model.elements).flatMap((agg) =>
+        (agg.commands ?? []).filter((c) => c.emits.includes(id) || c.errors.includes(id)).map((command) => ({ agg, command })),
+    );
+}
 
 /** Contexts with shared ones first. */
 export function orderedContexts(model: DomainModel): string[] {

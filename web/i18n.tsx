@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { DisplayMode, Lang } from '../src/graph/ir';
 import type { ElementKind } from '../src/model/model';
+import type { CatalogSectionKey } from './model-utils';
 
 /** The user's choice: follow the browser, or force a language. */
 export type LangPreference = 'auto' | Lang;
@@ -113,9 +114,18 @@ const ja = {
     noChanges: '直前の正常モデルからの変更はありません。',
 
     // catalog
-    catalogPrimitives: 'プリミティブ',
+    catalogSections: {
+        aggregates: '集約',
+        entities: 'エンティティ',
+        values: '値オブジェクト・ユニオン',
+        primitives: 'プリミティブ',
+        events: 'ドメインイベント',
+        errors: 'エラー',
+    } as Record<CatalogSectionKey, string>,
     sharedCatalog: '共有 · どの Context からも名前で参照可',
-    noPrimitives: 'Domain Primitive はありません。',
+    catalogEmpty: 'ありません。',
+    raisedByNone: '発生させる Command はありません',
+    returnedByNone: '返す Command はありません',
     usedIn: (n: number) => `使用 ${n} 箇所`,
 
     // source
@@ -270,9 +280,18 @@ const en: Messages = {
     noProblems: 'No problems.',
     noChanges: 'No changes since the last valid model.',
 
-    catalogPrimitives: 'Primitives',
+    catalogSections: {
+        aggregates: 'Aggregates',
+        entities: 'Entities',
+        values: 'Value Objects and Unions',
+        primitives: 'Primitives',
+        events: 'Domain Events',
+        errors: 'Errors',
+    },
     sharedCatalog: 'Shared · referable by name from any context',
-    noPrimitives: 'No domain primitives.',
+    catalogEmpty: 'None.',
+    raisedByNone: 'No command raises it',
+    returnedByNone: 'No command returns it',
     usedIn: (n) => `Used in ${n} ${n === 1 ? 'place' : 'places'}`,
 
     copyLocation: 'Copy the path and line',
