@@ -69,11 +69,11 @@ context Sales "販売" {
     owns unitPrice: Money "単価"
   }
 
-  event OrderPlaced "注文受付" {
+  persistent event OrderPlaced "注文受付" {
     orderId: OrderId
   }
 
-  event OrderConfirmed "注文確定" {
+  persistent event OrderConfirmed "注文確定" {
     orderId: OrderId
     confirmedAt: Timestamp
   }

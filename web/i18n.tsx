@@ -16,6 +16,11 @@ const ja = {
     shared: '共有',
     /** After a context's name. */
     sharedTag: '共有',
+    /** Events: declared `persistent`, or not. */
+    persistent: '永続化',
+    transient: '非永続',
+    persistentHint: '永続化される契約のイベント（persistent）',
+    transientHint: '永続化しないイベント（persistent の指定なし）',
     noModel: 'モデルがまだありません。',
     noDtFiles: '.dt ファイルがありません',
 
@@ -177,6 +182,10 @@ const en: Messages = {
     none: 'None',
     shared: 'Shared',
     sharedTag: 'shared',
+    persistent: 'Persistent',
+    transient: 'Transient',
+    persistentHint: 'Persisted by contract (persistent)',
+    transientHint: 'Not persisted (not declared persistent)',
     noModel: 'No model yet.',
     noDtFiles: 'No .dt files',
 

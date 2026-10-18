@@ -150,6 +150,7 @@ export function Inspector(props: InspectorProps) {
                 <div className="inspector-row">
                     <span className={`kind kind-${head.kind}`}>{KIND_LABEL[head.kind] ?? head.kind}</span>
                     {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
+                    {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} />}
                     {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
                     {history}
                 </div>
@@ -497,6 +498,16 @@ function CommandList({ title, agg, commands, onSelect }: { title: string; agg: E
 const payloadText = (names: Namer, ev: ElementModel): string =>
     ev.fields.map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`).join(', ');
 
+/** Whether an event is persisted by contract. */
+function PersistenceBadge({ persistent }: { persistent: boolean }) {
+    const tx = useT();
+    return (
+        <span className={`persistence-badge${persistent ? ' persistent' : ''}`} title={persistent ? tx.persistentHint : tx.transientHint}>
+            {persistent ? tx.persistent : tx.transient}
+        </span>
+    );
+}
+
 function OutcomeRow({ model, id, onSelect }: { model: DomainModel; id: string; onSelect: Select }) {
     const names = useNames();
     const ev = model.elements[id];
@@ -524,6 +535,7 @@ function AggregateOutcomes({ agg, model, kind, onSelect }: { agg: ElementModel; 
                 return (
                     <div key={id} className="event-row">
                         <a onClick={() => onSelect(id)}>{names.id(id)}</a>
+                        {kind === 'emits' && ev && <PersistenceBadge persistent={!!ev.persistent} />}
                         {ev?.doc && <div className="muted small">{ev.doc}</div>}
                         <div className="small">
                             <span className="muted">← </span>

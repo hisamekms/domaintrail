@@ -1,4 +1,4 @@
-import { ChevronRight, Diff, Folder, FolderOpen, PanelLeftClose, Search, TriangleAlert, X } from 'lucide-react';
+import { ChevronRight, Database, Diff, Folder, FolderOpen, PanelLeftClose, Search, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
@@ -91,7 +91,7 @@ export function Explorer(props: ExplorerProps) {
     }, [props.selected]);
 
     /** A selectable row: a model item or a file. */
-    const item = (id: string, text: string, row: RowState, kind: string) => {
+    const item = (id: string, text: string, row: RowState, kind: string, badge?: ReactNode) => {
         const m = marks.get(id);
         const selected = props.selected === id;
         return (
@@ -107,6 +107,7 @@ export function Explorer(props: ExplorerProps) {
                 <Twisty row={row} />
                 <span className={`tree-dot dot-${kind}`} />
                 <span className="tree-text">{text}</span>
+                {badge}
                 {m?.change && <span className={`tree-change tree-change-${m.change}`} title={m.change === 'added' ? t.added : t.changed} />}
                 {m?.severity && <span className={`tree-diag tree-diag-${m.severity}`}>{m.severity === 'error' ? '✕' : '!'}</span>}
             </div>
@@ -233,7 +234,17 @@ export function Explorer(props: ExplorerProps) {
         const open = isOpen(key, false);
         return (visible: boolean) => (
             <div key={el.id}>
-                {item(el.id, nameIn(props.mode, el.name, el.label), { depth: 2, visible, ...(hasChildren && { open, onToggle: () => toggle(key, false) }) }, el.kind)}
+                {item(
+                    el.id,
+                    nameIn(props.mode, el.name, el.label),
+                    { depth: 2, visible, ...(hasChildren && { open, onToggle: () => toggle(key, false) }) },
+                    el.kind,
+                    el.persistent && (
+                        <span className="tree-persistent" title={t.persistentHint}>
+                            <Database size={11} />
+                        </span>
+                    ),
+                )}
                 {hasChildren && (
                     <Collapse open={open}>
                         {states.map((s) => (

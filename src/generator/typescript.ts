@@ -2,6 +2,7 @@ import type { CommandModel, Described, DomainModel, ElementModel, FieldModel, In
 import { elementsIn } from '../model/model.js';
 import {
     EVENT_TAG,
+    PERSISTENT_EVENT_TYPE,
     STATE_TAG,
     aggregateParamName,
     commandTypeName,
@@ -82,6 +83,9 @@ const oneLine = (s: string): string => comment(s).replace(/\n+/g, ' ');
 /** Japanese name and description lines of a declaration. */
 const describedLines = (d: Described): string[] => [d.label, d.doc].filter((x): x is string => !!x);
 
+/** JSDoc line of an event declared `persistent`. */
+const PERSISTENT_LINE = '@persistent Persisted: storing this event is part of its contract.';
+
 const invariantLines = (invs: InvariantModel[]): string[] =>
     invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source}`);
 
@@ -125,7 +129,7 @@ class ContextEmitter {
                     break;
                 case 'event':
                 case 'error':
-                    this.jsdoc(describedLines(el));
+                    this.jsdoc([...describedLines(el), ...(el.persistent ? [PERSISTENT_LINE] : [])]);
                     this.iface(el.name, undefined, [`readonly ${EVENT_TAG}: '${el.name}';`], el.fields);
                     break;
                 case 'aggregate':
@@ -134,6 +138,7 @@ class ContextEmitter {
             }
             this.out.push('');
         }
+        this.persistentEvents();
         const body = this.out.join('\n');
         const runtime = ['Decimal', 'Result', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
         const imports = [
@@ -141,6 +146,15 @@ class ContextEmitter {
             ...[...this.imports].sort().map((c) => `import type * as ${c} from './${c}.js';`),
         ];
         return [HEADER, ...imports, '', body].join('\n');
+    }
+
+    /** The events of the context that are persisted, so that code storing events can name exactly them. */
+    private persistentEvents(): void {
+        const events = elementsIn(this.model, this.ctx).filter((el) => el.kind === 'event' && el.persistent);
+        if (!events.length) return;
+        this.jsdoc([`Events of ${this.ctx} that are persisted (declared \`persistent\`).`]);
+        this.line(`export type ${PERSISTENT_EVENT_TYPE} = ${events.map((e) => e.name).join(' | ')};`);
+        this.out.push('');
     }
 
     /**

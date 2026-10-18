@@ -96,6 +96,8 @@ export interface ElementModel extends Described {
     discriminator?: string;
     tagType?: string;
     variants?: VariantModel[];
+    /** Events only: true when the event is declared `persistent` (its contract is to be persisted). */
+    persistent?: boolean;
     /** Aggregates only. */
     states?: StateModel[];
     commands?: CommandModel[];
