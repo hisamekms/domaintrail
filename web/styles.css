@@ -1036,31 +1036,22 @@ select,
 .card-error {
     border-color: var(--error);
 }
-/* the tags sit beside the first line only, so that the name under the label gets the card's whole width */
+/* badges on their own line, then the label over the name; each line ends in an ellipsis rather than overflow the card */
 .card-head {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: baseline;
-    column-gap: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
 }
 .card-tags {
-    grid-area: 1 / 2;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
+    margin-bottom: 4px;
 }
 .card-tags .persistence-badge {
     margin-left: 0;
-}
-/* label over name (both), or one of them; each line ends in an ellipsis rather than overflow the card */
-.card-title {
-    display: contents;
-}
-.card-name {
-    grid-area: 1 / 1;
-}
-.card-subname {
-    grid-area: 2 / 1 / 3 / -1;
 }
 .card-name,
 .card-subname {

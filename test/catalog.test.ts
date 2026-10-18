@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { CardHead } from '../web/catalog.js';
+import { MESSAGES } from '../web/i18n.js';
 import { catalogSections, commandsWithOutcome, filterCatalog, inCatalog, isCatalogFiltered, matchesQuery, type CatalogFilter } from '../web/model-utils.js';
 import { EXAMPLES } from './helpers.js';
 
@@ -82,6 +85,34 @@ describe('catalog', () => {
             const combined = filterCatalog(catalogSections(model), { query: 'order', sections: ['events'], contexts: ['Sales'] });
             expect(shown(combined).every((id) => model.elements[id].kind === 'event' && model.elements[id].context === 'Sales')).toBe(true);
             expect(shown(filterCatalog(catalogSections(model), { ...none, query: 'no-such-element' }))).toEqual([]);
+        });
+    });
+
+    describe('card heading', () => {
+        const tx = MESSAGES.ja;
+        const head = (el: Parameters<typeof CardHead>[0]['el']) => renderToStaticMarkup(CardHead({ el, tx }));
+        const lines = (html: string) => [...html.matchAll(/class="(card-tags|card-name|card-subname)"/g)].map((m) => m[1]);
+
+        test('puts the badges first, then the label over the name', async () => {
+            const model = await shopModel();
+            const event = Object.values(model.elements).find((e) => e.kind === 'event' && e.label && !e.persistent)!;
+            const html = head(event);
+            expect(lines(html)).toEqual(['card-tags', 'card-name', 'card-subname']);
+            expect(html).toContain(`title="${event.label}">${event.label}</span>`);
+            expect(html).toContain(`title="${event.name}">${event.name}</span>`);
+            const tags = html.slice(html.indexOf('card-tags'), html.indexOf('card-name'));
+            expect(tags.indexOf(tx.kinds.event)).toBeLessThan(tags.indexOf(tx.transient));
+        });
+
+        test('shows the name alone when there is no label, and the persistence badge only on events', async () => {
+            const model = await shopModel();
+            const order = Object.values(model.elements).find((e) => e.kind === 'aggregate')!;
+            const el = { ...order, id: 'Sales.Audit', name: 'Audit', kind: 'fieldSet' as const, label: undefined };
+            const html = head(el);
+            expect(lines(html)).toEqual(['card-tags', 'card-name']);
+            expect(html).toContain(`>${el.name}</span>`);
+            expect(html).toContain(tx.kinds.fieldSet);
+            expect(html).not.toContain('persistence-badge');
         });
     });
 });
