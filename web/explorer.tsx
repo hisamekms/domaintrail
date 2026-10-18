@@ -149,18 +149,18 @@ export function Explorer(props: ExplorerProps) {
                         }}
                     />
                     {query && (
-                        <button className="icon-button" onClick={() => setQuery('')} title={t.clearFilter} aria-label={t.clearFilter}>
+                        <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
                             <X size={14} aria-hidden />
                         </button>
                     )}
                 </div>
-                <button className="icon-button" aria-pressed={onlyProblems} onClick={() => setOnlyProblems(!onlyProblems)} title={t.onlyProblems} aria-label={t.onlyProblems}>
+                <button className="icon-button" aria-pressed={onlyProblems} onClick={() => setOnlyProblems(!onlyProblems)} data-tooltip={t.onlyProblems} aria-label={t.onlyProblems}>
                     <TriangleAlert size={15} aria-hidden />
                 </button>
-                <button className="icon-button" aria-pressed={onlyChanged} onClick={() => setOnlyChanged(!onlyChanged)} title={t.onlyChanged} aria-label={t.onlyChanged}>
+                <button className="icon-button" aria-pressed={onlyChanged} onClick={() => setOnlyChanged(!onlyChanged)} data-tooltip={t.onlyChanged} aria-label={t.onlyChanged}>
                     <Diff size={15} aria-hidden />
                 </button>
-                <button className="icon-button" onClick={props.onClose} title={t.closeExplorer} aria-label={t.closeExplorer}>
+                <button className="icon-button" onClick={props.onClose} data-tooltip={t.closeExplorer} aria-label={t.closeExplorer}>
                     <PanelLeftClose size={16} aria-hidden />
                 </button>
             </div>

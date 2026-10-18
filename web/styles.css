@@ -1970,3 +1970,22 @@ details.deps > .sub {
     margin-bottom: 4px;
     padding-bottom: 4px;
 }
+
+/* ---------- tooltips (web/tooltip.tsx) ---------- */
+
+.tooltip {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    max-width: 320px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    background: var(--text);
+    color: var(--panel);
+    font: 12px/1.4 var(--sans);
+    box-shadow: 0 2px 8px var(--shadow);
+    pointer-events: none;
+    overflow: visible;
+    z-index: 1000; /* without popover support */
+}

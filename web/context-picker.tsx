@@ -63,7 +63,7 @@ export function ContextPicker(props: {
                             className="icon-button"
                             disabled={stubs.length === 0}
                             aria-label={t.allStubs}
-                            title={stubs.length === 0 ? undefined : hidden.length ? t.showAllStubs : t.hideAllStubs}
+                            data-tooltip={stubs.length === 0 ? undefined : hidden.length ? t.showAllStubs : t.hideAllStubs}
                             onClick={() => onHiddenChange(hidden.length ? [] : stubs)}
                         >
                             {allHidden ? <EyeOff size={14} aria-hidden /> : someHidden ? <EyeDashed size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
@@ -84,7 +84,7 @@ export function ContextPicker(props: {
                                     disabled={eyeDisabled}
                                     aria-pressed={!isHidden}
                                     aria-label={t.contextStubs(name(c))}
-                                    title={eyeDisabled ? undefined : isHidden ? t.showStubs : t.hideStubs}
+                                    data-tooltip={eyeDisabled ? undefined : isHidden ? t.showStubs : t.hideStubs}
                                     onClick={() => toggleHidden(c)}
                                 >
                                     {isHidden ? <EyeOff size={14} aria-hidden /> : <Eye size={14} aria-hidden />}

@@ -78,12 +78,12 @@ export function Inspector(props: InspectorProps) {
     const history = (
         <div className="history">
             {backName && (
-                <button className="back-button" onClick={props.onBack} title={tx.backTo(backName)} aria-label={tx.backTo(backName)}>
+                <button className="back-button" onClick={props.onBack} data-tooltip={tx.backTo(backName)} aria-label={tx.backTo(backName)}>
                     <span aria-hidden>←</span>
                     <span className="back-name">{backName}</span>
                 </button>
             )}
-            <button className="icon-button" onClick={props.onClose} title={tx.closeInspector} aria-label={tx.closeInspector}>
+            <button className="icon-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
                 <PanelRightClose size={16} aria-hidden />
             </button>
         </div>

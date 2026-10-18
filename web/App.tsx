@@ -18,6 +18,7 @@ import { locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
 import { SettingsDialog } from './settings-dialog';
 import { StatesCanvas } from './states-canvas';
+import { Tooltips } from './tooltip';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
 import { useViewSocket } from './useViewSocket';
@@ -288,7 +289,7 @@ export function App() {
                 {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
                 <div className={`side side-left${explorerOpen ? ' open' : ''}`} style={{ width: explorerOpen ? explorerWidth : RAIL_WIDTH }}>
                     <div className="rail" inert={explorerOpen}>
-                        <button className="icon-button" onClick={() => setExplorerOpen(true)} title={t.openExplorer} aria-label={t.openExplorer}>
+                        <button className="icon-button" onClick={() => setExplorerOpen(true)} data-tooltip={t.openExplorer} aria-label={t.openExplorer}>
                             <PanelLeftOpen size={16} aria-hidden />
                         </button>
                     </div>
@@ -356,7 +357,7 @@ export function App() {
                                                 className={structureLevel === l ? 'active' : ''}
                                                 aria-pressed={structureLevel === l}
                                                 onClick={() => setStructureLevel(l)}
-                                                title={t.structureLevels[l]}
+                                                data-tooltip={t.structureLevels[l]}
                                                 aria-label={t.structureLevels[l]}
                                             >
                                                 <Icon size={15} aria-hidden />
@@ -411,7 +412,7 @@ export function App() {
                 />
                 <div className={`side side-right${inspectorOpen ? ' open' : ''}`} style={{ width: inspectorOpen ? inspectorWidth : RAIL_WIDTH }}>
                     <div className="rail" inert={inspectorOpen}>
-                        <button className="icon-button" onClick={() => setInspectorOpen(true)} title={t.openInspector} aria-label={t.openInspector}>
+                        <button className="icon-button" onClick={() => setInspectorOpen(true)} data-tooltip={t.openInspector} aria-label={t.openInspector}>
                             <PanelRightOpen size={16} aria-hidden />
                         </button>
                     </div>
@@ -480,6 +481,7 @@ export function App() {
                     onSelect={(id) => select(id)}
                 />
             </div>
+            <Tooltips />
         </div>
         </I18nProvider>
     );
