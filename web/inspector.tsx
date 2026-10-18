@@ -6,6 +6,7 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantModel, Location } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
+import { CommandCard, OutcomeCard, outcomesOf, PersistenceBadge } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
 import { KIND_ORDER, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
@@ -150,7 +151,7 @@ export function Inspector(props: InspectorProps) {
                 <div className="inspector-row">
                     <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
                     {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
-                    {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} />}
+                    {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} tx={tx} />}
                     {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
                     {history}
                 </div>
@@ -224,8 +225,8 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             const outgoing = (agg.commands ?? []).filter((c) => c.from.includes(state.name));
             return (
                 <>
-                    <CommandList title={tx.commandsInto} agg={agg} commands={incoming} onSelect={onSelect} />
-                    <CommandList title={tx.commandsOutOf} agg={agg} commands={outgoing} onSelect={onSelect} />
+                    <CommandList title={tx.commandsInto} agg={agg} model={model} commands={incoming} onSelect={onSelect} />
+                    <CommandList title={tx.commandsOutOf} agg={agg} model={model} commands={outgoing} onSelect={onSelect} />
                 </>
             );
         }
@@ -273,7 +274,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     if (tab === 'behavior') {
         return (
             <>
-                <CommandList title={tx.counted(tx.commands, el.commands?.length ?? 0)} agg={el} commands={el.commands ?? []} onSelect={onSelect} />
+                <CommandList title={tx.counted(tx.commands, el.commands?.length ?? 0)} agg={el} model={model} commands={el.commands ?? []} onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="errors" onSelect={onSelect} />
             </>
@@ -470,20 +471,14 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
     );
 }
 
-function CommandList({ title, agg, commands, onSelect }: { title: string; agg: ElementModel; commands: CommandModel[]; onSelect: Select }) {
+function CommandList({ title, agg, model, commands, onSelect }: { title: string; agg: ElementModel; model: DomainModel; commands: CommandModel[]; onSelect: Select }) {
     const names = useNames();
     const tx = useT();
     return (
         <Section title={title}>
             {commands.length === 0 && <span className="muted">{tx.none}</span>}
             {commands.map((c) => (
-                <div key={c.id} className="sub">
-                    <a onClick={() => onSelect(c.id)}>
-                        {c.factory ? 'create ' : ''}
-                        {names.of(c)}
-                    </a>
-                    <span className="muted small"> {names.transition(agg, c)}</span>
-                </div>
+                <CommandCard key={c.id} agg={agg} c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
             ))}
         </Section>
     );
@@ -492,16 +487,6 @@ function CommandList({ title, agg, commands, onSelect }: { title: string; agg: E
 /** `orderId: OrderId, …` (or `注文ID: 注文ID, …`) */
 const payloadText = (names: Namer, ev: ElementModel): string =>
     ev.fields.map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`).join(', ');
-
-/** Whether an event is persisted by contract. */
-export function PersistenceBadge({ persistent }: { persistent: boolean }) {
-    const tx = useT();
-    return (
-        <span className={`persistence-badge${persistent ? ' persistent' : ''}`} title={persistent ? tx.persistentHint : tx.transientHint}>
-            {persistent ? tx.persistent : tx.transient}
-        </span>
-    );
-}
 
 function OutcomeRow({ model, id, onSelect }: { model: DomainModel; id: string; onSelect: Select }) {
     const names = useNames();
@@ -518,32 +503,13 @@ function OutcomeRow({ model, id, onSelect }: { model: DomainModel; id: string; o
 function AggregateOutcomes({ agg, model, kind, onSelect }: { agg: ElementModel; model: DomainModel; kind: 'emits' | 'errors'; onSelect: Select }) {
     const names = useNames();
     const tx = useT();
-    const emitters = new Map<string, CommandModel[]>();
-    for (const c of agg.commands ?? []) {
-        for (const e of c[kind]) emitters.set(e, [...(emitters.get(e) ?? []), c]);
-    }
-    if (emitters.size === 0) return null;
+    const outcomes = outcomesOf(agg.commands ?? [], kind);
+    if (outcomes.size === 0) return null;
     return (
-        <Section title={kind === 'emits' ? tx.raises(emitters.size) : tx.returns(emitters.size)}>
-            {[...emitters].map(([id, commands]) => {
-                const ev = model.elements[id];
-                return (
-                    <div key={id} className="event-row">
-                        <a onClick={() => onSelect(id)}>{names.id(id)}</a>
-                        {kind === 'emits' && ev && <PersistenceBadge persistent={!!ev.persistent} />}
-                        {ev?.doc && <div className="muted small">{ev.doc}</div>}
-                        <div className="small">
-                            <span className="muted">← </span>
-                            {commands.map((c) => (
-                                <a key={c.id} className="ref" onClick={() => onSelect(c.id)}>
-                                    {names.of(c)}
-                                </a>
-                            ))}
-                        </div>
-                        {ev && ev.fields.length > 0 && <div className="muted small mono">{payloadText(names, ev)}</div>}
-                    </div>
-                );
-            })}
+        <Section title={kind === 'emits' ? tx.raises(outcomes.size) : tx.returns(outcomes.size)}>
+            {[...outcomes].map(([id, commands]) => (
+                <OutcomeCard key={id} id={id} commands={commands} model={model} names={names} tx={tx} onSelect={onSelect} />
+            ))}
         </Section>
     );
 }
