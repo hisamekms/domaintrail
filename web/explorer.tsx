@@ -44,6 +44,8 @@ export function Explorer(props: ExplorerProps) {
     // Collapsed nodes are remembered; everything is expanded except aggregate children by default.
     const [collapsed, setCollapsed] = usePersistentState<string[]>('domaintrail.explorer.collapsed', []);
     const [expanded, setExpanded] = usePersistentState<string[]>('domaintrail.explorer.expanded', []);
+    // the two sections (model, files) open and close as a whole; both open by default
+    const [sections, setSections] = usePersistentState('domaintrail.explorer.sections', { model: true, files: true });
     // the filter is not remembered, so that a reload never hides items without saying so
     const [query, setQuery] = useState('');
     const [onlyProblems, setOnlyProblems] = useState(false);
@@ -129,6 +131,9 @@ export function Explorer(props: ExplorerProps) {
         </>
     );
 
+    // while filtering, each section title counts its matching rows, so that a closed section still tells what it holds
+    let modelHits = 0;
+    let fileHits = 0;
     const modelTree = model && orderedContexts(model).map((ctx) => contextNode(model, ctx)).filter(Boolean);
     const fileTree = buildFileTree(props.files)
         .map((n) => fileNode(n, 0, true))
@@ -165,17 +170,19 @@ export function Explorer(props: ExplorerProps) {
                 </button>
             </div>
             <div className="explorer-body">
-                <div className="pane-title">{t.model}</div>
-                <div className="tree">
-                    {!model && <p className="muted small pad">{t.noModel}</p>}
-                    {model && filtering && !modelTree?.length && <p className="muted small pad">{t.noMatches}</p>}
-                    {modelTree}
-                </div>
-                <div className="pane-title">{t.files}</div>
-                <div className="tree">
-                    {filtering && !fileTree.length && <p className="muted small pad">{t.noMatches}</p>}
-                    {fileTree}
-                </div>
+                <Section title={t.model} hits={filtering ? modelHits : undefined} open={sections.model} onToggle={() => setSections({ ...sections, model: !sections.model })}>
+                    <div className="tree">
+                        {!model && <p className="muted small pad">{t.noModel}</p>}
+                        {model && filtering && !modelTree?.length && <p className="muted small pad">{t.noMatches}</p>}
+                        {modelTree}
+                    </div>
+                </Section>
+                <Section title={t.files} hits={filtering ? fileHits : undefined} open={sections.files} onToggle={() => setSections({ ...sections, files: !sections.files })}>
+                    <div className="tree">
+                        {filtering && !fileTree.length && <p className="muted small pad">{t.noMatches}</p>}
+                        {fileTree}
+                    </div>
+                </Section>
             </div>
         </div>
     );
@@ -192,7 +199,9 @@ export function Explorer(props: ExplorerProps) {
                 .map((el) => elementNode(el, ctxText))
                 .filter((n) => n !== null),
         })).filter((g) => g.nodes.length);
-        if (!groups.length && !(ctxText && flagsHit(marks.get(ctx)))) return null;
+        const ctxHit = ctxText && flagsHit(marks.get(ctx));
+        if (!groups.length && !ctxHit) return null;
+        if (ctxHit) modelHits++;
 
         const shared = model.sharedContexts.includes(ctx);
         const open = isOpen(`ctx:${ctx}`, true);
@@ -227,7 +236,9 @@ export function Explorer(props: ExplorerProps) {
         const childShown = (c: { id: string; name: string; label?: string }) => (elText || textHit(c.name, c.label)) && flagsHit(marks.get(c.id));
         const states = (el.states ?? []).filter(childShown);
         const commands = (el.commands ?? []).filter(childShown);
-        if (!states.length && !commands.length && !(elText && flagsHit(marks.get(el.id)))) return null;
+        const elHit = elText && flagsHit(marks.get(el.id));
+        if (!states.length && !commands.length && !elHit) return null;
+        modelHits += states.length + commands.length + (elHit ? 1 : 0);
 
         const hasChildren = !!(el.states?.length || el.commands?.length);
         const key = `agg:${el.id}`;
@@ -267,6 +278,7 @@ export function Explorer(props: ExplorerProps) {
             const c = fileCounts([node.path]);
             const fileMark: Mark = { severity: c.errors ? 'error' : c.warnings ? 'warning' : undefined, change: changedFiles.has(node.path) ? 'changed' : undefined };
             if (!(textHit(node.path) && flagsHit(fileMark))) return null;
+            fileHits++;
             const id = fileSelection(node.path);
             const selected = props.selected === id;
             return (
@@ -323,6 +335,22 @@ function Twisty({ row }: { row: RowState }) {
         >
             <ChevronRight size={14} aria-hidden />
         </span>
+    );
+}
+
+/** A titled section of the pane that opens and closes with its title, like a tree row. */
+function Section({ title, hits, open, onToggle, children }: { title: string; hits?: number; open: boolean; onToggle: () => void; children: ReactNode }) {
+    return (
+        <section className="explorer-section">
+            <button type="button" className="pane-title explorer-section-title" onClick={onToggle} aria-expanded={open}>
+                <span className={`tree-twisty${open ? ' open' : ''}`}>
+                    <ChevronRight size={14} aria-hidden />
+                </span>
+                {title}
+                {hits !== undefined && <span className="explorer-section-hits">{hits}</span>}
+            </button>
+            <Collapse open={open}>{children}</Collapse>
+        </section>
     );
 }
 

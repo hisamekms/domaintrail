@@ -1396,6 +1396,28 @@ select,
     padding-top: 6px;
     padding-right: 6px;
 }
+/* the explorer's section titles open and close their section; one closed leaves its height to the other */
+.explorer-section-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    padding-left: 8px;
+    border: none;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+}
+.explorer-section-title:hover {
+    color: var(--text);
+}
+.explorer-section-hits {
+    font-weight: 400;
+}
+.explorer-section-title:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
 .tree-item,
 .tree-group {
     display: flex;
