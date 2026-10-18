@@ -6,7 +6,8 @@ import { loadWorkspace } from '../src/core/files.js';
 import type { DomainModel, ElementModel } from '../src/model/model.js';
 import { CommandCard, OutcomeCard, outcomesOf } from '../web/behavior.js';
 import { MESSAGES } from '../web/i18n.js';
-import { namer } from '../web/model-utils.js';
+import { tabsFor } from '../web/inspector.js';
+import { namer, resolve } from '../web/model-utils.js';
 import { EXAMPLES } from './helpers.js';
 
 let model: DomainModel;
@@ -84,5 +85,17 @@ describe('behaviour cards', () => {
         expect(text(html)).toContain(tx.origin);
         expect(text(html)).toContain('reason');
         expect(clickOn(card, '注文を取り消す cancel')).toEqual([command('cancel').id]);
+    });
+});
+
+describe('inspector tabs', () => {
+    test('an aggregate has its events in a tab of their own, right after the behaviour', () => {
+        expect(tabsFor(resolve(model, order.id)!)).toEqual(['structure', 'states', 'behavior', 'events', 'references', 'source']);
+    });
+
+    test('other items keep their tabs', () => {
+        const other = Object.values(model.elements).find((e) => e.kind === 'valueObject')!;
+        expect(tabsFor(resolve(model, other.id)!)).toEqual(['structure', 'references', 'source']);
+        expect(tabsFor(resolve(model, command('confirm').id)!)).toEqual(['structure', 'states', 'behavior', 'source']);
     });
 });

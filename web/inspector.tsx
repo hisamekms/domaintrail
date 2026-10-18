@@ -13,7 +13,7 @@ import { ownerElement } from './render';
 import { SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
 
-export type InspectorTab = 'structure' | 'states' | 'behavior' | 'references' | 'source';
+export type InspectorTab = 'structure' | 'states' | 'behavior' | 'events' | 'references' | 'source';
 
 /** Where the selected item can be shown in the main area. */
 export type RevealTarget = 'contextMap' | 'structure' | 'catalog';
@@ -46,7 +46,7 @@ export interface InspectorProps {
 }
 
 /** Tabs that make sense for a selected item, in display order. */
-function tabsFor(r: Resolved): InspectorTab[] {
+export function tabsFor(r: Resolved): InspectorTab[] {
     switch (r.kind) {
         case 'context':
             return ['structure'];
@@ -55,7 +55,7 @@ function tabsFor(r: Resolved): InspectorTab[] {
         case 'command':
             return ['structure', 'states', 'behavior', 'source'];
         case 'element':
-            return r.el.kind === 'aggregate' ? ['structure', 'states', 'behavior', 'references', 'source'] : ['structure', 'references', 'source'];
+            return r.el.kind === 'aggregate' ? ['structure', 'states', 'behavior', 'events', 'references', 'source'] : ['structure', 'references', 'source'];
     }
 }
 
@@ -276,11 +276,11 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         return (
             <>
                 <CommandList title={tx.counted(tx.commands, el.commands?.length ?? 0)} agg={el} model={model} commands={el.commands ?? []} onSelect={onSelect} />
-                <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="errors" onSelect={onSelect} />
             </>
         );
     }
+    if (tab === 'events') return <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />;
     if (tab === 'references') return <References model={model} el={el} onSelect={onSelect} />;
 
     // structure
@@ -505,9 +505,11 @@ function AggregateOutcomes({ agg, model, kind, onSelect }: { agg: ElementModel; 
     const names = useNames();
     const tx = useT();
     const outcomes = outcomesOf(agg.commands ?? [], kind);
-    if (outcomes.size === 0) return null;
+    // the errors are a part of the behaviour tab, but the events have a tab of their own, which says so when there are none
+    if (outcomes.size === 0 && kind === 'errors') return null;
     return (
         <Section title={kind === 'emits' ? tx.raises(outcomes.size) : tx.returns(outcomes.size)}>
+            {outcomes.size === 0 && <span className="muted">{tx.none}</span>}
             {[...outcomes].map(([id, commands]) => (
                 <OutcomeCard key={id} id={id} commands={commands} model={model} names={names} tx={tx} onSelect={onSelect} />
             ))}

@@ -3,7 +3,7 @@ import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 
 /**
- * Cards of the aggregate's 振る舞い tab: one per command, and one per event or error its commands raise or return.
+ * Cards of the aggregate's 振る舞い and イベント tabs: one per command, and one per event or error its commands raise or return.
  * They take the names and messages as props (no hooks), so that their clicks can be tested without a DOM.
  */
 
