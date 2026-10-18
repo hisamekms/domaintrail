@@ -20,11 +20,16 @@ import {
     type GraphNode,
     type StructureLevel,
     type Texts,
+    type TransitionLabels,
+    TRANSITION_SUB_SIZE,
+    compartmentHeight,
+    transitionText,
     OVERVIEW_TEXT_SCALE,
 } from './ir.js';
 
 export const STRUCTURE_GRAPH_ID = 'structure';
-export const stateGraphId = (aggregateId: string): string => `states:${aggregateId}`;
+/** Each way of labeling transitions has a layout of its own (both: the plain ID). */
+export const stateGraphId = (aggregateId: string, labels: TransitionLabels = 'both'): string => `states:${aggregateId}${labels === 'both' ? '' : `:${labels}`}`;
 export const boundaryId = (aggregateId: string): string => `${aggregateId}@boundary`;
 export const initialNodeId = (aggregateId: string): string => `${aggregateId}@new`;
 
@@ -486,59 +491,83 @@ function soleOwner(owners: Set<string> | undefined, ctx: string): string | undef
     return owner.startsWith(`${ctx}.`) ? owner : undefined;
 }
 
-/** State View of one aggregate: states as nodes, commands as transitions; factories start from an initial node. */
-export function buildStateGraph(agg: ElementModel, model: DomainModel): Graph {
-    const nodes: GraphNode[] = [];
+/**
+ * State View of one aggregate: states as nodes, commands as transitions; factories start from an initial node. A command
+ * that leaves a state as it is is listed in the state's box instead of drawn as a loop. Nodes and edge labels are sized
+ * for the transition texts `labels`.
+ */
+export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: TransitionLabels = 'both'): Graph {
+    const nodes: Omit<GraphNode, 'width' | 'height'>[] = [];
     const edges: GraphEdge[] = [];
     const states = agg.states ?? [];
     const commands = agg.commands ?? [];
     const stateful = states.length > 0;
 
-    if (commands.some((c) => c.factory)) {
-        nodes.push({ id: initialNodeId(agg.id), kind: 'initial', label: sameText('new'), lines: [], elementId: agg.id, width: 64, height: 64 });
-    }
     if (stateful) {
         for (const s of states) {
-            nodes.push(
-                sized({
-                    id: s.id,
-                    kind: 'state',
-                    label: named(s.name, s.label),
-                    stereotype: stereotype('状態', 'state'),
-                    lines: [
-                        ...s.fields.map((f) => fieldLine(f, agg.context, model)),
-                        ...s.invariants.map((i) => ({ key: named(`✓ ${i.name}`, i.label && `✓ ${i.label}`, (l, n) => `${l} (${n.slice(2)})`) })),
-                    ],
-                    elementId: s.id,
-                }),
-            );
+            nodes.push({
+                id: s.id,
+                kind: 'state',
+                label: named(s.name, s.label),
+                stereotype: stereotype('状態', 'state'),
+                lines: [
+                    ...s.fields.map((f) => fieldLine(f, agg.context, model)),
+                    ...s.invariants.map((i) => ({ key: named(`✓ ${i.name}`, i.label && `✓ ${i.label}`, (l, n) => `${l} (${n.slice(2)})`) })),
+                ],
+                elementId: s.id,
+            });
         }
     } else {
-        nodes.push(sized({ id: agg.id, kind: 'state', label: named(agg.name, agg.label), stereotype: stereotype('状態なし', 'no states'), lines: [], elementId: agg.id }));
+        nodes.push({ id: agg.id, kind: 'state', label: named(agg.name, agg.label), stereotype: stereotype('状態なし', 'no states'), lines: [], elementId: agg.id });
     }
 
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);
     for (const c of commands) {
         const sources = c.factory ? [initialNodeId(agg.id)] : stateful ? c.from.map(stateNode) : [agg.id];
         const targets = stateful ? c.to.map(stateNode) : [agg.id];
+        const label = commandLabel(c);
+        const events = eventsLabel(c, model);
         for (const source of sources) {
             for (const target of targets) {
                 if (!source || !target) continue; // unresolved state, reported as M006
-                edges.push({ id: `${c.id}|${source}->${target}`, kind: 'transition', source, target, label: commandLabel(c, model) });
+                const id = `${c.id}|${source}->${target}`;
+                const node = source === target ? nodes.find((n) => n.id === source) : undefined;
+                if (node) (node.internal ??= []).push({ id, elementId: c.id, label, ...(events && { events }) });
+                else edges.push({ id, kind: 'transition', source, target, label, ...(events && { events }) });
             }
         }
     }
-    return { id: stateGraphId(agg.id), nodes, edges };
+    const sizedNodes = nodes.map((n) => sizedState(n, labels));
+    if (commands.some((c) => c.factory)) {
+        sizedNodes.unshift({ id: initialNodeId(agg.id), kind: 'initial', label: sameText('new'), lines: [], elementId: agg.id, width: 64, height: 64 });
+    }
+    return { id: stateGraphId(agg.id, labels), nodes: sizedNodes, edges, transitionLabels: labels };
 }
 
-function commandLabel(c: CommandModel, model: DomainModel): Texts {
-    const short = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
-    const emitsByName = c.emits.length ? ` ⇒ ${c.emits.map(short).join(', ')}` : '';
-    const emitsByLabel = c.emits.length ? ` ⇒ ${c.emits.map((e) => lookupLabel(model, e) ?? short(e)).join(', ')}` : '';
-    const signature = `${c.name}(${c.params.map((p) => p.name).join(', ')})`;
-    return anyLang({
-        name: `${signature}${emitsByName}`,
-        label: `${c.label ?? signature}${emitsByLabel}`,
-        both: `${c.label ? `${c.label} ` : ''}${signature}${emitsByName}`,
+/** A state's box, with room for its internal transitions' compartment. */
+function sizedState(n: Omit<GraphNode, 'width' | 'height'>, labels: TransitionLabels): GraphNode {
+    const node = sized(n);
+    if (!n.internal?.length) return node;
+    const rows = n.internal.map((t) => {
+        const text = transitionText(t.label, t.events, labels);
+        return Math.max(maxUnits(text.main) + 2, text.sub ? maxUnits(text.sub) * TRANSITION_SUB_SIZE : 0);
     });
+    return {
+        ...node,
+        width: Math.max(node.width, Math.ceil(Math.max(...rows) * CHAR_WIDTH + 28)),
+        height: node.height + compartmentHeight(n, labels),
+    };
+}
+
+function commandLabel(c: CommandModel): Texts {
+    const signature = `${c.name}(${c.params.map((p) => p.name).join(', ')})`;
+    return anyLang({ name: signature, label: c.label ?? signature, both: `${c.label ? `${c.label} ` : ''}${signature}` });
+}
+
+/** The events a command raises, by name or label (none: undefined). */
+function eventsLabel(c: CommandModel, model: DomainModel): Texts | undefined {
+    if (!c.emits.length) return undefined;
+    const short = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
+    const each = c.emits.map((e) => named(short(e), lookupLabel(model, e), (l, n) => `${l} ${n}`));
+    return anyLang({ name: each.map((t) => t.en.name).join(', '), label: each.map((t) => t.en.label).join(', '), both: each.map((t) => t.en.both).join(', ') });
 }

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
-import type { DisplayMode, Lang, LaidOutGraph } from '../src/graph/ir';
+import { TRANSITION_LABELS, type DisplayMode, type Lang, type LaidOutGraph, type TransitionLabels } from '../src/graph/ir';
 import { fitAll, highlightElement, usePointerCursor } from './canvas';
 import { useT } from './i18n';
+import { usePersistentState } from './layout';
 import { Legend } from './legend';
 import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
@@ -19,9 +20,10 @@ const cameras = new Map<string, TLCamera>();
  */
 export function StatesCanvas(props: {
     aggregateId: string;
-    graph: LaidOutGraph | undefined;
-    /** The previously shown version of the same graph, for ghosts of removed states. */
-    previous: LaidOutGraph | undefined;
+    /** The aggregate's graph laid out for each way of labeling transitions. */
+    graphs: Record<TransitionLabels, LaidOutGraph> | undefined;
+    /** The previously shown version of the same graphs, for ghosts of removed states. */
+    previous: Record<TransitionLabels, LaidOutGraph> | undefined;
     diff: ModelDiff;
     diagnostics: Diagnostic[];
     mode: DisplayMode;
@@ -32,9 +34,13 @@ export function StatesCanvas(props: {
     legendOpen: boolean;
     onLegendToggle: () => void;
 }) {
-    const { aggregateId, graph } = props;
+    const { aggregateId } = props;
     const t = useT();
     const [editor, setEditor] = useState<Editor | null>(null);
+    const [savedLabels, setLabels] = usePersistentState<TransitionLabels>('domaintrail.states.transitionLabels', 'both');
+    const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
+    const graph = props.graphs?.[labels];
+    const previous = props.previous?.[labels];
     /** The aggregate whose camera is shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
 
@@ -59,7 +65,7 @@ export function StatesCanvas(props: {
             shown.current = null;
             return;
         }
-        renderGraph(editor, graph, { diff: props.diff, diagnostics: props.diagnostics, previous: props.previous, mode: props.mode, lang: props.lang });
+        renderGraph(editor, graph, { diff: props.diff, diagnostics: props.diagnostics, previous, mode: props.mode, lang: props.lang, transitionLabels: labels });
         if (shown.current !== aggregateId) {
             const saved = cameras.get(aggregateId);
             if (saved) editor.setCamera(saved);
@@ -68,7 +74,7 @@ export function StatesCanvas(props: {
             if (props.selected) highlightElement(editor, props.selected);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, graph, props.previous, props.diff, props.diagnostics, props.mode, props.lang, aggregateId]);
+    }, [editor, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, aggregateId]);
 
     // Show a selection made elsewhere.
     useEffect(() => {
@@ -100,6 +106,13 @@ export function StatesCanvas(props: {
             {graph ? (
                 <>
                     <div className="canvas-toolbar">
+                        <div className="segmented small" role="group" aria-label={t.transitionLabels}>
+                            {TRANSITION_LABELS.map((l) => (
+                                <button key={l} className={labels === l ? 'active' : ''} aria-pressed={labels === l} onClick={() => setLabels(l)} data-tooltip={t.transitionLabelModes[l].hint}>
+                                    {t.transitionLabelModes[l].label}
+                                </button>
+                            ))}
+                        </div>
                         <button onClick={() => editor && fitAll(editor, graph, true)}>{t.zoomToFit}</button>
                     </div>
                     <Legend view="states" open={props.legendOpen} onToggle={props.onLegendToggle} />

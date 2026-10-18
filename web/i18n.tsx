@@ -66,6 +66,12 @@ const ja = {
         aggregates: '集約 — 集約とその関係だけを表示',
     },
     zoomToFit: '全体表示',
+    transitionLabels: '遷移のラベル',
+    transitionLabelModes: {
+        command: { label: 'コマンド', hint: 'コマンドだけを表示' },
+        event: { label: 'イベント', hint: '発生させるドメインイベントだけを表示（イベントのない遷移はコマンドを薄く表示）' },
+        both: { label: '両方', hint: 'コマンドと、その下に発生させるドメインイベントを表示' },
+    },
     pickContexts: '表示する BC を選んでください',
     loading: '読み込み中…',
     noDiagram: '表示できる図がありません',
@@ -102,6 +108,7 @@ const ja = {
     stubNote: '点線枠の小さな箱は別の BC の要素（スタブ）',
     aggregateStubNote: '点線枠の小さな箱は別の BC の集約（スタブ）',
     arrowNote: '矢印の先が依存先',
+    internalNote: '状態の箱の中の ↻ は状態を変えないコマンド',
 
     // explorer
     model: 'モデル',
@@ -253,6 +260,12 @@ const en: Messages = {
         aggregates: 'Aggregates — show the aggregates and their relations only',
     },
     zoomToFit: 'Fit',
+    transitionLabels: 'Transition labels',
+    transitionLabelModes: {
+        command: { label: 'Command', hint: 'Show the commands only' },
+        event: { label: 'Events', hint: 'Show the domain events raised only (a transition without events shows its command, faded)' },
+        both: { label: 'Both', hint: 'Show the commands and, under them, the domain events raised' },
+    },
     pickContexts: 'Pick the BCs to show',
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
@@ -287,6 +300,7 @@ const en: Messages = {
     stubNote: 'Small dashed boxes are elements of other BCs (stubs)',
     aggregateStubNote: 'Small dashed boxes are aggregates of other BCs (stubs)',
     arrowNote: 'Arrows point at the dependency',
+    internalNote: '↻ in a state’s box: a command that keeps the state',
 
     model: 'Model',
     files: 'Files',

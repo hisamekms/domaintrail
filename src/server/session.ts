@@ -6,7 +6,7 @@ import { loadWorkspace } from '../core/files.js';
 import { buildStateGraph, buildStructureGraph } from '../graph/build.js';
 import { buildContextMapGraph } from '../graph/context-map.js';
 import { EMPTY_DIFF, diffModels, fingerprints, type ModelDiff } from '../graph/diff.js';
-import { graphSignature, type Graph, type LaidOutGraph, type StructureLevel } from '../graph/ir.js';
+import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type StructureLevel, type TransitionLabels } from '../graph/ir.js';
 import type { LayoutEngine } from '../layout/engine.js';
 import { supportingContexts } from '../model/dependencies.js';
 import type { DomainModel } from '../model/model.js';
@@ -134,12 +134,15 @@ export class ViewSession {
         const contextMapAll = await this.layout(buildContextMapGraph(model, { all: true }));
         const overview = await this.layout(buildStructureGraph(model, { level: 'overview' }));
         const aggregates = await this.layout(buildStructureGraph(model, { level: 'aggregates' }));
-        const states: Record<string, LaidOutGraph> = {};
+        const states: ViewPayload['states'] = {};
         for (const el of Object.values(model.elements)) {
-            if (el.kind === 'aggregate') states[el.id] = await this.layout(buildStateGraph(el, model));
+            if (el.kind !== 'aggregate') continue;
+            const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
+            for (const l of TRANSITION_LABELS) byLabels[l] = await this.layout(buildStateGraph(el, model, l));
+            states[el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
         }
         // Forget layouts of graphs that no longer exist (e.g. removed aggregates).
-        const live = new Set([structure.id, overview.id, aggregates.id, contextMap.id, contextMapAll.id, ...Object.values(states).map((g) => g.id)]);
+        const live = new Set([structure.id, overview.id, aggregates.id, contextMap.id, contextMapAll.id, ...Object.values(states).flatMap((byLabels) => Object.values(byLabels).map((g) => g.id))]);
         for (const id of [...this.layouts.keys()]) if (!live.has(id)) this.layouts.delete(id);
         await this.saveLayouts();
 

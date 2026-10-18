@@ -4,6 +4,7 @@ import { loadWorkspace } from '../src/core/files.js';
 import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '../src/graph/build.js';
 import { diffModels } from '../src/graph/diff.js';
 import { ElkLayoutEngine } from '../src/layout/elk.js';
+import { INTERNAL_PADDING, LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, anyLang, sameText, transitionText, type TransitionLabels } from '../src/graph/ir.js';
 import { EXAMPLES, check } from './helpers.js';
 
 const engine = new ElkLayoutEngine();
@@ -53,25 +54,94 @@ describe('Structure overview graph', () => {
 });
 
 describe('State View graph', () => {
-    test('states, factory start node and one edge per (from, to) pair', async () => {
+    test('states, factory start node and one edge per (from, to) pair; self transitions are listed in the state', async () => {
         const model = await exampleModel();
         const g = buildStateGraph(model.elements['Sales.Order'], model);
         expect(g.nodes.map((n) => n.id)).toEqual([initialNodeId('Sales.Order'), 'Sales.Order#Draft', 'Sales.Order#Confirmed', 'Sales.Order#Cancelled']);
-        expect(g.edges.map((e) => `${e.source.split(/[#@]/)[1]}->${e.target.split(/[#@]/)[1]}:${e.label?.en.name}`)).toEqual([
+        const short = (id: string) => id.split(/[#@]/)[1];
+        expect(g.edges.map((e) => `${short(e.source)}->${short(e.target)}:${e.label?.en.name}${e.events ? ` ⇒ ${e.events.en.name}` : ''}`)).toEqual([
             'new->Draft:place(customer) ⇒ OrderPlaced',
-            'Draft->Draft:addItem(item)',
             'Draft->Confirmed:confirm(at) ⇒ OrderConfirmed',
             'Draft->Cancelled:cancel(reason) ⇒ OrderCancelled',
             'Confirmed->Cancelled:cancel(reason) ⇒ OrderCancelled',
         ]);
+        const draft = g.nodes.find((n) => n.id === 'Sales.Order#Draft')!;
+        expect(draft.internal).toEqual([
+            {
+                id: 'Sales.Order:addItem|Sales.Order#Draft->Sales.Order#Draft',
+                elementId: 'Sales.Order:addItem',
+                label: anyLang({ name: 'addItem(item)', label: '明細を追加する', both: '明細を追加する addItem(item)' }),
+            },
+        ]);
+        expect(g.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.internal).toBeUndefined();
     });
 
-    test('aggregates without states show commands as self transitions', async () => {
+    test('aggregates without states list their commands in their one box', async () => {
         const model = await exampleModel();
         const g = buildStateGraph(model.elements['Sales.Customer'], model);
-        expect(g.edges.map((e) => `${e.source}->${e.target}`)).toEqual(['Sales.Customer@new->Sales.Customer', 'Sales.Customer->Sales.Customer']);
+        expect(g.edges.map((e) => `${e.source}->${e.target}`)).toEqual(['Sales.Customer@new->Sales.Customer']);
+        expect(g.nodes.find((n) => n.id === 'Sales.Customer')!.internal?.map((t) => t.label.en.name)).toEqual(['rename(name)']);
+    });
+
+    test('a command from several states is listed in each state it keeps, and drawn for the others', async () => {
+        const m = (await check({ 'a.dt': MULTI })).model!;
+        const g = buildStateGraph(m.elements['S.A'], m);
+        const internal = Object.fromEntries(g.nodes.filter((n) => n.internal).map((n) => [n.id, n.internal!.map((t) => t.elementId)]));
+        expect(internal).toEqual({ 'S.A#Open': ['S.A:touch', 'S.A:hold'], 'S.A#Held': ['S.A:touch'] });
+        expect(g.edges.map((e) => e.id).filter((id) => /:(touch|hold)\|/.test(id))).toEqual([
+            'S.A:touch|S.A#Open->S.A#Held',
+            'S.A:touch|S.A#Held->S.A#Open',
+            'S.A:hold|S.A#Held->S.A#Open',
+        ]);
+        expect(g.edges.find((e) => e.id.startsWith('S.A:hold'))!.events).toEqual(anyLang({ name: 'Held', label: '保留', both: '保留 Held' }));
+    });
+
+    test('state boxes grow by the rows of their internal transitions, as the labels show them', async () => {
+        const m = (await check({ 'a.dt': MULTI })).model!;
+        const height = (labels: TransitionLabels) => buildStateGraph(m.elements['S.A'], m, labels).nodes.find((n) => n.id === 'S.A#Open')!.height;
+        const plain = buildStateGraph(m.elements['S.A'], m).nodes.find((n) => n.id === 'S.A#Closed')!.height;
+        // touch (no events) and hold (raises Held): one line each, plus the events line of hold in both
+        expect(height('command')).toBe(plain + 2 * INTERNAL_PADDING + 2 * LINE_HEIGHT);
+        expect(height('event')).toBe(height('command'));
+        expect(height('both')).toBe(height('command') + TRANSITION_SUB_LINE_HEIGHT);
+    });
+
+    test('labels show the command, the events (or the command, faded), or both', () => {
+        const command = sameText('hold()');
+        const events = sameText('Held');
+        expect(transitionText(command, events, 'command')).toEqual({ main: command, faded: false });
+        expect(transitionText(command, events, 'event')).toEqual({ main: events, faded: false });
+        expect(transitionText(command, undefined, 'event')).toEqual({ main: command, faded: true });
+        expect(transitionText(command, events, 'both')).toEqual({ main: command, sub: sameText('⇒ Held'), faded: false });
+        expect(transitionText(command, undefined, 'both')).toEqual({ main: command, sub: undefined, faded: false });
+    });
+
+    test('self transitions are not laid out as edges; two-line labels get room for both lines', async () => {
+        const m = (await check({ 'a.dt': MULTI })).model!;
+        const both = await engine.layout(buildStateGraph(m.elements['S.A'], m, 'both'));
+        const command = await engine.layout(buildStateGraph(m.elements['S.A'], m, 'command'));
+        expect(Object.keys(both.edgeLayout).sort()).toEqual(both.edges.map((e) => e.id).sort());
+        expect(Object.keys(both.edgeLayout).filter((id) => id.endsWith('Open->S.A#Open'))).toEqual([]);
+        const id = 'S.A:hold|S.A#Held->S.A#Open';
+        expect(both.edgeLayout[id].label!.height).toBeGreaterThan(command.edgeLayout[id].label!.height);
+        expect(both.nodeLayout['S.A#Open'].height).toBe(both.nodes.find((n) => n.id === 'S.A#Open')!.height);
     });
 });
+
+const MULTI = `context S {
+  id AId: UUID
+  event Held "保留" { id: AId }
+  aggregate A {
+    id: AId
+    create command open() to Open
+    state Open
+    state Held
+    state Closed
+    command touch() from Open | Held to Open | Held
+    command hold() from Open | Held to Open emits Held
+    command close() from Open to Closed
+  }
+}`;
 
 describe('layout', () => {
     test('every node and edge gets coordinates; children lie inside their containers', async () => {

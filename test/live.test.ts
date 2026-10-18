@@ -50,6 +50,8 @@ describe('Live View', () => {
         expect(state.structure?.nodes.length).toBeGreaterThan(0);
         expect(state.aggregates?.nodes.filter((n) => n.kind === 'aggregate').map((n) => n.id)).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
         expect(Object.keys(state.states).sort()).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
+        // laid out for each way of labeling transitions
+        expect(Object.values(state.states['Sales.Order']).map((g) => g.id)).toEqual(['states:Sales.Order:command', 'states:Sales.Order:event', 'states:Sales.Order']);
         expect(state.sources.map((x) => x.path)).toEqual(state.files);
         const order = state.model!.elements['Sales.Order'].location;
         const lines = state.sources.find((x) => x.path === order.file)!.text.split('\n');
@@ -97,7 +99,7 @@ describe('Live View', () => {
         expect(p.status).toBe('ok');
         expect(p.diff.added.sort()).toEqual(['Sales.NotShippable', 'Sales.Order#Shipped']);
         expect(p.diff.changed).toEqual(['Sales.Order']);
-        expect(p.states['Sales.Order'].nodes.map((n) => n.id)).toContain('Sales.Order#Shipped');
+        expect(p.states['Sales.Order'].both.nodes.map((n) => n.id)).toContain('Sales.Order#Shipped');
     });
 
     test('several files saved in a burst produce one consistent update', async () => {

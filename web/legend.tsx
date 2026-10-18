@@ -53,6 +53,7 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
                 ))}
                 {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
                 {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
+                {view === 'states' && <div className="legend-note">{t.internalNote}</div>}
                 <div className="legend-note">{t.arrowNote}</div>
             </div>
             <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} data-tooltip={t.openLegend} aria-label={t.openLegend}>

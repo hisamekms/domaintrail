@@ -1,7 +1,20 @@
 import { createShapeId, type Editor, type TLShapeId, type TLShapePartial } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
-import type { DisplayMode, GraphEdge, GraphNode, Lang, LaidOutGraph, Texts } from '../src/graph/ir';
+import {
+    INTERNAL_PADDING,
+    compartmentHeight,
+    internalRowHeight,
+    transitionText,
+    type DisplayMode,
+    type GraphEdge,
+    type GraphNode,
+    type Lang,
+    type LaidOutGraph,
+    type NodeLayout,
+    type Texts,
+    type TransitionLabels,
+} from '../src/graph/ir';
 import type { ChangeMark, DiagMark, EdgeTone } from './shapes';
 
 export interface RenderOptions {
@@ -11,16 +24,19 @@ export interface RenderOptions {
     previous?: LaidOutGraph;
     mode: DisplayMode;
     lang: Lang;
+    /** State View: what transitions are labeled with (default both). */
+    transitionLabels?: TransitionLabels;
 }
 
 /** Which variant of the graph's texts to show. */
-type Variant = Pick<RenderOptions, 'mode' | 'lang'>;
+type Variant = Pick<RenderOptions, 'mode' | 'lang' | 'transitionLabels'>;
 const textOf = (t: Texts, v: Variant): string => t[v.lang][v.mode];
 
 const GROUP_KINDS = new Set(['context', 'sharedContext', 'aggregateBoundary']);
 const nodeShapeId = (id: string): TLShapeId => createShapeId(`n:${id}`);
 const edgeShapeId = (id: string): TLShapeId => createShapeId(`e:${id}`);
 const ghostShapeId = (id: string): TLShapeId => createShapeId(`ghost:${id}`);
+const internalShapeId = (id: string): TLShapeId => createShapeId(`i:${id}`);
 
 const rowsIn = (n: GraphNode, v: Variant) => n.lines.map((l) => ({ k: textOf(l.key, v), v: l.value ? textOf(l.value, v) : '' }));
 
@@ -51,6 +67,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
 
     const groups: TLShapePartial[] = [];
     const nodes: TLShapePartial[] = [];
+    const internal: TLShapePartial[] = [];
     for (const n of graph.nodes) {
         const l = graph.nodeLayout[n.id];
         if (!l) continue;
@@ -63,8 +80,9 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
             nodes.push({
                 ...base,
                 type: 'domain-node',
-                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ? textOf(n.stereotype, opts) : '', scale, rows: rowsIn(n, opts), ...marks },
+                props: { ...nodeProps(graph, n, l, opts), ...marks },
             });
+            internal.push(...internalRows(graph, n, l, opts, (id) => ({ change: change(id), diag: severity.get(id) ?? 'none' })));
         }
     }
 
@@ -80,8 +98,11 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
                 x: l.x,
                 y: l.y,
                 meta: { elementId: n.elementId, ghost: true },
-                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ? textOf(n.stereotype, opts) : '', scale, rows: rowsIn(n, opts), change: 'removed', diag: 'none' },
+                props: { ...nodeProps(opts.previous, n, l, opts), change: 'removed', diag: 'none' },
             });
+            for (const row of internalRows(opts.previous, n, l, opts, () => ({ change: 'removed', diag: 'none' }))) {
+                ghosts.push({ ...row, id: ghostShapeId(`i:${(row.meta as { edge: string }).edge}`), meta: { ...row.meta, ghost: true } });
+            }
         }
     }
 
@@ -92,7 +113,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         if (shape) edges.push(shape);
     }
 
-    const wanted = [...groups, ...nodes, ...ghosts, ...edges];
+    const wanted = [...groups, ...nodes, ...ghosts, ...internal, ...edges];
     const wantedIds = new Set(wanted.map((s) => s.id));
 
     withWriteAccess(editor, () => {
@@ -105,12 +126,48 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         editor.createShapes(create as never);
         editor.updateShapes(update as never);
 
-        // z-order: contexts < aggregate boundaries < nodes < edges
+        // z-order: contexts < aggregate boundaries < nodes < internal transitions < edges
         const boundaryIds = groups.filter((g) => (g.props as { kind: string }).kind === 'aggregateBoundary').map((g) => g.id);
         const contextIds = groups.filter((g) => (g.props as { kind: string }).kind !== 'aggregateBoundary').map((g) => g.id);
         if (boundaryIds.length) editor.sendToBack(boundaryIds);
         if (contextIds.length) editor.sendToBack(contextIds);
+        if (internal.length) editor.bringToFront(internal.map((r) => r.id));
         if (edges.length) editor.bringToFront(edges.map((e) => e.id));
+    });
+}
+
+function nodeProps(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Variant) {
+    return {
+        w: l.width,
+        h: l.height,
+        kind: n.kind,
+        label: textOf(n.label, v),
+        stereotype: n.stereotype ? textOf(n.stereotype, v) : '',
+        scale: graph.textScale ?? 1,
+        rows: rowsIn(n, v),
+        // the compartment of internal transitions takes the bottom of the box, as laid out
+        compartment: n.internal?.length ? compartmentHeight(n, graph.transitionLabels ?? 'both') : 0,
+    };
+}
+
+/** A node's internal transitions, each a shape of its own over the compartment (so it is selected on its own). */
+function internalRows(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Variant, marks: (command: string) => { change: ChangeMark; diag: DiagMark }): TLShapePartial[] {
+    if (!n.internal?.length) return [];
+    const labels = v.transitionLabels ?? 'both';
+    let y = l.y + l.height - compartmentHeight(n, graph.transitionLabels ?? 'both') + INTERNAL_PADDING;
+    return n.internal.map((t) => {
+        const text = transitionText(t.label, t.events, labels);
+        const h = internalRowHeight(t, labels);
+        const row: TLShapePartial = {
+            id: internalShapeId(t.id),
+            type: 'domain-internal',
+            x: l.x + 4,
+            y,
+            meta: { elementId: t.elementId, edge: t.id },
+            props: { w: l.width - 8, h, label: textOf(text.main, v), sub: text.sub ? textOf(text.sub, v) : '', faded: text.faded, scale: graph.textScale ?? 1, ...marks(t.elementId) },
+        };
+        y += h;
+        return row;
     });
 }
 
@@ -148,6 +205,7 @@ function edgeShape(graph: LaidOutGraph, e: GraphEdge, v: Variant, tone: EdgeTone
     const ox = Math.min(...xs);
     const oy = Math.min(...ys);
     const l = route.label;
+    const text = e.label && (e.kind === 'transition' ? transitionText(e.label, e.events, v.transitionLabels ?? 'both') : { main: e.label, faded: false });
     return {
         id: edgeShapeId(e.id),
         type: 'domain-edge',
@@ -157,7 +215,9 @@ function edgeShape(graph: LaidOutGraph, e: GraphEdge, v: Variant, tone: EdgeTone
         props: {
             points: route.points.map((p) => ({ x: p.x - ox, y: p.y - oy })),
             kind: e.kind,
-            label: e.label ? textOf(e.label, v) : '',
+            label: text ? textOf(text.main, v) : '',
+            sub: text && 'sub' in text && text.sub ? textOf(text.sub, v) : '',
+            faded: text ? text.faded : false,
             scale: graph.textScale ?? 1,
             lx: l ? l.x - ox : 0,
             ly: l ? l.y - oy : 0,

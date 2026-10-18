@@ -428,7 +428,7 @@ export function App() {
                                 statesView={(aggregateId) => (
                                     <StatesCanvas
                                         aggregateId={aggregateId}
-                                        graph={current?.states[aggregateId]}
+                                        graphs={current?.states[aggregateId]}
                                         previous={previous?.states[aggregateId]}
                                         diff={current?.diff ?? empty}
                                         diagnostics={current?.diagnostics ?? []}

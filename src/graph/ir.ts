@@ -57,6 +57,8 @@ export interface GraphNode {
     lines: GraphLine[];
     /** Containing node, if nested. */
     parent?: string;
+    /** Commands that leave a state as it is, listed in a compartment at the bottom of its box (UML internal transitions). */
+    internal?: InternalTransition[];
     /** Model element shown in the Detail Panel when the node is selected. */
     elementId: string;
     width: number;
@@ -75,7 +77,48 @@ export interface GraphEdge {
     source: string;
     target: string;
     label?: Texts;
+    /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
+    events?: Texts;
 }
+
+/** A command that leaves a state as it is, drawn as a row in the state's box instead of a loop. */
+export interface InternalTransition {
+    /** In the form of a transition edge's ID: `<command>|<state>-><state>`. */
+    id: string;
+    /** The command. */
+    elementId: string;
+    label: Texts;
+    events?: Texts;
+}
+
+/** What the State View writes on a transition: the command, the events it raises, or both (the events under the command). */
+export type TransitionLabels = 'command' | 'event' | 'both';
+export const TRANSITION_LABELS: TransitionLabels[] = ['command', 'event', 'both'];
+
+/**
+ * A transition's text in `labels`: the main line, and a smaller second line (the events under the command). Without
+ * events, the event labels fall back to the command, `faded`.
+ */
+export function transitionText(label: Texts, events: Texts | undefined, labels: TransitionLabels): { main: Texts; sub?: Texts; faded: boolean } {
+    if (labels === 'command') return { main: label, faded: false };
+    if (labels === 'event') return events ? { main: events, faded: false } : { main: label, faded: true };
+    return { main: label, sub: events && mapTexts(events, (s) => `⇒ ${s}`), faded: false };
+}
+
+/** Line heights of a transition's text (at text scale 1); the second line is smaller. */
+export const TRANSITION_LINE_HEIGHT = 19;
+export const TRANSITION_SUB_LINE_HEIGHT = 15;
+/** Size of the second line's text relative to the first. */
+export const TRANSITION_SUB_SIZE = 0.85;
+
+/** Height of an internal transition's row; rows are a little taller than edge labels, like the body rows. */
+export const internalRowHeight = (t: InternalTransition, labels: TransitionLabels): number =>
+    LINE_HEIGHT + (transitionText(t.label, t.events, labels).sub ? TRANSITION_SUB_LINE_HEIGHT : 0);
+/** Vertical padding of the internal transitions' compartment. */
+export const INTERNAL_PADDING = 5;
+/** Height of a node's internal transitions' compartment (0 without any). */
+export const compartmentHeight = (n: Pick<GraphNode, 'internal'>, labels: TransitionLabels): number =>
+    n.internal?.length ? 2 * INTERNAL_PADDING + n.internal.reduce((h, t) => h + internalRowHeight(t, labels), 0) : 0;
 
 export interface Graph {
     id: string;
@@ -83,6 +126,8 @@ export interface Graph {
     edges: GraphEdge[];
     /** Text size relative to the normal views (the Structure overview uses larger text). */
     textScale?: number;
+    /** State View: the transition texts the nodes and edge labels are sized for (default `both`). */
+    transitionLabels?: TransitionLabels;
 }
 
 /** Text scale of the Structure overview (names only, no field rows) and of the aggregates level. */
@@ -140,6 +185,6 @@ export const CONTAINER_PADDING = { top: 46, left: 20, bottom: 20, right: 20 };
 
 export function graphSignature(g: Graph): string {
     const nodes = g.nodes.map((n) => `${n.id}|${n.parent ?? ''}|${n.width}x${n.height}|${maxUnits(n.label)}`).sort();
-    const edges = g.edges.map((e) => `${e.id}|${e.source}|${e.target}|${e.label ? maxUnits(e.label) : ''}`).sort();
+    const edges = g.edges.map((e) => `${e.id}|${e.source}|${e.target}|${e.label ? maxUnits(e.label) : ''}|${e.events ? maxUnits(e.events) : ''}`).sort();
     return `${nodes.join(';')}#${edges.join(';')}`;
 }
