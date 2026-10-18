@@ -9,18 +9,6 @@ import { catalogSections, commandsWithOutcome, namer, type CatalogSection, type 
 import { ownerElement } from './render';
 import { usagesOf } from './usages';
 
-const KIND_LABEL: Record<ElementModel['kind'], string> = {
-    aggregate: 'Aggregate',
-    entity: 'Entity',
-    valueObject: 'Value Object',
-    union: 'Union',
-    primitive: 'Primitive',
-    id: 'ID',
-    enum: 'Enum',
-    event: 'Event',
-    error: 'Error',
-};
-
 interface CatalogProps {
     model: DomainModel;
     mode: DisplayMode;
@@ -114,7 +102,7 @@ function Card(props: {
                 <span className="card-name">{names.of(el)}</span>
                 <span className="card-tags">
                     {el.kind === 'event' && <PersistenceBadge persistent={!!el.persistent} />}
-                    <span className={`kind kind-${el.kind} tiny`}>{KIND_LABEL[el.kind]}</span>
+                    <span className={`kind kind-${el.kind} tiny`}>{t.kinds[el.kind]}</span>
                 </span>
             </div>
             <CardBody el={el} model={model} names={names} />

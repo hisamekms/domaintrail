@@ -5,22 +5,7 @@ import { ownerElement } from './render';
 
 export type Select = (id: string) => void;
 
-export const KIND_LABEL: Record<string, string> = {
-    id: 'ID',
-    primitive: 'Domain Primitive',
-    enum: 'Enum',
-    valueObject: 'Value Object',
-    union: 'Union',
-    entity: 'Entity',
-    aggregate: 'Aggregate',
-    event: 'Event',
-    error: 'Error',
-    state: 'State',
-    command: 'Command',
-    context: 'Context',
-};
-
-/** Order of element kinds in lists and the explorer (group titles: `kindGroups` in i18n). */
+/** Order of element kinds in lists and the explorer (their names: `kinds` in i18n). */
 export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'event', 'error'];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);

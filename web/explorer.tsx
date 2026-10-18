@@ -207,7 +207,7 @@ export function Explorer(props: ExplorerProps) {
                             <div key={kind}>
                                 {group(
                                     <>
-                                        {t.kindGroups[kind]}
+                                        {t.kinds[kind]}
                                         <span className="muted"> {nodes.length}</span>
                                     </>,
                                     { depth: 1, visible: open, open: groupOpen, onToggle: () => toggle(key, true) },

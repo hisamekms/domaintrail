@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { DisplayMode, Lang } from '../src/graph/ir';
 import type { ElementKind } from '../src/model/model';
+import type { Connection } from './useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 
 /** The user's choice: follow the browser, or force a language. */
@@ -8,6 +9,9 @@ export type LangPreference = 'auto' | Lang;
 
 /** localStorage key of the preference (JSON, like the other persisted settings). */
 export const LANG_KEY = 'domaintrail.lang';
+
+/** Kinds of item shown in the explorer and the inspector. */
+export type ItemKind = ElementKind | 'state' | 'command' | 'context';
 
 const ja = {
     added: '追加',
@@ -39,6 +43,9 @@ const ja = {
     language: '言語',
     langAuto: (now: string) => `ブラウザの設定に従う（いまは${now}）`,
     langHint: '画面の表示言語（モデルのラベルは変わりません）',
+    fileCount: (n: number) => `${n} ファイル`,
+    connection: { connecting: '接続中', open: '接続済み', closed: '切断' } as Record<Connection, string>,
+    connectionTitle: (state: string) => `サーバーとの接続: ${state}`,
     stale: (problems: ReactNode): ReactNode => <>構文エラーのため、最後に解析できた図を表示しています。{problems}から該当箇所へ移動できます。</>,
 
     // panes
@@ -52,7 +59,7 @@ const ja = {
     // views and their toolbar
     views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ' },
     showAllContexts: '共有・外部の BC も表示',
-    structureMode: 'Structure の表示',
+    structureMode: '構造図の表示',
     detail: '詳細',
     overview: '概観',
     zoomToFit: '全体表示',
@@ -82,10 +89,10 @@ const ja = {
         mapDependsOn: '型も借りて依存（型の借用の件数）',
         owns: '所有（集約の内部）',
         focusReferences: '参照（ID で別の集約・BC へ）',
-        focusValue: '値・型の借用（Value Object / Union / Enum など）',
+        focusValue: '値・型の借用（値オブジェクト / ユニオン / 列挙型 など）',
         references: '参照（ID で別の集約へ）',
-        value: '値（Value Object / Union を持つ）',
-        transition: 'Command による遷移（⇒ 発生させる Event）',
+        value: '値（値オブジェクト / ユニオンを持つ）',
+        transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
     },
     stubNote: '点線枠の小さな箱は別の BC の要素（スタブ）',
     arrowNote: '矢印の先が依存先',
@@ -99,17 +106,21 @@ const ja = {
     onlyProblems: '問題のある項目だけ表示',
     onlyChanged: '変更された項目だけ表示',
     noMatches: '一致する項目はありません。',
-    kindGroups: {
+    /** Kinds of item: the kind badges and the groups of elements. */
+    kinds: {
         aggregate: '集約',
-        entity: 'Entity',
-        valueObject: 'Value Object',
-        union: 'Union',
-        primitive: 'Domain Primitive',
+        entity: 'エンティティ',
+        valueObject: '値オブジェクト',
+        union: 'ユニオン',
+        primitive: 'ドメインプリミティブ',
         id: 'ID',
-        enum: 'Enum',
-        event: 'Event',
-        error: 'Error',
-    } as Record<ElementKind, string>,
+        enum: '列挙型',
+        event: 'ドメインイベント',
+        error: 'エラー',
+        state: '状態',
+        command: 'コマンド',
+        context: 'コンテキスト',
+    } as Record<ItemKind, string>,
 
     // bottom pane
     problems: '問題',
@@ -122,14 +133,14 @@ const ja = {
         aggregates: '集約',
         entities: 'エンティティ',
         values: '値オブジェクト・ユニオン',
-        primitives: 'プリミティブ',
+        primitives: 'ドメインプリミティブ',
         events: 'ドメインイベント',
         errors: 'エラー',
     } as Record<CatalogSectionKey, string>,
-    sharedCatalog: '共有 · どの Context からも名前で参照可',
+    sharedCatalog: '共有 · どの BC からも名前で参照可',
     catalogEmpty: 'ありません。',
-    raisedByNone: '発生させる Command はありません',
-    returnedByNone: '返す Command はありません',
+    raisedByNone: '発生させるコマンドはありません',
+    returnedByNone: '返すコマンドはありません',
     usedIn: (n: number) => `使用 ${n} 箇所`,
 
     // source
@@ -146,44 +157,46 @@ const ja = {
     notInModel: (id: string) => `${id} は現在のモデルにありません。`,
     pickElement: 'エクスプローラや図で要素やファイルを選ぶと、ここに詳細が出ます。',
     showIn: '見る:',
-    commandsInto: 'この State に入る Command',
-    commandsOutOf: 'この State から出る Command',
-    stateFields: 'State 固有フィールド',
-    noStateFields: 'State 固有のフィールドはありません。',
-    stateInvariants: 'Invariant（この State のみ）',
+    commandsInto: 'この状態に入るコマンド',
+    commandsOutOf: 'この状態から出るコマンド',
+    stateFields: 'この状態固有のフィールド',
+    noStateFields: 'この状態固有のフィールドはありません。',
+    stateInvariants: '不変条件（この状態のみ）',
     commonFieldsAt: (agg: ReactNode): ReactNode => <>共通フィールドは集約 {agg} を参照。</>,
     transition: '遷移',
-    noStates: '（State なし）',
-    mayRaise: '発生し得る Event（0 件以上）',
-    mayReturn: '返し得る Error',
+    noStates: '（状態なし）',
+    mayRaise: '発生し得るドメインイベント（0 件以上）',
+    mayReturn: '返し得るエラー',
     params: 'パラメータ',
     noParams: 'パラメータはありません。',
     contract: '契約',
-    identifier: 'Domain Primitive（識別子）',
+    identifier: 'ドメインプリミティブ（識別子）',
     separator: ' ／ ',
     baseType: '基底型',
     values: '値',
     discriminator: '判別子',
     noFields: 'フィールドはありません。',
-    variantInvariants: (variant: string) => `Invariant（${variant}）`,
+    variantInvariants: (variant: string) => `不変条件（${variant}）`,
     commonFields: '共通フィールド',
     payload: 'ペイロード',
     fields: 'フィールド',
-    invariants: 'Invariant',
-    allStateInvariants: 'Invariant（全State共通）',
-    valueInvariants: 'Invariant（適用: 値（value））',
+    invariants: '不変条件',
+    allStateInvariants: '不変条件（全状態共通）',
+    valueInvariants: '不変条件（値（value）に適用）',
+    commands: 'コマンド',
+    states: '状態',
     typeDependency: '型',
     focusContext: 'この BC だけを構造図で見る',
     dependencies: '依存先（この BC が使う）',
     dependents: '依存元（この BC を使う）',
     terms: '用語集（terms）',
     unreferenced: 'どこからも参照されていません。',
-    raisedBy: '発生させる Command',
-    returnedBy: '返す Command',
+    raisedBy: '発生させるコマンド',
+    returnedBy: '返すコマンド',
     typeUses: (n: number) => `型として使われている場所（${n}）`,
     idUses: (id: string, n: number) => `ID（${id}）で参照している場所（${n}）`,
-    raises: (n: number) => `発生させる Event（${n}）`,
-    returns: (n: number) => `返し得る Error（${n}）`,
+    raises: (n: number) => `発生させるドメインイベント（${n}）`,
+    returns: (n: number) => `返し得るエラー（${n}）`,
     labelSources: { term: '用語', type: '型' },
 };
 
@@ -216,6 +229,9 @@ const en: Messages = {
     language: 'Language',
     langAuto: (now) => `Follows the browser (now ${now})`,
     langHint: 'The language of the screen (model labels stay as written)',
+    fileCount: (n) => `${n} ${n === 1 ? 'file' : 'files'}`,
+    connection: { connecting: 'connecting', open: 'connected', closed: 'disconnected' },
+    connectionTitle: (state) => `Connection to the server: ${state}`,
     stale: (problems) => <>Showing the last diagram that could be parsed, because of a syntax error. See {problems} for where it is.</>,
 
     openExplorer: 'Open the explorer',
@@ -271,7 +287,7 @@ const en: Messages = {
     onlyProblems: 'Show only items with problems',
     onlyChanged: 'Show only changed items',
     noMatches: 'Nothing matches.',
-    kindGroups: {
+    kinds: {
         aggregate: 'Aggregate',
         entity: 'Entity',
         valueObject: 'Value Object',
@@ -281,6 +297,9 @@ const en: Messages = {
         enum: 'Enum',
         event: 'Event',
         error: 'Error',
+        state: 'State',
+        command: 'Command',
+        context: 'Context',
     },
 
     problems: 'Problems',
@@ -292,7 +311,7 @@ const en: Messages = {
         aggregates: 'Aggregates',
         entities: 'Entities',
         values: 'Value Objects and Unions',
-        primitives: 'Primitives',
+        primitives: 'Domain Primitives',
         events: 'Domain Events',
         errors: 'Errors',
     },
@@ -340,6 +359,8 @@ const en: Messages = {
     invariants: 'Invariants',
     allStateInvariants: 'Invariants (all states)',
     valueInvariants: 'Invariants (on the value)',
+    commands: 'Commands',
+    states: 'States',
     typeDependency: 'type',
     focusContext: 'Show only this BC in Structure',
     dependencies: 'Dependencies (used by this BC)',
