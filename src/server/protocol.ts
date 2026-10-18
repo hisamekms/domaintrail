@@ -1,6 +1,6 @@
 import type { Diagnostic } from '../core/diagnostics.js';
 import type { ModelDiff } from '../graph/diff.js';
-import type { LaidOutGraph } from '../graph/ir.js';
+import type { LaidOutGraph, TransitionLabels } from '../graph/ir.js';
 import type { DomainModel } from '../model/model.js';
 
 export type ViewStatus = 'ok' | 'invalid' | 'syntax-error' | 'empty';
@@ -25,8 +25,8 @@ export interface ViewPayload {
     overview: LaidOutGraph | null;
     /** Structure View at the aggregates level: aggregates and the dependencies between them only. */
     aggregates: LaidOutGraph | null;
-    /** State View graphs keyed by aggregate ID. */
-    states: Record<string, LaidOutGraph>;
+    /** State View graphs keyed by aggregate ID, laid out for each way of labeling transitions. */
+    states: Record<string, Record<TransitionLabels, LaidOutGraph>>;
     /** Contexts that can be focused in the Structure View (the graphs are served on request at /api/focus). */
     focusContexts: string[];
     /** Context Map without shared / ID-only contexts, and with every context. */

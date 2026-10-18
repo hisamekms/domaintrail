@@ -28,7 +28,8 @@ import {
 } from './ir.js';
 
 export const STRUCTURE_GRAPH_ID = 'structure';
-export const stateGraphId = (aggregateId: string): string => `states:${aggregateId}`;
+/** Each way of labeling transitions has a layout of its own (both: the plain ID). */
+export const stateGraphId = (aggregateId: string, labels: TransitionLabels = 'both'): string => `states:${aggregateId}${labels === 'both' ? '' : `:${labels}`}`;
 export const boundaryId = (aggregateId: string): string => `${aggregateId}@boundary`;
 export const initialNodeId = (aggregateId: string): string => `${aggregateId}@new`;
 
@@ -540,7 +541,7 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
     if (commands.some((c) => c.factory)) {
         sizedNodes.unshift({ id: initialNodeId(agg.id), kind: 'initial', label: sameText('new'), lines: [], elementId: agg.id, width: 64, height: 64 });
     }
-    return { id: stateGraphId(agg.id), nodes: sizedNodes, edges, transitionLabels: labels };
+    return { id: stateGraphId(agg.id, labels), nodes: sizedNodes, edges, transitionLabels: labels };
 }
 
 /** A state's box, with room for its internal transitions' compartment. */

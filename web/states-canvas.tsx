@@ -20,9 +20,10 @@ const cameras = new Map<string, TLCamera>();
  */
 export function StatesCanvas(props: {
     aggregateId: string;
-    graph: LaidOutGraph | undefined;
-    /** The previously shown version of the same graph, for ghosts of removed states. */
-    previous: LaidOutGraph | undefined;
+    /** The aggregate's graph laid out for each way of labeling transitions. */
+    graphs: Record<TransitionLabels, LaidOutGraph> | undefined;
+    /** The previously shown version of the same graphs, for ghosts of removed states. */
+    previous: Record<TransitionLabels, LaidOutGraph> | undefined;
     diff: ModelDiff;
     diagnostics: Diagnostic[];
     mode: DisplayMode;
@@ -33,11 +34,13 @@ export function StatesCanvas(props: {
     legendOpen: boolean;
     onLegendToggle: () => void;
 }) {
-    const { aggregateId, graph } = props;
+    const { aggregateId } = props;
     const t = useT();
     const [editor, setEditor] = useState<Editor | null>(null);
     const [savedLabels, setLabels] = usePersistentState<TransitionLabels>('domaintrail.states.transitionLabels', 'both');
     const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
+    const graph = props.graphs?.[labels];
+    const previous = props.previous?.[labels];
     /** The aggregate whose camera is shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
 
@@ -62,7 +65,7 @@ export function StatesCanvas(props: {
             shown.current = null;
             return;
         }
-        renderGraph(editor, graph, { diff: props.diff, diagnostics: props.diagnostics, previous: props.previous, mode: props.mode, lang: props.lang, transitionLabels: labels });
+        renderGraph(editor, graph, { diff: props.diff, diagnostics: props.diagnostics, previous, mode: props.mode, lang: props.lang, transitionLabels: labels });
         if (shown.current !== aggregateId) {
             const saved = cameras.get(aggregateId);
             if (saved) editor.setCamera(saved);
@@ -71,7 +74,7 @@ export function StatesCanvas(props: {
             if (props.selected) highlightElement(editor, props.selected);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, graph, props.previous, props.diff, props.diagnostics, props.mode, props.lang, labels, aggregateId]);
+    }, [editor, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, aggregateId]);
 
     // Show a selection made elsewhere.
     useEffect(() => {
