@@ -151,9 +151,15 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
 function checkOut(out: unknown, key: string, fail: (msg: string) => never): void {
     if (out === undefined) return;
     if (typeof out !== 'string') fail(`'${key}' must be a string`);
-    if (path.isAbsolute(out as string) || (out as string).split(/[\\/]/).includes('..')) {
-        fail(`'${key}' must stay inside the directory of the config file: '${out}'`);
-    }
+    if (!staysInside(out as string)) fail(`'${key}' must stay inside the directory of the config file: '${out}'`);
+}
+
+/**
+ * Whether a path relative to the root stays inside it: not absolute and without a `..` segment. Used for output
+ * directories from the config and `--out`, and for the entries of `.domaintrail/generated.json`.
+ */
+export function staysInside(rel: string): boolean {
+    return !path.isAbsolute(rel) && !path.win32.isAbsolute(rel) && !rel.split(/[\\/]/).includes('..');
 }
 
 /**

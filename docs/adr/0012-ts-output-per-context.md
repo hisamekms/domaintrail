@@ -16,7 +16,9 @@ single output directory, the shared types had to be copied or re-exported by han
 - **Validation**: a name that is not a context of the model is a config error (exit 2), detected by `generate ts` after
   the model is checked. Output directories stay inside the config file's directory, as `out` does, and must not be
   reached through a symlink.
-- **`--out` replaces `generate.ts.out` only**; listed contexts keep their own directories.
+- **`--out` replaces `generate.ts.out` only**; listed contexts keep their own directories. It is held to the same rules
+  as the directories in the config: outside the root (absolute, or with `..`) is a config error (exit 2) and nothing is
+  written; a symlink on the way stops generation (exit 1).
 - **Imports between contexts use relative paths** computed between the two directories
   (`import type * as Common from '../../packages/shared/src/generated/Common.js'`). Imports by package name are out of
   scope for now.
@@ -26,7 +28,9 @@ single output directory, the shared types had to be copied or re-exported by han
 - **Stale output is removed**: the files written are recorded in `<root>/.domaintrail/generated.json`. The next run
   deletes recorded files it no longer writes (an output directory moved, a context removed), but only those that still
   start with the generator's header, and removes a directory left empty. Files without the header are kept, and the
-  existing rule stands: generation stops rather than overwrite such a file.
+  existing rule stands: generation stops rather than overwrite such a file. The manifest is untrusted input (it may come
+  with a cloned repository): entries that are absolute, contain `..` or are reached through a symlink are skipped, so a
+  crafted manifest cannot delete files outside the root, and the root itself is never removed.
 - **M011 is unchanged**: it checks every context against the runtime names and the namespace names of all other
   contexts, which covers any placement, since each module imports its own directory's runtime and other contexts by
   namespace.
