@@ -23,7 +23,7 @@ describe('dmtr check', () => {
         dirs.push(dir);
         const r = await run('-r', dir, 'check');
         expect(r.code).toBe(0);
-        expect(r.out).toEqual(['4 file(s) checked: 0 error(s), 0 warning(s).']);
+        expect(r.out).toEqual(['6 file(s) checked: 0 error(s), 0 warning(s).']);
     });
 
     test('exits non-zero with file position and rule ID for each problem', async () => {

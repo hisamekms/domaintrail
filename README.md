@@ -206,6 +206,30 @@ context Sales "販売" {
 - Names are shown in the Live View (toggle 日本語 / English / 両方), the detail panel, and as JSDoc in generated TypeScript.
   Identifiers, stable IDs and generated type names stay English.
 
+### File layout (recommended)
+
+File names and directories carry no meaning — a context may be split across any files. The recommended layout, used by
+`examples/shop`, is one directory per context and one file per aggregate:
+
+```text
+common/context.dt      shared context Common "共通" { ... }        // a shared context has no aggregates
+sales/context.dt       /// 説明  context Sales "販売" { terms { ... } }
+sales/order.dt         context Sales { id OrderId ...  aggregate Order { ... }  entity OrderItem ...  event OrderPlaced ... }
+sales/customer.dt      context Sales { id CustomerId ...  aggregate Customer { ... } }
+billing/context.dt     /// 説明  context Billing "請求" { terms { ... } }
+billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { ... } }
+```
+
+- `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
+  primitives and values.
+- `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several
+  of its aggregates or by none. The other files open the context without a name: `context Sales { ... }`.
+- An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
+- Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
+  `order-fulfillment/`.
+
+This is a convention, not a rule: `check` neither requires nor warns about any layout (see [ADR 0009](docs/adr/0009-file-layout.md)).
+
 ## Rules
 
 | ID | Check |

@@ -1,11 +1,5 @@
 context Sales {
-  terms {
-    name: "氏名"
-    customerId: "顧客ID"
-  }
-
   id CustomerId "顧客ID": UUID
-
 
   aggregate Customer "顧客" {
     id: CustomerId

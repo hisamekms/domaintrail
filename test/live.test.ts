@@ -38,7 +38,7 @@ afterAll(async () => {
     await rm(dir, { recursive: true, force: true });
 });
 
-const order = () => path.join(dir, 'order.dt');
+const order = () => path.join(dir, 'sales', 'order.dt');
 
 describe('Live View', () => {
     test('serves the page and the current state', async () => {
@@ -46,7 +46,7 @@ describe('Live View', () => {
         expect(html).toContain('<div id="root"></div>');
         const state = (await (await fetch(`${server.url}api/state`)).json()) as ViewPayload;
         expect(state.status).toBe('ok');
-        expect(state.files).toEqual(['billing.dt', 'common.dt', 'customer.dt', 'order.dt']);
+        expect(state.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
         expect(state.structure?.nodes.length).toBeGreaterThan(0);
         expect(state.aggregates?.nodes.filter((n) => n.kind === 'aggregate').map((n) => n.id)).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
         expect(Object.keys(state.states).sort()).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
@@ -118,10 +118,10 @@ describe('Live View', () => {
         expect(p.structure).toEqual(before.structure);
         expect(p.model).toEqual(before.model);
         expect(p.modelVersion).toBe(before.modelVersion);
-        expect(p.diagnostics[0]).toMatchObject({ file: 'order.dt', code: 'SYNTAX', severity: 'error' });
+        expect(p.diagnostics[0]).toMatchObject({ file: 'sales/order.dt', code: 'SYNTAX', severity: 'error' });
         expect(p.diagnostics[0].start.line).toBeGreaterThan(1);
         // the diagram is the last valid one, but the sources are the current (broken) text
-        expect(p.sources.find((x) => x.path === 'order.dt')!.text).toContain('"確定済み" {{');
+        expect(p.sources.find((x) => x.path === 'sales/order.dt')!.text).toContain('"確定済み" {{');
 
         await writeFile(order(), src);
         const fixed = await nextUpdate((u) => u.status === 'ok');
