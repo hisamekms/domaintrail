@@ -4,6 +4,7 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { DisplayMode } from '../src/graph/ir';
 import type { DomainModel, ElementModel, FieldModel, InvariantModel } from '../src/model/model';
 import { useT } from './i18n';
+import { PersistenceBadge } from './inspector';
 import { catalogSections, commandsWithOutcome, namer, type CatalogSection, type Namer } from './model-utils';
 import { ownerElement } from './render';
 import { usagesOf } from './usages';
@@ -111,7 +112,10 @@ function Card(props: {
         <button className={classes.filter(Boolean).join(' ')} data-card={el.id} onClick={() => props.onSelect(el.id)} title={el.doc}>
             <div className="card-head">
                 <span className="card-name">{names.of(el)}</span>
-                <span className={`kind kind-${el.kind} tiny`}>{KIND_LABEL[el.kind]}</span>
+                <span className="card-tags">
+                    {el.kind === 'event' && <PersistenceBadge persistent={!!el.persistent} />}
+                    <span className={`kind kind-${el.kind} tiny`}>{KIND_LABEL[el.kind]}</span>
+                </span>
             </div>
             <CardBody el={el} model={model} names={names} />
             <div className="card-foot muted">

@@ -909,6 +909,15 @@ select,
     justify-content: space-between;
     gap: 8px;
 }
+.card-tags {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+}
+.card-tags .persistence-badge {
+    margin-left: 0;
+}
 .card-name {
     font-weight: 700;
     font-size: 16px;
