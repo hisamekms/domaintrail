@@ -98,6 +98,7 @@ export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent
             both: `${marker}${f.label ? `${f.label} ` : ''}${f.name}`,
         }),
         value: anyLang({ name: byName + f.multiplicity, label: byLabel + f.multiplicity, both: byName + f.multiplicity }),
+        ...(f.fieldSet && { origin: named(typeText({ kind: 'ref', ref: f.fieldSet, text: '' }, ctx, model.sharedContexts), lookupLabel(model, f.fieldSet), (l) => l) }),
     };
 }
 
@@ -110,7 +111,7 @@ function bodyUnits(lines: GraphLine[]): number {
         0,
         ...TEXT_VARIANTS.map(([g, m]) => {
             const key = Math.max(0, ...lines.filter((l) => l.value).map((l) => textUnits(l.key[g][m])));
-            const value = Math.max(0, ...lines.map((l) => (l.value ? textUnits(l.value[g][m]) : 0)));
+            const value = Math.max(0, ...lines.map((l) => (l.value ? textUnits(l.value[g][m]) + (l.origin ? COLUMN_GAP + textUnits(l.origin[g][m]) : 0) : 0)));
             const keyOnly = Math.max(0, ...lines.filter((l) => !l.value).map((l) => textUnits(l.key[g][m])));
             return Math.max(value ? key + COLUMN_GAP + value : 0, keyOnly);
         }),
@@ -397,6 +398,7 @@ const STUB_STEREOTYPES: Record<ElementModel['kind'], Texts> = {
     id: stereotype('ID', 'id'),
     event: stereotype('ドメインイベント', 'event'),
     error: stereotype('エラー', 'error'),
+    fieldSet: stereotype('項目セット', 'field set'),
 };
 
 /**

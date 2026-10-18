@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
+import { analyze } from '../src/core/analyze.js';
 import { parseJsonc } from '../src/core/config.js';
-import { check } from './helpers.js';
+import { loadWorkspace } from '../src/core/files.js';
+import { generateTypeScript } from '../src/generator/typescript.js';
+import { EXAMPLES, check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const guide = await readFile(path.join(ROOT, 'docs', 'guide.md'), 'utf8');
@@ -53,6 +57,30 @@ describe('dt guide', () => {
         const codes = [...union.matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]);
         expect(codes.length).toBeGreaterThan(10);
         for (const code of codes) expect(guide).toContain(`| ${code} |`);
+    });
+
+    test('its TypeScript files type-check against the code generated for examples/shop', async () => {
+        // blocks that start with `// src/<file>.ts` are files of the user's code
+        const files = blocks('ts').flatMap((b) => {
+            const name = /^\/\/ (src\/\S+\.ts)/.exec(b)?.[1];
+            return name ? [[name, b] as const] : [];
+        });
+        expect(files.map(([n]) => n)).toEqual(expect.arrayContaining(['src/stored.ts', 'src/meta-by-event.ts']));
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-guide-'));
+        try {
+            const a = await analyze(await loadWorkspace(EXAMPLES));
+            await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
+            for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
+            await mkdir(path.join(dir, 'src'));
+            for (const [name, text] of files) await writeFile(path.join(dir, name), text);
+            const tsc = path.join(ROOT, 'node_modules', '.bin', 'tsc');
+            const flags = ['--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM'];
+            const r = Bun.spawnSync([process.execPath, tsc, ...flags, ...files.map(([n]) => n)], { cwd: dir });
+            expect(r.stdout.toString() + r.stderr.toString()).toBe('');
+            expect(r.exitCode).toBe(0);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
     });
 
     test('its config example is valid JSONC', () => {

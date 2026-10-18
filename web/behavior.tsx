@@ -65,6 +65,11 @@ function FieldGrid({ fields, ctx, names, onSelect }: { fields: FieldModel[]; ctx
                             names.type(f.type, ctx)
                         )}
                         {f.multiplicity}
+                        {f.fieldSet && (
+                            <a className="field-origin" onClick={() => onSelect(f.fieldSet!)}>
+                                {names.short(f.fieldSet)}
+                            </a>
+                        )}
                     </span>
                 </div>
             ))}

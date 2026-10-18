@@ -12,7 +12,7 @@ describe('catalog', () => {
     test('has a section per kind of element, with every element in exactly one', async () => {
         const model = await shopModel();
         const sections = catalogSections(model);
-        expect(sections.map((s) => s.key)).toEqual(['aggregates', 'entities', 'values', 'primitives', 'events', 'errors']);
+        expect(sections.map((s) => s.key)).toEqual(['aggregates', 'entities', 'values', 'primitives', 'fieldSets', 'events', 'errors']);
         const ids = sections.flatMap((s) => s.groups.flatMap((g) => g.items.map((e) => e.id)));
         expect(ids.sort()).toEqual(Object.keys(model.elements).sort());
         expect(Object.values(model.elements).every((e) => inCatalog(e.kind))).toBe(true);

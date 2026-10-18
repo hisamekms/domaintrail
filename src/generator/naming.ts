@@ -29,6 +29,12 @@ export const makeTypeName = (p: Named): string => `Make${p.name}`;
 export const invalidTypeName = (p: Named): string => `Invalid${p.name}`;
 /** Union of the events of a context that are declared `persistent`; generated only when there is one. */
 export const PERSISTENT_EVENT_TYPE = 'PersistentEvent';
+/** Union of the events of a context; generated only when there is one. */
+export const DOMAIN_EVENT_TYPE = 'DomainEvent';
+/** Union of the aggregates of a context; generated only when there is one. */
+export const AGGREGATE_TYPE = 'Aggregate';
+/** Union of the events the commands of an aggregate may emit, e.g. `OrderEvent`; generated only when there is one. */
+export const aggregateEventTypeName = (agg: Named): string => `${agg.name}Event`;
 
 const KIND_LABELS: Record<string, string> = {
     IdType: 'id',
@@ -39,6 +45,7 @@ const KIND_LABELS: Record<string, string> = {
     Entity: 'entity',
     EventDecl: 'event',
     ErrorDecl: 'error',
+    FieldSet: 'field set',
 };
 
 export interface GeneratedName {
@@ -79,9 +86,16 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
         for (const c of commands) {
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, node: c });
         }
+        if (commands.some((c) => c.emits.length > 0)) {
+            out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, node: el });
+        }
     }
     const persistent = index.elementsOf(ctx).find((el) => isEventDecl(el) && el.persistent);
     if (persistent) out.push({ name: PERSISTENT_EVENT_TYPE, origin: 'the union of persistent events', node: persistent });
+    const event = index.elementsOf(ctx).find(isEventDecl);
+    if (event) out.push({ name: DOMAIN_EVENT_TYPE, origin: 'the union of the events', node: event });
+    const aggregate = index.elementsOf(ctx).find(isAggregate);
+    if (aggregate) out.push({ name: AGGREGATE_TYPE, origin: 'the union of the aggregates', node: aggregate });
     return out;
 }
 

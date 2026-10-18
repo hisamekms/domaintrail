@@ -1,4 +1,4 @@
-import type { DomainModel, FieldModel } from '../src/model/model';
+import { ownFields, type DomainModel, type FieldModel } from '../src/model/model';
 
 export interface Usage {
     key: string;
@@ -12,12 +12,15 @@ export interface Usage {
 type Named = { name: string; label?: string };
 const englishName = (x: Named): string => x.name;
 
-/** Where a type is used: fields of elements, states and union variants, and command parameters. `name` formats each part. */
+/**
+ * Where a type is used: fields of elements, states and union variants, and command parameters. `name` formats each part.
+ * A field of a field set counts once, in the field set, however many elements take it on.
+ */
 export function usagesOf(model: DomainModel, id: string, name: (x: Named) => string = englishName): Usage[] {
     const uses: Usage[] = [];
     const typed = (f: FieldModel) => f.type.kind === 'ref' && f.type.ref === id;
     for (const el of Object.values(model.elements)) {
-        for (const f of el.fields.filter(typed)) uses.push({ key: `${el.id}.${f.name}`, target: el.id, context: el.context, text: `${name(el)}.${name(f)}` });
+        for (const f of ownFields(el).filter(typed)) uses.push({ key: `${el.id}.${f.name}`, target: el.id, context: el.context, text: `${name(el)}.${name(f)}` });
         for (const s of el.states ?? []) {
             for (const f of s.fields.filter(typed)) {
                 uses.push({ key: `${s.id}.${f.name}`, target: s.id, context: el.context, text: `${name(el)}.${name(s)}.${name(f)}` });

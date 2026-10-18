@@ -2,7 +2,7 @@ import type { AstNode } from 'langium';
 import { isAggregate, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Parameter } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { LabelResolver } from '../labels.js';
-import { commandsOf, commonFields, fieldsOf, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
+import { commandsOf, commonFields, fieldsOf, includedFields, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
 
 /**
  * Japanese names (all warnings, except duplicate terms):
@@ -82,17 +82,19 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
                 sameLabel(invariantsOf(v.members).map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}.${v.name}'`, sink);
             }
         } else if (isAggregate(el)) {
+            const included = includedFields(el).map((x) => x.field);
             const common = commonFields(el);
             const states = statesOf(el);
-            fieldScope(common, `'${el.name}'`);
-            for (const s of states) fieldScope(fieldsOf(s.members), `state '${el.name}.${s.name}'`, common);
+            fieldScope(common, `'${el.name}'`, included);
+            for (const s of states) fieldScope(fieldsOf(s.members), `state '${el.name}.${s.name}'`, [...included, ...common]);
             sameLabel(states.map((s) => ({ node: s, name: s.name, label: s.label })), `the states of '${el.name}'`, sink);
             sameLabel(commandsOf(el).map((c) => ({ node: c, name: c.name, label: c.label })), `the commands of '${el.name}'`, sink);
             const invariants = [...invariantsOf(el.members), ...states.flatMap((s) => invariantsOf(s.members))];
             sameLabel(invariants.map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}'`, sink);
             for (const c of commandsOf(el)) fieldScope(c.params, `command '${el.name}.${c.name}'`);
         } else if ('members' in el) {
-            fieldScope(fieldsOf(el.members), `'${el.name}'`);
+            // fields of field sets were checked in the field set
+            fieldScope(fieldsOf(el.members), `'${el.name}'`, includedFields(el).map((x) => x.field));
             if (isEntity(el) || isValueObject(el)) {
                 sameLabel(invariantsOf(el.members).map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}'`, sink);
             }

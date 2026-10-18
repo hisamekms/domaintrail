@@ -69,6 +69,8 @@ export interface GraphNode {
 export interface GraphLine {
     key: Texts;
     value?: Texts;
+    /** The field set a field comes from, shown faded after the value. */
+    origin?: Texts;
 }
 
 export interface GraphEdge {

@@ -62,10 +62,10 @@ describe('shared contexts', () => {
 }`,
         });
         expect(only(a, 'M014').map((d) => d.message)).toEqual([
-            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions and terms; found ID 'CId'.",
-            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions and terms; found aggregate 'C'.",
-            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions and terms; found event 'E'.",
-            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions and terms; found error 'Er'.",
+            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions, field sets and terms; found ID 'CId'.",
+            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions, field sets and terms; found aggregate 'C'.",
+            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions, field sets and terms; found event 'E'.",
+            "Shared context 'Common' can only contain domain primitives, enums, value objects, unions, field sets and terms; found error 'Er'.",
         ]);
     });
 

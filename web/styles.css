@@ -437,6 +437,11 @@ code.block {
     background: var(--green-tint);
     color: var(--green-text);
 }
+.kind-fieldSet {
+    background: var(--bg);
+    color: var(--muted);
+    border: 1px dashed var(--grey-border);
+}
 .kind-union {
     background: var(--teal-tint2);
     color: var(--teal-text2);
@@ -549,6 +554,22 @@ code.block {
 }
 .dn-value {
     color: var(--blue-text);
+}
+/* the field set a field comes from, after its type */
+.dn-origin,
+.field-origin {
+    margin-left: 1.5ch;
+    white-space: nowrap;
+    font-family: var(--sans);
+    font-size: 0.85em;
+    color: var(--muted);
+    opacity: 0.8;
+}
+a.field-origin {
+    cursor: pointer;
+}
+.pane a.field-origin {
+    color: var(--muted);
 }
 .dn-full {
     grid-column: 1 / -1;
@@ -1790,6 +1811,10 @@ select,
 .dot-valueObject {
     background: var(--green);
     border-radius: 50%;
+}
+.dot-fieldSet {
+    background: transparent;
+    border: 1.5px dashed var(--grey);
 }
 .dot-union {
     background: var(--teal);

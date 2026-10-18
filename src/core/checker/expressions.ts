@@ -34,6 +34,7 @@ import {
     commonFields,
     discriminatorOf,
     fieldsOf,
+    includedFields,
     invariantsOf,
     primitiveInvariants,
     statesOf,
@@ -63,7 +64,7 @@ export function checkInvariants(index: ModelIndex, sink: DiagnosticSink): void {
             checkAggregate(el, ctx, index, sink);
         } else if (isEntity(el) || isValueObject(el)) {
             const members: DataMember[] = el.members;
-            const fields = new Map(fieldsOf(members).map((f) => [f.name, f]));
+            const fields = new Map([...includedFields(el).map((x) => x.field), ...fieldsOf(members)].map((f) => [f.name, f]));
             for (const inv of invariantsOf(members)) {
                 checkInvariant(inv, { ctx, fields, stateOnly: new Map(), lambdas: [], present: new Set() }, index, sink);
             }
@@ -103,7 +104,8 @@ function checkPrimitive(p: DomainPrimitive, ctx: string, index: ModelIndex, sink
 }
 
 function checkAggregate(agg: Aggregate, ctx: string, index: ModelIndex, sink: DiagnosticSink): void {
-    const common = new Map(commonFields(agg).map((f) => [f.name, f]));
+    // fields taken from field sets are common fields too
+    const common = new Map([...includedFields(agg).map((x) => x.field), ...commonFields(agg)].map((f) => [f.name, f]));
     const states = statesOf(agg);
     const stateOnly = (except?: string): Map<string, string[]> => {
         const m = new Map<string, string[]>();
@@ -315,7 +317,7 @@ class ExprChecker {
                 return ERROR;
             }
             case 'struct': {
-                const f = fieldsOf(recv.decl.members).find((x) => x.name === m);
+                const f = [...includedFields(recv.decl).map((x) => x.field), ...fieldsOf(recv.decl.members)].find((x) => x.name === m);
                 if (f) return narrow(memberType(f), pathOf(e) ?? '', scope);
                 this.sink.error('M001', `'${recv.decl.name}' has no field '${m}'.`, e, 'member');
                 return ERROR;

@@ -5,6 +5,7 @@ import {
     isEnumDecl,
     isErrorDecl,
     isEventDecl,
+    isFieldSet,
     isIdType,
     isOwnsField,
     isPrimitiveDecl,
@@ -21,7 +22,20 @@ import {
 } from '../language/generated/ast.js';
 import { LabelResolver, docComment } from '../core/labels.js';
 import { cardinality } from '../core/types.js';
-import { commandsOf, commonFields, discriminatorOf, fieldsOf, invariantsOf, primitiveInvariants, statesOf, type FieldLike, type ModelIndex } from '../core/model-index.js';
+import {
+    commandsOf,
+    commonFields,
+    discriminatorOf,
+    fieldSetsOf,
+    fieldsOf,
+    includedFields,
+    invariantsOf,
+    primitiveInvariants,
+    statesOf,
+    type FieldLike,
+    type ModelIndex,
+    type WithFieldSets,
+} from '../core/model-index.js';
 import { commandId, elementId, stateId } from './ids.js';
 import type { CommandModel, Described, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
 
@@ -37,6 +51,14 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
         line: (node.$cstNode?.range.start.line ?? 0) + 1,
         endLine: (node.$cstNode?.range.end.line ?? 0) + 1,
     });
+
+    /** Fields taken from the element's field sets, marked with the field set they come from. */
+    const included = (el: WithFieldSets): FieldModel[] =>
+        includedFields(el).map(({ field: f, fieldSet }) => ({ ...field(f), fieldSet: elementId(fieldSet.$container.name, fieldSet.name) }));
+    const withFieldSets = (el: WithFieldSets): Partial<ElementModel> => {
+        const sets = fieldSetsOf(el);
+        return sets.length && !isFieldSet(el) ? { fieldSets: sets.map((s) => elementId(s.$container.name, s.name)) } : {};
+    };
 
     for (const el of index.elements) {
         const id = elementId(el.$container.name, el.name);
@@ -79,13 +101,15 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                 };
             });
         } else if (isAggregate(el)) {
-            base.fields = commonFields(el).map(field);
+            Object.assign(base, withFieldSets(el));
+            base.fields = [...included(el), ...commonFields(el).map(field)];
             base.invariants = invariantsOf(el.members).map(invariant);
             base.states = statesOf(el).map((s) => state(id, s, loc, field));
             base.commands = commandsOf(el).map((c) => command(id, c, loc, field));
         } else {
+            Object.assign(base, withFieldSets(el));
             if (isEventDecl(el) && el.persistent) base.persistent = true;
-            base.fields = fieldsOf(el.members).map(field);
+            base.fields = [...included(el), ...fieldsOf(el.members).map(field)];
             base.invariants = invariantsOf(el.members).map(invariant);
         }
         elements[id] = base;
@@ -121,6 +145,7 @@ function kindOf(el: ContextElement): ElementKind {
     if (isAggregate(el)) return 'aggregate';
     if (isEventDecl(el)) return 'event';
     if (isErrorDecl(el)) return 'error';
+    if (isFieldSet(el)) return 'fieldSet';
     throw new Error(`unknown element ${(el as AstNode).$type}`);
 }
 

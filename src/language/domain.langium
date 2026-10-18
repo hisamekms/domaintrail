@@ -15,7 +15,7 @@ TermEntry:
     name=FeatureName ':' label=STRING;
 
 ContextElement:
-    IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl;
+    IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl | FieldSet;
 
 // Types that may appear on the right-hand side of a field declaration.
 type TypeDecl = IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate;
@@ -39,7 +39,16 @@ EnumValue:
     name=ID label=STRING?;
 
 ValueObject:
-    'value' name=ID label=STRING? ('{' members+=DataMember* '}')?;
+    'value' name=ID label=STRING? WithFieldSets? ('{' members+=DataMember* '}')?;
+
+// Fields that several aggregates, entities or events take on with `with`: plain fields only.
+FieldSet:
+    'fields' name=ID label=STRING? WithFieldSets? '{' members+=DataMember* '}';
+
+// `with A, B`: the fields of field sets, placed before the element's own fields. Only aggregates, entities and events
+// take field sets; elsewhere (and nested in a field set) it is reported by M016.
+fragment WithFieldSets:
+    'with' fieldSets+=[FieldSet:QualifiedName] (',' fieldSets+=[FieldSet:QualifiedName])*;
 
 // A value whose shape depends on a fixed kind: a tagged union of variants. The discriminator is `kind` unless
 // named with `by`; `by name: Enum` binds its values to an enum.
@@ -51,10 +60,10 @@ Variant:
     name=ID label=STRING? ('{' members+=DataMember* '}')?;
 
 Entity:
-    'entity' name=ID label=STRING? '{' members+=DataMember* '}';
+    'entity' name=ID label=STRING? WithFieldSets? '{' members+=DataMember* '}';
 
 Aggregate:
-    'aggregate' name=ID label=STRING? '{' members+=AggregateMember* '}';
+    'aggregate' name=ID label=STRING? WithFieldSets? '{' members+=AggregateMember* '}';
 
 AggregateMember:
     DataMember | State | Command;
@@ -86,10 +95,10 @@ Parameter:
 
 // `persistent` marks an event whose contract is to be persisted (stored as a fact); events are not persisted by default.
 EventDecl:
-    (persistent?='persistent')? 'event' name=ID label=STRING? ('{' members+=Field* '}')?;
+    (persistent?='persistent')? 'event' name=ID label=STRING? WithFieldSets? ('{' members+=Field* '}')?;
 
 ErrorDecl:
-    'error' name=ID label=STRING? ('{' members+=Field* '}')?;
+    'error' name=ID label=STRING? WithFieldSets? ('{' members+=Field* '}')?;
 
 TypeRef:
     primitive=PrimitiveType | decl=[TypeDecl:QualifiedName];
@@ -146,7 +155,7 @@ LambdaParam:
     name=FeatureName;
 
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent';
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with';
 
 QualifiedName returns string:
     ID ('.' ID)*;

@@ -1,6 +1,7 @@
 import {
     isAggregate,
     isEntity,
+    isFieldSet,
     isIdType,
     isOwnsField,
     isReferenceField,
@@ -8,6 +9,7 @@ import {
     isValueObject,
     type Aggregate,
     type Entity,
+    type FieldSet,
     type OwnsField,
     type UnionDecl,
     type ValueObject,
@@ -37,13 +39,17 @@ export function checkStructure(index: ModelIndex, sink: DiagnosticSink): void {
     for (const el of owners) {
         for (const f of allFields(el)) checkFieldKind(el, f, sink);
     }
+    // a field set's fields are plain (M016); what they may hold is checked like any plain field
+    for (const fs of index.fieldSets) {
+        for (const f of fieldsOf(fs.members)) if (f.$type === 'Field') checkFieldKind(fs, f, sink);
+    }
     checkPayloads(index, sink);
     checkIdentity(index, sink);
     checkOwningAggregates(index, sink);
     checkCycles(owners, sink);
 }
 
-function checkFieldKind(owner: Owner, f: FieldLike, sink: DiagnosticSink): void {
+function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticSink): void {
     const decl = f.type?.decl?.ref;
     if (isReferenceField(f)) {
         checkReference(f, sink);

@@ -5,7 +5,7 @@
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
-export type ElementKind = 'id' | 'primitive' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error';
+export type ElementKind = 'id' | 'primitive' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet';
 
 export type TypeExpr =
     | { kind: 'primitive'; name: PrimitiveName }
@@ -28,6 +28,8 @@ export interface FieldModel {
     labelSource?: 'inline' | 'term' | 'type';
     /** Description from `///` comments (own, or of the term). */
     doc?: string;
+    /** Qualified name of the field set the field comes from (`with`); absent for the element's own fields. */
+    fieldSet?: string;
 }
 
 /** Display name and description shared by declarations. */
@@ -96,6 +98,11 @@ export interface ElementModel extends Described {
     discriminator?: string;
     tagType?: string;
     variants?: VariantModel[];
+    /**
+     * Aggregates, entities and events: the field sets named with `with` (qualified names). Their fields come first in
+     * `fields`, marked with `fieldSet`.
+     */
+    fieldSets?: string[];
     /** Events only: true when the event is declared `persistent` (its contract is to be persisted). */
     persistent?: boolean;
     /** Aggregates only. */
@@ -127,6 +134,9 @@ export const elementsIn = (model: DomainModel, ctx: string): ElementModel[] =>
     Object.values(model.elements).filter((e) => e.context === ctx);
 
 export const elementList = (model: DomainModel): ElementModel[] => Object.values(model.elements);
+
+/** The element's own fields, without those it takes from field sets. */
+export const ownFields = (el: ElementModel): FieldModel[] => el.fields.filter((f) => !f.fieldSet);
 
 /** Fields of an element, including state-specific fields of aggregates and the fields of every union variant. */
 export const allFieldsOf = (el: ElementModel): FieldModel[] => [

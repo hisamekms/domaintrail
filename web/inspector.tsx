@@ -8,7 +8,7 @@ import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { CommandCard, OutcomeCard, outcomesOf, PersistenceBadge } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
-import { KIND_ORDER, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
+import { KIND_ORDER, fieldSetUsers, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
 import { SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
@@ -436,9 +436,20 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
     const commands = Object.values(model.elements).flatMap((a) =>
         (a.commands ?? []).filter((c) => c.emits.includes(el.id) || c.errors.includes(el.id)).map((c) => ({ agg: a, c })),
     );
-    if (!typeUses.length && !idUses.length && !commands.length) return <p className="muted">{tx.unreferenced}</p>;
+    const users = el.kind === 'fieldSet' ? fieldSetUsers(model, el.id) : [];
+    if (!typeUses.length && !idUses.length && !commands.length && !users.length) return <p className="muted">{tx.unreferenced}</p>;
     return (
         <>
+            {users.length > 0 && (
+                <Section title={tx.fieldSetUsers(users.length)}>
+                    {users.map((u) => (
+                        <div key={u.id} className="sub">
+                            <a onClick={() => onSelect(u.id)}>{names.id(u.id)}</a>
+                            <span className="muted small"> {tx.kinds[u.kind]}</span>
+                        </div>
+                    ))}
+                </Section>
+            )}
             {commands.length > 0 && (
                 <Section title={el.kind === 'event' ? tx.raisedBy : tx.returnedBy}>
                     {commands.map(({ agg, c }) => (
@@ -585,12 +596,24 @@ function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields
                                         </a>
                                     </>
                                 )}
+                                {f.fieldSet && <FieldOrigin id={f.fieldSet} onSelect={onSelect} />}
                             </td>
                         </tr>
                     ))}
                 </tbody>
             </table>
         </Section>
+    );
+}
+
+/** The field set a field comes from, faded after its type. */
+function FieldOrigin({ id, onSelect }: { id: string; onSelect: Select }) {
+    const names = useNames();
+    const tx = useT();
+    return (
+        <a className="field-origin" onClick={() => onSelect(id)} data-tooltip={tx.fromFieldSet(names.id(id))}>
+            {names.short(id)}
+        </a>
     );
 }
 
