@@ -13,18 +13,29 @@ const KIND_LABEL: Partial<Record<ElementModel['kind'], string>> = { primitive: '
 const nameIn = (mode: DisplayMode, name: string, label?: string): string =>
     mode === 'name' || !label ? name : mode === 'label' ? label : `${label} (${name})`;
 
-/**
- * Catalog of domain primitives (primitives, IDs, enums) per context; shared contexts come first.
- * Cards show base type, invariants and where each type is used.
- */
-export function PrimitiveCatalog(props: {
+interface CatalogProps {
     model: DomainModel;
     mode: DisplayMode;
     diff: ModelDiff;
     diagnostics: Diagnostic[];
     selected: string | undefined;
     onSelect: (id: string) => void;
-}) {
+}
+
+/** Cards to look over the model's elements, one section per kind of element; for now only the domain primitives. */
+export function Catalog(props: CatalogProps) {
+    return (
+        <div className="catalog">
+            <PrimitiveSection {...props} />
+        </div>
+    );
+}
+
+/**
+ * Domain primitives (primitives, IDs, enums) per context; shared contexts come first.
+ * Cards show base type, invariants and where each type is used.
+ */
+function PrimitiveSection(props: CatalogProps) {
     const { model, mode } = props;
     const t = useT();
     const shared = new Set(model.sharedContexts);
@@ -37,7 +48,8 @@ export function PrimitiveCatalog(props: {
     }
 
     return (
-        <div className="catalog">
+        <section className="catalog-section">
+            <h1>{t.catalogPrimitives}</h1>
             {contexts.map((ctx) => {
                 const items = Object.values(model.elements)
                     .filter((e) => e.context === ctx && KINDS.includes(e.kind))
@@ -60,7 +72,7 @@ export function PrimitiveCatalog(props: {
                     </section>
                 );
             })}
-        </div>
+        </section>
     );
 }
 

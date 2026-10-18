@@ -67,7 +67,7 @@ export const selectedFile = (id: string | undefined): string | undefined => (id?
 /** Kinds that are drawn in the Structure View. */
 export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 
-/** Kinds shown in the Primitives catalog. */
+/** Kinds shown in the catalog (for now its only section, the domain primitives). */
 export const inCatalog = (kind: string): boolean => kind === 'primitive' || kind === 'id' || kind === 'enum';
 
 /** Contexts with shared ones first. */

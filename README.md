@@ -250,9 +250,10 @@ The screen is laid out like an IDE; every pane is closed and opened with the ico
 pane leaves a narrow rail with the button that opens it) and resized by dragging (remembered per browser).
 
 - **Explorer (left)**: model tree — shared contexts first, then each context grouped by kind; aggregates expand to
-  their states and commands — and the `.dt` files with error/warning counts. Click selects; double-click opens the
-  item in the view that suits it.
-- **Main (center)**: tabs with a view-specific toolbar.
+  their states and commands — and the `.dt` files with error/warning counts. Click selects (a file too);
+  double-click opens the item in the view or inspector tab that suits it.
+- **Main (center)**: views of the whole model, in tabs with a view-specific toolbar. Anything about one selected item
+  is in the inspector. See [ADR 0007](docs/adr/0007-pane-roles.md).
   - *Context Map*: one node per bounded context and one edge per dependency between contexts, labeled with the
     number of ID references and borrowed types (solid when types are borrowed). Shared contexts and contexts that
     only declare IDs are hidden unless 「共有・外部の BC も表示」 is checked. Selecting a context lists every use in
@@ -262,11 +263,15 @@ pane leaves a narrow rail with the button that opens it) and resized by dragging
     as stubs; the eye next to each other context hides its stubs and the edges to and from them (the toolbar shows how
     many are hidden). The first row, 「すべての BC」, checks or unchecks every context and shows or hides every stub.
     詳細 / 概観 works in both.
-  - *States*: states and command transitions of one aggregate (`new` marks factory commands).
-  - *Primitives*: domain primitives per context (shared first) with base type, invariants and usages.
-  - *Source*: one file, read-only, syntax-coloured, diagnostics in the gutter; clicking a declaration selects it.
+  - *Catalog*: cards to look over the model, one section per kind; for now the domain primitives per context (shared
+    first) with base type, invariants and usages.
 - **Inspector (right)**: the selected item — name, description, location (copy `file:line-line` for AI feedback),
-  diagnostics, back/forward history, and buttons to show it in a view. Sub-tabs: 構造 / 振る舞い / 参照 / ソース.
+  diagnostics, back/forward history, and buttons to show it in a view. Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 /
+  ソース.
+  - *状態遷移*: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate
+    and its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
+  - *ソース*: the whole file, read-only, syntax-coloured, diagnostics in the gutter, scrolled to the declaration;
+    clicking a declaration selects it. A selected file shows here the same way.
 - **Problems / changes (bottom)**: diagnostics (click to locate) and additions / changes / removals since the previous model.
 - Selecting never switches the main view by itself; the item is highlighted when the current view shows it.
 - Added / changed elements are highlighted; removed ones appear as ghosts. On a syntax error the last diagram stays.

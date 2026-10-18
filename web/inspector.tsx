@@ -7,7 +7,7 @@ import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantMode
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { useLang, useT } from './i18n';
-import { KIND_LABEL, KIND_ORDER, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
+import { KIND_LABEL, KIND_ORDER, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
 import { CopyLocation, SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
@@ -15,7 +15,7 @@ import { usagesOf } from './usages';
 export type InspectorTab = 'structure' | 'states' | 'behavior' | 'references' | 'source';
 
 /** Where the selected item can be shown in the main area. */
-export type RevealTarget = 'contextMap' | 'structure' | 'primitives';
+export type RevealTarget = 'contextMap' | 'structure' | 'catalog';
 
 /** Display names in the current mode (ラベル / 名前 / 両方). */
 const NamerContext = createContext<Namer>(namer('both', null));
@@ -64,7 +64,7 @@ function revealTargets(r: Resolved): RevealTarget[] {
     const out: RevealTarget[] = [];
     if (r.kind === 'element') {
         if (r.el.kind === 'aggregate' || r.el.kind === 'entity' || r.el.kind === 'valueObject' || r.el.kind === 'union') out.push('structure');
-        if (r.el.kind === 'primitive' || r.el.kind === 'id' || r.el.kind === 'enum') out.push('primitives');
+        if (inCatalog(r.el.kind)) out.push('catalog');
     } else if (r.kind === 'context') {
         out.push('contextMap', 'structure');
     }

@@ -825,7 +825,12 @@ select,
     color: var(--teal-text);
 }
 
-/* ---------- Primitives catalog ---------- */
+/* ---------- Catalog ---------- */
+
+.catalog-section > h1 {
+    margin: 0 0 16px;
+    font-size: 22px;
+}
 
 .catalog-context {
     margin-bottom: 28px;

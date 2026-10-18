@@ -4,7 +4,7 @@ import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import { DISPLAY_MODES, type DisplayMode, type LaidOutGraph } from '../src/graph/ir';
 import { BottomPanel, type BottomTab } from './bottom';
-import { PrimitiveCatalog } from './catalog';
+import { Catalog } from './catalog';
 import { fitReadable, highlightElement, usePointerCursor } from './canvas';
 import { Explorer } from './explorer';
 import { Legend } from './legend';
@@ -21,7 +21,7 @@ import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from '.
 import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
 import { useViewSocket } from './useViewSocket';
 
-type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'primitives' };
+type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' };
 
 /** Width of the rail a closed side pane leaves, and height of the bottom pane's tab bar (with its border); see styles.css. */
 const RAIL_WIDTH = 28;
@@ -210,7 +210,7 @@ export function App() {
         else if (inStructure(r.el.kind)) {
             reveal('structure', id);
             if (r.el.kind === 'aggregate') openInspector('states');
-        } else if (inCatalog(r.el.kind)) reveal('primitives', id);
+        } else if (inCatalog(r.el.kind)) reveal('catalog', id);
         else openInspector('source');
     };
 
@@ -310,7 +310,7 @@ export function App() {
                 <section className="center">
                     <div className="view-tabs">
                         <div className="view-tab-list" role="tablist">
-                        {(['contextMap', 'structure', 'primitives'] as const).map((k) => (
+                        {(['contextMap', 'structure', 'catalog'] as const).map((k) => (
                             <button key={k} role="tab" aria-selected={view.kind === k} className={view.kind === k ? 'active' : ''} onClick={() => setView({ kind: k })}>
                                 {t.views[k]}
                             </button>
@@ -364,8 +364,8 @@ export function App() {
                                       : focusKey && view.kind === 'structure' ? t.loading : t.noDiagram}
                             </div>
                         )}
-                        {view.kind === 'primitives' && model && (
-                            <PrimitiveCatalog
+                        {view.kind === 'catalog' && model && (
+                            <Catalog
                                 model={model}
                                 mode={mode}
                                 diff={current?.diff ?? empty}

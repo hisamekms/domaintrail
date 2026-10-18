@@ -40,7 +40,7 @@ const ja = {
     closeBottom: '問題・変更を閉じる',
 
     // views and their toolbar
-    views: { contextMap: 'コンテキストマップ', structure: '構造図', primitives: 'プリミティブ' },
+    views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ' },
     showAllContexts: '共有・外部の BC も表示',
     structureMode: 'Structure の表示',
     detail: '詳細',
@@ -102,7 +102,8 @@ const ja = {
     noProblems: '問題はありません。',
     noChanges: '直前の正常モデルからの変更はありません。',
 
-    // Primitives
+    // catalog
+    catalogPrimitives: 'プリミティブ',
     sharedCatalog: '共有 · どの Context からも名前で参照可',
     noPrimitives: 'Domain Primitive はありません。',
     usedIn: (n: number) => `使用 ${n} 箇所`,
@@ -115,7 +116,7 @@ const ja = {
     // inspector
     counted: (title: string, n: number) => `${title}（${n}）`,
     tabs: { structure: '構造', states: '状態遷移', behavior: '振る舞い', references: '参照', source: 'ソース' },
-    reveal: { contextMap: 'コンテキストマップ', structure: '構造図', primitives: 'プリミティブ' },
+    reveal: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ' },
     back: '戻る',
     forward: '進む',
     notInModel: (id: string) => `${id} は現在のモデルにありません。`,
@@ -192,7 +193,7 @@ const en: Messages = {
     openBottom: 'Open problems and changes',
     closeBottom: 'Close problems and changes',
 
-    views: { contextMap: 'Context Map', structure: 'Structure', primitives: 'Primitives' },
+    views: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog' },
     showAllContexts: 'Also show shared and external BCs',
     structureMode: 'Structure view',
     detail: 'Detail',
@@ -250,6 +251,7 @@ const en: Messages = {
     noProblems: 'No problems.',
     noChanges: 'No changes since the last valid model.',
 
+    catalogPrimitives: 'Primitives',
     sharedCatalog: 'Shared · referable by name from any context',
     noPrimitives: 'No domain primitives.',
     usedIn: (n) => `Used in ${n} ${n === 1 ? 'place' : 'places'}`,
@@ -260,7 +262,7 @@ const en: Messages = {
 
     counted: (title, n) => `${title} (${n})`,
     tabs: { structure: 'Structure', states: 'States', behavior: 'Behavior', references: 'References', source: 'Source' },
-    reveal: { contextMap: 'Context Map', structure: 'Structure', primitives: 'Primitives' },
+    reveal: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog' },
     back: 'Back',
     forward: 'Forward',
     notInModel: (id) => `${id} is not in the current model.`,
