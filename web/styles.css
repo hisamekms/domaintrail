@@ -932,8 +932,15 @@ select,
 /* ---------- Catalog ---------- */
 
 .catalog-section > h1 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
     margin: 0 0 16px;
     font-size: 22px;
+}
+.catalog-section > h1 .catalog-count {
+    font-size: 14px;
+    font-weight: 400;
 }
 
 .catalog-context {
@@ -987,6 +994,7 @@ select,
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
     padding: 12px 14px;
     text-align: left;
     font: inherit;
@@ -1007,24 +1015,46 @@ select,
 .card-error {
     border-color: var(--error);
 }
+/* the tags sit beside the first line only, so that the name under the label gets the card's whole width */
 .card-head {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
+    column-gap: 8px;
 }
 .card-tags {
+    grid-area: 1 / 2;
     display: flex;
-    flex: none;
     align-items: center;
     gap: 6px;
 }
 .card-tags .persistence-badge {
     margin-left: 0;
 }
+/* label over name (both), or one of them; each line ends in an ellipsis rather than overflow the card */
+.card-title {
+    display: contents;
+}
+.card-name {
+    grid-area: 1 / 1;
+}
+.card-subname {
+    grid-area: 2 / 1 / 3 / -1;
+}
+.card-name,
+.card-subname {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .card-name {
     font-weight: 700;
     font-size: 16px;
+}
+.card-subname {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
 }
 .card-base {
     font-family: var(--mono);
@@ -1070,18 +1100,94 @@ select,
     background: var(--warning);
 }
 
-/* links to the sections, kept at the top while the catalog scrolls */
-.catalog-jump {
+/* the filter and the links to the sections, kept at the top while the catalog scrolls */
+.catalog-top {
     position: sticky;
     top: -20px;
     z-index: 1;
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-direction: column;
+    gap: 8px;
     margin: -20px -24px 20px;
     padding: 12px 24px;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
+}
+.catalog-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.catalog-filter-row .catalog-filter {
+    flex: 0 1 360px;
+    height: 28px;
+    margin-right: 0;
+    background: var(--panel);
+}
+.catalog-filter .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+.catalog-filter .icon-button:hover {
+    background: var(--hover);
+    color: inherit;
+}
+.catalog-filter-row .context-picker > button {
+    height: 28px;
+    padding: 0 10px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+}
+.catalog-filter-row .context-picker-menu {
+    right: auto;
+    left: 0;
+    font-size: 13px;
+}
+/* kinds to show: none pressed means all, so the others fade only once one is */
+.catalog-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+/* kinds without colours of their own (zero specificity, so that `.kind-*` wins) */
+:where(.catalog-kind) {
+    color: var(--text);
+    background: var(--neutral-tint);
+}
+.catalog-kind {
+    padding: 2px 10px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1.5px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+}
+.catalog-kind[aria-pressed='true'] {
+    border-color: currentColor;
+}
+.catalog-kind.off {
+    opacity: 0.4;
+}
+.catalog-kind:hover {
+    opacity: 1;
+}
+.catalog-jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 .catalog-jump button {
     display: flex;
@@ -1108,7 +1214,7 @@ select,
 }
 .catalog-section {
     margin-bottom: 12px;
-    scroll-margin-top: 72px;
+    scroll-margin-top: 150px;
 }
 .card-fields,
 .card-commands {

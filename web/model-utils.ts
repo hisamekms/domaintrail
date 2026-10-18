@@ -69,6 +69,7 @@ export const inCatalog = (kind: string): boolean => CATALOG_SECTIONS.some((s) =>
 
 export interface CatalogSection {
     key: CatalogSectionKey;
+    kinds: ElementKind[];
     /** Contexts with elements of the section, shared ones first. */
     groups: { context: string; items: ElementModel[] }[];
     count: number;
@@ -86,7 +87,38 @@ export function catalogSections(model: DomainModel): CatalogSection[] {
                     .sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.name.localeCompare(b.name)),
             }))
             .filter((g) => g.items.length > 0);
-        return { key, groups, count: groups.reduce((n, g) => n + g.items.length, 0) };
+        return { key, kinds, groups, count: groups.reduce((n, g) => n + g.items.length, 0) };
+    });
+}
+
+/** What the catalog is narrowed to; an empty query, no sections and no contexts (null) each mean all. */
+export interface CatalogFilter {
+    query: string;
+    sections: CatalogSectionKey[];
+    contexts: string[] | null;
+}
+
+export const isCatalogFiltered = (f: CatalogFilter): boolean => f.query.trim() !== '' || f.sections.length > 0 || f.contexts !== null;
+
+/** The element's label, name or description contains the query, ignoring case. */
+export function matchesQuery(el: ElementModel, query: string): boolean {
+    const q = query.trim().toLowerCase();
+    return !q || [el.label, el.name, el.doc].some((s) => s?.toLowerCase().includes(q));
+}
+
+/**
+ * The sections with only the matching elements, in the same order; `count` stays the section's total and `shown`
+ * counts the matches. Sections left out by kind keep no groups.
+ */
+export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter): (CatalogSection & { shown: number })[] {
+    return sections.map((s) => {
+        const groups = filter.sections.length && !filter.sections.includes(s.key)
+            ? []
+            : s.groups
+                  .filter((g) => filter.contexts === null || filter.contexts.includes(g.context))
+                  .map((g) => ({ ...g, items: g.items.filter((e) => matchesQuery(e, filter.query)) }))
+                  .filter((g) => g.items.length > 0);
+        return { ...s, groups, shown: groups.reduce((n, g) => n + g.items.length, 0) };
     });
 }
 
