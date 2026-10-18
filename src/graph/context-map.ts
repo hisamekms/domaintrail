@@ -21,13 +21,13 @@ export const contextNodeId = (ctx: string): string => `map:${ctx}`;
 /** Kinds counted on a context node, with their names. */
 const COUNTED: { kind: ElementKind; ja: string; en: string }[] = [
     { kind: 'aggregate', ja: '集約', en: 'aggregates' },
-    { kind: 'entity', ja: 'Entity', en: 'entities' },
-    { kind: 'valueObject', ja: 'Value Object', en: 'value objects' },
-    { kind: 'union', ja: 'Union', en: 'unions' },
-    { kind: 'enum', ja: 'Enum', en: 'enums' },
-    { kind: 'primitive', ja: 'Domain Primitive', en: 'primitives' },
+    { kind: 'entity', ja: 'エンティティ', en: 'entities' },
+    { kind: 'valueObject', ja: '値オブジェクト', en: 'value objects' },
+    { kind: 'union', ja: 'ユニオン', en: 'unions' },
+    { kind: 'enum', ja: '列挙型', en: 'enums' },
+    { kind: 'primitive', ja: 'ドメインプリミティブ', en: 'primitives' },
     { kind: 'id', ja: 'ID', en: 'IDs' },
-    { kind: 'event', ja: 'Event', en: 'events' },
+    { kind: 'event', ja: 'ドメインイベント', en: 'events' },
 ];
 
 /** `ID 12 · 型 3` / `ID 12 · type 3`, leaving out zero counts. */
@@ -56,7 +56,7 @@ export function buildContextMapGraph(model: DomainModel, opts: { all?: boolean }
             id: contextNodeId(ctx),
             kind: 'boundedContext',
             label: named(ctx, model.contextLabels[ctx]),
-            stereotype: shared ? '«shared kernel»' : idOnly ? '«external»' : '«bounded context»',
+            stereotype: perLang(shared ? { ja: '«共有カーネル»', en: '«shared kernel»' } : idOnly ? { ja: '«外部»', en: '«external»' } : { ja: '«境界づけられたコンテキスト»', en: '«bounded context»' }),
             lines,
             elementId: ctx,
         });

@@ -253,9 +253,9 @@ export function App() {
                 <div className="status">
                     {current && <span className={`pill pill-${current.status}`}>{t.status[current.status]}</span>}
                     <span className="muted">
-                        {current ? `${current.files.length} files · v${current.version} · ${new Date(current.updatedAt).toLocaleTimeString(lang)}` : ''}
+                        {current ? `${t.fileCount(current.files.length)} · v${current.version} · ${new Date(current.updatedAt).toLocaleTimeString(lang)}` : ''}
                     </span>
-                    <span className={`conn conn-${connection}`} title={`WebSocket: ${connection}`} />
+                    <span className={`conn conn-${connection}`} title={t.connectionTitle(t.connection[connection])} />
                 </div>
                 <SettingsDialog
                     mode={mode}

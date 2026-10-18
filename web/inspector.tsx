@@ -6,8 +6,8 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantModel, Location } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
-import { useLang, useT } from './i18n';
-import { KIND_LABEL, KIND_ORDER, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
+import { useLang, useT, type ItemKind } from './i18n';
+import { KIND_ORDER, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
 import { CopyLocation, SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
@@ -148,7 +148,7 @@ export function Inspector(props: InspectorProps) {
         <div className="inspector">
             <div className="inspector-head">
                 <div className="inspector-row">
-                    <span className={`kind kind-${head.kind}`}>{KIND_LABEL[head.kind] ?? head.kind}</span>
+                    <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
                     {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
                     {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} />}
                     {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
@@ -191,7 +191,7 @@ export function Inspector(props: InspectorProps) {
     );
 }
 
-function headOf(r: Resolved): { kind: string; name: string; label?: string; doc?: string; location?: Location } {
+function headOf(r: Resolved): { kind: ItemKind; name: string; label?: string; doc?: string; location?: Location } {
     switch (r.kind) {
         case 'context':
             return { kind: 'context', name: r.name, label: r.label };
@@ -278,7 +278,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     if (tab === 'behavior') {
         return (
             <>
-                <CommandList title={tx.counted('Command', el.commands?.length ?? 0)} agg={el} commands={el.commands ?? []} onSelect={onSelect} />
+                <CommandList title={tx.counted(tx.commands, el.commands?.length ?? 0)} agg={el} commands={el.commands ?? []} onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />
                 <AggregateOutcomes agg={el} model={model} kind="errors" onSelect={onSelect} />
             </>
@@ -291,7 +291,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         <>
             {el.base && (
                 <p>
-                    {el.kind === 'id' ? tx.identifier : 'Domain Primitive'}
+                    {el.kind === 'id' ? tx.identifier : tx.kinds.primitive}
                     {tx.separator}
                     {tx.baseType}: <code>{names.primitive(el.base)}</code>
                 </p>
@@ -341,7 +341,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             )}
             {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} title={tx.valueInvariants} />}
             {el.states && el.states.length > 0 && (
-                <Section title={tx.counted('State', el.states.length)}>
+                <Section title={tx.counted(tx.states, el.states.length)}>
                     {el.states.map((s) => (
                         <div key={s.id} className="sub">
                             <a onClick={() => onSelect(s.id)}>{names.of(s)}</a>
@@ -361,7 +361,7 @@ function Dependencies({ title, groups, other, onSelect }: { title: string; group
     const lang = useLang();
     if (groups.length === 0) return null;
     return (
-        <Section title={`${title}（${groups.length}）`}>
+        <Section title={tx.counted(title, groups.length)}>
             {groups.map((g) => (
                 <details key={other(g)} className="deps">
                     <summary>
@@ -401,7 +401,7 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
                 const items = els.filter((e) => e.kind === kind);
                 if (!items.length) return null;
                 return (
-                    <Section key={kind} title={tx.counted(tx.kindGroups[kind], items.length)}>
+                    <Section key={kind} title={tx.counted(tx.kinds[kind], items.length)}>
                         {items.map((e) => (
                             <div key={e.id} className="sub">
                                 <a onClick={() => onSelect(e.id)}>{names.of(e)}</a>

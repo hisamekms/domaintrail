@@ -63,7 +63,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
             nodes.push({
                 ...base,
                 type: 'domain-node',
-                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ?? '', scale, rows: rowsIn(n, opts), ...marks },
+                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ? textOf(n.stereotype, opts) : '', scale, rows: rowsIn(n, opts), ...marks },
             });
         }
     }
@@ -80,7 +80,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
                 x: l.x,
                 y: l.y,
                 meta: { elementId: n.elementId, ghost: true },
-                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ?? '', scale, rows: rowsIn(n, opts), change: 'removed', diag: 'none' },
+                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), stereotype: n.stereotype ? textOf(n.stereotype, opts) : '', scale, rows: rowsIn(n, opts), change: 'removed', diag: 'none' },
             });
         }
     }

@@ -52,7 +52,7 @@ export interface GraphNode {
     kind: NodeKind;
     label: Texts;
     /** Small caption shown above the label, e.g. «aggregate». */
-    stereotype?: string;
+    stereotype?: Texts;
     /** Body rows (fields, etc.), drawn as aligned key / value columns. */
     lines: GraphLine[];
     /** Containing node, if nested. */
