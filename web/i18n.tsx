@@ -150,9 +150,7 @@ const ja = {
     usedIn: (n: number) => `使用 ${n} 箇所`,
 
     // source
-    copyLocation: 'パスと行をコピー',
-    copied: 'コピーしました',
-    copy: (text: string) => `${text} をコピー`,
+    copyCode: 'コードをコピー',
 
     // inspector
     counted: (title: string, n: number) => `${title}（${n}）`,
@@ -332,9 +330,7 @@ const en: Messages = {
     returnedByNone: 'No command returns it',
     usedIn: (n) => `Used in ${n} ${n === 1 ? 'place' : 'places'}`,
 
-    copyLocation: 'Copy the path and line',
-    copied: 'Copied',
-    copy: (text) => `Copy ${text}`,
+    copyCode: 'Copy the code',
 
     counted: (title, n) => `${title} (${n})`,
     tabs: { structure: 'Structure', states: 'States', behavior: 'Behavior', references: 'References', source: 'Source' },
