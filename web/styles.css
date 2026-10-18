@@ -1234,6 +1234,117 @@ select,
     font-family: var(--mono);
 }
 
+/* ---------- behaviour cards (the aggregate's 振る舞い tab) ---------- */
+
+.bcard {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.bcard-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.bcard-head .persistence-badge {
+    margin-left: 0;
+}
+.pane a.bcard-title {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    color: var(--text);
+}
+.bcard-band {
+    align-self: stretch;
+    width: 4px;
+    border-radius: 2px;
+    background: var(--grey);
+}
+.band-command {
+    background: var(--purple);
+}
+.band-event {
+    background: var(--amber);
+}
+.band-error {
+    background: var(--error);
+}
+.bcard-name {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--muted);
+}
+.factory-badge {
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--purple-text);
+    background: var(--purple-tint);
+}
+.bcard-doc {
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    color: var(--text-soft);
+}
+.bcard-transition,
+.bcard-outcome,
+.bcard-outcomes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    font-size: 13px;
+}
+.bcard-outcomes {
+    gap: 4px 14px;
+}
+.pane a.state-chip {
+    padding: 1px 7px;
+    border-radius: 4px;
+    color: var(--purple-text);
+    background: var(--purple-tint);
+}
+.initial-state {
+    font-size: 11px;
+    color: var(--text-soft);
+}
+.pane a.kind-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text);
+}
+.bcard-caption {
+    font-size: 12px;
+    color: var(--muted);
+}
+.bcard-fields {
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: 2px 12px;
+    margin-top: 2px;
+    font-size: 13px;
+}
+.bcard-field {
+    display: contents;
+}
+.bcard-ftype {
+    font-family: var(--mono);
+    overflow-wrap: anywhere;
+}
+.pane .bcard-ftype a {
+    color: var(--text-soft);
+}
+
 /* ---------- pane layout ---------- */
 
 .workspace {

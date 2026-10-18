@@ -206,6 +206,10 @@ const ja = {
     typeUses: (n: number) => `型として使われている場所（${n}）`,
     idUses: (id: string, n: number) => `ID（${id}）で参照している場所（${n}）`,
     raises: (n: number) => `発生させるドメインイベント（${n}）`,
+    factory: '生成',
+    origin: '発生元',
+    raisesHint: '発生させるドメインイベント',
+    returnsHint: '返し得るエラー',
     returns: (n: number) => `返し得るエラー（${n}）`,
     labelSources: { term: '用語', type: '型' },
 };
@@ -392,6 +396,10 @@ const en: Messages = {
     typeUses: (n) => `Used as a type (${n})`,
     idUses: (id, n) => `Referenced by ID ${id} (${n})`,
     raises: (n) => `Events it raises (${n})`,
+    factory: 'create',
+    origin: 'From',
+    raisesHint: 'Events it raises',
+    returnsHint: 'Errors it may return',
     returns: (n) => `Errors it may return (${n})`,
     labelSources: { term: 'term', type: 'type' },
 };
