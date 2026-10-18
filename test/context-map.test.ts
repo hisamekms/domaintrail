@@ -156,6 +156,18 @@ describe('focused Structure View', () => {
         expect(g.edges.every((e) => ids.has(e.source) && ids.has(e.target))).toBe(true);
     });
 
+    test('hidden contexts: their stubs and the dependencies on and from them are left out', async () => {
+        const g = buildStructureGraph(await model(), { focus: ['Billing'], hidden: ['Sales'] });
+        expect(g.id).toBe('structure-focus:Billing:hide=Sales');
+        expect(g.nodes.some((n) => n.kind === 'stub' || n.id === 'Sales')).toBe(false);
+        expect(g.edges.map((e) => e.id)).toEqual(['Billing.Invoice.origin']);
+        // a focused context is never hidden
+        const focused = buildStructureGraph(await model(), { focus: ['Sales'], hidden: ['Sales', 'Billing'] });
+        expect(focused.id).toBe('structure-focus:Sales:hide=Billing');
+        // Sales.Channel is drawn only because Billing uses it
+        expect(focused.nodes.filter((n) => n.kind === 'stub')).toEqual([]);
+    });
+
     test('the overview of focused contexts has names only, in larger text', async () => {
         const g = buildStructureGraph(await model(), { focus: ['Billing'], overview: true });
         expect(g.id).toBe('structure-focus:Billing:overview');

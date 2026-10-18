@@ -1538,11 +1538,40 @@ details.deps > .sub {
     gap: 4px;
 }
 .context-picker-menu .check {
+    flex: 1;
     padding: 2px 4px;
     white-space: nowrap;
 }
-.context-picker-actions {
-    border-top: 1px solid var(--border);
-    margin-top: 4px;
-    padding-top: 6px;
+.context-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.context-picker-row.context-hidden .check {
+    color: var(--muted);
+}
+.context-picker-menu .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+}
+.context-picker-menu .icon-button:hover:not(:disabled) {
+    background: var(--hover);
+    color: inherit;
+}
+.context-picker-menu .icon-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+.context-picker-all {
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    padding-bottom: 4px;
 }

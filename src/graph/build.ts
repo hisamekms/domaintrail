@@ -113,22 +113,27 @@ export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphN
  */
 export const STRUCTURE_OVERVIEW_GRAPH_ID = 'structure-overview';
 
-/** Structure View of some bounded contexts, with the elements they depend on and that depend on them as stubs. */
-export const focusGraphId = (contexts: readonly string[], overview = false): string =>
-    `structure-focus:${[...contexts].sort().join('+')}${overview ? ':overview' : ''}`;
+/**
+ * Structure View of some bounded contexts, with the elements they depend on and that depend on them as stubs
+ * (except those of the `hidden` contexts).
+ */
+export const focusGraphId = (contexts: readonly string[], overview = false, hidden: readonly string[] = []): string =>
+    `structure-focus:${[...contexts].sort().join('+')}${hidden.length ? `:hide=${[...hidden].sort().join('+')}` : ''}${overview ? ':overview' : ''}`;
 
 /**
  * Structure View. With `overview`, nodes show only their names (no field rows) in larger text,
- * to see the whole model at a glance. With `focus`, only those contexts are drawn (see `focusStubs`).
+ * to see the whole model at a glance. With `focus`, only those contexts are drawn (see `focusStubs`), and
+ * the dependencies on and from the `hidden` contexts are left out.
  */
-export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean; focus?: readonly string[] } = {}): Graph {
+export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean; focus?: readonly string[]; hidden?: readonly string[] } = {}): Graph {
     const scale = opts.overview ? OVERVIEW_TEXT_SCALE : 1;
     const elements = elementList(model);
     const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
     const shown = elements.filter((e) => STRUCTURE_KINDS.has(e.kind) && (!focus || focus.has(e.context)));
     const byId = new Map(elements.map((e) => [e.id, e]));
     const owners = owningAggregates(shown, byId);
-    const stubs = focus ? focusStubs(model, focus, new Set(shown.map((e) => e.id))) : undefined;
+    const hidden = (opts.hidden ?? []).filter((c) => !focus?.has(c));
+    const stubs = focus ? focusStubs(model, focus, new Set(shown.map((e) => e.id)), new Set(hidden)) : undefined;
 
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
@@ -202,7 +207,7 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             );
         }
         edges.push(...stubs.edges);
-        const id = focusGraphId(opts.focus!, opts.overview);
+        const id = focusGraphId(opts.focus!, opts.overview, hidden);
         return opts.overview ? { id, nodes, edges, textScale: scale } : { id, nodes, edges };
     }
     return opts.overview ? { id: STRUCTURE_OVERVIEW_GRAPH_ID, nodes, edges, textScale: scale } : { id: STRUCTURE_GRAPH_ID, nodes, edges };
@@ -224,12 +229,17 @@ const STUB_STEREOTYPES: Record<ElementModel['kind'], string> = {
  * Dependencies of the focused contexts, both ways: elements of other contexts that they use, and elements of other
  * contexts that use them, drawn as stubs (name only) in their own context. Dependencies between two focused contexts
  * are drawn between their elements. An ID stands for the aggregate or entity it identifies, and an element that the
- * Structure View does not draw (an enum, a domain primitive) appears as a stub. Shared and ID-only contexts are left
- * out, and so are uses inside events and errors (they repeat the aggregate's fields). One edge per pair of elements,
- * labeled with the fields.
+ * Structure View does not draw (an enum, a domain primitive) appears as a stub. Shared and ID-only contexts and the
+ * `hidden` ones are left out, and so are uses inside events and errors (they repeat the aggregate's fields). One edge
+ * per pair of elements, labeled with the fields.
  */
-function focusStubs(model: DomainModel, focus: ReadonlySet<string>, shownIds: Set<string>): { elements: ElementModel[]; edges: GraphEdge[] } {
-    const hidden = supportingContexts(model);
+function focusStubs(
+    model: DomainModel,
+    focus: ReadonlySet<string>,
+    shownIds: Set<string>,
+    hiddenContexts: ReadonlySet<string>,
+): { elements: ElementModel[]; edges: GraphEdge[] } {
+    const hidden = new Set([...supportingContexts(model), ...hiddenContexts]);
     const stubs = new Map<string, ElementModel>();
     const pairs = new Map<string, { source: string; target: string; type: boolean; paths: string[] }>();
     for (const d of contextDependencies(model)) {

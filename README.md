@@ -258,7 +258,9 @@ The screen is laid out like an IDE; every pane can be toggled from the header an
     the inspector (依存先 / 依存元). See [ADR 0006](docs/adr/0006-context-map.md).
   - *Structure*: contexts, aggregate boundaries, entities, value objects, unions, `owns` / `references`. Pick bounded
     contexts in the toolbar (any number) to draw only them, with the elements they use and the elements that use them
-    as stubs; 詳細 / 概観 works in both.
+    as stubs; the eye next to each other context hides its stubs and the edges to and from them (the toolbar shows how
+    many are hidden). The first row, 「すべての BC」, checks or unchecks every context and shows or hides every stub.
+    詳細 / 概観 works in both.
   - *States*: states and command transitions of one aggregate (`new` marks factory commands).
   - *Primitives*: domain primitives per context (shared first) with base type, invariants and usages.
   - *Source*: one file, read-only, syntax-coloured, diagnostics in the gutter; clicking a declaration selects it.

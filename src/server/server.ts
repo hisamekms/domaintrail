@@ -123,12 +123,14 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
             if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
             return send(res, 200, 'application/json', JSON.stringify(session.state));
         }
-        // `?contexts=A,B&overview=1`: Structure View of those bounded contexts with their dependencies as stubs
+        // `?contexts=A,B&overview=1&hide=C`: Structure View of those bounded contexts with their dependencies as stubs,
+        // except those on and from C
         if (url.pathname === '/api/focus') {
             if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
             const contexts = (url.searchParams.get('contexts') ?? '').split(',').filter(Boolean);
             try {
-                const graph = await session.focusGraph(contexts, url.searchParams.get('overview') === '1');
+                const hidden = (url.searchParams.get('hide') ?? '').split(',').filter(Boolean);
+                const graph = await session.focusGraph(contexts, url.searchParams.get('overview') === '1', hidden);
                 return graph ? send(res, 200, 'application/json', JSON.stringify(graph)) : send(res, 404, 'text/plain', 'No such contexts');
             } catch {
                 return send(res, 500, 'text/plain', 'Layout failed');

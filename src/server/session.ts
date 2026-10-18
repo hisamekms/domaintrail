@@ -185,15 +185,16 @@ export class ViewSession {
 
     /**
      * Structure View of some bounded contexts with their dependencies as stubs, laid out on request (any combination
-     * of contexts can be asked for, so these are not part of the pushed state). Unknown contexts are ignored.
+     * of contexts can be asked for, so these are not part of the pushed state). The dependencies on and from the
+     * `hidden` contexts are left out. Unknown contexts are ignored.
      */
-    async focusGraph(contexts: readonly string[], overview: boolean): Promise<LaidOutGraph | null> {
+    async focusGraph(contexts: readonly string[], overview: boolean, hidden: readonly string[] = []): Promise<LaidOutGraph | null> {
         const model = this.current.model;
         if (!model) return null;
         const focusable = new Set(focusableContexts(model));
         const focus = [...new Set(contexts.filter((c) => focusable.has(c)))].sort();
         if (focus.length === 0) return null;
-        const graph = buildStructureGraph(model, { focus, overview });
+        const graph = buildStructureGraph(model, { focus, overview, hidden: [...new Set(hidden.filter((c) => focusable.has(c)))] });
         const signature = graphSignature(graph);
         const cached = this.focusLayouts.get(graph.id);
         if (cached && cached.signature === signature) return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };

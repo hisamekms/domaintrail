@@ -61,8 +61,10 @@ export function App() {
     const theme = useResolvedTheme(themePreference);
     /** Structure View: all fields (detail) or names only in larger text (overview). */
     const [structureMode, setStructureMode] = usePersistentState<'detail' | 'overview'>('domaintrail.structureMode', 'detail');
-    /** Structure View: only these bounded contexts, with their dependencies as stubs (empty = every context). */
-    const [focusContexts, setFocusContexts] = usePersistentState<string[]>('domaintrail.structureFocusContexts', []);
+    /** Structure View: the bounded contexts to draw (null = every context, including ones added later). */
+    const [structureContexts, setStructureContexts] = usePersistentState<string[] | null>('domaintrail.structureContexts', null);
+    /** Focused Structure View: contexts whose stubs (and the dependencies on and from them) are not drawn. */
+    const [hiddenContexts, setHiddenContexts] = usePersistentState<string[]>('domaintrail.structureHiddenContexts', []);
     /** Context Map: also show shared and ID-only contexts. */
     const [mapAll, setMapAll] = usePersistentState('domaintrail.contextMapAll', false);
 
@@ -89,15 +91,27 @@ export function App() {
     const lastAggregate = useRef<string | undefined>(undefined);
     if (view.kind === 'states') lastAggregate.current = view.aggregateId;
 
-    /** The focused contexts that can still be drawn, in model order. */
-    const focused = useMemo(() => (current?.focusContexts ?? []).filter((c) => focusContexts.includes(c)), [current?.focusContexts, focusContexts]);
-    const focusKey = focused.length ? `${focused.join('+')}|${structureMode}` : '';
+    /** The checked contexts that can still be drawn, in model order. */
+    const checked = useMemo(
+        () => (current?.focusContexts ?? []).filter((c) => structureContexts === null || structureContexts.includes(c)),
+        [current?.focusContexts, structureContexts],
+    );
+    const allChecked = checked.length === (current?.focusContexts ?? []).length;
+    /** Some but not all contexts: drawn only them, with their dependencies as stubs. */
+    const focused = useMemo(() => (allChecked ? [] : checked), [allChecked, checked]);
+    const noneChecked = !allChecked && checked.length === 0;
+    /** The hidden contexts that apply: only ones drawn as stubs, so none without a focus. */
+    const hidden = useMemo(
+        () => (focused.length ? (current?.focusContexts ?? []).filter((c) => hiddenContexts.includes(c) && !focused.includes(c)) : []),
+        [current?.focusContexts, hiddenContexts, focused],
+    );
+    const focusKey = focused.length ? `${focused.join('+')}|${hidden.join('+')}|${structureMode}` : '';
     /** The focused Structure View is laid out on request by the server. */
     const [focusGraph, setFocusGraph] = useState<{ key: string; graph: LaidOutGraph } | null>(null);
     useEffect(() => {
         if (!focusKey || view.kind !== 'structure') return;
         let cancelled = false;
-        const params = new URLSearchParams({ contexts: focused.join(','), overview: structureMode === 'overview' ? '1' : '0' });
+        const params = new URLSearchParams({ contexts: focused.join(','), overview: structureMode === 'overview' ? '1' : '0', hide: hidden.join(',') });
         fetch(`/api/focus?${params}`)
             .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
             .then((graph) => {
@@ -115,6 +129,7 @@ export function App() {
         if (!p || !isCanvas(v)) return null;
         if (v.kind === 'contextMap') return mapAll ? p.contextMapAll : p.contextMap;
         if (v.kind === 'structure') {
+            if (noneChecked) return null;
             if (focusKey) return focusGraph?.key === focusKey ? focusGraph.graph : undefined;
             return structureMode === 'overview' ? p.overview : p.structure;
         }
@@ -153,7 +168,7 @@ export function App() {
         }
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll]);
+    }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll, noneChecked]);
 
     useEffect(() => {
         applyTheme(theme, editor);
@@ -386,9 +401,11 @@ export function App() {
                                 <ContextPicker
                                     contexts={current?.focusContexts ?? []}
                                     labels={model?.contextLabels ?? {}}
-                                    selected={focused}
+                                    selected={checked}
+                                    hidden={hidden}
                                     mode={mode}
-                                    onChange={setFocusContexts}
+                                    onChange={(cs) => setStructureContexts(cs.length === (current?.focusContexts ?? []).length ? null : cs)}
+                                    onHiddenChange={setHiddenContexts}
                                 />
                             )}
                             {view.kind === 'structure' && (
@@ -414,7 +431,11 @@ export function App() {
                         {graph && isCanvas(view) && <Legend view={view.kind === 'states' ? 'states' : view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'} />}
                         {current && !graph && isCanvas(view) && (
                             <div className="empty">
-                                {current.status === 'empty' ? '.dt ファイルがありません' : focusKey && view.kind === 'structure' ? '読み込み中…' : '表示できる図がありません'}
+                                {current.status === 'empty'
+                                    ? '.dt ファイルがありません'
+                                    : noneChecked && view.kind === 'structure'
+                                      ? '表示する BC を選んでください'
+                                      : focusKey && view.kind === 'structure' ? '読み込み中…' : '表示できる図がありません'}
                             </div>
                         )}
                         {view.kind === 'source' && current && (
@@ -455,7 +476,7 @@ export function App() {
                                 onSelect={(id) => select(id)}
                                 onReveal={reveal}
                                 onFocusContext={(ctx) => {
-                                    setFocusContexts([ctx]);
+                                    setStructureContexts([ctx]);
                                     setView({ kind: 'structure' });
                                 }}
                                 canBack={history.index > 0}
