@@ -4,7 +4,7 @@ import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
 import type { DisplayMode } from '../src/graph/ir';
 import type { DomainModel, ElementModel, FieldModel, InvariantModel } from '../src/model/model';
-import { useT } from './i18n';
+import { useT, type Messages } from './i18n';
 import { PersistenceBadge } from './behavior';
 import { ContextPicker } from './context-picker';
 import {
@@ -177,28 +177,7 @@ function Card(props: {
 
     return (
         <button className={classes.filter(Boolean).join(' ')} data-card={el.id} onClick={() => props.onSelect(el.id)} title={el.doc}>
-            <div className="card-head">
-                {names.mode === 'both' && el.label ? (
-                    <span className="card-title">
-                        <span className="card-name" title={el.label}>
-                            {el.label}
-                        </span>
-                        <span className="card-subname" title={el.name}>
-                            {el.name}
-                        </span>
-                    </span>
-                ) : (
-                    <span className="card-title">
-                        <span className="card-name" title={names.of(el)}>
-                            {names.of(el)}
-                        </span>
-                    </span>
-                )}
-                <span className="card-tags">
-                    {el.kind === 'event' && <PersistenceBadge persistent={!!el.persistent} tx={t} />}
-                    <span className={`kind kind-${el.kind} tiny`}>{t.kinds[el.kind]}</span>
-                </span>
-            </div>
+            <CardHead el={el} tx={t} />
             <CardBody el={el} model={model} names={names} />
             <div className="card-foot muted">
                 <CardUses el={el} model={model} names={names} shared={props.shared} />
@@ -206,6 +185,29 @@ function Card(props: {
                 {props.severity && <span className={`card-diag card-diag-${props.severity}`}>{props.severity === 'error' ? '✕' : '!'}</span>}
             </div>
         </button>
+    );
+}
+
+/**
+ * The badges on a line of their own, then the label over the name whatever the display mode, so that the heading
+ * has the card's width; an element without a label shows its name alone.
+ */
+export function CardHead({ el, tx }: { el: ElementModel; tx: Messages }) {
+    return (
+        <div className="card-head">
+            <span className="card-tags">
+                <span className={`kind kind-${el.kind} tiny`}>{tx.kinds[el.kind]}</span>
+                {el.kind === 'event' && <PersistenceBadge persistent={!!el.persistent} tx={tx} />}
+            </span>
+            <span className="card-name" title={el.label ?? el.name}>
+                {el.label ?? el.name}
+            </span>
+            {el.label && (
+                <span className="card-subname" title={el.name}>
+                    {el.name}
+                </span>
+            )}
+        </div>
     );
 }
 
