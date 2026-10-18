@@ -1,14 +1,4 @@
-/// 顧客からの注文を受け付け、確定・取消までを扱う。
-context Sales "販売" {
-  terms {
-    /// 顧客が注文を確定した日時。キャンセル可否の判定に使う。
-    confirmedAt: "確定日時"
-    at: "日時"
-    orderId: "注文ID"
-    reason: "取消理由"
-    note: "備考"
-  }
-
+context Sales {
   id OrderId "注文ID": UUID
   id OrderItemId "注文明細ID": UUID
 

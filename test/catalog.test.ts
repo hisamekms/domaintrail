@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { readdir, readFile } from 'node:fs/promises';
-import * as path from 'node:path';
+import { analyze } from '../src/core/analyze.js';
+import { loadWorkspace } from '../src/core/files.js';
 import { catalogSections, commandsWithOutcome, inCatalog } from '../web/model-utils.js';
-import { check, EXAMPLES } from './helpers.js';
+import { EXAMPLES } from './helpers.js';
 
 async function shopModel() {
-    const files = (await readdir(EXAMPLES)).filter((f) => f.endsWith('.dt'));
-    const sources = Object.fromEntries(await Promise.all(files.map(async (f) => [f, await readFile(path.join(EXAMPLES, f), 'utf8')] as const)));
-    return (await check(sources)).model!;
+    return (await analyze(await loadWorkspace(EXAMPLES))).model!;
 }
 
 describe('catalog', () => {

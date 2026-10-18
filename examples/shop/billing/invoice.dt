@@ -1,11 +1,4 @@
-/// 注文への請求と支払いを扱う。
-context Billing "請求" {
-  terms {
-    paidAt: "支払日時"
-    invoiceId: "請求書ID"
-    at: "日時"
-  }
-
+context Billing {
   id InvoiceId "請求書ID": UUID
 
   aggregate Invoice "請求書" {

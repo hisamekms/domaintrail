@@ -19,7 +19,7 @@ const ORDER = `
 describe('examples', () => {
     test('the shop example is valid across multiple files and contexts', async () => {
         const a = await analyze(await loadWorkspace(EXAMPLES));
-        expect(a.files.length).toBe(4);
+        expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
         expect(a.diagnostics).toEqual([]);
         expect(a.ok).toBe(true);
     });
