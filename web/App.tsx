@@ -8,6 +8,7 @@ import { Catalog } from './catalog';
 import { fitReadable, highlightElement, usePointerCursor } from './canvas';
 import { Explorer } from './explorer';
 import { Legend } from './legend';
+import { backIndex, popHistory, pushHistory, type History } from './history';
 import { Inspector, type InspectorTab, type RevealTarget } from './inspector';
 import { Resizer, usePersistentState } from './layout';
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from './model-utils';
@@ -76,9 +77,9 @@ export function App() {
     const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
 
-    // Selection with back/forward history
-    const [history, setHistory] = useState<{ stack: string[]; index: number }>({ stack: [], index: -1 });
-    const selected = history.stack[history.index];
+    // Selection with a back history
+    const [history, setHistory] = useState<History>([]);
+    const selected = history[history.length - 1];
     const [sourceFocus, setSourceFocus] = useState<SourceFocus | undefined>();
 
     const cameras = useRef(new Map<string, TLCamera>());
@@ -174,20 +175,25 @@ export function App() {
     /** Selects an item: updates the inspector, the history and the highlight in the current view. */
     const select = useCallback(
         (id: string, opts: { highlight?: boolean } = {}) => {
-            setHistory((h) => (h.stack[h.index] === id ? h : { stack: [...h.stack.slice(0, h.index + 1), id], index: h.index + 1 }));
+            setHistory((h) => pushHistory(h, id));
             focusSource(id);
             if (opts.highlight !== false) highlight(id);
         },
         [focusSource, highlight],
     );
 
-    const goHistory = (delta: number) => {
-        const index = history.index + delta;
-        const id = history.stack[index];
-        if (!id) return;
-        setHistory({ ...history, index });
-        focusSource(id);
-        highlight(id);
+    /** Whether a history entry can still be shown; without a model, elements are kept (they may come back). */
+    const exists = (id: string): boolean => {
+        const file = selectedFile(id);
+        if (file) return (current?.sources ?? []).some((s) => s.path === file);
+        return !model || !!resolve(model, id);
+    };
+    const backTo = history[backIndex(history, exists)];
+    const goBack = () => {
+        if (!backTo) return;
+        setHistory(popHistory(history, exists));
+        focusSource(backTo);
+        highlight(backTo);
     };
 
     /** Shows `id` in a specific view (explicit user action). */
@@ -442,10 +448,8 @@ export function App() {
                                     setStructureContexts([ctx]);
                                     setView({ kind: 'structure' });
                                 }}
-                                canBack={history.index > 0}
-                                canForward={history.index < history.stack.length - 1}
-                                onBack={() => goHistory(-1)}
-                                onForward={() => goHistory(1)}
+                                backTo={backTo}
+                                onBack={goBack}
                                 onClose={() => setInspectorOpen(false)}
                             />
                     </aside>

@@ -38,10 +38,9 @@ export interface InspectorProps {
     onReveal: (target: RevealTarget, id: string) => void;
     /** Shows one bounded context in the Structure View, with its dependencies as stubs. */
     onFocusContext: (ctx: string) => void;
-    canBack: boolean;
-    canForward: boolean;
+    /** The selection "back" returns to, if any. */
+    backTo: string | undefined;
     onBack: () => void;
-    onForward: () => void;
     onClose: () => void;
 }
 
@@ -75,14 +74,15 @@ function revealTargets(r: Resolved): RevealTarget[] {
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
     const tx = useT();
+    const backName = props.backTo && (selectedFile(props.backTo) ?? namer(props.mode, model).id(props.backTo));
     const history = (
         <div className="history">
-            <button disabled={!props.canBack} onClick={props.onBack} title={tx.back} aria-label={tx.back}>
-                ←
-            </button>
-            <button disabled={!props.canForward} onClick={props.onForward} title={tx.forward} aria-label={tx.forward}>
-                →
-            </button>
+            {backName && (
+                <button className="back-button" onClick={props.onBack} title={tx.backTo(backName)} aria-label={tx.backTo(backName)}>
+                    <span aria-hidden>←</span>
+                    <span className="back-name">{backName}</span>
+                </button>
+            )}
             <button className="icon-button" onClick={props.onClose} title={tx.closeInspector} aria-label={tx.closeInspector}>
                 <PanelRightClose size={16} aria-hidden />
             </button>
