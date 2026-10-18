@@ -32,7 +32,7 @@ interface CatalogProps {
 }
 
 /**
- * Cards to look over the model's elements, one section per kind of element, with links to jump to each section.
+ * Cards to look over the model's elements, one section per kind of element.
  * The filter (text, kinds and contexts) hides what does not match, sections included.
  */
 export function Catalog(props: CatalogProps) {
@@ -61,8 +61,6 @@ export function Catalog(props: CatalogProps) {
     useEffect(() => {
         if (props.selected) root.current?.querySelector(`[data-card="${CSS.escape(props.selected)}"]`)?.scrollIntoView({ block: 'nearest' });
     }, [props.selected]);
-
-    const jump = (key: string) => root.current?.querySelector(`#catalog-${key}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
     return (
         <div className="catalog" ref={root}>
@@ -105,15 +103,6 @@ export function Catalog(props: CatalogProps) {
                         </button>
                     ))}
                 </div>
-                {sections.length > 0 && (
-                    <nav className="catalog-jump">
-                        {sections.map((s) => (
-                            <button key={s.key} className={s.count ? '' : 'muted'} onClick={() => jump(s.key)}>
-                                {t.catalogSections[s.key]} <span className="catalog-count">{filtering ? `${s.shown}/${s.count}` : s.count}</span>
-                            </button>
-                        ))}
-                    </nav>
-                )}
             </div>
             {sections.length === 0 && <p className="muted">{t.catalogNoMatches}</p>}
             {sections.map((s) => (
@@ -137,7 +126,7 @@ function Section(
     const { section, model, names } = props;
     const t = useT();
     return (
-        <section className="catalog-section" id={`catalog-${section.key}`}>
+        <section className="catalog-section">
             <h1>
                 {t.catalogSections[section.key]}
                 {props.hits && <span className="catalog-count">{props.hits}</span>}

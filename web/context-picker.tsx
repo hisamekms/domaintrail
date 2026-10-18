@@ -1,5 +1,5 @@
 import { Eye, EyeDashed, EyeOff } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
 import { useT } from './i18n';
 import { useDismiss } from './layout';
@@ -8,7 +8,8 @@ import { nameIn } from './model-utils';
 /**
  * Toolbar dropdown that picks the bounded contexts to draw. With some but not all selected, the eye of each other
  * context shows or hides it as stubs. The first row selects, shows or hides them all. Without `onHiddenChange` there
- * are no stubs, and so no eyes (the catalog).
+ * are no stubs, and so no eyes (the catalog). The button stays on one line: when narrow its summary ends in an ellipsis
+ * and the whole of it shows as a tooltip.
  */
 export function ContextPicker(props: {
     contexts: string[];
@@ -47,11 +48,32 @@ export function ContextPicker(props: {
     useEffect(() => {
         if (checkAll.current) checkAll.current.indeterminate = !all && selected.length > 0;
     });
+    const label = useRef<HTMLSpanElement>(null);
+    const [clipped, setClipped] = useState(false);
+    useLayoutEffect(() => {
+        const el = label.current;
+        if (!el) return;
+        const check = () => setClipped(el.scrollWidth > el.clientWidth);
+        check();
+        const observer = new ResizeObserver(check);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [summary]);
 
     return (
         <div className="context-picker" ref={root}>
-            <button aria-haspopup="listbox" aria-expanded={open} aria-label={t.contextsToShow} onClick={() => setOpen(!open)}>
-                BC: {summary} ▾
+            <button
+                className="context-picker-button"
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                aria-label={t.contextsToShow}
+                data-tooltip={clipped ? `BC: ${summary}` : undefined}
+                onClick={() => setOpen(!open)}
+            >
+                <span ref={label} className="context-picker-summary">
+                    BC: {summary}
+                </span>
+                <span aria-hidden>▾</span>
             </button>
             {open && (
                 <div className="context-picker-menu" role="listbox" aria-multiselectable>
