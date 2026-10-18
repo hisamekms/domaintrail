@@ -161,7 +161,7 @@ const ja = {
 
     // inspector
     counted: (title: string, n: number) => `${title}（${n}）`,
-    tabs: { structure: '構造', states: '状態遷移', behavior: '振る舞い', references: '参照', source: 'ソース' },
+    tabs: { structure: '構造', states: '状態遷移', behavior: '振る舞い', events: 'イベント', references: '参照', source: 'ソース' },
     reveal: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ' },
     backTo: (name: string) => `${name} に戻る`,
     notInModel: (id: string) => `${id} は現在のモデルにありません。`,
@@ -351,7 +351,7 @@ const en: Messages = {
     copyCode: 'Copy the code',
 
     counted: (title, n) => `${title} (${n})`,
-    tabs: { structure: 'Structure', states: 'States', behavior: 'Behavior', references: 'References', source: 'Source' },
+    tabs: { structure: 'Structure', states: 'States', behavior: 'Behavior', events: 'Events', references: 'References', source: 'Source' },
     reveal: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog' },
     backTo: (name) => `Back to ${name}`,
     notInModel: (id) => `${id} is not in the current model.`,
