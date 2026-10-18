@@ -13,6 +13,7 @@ import { findShapeForElement, ownerElement, renderGraph, shapeElementId, withWri
 import { shapeUtils } from './shapes';
 import { CopyLocation, SourceView, locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
+import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { useViewSocket } from './useViewSocket';
 
 type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' } | { kind: 'source' };
@@ -39,6 +40,7 @@ function fitReadable(editor: Editor, textScale = 1): void {
 }
 
 const MODE_LABEL: Record<DisplayMode, string> = { ja: '日本語', en: 'English', both: '両方' };
+const THEME_LABEL: Record<ThemePreference, string> = { auto: '自動', light: 'ライト', dark: 'ダーク' };
 const viewKey = (v: View): string => (v.kind === 'states' ? `states:${v.aggregateId}` : v.kind);
 const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'states';
 
@@ -55,6 +57,8 @@ export function App() {
     const [editor, setEditor] = useState<Editor | null>(null);
     const [view, setView] = useState<View>({ kind: 'structure' });
     const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.displayMode', 'both');
+    const [themePreference, setThemePreference] = usePersistentState<ThemePreference>(THEME_KEY, 'auto');
+    const theme = useResolvedTheme(themePreference);
     /** Structure View: all fields (detail) or names only in larger text (overview). */
     const [structureMode, setStructureMode] = usePersistentState<'detail' | 'overview'>('domaintrail.structureMode', 'detail');
     /** Structure View: only these bounded contexts, with their dependencies as stubs (empty = every context). */
@@ -150,6 +154,10 @@ export function App() {
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll]);
+
+    useEffect(() => {
+        applyTheme(theme, editor);
+    }, [theme, editor]);
 
     // If the aggregate of the State View disappears, fall back to the Structure View.
     useEffect(() => {
@@ -295,6 +303,13 @@ export function App() {
                     {(Object.keys(MODE_LABEL) as DisplayMode[]).map((m) => (
                         <button key={m} className={mode === m ? 'active' : ''} aria-pressed={mode === m} onClick={() => setMode(m)}>
                             {MODE_LABEL[m]}
+                        </button>
+                    ))}
+                </div>
+                <div className="segmented" role="group" aria-label="テーマ" title={themePreference === 'auto' ? `OS の設定に従う（いまは${THEME_LABEL[theme]}）` : undefined}>
+                    {(Object.keys(THEME_LABEL) as ThemePreference[]).map((t) => (
+                        <button key={t} className={themePreference === t ? 'active' : ''} aria-pressed={themePreference === t} onClick={() => setThemePreference(t)}>
+                            {THEME_LABEL[t]}
                         </button>
                     ))}
                 </div>

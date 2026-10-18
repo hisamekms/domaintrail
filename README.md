@@ -267,6 +267,7 @@ The screen is laid out like an IDE; every pane can be toggled from the header an
 - **Problems / changes (bottom)**: diagnostics (click to locate) and additions / changes / removals since the previous model.
 - Selecting never switches the main view by itself; the item is highlighted when the current view shows it.
 - Added / changed elements are highlighted; removed ones appear as ghosts. On a syntax error the last diagram stays.
+- The theme follows the OS (自動), or is forced with ライト / ダーク in the header; the choice is remembered per browser.
 - Names follow the 日本語 / English / 両方 toggle. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 
 See [docs/adr/0001-mvp-implementation-decisions.md](docs/adr/0001-mvp-implementation-decisions.md) for the design decisions.
