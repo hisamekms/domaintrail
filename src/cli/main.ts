@@ -1,11 +1,12 @@
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { Command } from 'commander';
+import { Command, InvalidArgumentError } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
 import { ConfigError, loadConfig, type ResolvedConfig } from '../core/config.js';
 import { formatDiagnostic } from '../core/diagnostics.js';
 import { loadWorkspace } from '../core/files.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
+import guide from '../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
     out: (line: string) => void;
@@ -16,6 +17,13 @@ const defaultIO: CliIO = {
     out: (l) => console.log(l),
     err: (l) => console.error(l),
 };
+
+/** An expected failure: printed as one line on stderr, exiting with `exitCode`. */
+class CliError extends Error {
+    constructor(message: string, readonly exitCode = 1) {
+        super(message);
+    }
+}
 
 async function runCheck(config: ResolvedConfig, io: CliIO): Promise<Analysis> {
     const root = config.root;
@@ -39,11 +47,26 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
         .option('-r, --root <dir>', 'where to look for domaintrail.jsonc / domaintrail.json (and the workspace root without one)', '.')
         .option('-c, --config <file>', 'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent)')
         .exitOverride()
-        .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) });
+        .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) })
+        .addHelpText('after', `
+Examples:
+  dt check                      validate every .dt file below the current directory
+  dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
+  dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
+
+New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workflow, config and exit codes.`);
 
     program
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
+        .addHelpText('after', `
+Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), then a summary line.
+Exits 0 when there are no errors, 1 on errors or when no .dt file is found, 2 on an invalid config.
+
+Examples:
+  dt check
+  dt -r domain check
+  dt -c config/domaintrail.jsonc check`)
         .action(async () => {
             const a = await runCheck(await config(), io);
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
@@ -54,6 +77,13 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
         .description('Generate code from a valid model.')
         .argument('<target>', 'generation target (ts)')
         .option('-o, --out <dir>', 'output directory relative to the root (default: generate.ts.out, else generated/domain)')
+        .addHelpText('after', `
+Runs check first and writes nothing if the model has errors (exit 1). Files generated before are replaced;
+other files in the output directory are never touched. Type-check your own code against the output with \`tsc --noEmit\`.
+
+Examples:
+  dt generate ts
+  dt generate ts --out src/domain/generated`)
         .action(async (target: string, opts: { out?: string }) => {
             if (target !== 'ts') {
                 io.err(`Unknown target '${target}'. Supported: ts`);
@@ -90,25 +120,49 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
 
     program
         .command('view')
-        .description('Start the Live View server and watch .dt files.')
-        .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)')
+        .description('Start the Live View server and watch .dt files (runs until Ctrl+C).')
+        .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)', parsePort)
         .option('--host <host>', 'host to bind (default: view.host, else 127.0.0.1)')
-        .action(async (opts: { port?: string; host?: string }) => {
+        .addHelpText('after', `
+A server that keeps running and never exits by itself: stop it with Ctrl+C. It re-checks on every save and
+pushes updates to the browser. Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
+
+Examples:
+  dt view
+  dt view --port 8080
+  dt -r examples/shop view`)
+        .action(async (opts: { port?: number; host?: string }) => {
             const cfg = await config();
             const { startViewServer } = await import('../server/server.js');
-            const server = await startViewServer({
-                root: cfg.root,
-                sources: cfg.sources,
-                port: opts.port !== undefined ? Number(opts.port) : cfg.view.port,
-                host: opts.host ?? cfg.view.host,
-                log: io.out,
+            const port = opts.port ?? cfg.view.port;
+            const host = opts.host ?? cfg.view.host;
+            const server = await startViewServer({ root: cfg.root, sources: cfg.sources, port, host, log: io.out }).catch((e: unknown) => {
+                if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
+                throw e;
             });
             if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
             io.out(`Live View: ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
         });
 
-    const config = () => loadConfig({ start: path.resolve(program.opts().root), configPath: program.opts().config });
+    program
+        .command('guide')
+        .description('Print the guide (Markdown): DSL, file layout, workflow, config, output and exit codes.')
+        .addHelpText('after', `
+The same text as docs/guide.md in the repository. Read it before writing .dt files.
+
+Examples:
+  dt guide
+  dt guide > domaintrail-guide.md`)
+        .action(() => io.out(guide.trimEnd()));
+
+    const config = async () => {
+        const start = path.resolve(program.opts().root);
+        const info = await stat(start).catch(() => undefined);
+        if (!info) throw new CliError(`Root directory not found: ${program.opts().root}`);
+        if (!info.isDirectory()) throw new CliError(`Root is not a directory: ${program.opts().root}`);
+        return loadConfig({ start, configPath: program.opts().config });
+    };
 
     try {
         await program.parseAsync(argv as string[], { from: 'user' });
@@ -117,11 +171,32 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
             io.err(e.message);
             return 2;
         }
+        if (e instanceof CliError) {
+            io.err(e.message);
+            return e.exitCode;
+        }
+        // File system and network failures (unreadable directories, permissions…) are reported, not thrown.
+        if (errorCode(e)) {
+            io.err((e as Error).message);
+            return 1;
+        }
         const code = (e as { exitCode?: number }).exitCode;
         if (typeof code === 'number') return code;
         throw e;
     }
     return exitCode;
+}
+
+function parsePort(value: string): number {
+    const port = Number(value);
+    if (!/^\d+$/.test(value) || port > 65535) throw new InvalidArgumentError('Expected a port number from 0 to 65535.');
+    return port;
+}
+
+/** The Node.js error code (`ENOENT`, `EACCES`, `EADDRINUSE`…) of a system error. */
+function errorCode(e: unknown): string | undefined {
+    const code = (e as { code?: unknown } | undefined)?.code;
+    return typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : undefined;
 }
 
 /**

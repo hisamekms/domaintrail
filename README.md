@@ -17,16 +17,17 @@ npx domaintrail <command>    # or run it without installing
 ## CLI
 
 ```bash
+dt guide                       # the guide: DSL, file layout, workflow, config, output and exit codes
 dt -r <root> check             # validate syntax, references, types and DDD rules
 dt -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
-dt -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host)
+dt -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host); runs until Ctrl+C
 ```
 
 The package installs the same command under two names: `dt` for everyday use and `domaintrail`, its full name, for
 when `dt` clashes with another command or a script should spell it out (CI, for example).
 
-`<root>` defaults to the current directory; every `*.dt` file below it (except `node_modules`, `.git`, `.dt`)
-belongs to the workspace.
+`<root>` defaults to the current directory; every `*.dt` file below it (except `node_modules`, `.git`, `.domaintrail`)
+belongs to the workspace. `dt --help` and `dt <command> --help` show the options with examples.
 
 `check` prints diagnostics as `file:line:col - error M00X: message` and exits non-zero on errors.
 `generate ts` runs `check` first and generates nothing if there are errors.
@@ -39,240 +40,41 @@ bun run dt -r examples/shop generate ts   # then examples/shop/src/order-command
 bun run build && bun run dt -r examples/shop view
 ```
 
-## Configuration
+## Guide
 
-Put `domaintrail.jsonc` (comments allowed) or `domaintrail.json` at the project root. The CLI looks for it in `--root` (default: the
-current directory) and its parents, like `tsconfig.json`; `--config <file>` picks one explicitly. All paths are relative
-to the config file. Without a config file, the defaults below apply with `--root` as the base.
+**[docs/guide.md](docs/guide.md)** is the reference for writing models and using the CLI, and `dt guide` prints the
+same text, so people and AI agents get it without leaving the terminal:
 
-```jsonc
-{
-  "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
-  // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
-  "sources": ["domain/**/*.dt", "!domain/drafts/**"],   // default: ["**/*.dt"]
-  "generate": { "ts": { "out": "src/domain/generated" } },  // default: generated/domain
-  "view": { "port": 4321, "host": "127.0.0.1" }
-}
-```
+- [Workflow](docs/guide.md#workflow): `check` → `generate ts` → type-check your own code (`tsc --noEmit`)
+- [Output and exit codes](docs/guide.md#output-and-exit-codes)
+- [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out`, `view.port` /
+  `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
+- [File layout (recommended)](docs/guide.md#file-layout-recommended): `<context>/<aggregate>.dt` and
+  `<context>/context.dt` (see [ADR 0009](docs/adr/0009-file-layout.md))
+- [DSL](docs/guide.md#dsl): contexts, aggregates, entities, values, states, commands, events, errors,
+  [domain primitives](docs/guide.md#domain-primitives), [unions](docs/guide.md#unions),
+  [shared contexts](docs/guide.md#shared-contexts), [names (表示名)](docs/guide.md#names-labels-and-descriptions)
+  and [invariant expressions](docs/guide.md#invariant-expressions)
+- [Rules](docs/guide.md#rules) (M001–M015, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript)
 
-CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. Sources must stay inside the config
-file's directory. The JSON Schema is `schema/domaintrail.schema.json`.
+A taste of the DSL:
 
-## DSL
-
-```text
-context Sales {                          // a bounded context; may be split across files
-  id OrderId: UUID                       // ID type with base primitive (UUID | String | Int)
-  enum CancelReason { Requested Other }
-  value Money { amount: Decimal currency: String }
-
-  aggregate Order {
-    id: OrderId                          // identity field (required)
-    owns items: OrderItem[0..*]          // ownership inside the aggregate
-    references customer: CustomerId -> Customer   // reference to another aggregate by ID
-    note: String?
-
-    invariant quantitiesPositive {       // applies to every state; common fields only
-      all(items, item => item.quantity > 0)
-    }
-
-    create command place(customer: CustomerId) to Draft emits OrderPlaced   // factory
-
-    state Draft
-    state Confirmed {
-      confirmedAt: Timestamp             // exists only in this state
-      invariant hasItems { count(items) > 0 }   // common + Confirmed fields
-    }
-    state Cancelled { reason: CancelReason }
-
-    command confirm(at: Timestamp)
-      from Draft
-      to Confirmed                       // several: `to A | B`
-      emits OrderConfirmed               // events that MAY be emitted (0..n)
-      errors EmptyOrder
-
-    command cancel(reason: CancelReason) from Draft | Confirmed to Cancelled emits OrderCancelled
-  }
-
-  entity OrderItem { id: OrderItemId quantity: Int owns unitPrice: Money }
-  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }   // persisted by contract
-  event OrderViewed { orderId: OrderId }   // not persisted (default)
-  error EmptyOrder                       // payload optional: error E { field: Type }
-}
-```
-
-- Primitives: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
-- Multiplicity: `?`, `[0..1]`, `[0..*]`, `[1..*]`, `[n..m]`.
-- Other contexts are referenced with qualified names: `Sales.OrderId`, `-> Sales.Order`.
-- Aggregates without states write commands without `from`/`to`.
-- Invariant expressions: literals, field paths (`item.quantity`), `== != < <= > >=`, `and or not implies`,
-  `exists(x)` (narrows `x` on the right of `and`/`implies`), `count(c)`, `all(c, x => …)`, `any(c, x => …)`,
-  enum values (`CancelReason.Other`). Only the type of an invariant is checked, not whether it holds.
-- Comments: `// …` and `/* … */`.
-- `persistent event` declares that storing the event is part of its contract; events without it are not persisted.
-  How events are stored is out of scope (see [ADR 0008](docs/adr/0008-persistent-events.md)).
-
-### Domain primitives
-
-A domain primitive is an indivisible single value with domain meaning and constraints. Values that combine several
-fields are value objects.
-
-```text
-primitive Quantity "数量": Int { value in 1..999 }          // one anonymous constraint
-primitive EmailAddress: String {                            // or named invariants
-  invariant format "形式" { matches(value, "^[^@\s]+@[^@\s]+$") }
-  invariant maxLength { length(value) <= 254 }
-}
-id InvoiceNo: String { matches(value, "^INV-\d{8}$") }      // an ID is a domain primitive used as identity
-enum CancelReason { Requested Other }                       // a closed set of literals
-```
-
-- The base is always a primitive type; refining another domain primitive or enum is not supported.
-- Inside the constraint only `value` (of the base type) is visible. Extra functions: `length(value)`,
-  `matches(value, "regex")` and ranges `value in 1..999` (negative literals allowed).
-- Regular expressions are written as in JavaScript: backslashes are not string escapes (`"\d"` means `\d`).
-- Elsewhere, a domain primitive compares with literals and with the same domain primitive (`quantity > 0`,
-  `quantity <= maxQuantity`), but not with another domain primitive or a plain field of its base type (M009).
-- Only IDs can be identity fields and reference types. Domain primitives cannot be owned.
-- Generated: a branded type, an `Invalid<Name>` error naming the violated invariant, and a constructor contract
-  `Make<Name> = (value) => Result<Name, Invalid<Name>>` (just `(value) => Name` without invariants) to implement by hand,
-  e.g. `examples/shop/src/primitives.ts`.
-
-### Unions
-
-A union is a value whose shape depends on a kind fixed when it is made: a tagged union of variants. Use a union for a
-classification that never changes, and aggregate states for a lifecycle that commands move through
-(see [ADR 0005](docs/adr/0005-unions.md)).
-
-```text
-union Actor "行為者" {                                      // discriminator `kind` by default
-  INTERNAL_USER "社内ユーザー" { userId: UserId }
-  EXTERNAL_PARTY "社外" { name: ActorName  contractorId: ContractorId? }
-}
-union SpecificationDetails by type: ProcessType {          // `by name`, optionally bound to an enum
-  DELIVERY { details: DeliverySpecification }              // exactly the enum's values (M015)
-  TRANSPORT { details: TransportSpecification }
-}
-```
-
-- A union is a value type: usable like a value object (fields, `owns`, parameters, payloads, shared contexts).
-  Variants hold value fields and invariants (seeing their own fields); entities and aggregates are not allowed.
-- In invariants, `actor.kind` compares with `Actor.EXTERNAL_PARTY` (or with the bound enum's values); variant fields
-  are not accessible from outside the union.
-- Generated: `export type Actor = { readonly kind: 'INTERNAL_USER'; readonly userId: UserId } | { ... }`.
-  A variant without a label takes the label of its enum value.
-
-### Shared contexts
-
-```text
-shared context Common "共通" {            // shared kernel
-  terms { currency: "通貨" }
-  enum Currency { JPY USD }
-  value Money { amount: Decimal currency: Currency }
-  primitive EmailAddress: String { ... }
-}
-context Sales {
-  aggregate Customer { id: CustomerId email: EmailAddress balance: Money }   // simple names
-}
-```
-
-- Elements of a shared context are usable by simple name from every context (`Common.Money` also works).
-  A context's own element with the same name wins, with an M014 warning.
-- A shared context holds only domain primitives, enums, value objects, unions and terms, and depends only on shared contexts.
-- Its `terms` apply to fields of every context that has no term of its own for the name.
-
-### Japanese names (表示名)
-
-```text
+```dt
 context Sales "販売" {
-  terms {                                  // field / parameter names, defined once per context
-    /// 顧客が注文を確定した日時。               // `///` = description
-    confirmedAt: "確定日時"
+  id OrderId: UUID
+  aggregate Order "注文" {
+    id: OrderId
+    state Draft
+    state Confirmed { confirmedAt: Timestamp }
+    create command place() to Draft
+    command confirm(at: Timestamp) from Draft to Confirmed emits OrderConfirmed
   }
-
-  /// 顧客からの購入依頼。
-  aggregate Order "注文" {                 // declarations: a string after the name
-    owns items: OrderItem[0..*] "明細"     // inline label on a field overrides the term
-    state Confirmed "確定済み" { confirmedAt: Timestamp }   // → 確定日時 (from terms)
-    invariant hasItems "明細が1件以上" { count(items) > 0 }
-    command confirm(at: Timestamp) "注文を確定する" from Draft to Confirmed
-  }
-  enum CancelReason "取消理由" { Requested "顧客都合" Other "その他" }
+  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
 }
 ```
 
-- Declarations (context, id, enum and its values, value, entity, aggregate, state, command, invariant, event, error)
-  take an optional string after the name.
-- A field or parameter is named by, in order: its inline string → the context's `terms` → the name of its type
-  (for `references`, the target aggregate) → the English name.
-- `///` lines directly above a declaration or term are its description.
-- Names are shown in the Live View (toggle 日本語 / English / 両方), the detail panel, and as JSDoc in generated TypeScript.
-  Identifiers, stable IDs and generated type names stay English.
-
-### File layout (recommended)
-
-File names and directories carry no meaning — a context may be split across any files. The recommended layout, used by
-`examples/shop`, is one directory per context and one file per aggregate:
-
-```text
-common/context.dt      shared context Common "共通" { ... }        // a shared context has no aggregates
-sales/context.dt       /// 説明  context Sales "販売" { terms { ... } }
-sales/order.dt         context Sales { id OrderId ...  aggregate Order { ... }  entity OrderItem ...  event OrderPlaced ... }
-sales/customer.dt      context Sales { id CustomerId ...  aggregate Customer { ... } }
-billing/context.dt     /// 説明  context Billing "請求" { terms { ... } }
-billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { ... } }
-```
-
-- `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
-  primitives and values.
-- `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several
-  of its aggregates or by none. The other files open the context without a name: `context Sales { ... }`.
-- An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
-- Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
-  `order-fulfillment/`.
-
-This is a convention, not a rule: `check` neither requires nor warns about any layout (see [ADR 0009](docs/adr/0009-file-layout.md)).
-
-## Rules
-
-| ID | Check |
-|---|---|
-| SYNTAX | lexer / parser errors |
-| M001 | types, aggregates and names in invariants resolve |
-| M002 | names are unique in their scope (also across files of one context) |
-| M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
-| M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
-| M005 | a reference's ID type matches the identity of the target aggregate |
-| M006 | command input/output states exist and fit the aggregate (factory / stateful / stateless) |
-| M007 | `emits` / `errors` refer to existing events / errors |
-| M008 | an invariant is a Bool expression |
-| M009 | operators and operands have compatible types |
-| M010 | state-specific fields are used only in their own state's invariants |
-| M011 | generated TypeScript names do not collide |
-| M012 | the ownership graph has no cycles |
-| M013 | aggregates and entities have an `id` field of their own ID type |
-| M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
-| M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
-| L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
-| L002 | (warning) a term is not used by any field or parameter |
-| L003 | (warning) different things in one scope share a Japanese name |
-
-## Generated TypeScript
-
-Per context a module with ID brands, enums, value objects, entities, a discriminated union per stateful aggregate
-(`DraftOrder | ConfirmedOrder | …`), event/error types with a `type` tag (`@persistent` in the JSDoc of persistent
-events, and a `PersistentEvent` union of them when there are any), a function type per command, and an
-`<Aggregate>Commands` interface to implement by hand:
-
-```ts
-export type ConfirmOrder = (
-    order: DraftOrder,
-    at: Timestamp,
-) => Result<readonly [ConfirmedOrder, readonly OrderConfirmed[]], EmptyOrder>;
-```
-
-Do not edit generated files. Each run replaces the files domaintrail generated before (recognized by their header);
-other files in the output directory are never deleted, and generation stops instead of overwriting one.
+The design decisions behind the DSL are in [docs/adr](docs/adr): shared contexts ([0004](docs/adr/0004-shared-contexts.md)),
+unions ([0005](docs/adr/0005-unions.md)), persistent events ([0008](docs/adr/0008-persistent-events.md)) and more.
 
 ## Live View
 
@@ -300,7 +102,7 @@ pane leaves a narrow rail with the button that opens it) and resized by dragging
   - *Catalog*: cards to look over the model, one section per kind; for now the domain primitives per context (shared
     first) with base type, invariants and usages.
 - **Inspector (right)**: the selected item — name, description, location (copy `file:line-line` for AI feedback),
-  diagnostics, back/forward history, and buttons to show it in a view. Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 /
+  diagnostics, a back button naming the item it returns to (「〇〇 に戻る」), and buttons to show it in a view. Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 /
   ソース. An event shows 永続化 / 非永続 next to its kind, as it does in an aggregate's 発生させる Event list;
   persistent events have a database icon in the explorer.
   - *状態遷移*: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate

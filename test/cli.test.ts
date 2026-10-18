@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
@@ -96,5 +97,60 @@ describe('dt generate ts', () => {
 
     test('rejects unknown targets', async () => {
         expect((await run('generate', 'rust')).code).toBe(2);
+    });
+});
+
+describe('expected failures', () => {
+    test('a missing or non-directory root is one line on stderr with exit 1', async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        await writeFile(path.join(dir, 'file.txt'), '');
+        for (const command of ['check', 'view']) {
+            expect(await run('-r', path.join(dir, 'missing'), command)).toEqual({
+                code: 1,
+                out: [],
+                err: [`Root directory not found: ${path.join(dir, 'missing')}`],
+            });
+        }
+        expect(await run('-r', path.join(dir, 'file.txt'), 'check')).toEqual({
+            code: 1,
+            out: [],
+            err: [`Root is not a directory: ${path.join(dir, 'file.txt')}`],
+        });
+    });
+
+    test('an unreadable directory is reported without a stack trace', async () => {
+        if (process.getuid?.() === 0) return; // root reads everything
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        await chmod(dir, 0o000);
+        try {
+            const r = await run('-r', dir, 'check');
+            expect(r.code).toBe(1);
+            expect(r.err).toEqual([expect.stringContaining('EACCES')]);
+        } finally {
+            await chmod(dir, 0o700);
+        }
+    });
+
+    test('an invalid port is a usage error', async () => {
+        const r = await run('view', '--port', 'abc');
+        expect(r.code).toBe(1);
+        expect(r.err).toEqual([expect.stringContaining('Expected a port number')]);
+    });
+
+    test('a port in use is one line on stderr', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        const busy = createServer();
+        await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
+        const { port } = busy.address() as AddressInfo;
+        try {
+            const r = await run('-r', dir, 'view', '--port', String(port));
+            expect(r.code).toBe(1);
+            expect(r.err).toEqual([`Port ${port} on 127.0.0.1 is already in use; pick another with --port.`]);
+        } finally {
+            busy.close();
+        }
     });
 });
