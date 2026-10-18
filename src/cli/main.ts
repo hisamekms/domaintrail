@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } f
 import * as path from 'node:path';
 import { Command, InvalidArgumentError } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
-import { ConfigError, checkTsContexts, loadConfig, type ResolvedConfig } from '../core/config.js';
+import { ConfigError, checkTsContexts, loadConfig, staysInside, type ResolvedConfig } from '../core/config.js';
 import { formatDiagnostic } from '../core/diagnostics.js';
 import { loadWorkspace } from '../core/files.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
@@ -80,7 +80,8 @@ Examples:
         .addHelpText('after', `
 Runs check first and writes nothing if the model has errors (exit 1). Files generated before are replaced, and those
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
---out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories.
+--out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
+directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
 Type-check your own code against the output with \`tsc --noEmit\`.
 
 Examples:
@@ -93,6 +94,9 @@ Examples:
                 return;
             }
             const cfg = await config();
+            if (opts.out !== undefined && !staysInside(opts.out)) {
+                throw new ConfigError(`--out must stay inside ${cfg.root} (the directory of the config file, else the root): '${opts.out}'`);
+            }
             const a = await runCheck(cfg, io);
             if (!a.ok || !a.model) {
                 io.err('Generation skipped because the model has errors.');
@@ -102,13 +106,11 @@ Examples:
             checkTsContexts(cfg, a.model.contexts);
             const defaultOut = path.resolve(cfg.root, opts.out ?? cfg.tsOut);
             const outOf = (ctx: string): string => (ctx in cfg.tsContexts ? path.resolve(cfg.root, cfg.tsContexts[ctx]) : defaultOut);
-            // An output directory from the config must not leave the project through a symlink
-            // (an explicit --out is the user's own choice).
-            const configured = [...Object.values(cfg.tsContexts).map((d) => path.resolve(cfg.root, d)), ...(opts.out === undefined ? [defaultOut] : [])];
-            for (const dir of new Set(configured)) {
+            // No output directory may leave the project through a symlink, --out included.
+            for (const dir of new Set([defaultOut, ...Object.values(cfg.tsContexts).map((d) => path.resolve(cfg.root, d))])) {
                 const linked = await symlinkOnPath(cfg.root, dir);
                 if (linked) {
-                    io.err(`Generation skipped: ${linked} is a symlink; the output directory from the config must be a plain directory inside ${cfg.root}.`);
+                    io.err(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`);
                     exitCode = 1;
                     return;
                 }
@@ -253,7 +255,8 @@ async function writeNew(file: string, content: string): Promise<void> {
 
 /**
  * Removes previous output. Only files written by the generator (recognized by their header) are deleted,
- * so pointing the output at a directory with hand-written code never destroys it.
+ * so pointing the output at a directory with hand-written code never destroys it. `outDir` must already be checked
+ * to be inside the root and free of symlinks.
  */
 async function cleanGenerated(outDir: string): Promise<void> {
     await mkdir(outDir, { recursive: true });
@@ -276,7 +279,8 @@ interface Manifest {
 async function readManifest(root: string): Promise<string[]> {
     try {
         const m = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8')) as Manifest;
-        return m.version === 1 && Array.isArray(m.files) ? m.files.filter((f) => typeof f === 'string') : [];
+        // the file may have been crafted: entries that would leave the root are dropped
+        return m.version === 1 && Array.isArray(m.files) ? m.files.filter((f) => typeof f === 'string' && f !== '' && staysInside(f)) : [];
     } catch {
         return [];
     }
@@ -296,18 +300,19 @@ async function writeManifest(root: string, files: string[]): Promise<boolean> {
 
 /**
  * Deletes files of the previous run that this run does not write. Like cleanGenerated, only files with the generator's
- * header are deleted, never through a symlinked directory inside the root; a directory left empty is removed too.
+ * header are deleted, only inside the root and never through a symlinked directory; a directory left empty is removed
+ * too (never the root itself).
  */
 async function removeStale(root: string, previous: string[], written: Set<string>): Promise<void> {
     for (const rel of previous) {
         const file = path.resolve(root, rel);
-        if (written.has(file) || !file.endsWith('.ts')) continue;
+        if (written.has(file) || !file.endsWith('.ts') || !staysInside(rel) || !isInside(root, file)) continue;
         const dir = path.dirname(file);
-        if (isInside(root, dir) && (await symlinkOnPath(root, dir))) continue;
+        if (await symlinkOnPath(root, dir)) continue;
         const stat = await lstat(file).catch(() => undefined);
         if (!stat?.isFile() || !(await isGeneratedOrMissing(file))) continue;
         await rm(file);
-        await rmdir(dir).catch(() => {}); // fails unless empty
+        if (dir !== root) await rmdir(dir).catch(() => {}); // fails unless empty
     }
 }
 

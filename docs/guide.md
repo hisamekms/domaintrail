@@ -74,8 +74,9 @@ Every key is optional.
 ```
 
 CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. `--out` replaces `generate.ts.out`
-only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories must stay
-inside the config file's directory. A name in `generate.ts.contexts` that is not a context of the model is a config
+only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
+included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
+`..` is a config error, and an output directory reached through a symlink stops generation. A name in `generate.ts.contexts` that is not a context of the model is a config
 error, reported by `generate ts` once the model has been checked.
 
 ## File layout (recommended)
@@ -376,5 +377,6 @@ identical, so values typed with one are accepted where the other is expected.
 
 Each run replaces the files generated before (recognized by their header). The files written are recorded in
 `.domaintrail/generated.json` under the root, and generated files of earlier runs that are no longer written (an output
-directory moved, a context removed) are deleted, along with a directory left empty. Other files are never deleted —
+directory moved, a context removed) are deleted, along with a directory left empty. Only recorded paths inside the root
+and not reached through a symlink are deleted; other entries in that file are ignored. Other files are never deleted —
 neither hand-written files nor generated files you edited — and generation stops instead of overwriting one.
