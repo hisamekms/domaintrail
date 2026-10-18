@@ -71,7 +71,7 @@ describe('context dependencies', () => {
 describe('Context Map', () => {
     test('one node per domain context and one edge per dependency, supporting contexts left out', async () => {
         const g = buildContextMapGraph(await model());
-        expect(g.nodes.map((n) => [n.id, n.kind, n.elementId, n.stereotype])).toEqual([
+        expect(g.nodes.map((n) => [n.id, n.kind, n.elementId, n.stereotype?.en.name])).toEqual([
             ['map:Billing', 'boundedContext', 'Billing', '«bounded context»'],
             ['map:Sales', 'boundedContext', 'Sales', '«bounded context»'],
         ]);
@@ -90,7 +90,7 @@ describe('Context Map', () => {
     test('with all, supporting contexts are shown and edges that only use IDs are references', async () => {
         const g = buildContextMapGraph(await model(), { all: true });
         expect(g.id).toBe(CONTEXT_MAP_ALL_GRAPH_ID);
-        expect(g.nodes.map((n) => n.stereotype)).toEqual(['«bounded context»', '«shared kernel»', '«external»', '«bounded context»']);
+        expect(g.nodes.map((n) => n.stereotype?.en.name)).toEqual(['«bounded context»', '«shared kernel»', '«external»', '«bounded context»']);
         expect(g.edges.map((e) => [e.id, e.kind])).toEqual([
             ['Sales|Common', 'dependsOn'],
             ['Sales|Identity', 'references'],

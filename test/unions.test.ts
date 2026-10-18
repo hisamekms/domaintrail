@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { VARIANT_INDENT, buildStructureGraph } from '../src/graph/build.js';
+import { perLang } from '../src/graph/ir.js';
 import { check, checkSales, codes, only } from './helpers.js';
 
 const SALES = `context Sales "販売" {
@@ -202,7 +203,7 @@ export const name = (a: Sales.Actor): string => (a.kind === 'EXTERNAL_PARTY' ? a
         const a = await check({ 'sales.dt': SALES });
         const g = buildStructureGraph(a.model!);
         const node = g.nodes.find((n) => n.id === 'Sales.Details')!;
-        expect(node).toMatchObject({ kind: 'union', stereotype: '«union»', parent: 'Sales.Spec@boundary' });
+        expect(node).toMatchObject({ kind: 'union', stereotype: perLang({ ja: '«ユニオン»', en: '«union»' }), parent: 'Sales.Spec@boundary' });
         expect(node.lines.map((l) => l.key.en.name)).toEqual(['type: DELIVERY', `${VARIANT_INDENT}details`, 'type: PRINTING', `${VARIANT_INDENT}details`]);
         const edges = g.edges.filter((e) => e.source === 'Sales.Details').map((e) => [e.id, e.target, e.label?.en.name]);
         expect(edges).toEqual([

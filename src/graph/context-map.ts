@@ -56,7 +56,7 @@ export function buildContextMapGraph(model: DomainModel, opts: { all?: boolean }
             id: contextNodeId(ctx),
             kind: 'boundedContext',
             label: named(ctx, model.contextLabels[ctx]),
-            stereotype: shared ? '«shared kernel»' : idOnly ? '«external»' : '«bounded context»',
+            stereotype: perLang(shared ? { ja: '«共有カーネル»', en: '«shared kernel»' } : idOnly ? { ja: '«外部»', en: '«external»' } : { ja: '«境界づけられたコンテキスト»', en: '«bounded context»' }),
             lines,
             elementId: ctx,
         });

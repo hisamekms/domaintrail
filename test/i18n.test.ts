@@ -3,8 +3,14 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { analyze } from '../src/core/analyze.js';
+import { loadWorkspace } from '../src/core/files.js';
+import { buildStateGraph, buildStructureGraph } from '../src/graph/build.js';
+import { buildContextMapGraph } from '../src/graph/context-map.js';
+import type { Graph } from '../src/graph/ir.js';
 import { MESSAGES } from '../web/i18n.js';
 import { KIND_ORDER } from '../web/model-utils.js';
+import { EXAMPLES } from './helpers.js';
 
 const WEB = join(import.meta.dir, '..', 'web');
 
@@ -16,6 +22,9 @@ function texts(value: unknown, path = ''): [string, string][] {
     if (value && typeof value === 'object') return Object.entries(value).flatMap(([k, v]) => texts(v, path ? `${path}.${k}` : k));
     return [];
 }
+
+/** Latin words of a Japanese text that are not allowed in it. */
+const englishIn = (text: string): string[] => (text.replace(/<[^>]*>/g, '').match(/[A-Za-z]+/g) ?? []).filter((w) => !LATIN_IN_JA.has(w));
 
 /** Paths of the message tree (`a.b`), so that the languages can be compared. */
 const paths = (value: unknown): string[] => texts(value).map(([p]) => p).sort();
@@ -40,9 +49,32 @@ describe('i18n', () => {
 
     test('Japanese messages leave no English words untranslated', () => {
         const english = texts(MESSAGES.ja).flatMap(([path, text]) =>
-            (text.replace(/<[^>]*>/g, '').match(/[A-Za-z]+/g) ?? []).filter((w) => !LATIN_IN_JA.has(w)).map((w) => `${path}: ${w}`),
+            englishIn(text).map((w) => `${path}: ${w}`),
         );
         expect(english).toEqual([]);
+    });
+
+    test('Japanese diagrams leave no English words untranslated', async () => {
+        const model = (await analyze(await loadWorkspace(EXAMPLES))).model!;
+        const contexts = model.contexts.filter((c) => !model.sharedContexts.includes(c));
+        const graphs: Graph[] = [
+            buildContextMapGraph(model, { all: true }),
+            buildStructureGraph(model),
+            // stubs of the other contexts
+            ...contexts.map((c) => buildStructureGraph(model, { focus: [c] })),
+            ...Object.values(model.elements)
+                .filter((e) => e.kind === 'aggregate')
+                .map((agg) => buildStateGraph(agg, model)),
+        ];
+        // the Live View's own words in diagrams: the captions, and the counts on the context map
+        const words = graphs.flatMap((g) =>
+            g.nodes.flatMap((n) => [
+                ...(n.stereotype ? [n.stereotype.ja.name] : []),
+                ...(n.kind === 'boundedContext' ? n.lines.map((l) => l.key.ja.name) : []),
+            ]),
+        );
+        expect(words.length).toBeGreaterThan(0);
+        expect([...new Set(words.flatMap(englishIn))]).toEqual([]);
     });
 
     /**

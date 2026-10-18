@@ -26,11 +26,14 @@ export const stateGraphId = (aggregateId: string): string => `states:${aggregate
 export const boundaryId = (aggregateId: string): string => `${aggregateId}@boundary`;
 export const initialNodeId = (aggregateId: string): string => `${aggregateId}@new`;
 
-const STEREOTYPES: Partial<Record<ElementModel['kind'], string>> = {
-    aggregate: '«aggregate root»',
-    entity: '«entity»',
-    valueObject: '«value object»',
-    union: '«union»',
+/** `«…»` captions in every language. */
+const stereotype = (ja: string, en: string): Texts => perLang({ ja: `«${ja}»`, en: `«${en}»` });
+
+const STEREOTYPES: Partial<Record<ElementModel['kind'], Texts>> = {
+    aggregate: stereotype('集約ルート', 'aggregate root'),
+    entity: stereotype('エンティティ', 'entity'),
+    valueObject: stereotype('値オブジェクト', 'value object'),
+    union: stereotype('ユニオン', 'union'),
 };
 
 /** Indent of variant fields under their variant row (no-break spaces, which HTML does not collapse). */
@@ -108,7 +111,7 @@ function bodyUnits(lines: GraphLine[]): number {
 }
 
 export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphNode {
-    const longest = Math.max(maxUnits(n.label) + 2, n.stereotype ? textUnits(n.stereotype) : 0, bodyUnits(n.lines));
+    const longest = Math.max(maxUnits(n.label) + 2, n.stereotype ? maxUnits(n.stereotype) : 0, bodyUnits(n.lines));
     return {
         ...n,
         width: Math.max(170 * scale, Math.ceil(longest * CHAR_WIDTH * scale + 28)),
@@ -223,16 +226,16 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
     return opts.overview ? { id: STRUCTURE_OVERVIEW_GRAPH_ID, nodes, edges, textScale: scale } : { id: STRUCTURE_GRAPH_ID, nodes, edges };
 }
 
-const STUB_STEREOTYPES: Record<ElementModel['kind'], string> = {
-    aggregate: '«aggregate»',
-    entity: '«entity»',
-    valueObject: '«value object»',
-    union: '«union»',
-    enum: '«enum»',
-    primitive: '«primitive»',
-    id: '«id»',
-    event: '«event»',
-    error: '«error»',
+const STUB_STEREOTYPES: Record<ElementModel['kind'], Texts> = {
+    aggregate: stereotype('集約', 'aggregate'),
+    entity: stereotype('エンティティ', 'entity'),
+    valueObject: stereotype('値オブジェクト', 'value object'),
+    union: stereotype('ユニオン', 'union'),
+    enum: stereotype('列挙型', 'enum'),
+    primitive: stereotype('ドメインプリミティブ', 'primitive'),
+    id: stereotype('ID', 'id'),
+    event: stereotype('ドメインイベント', 'event'),
+    error: stereotype('エラー', 'error'),
 };
 
 /**
@@ -345,7 +348,7 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel): Graph {
                     id: s.id,
                     kind: 'state',
                     label: named(s.name, s.label),
-                    stereotype: '«state»',
+                    stereotype: stereotype('状態', 'state'),
                     lines: [
                         ...s.fields.map((f) => fieldLine(f, agg.context, model)),
                         ...s.invariants.map((i) => ({ key: named(`✓ ${i.name}`, i.label && `✓ ${i.label}`, (l, n) => `${l} (${n.slice(2)})`) })),
@@ -355,7 +358,7 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel): Graph {
             );
         }
     } else {
-        nodes.push(sized({ id: agg.id, kind: 'state', label: named(agg.name, agg.label), stereotype: '«no states»', lines: [], elementId: agg.id }));
+        nodes.push(sized({ id: agg.id, kind: 'state', label: named(agg.name, agg.label), stereotype: stereotype('状態なし', 'no states'), lines: [], elementId: agg.id }));
     }
 
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);
