@@ -298,7 +298,16 @@ export function App() {
                             />
                     </aside>
                 </div>
-                {explorerOpen && <Resizer direction="x" size={explorerWidth} min={180} max={480} onResize={setExplorerWidth} />}
+                <Resizer
+                    direction="x"
+                    size={explorerWidth}
+                    min={180}
+                    max={480}
+                    open={explorerOpen}
+                    collapsed={RAIL_WIDTH}
+                    onResize={setExplorerWidth}
+                    onOpenChange={setExplorerOpen}
+                />
                 <section className="center">
                     <div className="view-tabs">
                         <div className="view-tab-list" role="tablist">
@@ -368,14 +377,17 @@ export function App() {
                         )}
                     </div>
                 </section>
-                {inspectorOpen && <Resizer
-                        direction="x"
-                        size={inspectorWidth}
-                        min={300}
-                        max={() => window.innerWidth - (explorerOpen ? explorerWidth : RAIL_WIDTH) - MIN_CANVAS_WIDTH}
-                        invert
-                        onResize={setInspectorWidth}
-                    />}
+                <Resizer
+                    direction="x"
+                    size={inspectorWidth}
+                    min={300}
+                    max={() => window.innerWidth - (explorerOpen ? explorerWidth : RAIL_WIDTH) - MIN_CANVAS_WIDTH}
+                    invert
+                    open={inspectorOpen}
+                    collapsed={RAIL_WIDTH}
+                    onResize={setInspectorWidth}
+                    onOpenChange={setInspectorOpen}
+                />
                 <div className={`side side-right${inspectorOpen ? ' open' : ''}`} style={{ width: inspectorOpen ? inspectorWidth : RAIL_WIDTH }}>
                     <div className="rail" inert={inspectorOpen}>
                         <button className="icon-button" onClick={() => setInspectorOpen(true)} title={t.openInspector} aria-label={t.openInspector}>
@@ -424,7 +436,17 @@ export function App() {
                     </aside>
                 </div>
             </div>
-            {bottomOpen && <Resizer direction="y" size={bottomHeight} min={120} max={600} invert onResize={setBottomHeight} />}
+            <Resizer
+                direction="y"
+                size={bottomHeight}
+                min={120}
+                max={600}
+                invert
+                open={bottomOpen}
+                collapsed={BOTTOM_BAR_HEIGHT}
+                onResize={setBottomHeight}
+                onOpenChange={setBottomOpen}
+            />
             <div className="bottom-wrap" style={{ height: bottomOpen ? bottomHeight : BOTTOM_BAR_HEIGHT }}>
                 <BottomPanel
                     tab={bottomTab}
