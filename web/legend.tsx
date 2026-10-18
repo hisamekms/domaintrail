@@ -37,7 +37,7 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
             <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>
                 <div className="legend-title">
                     {t.legend}
-                    <button className="icon-button" onClick={onToggle} title={t.closeLegend} aria-label={t.closeLegend}>
+                    <button className="icon-button" onClick={onToggle} data-tooltip={t.closeLegend} aria-label={t.closeLegend}>
                         <ChevronDown size={14} aria-hidden />
                     </button>
                 </div>
@@ -55,7 +55,7 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
                 {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
                 <div className="legend-note">{t.arrowNote}</div>
             </div>
-            <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} title={t.openLegend} aria-label={t.openLegend}>
+            <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} data-tooltip={t.openLegend} aria-label={t.openLegend}>
                 <ChevronUp size={14} aria-hidden />
             </button>
         </>

@@ -47,7 +47,7 @@ export function BottomPanel(props: {
                 <button
                     className="icon-button bottom-toggle"
                     onClick={props.onToggle}
-                    title={props.open ? t.closeBottom : t.openBottom}
+                    data-tooltip={props.open ? t.closeBottom : t.openBottom}
                     aria-label={props.open ? t.closeBottom : t.openBottom}
                 >
                     {props.open ? <PanelBottomClose size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}

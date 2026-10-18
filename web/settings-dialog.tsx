@@ -33,7 +33,7 @@ export function SettingsDialog(props: {
 
     return (
         <div className="settings">
-            <button className="icon-button" aria-haspopup="dialog" aria-expanded={open} aria-label={t.settings} title={t.settings} onClick={() => setOpen(true)}>
+            <button className="icon-button" aria-haspopup="dialog" aria-expanded={open} aria-label={t.settings} data-tooltip={t.settings} onClick={() => setOpen(true)}>
                 <Settings size={16} aria-hidden />
             </button>
             <dialog
@@ -46,7 +46,7 @@ export function SettingsDialog(props: {
             >
                 <div className="settings-dialog-header">
                     <h2 id="settings-title">{t.settings}</h2>
-                    <button className="icon-button" aria-label={t.closeSettings} title={t.closeSettings} onClick={() => setOpen(false)}>
+                    <button className="icon-button" aria-label={t.closeSettings} data-tooltip={t.closeSettings} onClick={() => setOpen(false)}>
                         <X size={18} aria-hidden />
                     </button>
                 </div>
