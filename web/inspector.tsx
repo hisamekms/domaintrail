@@ -1,4 +1,4 @@
-import { PanelRightClose } from 'lucide-react';
+import { PanelRightClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
@@ -76,15 +76,16 @@ export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
     const tx = useT();
     const backName = props.backTo && (selectedFile(props.backTo) ?? namer(props.mode, model).id(props.backTo));
+    // its own row above the kind badge: back on the left, close on the right, so the two aren't mistaken for each other
     const history = (
         <div className="history">
             {backName && (
                 <button className="back-button" onClick={props.onBack} data-tooltip={tx.backTo(backName)} aria-label={tx.backTo(backName)}>
-                    <span aria-hidden>←</span>
+                    <Undo2 size={14} aria-hidden />
                     <span className="back-name">{backName}</span>
                 </button>
             )}
-            <button className="icon-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
+            <button className="icon-button close-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
                 <PanelRightClose size={16} aria-hidden />
             </button>
         </div>
@@ -95,9 +96,9 @@ export function Inspector(props: InspectorProps) {
         return (
             <div className="inspector">
                 <div className="inspector-head">
+                    {history}
                     <div className="inspector-row">
                         <span className="kind kind-file">{tx.fileKind}</span>
-                        {history}
                     </div>
                     <h2>{file}</h2>
                     <DiagnosticList items={props.diagnostics.filter((d) => d.file === file)} />
@@ -119,7 +120,7 @@ export function Inspector(props: InspectorProps) {
         return (
             <div className="inspector">
                 <div className="inspector-head">
-                    <div className="inspector-row">{history}</div>
+                    {history}
                     <p className="muted">{tx.noModel}</p>
                 </div>
             </div>
@@ -129,7 +130,7 @@ export function Inspector(props: InspectorProps) {
         return (
             <div className="inspector">
                 <div className="inspector-head">
-                    <div className="inspector-row">{history}</div>
+                    {history}
                     <p className="muted">{selected ? tx.notInModel(selected) : tx.pickElement}</p>
                 </div>
             </div>
@@ -148,12 +149,12 @@ export function Inspector(props: InspectorProps) {
         <NamerContext.Provider value={names}>
         <div className="inspector">
             <div className="inspector-head">
+                {history}
                 <div className="inspector-row">
                     <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
                     {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
                     {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} tx={tx} />}
                     {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
-                    {history}
                 </div>
                 <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
                 {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
