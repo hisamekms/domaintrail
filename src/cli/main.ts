@@ -6,6 +6,7 @@ import { ConfigError, loadConfig, type ResolvedConfig } from '../core/config.js'
 import { formatDiagnostic } from '../core/diagnostics.js';
 import { loadWorkspace } from '../core/files.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
+import guide from '../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
     out: (line: string) => void;
@@ -39,11 +40,26 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
         .option('-r, --root <dir>', 'where to look for domaintrail.jsonc / domaintrail.json (and the workspace root without one)', '.')
         .option('-c, --config <file>', 'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent)')
         .exitOverride()
-        .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) });
+        .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) })
+        .addHelpText('after', `
+Examples:
+  dt check                      validate every .dt file below the current directory
+  dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
+  dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
+
+New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workflow, config and exit codes.`);
 
     program
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
+        .addHelpText('after', `
+Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), then a summary line.
+Exits 0 when there are no errors, 1 on errors or when no .dt file is found, 2 on an invalid config.
+
+Examples:
+  dt check
+  dt -r domain check
+  dt -c config/domaintrail.jsonc check`)
         .action(async () => {
             const a = await runCheck(await config(), io);
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
@@ -54,6 +70,13 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
         .description('Generate code from a valid model.')
         .argument('<target>', 'generation target (ts)')
         .option('-o, --out <dir>', 'output directory relative to the root (default: generate.ts.out, else generated/domain)')
+        .addHelpText('after', `
+Runs check first and writes nothing if the model has errors (exit 1). Files generated before are replaced;
+other files in the output directory are never touched. Type-check your own code against the output with \`tsc --noEmit\`.
+
+Examples:
+  dt generate ts
+  dt generate ts --out src/domain/generated`)
         .action(async (target: string, opts: { out?: string }) => {
             if (target !== 'ts') {
                 io.err(`Unknown target '${target}'. Supported: ts`);
@@ -90,9 +113,17 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
 
     program
         .command('view')
-        .description('Start the Live View server and watch .dt files.')
+        .description('Start the Live View server and watch .dt files (runs until Ctrl+C).')
         .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)')
         .option('--host <host>', 'host to bind (default: view.host, else 127.0.0.1)')
+        .addHelpText('after', `
+A server that keeps running and never exits by itself: stop it with Ctrl+C. It re-checks on every save and
+pushes updates to the browser. Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
+
+Examples:
+  dt view
+  dt view --port 8080
+  dt -r examples/shop view`)
         .action(async (opts: { port?: string; host?: string }) => {
             const cfg = await config();
             const { startViewServer } = await import('../server/server.js');
@@ -107,6 +138,17 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
             io.out(`Live View: ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
         });
+
+    program
+        .command('guide')
+        .description('Print the guide (Markdown): DSL, file layout, workflow, config, output and exit codes.')
+        .addHelpText('after', `
+The same text as docs/guide.md in the repository. Read it before writing .dt files.
+
+Examples:
+  dt guide
+  dt guide > domaintrail-guide.md`)
+        .action(() => io.out(guide.trimEnd()));
 
     const config = () => loadConfig({ start: path.resolve(program.opts().root), configPath: program.opts().config });
 
