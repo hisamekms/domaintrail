@@ -9,17 +9,17 @@ import { Explorer } from './explorer';
 import { Legend } from './legend';
 import { Inspector, type InspectorTab, type RevealTarget } from './inspector';
 import { Resizer, usePersistentState } from './layout';
-import { inCatalog, inStructure, nameIn, resolve } from './model-utils';
+import { fileSelection, inCatalog, inStructure, nameIn, resolve, selectedFile } from './model-utils';
 import { findShapeForElement, ownerElement, renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
-import { CopyLocation, SourceView, locationOf, type SourceFocus } from './source';
+import { locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
 import { SettingsMenu } from './settings-menu';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
 import { useViewSocket } from './useViewSocket';
 
-type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' } | { kind: 'source' };
+type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'states'; aggregateId: string } | { kind: 'primitives' };
 
 /**
  * Initial zoom never goes below this (in units of normal-size text), so text stays readable;
@@ -94,7 +94,6 @@ export function App() {
     // Selection with back/forward history
     const [history, setHistory] = useState<{ stack: string[]; index: number }>({ stack: [], index: -1 });
     const selected = history.stack[history.index];
-    const [sourceFile, setSourceFile] = useState<string | undefined>();
     const [sourceFocus, setSourceFocus] = useState<SourceFocus | undefined>();
 
     const cameras = useRef(new Map<string, TLCamera>());
@@ -208,15 +207,7 @@ export function App() {
         [editor, view],
     );
 
-    const focusSource = useCallback(
-        (id: string) => {
-            const loc = locationOf(model, id);
-            if (!loc) return;
-            setSourceFocus(loc);
-            setSourceFile(loc.file);
-        },
-        [model],
-    );
+    const focusSource = useCallback((id: string) => setSourceFocus(locationOf(model, id)), [model]);
 
     /** Selects an item: updates the inspector, the history and the highlight in the current view. */
     const select = useCallback(
@@ -250,10 +241,9 @@ export function App() {
                 next = { kind: target };
             }
             setView(next);
-            focusSource(id);
             if (isCanvas(next)) requestAnimationFrame(() => requestAnimationFrame(() => highlight(id, next)));
         },
-        [model, focusSource, highlight],
+        [model, highlight],
     );
 
     /** Double-click in the explorer: the view that suits the item best. */
@@ -265,14 +255,17 @@ export function App() {
         else if (r.kind === 'context') reveal('structure', id);
         else if (inStructure(r.el.kind)) reveal('structure', id);
         else if (inCatalog(r.el.kind)) reveal('primitives', id);
-        else reveal('source', id);
+        else {
+            setInspectorTab('source');
+            setInspectorOpen(true);
+        }
     };
 
     const locate = (d: Diagnostic) => {
-        if (d.elementId) select(d.elementId);
-        setSourceFile(d.file);
+        // e.g. syntax errors belong to no element: only their file can show them
+        select(d.elementId ?? fileSelection(d.file));
         setSourceFocus({ file: d.file, line: d.start.line, endLine: d.end.line });
-        if (!d.elementId) setView({ kind: 'source' }); // e.g. syntax errors: only the source can show them
+        if (!d.elementId) setInspectorOpen(true);
     };
 
     // Clicking a shape on the canvas selects it (without moving the camera).
@@ -309,7 +302,6 @@ export function App() {
         setEditor(e);
     }, []);
 
-    const activeFile = sourceFile ?? current?.files[0];
     const empty = { added: [], changed: [], removed: [] };
 
     return (
@@ -364,14 +356,12 @@ export function App() {
                                 diff={current?.diff ?? empty}
                                 mode={mode}
                                 selected={selected}
-                                activeFile={view.kind === 'source' ? activeFile : undefined}
-                                onSelect={(id) => select(id)}
+                                onSelect={(id) => {
+                                    select(id);
+                                    if (selectedFile(id)) setInspectorOpen(true);
+                                }}
                                 onOpen={openBest}
                                 onClose={() => setExplorerOpen(false)}
-                                onOpenFile={(f) => {
-                                    setSourceFile(f);
-                                    setView({ kind: 'source' });
-                                }}
                             />
                     </aside>
                 </div>
@@ -379,7 +369,7 @@ export function App() {
                 <section className="center">
                     <div className="view-tabs">
                         <div className="view-tab-list" role="tablist">
-                        {(['contextMap', 'structure', 'states', 'primitives', 'source'] as const).map((k) => (
+                        {(['contextMap', 'structure', 'states', 'primitives'] as const).map((k) => (
                             <button
                                 key={k}
                                 role="tab"
@@ -431,12 +421,6 @@ export function App() {
                                 </div>
                             )}
                             {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
-                            {view.kind === 'source' && activeFile && (
-                                <>
-                                    <span className="muted">{t.readOnly(activeFile)}</span>
-                                    {sourceFocus?.file === activeFile && <CopyLocation loc={sourceFocus} />}
-                                </>
-                            )}
                         </div>
                     </div>
                     <div className="view-area">
@@ -456,16 +440,6 @@ export function App() {
                                       ? t.pickContexts
                                       : focusKey && view.kind === 'structure' ? t.loading : t.noDiagram}
                             </div>
-                        )}
-                        {view.kind === 'source' && current && (
-                            <SourceView
-                                sources={current.sources}
-                                diagnostics={current.diagnostics}
-                                model={model}
-                                file={activeFile}
-                                focus={sourceFocus}
-                                onSelect={(id) => select(id)}
-                            />
                         )}
                         {view.kind === 'primitives' && model && (
                             <PrimitiveCatalog
@@ -501,6 +475,7 @@ export function App() {
                                 diagnostics={current?.diagnostics ?? []}
                                 diff={current?.diff ?? empty}
                                 sources={current?.sources ?? []}
+                                sourceFocus={sourceFocus}
                                 tab={inspectorTab}
                                 onTab={setInspectorTab}
                                 onSelect={(id) => select(id)}

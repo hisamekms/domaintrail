@@ -6,7 +6,7 @@ import type { DisplayMode } from '../src/graph/ir';
 import type { DomainModel, ElementModel } from '../src/model/model';
 import { usePersistentState } from './layout';
 import { useT } from './i18n';
-import { KIND_ORDER, nameIn, orderedContexts, type Select } from './model-utils';
+import { KIND_ORDER, fileSelection, nameIn, orderedContexts, type Select } from './model-utils';
 import { ownerElement } from './render';
 
 export interface ExplorerProps {
@@ -15,12 +15,11 @@ export interface ExplorerProps {
     diagnostics: Diagnostic[];
     diff: ModelDiff;
     mode: DisplayMode;
+    /** The selected item or file (see `fileSelection`). */
     selected: string | undefined;
-    activeFile: string | undefined;
     onSelect: Select;
     /** Double-click: show the item in the view that suits it best. */
     onOpen: (id: string) => void;
-    onOpenFile: (file: string) => void;
     onClose: () => void;
 }
 
@@ -139,8 +138,16 @@ export function Explorer(props: ExplorerProps) {
             <div className="tree">
                 {props.files.map((f) => {
                     const c = fileCounts(f);
+                    const id = fileSelection(f);
+                    const selected = props.selected === id;
                     return (
-                        <div key={f} className={`tree-item${props.activeFile === f ? ' selected' : ''}`} style={{ paddingLeft: 22 }} onClick={() => props.onOpenFile(f)}>
+                        <div
+                            key={f}
+                            ref={selected ? selectedRef : undefined}
+                            className={`tree-item${selected ? ' selected' : ''}`}
+                            style={{ paddingLeft: 22 }}
+                            onClick={() => props.onSelect(id)}
+                        >
                             <span className="tree-text">{f}</span>
                             {c.errors > 0 && <span className="count count-error">{c.errors}</span>}
                             {c.warnings > 0 && <span className="count count-warning">{c.warnings}</span>}

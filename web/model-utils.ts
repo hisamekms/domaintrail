@@ -58,6 +58,12 @@ export function transitionText(agg: ElementModel, c: CommandModel): string {
     return `${c.factory ? 'new' : c.from.join(' | ')} → ${c.to.join(' | ')}`;
 }
 
+/** Selection ID of a .dt file: files are selected like model items and shown in the inspector. */
+export const fileSelection = (path: string): string => `file:${path}`;
+
+/** The file a selection ID stands for, if it is one. */
+export const selectedFile = (id: string | undefined): string | undefined => (id?.startsWith('file:') ? id.slice('file:'.length) : undefined);
+
 /** Kinds that are drawn in the Structure View. */
 export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 

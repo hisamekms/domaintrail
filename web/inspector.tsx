@@ -6,17 +6,16 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantModel, Location } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
-import { highlight } from './highlight';
 import { useLang, useT } from './i18n';
-import { KIND_LABEL, KIND_ORDER, namer, resolve, type Namer, type Resolved, type Select } from './model-utils';
+import { KIND_LABEL, KIND_ORDER, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
-import { CodeLines, CopyLocation } from './source';
+import { CopyLocation, SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
 
 export type InspectorTab = 'structure' | 'behavior' | 'references' | 'source';
 
 /** Where the selected item can be shown in the main area. */
-export type RevealTarget = 'contextMap' | 'structure' | 'states' | 'primitives' | 'source';
+export type RevealTarget = 'contextMap' | 'structure' | 'states' | 'primitives';
 
 /** Display names in the current mode (ラベル / 名前 / 両方). */
 const NamerContext = createContext<Namer>(namer('both', null));
@@ -29,6 +28,8 @@ export interface InspectorProps {
     diagnostics: Diagnostic[];
     diff: ModelDiff;
     sources: { path: string; text: string }[];
+    /** Where the source tab (or a selected file) scrolls to. */
+    sourceFocus: SourceFocus | undefined;
     tab: InspectorTab;
     onTab: (tab: InspectorTab) => void;
     onSelect: Select;
@@ -63,11 +64,10 @@ function revealTargets(r: Resolved): RevealTarget[] {
         if (r.el.kind === 'aggregate' || r.el.kind === 'entity' || r.el.kind === 'valueObject' || r.el.kind === 'union') out.push('structure');
         if (r.el.kind === 'aggregate') out.push('states');
         if (r.el.kind === 'primitive' || r.el.kind === 'id' || r.el.kind === 'enum') out.push('primitives');
-        out.push('source');
     } else if (r.kind === 'context') {
         out.push('contextMap', 'structure');
     } else if (r.kind === 'state' || r.kind === 'command') {
-        out.push('states', 'source');
+        out.push('states');
     }
     return out;
 }
@@ -89,6 +89,32 @@ export function Inspector(props: InspectorProps) {
             </button>
         </div>
     );
+    // a file can be shown even without a model (e.g. a syntax error before the first valid parse)
+    const file = selectedFile(selected);
+    if (file) {
+        return (
+            <div className="inspector">
+                <div className="inspector-head">
+                    <div className="inspector-row">
+                        <span className="kind kind-file">{tx.fileKind}</span>
+                        {history}
+                    </div>
+                    <h2>{file}</h2>
+                    <DiagnosticList items={props.diagnostics.filter((d) => d.file === file)} />
+                </div>
+                <div className="inspector-body inspector-body-full">
+                    <SourceView
+                        sources={props.sources}
+                        diagnostics={props.diagnostics}
+                        model={model}
+                        file={file}
+                        focus={props.sourceFocus?.file === file ? props.sourceFocus : undefined}
+                        onSelect={props.onSelect}
+                    />
+                </div>
+            </div>
+        );
+    }
     if (!model)
         return (
             <div className="inspector">
@@ -146,15 +172,7 @@ export function Inspector(props: InspectorProps) {
                         ))}
                     </div>
                 )}
-                {diags.length > 0 && (
-                    <div className="inspector-diags">
-                        {diags.map((d, i) => (
-                            <div key={i} className={`diag diag-${d.severity}`}>
-                                <code>{d.code}</code> {d.message}
-                            </div>
-                        ))}
-                    </div>
-                )}
+                <DiagnosticList items={diags} />
             </div>
             {tabs.length > 1 && (
                 <div className="subtabs" role="tablist">
@@ -165,7 +183,7 @@ export function Inspector(props: InspectorProps) {
                     ))}
                 </div>
             )}
-            <div className="inspector-body">
+            <div className={`inspector-body${tab === 'source' ? ' inspector-body-full' : ''}`}>
                 <Body {...props} r={r} tab={tab} />
             </div>
         </div>
@@ -193,7 +211,10 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     if (!model) return null;
     if (tab === 'source') {
         const loc = headOf(r).location;
-        return loc ? <SourceSnippet loc={loc} sources={props.sources} onOpen={() => props.onReveal('source', props.selected!)} /> : null;
+        if (!loc) return null;
+        // the focus follows the selection, but may point at a diagnostic inside the declaration instead
+        const focus = props.sourceFocus?.file === loc.file ? props.sourceFocus : loc;
+        return <SourceView sources={props.sources} diagnostics={props.diagnostics} model={model} file={loc.file} focus={focus} onSelect={onSelect} />;
     }
 
     if (r.kind === 'context') return <ContextBody model={model} ctx={r.name} onSelect={onSelect} onFocus={props.onFocusContext} />;
@@ -518,26 +539,16 @@ function AggregateOutcomes({ agg, model, kind, onSelect }: { agg: ElementModel; 
     );
 }
 
-const SNIPPET_LINES = 60;
-
-/** The DSL declaration of the selected item. */
-function SourceSnippet({ loc, sources, onOpen }: { loc: Location; sources: { path: string; text: string }[]; onOpen: () => void }) {
-    const tx = useT();
-    const source = sources.find((s) => s.path === loc.file);
-    if (!source) return null;
-    const lines = highlight(source.text);
-    const to = Math.min(loc.endLine, loc.line + SNIPPET_LINES - 1);
+function DiagnosticList({ items }: { items: Diagnostic[] }) {
+    if (items.length === 0) return null;
     return (
-        <>
-            <div className="snippet">
-                <CodeLines lines={lines} from={loc.line} to={to} />
-            </div>
-            {to < loc.endLine && (
-                <p className="muted small">
-                    {tx.moreLines(loc.endLine - to, <a onClick={onOpen}>{tx.sourceView}</a>)}
-                </p>
-            )}
-        </>
+        <div className="inspector-diags">
+            {items.map((d, i) => (
+                <div key={i} className={`diag diag-${d.severity}`}>
+                    <code>{d.code}</code> {d.message}
+                </div>
+            ))}
+        </div>
     );
 }
 

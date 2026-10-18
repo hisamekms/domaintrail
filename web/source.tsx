@@ -95,7 +95,7 @@ export function CodeLines(props: {
     return <pre className="src-code-block">{rows}</pre>;
 }
 
-/** Read-only view of one .dt file, linked with the selection and the diagnostics. Files are picked in the explorer. */
+/** Read-only view of one .dt file, linked with the selection and the diagnostics; scrolls to `focus`. */
 export function SourceView(props: {
     sources: { path: string; text: string }[];
     diagnostics: Diagnostic[];

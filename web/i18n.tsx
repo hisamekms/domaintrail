@@ -40,14 +40,13 @@ const ja = {
     closeBottom: '問題・変更を閉じる',
 
     // views and their toolbar
-    views: { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'プリミティブ', source: 'ソース' },
+    views: { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'プリミティブ' },
     aggregate: '集約',
     showAllContexts: '共有・外部の BC も表示',
     structureMode: 'Structure の表示',
     detail: '詳細',
     overview: '概観',
     zoomToFit: '全体表示',
-    readOnly: (file: string) => `${file}（表示専用）`,
     pickContexts: '表示する BC を選んでください',
     loading: '読み込み中…',
     noDiagram: '表示できる図がありません',
@@ -85,6 +84,7 @@ const ja = {
     // explorer
     model: 'モデル',
     files: 'ファイル',
+    fileKind: 'ファイル',
     kindGroups: {
         aggregate: '集約',
         entity: 'Entity',
@@ -116,11 +116,11 @@ const ja = {
     // inspector
     counted: (title: string, n: number) => `${title}（${n}）`,
     tabs: { structure: '構造', behavior: '振る舞い', references: '参照', source: 'ソース' },
-    reveal: { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'プリミティブ', source: 'ソース' },
+    reveal: { contextMap: 'コンテキストマップ', structure: '構造図', states: '状態遷移', primitives: 'プリミティブ' },
     back: '戻る',
     forward: '進む',
     notInModel: (id: string) => `${id} は現在のモデルにありません。`,
-    pickElement: 'エクスプローラや図で要素を選ぶと、ここに詳細が出ます。',
+    pickElement: 'エクスプローラや図で要素やファイルを選ぶと、ここに詳細が出ます。',
     showIn: '見る:',
     commandsInto: 'この State に入る Command',
     commandsOutOf: 'この State から出る Command',
@@ -160,8 +160,6 @@ const ja = {
     idUses: (id: string, n: number) => `ID（${id}）で参照している場所（${n}）`,
     raises: (n: number) => `発生させる Event（${n}）`,
     returns: (n: number) => `返し得る Error（${n}）`,
-    moreLines: (n: number, sourceView: ReactNode): ReactNode => <>… 残り {n} 行は {sourceView}で確認できます。</>,
-    sourceView: 'ソース',
     labelSources: { term: '用語', type: '型' },
 };
 
@@ -195,14 +193,13 @@ const en: Messages = {
     openBottom: 'Open problems and changes',
     closeBottom: 'Close problems and changes',
 
-    views: { contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives', source: 'Source' },
+    views: { contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives' },
     aggregate: 'Aggregate',
     showAllContexts: 'Also show shared and external BCs',
     structureMode: 'Structure view',
     detail: 'Detail',
     overview: 'Overview',
     zoomToFit: 'Fit',
-    readOnly: (file) => `${file} (read-only)`,
     pickContexts: 'Pick the BCs to show',
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
@@ -237,6 +234,7 @@ const en: Messages = {
 
     model: 'Model',
     files: 'Files',
+    fileKind: 'File',
     kindGroups: {
         aggregate: 'Aggregate',
         entity: 'Entity',
@@ -264,11 +262,11 @@ const en: Messages = {
 
     counted: (title, n) => `${title} (${n})`,
     tabs: { structure: 'Structure', behavior: 'Behavior', references: 'References', source: 'Source' },
-    reveal: { contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives', source: 'Source' },
+    reveal: { contextMap: 'Context Map', structure: 'Structure', states: 'States', primitives: 'Primitives' },
     back: 'Back',
     forward: 'Forward',
     notInModel: (id) => `${id} is not in the current model.`,
-    pickElement: 'Select an element in the explorer or a diagram to see its details here.',
+    pickElement: 'Select an element or a file in the explorer or a diagram to see its details here.',
     showIn: 'Show in:',
     commandsInto: 'Commands into this state',
     commandsOutOf: 'Commands out of this state',
@@ -308,8 +306,6 @@ const en: Messages = {
     idUses: (id, n) => `Referenced by ID ${id} (${n})`,
     raises: (n) => `Events it raises (${n})`,
     returns: (n) => `Errors it may return (${n})`,
-    moreLines: (n, sourceView) => <>… {n} more lines in {sourceView}.</>,
-    sourceView: 'the Source view',
     labelSources: { term: 'term', type: 'type' },
 };
 

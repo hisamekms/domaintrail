@@ -85,7 +85,6 @@
     --gutter: #a0a0aa;
     --keyword: #8a2fb5;
     --doc-comment: #3c7a3a;
-    --snippet-bg: #fbfbfd;
 }
 
 /* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). */
@@ -169,7 +168,6 @@
     --gutter: #6a6a76;
     --keyword: #d08cff;
     --doc-comment: #86c784;
-    --snippet-bg: #1a1a20;
 }
 
 /* form controls follow the theme (their default colors come from the browser) */
@@ -1018,29 +1016,6 @@ select,
     color: var(--doc-comment);
     font-style: italic;
 }
-.snippet {
-    max-height: 420px;
-    overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--snippet-bg);
-}
-.snippet .src-code-block {
-    font-size: 12.5px;
-    line-height: 19px;
-}
-.snippet .src-gutter {
-    width: 44px;
-}
-.snippet-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 6px;
-}
-.snippet-actions .link-button {
-    margin-top: 0;
-}
 .copy-button {
     padding: 3px 8px;
     font: inherit;
@@ -1212,19 +1187,13 @@ select,
     position: relative;
     min-height: 0;
 }
-.catalog,
-.source-view {
+.catalog {
     position: absolute;
     inset: 0;
     z-index: 10;
     overflow: auto;
-    background: var(--bg);
-}
-.catalog {
     padding: 20px 24px 40px;
-}
-.source-view {
-    background: var(--panel);
+    background: var(--bg);
 }
 
 /* explorer */
@@ -1442,9 +1411,25 @@ select,
     overflow: auto;
     padding: 4px 14px 16px;
 }
-.inspector-body .snippet {
-    margin-top: 10px;
-    max-height: none;
+/* a body that scrolls on its own (the source) */
+.inspector-body-full {
+    padding: 0;
+    overflow: hidden;
+}
+.source-view {
+    height: 100%;
+    overflow: auto;
+    background: var(--panel);
+}
+/* the pane is narrow: smaller text, and line highlights that span long lines when scrolled sideways */
+.source-view .src-code-block {
+    min-width: 100%;
+    width: max-content;
+    font-size: 12.5px;
+    line-height: 19px;
+}
+.source-view .src-gutter {
+    width: 52px;
 }
 
 /* bottom panel */
