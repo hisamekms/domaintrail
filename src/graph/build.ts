@@ -3,6 +3,7 @@ import { contextDependencies, representative, supportingContexts } from '../mode
 import { allFieldsOf, elementList } from '../model/model.js';
 import {
     CHAR_WIDTH,
+    CONTAINER_PADDING,
     HEADER_HEIGHT,
     LINE_HEIGHT,
     TEXT_VARIANTS,
@@ -17,6 +18,7 @@ import {
     type GraphEdge,
     type GraphLine,
     type GraphNode,
+    type StructureLevel,
     type Texts,
     OVERVIEW_TEXT_SCALE,
 } from './ir.js';
@@ -111,10 +113,11 @@ function bodyUnits(lines: GraphLine[]): number {
 }
 
 export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphNode {
-    const longest = Math.max(maxUnits(n.label) + 2, n.stereotype ? maxUnits(n.stereotype) : 0, bodyUnits(n.lines));
+    // the body rows keep their size in larger text
+    const head = Math.max(maxUnits(n.label) + 2, n.stereotype ? maxUnits(n.stereotype) : 0) * scale;
     return {
         ...n,
-        width: Math.max(170 * scale, Math.ceil(longest * CHAR_WIDTH * scale + 28)),
+        width: Math.max(170 * scale, Math.ceil(Math.max(head, bodyUnits(n.lines)) * CHAR_WIDTH + 28)),
         height: Math.ceil(HEADER_HEIGHT * scale) + n.lines.length * LINE_HEIGHT + (n.lines.length ? 10 : 0),
     };
 }
@@ -125,21 +128,37 @@ export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphN
  * unowned entities are placed directly in their context.
  */
 export const STRUCTURE_OVERVIEW_GRAPH_ID = 'structure-overview';
+export const STRUCTURE_AGGREGATES_GRAPH_ID = 'structure-aggregates';
+const LEVEL_GRAPH_IDS: Record<StructureLevel, string> = {
+    detail: STRUCTURE_GRAPH_ID,
+    overview: STRUCTURE_OVERVIEW_GRAPH_ID,
+    aggregates: STRUCTURE_AGGREGATES_GRAPH_ID,
+};
 
 /**
  * Structure View of some bounded contexts, with the elements they depend on and that depend on them as stubs
  * (except those of the `hidden` contexts).
  */
-export const focusGraphId = (contexts: readonly string[], overview = false, hidden: readonly string[] = []): string =>
-    `structure-focus:${[...contexts].sort().join('+')}${hidden.length ? `:hide=${[...hidden].sort().join('+')}` : ''}${overview ? ':overview' : ''}`;
+export const focusGraphId = (contexts: readonly string[], level: StructureLevel = 'detail', hidden: readonly string[] = []): string =>
+    `structure-focus:${[...contexts].sort().join('+')}${hidden.length ? `:hide=${[...hidden].sort().join('+')}` : ''}${level === 'detail' ? '' : `:${level}`}`;
+
+export interface StructureOptions {
+    level?: StructureLevel;
+    focus?: readonly string[];
+    hidden?: readonly string[];
+}
 
 /**
- * Structure View. With `overview`, nodes show only their names (no field rows) in larger text,
- * to see the whole model at a glance. With `focus`, only those contexts are drawn (see `focusStubs`), and
+ * Structure View. At the `overview` level, nodes show only their names (no field rows) in larger text,
+ * to see the whole model at a glance; at the `aggregates` level, only the aggregates are drawn (see
+ * `buildAggregatesGraph`). With `focus`, only those contexts are drawn (see `focusStubs`), and
  * the dependencies on and from the `hidden` contexts are left out.
  */
-export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean; focus?: readonly string[]; hidden?: readonly string[] } = {}): Graph {
-    const scale = opts.overview ? OVERVIEW_TEXT_SCALE : 1;
+export function buildStructureGraph(model: DomainModel, opts: StructureOptions = {}): Graph {
+    const level = opts.level ?? 'detail';
+    if (level === 'aggregates') return buildAggregatesGraph(model, opts);
+    const overview = level === 'overview';
+    const scale = overview ? OVERVIEW_TEXT_SCALE : 1;
     const elements = elementList(model);
     const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
     const shown = elements.filter((e) => STRUCTURE_KINDS.has(e.kind) && (!focus || focus.has(e.context)));
@@ -173,15 +192,15 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             });
         }
         const owner = el.kind === 'aggregate' ? el.id : soleOwner(owners.get(el.id), el.context);
-        const lines = opts.overview ? [] : el.fields.map((f) => fieldLine(f, el.context, model));
-        if (!opts.overview && el.kind === 'union') {
+        const lines = overview ? [] : el.fields.map((f) => fieldLine(f, el.context, model));
+        if (!overview && el.kind === 'union') {
             // One row per variant (the discriminator value), followed by its fields.
             for (const v of el.variants ?? []) {
                 lines.push({ key: named(`${el.discriminator}: ${v.name}`, v.label && `${v.label}`, (l, n) => `${l} (${n})`) });
                 lines.push(...v.fields.map((f) => fieldLine(f, el.context, model, VARIANT_INDENT)));
             }
         }
-        if (!opts.overview && el.kind === 'aggregate' && el.states?.length) {
+        if (!overview && el.kind === 'aggregate' && el.states?.length) {
             const byName = el.states.map((s) => s.name).join(' | ');
             const byLabel = el.states.map((s) => s.label ?? s.name).join(' | ');
             lines.push({ key: perLang({ ja: WORDS.ja.state, en: WORDS.en.state }), value: anyLang({ name: byName, label: byLabel, both: byName }) });
@@ -220,10 +239,147 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             );
         }
         edges.push(...stubs.edges);
-        const id = focusGraphId(opts.focus!, opts.overview, hidden);
-        return opts.overview ? { id, nodes, edges, textScale: scale } : { id, nodes, edges };
     }
-    return opts.overview ? { id: STRUCTURE_OVERVIEW_GRAPH_ID, nodes, edges, textScale: scale } : { id: STRUCTURE_GRAPH_ID, nodes, edges };
+    const id = stubs ? focusGraphId(opts.focus!, level, hidden) : LEVEL_GRAPH_IDS[level];
+    return overview ? { id, nodes, edges, textScale: scale } : { id, nodes, edges };
+}
+
+/** Widest row of a description, in characters, on an aggregate and on a context. */
+const AGGREGATE_DOC_WIDTH = 36;
+const CONTEXT_DOC_WIDTH = 60;
+
+/**
+ * Structure View at the aggregates level, for readers who do not need the details: the aggregates with their
+ * descriptions, in larger text, and one edge per pair of aggregates where one depends on the other, also through
+ * the elements it holds and through IDs (see `aggregateDependencies`). Shared contexts are left out; a context
+ * without aggregates is drawn as an empty frame with its description. With `focus`, the aggregates of other contexts
+ * that depend on the focused ones or that they depend on are drawn as stubs, except those of shared, ID-only and
+ * `hidden` contexts.
+ */
+function buildAggregatesGraph(model: DomainModel, opts: StructureOptions): Graph {
+    const scale = OVERVIEW_TEXT_SCALE;
+    const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
+    const hidden = (opts.hidden ?? []).filter((c) => !focus?.has(c));
+    const left = new Set(focus ? [...supportingContexts(model), ...hidden] : model.sharedContexts);
+    const aggregates = elementList(model).filter((e) => e.kind === 'aggregate' && !left.has(e.context));
+    const drawable = new Set(aggregates.map((e) => e.id));
+    const shown = aggregates.filter((e) => !focus || focus.has(e.context));
+    const shownIds = new Set(shown.map((e) => e.id));
+    const deps = aggregateDependencies(model).filter(
+        (d) => drawable.has(d.source) && drawable.has(d.target) && (shownIds.has(d.source) || shownIds.has(d.target)),
+    );
+    const stubs = aggregates.filter((e) => !shownIds.has(e.id) && deps.some((d) => d.source === e.id || d.target === e.id));
+    const stubContexts = new Set(stubs.map((e) => e.context));
+
+    const nodes: GraphNode[] = [];
+    for (const ctx of model.contexts) {
+        if (left.has(ctx) || model.sharedContexts.includes(ctx) || (focus && !focus.has(ctx) && !stubContexts.has(ctx))) continue;
+        nodes.push(sizedGroup({ id: ctx, kind: 'context', label: named(ctx, model.contextLabels[ctx]), lines: docLines(model.contextDocs[ctx], CONTEXT_DOC_WIDTH), elementId: ctx }, scale));
+    }
+    const aggregate = stereotype('集約', 'aggregate');
+    for (const el of shown) {
+        nodes.push(sized({ id: el.id, kind: 'aggregate', label: named(el.name, el.label), stereotype: aggregate, lines: docLines(el.doc, AGGREGATE_DOC_WIDTH), parent: el.context, elementId: el.id }, scale));
+    }
+    for (const el of stubs) {
+        nodes.push(sized({ id: el.id, kind: 'stub', label: named(el.name, el.label), stereotype: aggregate, lines: [], parent: el.context, elementId: el.id }, scale));
+    }
+    const edges = deps.map((d): GraphEdge => ({ id: `${d.source}=>${d.target}`, kind: d.type ? 'value' : 'references', source: d.source, target: d.target }));
+    return { id: focus ? focusGraphId(opts.focus!, 'aggregates', hidden) : STRUCTURE_AGGREGATES_GRAPH_ID, nodes, edges, textScale: scale };
+}
+
+/** A dependency of one aggregate on another, with the paths of the fields it goes through (`items.product`). */
+export interface AggregateDependency {
+    source: string;
+    target: string;
+    /** Holds a type of the other aggregate, not only its ID. */
+    type: boolean;
+    paths: string[];
+}
+
+/**
+ * Dependencies between aggregates: an aggregate depends on another when it, or an entity / value object / union it
+ * holds, references it, holds its ID or the ID of one of its entities, or holds it as a value. One per pair, in
+ * declaration order.
+ */
+export function aggregateDependencies(model: DomainModel): AggregateDependency[] {
+    const elements = elementList(model);
+    const byId = new Map(elements.map((e) => [e.id, e]));
+    const owners = owningAggregates(elements, byId);
+    /** The aggregate that stands for an element: itself, or the aggregate that owns an entity. */
+    const aggregateOf = (el: ElementModel | undefined): string | undefined =>
+        el?.kind === 'aggregate' ? el.id : el?.kind === 'entity' ? soleOwner(owners.get(el.id), el.context) : undefined;
+    const out = new Map<string, AggregateDependency>();
+    for (const agg of elements.filter((e) => e.kind === 'aggregate')) {
+        const add = (target: string | undefined, type: boolean, path: string): void => {
+            if (!target || target === agg.id) return;
+            const key = `${agg.id}=>${target}`;
+            const dep = out.get(key) ?? { source: agg.id, target, type: false, paths: [] };
+            dep.type ||= type;
+            if (!dep.paths.includes(path)) dep.paths.push(path);
+            out.set(key, dep);
+        };
+        const queue: [ElementModel, string][] = [[agg, '']];
+        const seen = new Set<string>();
+        while (queue.length) {
+            const [el, prefix] = queue.shift()!;
+            if (seen.has(el.id)) continue;
+            seen.add(el.id);
+            for (const f of allFieldsOf(el)) {
+                const path = prefix + f.name;
+                if (f.kind === 'references') {
+                    if (f.target) add(aggregateOf(representative(model, f.target)), false, path);
+                    continue;
+                }
+                const t = f.type.kind === 'ref' ? byId.get(f.type.ref) : undefined;
+                if (t?.kind === 'id') add(aggregateOf(representative(model, t.id)), false, path);
+                else if (t?.kind === 'aggregate') add(t.id, true, path);
+                else if (t && HELD_KINDS.has(t.kind)) queue.push([t, `${path}.`]);
+            }
+        }
+    }
+    return [...out.values()];
+}
+
+/** A description as body rows of at most `width` characters. */
+function docLines(doc: string | undefined, width: number): GraphLine[] {
+    return doc ? wrapText(doc, width).map((l) => ({ key: sameText(l) })) : [];
+}
+
+/** Punctuation that may not start a line; it hangs at the end of the line before. */
+const NO_LINE_START = new Set([...'、。，．,.)）」』】!?！？ー']);
+
+/**
+ * Splits a text into lines of at most `width` character units, breaking after a space where there is one
+ * (punctuation may go over).
+ */
+export function wrapText(text: string, width: number): string[] {
+    const out: string[] = [];
+    for (const paragraph of text.split('\n')) {
+        let line = '';
+        for (const ch of paragraph) {
+            if (textUnits(line + ch) <= width || NO_LINE_START.has(ch)) {
+                line += ch;
+                continue;
+            }
+            const space = line.lastIndexOf(' ');
+            if (ch !== ' ' && space > 0) {
+                out.push(line.slice(0, space));
+                line = line.slice(space + 1) + ch;
+            } else {
+                out.push(line.trimEnd());
+                line = ch === ' ' ? '' : ch;
+            }
+        }
+        out.push(line.trimEnd());
+    }
+    return out.filter((l) => l !== '');
+}
+
+/** A context drawn with its description under the label; sized to hold them even when it has no children. */
+function sizedGroup(n: Omit<GraphNode, 'width' | 'height'>, scale: number): GraphNode {
+    const width = Math.ceil(Math.max(160, maxUnits(n.label) * 10.5 * scale + 40, bodyUnits(n.lines) * CHAR_WIDTH + 40));
+    const height = Math.ceil(CONTAINER_PADDING.top * scale) + n.lines.length * LINE_HEIGHT + CONTAINER_PADDING.bottom;
+    return { ...n, width, height };
 }
 
 const STUB_STEREOTYPES: Record<ElementModel['kind'], Texts> = {

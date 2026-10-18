@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
+import { Box, LayoutGrid, LayoutList, PanelLeftOpen, PanelRightOpen, type LucideIcon } from 'lucide-react';
 import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
-import type { DisplayMode, LaidOutGraph } from '../src/graph/ir';
+import { STRUCTURE_LEVELS, type DisplayMode, type LaidOutGraph, type StructureLevel } from '../src/graph/ir';
 import { BottomPanel, type BottomTab } from './bottom';
 import { Catalog } from './catalog';
 import { fitReadable, highlightElement, usePointerCursor } from './canvas';
@@ -40,6 +40,10 @@ function savedDisplayMode(): DisplayMode {
 }
 const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure';
 
+const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
+/** The pushed graph of each Structure View level (focused views are fetched instead). */
+const LEVEL_GRAPHS = { detail: 'structure', overview: 'overview', aggregates: 'aggregates' } as const;
+
 export function App() {
     const { current, previous, connection } = useViewSocket();
     const model = current?.model ?? null;
@@ -51,8 +55,9 @@ export function App() {
     const [langPreference, setLangPreference] = usePersistentState<LangPreference>(LANG_KEY, 'auto');
     const lang = useResolvedLang(langPreference);
     const t = MESSAGES[lang];
-    /** Structure View: all fields (detail) or names only in larger text (overview). */
-    const [structureMode, setStructureMode] = usePersistentState<'detail' | 'overview'>('domaintrail.structureMode', 'detail');
+    /** Structure View: all fields (detail), names only in larger text (overview), or aggregates only (aggregates). */
+    const [savedLevel, setStructureLevel] = usePersistentState<StructureLevel>('domaintrail.structureMode', 'detail');
+    const structureLevel = STRUCTURE_LEVELS.includes(savedLevel) ? savedLevel : 'detail';
     /** Structure View: the bounded contexts to draw (null = every context, including ones added later). */
     const [structureContexts, setStructureContexts] = usePersistentState<string[] | null>('domaintrail.structureContexts', null);
     /** Focused Structure View: contexts whose stubs (and the dependencies on and from them) are not drawn. */
@@ -93,13 +98,13 @@ export function App() {
         () => (focused.length ? (current?.focusContexts ?? []).filter((c) => hiddenContexts.includes(c) && !focused.includes(c)) : []),
         [current?.focusContexts, hiddenContexts, focused],
     );
-    const focusKey = focused.length ? `${focused.join('+')}|${hidden.join('+')}|${structureMode}` : '';
+    const focusKey = focused.length ? `${focused.join('+')}|${hidden.join('+')}|${structureLevel}` : '';
     /** The focused Structure View is laid out on request by the server. */
     const [focusGraph, setFocusGraph] = useState<{ key: string; graph: LaidOutGraph } | null>(null);
     useEffect(() => {
         if (!focusKey || view.kind !== 'structure') return;
         let cancelled = false;
-        const params = new URLSearchParams({ contexts: focused.join(','), overview: structureMode === 'overview' ? '1' : '0', hide: hidden.join(',') });
+        const params = new URLSearchParams({ contexts: focused.join(','), level: structureLevel, hide: hidden.join(',') });
         fetch(`/api/focus?${params}`)
             .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
             .then((graph) => {
@@ -119,13 +124,13 @@ export function App() {
         if (v.kind === 'structure') {
             if (noneChecked) return null;
             if (focusKey) return focusGraph?.key === focusKey ? focusGraph.graph : undefined;
-            return structureMode === 'overview' ? p.overview : p.structure;
+            return p[LEVEL_GRAPHS[structureLevel]];
         }
         return null;
     };
     /** Camera key: each view (and each Structure mode and focus) keeps its own camera. */
     const cameraKey = (v: View): string =>
-        v.kind === 'structure' ? (focusKey ? `structure:focus:${focusKey}` : `structure:${structureMode}`) : `${v.kind}:${mapAll}`;
+        v.kind === 'structure' ? (focusKey ? `structure:focus:${focusKey}` : `structure:${structureLevel}`) : `${v.kind}:${mapAll}`;
     const graph = graphFor(current, view);
 
     // Draw the current graph; keep the camera of each view, fit only the first time a view is shown.
@@ -150,7 +155,7 @@ export function App() {
         }
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, previous, view, mode, structureMode, focusKey, focusGraph, mapAll, noneChecked, lang]);
+    }, [editor, current, previous, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang]);
 
     useEffect(() => {
         applyTheme(theme, editor);
@@ -336,12 +341,22 @@ export function App() {
                                 />
                             )}
                             {view.kind === 'structure' && (
-                                <div className="segmented small" role="group" aria-label={t.structureMode}>
-                                    {(['detail', 'overview'] as const).map((m) => (
-                                        <button key={m} className={structureMode === m ? 'active' : ''} aria-pressed={structureMode === m} onClick={() => setStructureMode(m)}>
-                                            {m === 'detail' ? t.detail : t.overview}
-                                        </button>
-                                    ))}
+                                <div className="segmented small icons" role="group" aria-label={t.structureMode}>
+                                    {STRUCTURE_LEVELS.map((l) => {
+                                        const Icon = LEVEL_ICONS[l];
+                                        return (
+                                            <button
+                                                key={l}
+                                                className={structureLevel === l ? 'active' : ''}
+                                                aria-pressed={structureLevel === l}
+                                                onClick={() => setStructureLevel(l)}
+                                                title={t.structureLevels[l]}
+                                                aria-label={t.structureLevels[l]}
+                                            >
+                                                <Icon size={15} aria-hidden />
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             )}
                             {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
@@ -351,7 +366,7 @@ export function App() {
                         <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
                         {graph && isCanvas(view) && (
                             <Legend
-                                view={view.kind === 'contextMap' ? 'contextMap' : focusKey ? 'focus' : 'structure'}
+                                view={view.kind === 'contextMap' ? 'contextMap' : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`}
                                 open={legendOpen}
                                 onToggle={() => setLegendOpen(!legendOpen)}
                             />

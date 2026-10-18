@@ -23,6 +23,8 @@ export interface ViewPayload {
     structure: LaidOutGraph | null;
     /** Structure overview: names only, larger text. */
     overview: LaidOutGraph | null;
+    /** Structure View at the aggregates level: aggregates and the dependencies between them only. */
+    aggregates: LaidOutGraph | null;
     /** State View graphs keyed by aggregate ID. */
     states: Record<string, LaidOutGraph>;
     /** Contexts that can be focused in the Structure View (the graphs are served on request at /api/focus). */

@@ -31,7 +31,8 @@ Simply drawing a subset of contexts would hide even those.
   are not drawn in the Structure View.
 - The server lays out the Context Map (with and without supporting contexts) on every update, like the State View
   graphs. Focused views cannot be precomputed (any combination of contexts can be picked), so the browser asks for
-  them at `/api/focus?contexts=A,B&overview=1` (same trust checks as `/api/state`) and again when the model changes;
+  them at `/api/focus?contexts=A,B&level=overview` (`level` is `detail`, `overview` or `aggregates`; `overview=1` is still
+  accepted) (same trust checks as `/api/state`) and again when the model changes;
   the server keeps the 20 most recently used focused layouts. Node IDs of the Context Map (`map:<context>`) differ
   from the context group IDs of the Structure View, because shapes are reused by ID across views.
 

@@ -39,7 +39,7 @@ describe('Structure overview graph', () => {
     test('same nodes and edges, names only, larger text', async () => {
         const model = await exampleModel();
         const detail = buildStructureGraph(model);
-        const overview = buildStructureGraph(model, { overview: true });
+        const overview = buildStructureGraph(model, { level: 'overview' });
         expect(overview.id).toBe('structure-overview');
         expect(overview.textScale).toBe(1.5);
         expect(overview.nodes.map((n) => n.id)).toEqual(detail.nodes.map((n) => n.id));

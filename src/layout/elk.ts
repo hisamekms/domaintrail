@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk-api.js';
-import { CONTAINER_PADDING, graphSignature, maxUnits, type Graph, type LaidOutGraph, type NodeLayout, type Point } from '../graph/ir.js';
+import { CONTAINER_PADDING, LINE_HEIGHT, graphSignature, maxUnits, type Graph, type LaidOutGraph, type NodeLayout, type Point } from '../graph/ir.js';
 import type { LayoutEngine } from './engine.js';
 
 const ROOT = '__root__';
@@ -40,13 +40,14 @@ const DIRECTION: Record<string, string> = {
     structure: 'DOWN',
     // same direction as the detail mode, so switching keeps the mental map
     'structure-overview': 'DOWN',
+    'structure-aggregates': 'DOWN',
     // shown in the inspector, which is tall and narrow
     states: 'DOWN',
 };
 
 export class ElkLayoutEngine implements LayoutEngine {
     readonly name = 'elk';
-    readonly version = 8;
+    readonly version = 9;
     private readonly elk = new ELK({ workerFactory: createWorker });
 
     /** Stops the layout worker so the process can exit (the in-process fake Worker has nothing to stop). */
@@ -59,14 +60,19 @@ export class ElkLayoutEngine implements LayoutEngine {
         const children = new Map<string, ElkNode[]>();
         const elkNodes = new Map<string, ElkNode>();
         const containers = new Set(graph.nodes.map((n) => n.parent).filter((p): p is string => !!p));
+        const direction = DIRECTION[graph.id.split(':')[0]] ?? 'DOWN';
+        // ELK applies the minimum size of a container transposed in a vertical layout
+        const minimum = (w: number, h: number): string => (direction === 'DOWN' || direction === 'UP' ? `(${h},${w})` : `(${w},${h})`);
 
         for (const n of graph.nodes) {
             const node: ElkNode = { id: n.id, children: [] };
             if (containers.has(n.id)) {
+                // a context's description is drawn under its label
+                const top = Math.round(CONTAINER_PADDING.top * scale) + n.lines.length * LINE_HEIGHT;
                 node.layoutOptions = {
-                    'elk.padding': `[top=${Math.round(CONTAINER_PADDING.top * scale)},left=${CONTAINER_PADDING.left},bottom=${CONTAINER_PADDING.bottom},right=${CONTAINER_PADDING.right}]`,
+                    'elk.padding': `[top=${top},left=${CONTAINER_PADDING.left},bottom=${CONTAINER_PADDING.bottom},right=${CONTAINER_PADDING.right}]`,
                     'elk.nodeSize.constraints': 'MINIMUM_SIZE',
-                    'elk.nodeSize.minimum': `(${Math.max(160, maxUnits(n.label) * 10.5 * scale + 40)},60)`,
+                    'elk.nodeSize.minimum': minimum(Math.ceil(Math.max(160, maxUnits(n.label) * 10.5 * scale + 40, n.width)), Math.max(60, n.height)),
                 };
             } else {
                 node.width = n.width;
@@ -89,10 +95,9 @@ export class ElkLayoutEngine implements LayoutEngine {
                 labels: e.label ? [{ text: e.label.en.name, width: Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(19 * scale) }] : [],
             }));
 
-        const kind = graph.id.split(':')[0];
         const root: ElkNode = {
             id: ROOT,
-            layoutOptions: { ...BASE_OPTIONS, 'elk.direction': DIRECTION[kind] ?? 'DOWN' },
+            layoutOptions: { ...BASE_OPTIONS, 'elk.direction': direction },
             children: children.get(ROOT) ?? [],
             edges,
         };

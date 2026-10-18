@@ -46,6 +46,11 @@ export class LabelResolver {
         return this.index.fragments.find((c) => c.name === ctx && c.label)?.label;
     }
 
+    /** `///` description of a context; the first fragment that has one wins. */
+    contextDoc(ctx: string): string | undefined {
+        return this.index.fragments.filter((c) => c.name === ctx).map(docComment).find(Boolean);
+    }
+
     fieldLabel(f: FieldLike | Parameter): ResolvedLabel | undefined {
         if (f.label) return { label: f.label, source: 'inline' };
         const ctx = AstUtils.getContainerOfType(f, isContext)?.name;

@@ -672,6 +672,15 @@ code.block {
     font-size: calc(16px * var(--s, 1));
     font-weight: 700;
 }
+.dg-desc {
+    margin-top: calc(-4px * var(--s, 1));
+    padding: 0 12px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 21px;
+    white-space: nowrap;
+    color: var(--muted);
+}
 .dg-context {
     border: 1.5px solid var(--grey-border);
     background: var(--context-bg);
@@ -810,6 +819,11 @@ select,
 }
 .segmented button:last-child {
     border-right: none;
+}
+.segmented.icons button {
+    display: grid;
+    place-items: center;
+    padding: 4px 8px;
 }
 .segmented button.active {
     background: var(--accent);

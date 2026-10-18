@@ -1,3 +1,4 @@
+/// 注文への請求と支払いを扱う。
 context Billing "請求" {
   terms {
     paidAt: "支払日時"
