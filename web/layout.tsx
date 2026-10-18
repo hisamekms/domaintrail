@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState, type RefObject } from 'react';
 
 /** State kept in localStorage (per browser). Falls back to memory when storage is unavailable. */
 export function usePersistentState<T>(key: string, initial: T): [T, (value: T) => void] {
@@ -24,23 +24,54 @@ export function usePersistentState<T>(key: string, initial: T): [T, (value: T) =
     return [value, set];
 }
 
+/** Closes a dropdown on a click outside `root` or on Escape. */
+export function useDismiss(open: boolean, root: RefObject<HTMLElement | null>, close: () => void): void {
+    useEffect(() => {
+        if (!open) return;
+        const onDown = (e: MouseEvent) => {
+            if (root.current && !root.current.contains(e.target as Node)) close();
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') close();
+        };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [open, root, close]);
+}
+
 /**
  * Drag handle between panes. `direction` is the axis of the size being changed;
  * `invert` makes dragging towards the start grow the pane (for panes on the right / bottom).
+ * A function `max` is read when the drag starts (for limits that depend on the window size).
  */
-export function Resizer(props: { direction: 'x' | 'y'; size: number; min: number; max: number; invert?: boolean; onResize: (size: number) => void }) {
+export function Resizer(props: {
+    direction: 'x' | 'y';
+    size: number;
+    min: number;
+    max: number | (() => number);
+    invert?: boolean;
+    onResize: (size: number) => void;
+}) {
     const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
         e.preventDefault();
         const start = props.direction === 'x' ? e.clientX : e.clientY;
         const initial = props.size;
+        const max = Math.max(props.min, typeof props.max === 'function' ? props.max() : props.max);
         const target = e.currentTarget;
         target.setPointerCapture(e.pointerId);
+        // panes follow the pointer without their open / close animation
+        document.documentElement.classList.add('resizing');
         const move = (ev: PointerEvent) => {
             const delta = (props.direction === 'x' ? ev.clientX : ev.clientY) - start;
             const next = initial + (props.invert ? -delta : delta);
-            props.onResize(Math.round(Math.min(props.max, Math.max(props.min, next))));
+            props.onResize(Math.round(Math.min(max, Math.max(props.min, next))));
         };
         const up = () => {
+            document.documentElement.classList.remove('resizing');
             target.removeEventListener('pointermove', move);
             target.removeEventListener('pointerup', up);
         };

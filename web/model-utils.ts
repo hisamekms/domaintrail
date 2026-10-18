@@ -1,5 +1,5 @@
 import type { DisplayMode } from '../src/graph/ir';
-import { PRIMITIVE_JA, typeText } from '../src/graph/build';
+import { PRIMITIVE_LABELS, typeText } from '../src/graph/build';
 import type { CommandModel, DomainModel, ElementKind, ElementModel, StateModel, TypeExpr } from '../src/model/model';
 import { ownerElement } from './render';
 
@@ -20,27 +20,17 @@ export const KIND_LABEL: Record<string, string> = {
     context: 'Context',
 };
 
-/** Order of element kinds in lists and the explorer, with the group titles. */
-export const KIND_GROUPS: { kind: ElementKind; title: string }[] = [
-    { kind: 'aggregate', title: '集約' },
-    { kind: 'entity', title: 'Entity' },
-    { kind: 'valueObject', title: 'Value Object' },
-    { kind: 'union', title: 'Union' },
-    { kind: 'primitive', title: 'Domain Primitive' },
-    { kind: 'id', title: 'ID' },
-    { kind: 'enum', title: 'Enum' },
-    { kind: 'event', title: 'Event' },
-    { kind: 'error', title: 'Error' },
-];
+/** Order of element kinds in lists and the explorer (group titles: `kindGroups` in i18n). */
+export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'event', 'error'];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
-/** `確定済み (Confirmed)` when a Japanese name exists, otherwise the name. */
+/** `確定済み (Confirmed)` when a label exists, otherwise the name. */
 export const withLabel = (x: { name: string; label?: string }): string => (x.label ? `${x.label} (${x.name})` : x.name);
 
 /** A name in the given display mode. */
 export const nameIn = (mode: DisplayMode, name: string, label?: string): string =>
-    mode === 'en' || !label ? name : mode === 'ja' ? label : `${label} (${name})`;
+    mode === 'name' || !label ? name : mode === 'label' ? label : `${label} (${name})`;
 
 export type Resolved =
     | { kind: 'context'; name: string; label?: string; shared: boolean }
@@ -68,10 +58,16 @@ export function transitionText(agg: ElementModel, c: CommandModel): string {
     return `${c.factory ? 'new' : c.from.join(' | ')} → ${c.to.join(' | ')}`;
 }
 
+/** Selection ID of a .dt file: files are selected like model items and shown in the inspector. */
+export const fileSelection = (path: string): string => `file:${path}`;
+
+/** The file a selection ID stands for, if it is one. */
+export const selectedFile = (id: string | undefined): string | undefined => (id?.startsWith('file:') ? id.slice('file:'.length) : undefined);
+
 /** Kinds that are drawn in the Structure View. */
 export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 
-/** Kinds shown in the Primitives catalog. */
+/** Kinds shown in the catalog (for now its only section, the domain primitives). */
 export const inCatalog = (kind: string): boolean => kind === 'primitive' || kind === 'id' || kind === 'enum';
 
 /** Contexts with shared ones first. */
@@ -87,7 +83,7 @@ export interface Namer {
     of(x: { name: string; label?: string }): string;
     /** A field or parameter: its resolved label (inline, term or type). */
     field(f: { name: string; label?: string }): string;
-    /** A type as written in `ctx`; in `ja` mode built-in types and labelled elements use their Japanese names. */
+    /** A type as written in `ctx`; in `label` mode built-in types and labelled elements use their labels. */
     type(t: TypeExpr, ctx: string): string;
     /** A built-in type name (e.g. the base of a domain primitive). */
     primitive(name: string): string;
@@ -110,11 +106,11 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         of,
         field: of,
         type(t, ctx) {
-            const en = typeText(t, ctx, model?.sharedContexts ?? []);
-            if (mode !== 'ja') return en;
-            return t.kind === 'primitive' ? PRIMITIVE_JA[t.name] : (model?.elements[t.ref]?.label ?? en);
+            const byName = typeText(t, ctx, model?.sharedContexts ?? []);
+            if (mode !== 'label') return byName;
+            return t.kind === 'primitive' ? PRIMITIVE_LABELS[t.name] : (model?.elements[t.ref]?.label ?? byName);
         },
-        primitive: (name) => (mode === 'ja' ? (PRIMITIVE_JA[name] ?? name) : name),
+        primitive: (name) => (mode === 'label' ? (PRIMITIVE_LABELS[name] ?? name) : name),
         state,
         transition(agg, c) {
             if (!agg.states?.length) return c.factory ? 'new' : '';

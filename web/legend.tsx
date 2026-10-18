@@ -1,38 +1,57 @@
-/** Key for the edges of the canvas views; every edge points from the dependent to its dependency. */
-export function Legend({ view }: { view: 'contextMap' | 'structure' | 'focus' | 'states' }) {
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useT } from './i18n';
+
+/**
+ * Key for the edges of the canvas views; every edge points from the dependent to its dependency. Closed, it leaves a
+ * flat tab on the bottom edge of the canvas that opens it.
+ */
+export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structure' | 'focus' | 'states'; open: boolean; onToggle: () => void }) {
+    const t = useT();
+    const words = t.legendRows;
     const rows =
         view === 'contextMap'
             ? [
-                  { kind: 'references', text: 'ID だけで依存（ID 参照の件数）' },
-                  { kind: 'dependsOn', text: '型も借りて依存（型の借用の件数）' },
+                  { kind: 'references', text: words.mapReferences },
+                  { kind: 'dependsOn', text: words.mapDependsOn },
               ]
             : view === 'focus'
               ? [
-                    { kind: 'owns', text: '所有（集約の内部）' },
-                    { kind: 'references', text: '参照（ID で別の集約・BC へ）' },
-                    { kind: 'value', text: '値・型の借用（Value Object / Union / Enum など）' },
+                    { kind: 'owns', text: words.owns },
+                    { kind: 'references', text: words.focusReferences },
+                    { kind: 'value', text: words.focusValue },
                 ]
               : view === 'structure'
                 ? [
-                      { kind: 'owns', text: '所有（集約の内部）' },
-                      { kind: 'references', text: '参照（ID で別の集約へ）' },
-                      { kind: 'value', text: '値（Value Object / Union を持つ）' },
+                      { kind: 'owns', text: words.owns },
+                      { kind: 'references', text: words.references },
+                      { kind: 'value', text: words.value },
                   ]
-                : [{ kind: 'transition', text: 'Command による遷移（⇒ 発生させる Event）' }];
+                : [{ kind: 'transition', text: words.transition }];
     return (
-        <div className="legend">
-            {rows.map((r) => (
-                <div key={r.kind} className="legend-row">
-                    <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
-                        <path d="M4,7 L42,7" className="de-line" />
-                        {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
-                        <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />
-                    </svg>
-                    <span>{r.text}</span>
+        <>
+            <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>
+                <div className="legend-title">
+                    {t.legend}
+                    <button className="icon-button" onClick={onToggle} title={t.closeLegend} aria-label={t.closeLegend}>
+                        <ChevronDown size={14} aria-hidden />
+                    </button>
                 </div>
-            ))}
-            {view === 'focus' && <div className="legend-note">点線枠の小さな箱は別の BC の要素（スタブ）</div>}
-            <div className="legend-note">矢印の先が依存先</div>
-        </div>
+                {rows.map((r) => (
+                    <div key={r.kind} className="legend-row">
+                        <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
+                            <path d="M4,7 L42,7" className="de-line" />
+                            {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
+                            <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />
+                        </svg>
+                        <span>{r.text}</span>
+                    </div>
+                ))}
+                {view === 'focus' && <div className="legend-note">{t.stubNote}</div>}
+                <div className="legend-note">{t.arrowNote}</div>
+            </div>
+            <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} title={t.openLegend} aria-label={t.openLegend}>
+                <ChevronUp size={14} aria-hidden />
+            </button>
+        </>
     );
 }

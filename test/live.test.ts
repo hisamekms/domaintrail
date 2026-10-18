@@ -65,6 +65,8 @@ describe('Live View', () => {
         const graph = (await focus.json()) as { id: string; nodeLayout: Record<string, unknown> };
         expect(graph.id).toBe('structure-focus:Billing:overview');
         expect(Object.keys(graph.nodeLayout)).toContain('Billing.Invoice');
+        const hidden = (await (await fetch(`${server.url}api/focus?contexts=Billing&hide=Sales,Billing,Unknown`)).json()) as { id: string };
+        expect(hidden.id).toBe('structure-focus:Billing:hide=Sales');
         expect((await fetch(`${server.url}api/focus?contexts=Common`)).status).toBe(404);
         const rebound = await fetch(`${server.url}api/focus?contexts=Billing`, { headers: { Host: 'attacker.example' } });
         expect(rebound.status).toBe(403);

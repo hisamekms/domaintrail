@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { buildStructureGraph, focusGraphId } from '../src/graph/build.js';
 import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from '../src/graph/context-map.js';
 import { contextDependencies, groupByContext, supportingContexts } from '../src/model/dependencies.js';
+import { perLang } from '../src/graph/ir.js';
 import type { DomainModel } from '../src/model/model.js';
 import { check } from './helpers.js';
 
@@ -74,14 +75,14 @@ describe('Context Map', () => {
             ['map:Billing', 'boundedContext', 'Billing', '«bounded context»'],
             ['map:Sales', 'boundedContext', 'Sales', '«bounded context»'],
         ]);
-        expect(g.nodes[1].lines.map((l) => `${l.key.en} ${l.value?.en}`)).toEqual(['aggregates 1', 'value objects 1', 'enums 1', 'IDs 1', 'events 1']);
+        expect(g.nodes[1].lines.map((l) => `${l.key.en.name} ${l.value?.en.name}`)).toEqual(['aggregates 1', 'value objects 1', 'enums 1', 'IDs 1', 'events 1']);
         expect(g.edges).toEqual([
             {
                 id: 'Billing|Sales',
                 kind: 'dependsOn',
                 source: contextNodeId('Billing'),
                 target: contextNodeId('Sales'),
-                label: { en: 'ID 2 · type 2', ja: 'ID 2 · 型 2', both: 'ID 2 · 型 2' },
+                label: perLang({ ja: 'ID 2 · 型 2', en: 'ID 2 · type 2' }),
             },
         ]);
     });
@@ -114,7 +115,7 @@ describe('focused Structure View', () => {
             'Sales.Channel stub in Sales',
             'Sales.Address stub in Sales',
         ]);
-        expect(g.edges.map((e) => [e.id, e.kind, e.label?.en])).toEqual([
+        expect(g.edges.map((e) => [e.id, e.kind, e.label?.en.name])).toEqual([
             ['Billing.Invoice.origin', 'value', 'origin'],
             ['Billing.Origin=>Sales.Order', 'references', 'ORDER.orderId'],
             ['Billing.Origin=>Sales.Channel', 'value', 'MANUAL.channel'],
@@ -154,6 +155,18 @@ describe('focused Structure View', () => {
         ]);
         const ids = new Set(g.nodes.map((n) => n.id));
         expect(g.edges.every((e) => ids.has(e.source) && ids.has(e.target))).toBe(true);
+    });
+
+    test('hidden contexts: their stubs and the dependencies on and from them are left out', async () => {
+        const g = buildStructureGraph(await model(), { focus: ['Billing'], hidden: ['Sales'] });
+        expect(g.id).toBe('structure-focus:Billing:hide=Sales');
+        expect(g.nodes.some((n) => n.kind === 'stub' || n.id === 'Sales')).toBe(false);
+        expect(g.edges.map((e) => e.id)).toEqual(['Billing.Invoice.origin']);
+        // a focused context is never hidden
+        const focused = buildStructureGraph(await model(), { focus: ['Sales'], hidden: ['Sales', 'Billing'] });
+        expect(focused.id).toBe('structure-focus:Sales:hide=Billing');
+        // Sales.Channel is drawn only because Billing uses it
+        expect(focused.nodes.filter((n) => n.kind === 'stub')).toEqual([]);
     });
 
     test('the overview of focused contexts has names only, in larger text', async () => {

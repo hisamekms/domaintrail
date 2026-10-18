@@ -57,7 +57,7 @@ describe('State View graph', () => {
         const model = await exampleModel();
         const g = buildStateGraph(model.elements['Sales.Order'], model);
         expect(g.nodes.map((n) => n.id)).toEqual([initialNodeId('Sales.Order'), 'Sales.Order#Draft', 'Sales.Order#Confirmed', 'Sales.Order#Cancelled']);
-        expect(g.edges.map((e) => `${e.source.split(/[#@]/)[1]}->${e.target.split(/[#@]/)[1]}:${e.label?.en}`)).toEqual([
+        expect(g.edges.map((e) => `${e.source.split(/[#@]/)[1]}->${e.target.split(/[#@]/)[1]}:${e.label?.en.name}`)).toEqual([
             'new->Draft:place(customer) ⇒ OrderPlaced',
             'Draft->Draft:addItem(item)',
             'Draft->Confirmed:confirm(at) ⇒ OrderConfirmed',

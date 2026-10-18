@@ -3,12 +3,16 @@ import { contextDependencies, representative, supportingContexts } from '../mode
 import { allFieldsOf, elementList } from '../model/model.js';
 import {
     CHAR_WIDTH,
-    DISPLAY_MODES,
     HEADER_HEIGHT,
     LINE_HEIGHT,
+    TEXT_VARIANTS,
+    anyLang,
+    mapTexts,
     maxUnits,
+    perLang,
     sameText,
     textUnits,
+    type Lang,
     type Graph,
     type GraphEdge,
     type GraphLine,
@@ -38,8 +42,8 @@ const STRUCTURE_KINDS = new Set<ElementModel['kind']>(['aggregate', 'entity', 'v
 const HELD_KINDS = new Set<ElementModel['kind']>(['entity', 'valueObject', 'union']);
 
 /** Type name as written in `ctx`: own and shared-context types by simple name, others qualified. */
-/** Japanese names of built-in types, used in the 日本語 display mode. */
-export const PRIMITIVE_JA: Record<string, string> = {
+/** Labels of built-in types, shown in the ラベル display mode. */
+export const PRIMITIVE_LABELS: Record<string, string> = {
     String: '文字列',
     Int: '整数',
     Decimal: '小数',
@@ -59,9 +63,15 @@ export function fieldText(f: FieldModel, ctx: string): string {
     return `${marker}${f.name}: ${typeText(f.type, ctx)}${f.multiplicity}`;
 }
 
+/** The Live View's own words in the diagrams. */
+const WORDS: Record<Lang, { shared: string; aggregate: string; state: string; more: (n: number) => string }> = {
+    ja: { shared: '共有', aggregate: '集約', state: '状態', more: (n) => `他${n}` },
+    en: { shared: 'shared', aggregate: 'aggregate', state: 'state', more: (n) => `+${n}` },
+};
+
 /** `name` / `label` / `label name` depending on the display mode (label falls back to the name). */
 export function named(name: string, label: string | undefined, both = (l: string, n: string) => `${l} (${n})`, suffix = ''): Texts {
-    return { en: name + suffix, ja: (label ?? name) + suffix, both: (label ? both(label, name) : name) + suffix };
+    return anyLang({ name: name + suffix, label: (label ?? name) + suffix, both: (label ? both(label, name) : name) + suffix });
 }
 
 const lookupLabel = (model: DomainModel, qname: string): string | undefined => model.elements[qname]?.label;
@@ -69,15 +79,15 @@ const lookupLabel = (model: DomainModel, qname: string): string | undefined => m
 /** A field row in every display mode: key `◆ 明細` / `◆ items`, value `注文明細[0..*]` / `OrderItem[0..*]`. */
 export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent = ''): GraphLine {
     const marker = indent + (f.kind === 'owns' ? '◆ ' : f.kind === 'references' ? '→ ' : '');
-    const en = typeText(f.type, ctx, model.sharedContexts);
-    const ja = f.type.kind === 'ref' ? (lookupLabel(model, f.type.ref) ?? en) : PRIMITIVE_JA[f.type.name];
+    const byName = typeText(f.type, ctx, model.sharedContexts);
+    const byLabel = f.type.kind === 'ref' ? (lookupLabel(model, f.type.ref) ?? byName) : PRIMITIVE_LABELS[f.type.name];
     return {
-        key: {
-            en: `${marker}${f.name}`,
-            ja: `${marker}${f.label ?? f.name}`,
+        key: anyLang({
+            name: `${marker}${f.name}`,
+            label: `${marker}${f.label ?? f.name}`,
             both: `${marker}${f.label ? `${f.label} ` : ''}${f.name}`,
-        },
-        value: { en: en + f.multiplicity, ja: ja + f.multiplicity, both: en + f.multiplicity },
+        }),
+        value: anyLang({ name: byName + f.multiplicity, label: byLabel + f.multiplicity, both: byName + f.multiplicity }),
     };
 }
 
@@ -88,10 +98,10 @@ const COLUMN_GAP = 2;
 function bodyUnits(lines: GraphLine[]): number {
     return Math.max(
         0,
-        ...DISPLAY_MODES.map((m) => {
-            const key = Math.max(0, ...lines.filter((l) => l.value).map((l) => textUnits(l.key[m])));
-            const value = Math.max(0, ...lines.map((l) => (l.value ? textUnits(l.value[m]) : 0)));
-            const keyOnly = Math.max(0, ...lines.filter((l) => !l.value).map((l) => textUnits(l.key[m])));
+        ...TEXT_VARIANTS.map(([g, m]) => {
+            const key = Math.max(0, ...lines.filter((l) => l.value).map((l) => textUnits(l.key[g][m])));
+            const value = Math.max(0, ...lines.map((l) => (l.value ? textUnits(l.value[g][m]) : 0)));
+            const keyOnly = Math.max(0, ...lines.filter((l) => !l.value).map((l) => textUnits(l.key[g][m])));
             return Math.max(value ? key + COLUMN_GAP + value : 0, keyOnly);
         }),
     );
@@ -113,22 +123,27 @@ export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphN
  */
 export const STRUCTURE_OVERVIEW_GRAPH_ID = 'structure-overview';
 
-/** Structure View of some bounded contexts, with the elements they depend on and that depend on them as stubs. */
-export const focusGraphId = (contexts: readonly string[], overview = false): string =>
-    `structure-focus:${[...contexts].sort().join('+')}${overview ? ':overview' : ''}`;
+/**
+ * Structure View of some bounded contexts, with the elements they depend on and that depend on them as stubs
+ * (except those of the `hidden` contexts).
+ */
+export const focusGraphId = (contexts: readonly string[], overview = false, hidden: readonly string[] = []): string =>
+    `structure-focus:${[...contexts].sort().join('+')}${hidden.length ? `:hide=${[...hidden].sort().join('+')}` : ''}${overview ? ':overview' : ''}`;
 
 /**
  * Structure View. With `overview`, nodes show only their names (no field rows) in larger text,
- * to see the whole model at a glance. With `focus`, only those contexts are drawn (see `focusStubs`).
+ * to see the whole model at a glance. With `focus`, only those contexts are drawn (see `focusStubs`), and
+ * the dependencies on and from the `hidden` contexts are left out.
  */
-export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean; focus?: readonly string[] } = {}): Graph {
+export function buildStructureGraph(model: DomainModel, opts: { overview?: boolean; focus?: readonly string[]; hidden?: readonly string[] } = {}): Graph {
     const scale = opts.overview ? OVERVIEW_TEXT_SCALE : 1;
     const elements = elementList(model);
     const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
     const shown = elements.filter((e) => STRUCTURE_KINDS.has(e.kind) && (!focus || focus.has(e.context)));
     const byId = new Map(elements.map((e) => [e.id, e]));
     const owners = owningAggregates(shown, byId);
-    const stubs = focus ? focusStubs(model, focus, new Set(shown.map((e) => e.id))) : undefined;
+    const hidden = (opts.hidden ?? []).filter((c) => !focus?.has(c));
+    const stubs = focus ? focusStubs(model, focus, new Set(shown.map((e) => e.id)), new Set(hidden)) : undefined;
 
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
@@ -137,7 +152,7 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
         if (!usedContexts.has(ctx)) continue;
         const shared = model.sharedContexts.includes(ctx);
         const base = named(ctx, model.contextLabels[ctx]);
-        const label = shared ? { en: `${base.en} · shared`, ja: `${base.ja} · 共有`, both: `${base.both} · 共有` } : base;
+        const label = shared ? mapTexts(base, (s, lang) => `${s} · ${WORDS[lang].shared}`) : base;
         nodes.push({ id: ctx, kind: shared ? 'sharedContext' : 'context', label, lines: [], elementId: ctx, width: 0, height: 0 });
     }
 
@@ -146,7 +161,7 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             nodes.push({
                 id: boundaryId(el.id),
                 kind: 'aggregateBoundary',
-                label: { en: `${el.name} aggregate`, ja: `${el.label ?? el.name} 集約`, both: `${el.label ? `${el.label} (${el.name})` : el.name} aggregate` },
+                label: mapTexts(named(el.name, el.label), (s, lang) => `${s} ${WORDS[lang].aggregate}`),
                 lines: [],
                 parent: el.context,
                 elementId: el.id,
@@ -164,9 +179,9 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             }
         }
         if (!opts.overview && el.kind === 'aggregate' && el.states?.length) {
-            const en = el.states.map((s) => s.name).join(' | ');
-            const ja = el.states.map((s) => s.label ?? s.name).join(' | ');
-            lines.push({ key: { en: 'state', ja: '状態', both: '状態 state' }, value: { en, ja, both: en } });
+            const byName = el.states.map((s) => s.name).join(' | ');
+            const byLabel = el.states.map((s) => s.label ?? s.name).join(' | ');
+            lines.push({ key: perLang({ ja: WORDS.ja.state, en: WORDS.en.state }), value: anyLang({ name: byName, label: byLabel, both: byName }) });
         }
         nodes.push(
             sized({
@@ -202,7 +217,7 @@ export function buildStructureGraph(model: DomainModel, opts: { overview?: boole
             );
         }
         edges.push(...stubs.edges);
-        const id = focusGraphId(opts.focus!, opts.overview);
+        const id = focusGraphId(opts.focus!, opts.overview, hidden);
         return opts.overview ? { id, nodes, edges, textScale: scale } : { id, nodes, edges };
     }
     return opts.overview ? { id: STRUCTURE_OVERVIEW_GRAPH_ID, nodes, edges, textScale: scale } : { id: STRUCTURE_GRAPH_ID, nodes, edges };
@@ -224,12 +239,17 @@ const STUB_STEREOTYPES: Record<ElementModel['kind'], string> = {
  * Dependencies of the focused contexts, both ways: elements of other contexts that they use, and elements of other
  * contexts that use them, drawn as stubs (name only) in their own context. Dependencies between two focused contexts
  * are drawn between their elements. An ID stands for the aggregate or entity it identifies, and an element that the
- * Structure View does not draw (an enum, a domain primitive) appears as a stub. Shared and ID-only contexts are left
- * out, and so are uses inside events and errors (they repeat the aggregate's fields). One edge per pair of elements,
- * labeled with the fields.
+ * Structure View does not draw (an enum, a domain primitive) appears as a stub. Shared and ID-only contexts and the
+ * `hidden` ones are left out, and so are uses inside events and errors (they repeat the aggregate's fields). One edge
+ * per pair of elements, labeled with the fields.
  */
-function focusStubs(model: DomainModel, focus: ReadonlySet<string>, shownIds: Set<string>): { elements: ElementModel[]; edges: GraphEdge[] } {
-    const hidden = supportingContexts(model);
+function focusStubs(
+    model: DomainModel,
+    focus: ReadonlySet<string>,
+    shownIds: Set<string>,
+    hiddenContexts: ReadonlySet<string>,
+): { elements: ElementModel[]; edges: GraphEdge[] } {
+    const hidden = new Set([...supportingContexts(model), ...hiddenContexts]);
     const stubs = new Map<string, ElementModel>();
     const pairs = new Map<string, { source: string; target: string; type: boolean; paths: string[] }>();
     for (const d of contextDependencies(model)) {
@@ -252,7 +272,7 @@ function focusStubs(model: DomainModel, focus: ReadonlySet<string>, shownIds: Se
             kind: p.type ? 'value' : 'references',
             source: p.source,
             target: p.target,
-            label: { en: more > 0 ? `${shown} +${more}` : shown, ja: more > 0 ? `${shown} 他${more}` : shown, both: more > 0 ? `${shown} 他${more}` : shown },
+            label: perLang({ ja: more > 0 ? `${shown} ${WORDS.ja.more(more)}` : shown, en: more > 0 ? `${shown} ${WORDS.en.more(more)}` : shown }),
         };
     });
     return { elements: [...stubs.values()], edges };
@@ -265,7 +285,7 @@ function fieldEdge(el: ElementModel, f: FieldModel, byId: Map<string, ElementMod
         const field = named(f.name, f.label, (l, n) => `${l} ${n}`, suffix);
         if (!variant) return field;
         const v = named(variant.name, variant.label, (l, n) => `${l} ${n}`);
-        return { en: `${v.en}.${field.en}`, ja: `${v.ja}.${field.ja}`, both: `${v.both}.${field.both}` };
+        return mapTexts(field, (s, lang, mode) => `${v[lang][mode]}.${s}`);
     };
     if (f.kind === 'references') {
         if (!f.target || byId.get(f.target)?.kind !== 'aggregate') return undefined;
@@ -354,12 +374,12 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel): Graph {
 
 function commandLabel(c: CommandModel, model: DomainModel): Texts {
     const short = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
-    const emitsEn = c.emits.length ? ` ⇒ ${c.emits.map(short).join(', ')}` : '';
-    const emitsJa = c.emits.length ? ` ⇒ ${c.emits.map((e) => lookupLabel(model, e) ?? short(e)).join(', ')}` : '';
+    const emitsByName = c.emits.length ? ` ⇒ ${c.emits.map(short).join(', ')}` : '';
+    const emitsByLabel = c.emits.length ? ` ⇒ ${c.emits.map((e) => lookupLabel(model, e) ?? short(e)).join(', ')}` : '';
     const signature = `${c.name}(${c.params.map((p) => p.name).join(', ')})`;
-    return {
-        en: `${signature}${emitsEn}`,
-        ja: `${c.label ?? signature}${emitsJa}`,
-        both: `${c.label ? `${c.label} ` : ''}${signature}${emitsEn}`,
-    };
+    return anyLang({
+        name: `${signature}${emitsByName}`,
+        label: `${c.label ?? signature}${emitsByLabel}`,
+        both: `${c.label ? `${c.label} ` : ''}${signature}${emitsByName}`,
+    });
 }

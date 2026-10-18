@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DomainTrail</title>
     <link rel="stylesheet" href="./styles.css" />
+    <script>
+      // Apply the theme before the app loads so that the page does not flash light (see web/theme.ts).
+      try {
+        const pref = JSON.parse(localStorage.getItem('domaintrail.theme') ?? '"auto"');
+        const dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      } catch {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

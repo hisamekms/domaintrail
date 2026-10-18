@@ -40,12 +40,13 @@ const DIRECTION: Record<string, string> = {
     structure: 'DOWN',
     // same direction as the detail mode, so switching keeps the mental map
     'structure-overview': 'DOWN',
-    states: 'RIGHT',
+    // shown in the inspector, which is tall and narrow
+    states: 'DOWN',
 };
 
 export class ElkLayoutEngine implements LayoutEngine {
     readonly name = 'elk';
-    readonly version = 7;
+    readonly version = 8;
     private readonly elk = new ELK({ workerFactory: createWorker });
 
     /** Stops the layout worker so the process can exit (the in-process fake Worker has nothing to stop). */
@@ -85,7 +86,7 @@ export class ElkLayoutEngine implements LayoutEngine {
                 id: e.id,
                 sources: [e.source],
                 targets: [e.target],
-                labels: e.label ? [{ text: e.label.en, width: Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(19 * scale) }] : [],
+                labels: e.label ? [{ text: e.label.en.name, width: Math.ceil(maxUnits(e.label) * LABEL_CHAR_WIDTH * scale) + 8, height: Math.ceil(19 * scale) }] : [],
             }));
 
         const kind = graph.id.split(':')[0];

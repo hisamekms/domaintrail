@@ -203,8 +203,8 @@ export const name = (a: Sales.Actor): string => (a.kind === 'EXTERNAL_PARTY' ? a
         const g = buildStructureGraph(a.model!);
         const node = g.nodes.find((n) => n.id === 'Sales.Details')!;
         expect(node).toMatchObject({ kind: 'union', stereotype: '«union»', parent: 'Sales.Spec@boundary' });
-        expect(node.lines.map((l) => l.key.en)).toEqual(['type: DELIVERY', `${VARIANT_INDENT}details`, 'type: PRINTING', `${VARIANT_INDENT}details`]);
-        const edges = g.edges.filter((e) => e.source === 'Sales.Details').map((e) => [e.id, e.target, e.label?.en]);
+        expect(node.lines.map((l) => l.key.en.name)).toEqual(['type: DELIVERY', `${VARIANT_INDENT}details`, 'type: PRINTING', `${VARIANT_INDENT}details`]);
+        const edges = g.edges.filter((e) => e.source === 'Sales.Details').map((e) => [e.id, e.target, e.label?.en.name]);
         expect(edges).toEqual([
             ['Sales.Details.DELIVERY.details', 'Sales.DeliverySpec', 'DELIVERY.details'],
             ['Sales.Details.PRINTING.details', 'Sales.PrintingSpec', 'PRINTING.details'],

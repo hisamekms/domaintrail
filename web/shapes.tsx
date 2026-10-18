@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { useT } from './i18n';
 import { BaseBoxShapeUtil, HTMLContainer, Polyline2d, SVGContainer, ShapeUtil, T, Vec, type RecordProps, type TLShape } from 'tldraw';
 
 export type ChangeMark = 'none' | 'added' | 'changed' | 'removed';
@@ -104,7 +105,7 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
                                 )}
                             </div>
                         )}
-                        {p.change !== 'none' && <div className="dn-badge">{CHANGE_LABEL[p.change]}</div>}
+                        {p.change !== 'none' && <ChangeBadge change={p.change} />}
                         {p.diag !== 'none' && <div className="dn-diag">{p.diag === 'error' ? '✕' : '!'}</div>}
                     </>
                 )}
@@ -248,6 +249,9 @@ function roundRect(w: number, h: number, r: number): Path2D {
     return p;
 }
 
-const CHANGE_LABEL: Record<ChangeMark, string> = { none: '', added: '追加', changed: '変更', removed: '削除' };
+function ChangeBadge({ change }: { change: Exclude<ChangeMark, 'none'> }) {
+    const t = useT();
+    return <div className="dn-badge">{t[change]}</div>;
+}
 
 export const shapeUtils = [DomainNodeUtil, DomainGroupUtil, DomainEdgeUtil];
