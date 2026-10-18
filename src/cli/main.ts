@@ -34,7 +34,7 @@ async function runCheck(config: ResolvedConfig, io: CliIO): Promise<Analysis> {
 export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Promise<number> {
     let exitCode = 0;
     const program = new Command()
-        .name('dmtr')
+        .name('dt')
         .description('Domain Modeling DSL: check, generate TypeScript, and view models live.')
         .option('-r, --root <dir>', 'where to look for domaintrail.jsonc / domaintrail.json (and the workspace root without one)', '.')
         .option('-c, --config <file>', 'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent)')

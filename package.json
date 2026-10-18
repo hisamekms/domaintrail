@@ -22,7 +22,8 @@
   ],
   "type": "module",
   "bin": {
-    "dmtr": "./dist/dmtr.js"
+    "dt": "./dist/dt.js",
+    "domaintrail": "./dist/dt.js"
   },
   "files": [
     "dist",
@@ -36,7 +37,7 @@
     "build": "bun run langium:generate && bun ./scripts/build.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
-    "dmtr": "bun ./bin/dmtr.ts",
+    "dt": "bun ./bin/dt.ts",
     "prepack": "bun run build"
   },
   "dependencies": {

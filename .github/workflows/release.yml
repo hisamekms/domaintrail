@@ -35,6 +35,6 @@ jobs:
       - run: bun test
 
       - name: Smoke test on Node
-        run: node dist/dmtr.js -r examples/shop check
+        run: node dist/dt.js -r examples/shop check
 
       - run: npm publish --provenance --access public
