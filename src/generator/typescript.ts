@@ -9,12 +9,14 @@ import {
     STATE_TAG,
     aggregateEventTypeName,
     aggregateParamName,
+    byStateTypeName,
     commandTypeName,
     commandsInterfaceName,
     commonTypeName,
     invalidTypeName,
     makeTypeName,
     stateTypeName,
+    targetsVary,
 } from './naming.js';
 
 export interface GeneratedFile {
@@ -50,6 +52,20 @@ export interface Err<E> {
 
 export const ok = <T>(value: T): Ok<T> => ({ ok: true, value });
 export const err = <E>(error: E): Err<E> => ({ ok: false, error });
+
+/** Arguments of a handler after the first. */
+type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A : never;
+
+/**
+ * Implements a command from one handler per state (a generated \`<Command>ByState\` type): the result calls the handler
+ * of its first argument's \`${STATE_TAG}\` with the same arguments, and is assignable to the command's contract.
+ *
+ *     changeNote: byState<Sales.ChangeNoteOrderByState>({ Draft: (order, note) => …, Confirmed: (order, note) => … })
+ */
+export const byState =
+    <H extends { readonly [state: string]: (subject: any, ...args: any[]) => unknown }>(handlers: H) =>
+    <S extends { readonly ${STATE_TAG}: keyof H }>(subject: S, ...args: ArgsAfterFirst<H[keyof H]>): ReturnType<H[S['${STATE_TAG}']]> =>
+        handlers[subject.${STATE_TAG}](subject, ...args) as ReturnType<H[S['${STATE_TAG}']]>;
 
 /** Decimal values are carried as strings so that no precision is lost. */
 export type Decimal = string & { readonly __brand: 'Decimal' };
@@ -302,22 +318,16 @@ class ContextEmitter {
         const stateUnion = (names: string[]): string => (stateful ? unique(names).map((n) => stateTypeName(agg, n)).join(' | ') : agg.name);
         const transitions = stateful ? c.transitions : [];
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
-        // (`A -> A, B -> B`): generic over the input state, the output picked by a conditional type.
-        const generic = !c.factory && new Set(transitions.map((t) => unique(t.to).sort().join('|'))).size > 1;
+        // (`A -> A, B -> B`): a handler per source state (`…ByState`), and a contract generic over the input state
+        // whose output is that of the handler of its state. `byState` turns the handlers into the contract.
+        const generic = stateful && targetsVary(c.factory, transitions.map((t) => t.to));
         const input = stateUnion(transitions.flatMap((t) => t.from));
-        const params: string[] = [];
-        if (!c.factory) params.push(`${aggregateParamName(agg)}: ${generic ? 'S' : input}`);
-        for (const p of c.params) params.push(`${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
-
-        const output = generic
-            ? transitions
-                  .slice(0, -1)
-                  .map((t) => `S extends ${stateUnion(t.from)} ? ${stateUnion(t.to)} : `)
-                  .join('') + stateUnion(transitions[transitions.length - 1]!.to)
-            : stateUnion(transitions[0]?.to ?? []);
+        const self = aggregateParamName(agg);
+        const params = c.params.map((p) => `${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
         const events = c.emits.length === 0 ? 'never' : c.emits.map((e) => this.ref(e)).join(' | ');
         const eventArray = c.emits.length > 1 ? `readonly (${events})[]` : `readonly ${events}[]`;
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
+        const result = (output: string): string => `Result<readonly [${output}, ${eventArray}], ${errors}>`;
 
         const transition = c.factory
             ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
@@ -328,15 +338,22 @@ class ContextEmitter {
             ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
         ]);
         this.line(`export type ${commandTypeName(agg, c)} = ${generic ? `<S extends ${input}>` : ''}(`);
-        for (const p of params) this.line(`    ${p},`);
-        if (generic) {
-            this.line(') => Result<readonly [');
-            this.line(`    ${output},`);
-            this.line(`    ${eventArray},`);
-            this.line(`], ${errors}>;`);
-        } else {
-            this.line(`) => Result<readonly [${output}, ${eventArray}], ${errors}>;`);
+        for (const p of [...(c.factory ? [] : [`${self}: ${generic ? 'S' : input}`]), ...params]) this.line(`    ${p},`);
+        if (!generic) {
+            this.line(`) => ${result(stateUnion(transitions[0]?.to ?? []))};`);
+            return;
         }
+        this.line(`) => ReturnType<${byStateTypeName(agg, c)}[S['${STATE_TAG}']]>;`);
+        this.out.push('');
+        this.jsdoc([`${agg.name}.${c.name}, one handler per source state; implement it with \`byState\` from the runtime.`]);
+        this.line(`export type ${byStateTypeName(agg, c)} = {`);
+        for (const t of transitions) {
+            for (const from of t.from) {
+                const args = [`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ');
+                this.line(`    readonly ${from}: (${args}) => ${result(stateUnion(t.to))};`);
+            }
+        }
+        this.line('};');
     }
 
     private iface(name: string, bases: string[], extra: string[], fields: FieldModel[]): void {

@@ -448,30 +448,49 @@ export type ConfirmOrder = (
 ```
 
 A command takes the aggregate in any source state of its transitions. When every transition has the same targets
-(`Draft | Confirmed -> Cancelled`), it returns them, as above. When the targets differ by transition, the command is
-generic over the input state and a conditional type picks the output of its transition, so a caller with a
-`DraftOrder` gets a `DraftOrder` back, never a `ConfirmedOrder`:
+(`Draft | Confirmed -> Cancelled`), it returns them, as above. When the targets differ by transition, the command
+also gets a `<Command>ByState` type with one handler per source state (keyed by the state's name), and the command is
+generic over the input state, returning what the handler of that state returns. A caller with a `DraftOrder` gets a
+`DraftOrder` back, never a `ConfirmedOrder`; a caller with `DraftOrder | ConfirmedOrder` gets either:
 
 ```ts
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
     note: string | undefined,
-) => Result<readonly [
-    S extends DraftOrder ? DraftOrder : ConfirmedOrder,
-    readonly never[],
-], never>;
+) => ReturnType<ChangeNoteOrderByState[S['state']]>;
+
+export type ChangeNoteOrderByState = {
+    readonly Draft: (order: DraftOrder, note: string | undefined) => Result<readonly [DraftOrder, readonly never[]], never>;
+    readonly Confirmed: (order: ConfirmedOrder, note: string | undefined) => Result<readonly [ConfirmedOrder, readonly never[]], never>;
+};
 ```
 
-TypeScript does not narrow `S` inside an implementation, so an implementation of such a command needs a type
-assertion on its result; the compiler checks the contract where the command is called.
+Implement such a command with `byState` from the runtime: it takes the handlers and calls the one of the aggregate's
+`state`. Each handler is checked against its own transition — returning a `ConfirmedOrder` from the `Draft` handler,
+or leaving a handler out, is a compile error — and no type assertion is needed. Pass the `…ByState` type as the type
+argument so that the handlers' parameters are typed from it:
+
+```ts
+// src/note.ts — your code
+import { byState, ok, type Sales } from '../generated/domain/index.js';
+
+export const changeNote: Sales.OrderCommands['changeNote'] = byState<Sales.ChangeNoteOrderByState>({
+    Draft: (order, note) => ok([{ ...order, note }, []] as const),
+    Confirmed: (order, note) => ok([{ ...order, note }, []] as const),
+});
+```
+
+(TypeScript does not narrow `S` inside a hand-written implementation of the generic contract, which is why the
+handlers exist: written directly, the implementation needs a type assertion on its result.)
 
 ### Generated code and your code
 
 The generated files are the **contract**, your code is the **implementation**:
 
-- Generated: types only — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`) and the
-  constructor signatures of domain primitives (`MakeQuantity`). Invariants appear as JSDoc (`@invariant`); nothing in
-  the generated code checks them.
+- Generated: types only — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`,
+  `ChangeNoteOrderByState`) and the constructor signatures of domain primitives (`MakeQuantity`). Invariants appear as
+  JSDoc (`@invariant`); nothing in the generated code checks them. The one exception is `_runtime.ts`, whose few
+  helpers (`ok`, `err`, `byState`) are the same for every model.
 - Yours: everything that runs — command implementations, `Make<Name>` constructors, invariant checks — in your own
   files, which import the generated modules (never the other way round) and are type-checked against them.
 

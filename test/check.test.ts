@@ -227,6 +227,16 @@ describe('generated TypeScript names (M011)', () => {
         );
     });
 
+    test('collision with the handlers per state of a command whose targets depend on its source', async () => {
+        const vary = ORDER.replace('Draft -> Done', 'Draft -> Done, Done -> Draft');
+        const a = await checkSales(`${vary} value FinishOrderByState`);
+        expect(only(a, 'M011')[0].message).toBe(
+            "Generated TypeScript name 'FinishOrderByState' for value object 'FinishOrderByState' collides with the handlers per state of 'Order.finish'.",
+        );
+        // shared targets: no such type, so no collision
+        expect(only(await checkSales(`${ORDER} value FinishOrderByState`), 'M011')).toEqual([]);
+    });
+
     test('reserved discriminant and parameter names', async () => {
         const a = await checkSales(`${ORDER.replace('finish(at: Timestamp)', 'finish(order: Timestamp, default: Int)')} event E { type: String }`);
         expect(only(a, 'M011').map((d) => d.message)).toEqual([

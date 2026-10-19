@@ -3,6 +3,8 @@
 - Status: accepted
 - Date: 2026-10-19
 - Supersedes: the command syntax (`from` / `to`) of ADR 0001
+- Amended by: [ADR 0015](0015-handlers-per-state.md) (the generated contract of a command whose output depends on its
+  input)
 
 ## Context
 
@@ -65,7 +67,9 @@ aggregate Work {
 - When every transition has the same targets — the shape `from`/`to` could express — the command stays a plain
   function: the input is the union of all sources, the output the union of the targets.
 - When the targets differ, the command is generic over the input state and a chain of conditional types, one per
-  transition, picks its output; the last transition's targets end the chain:
+  transition, picks its output; the last transition's targets end the chain (amended by
+  [ADR 0015](0015-handlers-per-state.md): the output is the result of a generated handler per state, and `byState`
+  implements the command from such handlers):
 
   ```ts
   export type ChangeWork = <S extends DraftWork | InProgressWork>(
@@ -104,4 +108,5 @@ the state's box, as before). The Detail Panel shows a row per transition.
 - Callers of a command whose outputs depend on its input get the precise output type.
 - TypeScript does not narrow a type parameter inside an implementation, so an implementation of a generic command
   needs a type assertion on its result: the contract is checked where the command is called, not inside its
-  implementation. Commands whose transitions share their targets are unaffected.
+  implementation. Commands whose transitions share their targets are unaffected. [ADR 0015](0015-handlers-per-state.md)
+  lifts this: implemented with `byState` from one handler per state, each handler is checked against its transition.

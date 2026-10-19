@@ -3,7 +3,7 @@ import { isAggregate, isEventDecl, isIdType, isPrimitiveDecl } from '../language
 import { commandsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
-export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err'] as const;
+export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'byState'] as const;
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';
@@ -22,6 +22,14 @@ export const stateTypeName = (agg: Named, state: Named | string): string =>
     `${typeof state === 'string' ? state : state.name}${agg.name}`;
 export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd.name)}${agg.name}`;
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
+/** Handlers of a command per source state, e.g. `ChangeWorkByState`; generated when the targets depend on the source. */
+export const byStateTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}ByState`;
+/**
+ * Whether the targets of a command's transitions depend on its source state (`A -> A, B -> B`), which makes its
+ * contract generic over the input state and adds a `…ByState` type. `targets` lists the targets of each transition.
+ */
+export const targetsVary = (factory: boolean, targets: string[][]): boolean =>
+    !factory && new Set(targets.map((t) => [...new Set(t)].sort().join('|'))).size > 1;
 export const aggregateParamName = (agg: Named): string => camel(agg.name);
 /** Constructor contract of a domain primitive, e.g. `MakeQuantity`. */
 export const makeTypeName = (p: Named): string => `Make${p.name}`;
@@ -85,6 +93,9 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
         }
         for (const c of commands) {
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, node: c });
+            if (states.length > 0 && targetsVary(c.factory, c.transitions.map((t) => t.to.map((r) => r.$refText)))) {
+                out.push({ name: byStateTypeName(el, c), origin: `the handlers per state of '${el.name}.${c.name}'`, node: c });
+            }
         }
         if (commands.some((c) => c.emits.length > 0)) {
             out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, node: el });

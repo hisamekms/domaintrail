@@ -80,7 +80,8 @@ context Sales "販売" {
 
 The design decisions behind the DSL are in [docs/adr](docs/adr): shared contexts ([0004](docs/adr/0004-shared-contexts.md)),
 unions ([0005](docs/adr/0005-unions.md)), persistent events ([0008](docs/adr/0008-persistent-events.md)),
-command transitions ([0014](docs/adr/0014-command-transitions.md)) and more.
+command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per state
+([0015](docs/adr/0015-handlers-per-state.md)) and more.
 
 ## Live View
 
