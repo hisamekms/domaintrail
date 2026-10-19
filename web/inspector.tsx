@@ -222,8 +222,8 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     if (r.kind === 'state') {
         const { agg, state } = r;
         if (tab === 'behavior') {
-            const incoming = (agg.commands ?? []).filter((c) => c.to.includes(state.name));
-            const outgoing = (agg.commands ?? []).filter((c) => c.from.includes(state.name));
+            const incoming = (agg.commands ?? []).filter((c) => c.transitions.some((t) => t.to.includes(state.name)));
+            const outgoing = (agg.commands ?? []).filter((c) => c.transitions.some((t) => t.from.includes(state.name)));
             return (
                 <>
                     <CommandList title={tx.commandsInto} agg={agg} model={model} commands={incoming} onSelect={onSelect} />

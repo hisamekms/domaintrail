@@ -128,7 +128,7 @@ context Sales {                          // a bounded context; may be split acro
       all(items, item => item.quantity > 0)
     }
 
-    create command place(customer: CustomerId) to Draft emits OrderPlaced   // factory: no `from`
+    create command place(customer: CustomerId) -> Draft emits OrderPlaced   // factory: `-> State`, no source
 
     state Draft
     state Confirmed {
@@ -141,12 +141,15 @@ context Sales {                          // a bounded context; may be split acro
     }
 
     command confirm(at: Timestamp)
-      from Draft
-      to Confirmed                       // several: `to A | B`
+      Draft -> Confirmed                 // a transition: source state(s) -> target state(s)
       emits OrderConfirmed               // events that MAY be emitted (0..n)
       errors EmptyOrder                  // errors that MAY be returned
 
-    command cancel(reason: CancelReason) from Draft | Confirmed to Cancelled emits OrderCancelled
+    command cancel(reason: CancelReason) Draft | Confirmed -> Cancelled emits OrderCancelled   // from either
+
+    command changeNote(note: String?)    // one transition per input state: the output depends on the input
+      Draft -> Draft
+      Confirmed -> Confirmed             // also on one line: `Draft -> Draft, Confirmed -> Confirmed`
   }
 
   entity OrderItem { id: OrderItemId quantity: Quantity owns unitPrice: Money }
@@ -163,7 +166,7 @@ context Sales {                          // a bounded context; may be split acro
 context Sales {
   id CustomerId: UUID
 
-  aggregate Customer {                   // no states: commands have no `from` / `to`
+  aggregate Customer {                   // no states: commands have no transitions
     id: CustomerId
     email: EmailAddress                  // from the shared context Common
     active: Bool
@@ -186,8 +189,13 @@ context Sales {
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
 - Multiplicity after the type: `?`, `[0..1]`, `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
-  An aggregate with states needs `to` on every command and `from` on every non-`create` one; without states, neither.
-- `create command` makes a new aggregate; other commands take the aggregate in one of their `from` states.
+- Command transitions follow the parameters (and label), before `emits` / `errors`: `A | B -> C | D` means "in `A` or
+  `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas. A state may be the
+  source of one transition of a command only, so the input state decides the possible outputs; for several possible
+  outcomes, list them on the right: `InProgress -> InProgress | Completed`.
+- In an aggregate with states, a `create command` makes a new aggregate and has exactly one transition without
+  sources (`-> Draft`, or `-> A | B`); every other command has one or more transitions, each with sources. Without
+  states, commands have no transitions. A command that keeps the state writes it out: `Draft -> Draft`.
 - `value`, `state`, `event` and `error` bodies are optional (`state Draft`, `error EmptyOrder`).
 - Other contexts' elements are referenced with qualified names: `Sales.OrderId`, `-> Sales.Order`.
 - Comments: `// …` and `/* … */`; `///` is a description (see [Names](#names-labels-and-descriptions)).
@@ -364,8 +372,8 @@ context Billing {                          // other files open the context witho
     state Open "未払い"
     state Paid "支払済み" { paidAt: Timestamp }               // → 支払日時 (from terms)
     invariant positive "金額が正" { amount.amount > 0 }
-    create command issue(order: Sales.OrderId, amount: Money) "請求書を発行する" to Open
-    command pay(at: Timestamp "支払日時") "支払う" from Open to Paid emits InvoicePaid
+    create command issue(order: Sales.OrderId, amount: Money) "請求書を発行する" -> Open
+    command pay(at: Timestamp "支払日時") "支払う" Open -> Paid emits InvoicePaid
   }
   enum InvoiceKind "請求区分" { Regular "通常" Refund "返金" }
   event InvoicePaid "支払完了" { invoiceId: InvoiceId paidAt: Timestamp }
@@ -399,7 +407,7 @@ context Billing {                          // other files open the context witho
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
 | M005 | a reference's ID type matches the identity of the target aggregate |
-| M006 | command input/output states exist and fit the aggregate (factory / stateful / stateless) |
+| M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none |
 | M007 | `emits` / `errors` refer to existing events / errors |
 | M008 | an invariant is a Bool expression |
 | M009 | operators and operands have compatible types |
@@ -438,6 +446,24 @@ export type ConfirmOrder = (
     at: Timestamp,
 ) => Result<readonly [ConfirmedOrder, readonly OrderConfirmed[]], EmptyOrder>;
 ```
+
+A command takes the aggregate in any source state of its transitions. When every transition has the same targets
+(`Draft | Confirmed -> Cancelled`), it returns them, as above. When the targets differ by transition, the command is
+generic over the input state and a conditional type picks the output of its transition, so a caller with a
+`DraftOrder` gets a `DraftOrder` back, never a `ConfirmedOrder`:
+
+```ts
+export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
+    order: S,
+    note: string | undefined,
+) => Result<readonly [
+    S extends DraftOrder ? DraftOrder : ConfirmedOrder,
+    readonly never[],
+], never>;
+```
+
+TypeScript does not narrow `S` inside an implementation, so an implementation of such a command needs a type
+assertion on its result; the compiler checks the contract where the command is called.
 
 ### Generated code and your code
 

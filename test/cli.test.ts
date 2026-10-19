@@ -39,7 +39,7 @@ describe('dt check', () => {
     total: Money
     state Draft
     invariant positive { count(total) > 0 }
-    command confirm() from Draft to Shipped
+    command confirm() Draft -> Shipped
   }
   value Money { amount: Decimal owns order: Order }
 }
@@ -49,7 +49,7 @@ describe('dt check', () => {
         expect(r.code).toBe(1);
         expect(r.err).toEqual([
             "order.dt:7:32 - error M009: count() requires a collection, but got 'Money'.",
-            "order.dt:8:37 - error M006: Cannot resolve state 'Shipped' in this aggregate.",
+            "order.dt:8:32 - error M006: Cannot resolve state 'Shipped' in this aggregate.",
             "order.dt:10:45 - error M004: 'Money' cannot own aggregate 'Order'; aggregates are referenced by ID ('references').",
             '1 file(s) checked: 3 error(s), 0 warning(s).',
         ]);

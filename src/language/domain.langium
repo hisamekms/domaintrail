@@ -85,10 +85,14 @@ ReferenceField:
 
 Command:
     (factory?='create')? 'command' name=FeatureName '(' (params+=Parameter (',' params+=Parameter)*)? ')' label=STRING?
-    ('from' from+=[State:ID] ('|' from+=[State:ID])*)?
-    ('to' to+=[State:ID] ('|' to+=[State:ID])*)?
+    (transitions+=Transition (','? transitions+=Transition)*)?
     ('emits' emits+=[EventDecl:QualifiedName] (',' emits+=[EventDecl:QualifiedName])*)?
     ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?;
+
+// `A | B -> C | D`: a command in one of the source states ends in one of the target states. A factory
+// (`create command`) has a single transition without sources: `-> Draft`.
+Transition:
+    (from+=[State:ID] ('|' from+=[State:ID])*)? '->' to+=[State:ID] ('|' to+=[State:ID])*;
 
 Parameter:
     name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;

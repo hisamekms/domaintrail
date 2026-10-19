@@ -31,8 +31,8 @@ const FILES = {
     id: OrderId
     owns items: OrderItem[0..*]
     invariant sameTenant { all(items, i => i.tenant == tenant) }
-    create command place() to Draft emits OrderPlaced
-    command confirm() from Draft to Confirmed emits OrderConfirmed, Billing.Billed
+    create command place() -> Draft emits OrderPlaced
+    command confirm() Draft -> Confirmed emits OrderConfirmed, Billing.Billed
     state Draft
     state Confirmed { confirmedAt: Timestamp }
   }

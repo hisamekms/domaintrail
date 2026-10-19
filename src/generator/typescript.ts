@@ -104,6 +104,8 @@ const PERSISTENT_LINE = '@persistent Persisted: storing this event is part of it
 const invariantLines = (invs: InvariantModel[]): string[] =>
     invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source}`);
 
+const unique = (names: string[]): string[] => [...new Set(names)];
+
 class ContextEmitter {
     private readonly imports = new Set<string>();
     private readonly out: string[] = [];
@@ -297,25 +299,44 @@ class ContextEmitter {
 
     private command(agg: ElementModel, c: CommandModel): void {
         const stateful = (agg.states ?? []).length > 0;
-        const stateUnion = (names: string[]): string => (stateful ? names.map((n) => stateTypeName(agg, n)).join(' | ') : agg.name);
+        const stateUnion = (names: string[]): string => (stateful ? unique(names).map((n) => stateTypeName(agg, n)).join(' | ') : agg.name);
+        const transitions = stateful ? c.transitions : [];
+        // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
+        // (`A -> A, B -> B`): generic over the input state, the output picked by a conditional type.
+        const generic = !c.factory && new Set(transitions.map((t) => unique(t.to).sort().join('|'))).size > 1;
+        const input = stateUnion(transitions.flatMap((t) => t.from));
         const params: string[] = [];
-        if (!c.factory) params.push(`${aggregateParamName(agg)}: ${stateUnion(c.from)}`);
+        if (!c.factory) params.push(`${aggregateParamName(agg)}: ${generic ? 'S' : input}`);
         for (const p of c.params) params.push(`${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
 
-        const output = stateUnion(c.to);
+        const output = generic
+            ? transitions
+                  .slice(0, -1)
+                  .map((t) => `S extends ${stateUnion(t.from)} ? ${stateUnion(t.to)} : `)
+                  .join('') + stateUnion(transitions[transitions.length - 1]!.to)
+            : stateUnion(transitions[0]?.to ?? []);
         const events = c.emits.length === 0 ? 'never' : c.emits.map((e) => this.ref(e)).join(' | ');
         const eventArray = c.emits.length > 1 ? `readonly (${events})[]` : `readonly ${events}[]`;
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
 
-        const transition = c.factory ? `new -> ${c.to.join(' | ') || agg.name}` : stateful ? `${c.from.join(' | ')} -> ${c.to.join(' | ')}` : '';
+        const transition = c.factory
+            ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
+            : transitions.map((t) => `${t.from.join(' | ')} -> ${t.to.join(' | ')}`).join('; ');
         this.jsdoc([
             `${agg.name}.${c.name}${transition ? ` (${transition})` : ''}${c.factory ? ' — factory' : ''}`,
             ...describedLines(c),
             ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
         ]);
-        this.line(`export type ${commandTypeName(agg, c)} = (`);
+        this.line(`export type ${commandTypeName(agg, c)} = ${generic ? `<S extends ${input}>` : ''}(`);
         for (const p of params) this.line(`    ${p},`);
-        this.line(`) => Result<readonly [${output}, ${eventArray}], ${errors}>;`);
+        if (generic) {
+            this.line(') => Result<readonly [');
+            this.line(`    ${output},`);
+            this.line(`    ${eventArray},`);
+            this.line(`], ${errors}>;`);
+        } else {
+            this.line(`) => Result<readonly [${output}, ${eventArray}], ${errors}>;`);
+        }
     }
 
     private iface(name: string, bases: string[], extra: string[], fields: FieldModel[]): void {

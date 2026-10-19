@@ -28,6 +28,9 @@ A command without `emits` returns `readonly never[]` as its event list; without 
 
 ### Command syntax (§11)
 
+> Superseded by [ADR 0014](0014-command-transitions.md): `from` / `to` were replaced by transitions (`Draft -> Confirmed`,
+> `create command place(...) -> Draft`).
+
 - Factory commands: `create command place(...) to Draft`. They have no `from` and no aggregate parameter.
 - Multiple output states: `to A | B`; the success value is the union `AAgg | BAgg`.
 - Aggregates without states: commands have neither `from` nor `to`; input and output are the aggregate type.

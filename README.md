@@ -71,15 +71,16 @@ context Sales "販売" {
     id: OrderId
     state Draft
     state Confirmed { confirmedAt: Timestamp }
-    create command place() to Draft
-    command confirm(at: Timestamp) from Draft to Confirmed emits OrderConfirmed
+    create command place() -> Draft
+    command confirm(at: Timestamp) Draft -> Confirmed emits OrderConfirmed
   }
   persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
 }
 ```
 
 The design decisions behind the DSL are in [docs/adr](docs/adr): shared contexts ([0004](docs/adr/0004-shared-contexts.md)),
-unions ([0005](docs/adr/0005-unions.md)), persistent events ([0008](docs/adr/0008-persistent-events.md)) and more.
+unions ([0005](docs/adr/0005-unions.md)), persistent events ([0008](docs/adr/0008-persistent-events.md)),
+command transitions ([0014](docs/adr/0014-command-transitions.md)) and more.
 
 ## Live View
 

@@ -66,14 +66,19 @@ export interface VariantModel extends Described {
     invariants: InvariantModel[];
 }
 
+/** `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory. */
+export interface TransitionModel {
+    from: string[];
+    to: string[];
+}
+
 export interface CommandModel extends Described {
     id: string;
     name: string;
     factory: boolean;
     params: FieldModel[];
-    /** State names (within the owning aggregate). */
-    from: string[];
-    to: string[];
+    /** State transitions; a factory has one without source states, an aggregate without states none. */
+    transitions: TransitionModel[];
     /** Qualified event / error names. */
     emits: string[];
     errors: string[];

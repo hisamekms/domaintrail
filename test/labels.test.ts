@@ -28,7 +28,7 @@ const SALES = `context Sales "販売" {
       confirmedAt: Timestamp
       invariant hasNote "備考あり" { exists(note) }
     }
-    command confirm(at: Timestamp "確定する日時") "確定する" from Draft to Confirmed
+    command confirm(at: Timestamp "確定する日時") "確定する" Draft -> Confirmed
   }
 }`;
 
