@@ -166,21 +166,33 @@ describe('commands with several transitions', () => {
         expect(code).toContain('/** Work.open (new -> Draft) — factory */');
     });
 
-    test('targets that differ by transition: generic over the input state, the output picked per transition', () => {
+    test('targets that differ by transition: a handler per source state, and a contract generic over the input state', () => {
         expect(code).toContain('/** Work.change (Draft -> Draft; InProgress -> InProgress) */');
         expect(code).toContain(
             `export type ChangeWork = <S extends DraftWork | InProgressWork>(
     work: S,
     title: Title,
-) => Result<readonly [
-    S extends DraftWork ? DraftWork : InProgressWork,
-    readonly WorkChanged[],
-], never>;`,
+) => ReturnType<ChangeWorkByState[S['state']]>;
+
+/** Work.change, one handler per source state; implement it with \`byState\` from the runtime. */
+export type ChangeWorkByState = {
+    readonly Draft: (work: DraftWork, title: Title) => Result<readonly [DraftWork, readonly WorkChanged[]], never>;
+    readonly InProgress: (work: InProgressWork, title: Title) => Result<readonly [InProgressWork, readonly WorkChanged[]], never>;
+};`,
         );
-        expect(code).toContain('    S extends InProgressWork ? InProgressWork | CompletedWork : DraftWork,\n    readonly never[],\n], NotReady>;');
         expect(code).toContain(
-            '    S extends DraftWork ? InProgressWork : S extends InProgressWork ? CompletedWork : CancelledWork,',
+            '    readonly InProgress: (work: InProgressWork, at: Timestamp) => Result<readonly [InProgressWork | CompletedWork, readonly never[]], NotReady>;',
         );
+        // several sources of one transition: a handler each, with the same output
+        expect(code).toContain('    readonly Completed: (work: CompletedWork) => Result<readonly [CancelledWork, readonly never[]], never>;');
+        expect(code).toContain('    readonly Cancelled: (work: CancelledWork) => Result<readonly [CancelledWork, readonly never[]], never>;');
+        // the commands interface is unchanged
+        expect(code).toContain('    readonly change: ChangeWork;');
+    });
+
+    test('no handlers per state for commands whose transitions share their targets, nor for factories', () => {
+        expect(code).not.toMatch(/(Open|Start|Cancel)WorkByState/);
+        expect([...code.matchAll(/export type (\w+ByState) =/g)].map((m) => m[1])).toEqual(['ChangeWorkByState', 'ReviewWorkByState', 'StepWorkByState']);
     });
 
     test('callers get the output of the transition of their input state; anything else is a compile error', async () => {
@@ -229,6 +241,80 @@ export const wrong: Tasks.ChangeWork = (work, title) =>
         const r = tscIn(work, 'src/use.ts');
         expect(r.output).toBe('');
         expect(r.code).toBe(0);
+    });
+
+    test('byState: handlers per state implement the commands, typed without assertions', async () => {
+        await writeFile(
+            path.join(work, 'src', 'impl.ts'),
+            `import { byState, ok, type Tasks } from '../generated/index.js';
+
+export const commands: Tasks.WorkCommands = {
+    open: (title) => ok([{ state: 'Draft', id: crypto.randomUUID() as Tasks.WorkId, title }, []] as const),
+    change: byState<Tasks.ChangeWorkByState>({
+        Draft: (work, title) => ok([{ ...work, title }, [{ type: 'WorkChanged', workId: work.id }]] as const),
+        InProgress: (work, title) => ok([{ ...work, title }, []] as const),
+    }),
+    start: (work) => ok([{ ...work, state: 'InProgress' }, []] as const),
+    cancel: (work) => ok([{ ...work, state: 'Cancelled' }, []] as const),
+    review: byState<Tasks.ReviewWorkByState>({
+        InProgress: (work, at) => ok([{ ...work, state: 'Completed', completedAt: at }, []] as const),
+        Draft: (work) => ok([work, []] as const),
+    }),
+    step: byState<Tasks.StepWorkByState>({
+        Draft: (work) => ok([{ ...work, state: 'InProgress' }, []] as const),
+        InProgress: (work) => ok([{ ...work, state: 'Completed', completedAt: new Date() }, []] as const),
+        Completed: ({ completedAt, ...work }) => ok([{ ...work, state: 'Cancelled' }, []] as const),
+        Cancelled: (work) => ok([work, []] as const),
+    }),
+};
+
+declare const draft: Tasks.DraftWork;
+declare const title: Tasks.Title;
+const r = commands.change(draft, title);
+if (r.ok) {
+    const stays: Tasks.DraftWork = r.value[0];
+}
+
+export const draftToInProgress: Tasks.ChangeWork = byState<Tasks.ChangeWorkByState>({
+    // @ts-expect-error the Draft handler must return a Draft work
+    Draft: (work, title) => ok([{ ...work, title, state: 'InProgress' }, []] as const),
+    InProgress: (work, title) => ok([{ ...work, title }, []] as const),
+});
+
+// @ts-expect-error a handler for every source state is required
+export const missing: Tasks.ChangeWork = byState<Tasks.ChangeWorkByState>({
+    Draft: (work, title) => ok([{ ...work, title }, []] as const),
+});
+
+// handlers typed by hand are checked against the contract as well
+declare const swapped: { Draft: Tasks.ChangeWorkByState['InProgress']; InProgress: Tasks.ChangeWorkByState['InProgress'] };
+// @ts-expect-error Draft -> InProgress is not a transition of change
+export const fromSwapped: Tasks.ChangeWork = byState(swapped);
+
+export const wrongArgs: Tasks.ChangeWorkByState = {
+    Draft: (work, title) => ok([{ ...work, title }, []] as const),
+    // @ts-expect-error parameters are those of the command
+    InProgress: (work, title: number) => ok([work, []] as const),
+};
+`,
+        );
+        const r = tscIn(work, 'src/impl.ts');
+        expect(r.output).toBe('');
+        expect(r.code).toBe(0);
+    });
+
+    test('byState calls the handler of the state of its first argument with the same arguments', async () => {
+        const { byState } = await import(path.join(work, 'generated', '_runtime.ts'));
+        const calls: unknown[][] = [];
+        const f = byState({
+            Draft: (...args: unknown[]) => (calls.push(['Draft', ...args]), 'draft'),
+            InProgress: (...args: unknown[]) => (calls.push(['InProgress', ...args]), 'inProgress'),
+        });
+        const draft = { state: 'Draft', id: 1 };
+        const inProgress = { state: 'InProgress', id: 2 };
+        expect(f(draft, 'a', 3)).toBe('draft');
+        expect(f(inProgress, 'b')).toBe('inProgress');
+        expect(calls).toEqual([['Draft', draft, 'a', 3], ['InProgress', inProgress, 'b']]);
     });
 });
 
