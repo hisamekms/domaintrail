@@ -96,6 +96,44 @@ describe('State View graph', () => {
         expect(g.edges.find((e) => e.id.startsWith('S.A:hold'))!.events).toEqual(anyLang({ name: 'Held', label: '保留', both: '保留 Held' }));
     });
 
+    test('each transition joins only its own sources and targets: self transitions per state, fan-in, branches', async () => {
+        const m = (
+            await check({
+                'a.dt': `context S {
+  id AId: UUID
+  aggregate A {
+    id: AId
+    state Open
+    state Held
+    state Closed
+    create command open() -> Open | Held
+    command keep() Open -> Open, Held -> Held
+    command step()
+      Open -> Held
+      Held -> Closed
+    command close() Open | Held -> Closed
+    command review() Held -> Held | Closed
+  }
+}`,
+            })
+        ).model!;
+        const g = buildStateGraph(m.elements['S.A'], m);
+        const internal = Object.fromEntries(g.nodes.filter((n) => n.internal).map((n) => [n.id, n.internal!.map((t) => t.id)]));
+        expect(internal).toEqual({
+            'S.A#Open': ['S.A:keep|S.A#Open->S.A#Open'],
+            'S.A#Held': ['S.A:keep|S.A#Held->S.A#Held', 'S.A:review|S.A#Held->S.A#Held'],
+        });
+        expect(g.edges.map((e) => e.id)).toEqual([
+            'S.A:open|S.A@new->S.A#Open',
+            'S.A:open|S.A@new->S.A#Held',
+            'S.A:step|S.A#Open->S.A#Held',
+            'S.A:step|S.A#Held->S.A#Closed',
+            'S.A:close|S.A#Open->S.A#Closed',
+            'S.A:close|S.A#Held->S.A#Closed',
+            'S.A:review|S.A#Held->S.A#Closed',
+        ]);
+    });
+
     test('state boxes grow by the rows of their internal transitions, as the labels show them', async () => {
         const m = (await check({ 'a.dt': MULTI })).model!;
         const height = (labels: TransitionLabels) => buildStateGraph(m.elements['S.A'], m, labels).nodes.find((n) => n.id === 'S.A#Open')!.height;
@@ -133,13 +171,13 @@ const MULTI = `context S {
   event Held "保留" { id: AId }
   aggregate A {
     id: AId
-    create command open() to Open
+    create command open() -> Open
     state Open
     state Held
     state Closed
-    command touch() from Open | Held to Open | Held
-    command hold() from Open | Held to Open emits Held
-    command close() from Open to Closed
+    command touch() Open | Held -> Open | Held
+    command hold() Open | Held -> Open emits Held
+    command close() Open -> Closed
   }
 }`;
 
@@ -169,8 +207,8 @@ describe('layout', () => {
 
 describe('diff', () => {
     test('identifies added, changed and removed elements, states and commands', async () => {
-        const before = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId state X state Y command go() from X to Y } value V }' })).model!;
-        const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() from X to Z } value W }' })).model!;
+        const before = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId state X state Y command go() X -> Y } value V }' })).model!;
+        const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() X -> Z } value W }' })).model!;
         const d = diffModels(before, after);
         expect(d.added.sort()).toEqual(['S.A#Z', 'S.W']);
         expect(d.changed.sort()).toEqual(['S.A', 'S.A:go']);

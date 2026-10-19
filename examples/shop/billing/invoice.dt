@@ -12,11 +12,10 @@ context Billing {
     }
 
     create command issue(order: Sales.OrderId, billedAmount: Money "請求金額") "請求書を発行する"
-      to Open
+      -> Open
 
     command pay(at: Timestamp) "支払う"
-      from Open
-      to Paid
+      Open -> Paid
       emits InvoicePaid
       errors AlreadyPaid
   }

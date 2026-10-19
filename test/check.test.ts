@@ -11,7 +11,7 @@ const ORDER = `
     owns lines: Line[0..*]
     state Draft
     state Done { doneAt: Timestamp }
-    command finish(at: Timestamp) from Draft to Done
+    command finish(at: Timestamp) Draft -> Done
   }
   entity Line { id: LineId  quantity: Int }
 `;
@@ -122,8 +122,54 @@ describe('references (M005)', () => {
 });
 
 describe('commands (M006, M007)', () => {
+    test('transitions are separated by line breaks or commas; sources and targets take several states', async () => {
+        const a = await checkSales(`
+  id WorkId: UUID
+  event WorkChanged { workId: WorkId }
+  error NotReady
+  aggregate Work {
+    id: WorkId
+    state Draft
+    state InProgress
+    state Completed
+    state Cancelled
+
+    create command open() -> Draft
+
+    command change()
+      Draft -> Draft
+      InProgress -> InProgress
+      emits WorkChanged
+
+    command start() Draft -> InProgress
+    command finish() InProgress -> Completed errors NotReady
+    command cancel() Draft | InProgress -> Cancelled
+    command review() InProgress -> InProgress | Completed
+    command edit() Draft -> Draft, InProgress -> InProgress
+    note: String?
+  }`);
+        expect(a.diagnostics).toEqual([]);
+        const work = a.model!.elements['Sales.Work'];
+        expect(Object.fromEntries(work.commands!.map((c) => [c.name, c.transitions]))).toEqual({
+            open: [{ from: [], to: ['Draft'] }],
+            change: [{ from: ['Draft'], to: ['Draft'] }, { from: ['InProgress'], to: ['InProgress'] }],
+            start: [{ from: ['Draft'], to: ['InProgress'] }],
+            finish: [{ from: ['InProgress'], to: ['Completed'] }],
+            cancel: [{ from: ['Draft', 'InProgress'], to: ['Cancelled'] }],
+            review: [{ from: ['InProgress'], to: ['InProgress', 'Completed'] }],
+            edit: [{ from: ['Draft'], to: ['Draft'] }, { from: ['InProgress'], to: ['InProgress'] }],
+        });
+        expect(work.commands!.find((c) => c.name === 'change')!.emits).toEqual(['Sales.WorkChanged']);
+        expect(work.fields.map((f) => f.name)).toContain('note');
+    });
+
+    test('the old from/to syntax is a syntax error', async () => {
+        const a = await checkSales(ORDER.replace('Draft -> Done', 'from Draft to Done'));
+        expect(codes(a)).toContain('SYNTAX');
+    });
+
     test('M006 non-existent state', async () => {
-        const a = await checkSales(ORDER.replace('to Done', 'to Shipped'));
+        const a = await checkSales(ORDER.replace('-> Done', '-> Shipped'));
         const [d] = only(a, 'M006');
         expect(d.message).toBe("Cannot resolve state 'Shipped' in this aggregate.");
         expect(d.elementId).toBe('Sales.Order:finish');
@@ -134,24 +180,37 @@ describe('commands (M006, M007)', () => {
   id CId: UUID
   aggregate C {
     id: CId
-    command a() from X
-  }`.replace('command finish(at: Timestamp) from Draft to Done', `command finish(at: Timestamp) from Draft to Done
-    command noFrom() to Done
-    command noTo() from Draft
-    create command make() from Draft to Draft
-    create command make2()`));
+    command a() X -> X
+  }`.replace('command finish(at: Timestamp) Draft -> Done', `command finish(at: Timestamp) Draft -> Done
+    command none()
+    command noSource() -> Done
+    command mixed() Draft -> Done, -> Draft
+    create command make() Draft -> Draft
+    create command make2()
+    create command make3() -> Draft, -> Done`));
         expect(only(a, 'M006').map((d) => d.message)).toEqual([
-            "Command 'noFrom' must declare its input state(s) with 'from' (or be declared with 'create command').",
-            "Command 'noTo' must declare its output state(s) with 'to'.",
-            "Factory command 'make' creates a new 'Order' and cannot have input states ('from').",
-            "Factory command 'make2' must declare its output state(s) with 'to'.",
+            "Command 'none' must declare its state transitions, e.g. 'Draft -> Submitted' (or be declared with 'create command').",
+            "Command 'noSource' has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').",
+            "Command 'mixed' has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').",
+            "Factory command 'make' creates a new 'Order' and cannot have source states; write '-> Draft'.",
+            "Factory command 'make2' must declare exactly one transition to its initial state(s), e.g. '-> Draft'.",
+            "Factory command 'make3' must declare exactly one transition to its initial state(s), e.g. '-> Draft'.",
             "Cannot resolve state 'X' in this aggregate.",
-            "Command 'a' declares states, but aggregate 'C' has no states.",
+            "Command 'a' declares state transitions, but aggregate 'C' has no states.",
+            "Cannot resolve state 'X' in this aggregate.",
+        ]);
+    });
+
+    test('M006 a state is the source of one transition only; a target listed twice is a warning', async () => {
+        const a = await checkSales(ORDER.replace('Draft -> Done', 'Draft -> Draft\n    Done | Draft -> Done | Done'));
+        expect(only(a, 'M006').map((d) => [d.severity, d.message, d.start.line])).toEqual([
+            ['error', "State 'Draft' is the source of more than one transition of command 'finish'; its outcome must be decided by one transition (use 'A -> B | C').", 11],
+            ['warning', "State 'Done' is listed more than once.", 11],
         ]);
     });
 
     test('M007 events and errors must exist and be of the right kind', async () => {
-        const a = await checkSales(`${ORDER.replace('to Done', 'to Done emits Ghost, Oops errors Done2')} error Oops`);
+        const a = await checkSales(`${ORDER.replace('-> Done', '-> Done emits Ghost, Oops errors Done2')} error Oops`);
         expect(only(a, 'M007').map((d) => d.message)).toEqual([
             "Cannot resolve event 'Ghost' in this context (use Context.Name for other contexts).",
             "Cannot resolve event 'Oops' in this context (use Context.Name for other contexts).",

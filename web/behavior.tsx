@@ -77,7 +77,10 @@ function FieldGrid({ fields, ctx, names, onSelect }: { fields: FieldModel[]; ctx
     );
 }
 
-/** `[下書き] [確定済み] → [取消済み]`, or `● → [下書き]` for a factory; in 両方 a chip shows the label, and the name on hover. */
+/**
+ * `[下書き] [確定済み] → [取消済み]`, or `● → [下書き]` for a factory, one row per transition; in 両方 a chip shows the
+ * label, and the name on hover.
+ */
 function Transition({ agg, c, names, onSelect }: { agg: ElementModel; c: CommandModel; names: Namer; onSelect: Select }) {
     const chips = (states: string[]) =>
         states.map((name) => {
@@ -89,13 +92,13 @@ function Transition({ agg, c, names, onSelect }: { agg: ElementModel; c: Command
                 </a>
             );
         });
-    return (
-        <div className="bcard-transition">
-            {c.factory ? <span className="initial-state" aria-hidden>●</span> : chips(c.from)}
+    return c.transitions.map((t, i) => (
+        <div key={i} className="bcard-transition">
+            {c.factory ? <span className="initial-state" aria-hidden>●</span> : chips(t.from)}
             <span className="muted">→</span>
-            {chips(c.to)}
+            {chips(t.to)}
         </div>
-    );
+    ));
 }
 
 export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: ElementModel; c: CommandModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {

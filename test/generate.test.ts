@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
-import { EXAMPLES } from './helpers.js';
+import { EXAMPLES, check } from './helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
 let dir: string;
@@ -112,6 +112,121 @@ const wrongId: Sales.OrderId = draft.customer;
 `,
         );
         const r = tsc('src/violations.ts');
+        expect(r.output).toBe('');
+        expect(r.code).toBe(0);
+    });
+});
+
+describe('commands with several transitions', () => {
+    const WORK = `context Tasks {
+  id WorkId: UUID
+  primitive Title: String
+  event WorkChanged { workId: WorkId }
+  error NotReady
+  aggregate Work {
+    id: WorkId
+    title: Title
+    state Draft
+    state InProgress
+    state Completed { completedAt: Timestamp }
+    state Cancelled
+
+    create command open(title: Title) -> Draft
+    command change(title: Title)
+      Draft -> Draft
+      InProgress -> InProgress
+      emits WorkChanged
+    command start() Draft -> InProgress
+    command cancel() Draft -> Cancelled, InProgress -> Cancelled
+    command review(at: Timestamp) InProgress -> InProgress | Completed, Draft -> Draft errors NotReady
+    command step() Draft -> InProgress, InProgress -> Completed, Completed | Cancelled -> Cancelled
+  }
+}
+`;
+    let work: string;
+    let code: string;
+
+    beforeAll(async () => {
+        work = await mkdtemp(path.join(tmpdir(), 'domaintrail-work-'));
+        const a = await check({ 'tasks.dt': WORK });
+        expect(a.diagnostics).toEqual([]);
+        await mkdir(path.join(work, 'generated'));
+        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(work, 'generated', f.path), f.content);
+        code = await readFile(path.join(work, 'generated', 'Tasks.ts'), 'utf8');
+        await mkdir(path.join(work, 'src'));
+    });
+
+    afterAll(async () => {
+        await rm(work, { recursive: true, force: true });
+    });
+
+    test('the same targets for every transition: a plain function of the union of the sources', () => {
+        expect(code).toContain('/** Work.cancel (Draft -> Cancelled; InProgress -> Cancelled) */');
+        expect(code).toContain('export type CancelWork = (\n    work: DraftWork | InProgressWork,\n) => Result<readonly [CancelledWork, readonly never[]], never>;');
+        expect(code).toContain('/** Work.open (new -> Draft) — factory */');
+    });
+
+    test('targets that differ by transition: generic over the input state, the output picked per transition', () => {
+        expect(code).toContain('/** Work.change (Draft -> Draft; InProgress -> InProgress) */');
+        expect(code).toContain(
+            `export type ChangeWork = <S extends DraftWork | InProgressWork>(
+    work: S,
+    title: Title,
+) => Result<readonly [
+    S extends DraftWork ? DraftWork : InProgressWork,
+    readonly WorkChanged[],
+], never>;`,
+        );
+        expect(code).toContain('    S extends InProgressWork ? InProgressWork | CompletedWork : DraftWork,\n    readonly never[],\n], NotReady>;');
+        expect(code).toContain(
+            '    S extends DraftWork ? InProgressWork : S extends InProgressWork ? CompletedWork : CancelledWork,',
+        );
+    });
+
+    test('callers get the output of the transition of their input state; anything else is a compile error', async () => {
+        await writeFile(
+            path.join(work, 'src', 'use.ts'),
+            `import { ok, type Tasks } from '../generated/index.js';
+declare const commands: Tasks.WorkCommands;
+declare const draft: Tasks.DraftWork;
+declare const inProgress: Tasks.InProgressWork;
+declare const either: Tasks.DraftWork | Tasks.InProgressWork;
+declare const completed: Tasks.CompletedWork;
+declare const title: Tasks.Title;
+
+const a = commands.change(draft, title);
+if (a.ok) {
+    const stays: Tasks.DraftWork = a.value[0];
+    // @ts-expect-error a Draft work stays Draft: it never comes back InProgress
+    const moved: Tasks.InProgressWork = a.value[0];
+}
+const b = commands.change(inProgress, title);
+if (b.ok) {
+    const stays: Tasks.InProgressWork = b.value[0];
+    // @ts-expect-error an InProgress work stays InProgress
+    const moved: Tasks.DraftWork = b.value[0];
+}
+const c = commands.change(either, title);
+if (c.ok) {
+    const any: Tasks.DraftWork | Tasks.InProgressWork = c.value[0];
+    // @ts-expect-error either state may come back
+    const one: Tasks.DraftWork = c.value[0];
+}
+// @ts-expect-error change takes only Draft or InProgress
+commands.change(completed, title);
+
+const d = commands.step(inProgress);
+if (d.ok) {
+    const next: Tasks.CompletedWork = d.value[0];
+}
+
+// an implementation returning a Draft work as InProgress is rejected
+export const wrong: Tasks.ChangeWork = (work, title) =>
+    // @ts-expect-error Draft -> InProgress is not a transition of change
+    ok([{ ...work, title, state: 'InProgress' } as Tasks.InProgressWork, []] as const);
+`,
+        );
+        const r = tscIn(work, 'src/use.ts');
         expect(r.output).toBe('');
         expect(r.code).toBe(0);
     });

@@ -40,7 +40,7 @@ export function resolve(model: DomainModel, id: string): Resolved | undefined {
 
 export function transitionText(agg: ElementModel, c: CommandModel): string {
     if (!agg.states?.length) return c.factory ? 'new' : '';
-    return `${c.factory ? 'new' : c.from.join(' | ')} → ${c.to.join(' | ')}`;
+    return c.transitions.map((t) => `${c.factory ? 'new' : t.from.join(' | ')} → ${t.to.join(' | ')}`).join('; ');
 }
 
 /** Selection ID of a .dt file: files are selected like model items and shown in the inspector. */
@@ -179,7 +179,8 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         state,
         transition(agg, c) {
             if (!agg.states?.length) return c.factory ? 'new' : '';
-            return `${c.factory ? 'new' : c.from.map((n) => state(agg, n)).join(' | ')} → ${c.to.map((n) => state(agg, n)).join(' | ')}`;
+            const states = (names: string[]) => names.map((n) => state(agg, n)).join(' | ');
+            return c.transitions.map((t) => `${c.factory ? 'new' : states(t.from)} → ${states(t.to)}`).join('; ');
         },
         short(id) {
             const el = model?.elements[id];

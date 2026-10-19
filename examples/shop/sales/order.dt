@@ -21,7 +21,7 @@ context Sales {
     }
 
     create command place(customer: CustomerId) "注文する"
-      to Draft
+      -> Draft
       emits OrderPlaced
 
     state Draft "下書き"
@@ -38,18 +38,15 @@ context Sales {
     }
 
     command addItem(item: OrderItem "追加する明細") "明細を追加する"
-      from Draft
-      to Draft
+      Draft -> Draft
 
     command confirm(at: Timestamp) "注文を確定する"
-      from Draft
-      to Confirmed
+      Draft -> Confirmed
       emits OrderConfirmed
       errors EmptyOrder
 
     command cancel(reason: CancelReason) "注文を取り消す"
-      from Draft | Confirmed
-      to Cancelled
+      Draft | Confirmed -> Cancelled
       emits OrderCancelled
   }
 

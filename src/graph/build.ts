@@ -525,18 +525,24 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
 
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);
     for (const c of commands) {
-        const sources = c.factory ? [initialNodeId(agg.id)] : stateful ? c.from.map(stateNode) : [agg.id];
-        const targets = stateful ? c.to.map(stateNode) : [agg.id];
+        // each transition joins its own sources and targets; a factory starts from the initial node
+        const pairs = stateful
+            ? c.transitions.flatMap((t) => {
+                  const sources = c.factory ? [initialNodeId(agg.id)] : t.from.map(stateNode);
+                  return sources.flatMap((source) => t.to.map((to) => [source, stateNode(to)] as const));
+              })
+            : [[c.factory ? initialNodeId(agg.id) : agg.id, agg.id] as const];
         const label = commandLabel(c);
         const events = eventsLabel(c, model);
-        for (const source of sources) {
-            for (const target of targets) {
-                if (!source || !target) continue; // unresolved state, reported as M006
-                const id = `${c.id}|${source}->${target}`;
-                const node = source === target ? nodes.find((n) => n.id === source) : undefined;
-                if (node) (node.internal ??= []).push({ id, elementId: c.id, label, ...(events && { events }) });
-                else edges.push({ id, kind: 'transition', source, target, label, ...(events && { events }) });
-            }
+        const seen = new Set<string>();
+        for (const [source, target] of pairs) {
+            if (!source || !target) continue; // unresolved state, reported as M006
+            const id = `${c.id}|${source}->${target}`;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            const node = source === target ? nodes.find((n) => n.id === source) : undefined;
+            if (node) (node.internal ??= []).push({ id, elementId: c.id, label, ...(events && { events }) });
+            else edges.push({ id, kind: 'transition', source, target, label, ...(events && { events }) });
         }
     }
     const sizedNodes = nodes.map((n) => sizedState(n, labels));
