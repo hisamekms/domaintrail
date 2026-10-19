@@ -72,8 +72,19 @@ describe('State View graph', () => {
                 elementId: 'Sales.Order:addItem',
                 label: anyLang({ name: 'addItem(item)', label: '明細を追加する', both: '明細を追加する addItem(item)' }),
             },
+            {
+                id: 'Sales.Order:changeNote|Sales.Order#Draft->Sales.Order#Draft',
+                elementId: 'Sales.Order:changeNote',
+                label: anyLang({ name: 'changeNote(note)', label: '備考を変更する', both: '備考を変更する changeNote(note)' }),
+            },
         ]);
-        expect(g.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.internal).toBeUndefined();
+        expect(g.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.internal).toEqual([
+            {
+                id: 'Sales.Order:changeNote|Sales.Order#Confirmed->Sales.Order#Confirmed',
+                elementId: 'Sales.Order:changeNote',
+                label: anyLang({ name: 'changeNote(note)', label: '備考を変更する', both: '備考を変更する changeNote(note)' }),
+            },
+        ]);
     });
 
     test('aggregates without states list their commands in their one box', async () => {

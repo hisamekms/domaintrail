@@ -1,7 +1,7 @@
 // Hand-written command implementations, checked against the generated contracts.
 // Run `domain -r examples/shop generate ts` first; the TypeScript compiler then verifies that
 // every command accepts only its declared input states and returns only declared states/events/errors.
-import { err, ok, type Sales } from '../generated/domain/index.js';
+import { byState, err, ok, type Sales } from '../generated/domain/index.js';
 
 export const orderCommands: Sales.OrderCommands = {
     place: (customer) => {
@@ -22,4 +22,10 @@ export const orderCommands: Sales.OrderCommands = {
         const cancelled: Sales.CancelledOrder = { id, items, customer, note, state: 'Cancelled', reason };
         return ok([cancelled, [{ type: 'OrderCancelled', orderId: order.id, reason }]] as const);
     },
+
+    // The output depends on the input state: one handler per state, each checked against its own transition.
+    changeNote: byState<Sales.ChangeNoteOrderByState>({
+        Draft: (order, note) => ok([{ ...order, note }, []] as const),
+        Confirmed: (order, note) => ok([{ ...order, note }, []] as const),
+    }),
 };

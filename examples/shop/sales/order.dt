@@ -48,6 +48,11 @@ context Sales {
     command cancel(reason: CancelReason) "注文を取り消す"
       Draft | Confirmed -> Cancelled
       emits OrderCancelled
+
+    /// 確定後も備考は変更できる。状態は変わらない。
+    command changeNote(note: String?) "備考を変更する"
+      Draft -> Draft
+      Confirmed -> Confirmed
   }
 
   entity OrderItem "注文明細" {
