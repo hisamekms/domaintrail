@@ -14,7 +14,7 @@ setDefaultTimeout(30_000);
 
 interface PublishedDiagnostics {
     uri: string;
-    diagnostics: { range: { start: { line: number; character: number } }; severity: number; code: string; message: string }[];
+    diagnostics: { range: { start: { line: number; character: number } }; severity: number; code: string; message: string; data?: { hint?: string } }[];
 }
 
 /** A language server started with `dt lsp` over stdio, and the diagnostics it last published per file. */
@@ -147,14 +147,14 @@ async function start(files: Record<string, string>, args: string[] = []): Promis
     return client;
 }
 
-/** The output of `dt check` for the same workspace, as `line:col code message` per diagnostic of `file`. */
+/** The diagnostics of `dt check --format json` for one file of the same workspace, as `line:col severity code message`. */
 async function checkOutput(root: string, file: string): Promise<string[]> {
     const lines: string[] = [];
-    await runCli(['-r', root, 'check'], { out: (l) => lines.push(l), err: (l) => lines.push(l) });
-    return lines.filter((l) => l.startsWith(`${file}:`)).map((l) => {
-        const m = /^[^:]+:(\d+):(\d+) - (error|warning) (\S+): (.*)$/.exec(l)!;
-        return `${m[1]}:${m[2]} ${m[3]} ${m[4]} ${m[5]}`;
-    });
+    await runCli(['-r', root, 'check', '--format', 'json'], { out: (l) => lines.push(l), err: (l) => lines.push(l) });
+    const { diagnostics } = JSON.parse(lines.join('\n')) as { diagnostics: { file: string; line: number; column: number; severity: string; code: string; message: string; hint?: string }[] };
+    return diagnostics
+        .filter((d) => d.file === file)
+        .map((d) => `${d.line}:${d.column} ${d.severity} ${d.code} ${d.message}${d.hint ? `\nhint: ${d.hint}` : ''}`);
 }
 
 const asCheckLines = (d: PublishedDiagnostics['diagnostics']): string[] =>
@@ -187,6 +187,17 @@ describe('dt lsp', () => {
         expect(asCheckLines(sales)).toEqual(await checkOutput(client.root, 'sales.dt'));
         expect(asCheckLines(billing)).toEqual(await checkOutput(client.root, 'billing.dt'));
         expect(await client.until('common.dt', () => true)).toEqual([]);
+    });
+
+    test('appends the hint of a diagnostic to its message, and carries it in data', async () => {
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES.replace('Draft -> Placed', 'Draft -> Placd') });
+        const [d] = await client.until('sales.dt', (d) => d.length > 0);
+        expect(d).toMatchObject({
+            code: 'M006',
+            message: "Cannot resolve state 'Placd' in this aggregate.\nhint: did you mean 'Placed'?",
+            data: { hint: "did you mean 'Placed'?" },
+        });
+        expect(asCheckLines([d])).toEqual(await checkOutput(client.root, 'sales.dt'));
     });
 
     test('a rule over the whole workspace (M010) is reported, and follows unsaved edits', async () => {

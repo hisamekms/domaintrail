@@ -174,6 +174,11 @@ class DiagnosticsPublisher {
     }
 }
 
+/**
+ * The hint is appended to the message as a second line, as `dt check` prints it: clients show the message (and agents
+ * read it), while `relatedInformation` needs a location and is shown less prominently or not at all. `data` also carries
+ * it on its own.
+ */
 export function toLspDiagnostic(d: Diagnostic): LspDiagnostic {
     return {
         range: {
@@ -183,8 +188,8 @@ export function toLspDiagnostic(d: Diagnostic): LspDiagnostic {
         severity: d.severity === 'error' ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
         code: d.code,
         source: 'dt',
-        message: d.message,
-        ...(d.elementId ? { data: { elementId: d.elementId } } : {}),
+        message: d.hint ? `${d.message}\nhint: ${d.hint}` : d.message,
+        data: { ...(d.elementId ? { elementId: d.elementId } : {}), ...(d.hint ? { hint: d.hint } : {}) },
     };
 }
 

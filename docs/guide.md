@@ -109,6 +109,8 @@ runs until the client shuts it down. It offers:
 
 - **Diagnostics equal to `dt check`**: the same rules, severities, codes (the rule ID, e.g. `M009`) and messages,
   computed over the whole workspace (the config's `sources`) with the unsaved text of open files, after every change.
+  A hint follows the message on a second line (`hint: did you mean 'Confirmed'?`) and is also in the diagnostic's
+  `data.hint`.
 - **Go to definition** and **find references** for types, states, events, errors and field sets, across files and
   contexts (`Sales.Order` included).
 - **Hover**: kind, name, Japanese name, `///` description, and the expression of an invariant or requirement.
