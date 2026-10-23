@@ -42,7 +42,31 @@ export interface InvariantModel extends Described {
     name: string;
     /** The expression as written; absent for an invariant declared without one (not expressed in the DSL). */
     source?: string;
+    /** The expression as a tree, for generated checks; absent with `source`. */
+    expr?: ExprModel;
 }
+
+/**
+ * An invariant or requirement expression as a tree (syntax only: names are resolved by whoever reads it, in the scope
+ * of the invariant or requirement). Numbers keep their sign; `pattern` is the regular expression exactly as written.
+ */
+export type ExprModel =
+    | { k: 'bool'; value: boolean }
+    | { k: 'int'; value: number }
+    | { k: 'decimal'; value: string }
+    | { k: 'string'; value: string }
+    | { k: 'name'; name: string }
+    | { k: 'member'; receiver: ExprModel; member: string }
+    | { k: 'not'; operand: ExprModel }
+    | { k: 'binary'; op: 'implies' | 'or' | 'and' | '==' | '!=' | '<' | '<=' | '>' | '>='; left: ExprModel; right: ExprModel }
+    | { k: 'range'; operand: ExprModel; lower: ExprModel; upper: ExprModel }
+    | { k: 'count'; collection: ExprModel }
+    | { k: 'exists'; operand: ExprModel }
+    | { k: 'length'; operand: ExprModel }
+    | { k: 'matches'; operand: ExprModel; pattern: string }
+    | { k: 'unique'; collection: ExprModel; param?: string; keys: ExprModel[] }
+    | { k: 'contains'; collection: ExprModel; element: ExprModel }
+    | { k: 'quantifier'; quantifier: 'all' | 'any'; collection: ExprModel; param: string; body: ExprModel };
 
 export interface Location {
     file: string;
@@ -72,6 +96,8 @@ export interface RequirementModel extends Described {
     name: string;
     /** The expression as written; absent for a requirement declared without one (not expressed in the DSL). */
     source?: string;
+    /** The expression as a tree, for generated checks; absent with `source`. */
+    expr?: ExprModel;
     /** Qualified name of the error returned when the requirement does not hold. */
     error: string;
 }

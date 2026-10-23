@@ -152,7 +152,7 @@ describe('--format json', () => {
         dirs.push(dir);
         const ok = await run('-r', dir, 'generate', 'ts', '--out', 'gen', '--format', 'json');
         expect(ok.code).toBe(0);
-        expect(json(ok)).toEqual({ diagnostics: [], summary: { files: 6, errors: 0, warnings: 0 }, written: [path.relative(process.cwd(), path.join(dir, 'gen'))] });
+        expect(json(ok)).toEqual({ diagnostics: [], summary: { files: 6, errors: 0, warnings: 0 }, written: [path.relative(process.cwd(), path.join(dir, 'gen')), path.relative(process.cwd(), path.join(dir, 'gen', 'tests'))] });
 
         const invalid = await run('-r', await invalidWorkspace(), 'generate', 'ts', '--format', 'json');
         expect(invalid.code).toBe(1);
@@ -176,7 +176,7 @@ describe('dt generate ts', () => {
         dirs.push(dir);
         const r = await run('-r', dir, 'generate', 'ts', '--out', 'gen');
         expect(r.code).toBe(0);
-        expect((await readdir(path.join(dir, 'gen'))).sort()).toEqual(['Billing.ts', 'Common.ts', 'Sales.ts', '_runtime.ts', 'index.ts']);
+        expect((await readdir(path.join(dir, 'gen'))).sort()).toEqual(['Billing.ts', 'Common.ts', 'Sales.ts', '_runtime.ts', 'index.ts', 'tests']);
         expect(await readFile(path.join(dir, 'gen', 'Billing.ts'), 'utf8')).toContain("import type * as Sales from './Sales.js';");
     });
 

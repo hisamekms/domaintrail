@@ -68,14 +68,14 @@ describe('dt show', () => {
             '    Draft -> Confirmed: emits OrderConfirmed',
             '      sets confirmedAt; carries id, items, customer, note',
             '  events',
-            '    OrderConfirmed "注文確定" { orderId: OrderId "注文ID" (from term), confirmedAt: Timestamp "確定日時" (from term) }  // sales/order.dt:74',
+            '    OrderConfirmed "注文確定" { orderId: OrderId "注文ID" (from term), confirmedAt: Timestamp "確定日時" (from term) }  // sales/order.dt:77',
             '  errors',
-            '    EmptyOrder "明細なし"  // sales/order.dt:95',
+            '    EmptyOrder "明細なし"  // sales/order.dt:98',
         ]);
         const cancel = await shop('Sales.Order.cancel');
         expect(cancel.out).toContain('    Draft -> Cancelled: emits OrderCancelled');
         expect(cancel.out).toContain('      sets reason; carries id, items, customer, note; drops confirmedAt');
-        expect(cancel.out).toContain('  errors none');
+        expect(cancel.out).toContain('    NoteRequired "備考なし"  // sales/order.dt:106');
     });
 
     test('a state: its fields, invariants and the commands that enter and leave it', async () => {
@@ -195,7 +195,7 @@ describe('dt show --format json', () => {
         expect(doc.show).toBe('element');
         expect(doc.modelErrors).toBeUndefined();
         expect(doc.element.id).toBe('Sales.Order');
-        expect(doc.element.location).toEqual({ file: 'sales/order.dt', line: 13, endLine: 61 });
+        expect(doc.element.location).toEqual({ file: 'sales/order.dt', line: 13, endLine: 64 });
         expect(doc.element.fields.find((f: { name: string }) => f.name === 'note')).toMatchObject({ label: '備考', labelSource: 'term', multiplicity: '?' });
         const cancel = doc.element.commands.find((c: { name: string }) => c.name === 'cancel');
         expect(cancel.outcomes).toEqual([

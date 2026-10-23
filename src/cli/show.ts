@@ -182,7 +182,15 @@ function moves(agg: ElementModel, state: string): { enteredBy: Move[]; leftBy: M
     return { enteredBy: all.filter((m) => m.to === state), leftBy: all.filter((m) => m.from === state) };
 }
 
+/**
+ * The JSON of `dt show`. Invariants and requirements keep their `source`; the expression trees of the Typed Model
+ * (`expr`, read by the generator) are left out.
+ */
 export function showJson(model: DomainModel, target: ShowTarget | undefined): ShowJson {
+    return JSON.parse(JSON.stringify(showJsonOf(model, target), (key, value) => (key === 'expr' ? undefined : value)));
+}
+
+function showJsonOf(model: DomainModel, target: ShowTarget | undefined): ShowJson {
     if (!target) return { show: 'overview', contexts: model.contexts.map((c) => contextSummary(model, c)) };
     switch (target.kind) {
         case 'context':

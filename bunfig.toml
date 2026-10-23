@@ -1,0 +1,3 @@
+[test]
+# the repository's tests; examples/shop runs its generated contract tests itself (test/contract-tests.test.ts)
+root = "./test"

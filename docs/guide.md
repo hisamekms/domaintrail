@@ -14,6 +14,8 @@ This guide is what `dt guide` prints. It is written for people and AI agents usi
 4. Run `dt generate ts` to write the TypeScript (it runs `check` first and writes nothing on errors).
 5. Implement the generated contracts in your own code, and type-check that code with your own TypeScript setup
    (e.g. `tsc --noEmit`). `dt` does not run the TypeScript compiler.
+6. With `generate.ts.tests` configured, run the generated contract tests against your implementation with your test
+   runner (see [Generated tests](#generated-tests)).
 
 `dt view` starts the Live View, a browser page where people watch the model update as files are saved. It is a server
 that keeps running and never exits by itself (stop it with Ctrl+C), so do not wait for it to finish: run it in the
@@ -127,7 +129,9 @@ Every key is optional.
     "ts": {
       "out": "src/domain/generated",                        // default: "generated/domain"
       // contexts written elsewhere than "out" (optional)
-      "contexts": { "Common": { "out": "packages/shared/src/generated" } }
+      "contexts": { "Common": { "out": "packages/shared/src/generated" } },
+      // contract tests, written only with this key (optional); needs fast-check in your project
+      "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
     }
   },
   "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
@@ -138,7 +142,8 @@ CLI options win over the file: `generate ts --out`, `view --port`, `view --host`
 only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in `generate.ts.contexts` that is not a context of the model is a config
-error, reported by `generate ts` once the model has been checked.
+error, reported by `generate ts` once the model has been checked. Without `generate.ts.tests.out`, the tests follow
+`--out` (`<out>/tests`).
 
 ## Language server
 
@@ -393,6 +398,8 @@ context Sales {
 - Elsewhere a domain primitive compares with literals and with the same domain primitive, not with another domain
   primitive or a plain field of its base type (M009).
 - Only IDs can be identity fields and reference types. Domain primitives cannot be owned.
+- The generated code includes the constructor: `makeQuantity` checks the invariants and returns the first one
+  violated (`makeSkuWith(checks)` when an invariant has no expression); see [Generated checks](#generated-checks).
 
 ### Unions
 
@@ -597,11 +604,14 @@ context Billing { // other files open the context without a name
   values by name, value objects by all their fields, entities by `id`, union values by discriminator and fields.
   Both sides must be of the same type (domain primitives also compare with literals); collections and optional values
   cannot be compared (guard an optional with `exists(...)` first).
-- An invariant must be a Bool expression. Only its type is checked, not whether it holds.
+- An invariant must be a Bool expression. `dt check` checks only its type; whether a value holds it is checked by the
+  generated check functions (`checkConfirmedOrder`, see [Generated checks](#generated-checks)), with exactly these
+  semantics.
 - A constraint the DSL cannot express is declared without an expression, with a label or a `///` description that
   states it (M018): `invariant uniqueEmail "メールアドレスは顧客ごとに一意"`. It is documented like any invariant (in
   the Live View and as `@invariant uniqueEmail (…): not expressed in the DSL` in the generated TypeScript) and is
-  checked by your code only. In a domain primitive, its name joins the invariants of `Invalid<Name>`.
+  checked by your code only: the generated checks take it as a function you pass in (a slot). In a domain primitive,
+  its name joins the invariants of `Invalid<Name>`.
 - `count`, `exists`, `length`, `matches`, `all`, `any`, `unique` and `contains` are also usable as field and parameter
   names; followed by `(` they are the functions.
 
@@ -669,9 +679,13 @@ context Review {
   again is allowed), and several requirements may share one. An unknown error is M007.
 - Requirement names are unique within the command (M002). Without an expression, a requirement needs a label or a
   `///` description (M018), like an invariant.
-- Nothing checks them at run time: they appear in the Live View (振る舞い tab) and as `@requires` JSDoc on the
-  generated command type (see [Generated TypeScript](#generated-typescript)); your command implementation returns
-  the error.
+- They appear in the Live View (振る舞い tab) and as `@requires` JSDoc on the generated command type (see
+  [Generated TypeScript](#generated-typescript)); your command implementation returns the error. The generated
+  `check<Command>Requires` (e.g. `checkConfirmOrderRequires`) evaluates them, and the generated tests compare your
+  implementation with it.
+- **When several requirements do not hold, the command returns the error of the first one in declaration order.**
+  Order the requirements accordingly (the cheapest or most basic first); the generated tests expect exactly that
+  error.
 - Not supported: requirements for some source states only (split the command instead), and a generic
   `<Command>Rejected` error.
 - `requires` and `else` are also usable as field and parameter names.
@@ -862,7 +876,8 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 Per context a module (`Sales.ts`, …) with ID brands, enums, value objects, entities, unions, a discriminated union per
 stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types with a `type` tag, a function type per
 command and an `<Aggregate>Commands` interface to implement, plus `index.ts` and `_runtime.ts`. A domain primitive
-gets a branded type and a constructor contract `Make<Name>` to implement by hand. A field set is an interface that the
+gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`; invariants and
+requirements get check functions (see [Generated checks](#generated-checks)). A field set is an interface that the
 elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its `…Common`).
 The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's place as
 `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:44`); editing the `.dt` sources moves
@@ -1111,14 +1126,16 @@ The generated files are the **contract**, your code is the **implementation**:
 
 - Generated: types — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`) and their
   decisions (`ConfirmOrderDecision`), and the constructor signatures of domain primitives (`MakeQuantity`) — plus
-  data without logic: one shape constant per aggregate (`OrderShape`), the field names `decide` needs. Invariants and
-  command requirements appear as JSDoc (`@invariant`, `@requires`); nothing in the generated code checks them. The
-  one exception is `_runtime.ts`, whose few helpers (`ok`, `err`, `decide`, `outcome`, `eventList`) are the same for
-  every model.
-- Yours: everything that runs — command implementations (including their requirements; pure functions, see
-  [Pure commands](#pure-commands)), `Make<Name>` constructors,
-  invariant checks — in your own files, which import the generated modules (never the other way round) and are
-  type-checked against them.
+  data without logic: one shape constant per aggregate (`OrderShape`), the field names `decide` needs — plus logic
+  derived 1:1 from DSL expressions: the checks of invariants and requirements, the equality of value types and the
+  constructors of domain primitives (see [Generated checks](#generated-checks)). Invariants and requirements also
+  appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `outcome`,
+  `eventList`, and those of the checks) that are the same for every model.
+- Yours: the behaviour — command implementations (returning the error of the first requirement that does not hold;
+  pure functions, see [Pure commands](#pure-commands)) and the constraints the DSL does not express, which you pass to
+  the generated checks — in your own files, which import the generated modules (never the other way round) and are
+  type-checked against them. Your code may call the generated checks, or implement its own (a hand-written
+  `Make<Name>` like the one below); the generated tests use the generated checks as the oracle either way.
 
 ```ts
 // src/primitives.ts — your code
@@ -1130,6 +1147,103 @@ export const makeQuantity: Sales.MakeQuantity = (value) =>
 
 Do not edit generated files: change the `.dt` sources and generate again. Adding properties or methods to generated
 types (declaration merging, editing the output) is not supported; write functions that take the generated types.
+
+### Generated checks
+
+Every invariant and requirement with an expression becomes a pure function in the context's module, translated 1:1
+with the semantics of [Invariant expressions](#invariant-expressions): equality by value / all fields / `id` / tag and
+fields, `exists` and `implies` as written, regular expressions as JavaScript (`matches` is `RegExp.test`), `length` as
+the string's `length`, Decimals (carried as strings) and Ints compared as numbers, Timestamps by time.
+
+| Generated | For | Returns |
+|---|---|---|
+| `check<Name>(value)` | a domain primitive with invariants | the violated invariants, in declaration order (empty: valid) |
+| `make<Name>` | every domain primitive and ID | implements `Make<Name>`: `Invalid<Name>` with the **first** violated invariant |
+| `check<Name>(x)` | a value object, entity or union with invariants (a union: those of its variant) | the violated invariants |
+| `check<State><Aggregate>(x)`, `check<Aggregate>(x)` | an aggregate with invariants | per state, the aggregate's and the state's violated invariants; `check<Aggregate>` for any state |
+| `check<Command>Requires(aggregate, …params)` | a command with requirements | the name of the first requirement that does not hold, or `undefined` |
+| `equal<Name>(a, b)` | every value object, entity and union | the equality of `==`, `unique` and `contains` |
+
+```ts
+/** The first requirement of Order.confirm that does not hold, in declaration order; `undefined` when all hold. */
+export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'hasItems' | undefined {
+    if (!(order.items.length > 0)) return 'hasItems';
+    return undefined;
+}
+```
+
+A constraint without an expression cannot be generated. Instead the check gets a **slot**: a type naming the
+function your code provides, and a `…With` variant that takes it and combines it with the generated parts, in
+declaration order. Generated code never imports your code; you pass the function in:
+
+```ts
+// generated (Sales.ts), for `invariant reserved "予約語でない"` in `primitive Sku`
+export type SkuDeclaredChecks = { readonly reserved: (value: string) => boolean };
+export function checkSkuWith(checks: SkuDeclaredChecks): (value: string) => readonly InvalidSku['invariant'][];
+export const makeSkuWith: (checks: SkuDeclaredChecks) => MakeSku;
+
+// your code
+export const makeSku = Sales.makeSkuWith({ reserved: (value) => !RESERVED.has(value) });
+```
+
+The same holds for the other checks: `<Type>DeclaredChecks` and `check<Type>With(checks)` for value types and
+aggregates (one object per aggregate, keyed by invariant name, for all its states), and
+`<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements. A type without such a
+constraint has only the plain function.
+
+### Generated tests
+
+With `generate.ts.tests` in the config, `dt generate ts` also writes **contract tests** into `<out>/tests` (or
+`generate.ts.tests.out`). They check what the types cannot — the values — and use the generated checks as the oracle:
+
+| | Checks |
+|---|---|
+| T1 | `make<Name>` accepts exactly the values that hold the invariants, with values at and next to each bound of ranges and lengths and strings for regular expressions, and reports the first one violated |
+| T2 | when a requirement does not hold, the command returns the `else` error of the first such requirement; when all hold, none of the `else` errors |
+| T3 | after a successful command, the aggregate holds the invariants of its state (the aggregate's and the state's) |
+| T4 | events whose bounds the types do not express (`X[2..5]`) are emitted that many times |
+| T5 | purity: the same input twice gives deep-equal results, and the input is not changed |
+
+Inputs are generated with [fast-check](https://fast-check.dev) from the types: IDs, ranges, lengths and regular
+expressions of domain primitives, enums, value objects, entities, unions, collections with their multiplicities, and
+aggregates per state. **Inputs are always valid**: only values that hold their invariants are used, and parameters
+are values of their types; what a command does with invalid input is outside its contract. Values of one type are
+drawn often from a small pool, so that duplicates, `contains` and `!=` are decided both ways. Runs are deterministic
+(fixed seed, configurable), and a failure shows the shrunk counterexample and the seed. Install fast-check as a dev
+dependency of your project; generated product code does not use it.
+
+Per context, `tests/<Context>.ts` exports `contract(impl, options?)`, returning a suite of named test cases
+(`{ name, children }` of `{ name, run, todo? }`) for any runner, and `arbitraries(options?)`. `impl` lists what to
+test, each optional: the constructors (`make: { Quantity: makeQuantity }`) and the commands per aggregate
+(`Order: orderCommands`). With `generate.ts.tests.runner` (`bun`, `vitest`, `jest`, `node`), `tests/_register.ts`
+registers a suite with that runner, and the test file is a few lines:
+
+```ts
+// examples/shop/src/contract.test.ts
+import { Common, Sales, register } from '../generated/domain/tests/index.js';
+import { orderCommands } from './order-commands.js';
+import { makeEmailAddress, makeOrderId, makeQuantity, makeSku } from './primitives.js';
+
+register(Sales.contract({ make: { Quantity: makeQuantity, Sku: makeSku, OrderId: makeOrderId }, Order: orderCommands }));
+register(Common.contract({ make: { EmailAddress: makeEmailAddress } }));
+```
+
+Options, all optional:
+
+- `seed`, `runs`: fast-check's seed (default 42) and the number of generated inputs per case (default 100).
+- `arbitraries: { Sales: { Sku: fc.stringMatching(/^ABC-\d{4}$/) } }`: replaces the arbitrary of a type, by context
+  and type name (aggregates per state, e.g. `DraftOrder`). Its values are still filtered by the invariants. When
+  filtering rejects 1000 values in a row, the case fails with a message naming the type to override.
+- `declared: { Sales: { Sku: { reserved: … }, Order: { … }, AcceptReview: { signedOff: … } } }`: the checks of the
+  constraints without an expression, by context and type or command type; the same functions your code passes to the
+  `…With` checks. A constraint whose check is not passed is listed as a **todo** case ("not expressed in the DSL and
+  not checked"), and the tests accept either outcome where it would decide.
+- `examples: { Order: { states: { Draft: [order] }, commands: { confirm: [[order, at]] } } }`: valid aggregates per
+  state (mixed into the generated ones) and arguments per command (run first, before the generated ones). Examples
+  must hold their invariants; one that does not fails the case.
+
+A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
+the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
 
 ### Technical metadata
 

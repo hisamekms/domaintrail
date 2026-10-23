@@ -2,6 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-23
+- Amended by: [ADR 0020](0020-generated-checks-and-contract-tests.md) (generated checks of requirements; when several
+  do not hold, the error of the first in declaration order)
 
 ## Context
 
@@ -75,7 +77,15 @@ requirement to a command can make M019 appear; the message says to rename the pa
   `@requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)`; without an
   expression, `…: not expressed in the DSL`.
 - The command's error type is the union of `CommandModel.errors` (listed errors, then those of `else`, each once).
-- No checks are generated; the hand-written implementation returns the error (ADR 0011).
+- No checks are generated; the hand-written implementation returns the error (ADR 0011). (Amended by
+  [ADR 0020](0020-generated-checks-and-contract-tests.md): `check<Command>Requires` is generated, a requirement without
+  an expression is a slot, and the implementation still returns the error.)
+
+### Several requirements that do not hold
+
+(Added by [ADR 0020](0020-generated-checks-and-contract-tests.md).) The command returns the `else` error of the
+**first** requirement that does not hold, in declaration order. The order in the model is the order of the checks;
+the generated tests expect exactly that error.
 
 ### Live View
 

@@ -41,6 +41,16 @@
                 }
               },
               "examples": [{ "Common": { "out": "packages/shared/src/generated" } }]
+            },
+            "tests": {
+              "description": "Contract tests generated from the model (ADR 0020), written only when this key is present: fast-check arbitraries of the types and a runner-agnostic suite per context. Your project needs fast-check as a (dev) dependency.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "out": { "description": "Output directory of the test modules, inside the directory of this file. Default: 'tests' in the output directory ('out', or --out).", "type": "string" },
+                "runner": { "description": "Writes _register.ts, which registers a generated suite with this test runner.", "enum": ["bun", "vitest", "jest", "node"] }
+              },
+              "examples": [{ "runner": "vitest" }]
             }
           }
         }

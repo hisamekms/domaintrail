@@ -3,7 +3,8 @@
 - Status: accepted
 - Date: 2026-10-18
 - Amended by: [ADR 0019](0019-command-changes-and-decisions.md) (generated code may also hold data without logic: the
-  shape constants read by `decide`)
+  shape constants read by `decide`), [ADR 0020](0020-generated-checks-and-contract-tests.md) (generated code may hold
+  logic derived 1:1 from DSL expressions: checks, equality, `make<Name>`)
 
 ## Context
 
@@ -19,9 +20,13 @@ boundary has to be stated.
   (`ConfirmOrder`, `<Aggregate>Commands`) and constructor signatures of domain primitives (`Make<Name>`). Invariants
   are documented as JSDoc (`@invariant`) and not checked. (Amended by [ADR 0019](0019-command-changes-and-decisions.md):
   besides types, **data without logic** — one constant per aggregate, `<Aggregate>Shape`, restating its field names
-  for `decide` of the runtime. Behaviour stays in the runtime, which is the same for every model, and in users' code.)
+  for `decide` of the runtime. Behaviour stays in the runtime, which is the same for every model, and in users' code.
+  Amended by [ADR 0020](0020-generated-checks-and-contract-tests.md): also **logic derived 1:1 from DSL
+  expressions** — the checks of invariants and requirements, the equality they use, and `make<Name>` built from them;
+  constraints without an expression are slots the user's code passes in.)
 - **Users write the implementation**: command implementations, `Make<Name>` constructors and invariant checks, in
-  their own files.
+  their own files. (Since [ADR 0020](0020-generated-checks-and-contract-tests.md): command implementations and the
+  constraints the DSL does not express; constructors and checks are generated, and hand-written ones are optional.)
 - **Generated files are never edited.** They hold only what follows from the DSL and are replaced on every run.
 - **Dependencies point one way**: users' code imports the generated modules; generated code never imports users' code.
 - **Adding properties or methods to generated types is not supported** (declaration merging, editing the output).
@@ -29,7 +34,8 @@ boundary has to be stated.
 
 ### Direction under consideration: generating invariant checks
 
-Not decided, recorded so that later work keeps the boundary above:
+Decided in [ADR 0020](0020-generated-checks-and-contract-tests.md), along these lines (constructors are generated too).
+Recorded so that later work keeps the boundary above:
 
 - Invariants the DSL can express (ranges, regular expressions, lengths, …) → the generated code gets a pure check
   function, e.g. `checkQuantity(value): InvalidQuantity | undefined`.

@@ -111,7 +111,7 @@ describe('behaviour cards', () => {
     });
 
     test('a command without requirements has no requirements part', () => {
-        const html = renderToStaticMarkup(<CommandCard agg={order} c={command('cancel')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
+        const html = renderToStaticMarkup(<CommandCard agg={order} c={command('changeNote')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
         expect(html).not.toContain(tx.requirements);
     });
 

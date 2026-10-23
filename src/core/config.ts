@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
+import { RUNNERS, type Runner } from '../generator/tests.js';
 
 /** Config file names, in order of preference within one directory. */
 export const CONFIG_FILES = ['domaintrail.jsonc', 'domaintrail.json'] as const;
@@ -16,7 +17,7 @@ export interface DomainTrailConfigFile {
     $schema?: string;
     /** Globs of DSL files; `!pattern` excludes. Default: `**\/*.dt`. */
     sources?: string[];
-    generate?: { ts?: { out?: string; contexts?: Record<string, { out: string }> } };
+    generate?: { ts?: { out?: string; contexts?: Record<string, { out: string }>; tests?: { out?: string; runner?: Runner } } };
     view?: { port?: number; host?: string };
 }
 
@@ -29,6 +30,11 @@ export interface ResolvedConfig {
     tsOut: string;
     /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
     tsContexts: Record<string, string>;
+    /**
+     * The contract tests (`generate.ts.tests`), generated only when configured: their directory (absent: `tests` in the
+     * output directory of `generate.ts.out` / `--out`) and the runner to write an adapter for.
+     */
+    tsTests?: { out?: string; runner?: Runner };
     view: { port: number; host: string };
 }
 
@@ -65,6 +71,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
         sources: config.sources ?? DEFAULT_SOURCES,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
         tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).map(([ctx, c]) => [ctx, c.out])),
+        ...(config.generate?.ts?.tests && { tsTests: config.generate.ts.tests }),
         view: { port: config.view?.port ?? DEFAULT_PORT, host: config.view?.host ?? DEFAULT_HOST },
     };
 }
@@ -124,8 +131,17 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
         for (const key of Object.keys(gen!)) if (key !== 'ts') fail(`unknown generator 'generate.${key}' (supported: ts)`);
         const ts = gen!.ts as Record<string, unknown> | undefined;
         if (ts !== undefined && (typeof ts !== 'object' || ts === null || Array.isArray(ts))) fail("'generate.ts' must be an object");
-        for (const key of Object.keys(ts ?? {})) if (!['out', 'contexts'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
+        for (const key of Object.keys(ts ?? {})) if (!['out', 'contexts', 'tests'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
         checkOut(ts?.out, 'generate.ts.out', fail);
+        const tests = ts?.tests as Record<string, unknown> | undefined;
+        if (tests !== undefined) {
+            if (typeof tests !== 'object' || tests === null || Array.isArray(tests)) fail("'generate.ts.tests' must be an object");
+            for (const k of Object.keys(tests!)) if (!['out', 'runner'].includes(k)) fail(`unknown key 'generate.ts.tests.${k}'`);
+            checkOut(tests!.out, 'generate.ts.tests.out', fail);
+            if (tests!.runner !== undefined && !(RUNNERS as readonly unknown[]).includes(tests!.runner)) {
+                fail(`'generate.ts.tests.runner' must be one of ${RUNNERS.map((r) => `'${r}'`).join(', ')}`);
+            }
+        }
         const contexts = ts?.contexts;
         if (contexts !== undefined) {
             if (typeof contexts !== 'object' || contexts === null || Array.isArray(contexts)) fail("'generate.ts.contexts' must be an object keyed by context name");

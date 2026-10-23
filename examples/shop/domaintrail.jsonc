@@ -3,8 +3,9 @@
   // DSL files of this example (paths are relative to this file)
   "sources": ["**/*.dt"],
   "generate": {
-    // src/*.ts import the generated contracts from here
-    "ts": { "out": "generated/domain" }
+    // src/*.ts import the generated contracts from here; the contract tests go to generated/domain/tests,
+    // with an adapter for bun:test (src/contract.test.ts)
+    "ts": { "out": "generated/domain", "tests": { "runner": "bun" } }
   },
   "view": { "port": 4321 }
 }
