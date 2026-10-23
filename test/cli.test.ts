@@ -50,7 +50,9 @@ describe('dt check', () => {
         expect(r.err).toEqual([
             "order.dt:7:32 - error M009: count() requires a collection, but got 'Money'.",
             "order.dt:8:32 - error M006: Cannot resolve state 'Shipped' in this aggregate.",
+            "  hint: use a state of 'Order': Draft",
             "order.dt:10:45 - error M004: 'Money' cannot own aggregate 'Order'; aggregates are referenced by ID ('references').",
+            "  hint: write 'references order: OrderId -> Order' instead",
             '1 file(s) checked: 3 error(s), 0 warning(s).',
         ]);
     });
@@ -59,6 +61,112 @@ describe('dt check', () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
         dirs.push(dir);
         expect((await run('-r', dir, 'check')).code).toBe(1);
+    });
+});
+
+describe('--format json', () => {
+    const json = (r: { out: string[] }) => {
+        expect(r.out).toHaveLength(1);
+        return JSON.parse(r.out[0]);
+    };
+
+    async function invalidWorkspace(): Promise<string> {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        await writeFile(
+            path.join(dir, 'b.dt'),
+            `context Sales {
+  id OrderId: UUID
+  aggregate Order { id: OrderId state Draft state Confirmed command confirm() Draft -> Confirmd }
+}
+`,
+        );
+        await writeFile(path.join(dir, 'a.dt'), 'context Sales "販売" {\n  terms { nte: "備考" }\n  value V { note: String }\n}\n');
+        return dir;
+    }
+
+    test('check prints one document with the sorted diagnostics, hints and a summary; same exit code as text', async () => {
+        const dir = await invalidWorkspace();
+        const r = await run('-r', dir, 'check', '--format', 'json');
+        expect(r.code).toBe(1);
+        expect(r.err).toEqual([]);
+        expect(json(r)).toEqual({
+            diagnostics: [
+                {
+                    file: 'a.dt',
+                    line: 2,
+                    column: 11,
+                    endLine: 2,
+                    endColumn: 14,
+                    severity: 'warning',
+                    code: 'L002',
+                    message: `Term 'nte' ("備考") is not used by any field or parameter in context 'Sales'.`,
+                    hint: "did you mean 'note'?",
+                },
+                {
+                    file: 'b.dt',
+                    line: 3,
+                    column: 88,
+                    endLine: 3,
+                    endColumn: 96,
+                    severity: 'error',
+                    code: 'M006',
+                    message: "Cannot resolve state 'Confirmd' in this aggregate.",
+                    hint: "did you mean 'Confirmed'?",
+                },
+            ],
+            summary: { files: 2, errors: 1, warnings: 1 },
+        });
+        const text = await run('-r', dir, 'check');
+        expect(text.code).toBe(1);
+        expect(text.out).toEqual([`a.dt:2:11 - warning L002: Term 'nte' ("備考") is not used by any field or parameter in context 'Sales'.`, "  hint: did you mean 'note'?"]);
+    });
+
+    test('a valid workspace: no diagnostics, exit 0', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        const r = await run('-r', dir, 'check', '--format', 'json');
+        expect(r.code).toBe(0);
+        expect(json(r)).toEqual({ diagnostics: [], summary: { files: 6, errors: 0, warnings: 0 } });
+    });
+
+    test('failures are an error message in the document, with the exit codes of text', async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        const missing = await run('-r', path.join(dir, 'missing'), 'check', '--format', 'json');
+        expect(missing.code).toBe(1);
+        expect(json(missing)).toEqual({ error: `Root directory not found: ${path.join(dir, 'missing')}` });
+
+        const empty = await run('-r', dir, 'check', '--format', 'json');
+        expect(empty.code).toBe(1);
+        expect(json(empty)).toMatchObject({ diagnostics: [], summary: { files: 0 }, error: expect.stringContaining('No .dt files found') });
+
+        await writeFile(path.join(dir, 'domaintrail.json'), '{ "sources": 1 }');
+        const config = await run('-r', dir, 'check', '--format', 'json');
+        expect(config.code).toBe(2);
+        expect(Object.keys(json(config))).toEqual(['error']);
+    });
+
+    test('generate ts: the directories written, or why nothing was', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        const ok = await run('-r', dir, 'generate', 'ts', '--out', 'gen', '--format', 'json');
+        expect(ok.code).toBe(0);
+        expect(json(ok)).toEqual({ diagnostics: [], summary: { files: 6, errors: 0, warnings: 0 }, written: [path.relative(process.cwd(), path.join(dir, 'gen'))] });
+
+        const invalid = await run('-r', await invalidWorkspace(), 'generate', 'ts', '--format', 'json');
+        expect(invalid.code).toBe(1);
+        expect(json(invalid)).toMatchObject({ summary: { errors: 1 }, error: 'Generation skipped because the model has errors.' });
+
+        const target = await run('-r', dir, 'generate', 'js', '--format', 'json');
+        expect(target.code).toBe(2);
+        expect(json(target)).toEqual({ error: "Unknown target 'js'. Supported: ts" });
+    });
+
+    test('an unknown format is a usage error', async () => {
+        const r = await run('check', '--format', 'xml');
+        expect(r.code).not.toBe(0);
+        expect(r.err.join('\n')).toContain("'xml' is invalid");
     });
 });
 

@@ -1,9 +1,9 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { Command, InvalidArgumentError } from 'commander';
+import { Command, InvalidArgumentError, Option } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
 import { ConfigError, checkTsContexts, loadConfig, staysInside, type ResolvedConfig } from '../core/config.js';
-import { formatDiagnostic } from '../core/diagnostics.js';
+import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
 import { loadWorkspace } from '../core/files.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
 import guide from '../../docs/guide.md' with { type: 'text' };
@@ -25,15 +25,42 @@ class CliError extends Error {
     }
 }
 
-async function runCheck(config: ResolvedConfig, io: CliIO): Promise<Analysis> {
+type Format = 'text' | 'json';
+
+const formatOption = () => new Option('--format <format>', 'output format').choices(['text', 'json']).default('text');
+
+/** What `--format json` prints: one JSON document on stdout (see schema/diagnostics.schema.json). */
+interface JsonReport {
+    diagnostics?: JsonDiagnostic[];
+    summary?: { files: number; errors: number; warnings: number };
+    /** Output directories written by `generate ts`, relative to the working directory. */
+    written?: string[];
+    /** Why the command failed, unless only because of the diagnostics of `check`. */
+    error?: string;
+}
+
+/**
+ * Checks the workspace. In text mode the diagnostics and the summary are printed; in JSON mode they are put into
+ * `report`, printed by the caller.
+ */
+async function runCheck(config: ResolvedConfig, io: CliIO, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
     const sources = await loadWorkspace(root, config.sources);
     const analysis = await analyze(sources);
-    for (const d of analysis.diagnostics) (d.severity === 'error' ? io.err : io.out)(formatDiagnostic(d));
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
+    const noFiles = `No .dt files found under ${root} (sources: ${config.sources.join(', ')}).`;
+    if (report) {
+        report.diagnostics = analysis.diagnostics.map(jsonDiagnostic);
+        report.summary = { files: sources.length, errors, warnings };
+        if (sources.length === 0) report.error = noFiles;
+        return analysis;
+    }
+    for (const d of analysis.diagnostics) {
+        for (const line of formatDiagnostic(d).split('\n')) (d.severity === 'error' ? io.err : io.out)(line);
+    }
     const summary = `${sources.length} file(s) checked: ${errors} error(s), ${warnings} warning(s).`;
-    if (sources.length === 0) io.err(`No .dt files found under ${root} (sources: ${config.sources.join(', ')}).`);
+    if (sources.length === 0) io.err(noFiles);
     else (errors ? io.err : io.out)(summary);
     return analysis;
 }
@@ -41,6 +68,13 @@ async function runCheck(config: ResolvedConfig, io: CliIO): Promise<Analysis> {
 /** Runs the CLI and returns the process exit code. */
 export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Promise<number> {
     let exitCode = 0;
+    /** Set by commands run with `--format json`; printed once at the end, failures included. */
+    let report: JsonReport | undefined;
+    const fail = (message: string, code: number): void => {
+        if (report) report.error = message;
+        else io.err(message);
+        exitCode = code;
+    };
     const program = new Command()
         .name('dt')
         .description('Domain Modeling DSL: check, generate TypeScript, and view models live.')
@@ -60,15 +94,20 @@ New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workfl
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
         .addHelpText('after', `
-Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), then a summary line.
+Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), followed by an
+indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
+on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
 Exits 0 when there are no errors, 1 on errors or when no .dt file is found, 2 on an invalid config.
 
 Examples:
   dt check
+  dt check --format json
   dt -r domain check
   dt -c config/domaintrail.jsonc check`)
-        .action(async () => {
-            const a = await runCheck(await config(), io);
+        .addOption(formatOption())
+        .action(async (opts: { format: Format }) => {
+            if (opts.format === 'json') report = {};
+            const a = await runCheck(await config(), io, report);
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
         });
 
@@ -77,30 +116,36 @@ Examples:
         .description('Generate code from a valid model.')
         .argument('<target>', 'generation target (ts)')
         .option('-o, --out <dir>', 'output directory relative to the root (default: generate.ts.out, else generated/domain)')
+        .addOption(formatOption())
         .addHelpText('after', `
 Runs check first and writes nothing if the model has errors (exit 1). Files generated before are replaced, and those
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
 directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
+With --format json, prints one JSON document like \`check\`, with the directories written ("written") or why
+nothing was written ("error").
 Type-check your own code against the output with \`tsc --noEmit\`.
 
 Examples:
   dt generate ts
   dt generate ts --out src/domain/generated`)
-        .action(async (target: string, opts: { out?: string }) => {
+        .action(async (target: string, opts: { out?: string; format: Format }) => {
+            if (opts.format === 'json') report = {};
             if (target !== 'ts') {
-                io.err(`Unknown target '${target}'. Supported: ts`);
-                exitCode = 2;
+                fail(`Unknown target '${target}'. Supported: ts`, 2);
                 return;
             }
             const cfg = await config();
             if (opts.out !== undefined && !staysInside(opts.out)) {
                 throw new ConfigError(`--out must stay inside ${cfg.root} (the directory of the config file, else the root): '${opts.out}'`);
             }
-            const a = await runCheck(cfg, io);
+            const a = await runCheck(cfg, io, report);
+            if (a.files.length === 0) {
+                exitCode = 1; // reported by runCheck
+                return;
+            }
             if (!a.ok || !a.model) {
-                io.err('Generation skipped because the model has errors.');
-                exitCode = 1;
+                fail('Generation skipped because the model has errors.', 1);
                 return;
             }
             checkTsContexts(cfg, a.model.contexts);
@@ -110,8 +155,7 @@ Examples:
             for (const dir of new Set([defaultOut, ...Object.values(cfg.tsContexts).map((d) => path.resolve(cfg.root, d))])) {
                 const linked = await symlinkOnPath(cfg.root, dir);
                 if (linked) {
-                    io.err(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`);
-                    exitCode = 1;
+                    fail(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`, 1);
                     return;
                 }
             }
@@ -120,8 +164,7 @@ Examples:
             const foreign = await foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);
-                io.err(`Generation skipped: ${names.join(', ')} ${foreign.length > 1 ? 'are' : 'is'} not generated by domaintrail and would be overwritten.`);
-                exitCode = 1;
+                fail(`Generation skipped: ${names.join(', ')} ${foreign.length > 1 ? 'are' : 'is'} not generated by domaintrail and would be overwritten.`, 1);
                 return;
             }
             const outDirs = [...new Set(files.map((f) => path.dirname(f.file)))];
@@ -131,7 +174,9 @@ Examples:
             for (const f of files) await writeNew(f.file, f.content);
             const recorded = await writeManifest(cfg.root, files.map((f) => f.path));
             if (!recorded) io.err(`Warning: generated files not recorded in ${MANIFEST_FILE}, which is not a plain file in a plain directory; they will not be removed automatically.`);
-            io.out(`TypeScript written to ${outDirs.map((d) => path.relative(process.cwd(), d) || '.').join(', ')}`);
+            const written = outDirs.map((d) => path.relative(process.cwd(), d) || '.');
+            if (report) report.written = written;
+            else io.out(`TypeScript written to ${written.join(', ')}`);
         });
 
     program
@@ -183,23 +228,17 @@ Examples:
     try {
         await program.parseAsync(argv as string[], { from: 'user' });
     } catch (e) {
-        if (e instanceof ConfigError) {
-            io.err(e.message);
-            return 2;
-        }
-        if (e instanceof CliError) {
-            io.err(e.message);
-            return e.exitCode;
-        }
+        if (e instanceof ConfigError) fail(e.message, 2);
+        else if (e instanceof CliError) fail(e.message, e.exitCode);
         // File system and network failures (unreadable directories, permissions…) are reported, not thrown.
-        if (errorCode(e)) {
-            io.err((e as Error).message);
-            return 1;
+        else if (errorCode(e)) fail((e as Error).message, 1);
+        else {
+            const code = (e as { exitCode?: number }).exitCode;
+            if (typeof code === 'number') return code;
+            throw e;
         }
-        const code = (e as { exitCode?: number }).exitCode;
-        if (typeof code === 'number') return code;
-        throw e;
     }
+    if (report) io.out(JSON.stringify(report, null, 2));
     return exitCode;
 }
 
