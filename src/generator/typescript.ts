@@ -2,6 +2,7 @@ import * as posix from 'node:path/posix';
 import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, Location, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
 import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
 import { CheckWriter } from './checks.js';
+import { generateTests, type TestsOptions } from './tests.js';
 import {
     AGGREGATE_TYPE,
     DOMAIN_EVENT_TYPE,
@@ -173,9 +174,10 @@ export type Timestamp = Date;
 /**
  * Generates one module per bounded context, plus a runtime and an index in every directory written to.
  * `dirs` places contexts in directories (`/`-separated, relative to the output directory; default: the output
- * directory itself); each index re-exports only the contexts in its directory. Requires a model without errors.
+ * directory itself); each index re-exports only the contexts in its directory. With `tests`, also the contract tests
+ * (ADR 0020) into `tests.dir`. Requires a model without errors.
  */
-export function generateTypeScript(model: DomainModel, dirs: Readonly<Record<string, string>> = {}): GeneratedFile[] {
+export function generateTypeScript(model: DomainModel, dirs: Readonly<Record<string, string>> = {}, tests?: TestsOptions): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     const files: GeneratedFile[] = [];
     for (const dir of [...new Set(model.contexts.map(dirOf))]) {
@@ -187,6 +189,7 @@ export function generateTypeScript(model: DomainModel, dirs: Readonly<Record<str
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
         files.push({ path: posix.join(dir, 'index.ts'), content: index });
     }
+    if (tests) files.push(...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir) }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)));
     return files;
 }
 

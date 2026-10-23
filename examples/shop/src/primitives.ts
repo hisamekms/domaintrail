@@ -1,12 +1,10 @@
-// Hand-written constructors of domain primitives, checked against the generated contracts.
-// The generator documents each invariant; enforcing it at run time is the job of these functions.
-import { err, ok, type Common, type Sales } from '../generated/domain/index.js';
+// Constructors of domain primitives. The generator writes them from the invariants of the DSL (`Sales.makeQuantity`,
+// …), returning the first invariant violated; a hand-written one, like `makeEmailAddress`, implements the same contract
+// and is checked by the generated tests (src/contract.test.ts) against the generated checks.
+import { Sales, err, ok, type Common } from '../generated/domain/index.js';
 
-export const makeQuantity: Sales.MakeQuantity = (value) =>
-    Number.isInteger(value) && value >= 1 && value <= 999 ? ok(value as Sales.Quantity) : err({ type: 'InvalidQuantity', value, invariant: 'valid' });
-
-export const makeSku: Sales.MakeSku = (value) =>
-    /^[A-Z]{3}-\d{4}$/.test(value) ? ok(value as Sales.Sku) : err({ type: 'InvalidSku', value, invariant: 'valid' });
+export const makeQuantity: Sales.MakeQuantity = Sales.makeQuantity;
+export const makeSku: Sales.MakeSku = Sales.makeSku;
 
 export const makeEmailAddress: Common.MakeEmailAddress = (value) => {
     if (!/^[^@\s]+@[^@\s]+$/.test(value)) return err({ type: 'InvalidEmailAddress', value, invariant: 'format' });
@@ -15,4 +13,4 @@ export const makeEmailAddress: Common.MakeEmailAddress = (value) => {
 };
 
 // IDs without invariants cannot fail.
-export const makeOrderId: Sales.MakeOrderId = (value) => value as Sales.OrderId;
+export const makeOrderId: Sales.MakeOrderId = Sales.makeOrderId;

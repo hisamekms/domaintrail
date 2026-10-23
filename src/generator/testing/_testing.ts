@@ -1,0 +1,436 @@
+/**
+ * Generic helpers of the generated contract tests (the same for every model). Inputs are generated with fast-check
+ * from the types, and only values that hold their invariants are used (ADR 0020); the generated checks are the oracle.
+ */
+import * as fc from 'fast-check';
+
+/** A named test case. A `todo` case names something the suite does not check; its `run` does nothing. */
+export interface TestCase {
+    readonly name: string;
+    readonly run: () => void | Promise<void>;
+    readonly todo?: boolean;
+}
+
+/** Test cases grouped like `describe`. */
+export interface Suite {
+    readonly name: string;
+    readonly children: readonly (Suite | TestCase)[];
+}
+
+export const isSuite = (x: Suite | TestCase): x is Suite => 'children' in x;
+
+export const suite = (name: string, children: readonly (Suite | TestCase | undefined)[]): Suite => ({ name, children: children.filter((c): c is Suite | TestCase => c !== undefined) });
+
+export const todo = (name: string): TestCase => ({ name, run: () => {}, todo: true });
+
+/** How the properties run: fast-check's seed (fixed by default, so that runs are reproducible) and number of runs. */
+export interface RunOptions {
+    readonly seed?: number;
+    readonly runs?: number;
+}
+
+export const DEFAULT_SEED = 42;
+export const DEFAULT_RUNS = 100;
+
+/** The flat list of test cases of a suite, with their names joined by ` > `. */
+export function cases(s: Suite, prefix = ''): TestCase[] {
+    const name = prefix ? `${prefix} > ${s.name}` : s.name;
+    return s.children.flatMap((c) => (isSuite(c) ? cases(c, name) : [{ ...c, name: `${name} > ${c.name}` }]));
+}
+
+/** Runs `predicate` for generated inputs, after the given examples; throws with the (shrunk) counterexample. */
+export function property<A>(arb: fc.Arbitrary<A>, examples: readonly A[], options: RunOptions, predicate: (a: A) => void): void {
+    fc.assert(
+        fc.property(arb, (a) => {
+            predicate(a);
+        }),
+        { seed: options.seed ?? DEFAULT_SEED, numRuns: options.runs ?? DEFAULT_RUNS, examples: examples.map((e) => [e] as [A]), includeErrorInReport: true },
+    );
+}
+
+export class ContractError extends Error {}
+
+export function fail(message: string): never {
+    throw new ContractError(message);
+}
+
+export const show = (v: unknown): string => fc.stringify(v);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Arbitraries
+
+const MAX_MISSES = 1000;
+
+/**
+ * The values of `arb` for which `holds` is true. When it rejects MAX_MISSES values in a row, generation stops with a
+ * message naming the type, whose arbitrary should then be passed in `options.arbitraries`.
+ */
+export function valid<T>(arb: fc.Arbitrary<T>, holds: (v: T) => boolean, type: string): fc.Arbitrary<T> {
+    let misses = 0;
+    return arb.filter((v) => {
+        if (holds(v)) {
+            misses = 0;
+            return true;
+        }
+        if (++misses < MAX_MISSES) return false;
+        misses = 0;
+        const [ctx, name] = type.split('.');
+        return fail(
+            `Generating values of ${type} that hold its invariants failed ${MAX_MISSES} times in a row. Pass an arbitrary for it: options.arbitraries = { ${ctx}: { ${name}: … } }.`,
+        );
+    });
+}
+
+/**
+ * Mixes a small pool of values of `arb` into it, so that two values of one type are often equal: duplicates,
+ * `contains` and `!=` are then decided both ways.
+ */
+export function collide<T>(arb: fc.Arbitrary<T>, seed: number): fc.Arbitrary<T> {
+    const pool = fc.sample(arb, { seed, numRuns: 3 });
+    return fc.oneof({ weight: 1, arbitrary: fc.constantFrom(...pool) }, { weight: 3, arbitrary: arb });
+}
+
+/** Mixes the given examples into `arb`, after checking that they hold their invariants (inputs are always valid). */
+export function withExamples<T>(arb: fc.Arbitrary<T>, examples: readonly T[] | undefined, violated: (v: T) => readonly string[], type: string): fc.Arbitrary<T> {
+    if (!examples?.length) return arb;
+    examples.forEach((e, i) => {
+        const v = violated(e);
+        if (v.length) fail(`Example ${i + 1} of ${type} violates ${v.map((n) => `'${n}'`).join(', ')}: examples must hold their invariants.`);
+    });
+    return fc.oneof({ weight: 1, arbitrary: fc.constantFrom(...examples) }, { weight: 2, arbitrary: arb });
+}
+
+/** A record whose properties are computed when first read (arbitraries may refer to each other). */
+export function lazy<T extends object>(defs: { readonly [K in keyof T]: () => T[K] }): T {
+    const out = {} as T;
+    for (const k of Object.keys(defs) as (keyof T)[]) {
+        let v: T[keyof T] | undefined;
+        Object.defineProperty(out, k, { enumerable: true, get: () => (v ??= defs[k]()) });
+    }
+    return out;
+}
+
+export const cast = <T>(arb: fc.Arbitrary<unknown>): fc.Arbitrary<T> => arb as fc.Arbitrary<T>;
+
+/** A field or parameter of a multiplicity: `[lower..upper]` elements (`upper` absent: a few more than `lower`). */
+export function many<T>(arb: fc.Arbitrary<T>, lower: number, upper?: number): fc.Arbitrary<T[]> {
+    return fc.array(arb, { minLength: lower, maxLength: upper ?? lower + 4 });
+}
+
+export function optional<T>(arb: fc.Arbitrary<T>): fc.Arbitrary<T | undefined> {
+    return fc.option(arb, { nil: undefined });
+}
+
+/** Bounds read from the invariants of a domain primitive, to generate mostly valid values. */
+export interface Hints {
+    readonly ge?: number;
+    readonly gt?: number;
+    readonly le?: number;
+    readonly lt?: number;
+    readonly minLength?: number;
+    readonly maxLength?: number;
+    readonly pattern?: string;
+}
+
+export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
+
+/** Smallest and largest number allowed by the hints, in steps of `step` (1 for Int, 0.01 for Decimal). */
+function range(h: Hints, step: number): [number, number] {
+    const lo = Math.max(h.ge ?? -Infinity, h.gt !== undefined ? h.gt + step : -Infinity);
+    const hi = Math.min(h.le ?? Infinity, h.lt !== undefined ? h.lt - step : Infinity);
+    const min = Number.isFinite(lo) ? lo : Number.isFinite(hi) ? hi - 2000 : -1000;
+    const max = Number.isFinite(hi) ? hi : min + 2000;
+    return [Math.ceil(min / step), Math.floor(max / step)];
+}
+
+const decimal = (hundredths: number): string => String(hundredths / 100);
+
+/** Values of a base type, within the hints where they apply. */
+export function base(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
+    switch (b) {
+        case 'Int': {
+            const [min, max] = range(h, 1);
+            return fc.integer({ min, max: Math.max(min, max) });
+        }
+        case 'Decimal': {
+            const [min, max] = range(h, 0.01);
+            return fc.integer({ min, max: Math.max(min, max) }).map(decimal);
+        }
+        case 'Bool':
+            return fc.boolean();
+        case 'Timestamp':
+            return fc.date({ min: new Date('2000-01-01T00:00:00Z'), max: new Date('2100-01-01T00:00:00Z'), noInvalidDate: true });
+        case 'UUID':
+        case 'String': {
+            if (h.pattern !== undefined) return fc.stringMatching(new RegExp(h.pattern));
+            if (b === 'UUID') return fc.uuid();
+            const minLength = h.minLength ?? 0;
+            return fc.string({ minLength, maxLength: Math.max(minLength, h.maxLength ?? minLength + 10) });
+        }
+    }
+}
+
+/** Values of each base type for plain fields and parameters, with a pool each so that values often repeat. */
+export function scalars(seed: number): Readonly<Record<Base, fc.Arbitrary<unknown>>> {
+    const of = (b: Base) => () => collide(base(b), seed);
+    return lazy<Record<Base, fc.Arbitrary<unknown>>>({ String: of('String'), Int: of('Int'), Decimal: of('Decimal'), Bool: of('Bool'), Timestamp: of('Timestamp'), UUID: of('UUID') });
+}
+
+/** Values of a base type regardless of the hints: valid and invalid ones, for the checks of `make<Name>`. */
+export function anyOf(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
+    switch (b) {
+        case 'Int':
+            return fc.oneof(base(b, h), fc.integer({ min: -2000, max: 2000 }));
+        case 'Decimal':
+            return fc.oneof(base(b, h), fc.integer({ min: -200000, max: 200000 }).map(decimal));
+        case 'String':
+        case 'UUID':
+            return fc.oneof(base(b, h), fc.string({ maxLength: (h.maxLength ?? 10) + 5 }));
+        default:
+            return base(b, h);
+    }
+}
+
+/** Values at the edges of the hints: on and next to each bound. */
+export function boundaries(b: Base, h: Hints, seed: number): unknown[] {
+    const out: unknown[] = [];
+    if (b === 'Int' || b === 'Decimal') {
+        const step = b === 'Int' ? 1 : 0.01;
+        for (const v of [h.ge, h.gt, h.le, h.lt]) if (v !== undefined) out.push(v - step, v, v + step);
+        out.push(0);
+        const n = out.map((v) => Math.round((v as number) / step));
+        return [...new Set(n)].map((x) => (b === 'Int' ? x : decimal(x)));
+    }
+    if (b === 'String' || b === 'UUID') {
+        const [sample] = h.pattern !== undefined ? fc.sample(fc.stringMatching(new RegExp(h.pattern)), { seed, numRuns: 1 }) : ['a'];
+        out.push('', sample, `${sample}x`, `x${sample}`, sample.slice(0, -1));
+        for (const n of [h.minLength, h.maxLength]) if (n !== undefined) for (const m of [n - 1, n, n + 1]) if (m >= 0) out.push(sample.padEnd(m, 'a').slice(0, m));
+        return [...new Set(out)];
+    }
+    return out;
+}
+
+/** Declared checks for every name: those given, and `() => true` for the others (calls of which are recorded). */
+export function declared<C>(names: readonly string[], given: Partial<Record<string, unknown>> | undefined, reached?: string[]): C {
+    return Object.fromEntries(
+        names.map((n) => [
+            n,
+            given?.[n] ??
+                (() => {
+                    reached?.push(n);
+                    return true;
+                }),
+        ]),
+    ) as C;
+}
+
+/** The declared names without a check given (not tested). */
+export const unchecked = (names: readonly string[], given: Partial<Record<string, unknown>> | undefined): string[] => names.filter((n) => !given?.[n]);
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Equality
+
+/** Deep equality of results: Dates by time, an absent property equal to one that is `undefined`. */
+export function deepEqual(a: unknown, b: unknown): boolean {
+    if (Object.is(a, b)) return true;
+    if (a instanceof Date || b instanceof Date) return a instanceof Date && b instanceof Date && a.getTime() === b.getTime();
+    if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    if (Array.isArray(a)) return a.length === (b as unknown[]).length && a.every((x, i) => deepEqual(x, (b as unknown[])[i]));
+    const keys = (o: object): string[] => Object.keys(o).filter((k) => (o as Record<string, unknown>)[k] !== undefined);
+    const [ka, kb] = [keys(a), keys(b)];
+    return ka.length === kb.length && ka.every((k) => deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Domain primitives (T1)
+
+export interface PrimitiveSpec {
+    /** Qualified name, e.g. `Sales.Sku`. */
+    readonly type: string;
+    readonly base: Base;
+    readonly hints: Hints;
+    /** The invariants in declaration order, and those without an expression. */
+    readonly invariants: readonly string[];
+    readonly declared: readonly string[];
+    /** The generated check, given the declared checks. */
+    readonly check: (checks: never) => (value: never) => readonly string[];
+    /** The implementation under test. */
+    readonly make: (value: never) => unknown;
+    /** Checks of the declared invariants, from the options. */
+    readonly given?: Partial<Record<string, unknown>> | undefined;
+}
+
+/** T1: `make<Name>` accepts exactly the values that hold the invariants, and reports the first one violated. */
+export function primitiveCases(s: PrimitiveSpec, options: RunOptions): TestCase[] {
+    const simple = s.type.slice(s.type.indexOf('.') + 1);
+    const make = s.make as (v: unknown) => unknown;
+    const name = `make${simple}`;
+    const run = (): void => {
+        const values = boundaries(s.base, s.hints, options.seed ?? DEFAULT_SEED);
+        property(fc.oneof(fc.constantFrom(...(values.length ? values : [undefined])).filter((v) => v !== undefined), anyOf(s.base, s.hints)), values, options, (value) => {
+            const r = make(value);
+            if (!s.invariants.length) {
+                if (!deepEqual(r, value)) fail(`${name}(${show(value)}) returned ${show(r)}; ${simple} has no invariants, so it is the value itself.`);
+                return;
+            }
+            const reached: string[] = [];
+            const violated = (s.check as (c: unknown) => (v: unknown) => readonly string[])(declared(s.declared, s.given, reached))(value);
+            const first = violated[0];
+            // without a check of a declared invariant, the implementation may also report it
+            const unknown = unchecked(s.declared, s.given).filter((n) => first === undefined || s.invariants.indexOf(n) < s.invariants.indexOf(first));
+            const res = r as { ok: boolean; value?: unknown; error?: { type?: unknown; value?: unknown; invariant?: unknown } };
+            if (res.ok) {
+                if (first !== undefined) fail(`${name}(${show(value)}) accepted a value that violates '${first}'.`);
+                if (!deepEqual(res.value, value)) fail(`${name}(${show(value)}) returned ${show(res.value)} instead of the value.`);
+                return;
+            }
+            const e = res.error ?? {};
+            const allowed = [...unknown, ...(first !== undefined ? [first] : [])];
+            if (!allowed.length) fail(`${name}(${show(value)}) rejected a value that holds every invariant of ${simple} (error ${show(e)}).`);
+            if (e.type !== `Invalid${simple}` || !deepEqual(e.value, value) || !allowed.includes(e.invariant as string)) {
+                fail(`${name}(${show(value)}) returned the error ${show(e)}; expected { type: 'Invalid${simple}', value: ${show(value)}, invariant: ${allowed.map((a) => `'${a}'`).join(' or ')} }.`);
+            }
+        });
+    };
+    return [{ name: `${name} accepts exactly the values that hold the invariants of ${simple}, reporting the first one violated`, run }, ...declaredTodos(s.type, s.declared, s.given, 'invariant')];
+}
+
+const declaredTodos = (owner: string, names: readonly string[], given: Partial<Record<string, unknown>> | undefined, what: string): TestCase[] =>
+    unchecked(names, given).map((n) => todo(`${what} '${n}' of ${owner} is not expressed in the DSL and not checked: pass a check in options.declared`));
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Commands (T2–T5)
+
+export interface EmitSpec {
+    /** The key of the event in `events` (its simple name). */
+    readonly key: string;
+    readonly lower: number;
+    readonly upper?: number;
+    /** `when`: the source and target states it applies to (empty: any). */
+    readonly from: readonly string[];
+    readonly to: readonly string[];
+}
+
+export interface CommandSpec {
+    /** `Order.confirm`. */
+    readonly name: string;
+    readonly run: (...args: never[]) => unknown;
+    /** The arguments: the aggregate (except for a factory) and the parameters; made when a case runs. */
+    readonly input: () => fc.Arbitrary<readonly unknown[]>;
+    readonly examples: readonly (readonly unknown[])[];
+    readonly factory: boolean;
+    /** The requirements in declaration order, the type of the error of each, and those without an expression. */
+    readonly requires: readonly { readonly name: string; readonly error: string }[];
+    readonly declaredRequires: readonly string[];
+    readonly givenRequires?: Partial<Record<string, unknown>> | undefined;
+    /** The generated check of the requirements, given the declared ones. */
+    readonly firstFailing?: (checks: never) => (...args: never[]) => string | undefined;
+    /** The generated check of the aggregate's invariants, given the declared ones; its declared invariants. */
+    readonly invariants?: (checks: never) => (aggregate: never) => readonly string[];
+    readonly declaredInvariants: readonly string[];
+    readonly givenInvariants?: Partial<Record<string, unknown>> | undefined;
+    /** Whether the aggregate has states (the outcome key is then its target state). */
+    readonly stateful: boolean;
+    /** Entries of `emits` whose bounds the types do not express. */
+    readonly counted: readonly EmitSpec[];
+}
+
+type Res = { ok: true; value: Record<string, { aggregate: { state?: string }; events: Record<string, unknown> } | undefined> } | { ok: false; error: { type?: string } };
+
+/** The one outcome of a success value, as `[key, outcome]`. */
+function theOutcome(name: string, value: Res & { ok: true }): [string, { aggregate: { state?: string }; events: Record<string, unknown> }] {
+    const entries = Object.entries(value.value).filter((e): e is [string, NonNullable<(typeof e)[1]>] => e[1] !== undefined);
+    if (entries.length !== 1) fail(`${name} returned ${entries.length} outcomes (${entries.map(([k]) => k).join(', ')}); a success value holds exactly one.`);
+    return entries[0];
+}
+
+export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
+    // every call gets its own copy of the input, so that an implementation that changes it cannot change generated
+    // values that fast-check reuses
+    const callOn = (copy: unknown[]): Res => (s.run as (...a: unknown[]) => Res)(...copy);
+    const call = (args: readonly unknown[]): Res => callOn(structuredClone(args) as unknown[]);
+    const checkOf = <F>(f: unknown, names: readonly string[], given: Partial<Record<string, unknown>> | undefined, reached?: string[]): F =>
+        (f as (c: unknown) => F)(declared(names, given, reached));
+    const describe = (args: readonly unknown[]): string => `${s.name}(${args.map(show).join(', ')})`;
+    const validate = (): void => {
+        if (s.factory || !s.invariants) return;
+        s.examples.forEach((args, i) => {
+            const v = checkOf<(a: unknown) => readonly string[]>(s.invariants, s.declaredInvariants, s.givenInvariants)(args[0]);
+            if (v.length) fail(`Example ${i + 1} of ${s.name}: the aggregate violates ${v.map((n) => `'${n}'`).join(', ')}; examples must hold their invariants.`);
+        });
+    };
+    const prop = (predicate: (args: readonly unknown[]) => void) => (): void => {
+        validate();
+        property(s.input(), s.examples, options, predicate);
+    };
+    const out: TestCase[] = [];
+
+    if (s.requires.length && s.firstFailing) {
+        const elseErrors = [...new Set(s.requires.map((r) => r.error))];
+        out.push({
+            name: `${s.name} returns the error of the first requirement that does not hold, and none of their errors when all hold`,
+            run: prop((args) => {
+                const reached: string[] = [];
+                const first = checkOf<(...a: unknown[]) => string | undefined>(s.firstFailing, s.declaredRequires, s.givenRequires, reached)(...args);
+                const errorOf = (n: string): string => s.requires.find((r) => r.name === n)!.error;
+                const unknown = reached.map(errorOf); // declared requirements without a check, before the first failing one
+                const r = call(args);
+                if (first !== undefined) {
+                    const allowed = [...unknown, errorOf(first)];
+                    if (r.ok) fail(`${describe(args)} succeeded, but requirement '${first}' does not hold: expected the error ${errorOf(first)}.`);
+                    if (!allowed.includes(r.error.type as string)) fail(`${describe(args)} returned ${show(r.error)}, but requirement '${first}' is the first that does not hold: expected ${allowed.join(' or ')}.`);
+                } else if (!r.ok && elseErrors.includes(r.error.type as string) && !unknown.includes(r.error.type as string)) {
+                    fail(`${describe(args)} returned ${show(r.error)}, although every requirement holds.`);
+                }
+            }),
+        });
+        out.push(...declaredTodos(s.name, s.declaredRequires, s.givenRequires, 'requirement'));
+    }
+
+    if (s.invariants) {
+        out.push({
+            name: `${s.name} makes an aggregate that holds the invariants of its state`,
+            run: prop((args) => {
+                const r = call(args);
+                if (!r.ok) return;
+                const [to, o] = theOutcome(s.name, r);
+                if (s.stateful && o.aggregate.state !== to) fail(`${describe(args)} returned the outcome '${to}' with an aggregate in state ${show(o.aggregate.state)}.`);
+                const v = checkOf<(a: unknown) => readonly string[]>(s.invariants, s.declaredInvariants, s.givenInvariants)(o.aggregate);
+                if (v.length) fail(`${describe(args)} made an aggregate that violates ${v.map((n) => `'${n}'`).join(', ')}: ${show(o.aggregate)}`);
+            }),
+        });
+    }
+
+    if (s.counted.length) {
+        out.push({
+            name: `${s.name} emits ${s.counted.map((e) => `${e.key}[${e.lower}..${e.upper ?? '*'}]`).join(', ')} as many times as declared`,
+            run: prop((args) => {
+                const r = call(args);
+                if (!r.ok) return;
+                const [to, o] = theOutcome(s.name, r);
+                const from = s.factory ? undefined : (args[0] as { state?: string }).state;
+                for (const e of s.counted) {
+                    if ((e.from.length && (from === undefined || !e.from.includes(from))) || (e.to.length && !e.to.includes(to))) continue;
+                    const v = o.events[e.key];
+                    const n = Array.isArray(v) ? v.length : v === undefined ? 0 : 1;
+                    if (n < e.lower || (e.upper !== undefined && n > e.upper)) fail(`${describe(args)} emitted ${e.key} ${n} times; declared ${e.key}[${e.lower}..${e.upper ?? '*'}].`);
+                }
+            }),
+        });
+    }
+
+    out.push({
+        name: `${s.name} is pure: the same input gives the same result, and the input is not changed`,
+        run: prop((args) => {
+            const copy = structuredClone(args) as unknown[];
+            const r1 = callOn(copy);
+            if (!deepEqual(copy, args)) fail(`${describe(args)} changed its input to ${show(copy)}.`);
+            const r2 = call(args);
+            if (!deepEqual(r1, r2)) fail(`${describe(args)} returned different results for the same input:\n${show(r1)}\n${show(r2)}`);
+        }),
+    });
+
+    if (s.invariants) out.push(...declaredTodos(s.name.slice(0, s.name.indexOf('.')), s.declaredInvariants, s.givenInvariants, 'invariant'));
+    return out;
+}

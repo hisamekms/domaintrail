@@ -65,6 +65,10 @@ describe('config file', () => {
         ['{ "generate": { "ts": { "contexts": { "C": "x" } } } }', "'generate.ts.contexts.C' must be an object"],
         ['{ "generate": { "ts": { "contexts": { "C": {} } } } }', "'generate.ts.contexts.C.out' is required"],
         ['{ "generate": { "ts": { "contexts": { "C": { "out": "../x" } } } } }', "'generate.ts.contexts.C.out' must stay inside the directory of the config file"],
+        ['{ "generate": { "ts": { "tests": true } } }', "'generate.ts.tests' must be an object"],
+        ['{ "generate": { "ts": { "tests": { "runner": "mocha" } } } }', "'generate.ts.tests.runner' must be one of 'bun', 'vitest', 'jest', 'node'"],
+        ['{ "generate": { "ts": { "tests": { "out": "../t" } } } }', "'generate.ts.tests.out' must stay inside the directory of the config file"],
+        ['{ "generate": { "ts": { "tests": { "dir": "t" } } } }', "unknown key 'generate.ts.tests.dir'"],
     ])('invalid config %s', async (text, message) => {
         const dir = await project({ 'domaintrail.json': text });
         const e = await loadConfig({ start: dir }).catch((x) => x);
@@ -166,6 +170,22 @@ describe('output directories per context', () => {
         expect((await run('-r', dir, 'generate', 'ts', '--out', 'other')).code).toBe(0);
         expect(await ls(path.join(dir, 'other'))).toEqual(['S.ts', '_runtime.ts', 'index.ts']);
         expect(await ls(path.join(dir, 'shared', 'gen'))).toEqual(['C.ts', '_runtime.ts', 'index.ts']);
+    });
+
+    test('generate.ts.tests writes the contract tests, by default into tests below out (or --out), importing every directory', async () => {
+        const dir = await project({ 'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen' } }, tests: {} }), ...SPLIT_MODEL });
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect(await ls(path.join(dir, 'gen', 'tests'))).toEqual(['C.ts', 'S.ts', '_testing.ts', 'index.ts']);
+        expect(await Bun.file(path.join(dir, 'gen', 'tests', 'C.ts')).text()).toContain(`from '../../shared/gen/C.js';`);
+        expect((await run('-r', dir, 'generate', 'ts', '--out', 'other')).code).toBe(0);
+        expect(await ls(path.join(dir, 'other', 'tests'))).toEqual(['C.ts', 'S.ts', '_testing.ts', 'index.ts']);
+        expect(await ls(path.join(dir, 'gen'))).toEqual([]); // the earlier run's files are removed
+
+        await writeFile(path.join(dir, 'domaintrail.json'), config({ out: 'gen', tests: { out: 'spec/contract', runner: 'vitest' } }));
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect(await ls(path.join(dir, 'spec', 'contract'))).toEqual(['C.ts', 'S.ts', '_register.ts', '_testing.ts', 'index.ts']);
+        expect(await Bun.file(path.join(dir, 'spec', 'contract', '_register.ts')).text()).toContain(`import { describe, test } from 'vitest';`);
+        expect(await Bun.file(path.join(dir, 'spec', 'contract', 'S.ts')).text()).toContain(`from '../../gen/S.js';`);
     });
 
     test('a context name the model does not have is a config error (exit 2) and nothing is written', async () => {

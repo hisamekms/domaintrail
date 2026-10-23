@@ -127,6 +127,8 @@ Runs check first and writes nothing if the model has errors (exit 1). Files gene
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
 directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
+With generate.ts.tests in the config, also writes the contract tests (fast-check arbitraries and a suite per
+context, by default into <out>/tests); see \`dt guide\`, "Generated tests".
 With --format json, prints one JSON document like \`check\`, with the directories written ("written") or why
 nothing was written ("error").
 Type-check your own code against the output with \`tsc --noEmit\`.
@@ -156,8 +158,10 @@ Examples:
             checkTsContexts(cfg, a.model.contexts);
             const defaultOut = path.resolve(cfg.root, opts.out ?? cfg.tsOut);
             const outOf = (ctx: string): string => (ctx in cfg.tsContexts ? path.resolve(cfg.root, cfg.tsContexts[ctx]) : defaultOut);
+            // contract tests (ADR 0020) only when configured; by default in `tests` below the output directory
+            const testsOut = cfg.tsTests && path.resolve(cfg.root, cfg.tsTests.out ?? path.join(opts.out ?? cfg.tsOut, 'tests'));
             // No output directory may leave the project through a symlink, --out included.
-            for (const dir of new Set([defaultOut, ...Object.values(cfg.tsContexts).map((d) => path.resolve(cfg.root, d))])) {
+            for (const dir of new Set([defaultOut, ...Object.values(cfg.tsContexts).map((d) => path.resolve(cfg.root, d)), ...(testsOut ? [testsOut] : [])])) {
                 const linked = await symlinkOnPath(cfg.root, dir);
                 if (linked) {
                     fail(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`, 1);
@@ -165,7 +169,8 @@ Examples:
                 }
             }
             const dirs = Object.fromEntries(a.model.contexts.map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
-            const files = generateTypeScript(a.model, dirs).map((f) => ({ ...f, file: path.resolve(cfg.root, f.path) }));
+            const tests = testsOut ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) } : undefined;
+            const files = generateTypeScript(a.model, dirs, tests).map((f) => ({ ...f, file: path.resolve(cfg.root, f.path) }));
             const foreign = await foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);

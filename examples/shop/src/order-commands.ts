@@ -30,10 +30,15 @@ export const orderCommands: Sales.OrderCommands = {
     }),
 
     // The events depend on the input state (`RefundRequested when Confirmed ->`); `confirmedAt` is dropped by `decide`.
+    // Both handlers check the requirement `noteForOther` first.
     cancel: decide<Sales.CancelOrderDecision>(Sales.OrderShape, {
-        Draft: (order, reason) => ok({ Cancelled: { set: { reason }, events: { OrderCancelled: { type: 'OrderCancelled', orderId: order.id, reason } } } }),
-        Confirmed: (order, reason) =>
-            ok({
+        Draft: (order, reason) => {
+            if (reason === 'Other' && order.note === undefined) return err({ type: 'NoteRequired' });
+            return ok({ Cancelled: { set: { reason }, events: { OrderCancelled: { type: 'OrderCancelled', orderId: order.id, reason } } } });
+        },
+        Confirmed: (order, reason) => {
+            if (reason === 'Other' && order.note === undefined) return err({ type: 'NoteRequired' });
+            return ok({
                 Cancelled: {
                     set: { reason },
                     events: {
@@ -41,7 +46,8 @@ export const orderCommands: Sales.OrderCommands = {
                         RefundRequested: { type: 'RefundRequested', orderId: order.id },
                     },
                 },
-            }),
+            });
+        },
     }),
 
     // `changes note`, in either state; `NoteChanged?`: nothing is emitted when the note stays the same.

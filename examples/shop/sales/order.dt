@@ -48,6 +48,9 @@ context Sales {
 
     command cancel(reason: CancelReason) "注文を取り消す"
       Draft | Confirmed -> Cancelled
+      requires noteForOther "その他の取消には備考が必要" {
+        reason == CancelReason.Other implies exists(note)
+      } else NoteRequired
       emits OrderCancelled,
             RefundRequested when Confirmed -> // 確定済みの注文を取り消したときだけ
 
@@ -98,4 +101,7 @@ context Sales {
   error DuplicateSku "商品コードの重複" {
     sku: Sku
   }
+
+  /// 「その他」で取り消すのに、注文に備考がない。
+  error NoteRequired "備考なし"
 }
