@@ -258,7 +258,7 @@ describe('field sets: generated TypeScript', () => {
 
     test('a field set is an interface that the elements using it extend', () => {
         expect(ts(a, 'Common')).toContain(
-            '/**\n * テナント所属\n * 契約者ごとにデータを分ける。\n * Fields taken on with `with Tenanted`.\n */\nexport interface Tenanted {\n    /** テナント */\n    readonly tenant: TenantId;\n}',
+            '/**\n * テナント所属\n * 契約者ごとにデータを分ける。\n * Fields taken on with `with Tenanted`.\n * @see common.dt:4\n */\nexport interface Tenanted {\n    /** テナント */\n    readonly tenant: TenantId;\n}',
         );
         const sales = ts(a, 'Sales');
         expect(sales).toContain("import type * as Common from './Common.js';");
@@ -272,7 +272,7 @@ describe('field sets: generated TypeScript', () => {
 
     test('unions of the events, the aggregates and the events of each aggregate', () => {
         const sales = ts(a, 'Sales');
-        expect(sales).toContain('/** Events that the commands of Order may emit. */\nexport type OrderEvent = OrderPlaced | OrderConfirmed | Billing.Billed;');
+        expect(sales).toContain('/**\n * Events that the commands of Order may emit.\n * @see sales.dt:8\n */\nexport type OrderEvent = OrderPlaced | OrderConfirmed | Billing.Billed;');
         expect(sales).toContain('/** Events of Sales. */\nexport type DomainEvent = OrderPlaced | OrderConfirmed;');
         expect(sales).toContain('/** Aggregates of Sales. */\nexport type Aggregate = Order;');
         const common = ts(a, 'Common');

@@ -190,7 +190,7 @@ describe('requires in the generated TypeScript', () => {
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
         ].join('\n');
         const changes = ' * @changes none — the command changes no common field';
-        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n */\nexport type AcceptReview = `);
+        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n * @see review.dt:13\n */\nexport type AcceptReview = `);
         expect(code).toContain(`/**\n * Review.accept, decided per source state; implement it with \`decide(ReviewShape, …)\` from the runtime.\n * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.\n${lines}\n${changes}\n`);
         expect(code).toContain('    }, Blocked | Conflict | NotApprover>;');
         expect(code).not.toContain('Blocked | Conflict | NotApprover | Blocked');

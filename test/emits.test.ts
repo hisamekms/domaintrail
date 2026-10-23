@@ -178,6 +178,7 @@ describe('emits in the generated TypeScript', () => {
  * @changes none — the command changes no common field
  * @emits StepRecorded — exactly once when the command succeeds
  * @emits WorkCompleted — exactly once when it ends in Completed
+ * @see tasks.dt:19
  */
 export type ProgressWork = (
     work: InProgressWork,
@@ -209,7 +210,7 @@ export type ProgressWork = (
     });
 
     test('events that depend on the source state make the contract generic, documented per source state', () => {
-        expect(code).toContain(' * @emits RefundRequested — exactly once when it comes from InProgress\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(');
+        expect(code).toContain(' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:24\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(');
         expect(code).toContain(
             `) => {
     /** @emits WorkCancelled — exactly once when the command succeeds */
