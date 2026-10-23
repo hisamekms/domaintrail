@@ -67,6 +67,15 @@ export interface VariantModel extends Described {
     invariants: InvariantModel[];
 }
 
+/** `requires name "label" { expr } else Error`: the command is accepted only if the requirement holds. */
+export interface RequirementModel extends Described {
+    name: string;
+    /** The expression as written; absent for a requirement declared without one (not expressed in the DSL). */
+    source?: string;
+    /** Qualified name of the error returned when the requirement does not hold. */
+    error: string;
+}
+
 /** `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory. */
 export interface TransitionModel {
     from: string[];
@@ -80,8 +89,14 @@ export interface CommandModel extends Described {
     params: FieldModel[];
     /** State transitions; a factory has one without source states, an aggregate without states none. */
     transitions: TransitionModel[];
-    /** Qualified event / error names. */
+    /** Preconditions over the parameters and the aggregate's current data (`requires`). */
+    requires: RequirementModel[];
+    /** Qualified event names. */
     emits: string[];
+    /**
+     * Qualified error names: those listed in `errors`, then those named by `else` of the requirements, each once.
+     * Together they make the command's error union.
+     */
     errors: string[];
     location: Location;
 }

@@ -1433,6 +1433,31 @@ select,
     font-size: 12px;
     color: var(--muted);
 }
+/* A command's requirements: name, expression (or that it is not in the DSL) and the error of `else`. */
+.bcard-requires {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 2px;
+    font-size: 13px;
+}
+.bcard-require {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+}
+.bcard-require code {
+    font-family: var(--mono);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+.bcard-require .not-in-dsl {
+    margin: 0;
+}
+.bcard-require .bcard-doc {
+    flex-basis: 100%;
+}
 .bcard-fields {
     display: grid;
     grid-template-columns: minmax(0, max-content) minmax(0, 1fr);

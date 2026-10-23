@@ -43,6 +43,7 @@ const LINK_RULES: Record<string, RuleId> = {
     to: 'M006',
     emits: 'M007',
     errors: 'M007',
+    error: 'M007', // `requires … else Error`
     fieldSets: 'M016',
 };
 
@@ -117,6 +118,7 @@ const LINK_KINDS: Record<string, string> = {
     to: 'state',
     emits: 'event',
     errors: 'error',
+    error: 'error',
     fieldSets: 'field set',
     target: 'aggregate',
     decl: 'type',

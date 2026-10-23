@@ -181,6 +181,9 @@ const ja = {
     noStates: '（状態なし）',
     mayRaise: '発生し得るドメインイベント（0 件以上）',
     mayReturn: '返し得るエラー',
+    /** A command's `requires`: when it is accepted. */
+    requirements: '前提条件',
+    requirementElseHint: '前提条件を満たさないときに返すエラー',
     params: 'パラメータ',
     noParams: 'パラメータはありません。',
     contract: '契約',
@@ -379,6 +382,8 @@ const en: Messages = {
     noStates: '(no states)',
     mayRaise: 'Events it may raise (zero or more)',
     mayReturn: 'Errors it may return',
+    requirements: 'Requirements',
+    requirementElseHint: 'Error returned when the requirement does not hold',
     params: 'Parameters',
     noParams: 'No parameters.',
     contract: 'Contract',
