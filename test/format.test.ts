@@ -174,6 +174,8 @@ context Sales { // trailing the brace
 // trailer
 `);
         expect(formatDomain(out)).toBe(out);
+        expect(formatDomain('context A { // nothing yet\n}')).toBe('context A { // nothing yet\n}\n');
+        expect(formatDomain('context A {\n// nothing yet\n}')).toBe('context A {\n  // nothing yet\n}\n');
     });
 
     test('a short command stays on one line; long lines and expression bodies are broken at clauses and braces', () => {

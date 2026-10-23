@@ -210,7 +210,7 @@ class Layout {
         if (open === undefined || close === undefined) return;
         this.closers.add(close);
         if (!members.length) {
-            this.set(close, 'none', indent);
+            this.set(close, this.hasComment(open, close) ? 'line' : 'none', indent);
             return;
         }
         members.forEach((m, i) => this.set(this.first(m), i === 0 ? 'line' : 'member', indent + INDENT));
