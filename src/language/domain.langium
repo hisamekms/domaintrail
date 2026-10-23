@@ -87,13 +87,22 @@ Command:
     (factory?='create')? 'command' name=FeatureName '(' (params+=Parameter (',' params+=Parameter)*)? ')' label=STRING?
     (transitions+=Transition (','? transitions+=Transition)*)?
     requirements+=Requirement*
-    ('emits' emits+=[EventDecl:QualifiedName] (',' emits+=[EventDecl:QualifiedName])*)?
+    ('emits' emits+=Emit (',' emits+=Emit)*)?
     ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?;
 
 // `A | B -> C | D`: a command in one of the source states ends in one of the target states. A factory
 // (`create command`) has a single transition without sources: `-> Draft`.
 Transition:
     (from+=[State:ID] ('|' from+=[State:ID])*)? '->' to+=[State:ID] ('|' to+=[State:ID])*;
+
+// `emits X`: exactly one X when the command succeeds; a multiplicity as for fields (`X?`, `X[0..*]`, `X[1..*]`,
+// `X[n..m]`). `when A | B -> C`: only for the outcomes of the command that match the pattern (either side may be left
+// out, not both; checked by M006).
+Emit:
+    event=[EventDecl:QualifiedName] multiplicity=Multiplicity? ('when' when=OutcomePattern)?;
+
+OutcomePattern:
+    (from+=[State:ID] ('|' from+=[State:ID])*)? '->' (to+=[State:ID] ('|' to+=[State:ID])*)?;
 
 // `requires name "label" { expr } else Error`: the command is accepted only if the expression holds over its
 // parameters and the aggregate's current data; otherwise it returns the error, which joins its `errors`. Like an
@@ -170,7 +179,7 @@ LambdaParam:
 
 // Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else'
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 QualifiedName returns string:

@@ -56,6 +56,21 @@ export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {
                     sink.error('M011', `Parameter '${p.name}' of ${commandTypeName(agg, cmd)} collides with the aggregate parameter '${self}'.`, p, 'name');
                 }
             }
+            // the events of a command's success value are keyed by their simple name
+            const keys = new Map<string, string>();
+            for (const e of cmd.emits) {
+                const ev = e.event.ref;
+                if (!ev) continue;
+                const qname = `${ev.$container.name}.${ev.name}`;
+                const prev = keys.get(ev.name);
+                if (prev === qname) {
+                    sink.error('M011', `Event '${ev.name}' is listed more than once in 'emits' of '${agg.name}.${cmd.name}'; the events of its result are keyed by name.`, e, 'event', undefined, `list it once, with a multiplicity such as '${ev.name}[1..*]' or '${ev.name}?'`);
+                } else if (prev) {
+                    sink.error('M011', `Events '${prev}' and '${qname}' of '${agg.name}.${cmd.name}' have the same name, and the events of its result are keyed by name.`, e, 'event', undefined, `rename one of the events`);
+                } else {
+                    keys.set(ev.name, qname);
+                }
+            }
         }
     }
 }

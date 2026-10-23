@@ -3,7 +3,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
-import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantModel, Location } from '../src/model/model';
+import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel, type InvariantModel, type Location } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, Requirements } from './behavior';
@@ -256,7 +256,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                         </Section>
                     )}
                     <Section title={tx.mayRaise}>
-                        {c.emits.length ? c.emits.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
+                        {c.emits.length ? c.emits.map((e, i) => <OutcomeRow key={i} model={model} id={e.event} suffix={emitSuffix(e)} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
                     </Section>
                     <Section title={tx.mayReturn}>
                         {c.errors.length ? c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
@@ -439,7 +439,7 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
     const idType = el.fields.find((f) => f.name === 'id' && f.type.kind === 'ref')?.type;
     const idUses = el.kind === 'aggregate' && idType?.kind === 'ref' ? usagesOf(model, idType.ref, names.of).filter((u) => u.target !== el.id) : [];
     const commands = Object.values(model.elements).flatMap((a) =>
-        (a.commands ?? []).filter((c) => c.emits.includes(el.id) || c.errors.includes(el.id)).map((c) => ({ agg: a, c })),
+        (a.commands ?? []).filter((c) => emittedEvents(c).includes(el.id) || c.errors.includes(el.id)).map((c) => ({ agg: a, c })),
     );
     const users = el.kind === 'fieldSet' ? fieldSetUsers(model, el.id) : [];
     if (!typeUses.length && !idUses.length && !commands.length && !users.length) return <p className="muted">{tx.unreferenced}</p>;
@@ -505,12 +505,14 @@ function CommandList({ title, agg, model, commands, onSelect }: { title: string;
 const payloadText = (names: Namer, ev: ElementModel): string =>
     ev.fields.map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`).join(', ');
 
-function OutcomeRow({ model, id, onSelect }: { model: DomainModel; id: string; onSelect: Select }) {
+/** An event or error of a command; `suffix` is an event's multiplicity and `when` as written (`[1..*] when -> Draft`). */
+function OutcomeRow({ model, id, suffix, onSelect }: { model: DomainModel; id: string; suffix?: string; onSelect: Select }) {
     const names = useNames();
     const ev = model.elements[id];
     return (
         <div className="event-row">
             <a onClick={() => onSelect(id)}>{names.id(id)}</a>
+            {suffix && <code className="emit-when"> {suffix}</code>}
             {ev && ev.fields.length > 0 && <div className="muted small mono">{payloadText(names, ev)}</div>}
         </div>
     );

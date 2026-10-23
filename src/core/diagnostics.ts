@@ -6,12 +6,13 @@ export type Severity = 'error' | 'warning';
 /**
  * Rule IDs from the spec (M001–M012), plus M013 (identity field), M014 (shared contexts), M015 (unions), M016 (field sets),
  * M017 (events carry the ID of their aggregate), M018 (invariants and requirements without an expression),
- * M019 (parameters named like fields their command's requirements see), L001–L003 (Japanese names) and SYNTAX for lexer/parser errors.
+ * M019 (parameters named like fields their command's requirements see),
+ * M020 (factories take the new aggregate's ID as a parameter), L001–L003 (Japanese names) and SYNTAX for lexer/parser errors.
  */
 export type RuleId =
     | 'SYNTAX'
     | 'M001' | 'M002' | 'M003' | 'M004' | 'M005' | 'M006'
-    | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015' | 'M016' | 'M017' | 'M018' | 'M019'
+    | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015' | 'M016' | 'M017' | 'M018' | 'M019' | 'M020'
     | 'L001' | 'L002' | 'L003';
 
 export interface Position {

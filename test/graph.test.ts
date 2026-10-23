@@ -60,10 +60,11 @@ describe('State View graph', () => {
         expect(g.nodes.map((n) => n.id)).toEqual([initialNodeId('Sales.Order'), 'Sales.Order#Draft', 'Sales.Order#Confirmed', 'Sales.Order#Cancelled']);
         const short = (id: string) => id.split(/[#@]/)[1];
         expect(g.edges.map((e) => `${short(e.source)}->${short(e.target)}:${e.label?.en.name}${e.events ? ` ⇒ ${e.events.en.name}` : ''}`)).toEqual([
-            'new->Draft:place(customer) ⇒ OrderPlaced',
+            'new->Draft:place(id, customer) ⇒ OrderPlaced',
             'Draft->Confirmed:confirm(at) ⇒ OrderConfirmed',
+            // `RefundRequested when Confirmed ->`: on the edge from Confirmed only
             'Draft->Cancelled:cancel(reason) ⇒ OrderCancelled',
-            'Confirmed->Cancelled:cancel(reason) ⇒ OrderCancelled',
+            'Confirmed->Cancelled:cancel(reason) ⇒ OrderCancelled, RefundRequested',
         ]);
         const draft = g.nodes.find((n) => n.id === 'Sales.Order#Draft')!;
         expect(draft.internal).toEqual([
@@ -76,6 +77,8 @@ describe('State View graph', () => {
                 id: 'Sales.Order:changeNote|Sales.Order#Draft->Sales.Order#Draft',
                 elementId: 'Sales.Order:changeNote',
                 label: anyLang({ name: 'changeNote(note)', label: '備考を変更する', both: '備考を変更する changeNote(note)' }),
+                // with its multiplicity
+                events: anyLang({ name: 'NoteChanged?', label: '備考変更?', both: '備考変更 NoteChanged?' }),
             },
         ]);
         expect(g.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.internal).toEqual([
@@ -83,6 +86,7 @@ describe('State View graph', () => {
                 id: 'Sales.Order:changeNote|Sales.Order#Confirmed->Sales.Order#Confirmed',
                 elementId: 'Sales.Order:changeNote',
                 label: anyLang({ name: 'changeNote(note)', label: '備考を変更する', both: '備考を変更する changeNote(note)' }),
+                events: anyLang({ name: 'NoteChanged?', label: '備考変更?', both: '備考変更 NoteChanged?' }),
             },
         ]);
     });

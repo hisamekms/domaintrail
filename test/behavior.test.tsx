@@ -80,7 +80,7 @@ describe('behaviour cards', () => {
         const card = (onSelect: (id: string) => void) => CommandCard({ agg: order, c: command('confirm'), model, names: names(), tx, onSelect });
         expect(clickOn(card, '注文を確定するconfirm')).toEqual([command('confirm').id]);
         expect(clickOn(card, '確定済み')).toEqual([order.states!.find((s) => s.name === 'Confirmed')!.id]);
-        expect(clickOn(card, '注文確定 OrderConfirmed')).toEqual([command('confirm').emits[0]]);
+        expect(clickOn(card, '注文確定 OrderConfirmed')).toEqual([command('confirm').emits[0].event]);
         // once as the error of its requirement, once among the errors it may return
         expect(clickOn(card, '明細なし EmptyOrder', 2)).toEqual([command('confirm').errors[0], command('confirm').errors[0]]);
     });
@@ -92,6 +92,15 @@ describe('behaviour cards', () => {
         const card = (onSelect: (id: string) => void) => CommandCard({ agg: order, c: command('addItem'), model, names: names(), tx, onSelect });
         expect(clickOn(card, '商品コードの重複 DuplicateSku', 2)).toEqual(['Sales.DuplicateSku', 'Sales.DuplicateSku']);
         expect(text(html)).toContain('同じ商品コードの明細がない newSku');
+    });
+
+    test('a command card shows the multiplicity and `when` of each event, and the event links to it', () => {
+        const html = renderToStaticMarkup(<CommandCard agg={order} c={command('cancel')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
+        expect(html).toContain('<code class="bcard-emit-when">when Confirmed -&gt;</code>');
+        const note = renderToStaticMarkup(<CommandCard agg={order} c={command('changeNote')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
+        expect(note).toContain('<code class="bcard-emit-when">?</code>');
+        const card = (onSelect: (id: string) => void) => CommandCard({ agg: order, c: command('cancel'), model, names: names(), tx, onSelect });
+        expect(clickOn(card, '返金依頼 RefundRequested')).toEqual(['Sales.RefundRequested']);
     });
 
     test('a requirement without an expression says it is not expressed in the DSL', () => {

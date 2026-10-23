@@ -1402,6 +1402,18 @@ select,
     color: var(--text-soft);
 }
 .bcard-transition,
+.bcard-emit {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.bcard-emit-when,
+.emit-when {
+    font-size: 11px;
+    color: var(--muted);
+}
+
 .bcard-outcome,
 .bcard-outcomes {
     display: flex;

@@ -134,7 +134,7 @@ describe('commands (M006, M007)', () => {
     state Completed
     state Cancelled
 
-    create command open() -> Draft
+    create command open(id: WorkId) -> Draft
 
     command change()
       Draft -> Draft
@@ -159,7 +159,7 @@ describe('commands (M006, M007)', () => {
             review: [{ from: ['InProgress'], to: ['InProgress', 'Completed'] }],
             edit: [{ from: ['Draft'], to: ['Draft'] }, { from: ['InProgress'], to: ['InProgress'] }],
         });
-        expect(work.commands!.find((c) => c.name === 'change')!.emits).toEqual(['Sales.WorkChanged']);
+        expect(work.commands!.find((c) => c.name === 'change')!.emits).toEqual([{ event: 'Sales.WorkChanged', cardinality: 'one', multiplicity: '', lower: 1, upper: 1 }]);
         expect(work.fields.map((f) => f.name)).toContain('note');
     });
 

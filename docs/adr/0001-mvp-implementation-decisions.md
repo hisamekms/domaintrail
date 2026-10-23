@@ -26,6 +26,9 @@ Type checking runs `tsc --noEmit` through `bun run typecheck`. The CLI runs Type
 
 A command without `emits` returns `readonly never[]` as its event list; without `errors` its error type is `never`.
 
+> Superseded by [ADR 0018](0018-command-events-contract.md): the success value is keyed by the outcome, and a command
+> without `emits` has `events: NoEvents`.
+
 ### Command syntax (§11)
 
 > Superseded by [ADR 0014](0014-command-transitions.md): `from` / `to` were replaced by transitions (`Draft -> Confirmed`,

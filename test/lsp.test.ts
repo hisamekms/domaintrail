@@ -299,6 +299,28 @@ describe('dt lsp', () => {
         expect(await client.request('textDocument/prepareRename', 'sales.dt', at(SALES, 'total:'))).toBeNull();
     });
 
+    test('hovers on a command list its emits entries; renaming a state renames it in `when` too', async () => {
+        const sales = SALES.replace('emits OrderPlaced', 'emits OrderPlaced[1..*] when Draft -> Placed');
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': sales });
+        expect(await client.until('sales.dt', () => true)).toEqual([]);
+        const hover = await client.request<{ contents: { value: string } } | null>('textDocument/hover', 'sales.dt', at(sales, 'place'));
+        expect(hover?.contents.value).toBe('**command `place`** — `Sales.Order:place`\n\n```dt\nemits OrderPlaced[1..*] when Draft -> Placed\n```');
+        const edit = await client.request<{ changes: Record<string, { range: { start: { line: number; character: number }; end: { character: number } }; newText: string }[]> }>(
+            'textDocument/rename',
+            'sales.dt',
+            at(sales, 'state Placed', 'state '.length),
+            { newName: 'Ordered' },
+        );
+        const edits = edit.changes[client.uri('sales.dt')];
+        expect(edits.map((e) => [e.range.start.line, sales.split('\n')[e.range.start.line].slice(e.range.start.character, e.range.end.character)])).toEqual(
+            expect.arrayContaining([
+                [at(sales, 'state Placed').line, 'Placed'],
+                [at(sales, 'when Draft').line, 'Placed'],
+            ]),
+        );
+        expect(edits.filter((e) => e.range.start.line === at(sales, 'when Draft').line)).toHaveLength(2); // the transition and `when`
+    });
+
     test('uses the config of --root and its sources', async () => {
         const dir = await workspace({});
         const root = path.join(dir, 'domain');

@@ -1,6 +1,6 @@
 import type { CommandModel, DomainModel, ElementModel, FieldModel, TypeExpr, VariantModel } from '../model/model.js';
 import { contextDependencies, representative, supportingContexts } from '../model/dependencies.js';
-import { allFieldsOf, elementList } from '../model/model.js';
+import { allFieldsOf, elementList, emitApplies } from '../model/model.js';
 import {
     CHAR_WIDTH,
     CONTAINER_PADDING,
@@ -526,16 +526,18 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);
     for (const c of commands) {
         // each transition joins its own sources and targets; a factory starts from the initial node
+        // [source node, target node, source state, target state]; a factory has no source state
         const pairs = stateful
             ? c.transitions.flatMap((t) => {
-                  const sources = c.factory ? [initialNodeId(agg.id)] : t.from.map(stateNode);
-                  return sources.flatMap((source) => t.to.map((to) => [source, stateNode(to)] as const));
+                  const sources = c.factory ? [[initialNodeId(agg.id), undefined] as const] : t.from.map((f) => [stateNode(f), f] as const);
+                  return sources.flatMap(([source, from]) => t.to.map((to) => [source, stateNode(to), from, to] as const));
               })
-            : [[c.factory ? initialNodeId(agg.id) : agg.id, agg.id] as const];
+            : [[c.factory ? initialNodeId(agg.id) : agg.id, agg.id, undefined, undefined] as const];
         const label = commandLabel(c);
-        const events = eventsLabel(c, model);
         const seen = new Set<string>();
-        for (const [source, target] of pairs) {
+        for (const [source, target, from, to] of pairs) {
+            // the events of this outcome only (`emits X when A ->`)
+            const events = eventsLabel(c, model, from, to);
             if (!source || !target) continue; // unresolved state, reported as M006
             const id = `${c.id}|${source}->${target}`;
             if (seen.has(id)) continue;
@@ -572,10 +574,14 @@ function commandLabel(c: CommandModel): Texts {
     return anyLang({ name: signature, label: c.label ?? signature, both: `${c.label ? `${c.label} ` : ''}${signature}` });
 }
 
-/** The events a command raises, by name or label (none: undefined). */
-function eventsLabel(c: CommandModel, model: DomainModel): Texts | undefined {
-    if (!c.emits.length) return undefined;
+/**
+ * The events a command raises when it goes from `from` to `to` (no states: both undefined), by name or label, each
+ * with its multiplicity (none: undefined).
+ */
+function eventsLabel(c: CommandModel, model: DomainModel, from: string | undefined, to: string | undefined): Texts | undefined {
+    const emits = c.emits.filter((e) => emitApplies(e, from, to));
+    if (!emits.length) return undefined;
     const short = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
-    const each = c.emits.map((e) => named(short(e), lookupLabel(model, e), (l, n) => `${l} ${n}`));
+    const each = emits.map((e) => named(short(e.event), lookupLabel(model, e.event), (l, n) => `${l} ${n}`, e.multiplicity));
     return anyLang({ name: each.map((t) => t.en.name).join(', '), label: each.map((t) => t.en.label).join(', '), both: each.map((t) => t.en.both).join(', ') });
 }

@@ -14,22 +14,22 @@ export function checkEventIds(index: ModelIndex, sink: DiagnosticSink): void {
         if (!idType || !isIdType(idType)) continue; // reported by M013
         const checked = new Set<unknown>();
         for (const cmd of commandsOf(agg)) {
-            cmd.emits.forEach((r, i) => {
-                const ev = r.ref;
-                if (!ev || checked.has(ev)) return;
+            for (const e of cmd.emits) {
+                const ev = e.event.ref;
+                if (!ev || checked.has(ev)) continue;
                 checked.add(ev);
                 const fields = [...includedFields(ev).map((x) => x.field), ...ev.members];
-                if (fields.some((f) => f.type?.decl?.ref === idType)) return;
+                if (fields.some((f) => f.type?.decl?.ref === idType)) continue;
                 const typeName = idType.$container.name === ev.$container.name ? idType.name : `${idType.$container.name}.${idType.name}`;
                 sink.warning(
                     'M017',
                     `Event '${ev.name}' emitted by '${agg.name}.${cmd.name}' has no field of type '${idType.name}' to tell which '${agg.name}' it is about.`,
-                    cmd,
-                    'emits',
-                    i,
+                    e,
+                    'event',
+                    undefined,
                     `add a field such as '${camel(agg.name)}Id: ${typeName}' to event '${ev.name}'`,
                 );
-            });
+            }
         }
     }
 }

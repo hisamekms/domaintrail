@@ -222,7 +222,10 @@ function kindOf(node: AstNode): string | undefined {
 
 const cstText = (node: AstNode | undefined): string => node?.$cstNode?.text ?? '';
 
-/** Hover: kind, name (with type for fields), label, `///` description, and the expression of an invariant or requirement. */
+/**
+ * Hover: kind, name (with type for fields), label, `///` description, the expression of an invariant or requirement,
+ * and the `emits` entries of a command (with their multiplicity and `when`).
+ */
 class DomainHoverProvider extends AstNodeHoverProvider {
     constructor(private readonly services: LangiumServices) {
         super(services);
@@ -250,6 +253,7 @@ class DomainHoverProvider extends AstNodeHoverProvider {
         const lines = [`**${title}**${label ? ` ${label}` : ''}${owner ? ` — \`${owner}\`` : ''}`];
         if (doc) lines.push(doc);
         if (ast.isInvariant(node) && node.expr) lines.push(`\`\`\`dt\n{ ${cstText(node.expr)} }\n\`\`\``);
+        if (ast.isCommand(node) && node.emits.length) lines.push(`\`\`\`dt\nemits ${node.emits.map(cstText).join(', ')}\n\`\`\``);
         if (ast.isRequirement(node)) lines.push(`\`\`\`dt\n${node.expr ? `{ ${cstText(node.expr)} } ` : ''}else ${node.error?.$refText ?? ''}\n\`\`\``);
         return lines.join('\n\n');
     }

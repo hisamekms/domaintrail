@@ -19,7 +19,7 @@ import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
 import type { DomainModel } from '../model/model.js';
-import { checkCommands } from './checker/commands.js';
+import { checkCommands, checkFactoryIds } from './checker/commands.js';
 import { checkEventIds } from './checker/events.js';
 import { checkFieldSets } from './checker/field-sets.js';
 import { checkInvariants } from './checker/expressions.js';
@@ -56,7 +56,7 @@ export interface Analysis {
 const LINK_RULES: Record<string, RuleId> = {
     from: 'M006',
     to: 'M006',
-    emits: 'M007',
+    event: 'M007', // `emits Event`
     errors: 'M007',
     error: 'M007', // `requires … else Error`
     fieldSets: 'M016',
@@ -112,6 +112,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkUnions(index, sink);
         checkFieldSets(index, sink);
         checkCommands(index, sink);
+        checkFactoryIds(index, sink);
         checkEventIds(index, sink);
         checkInvariants(index, sink);
         checkTsNames(index, sink);
@@ -134,7 +135,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
 const LINK_KINDS: Record<string, string> = {
     from: 'state',
     to: 'state',
-    emits: 'event',
+    event: 'event',
     errors: 'error',
     error: 'error',
     fieldSets: 'field set',
@@ -151,7 +152,7 @@ function linkMessage(property: string, refText: string): string {
 
 /** What each cross-reference property may point to (states are looked up in the aggregate instead). */
 const LINK_TARGETS: Record<string, (el: ContextElement) => boolean> = {
-    emits: isEventDecl,
+    event: isEventDecl, // `emits Event`
     errors: isErrorDecl,
     error: isErrorDecl,
     fieldSets: isFieldSet,

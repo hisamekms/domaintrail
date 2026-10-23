@@ -4,7 +4,8 @@
 - Date: 2026-10-19
 - Supersedes: the command syntax (`from` / `to`) of ADR 0001
 - Amended by: [ADR 0015](0015-handlers-per-state.md) (the generated contract of a command whose output depends on its
-  input)
+  input), [ADR 0018](0018-command-events-contract.md) (`emits` is exact, with multiplicities and `when`; the success
+  value is keyed by the outcome)
 
 ## Context
 
@@ -48,7 +49,8 @@ aggregate Work {
 - A command has zero or more transitions; `A | B -> C | D` reads "in `A` or `B`, the command ends in `C` or `D`".
   Transitions are separated by line breaks (white space) or commas.
 - A `create command` has exactly one transition without sources: `-> Draft` (or `-> A | B`).
-- `emits` and `errors` stay per command.
+- `emits` and `errors` stay per command. (Amended by [ADR 0018](0018-command-events-contract.md): `emits X` is exactly
+  one `X`, with multiplicities as for fields, and `X when A ->` / `X when -> B` selects outcomes by transition.)
 - `from` and `to` are no longer keywords (and so become usable as field and parameter names). The old form is a
   syntax error.
 

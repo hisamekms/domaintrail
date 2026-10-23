@@ -113,7 +113,8 @@ runs until the client shuts it down. It offers:
   `data.hint`.
 - **Go to definition** and **find references** for types, states, events, errors and field sets, across files and
   contexts (`Sales.Order` included).
-- **Hover**: kind, name, Japanese name, `///` description, and the expression of an invariant or requirement.
+- **Hover**: kind, name, Japanese name, `///` description, the expression of an invariant or requirement, and the
+  `emits` entries of a command.
 - **Outline** (document symbols), **completion** of names, and **rename** of context elements and states, which updates
   every reference (a qualified `Sales.Order` keeps its context). Contexts, fields and parameters are not renamed, since
   their names also appear outside references (in qualified names, expressions and terms).
@@ -184,7 +185,7 @@ context Sales {                          // a bounded context; may be split acro
       all(items, item => item.quantity > 0)
     }
 
-    create command place(customer: CustomerId) -> Draft emits OrderPlaced   // factory: `-> State`, no source
+    create command place(id: OrderId, customer: CustomerId) -> Draft emits OrderPlaced   // factory: `-> State`, no source
 
     state Draft
     state Confirmed {
@@ -199,9 +200,12 @@ context Sales {                          // a bounded context; may be split acro
     command confirm(at: Timestamp)
       Draft -> Confirmed                 // a transition: source state(s) -> target state(s)
       requires hasItems { count(items) > 0 } else EmptyOrder   // accepted only if; otherwise returns EmptyOrder
-      emits OrderConfirmed               // events that MAY be emitted (0..n)
+      emits OrderConfirmed               // exactly one OrderConfirmed whenever it succeeds
 
-    command cancel(reason: CancelReason) Draft | Confirmed -> Cancelled emits OrderCancelled   // from either
+    command cancel(reason: CancelReason)
+      Draft | Confirmed -> Cancelled     // from either
+      emits OrderCancelled,
+            RefundRequested when Confirmed ->   // only when it comes from Confirmed
 
     command changeNote(note: String?)    // one transition per input state: the output depends on the input
       Draft -> Draft
@@ -213,6 +217,7 @@ context Sales {                          // a bounded context; may be split acro
   persistent event OrderPlaced { orderId: OrderId }      // storing it is part of its contract
   persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
   event OrderCancelled { orderId: OrderId reason: CancelReason }   // not persisted (default)
+  event RefundRequested { orderId: OrderId }
   error EmptyOrder                       // payload optional: error E { field: Type }
 }
 ```
@@ -252,7 +257,7 @@ context Sales {
 - Multiplicity after the type: `?`, `[0..1]`, `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
 - A command is written in this order: parameters and label, transitions, `requires` (see
-  [Command requirements](#command-requirements)), `emits`, `errors`.
+  [Command requirements](#command-requirements)), `emits` (see [Command events](#command-events)), `errors`.
 - Command transitions follow the parameters (and label), before `emits` / `errors`: `A | B -> C | D` means "in `A` or
   `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas. A state may be the
   source of one transition of a command only, so the input state decides the possible outputs; for several possible
@@ -363,7 +368,7 @@ context Expenses "経費" {
     approver: StaffId? "承認者"
     invariant notSelfApproved "申請者は承認できない" { exists(approver) implies approver != applicant }
 
-    create command submit(applicant: StaffId "申請者") "申請する" emits ExpenseSubmitted
+    create command submit(id: ExpenseId, applicant: StaffId "申請者") "申請する" emits ExpenseSubmitted
     command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する" emits ExpenseApproved
   }
 
@@ -436,7 +441,7 @@ context Billing {                          // other files open the context witho
     state Open "未払い"
     state Paid "支払済み" { paidAt: Timestamp }               // → 支払日時 (from terms)
     invariant positive "金額が正" { amount.amount > 0 }
-    create command issue(order: Sales.OrderId, amount: Money) "請求書を発行する" -> Open
+    create command issue(id: InvoiceId, order: Sales.OrderId, amount: Money) "請求書を発行する" -> Open
     command pay(at: Timestamp "支払日時") "支払う" Open -> Paid emits InvoicePaid
   }
   enum InvoiceKind "請求区分" { Regular "通常" Refund "返金" }
@@ -542,6 +547,70 @@ context Review {
   `<Command>Rejected` error.
 - `requires` and `else` are also usable as field and parameter names.
 
+### Command events
+
+`emits` is the exact list of the events a command emits **when it succeeds**; on failure (an error) it emits none.
+Each entry is read like a field:
+
+```dt
+// work/work.dt
+context Work {
+  id WorkId: UUID
+  id StepId: UUID
+
+  aggregate Work {
+    id: WorkId
+    state Draft
+    state InProgress
+    state Completed { completedAt: Timestamp }
+
+    create command open(id: WorkId) -> Draft emits WorkOpened      // the new ID is a parameter
+    command plan(steps: StepId[1..*]) Draft -> Draft emits StepPlanned[1..*]   // one per step
+    command rename(title: String) Draft -> Draft emits Renamed?      // not when the title is the same
+    command start() Draft -> InProgress
+    command progress(step: StepId, at: Timestamp)
+      InProgress -> InProgress | Completed
+      emits StepRecorded,
+            WorkCompleted when -> Completed                         // only when it ends in Completed
+  }
+
+  event WorkOpened { workId: WorkId }
+  event StepPlanned { workId: WorkId step: StepId }
+  event Renamed { workId: WorkId title: String }
+  event StepRecorded { workId: WorkId step: StepId }
+  event WorkCompleted { workId: WorkId completedAt: Timestamp }
+}
+```
+
+- `emits X`: **exactly one** `X`. `X?`: at most one. `X[0..*]`: any number. `X[1..*]`: one or more. `X[n..m]`:
+  between `n` and `m` (the generated types check the cases before; other bounds are documented only).
+- `X when Sources -> Targets`: the entry applies only to the outcomes that match — the command starts in one of the
+  sources and ends in one of the targets. Either side may be left out (`when Confirmed ->`, `when -> Completed`), not
+  both; each side may list states with `|`. A multiplicity comes before `when`: `ItemAdded[1..*] when -> Draft`.
+- The states of `when` must be sources (left) or targets (right) of the command's transitions, and the pattern must
+  match at least one of its outcomes (M006). A `create command` has no source: only `when -> X`. Commands of an
+  aggregate without states take no `when`.
+- An event is listed once per command (M011): its events are keyed by name in the generated result, so two events of
+  different contexts with the same name cannot be emitted by one command.
+- The events of one command have **no order**: they are facts of one decision. With event sourcing, applying the
+  events of one command must not depend on their order.
+- **When the contract and the implementation disagree**, change the DSL, not the implementation. If following the
+  contract would make the implementation do something wrong in business terms — emitting `Renamed` although the title
+  did not change — the contract is what is wrong: write `emits Renamed?`. Never emit an event only to satisfy the
+  types, and never leave out one the contract requires.
+- `when` is also usable as a field and parameter name.
+
+### Pure commands
+
+A command is a **pure function** of the aggregate and its parameters: no I/O, no clock, no randomness, no generated
+IDs. Whatever the decision needs comes in as a parameter — the new aggregate's ID (`open(id: WorkId)`), the time
+(`at: Timestamp`), data of other aggregates. Loading, saving, publishing and calling other services happen around the
+command, in your application code. This makes every command reproducible: the same inputs give the same aggregate
+and events, so commands are tested without mocks.
+
+A `create command` without a parameter of the aggregate's ID type is a warning (M020): it would have to make the ID
+itself.
+
 ## Rules
 
 Each diagnostic names its rule. A `hint` says what to change when the message does not; unresolved names get
@@ -555,12 +624,12 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
 | M005 | a reference's ID type matches the identity of the target aggregate |
-| M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none |
+| M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
 | M009 | operators and operands have compatible types |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
-| M011 | generated TypeScript names do not collide |
+| M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycles |
 | M013 | aggregates and entities have an `id` field of their own ID type |
 | M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
@@ -569,6 +638,7 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |
+| M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -591,17 +661,80 @@ Unions to name groups of them, each generated only when it has a member:
 | `<Aggregate>Event` (`OrderEvent`) | the events the aggregate's commands may emit (also of other contexts) |
 
 ```ts
+/**
+ * Order.confirm (Draft -> Confirmed)
+ * 注文を確定する
+ * @param at 日時
+ * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @emits OrderConfirmed — exactly once when the command succeeds
+ */
 export type ConfirmOrder = (
     order: DraftOrder,
     at: Timestamp,
-) => Result<readonly [ConfirmedOrder, readonly OrderConfirmed[]], EmptyOrder>;
+) => Result<{
+    readonly Confirmed: {
+        readonly aggregate: ConfirmedOrder;
+        readonly events: { readonly OrderConfirmed: OrderConfirmed };
+    };
+}, EmptyOrder>;
 ```
 
-A command takes the aggregate in any source state of its transitions. When every transition has the same targets
-(`Draft | Confirmed -> Cancelled`), it returns them, as above. When the targets differ by transition, the command
-also gets a `<Command>ByState` type with one handler per source state (keyed by the state's name), and the command is
-generic over the input state, returning what the handler of that state returns. A caller with a `DraftOrder` gets a
-`DraftOrder` back, never a `ConfirmedOrder`; a caller with `DraftOrder | ConfirmedOrder` gets either:
+The success value is **keyed by the outcome**: the target state's name (an aggregate without states: the aggregate's
+name, `{ Customer: { aggregate, events } }`), holding the aggregate in that state and its `events`. Every command has
+this shape, also with one target. With several targets the value is a union, and each branch rules out the other keys,
+so a value holds exactly one outcome:
+
+```ts
+export type ProgressWork = (
+    work: InProgressWork,
+    step: StepId,
+    at: Timestamp,
+) => Result<
+    | {
+          readonly InProgress: {
+              readonly aggregate: InProgressWork;
+              readonly events: { readonly StepRecorded: StepRecorded };
+          };
+          readonly Completed?: never;
+      }
+    | {
+          readonly Completed: {
+              readonly aggregate: CompletedWork;
+              readonly events: { readonly StepRecorded: StepRecorded; readonly WorkCompleted: WorkCompleted };
+          };
+          readonly InProgress?: never;
+      },
+    never
+>;
+```
+
+`events` is always there, one property per event of that outcome, keyed by the event's name (its `type`; an event of
+another context by its simple name) and typed by its multiplicity:
+
+| `emits` | property of `events` |
+|---|---|
+| `X` | `X: X` |
+| `X?` | `X?: X` |
+| `X[0..*]` | `X: readonly X[]` (also when empty) |
+| `X[1..*]` | `X: readonly [X, ...X[]]` |
+| `X[n..m]` (others) | `X: readonly X[]`, the bounds in JSDoc (not checked by the types) |
+| none | `NoEvents` (only `{}` is assignable) |
+
+The JSDoc says the same in words, one `@emits` line per entry (`@emits WorkCompleted — exactly once when it ends in
+Completed`). Return the value with `ok`, which takes its type from the contract, so that the compiler checks the
+object exactly: a missing event is reported as `Property 'WorkCompleted' is missing …`, an event the outcome does not
+emit as `… 'WorkCompleted' does not exist in type …`:
+
+```ts
+return ok({ Confirmed: { aggregate: confirmed, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
+```
+
+A command takes the aggregate in any source state of its transitions. When every source state has the same outputs
+(`Draft | Confirmed -> Cancelled`), it is a plain function, as above. When the outputs differ by source state — the
+targets differ by transition, or the events do (`emits RefundRequested when Confirmed ->`) — the command also gets a
+`<Command>ByState` type with one handler per source state (keyed by the state's name), and the command is generic over
+the input state, returning what the handler of that state returns. A caller with a `DraftOrder` gets a `DraftOrder`
+back, never a `ConfirmedOrder`; a caller with `DraftOrder | ConfirmedOrder` gets either:
 
 ```ts
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
@@ -610,8 +743,20 @@ export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
 ) => ReturnType<ChangeNoteOrderByState[S['state']]>;
 
 export type ChangeNoteOrderByState = {
-    readonly Draft: (order: DraftOrder, note: string | undefined) => Result<readonly [DraftOrder, readonly never[]], never>;
-    readonly Confirmed: (order: ConfirmedOrder, note: string | undefined) => Result<readonly [ConfirmedOrder, readonly never[]], never>;
+    /** @emits NoteChanged? — at most once when the command succeeds */
+    readonly Draft: (order: DraftOrder, note: string | undefined) => Result<{
+        readonly Draft: {
+            readonly aggregate: DraftOrder;
+            readonly events: { readonly NoteChanged?: NoteChanged };
+        };
+    }, never>;
+    /** @emits NoteChanged? — at most once when the command succeeds */
+    readonly Confirmed: (order: ConfirmedOrder, note: string | undefined) => Result<{
+        readonly Confirmed: {
+            readonly aggregate: ConfirmedOrder;
+            readonly events: { readonly NoteChanged?: NoteChanged };
+        };
+    }, never>;
 };
 ```
 
@@ -624,14 +769,39 @@ argument so that the handlers' parameters are typed from it:
 // src/note.ts — your code
 import { byState, ok, type Sales } from '../generated/domain/index.js';
 
+const noteChanged = (order: Sales.Order, note: string | undefined) =>
+    note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
+
 export const changeNote: Sales.OrderCommands['changeNote'] = byState<Sales.ChangeNoteOrderByState>({
-    Draft: (order, note) => ok([{ ...order, note }, []] as const),
-    Confirmed: (order, note) => ok([{ ...order, note }, []] as const),
+    Draft: (order, note) => ok({ Draft: { aggregate: { ...order, note }, events: noteChanged(order, note) } }),
+    Confirmed: (order, note) => ok({ Confirmed: { aggregate: { ...order, note }, events: noteChanged(order, note) } }),
 });
 ```
 
 (TypeScript does not narrow `S` inside a hand-written implementation of the generic contract, which is why the
 handlers exist: written directly, the implementation needs a type assertion on its result.)
+
+Code that handles any command — saving the aggregate, publishing the events — uses `outcome` and `eventList` from the
+runtime. `outcome(value)` gives `{ to, aggregate, events }` (`to` is the key: the target state). `eventList(events)`
+gives the events as one list: arrays flattened, absent optional events skipped, sorted by event type (an order of
+convenience: the contract has none).
+
+```ts
+// src/confirm.ts — your code: the application around a command
+import { eventList, outcome, type Sales } from '../generated/domain/index.js';
+
+export interface OrderStore {
+    save(order: Sales.Order, events: readonly Sales.OrderEvent[]): Promise<void>;
+}
+
+export async function confirm(commands: Sales.OrderCommands, store: OrderStore, order: Sales.DraftOrder, at: Date): Promise<Sales.EmptyOrder | undefined> {
+    const r = commands.confirm(order, at); // the time is a parameter: the command is pure
+    if (!r.ok) return r.error;
+    const { aggregate, events } = outcome(r.value);
+    await store.save(aggregate, eventList(events));
+    return undefined;
+}
+```
 
 A command's requirements are documented on its type and on its `…ByState` type, one `@requires` line each, and the
 errors of their `else` are part of its error type (after those of `errors`, each once):
@@ -643,11 +813,17 @@ errors of their `else` are part of its error type (after those of `errors`, each
  * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)
  * @requires noOpenBlocker (未解決の阻害がない) else Blocked: openBlockers == 0
  * @requires signedOff (本人の承認が記録済み) else NotSignedOff: not expressed in the DSL
+ * @emits nothing
  */
 export type AcceptReview = (
     review: ReviewingReview | EscalatedReview,
     person: PersonId,
-) => Result<readonly [AcceptedReview, readonly never[]], Conflict | NotApprover | Blocked | NotSignedOff>;
+) => Result<{
+    readonly Accepted: {
+        readonly aggregate: AcceptedReview;
+        readonly events: NoEvents;
+    };
+}, Conflict | NotApprover | Blocked | NotSignedOff>;
 ```
 
 ### Generated code and your code
@@ -657,8 +833,10 @@ The generated files are the **contract**, your code is the **implementation**:
 - Generated: types only — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`,
   `ChangeNoteOrderByState`) and the constructor signatures of domain primitives (`MakeQuantity`). Invariants and
   command requirements appear as JSDoc (`@invariant`, `@requires`); nothing in the generated code checks them. The
-  one exception is `_runtime.ts`, whose few helpers (`ok`, `err`, `byState`) are the same for every model.
-- Yours: everything that runs — command implementations (including their requirements), `Make<Name>` constructors,
+  one exception is `_runtime.ts`, whose few helpers (`ok`, `err`, `byState`, `outcome`, `eventList`) are the same for
+  every model.
+- Yours: everything that runs — command implementations (including their requirements; pure functions, see
+  [Pure commands](#pure-commands)), `Make<Name>` constructors,
   invariant checks — in your own files, which import the generated modules (never the other way round) and are
   type-checked against them.
 

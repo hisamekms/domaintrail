@@ -179,7 +179,7 @@ const ja = {
     commonFieldsAt: (agg: ReactNode): ReactNode => <>共通フィールドは集約 {agg} を参照。</>,
     transition: '遷移',
     noStates: '（状態なし）',
-    mayRaise: '発生し得るドメインイベント（0 件以上）',
+    mayRaise: '成功時に発生させるドメインイベント（多重度と発生条件のとおり）',
     mayReturn: '返し得るエラー',
     /** A command's `requires`: when it is accepted. */
     requirements: '前提条件',
@@ -380,7 +380,7 @@ const en: Messages = {
     commonFieldsAt: (agg) => <>For the common fields, see the aggregate {agg}.</>,
     transition: 'Transition',
     noStates: '(no states)',
-    mayRaise: 'Events it may raise (zero or more)',
+    mayRaise: 'Events it emits on success (as their multiplicity and `when` say)',
     mayReturn: 'Errors it may return',
     requirements: 'Requirements',
     requirementElseHint: 'Error returned when the requirement does not hold',
