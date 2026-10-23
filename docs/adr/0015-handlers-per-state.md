@@ -3,6 +3,8 @@
 - Status: accepted
 - Date: 2026-10-19
 - Amends: the generated TypeScript of ADR 0014
+- Amended by: [ADR 0018](0018-command-events-contract.md) (handlers also when the events differ by source state; the
+  result keyed by the outcome)
 
 ## Context
 
@@ -38,6 +40,9 @@ export type ChangeWorkByState = {
 - The keys are the source state names, the values of the states' `state` tag.
 - Every source of a transition gets a handler; the sources of `A | B -> C` get the same output.
 - Commands whose transitions share their targets (the plain function of ADR 0014) and factories get no such type.
+- Amended by [ADR 0018](0018-command-events-contract.md): also generated when the events differ by source state
+  (`emits X when A ->`), and each handler returns the keyed result (`Result<{ readonly Draft: { aggregate, events } }, …>`)
+  instead of a tuple. The samples here show the shape before.
 
 ### The contract is stated through the handlers
 
