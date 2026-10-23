@@ -865,7 +865,7 @@ command and an `<Aggregate>Commands` interface to implement, plus `index.ts` and
 gets a branded type and a constructor contract `Make<Name>` to implement by hand. A field set is an interface that the
 elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its `…Common`).
 The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's place as
-`dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:46`); editing the `.dt` sources moves
+`dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:44`); editing the `.dt` sources moves
 these lines, and generating again rewrites them.
 
 Unions to name groups of them, each generated only when it has a member:
@@ -885,7 +885,7 @@ Unions to name groups of them, each generated only when it has a member:
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
- * @see sales/order.dt:46
+ * @see sales/order.dt:44
  */
 export type ConfirmOrder = (
     order: DraftOrder,
@@ -992,7 +992,7 @@ instead.
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
- * @see sales/order.dt:46
+ * @see sales/order.dt:44
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
@@ -1092,7 +1092,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  * @requires signedOff (本人の承認が記録済み) else NotSignedOff: not expressed in the DSL
  * @changes none — the command changes no common field
  * @emits nothing
- * @see review/review.dt:18
+ * @see review/review.dt:24
  */
 export type AcceptReview = (
     review: ReviewingReview | EscalatedReview,
