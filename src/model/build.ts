@@ -77,7 +77,7 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
             base.base = el.base;
             base.invariants = primitiveInvariants(el).map((i) => ({
                 name: i.name,
-                source: sourceText(i.expr),
+                ...optional('source', i.expr && sourceText(i.expr)),
                 ...optional('label', i.label),
                 ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
             }));
@@ -186,7 +186,7 @@ function fieldModel(f: FieldLike | Parameter, labels: LabelResolver): FieldModel
 }
 
 function invariant(inv: Invariant): InvariantModel {
-    return { name: inv.name, source: sourceText(inv.expr), ...described(inv) };
+    return { name: inv.name, ...optional('source', inv.expr && sourceText(inv.expr)), ...described(inv) };
 }
 
 const sourceText = (e: AstNode | undefined): string => e?.$cstNode?.text.replace(/\s+/g, ' ').trim() ?? '';

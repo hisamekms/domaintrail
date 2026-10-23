@@ -33,7 +33,7 @@ const paths = (value: unknown): string[] => texts(value).map(([p]) => p).sort();
  * Latin words allowed in Japanese messages: abbreviations, the DSL's keywords and file names, which are written as
  * they are in Japanese too. `X` is the sample argument.
  */
-const LATIN_IN_JA = new Set(['BC', 'ID', 'OS', 'dt', 'persistent', 'value', 'terms', 'X']);
+const LATIN_IN_JA = new Set(['BC', 'DSL', 'ID', 'OS', 'dt', 'persistent', 'value', 'terms', 'X']);
 
 describe('i18n', () => {
     test('every language has the same messages', () => {

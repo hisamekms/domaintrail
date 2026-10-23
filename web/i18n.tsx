@@ -197,6 +197,8 @@ const ja = {
     invariants: '不変条件',
     allStateInvariants: '不変条件（全状態共通）',
     valueInvariants: '不変条件（値（value）に適用）',
+    /** In place of the expression of an invariant declared without one. */
+    notInDsl: 'DSL では表現していない',
     commands: 'コマンド',
     states: '状態',
     typeDependency: '型',
@@ -393,6 +395,7 @@ const en: Messages = {
     invariants: 'Invariants',
     allStateInvariants: 'Invariants (all states)',
     valueInvariants: 'Invariants (on the value)',
+    notInDsl: 'Not expressed in the DSL',
     commands: 'Commands',
     states: 'States',
     typeDependency: 'type',

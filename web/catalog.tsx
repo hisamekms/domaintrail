@@ -319,14 +319,15 @@ function Fields({ fields, ctx, names }: { fields: FieldModel[]; ctx: string; nam
     );
 }
 
-function Invariants({ invariants, names }: { invariants: InvariantModel[]; names: Namer }) {
+export function Invariants({ invariants, names }: { invariants: InvariantModel[]; names: Namer }) {
+    const t = useT();
     if (!invariants.length) return null;
     return (
         <ul className="card-invariants">
             {invariants.map((i) => (
                 <li key={i.name}>
                     <span>✓ {names.of(i)}</span>
-                    <code>{i.source}</code>
+                    {i.source !== undefined ? <code>{i.source}</code> : <em className="not-in-dsl">{t.notInDsl}</em>}
                 </li>
             ))}
         </ul>

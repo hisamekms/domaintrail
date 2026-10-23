@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CardHead } from '../web/catalog.js';
+import type { InvariantModel } from '../src/model/model.js';
+import { CardHead, Invariants as CardInvariants } from '../web/catalog.js';
 import { MESSAGES } from '../web/i18n.js';
-import { catalogSections, commandsWithOutcome, filterCatalog, inCatalog, isCatalogFiltered, matchesQuery, type CatalogFilter } from '../web/model-utils.js';
+import { Invariants as InspectorInvariants } from '../web/inspector.js';
+import { catalogSections, commandsWithOutcome, filterCatalog, inCatalog, isCatalogFiltered, matchesQuery, namer, type CatalogFilter } from '../web/model-utils.js';
 import { EXAMPLES } from './helpers.js';
 
 async function shopModel() {
@@ -114,5 +117,23 @@ describe('catalog', () => {
             expect(html).toContain(tx.kinds.fieldSet);
             expect(html).not.toContain('persistence-badge');
         });
+    });
+});
+
+describe('invariants without an expression', () => {
+    const invariants: InvariantModel[] = [
+        { name: 'hasItems', label: '明細が1件以上', source: 'count(items) > 0' },
+        { name: 'acyclicDeps', label: 'タスク依存が循環しない', doc: 'depends を辺とするグラフに閉路がない' },
+    ];
+
+    test('show that they are not expressed in the DSL, in place of the expression', () => {
+        const card = renderToStaticMarkup(createElement(CardInvariants, { invariants, names: namer('both', null) }));
+        expect(card).toContain('<code>count(items) &gt; 0</code>');
+        expect(card).toContain(`<em class="not-in-dsl">${MESSAGES.ja.notInDsl}</em>`);
+        const inspector = renderToStaticMarkup(createElement(InspectorInvariants, { items: invariants, title: MESSAGES.ja.invariants }));
+        expect(inspector).toContain('<code class="block">count(items) &gt; 0</code>');
+        expect(inspector).toContain('depends を辺とするグラフに閉路がない');
+        expect(inspector).toContain(`<p class="not-in-dsl">${MESSAGES.ja.notInDsl}</p>`);
+        expect(inspector.match(/<code/g)).toHaveLength(1);
     });
 });

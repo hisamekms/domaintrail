@@ -117,8 +117,9 @@ const describedLines = (d: Described): string[] => [d.label, d.doc].filter((x): 
 /** JSDoc line of an event declared `persistent`. */
 const PERSISTENT_LINE = '@persistent Persisted: storing this event is part of its contract.';
 
+/** JSDoc lines of invariants; one declared without an expression says so. */
 const invariantLines = (invs: InvariantModel[]): string[] =>
-    invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source}`);
+    invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source ?? 'not expressed in the DSL'}`);
 
 const unique = (names: string[]): string[] => [...new Set(names)];
 

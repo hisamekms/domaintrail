@@ -621,8 +621,9 @@ function FieldOrigin({ id, onSelect }: { id: string; onSelect: Select }) {
  * Invariants. With `labelOnly`, an invariant that has a Japanese name is shown by its name alone;
  * the expression is shown only for unnamed ones.
  */
-function Invariants({ items, title, labelOnly }: { items: InvariantModel[]; title: string; labelOnly?: boolean }) {
+export function Invariants({ items, title, labelOnly }: { items: InvariantModel[]; title: string; labelOnly?: boolean }) {
     const names = useNames();
+    const tx = useT();
     if (items.length === 0) return null;
     return (
         <Section title={title}>
@@ -632,7 +633,7 @@ function Invariants({ items, title, labelOnly }: { items: InvariantModel[]; titl
                     <div key={i.name} className="sub">
                         <strong>{names.of(i)}</strong>
                         {!nameOnly && i.doc && <p className="doc">{i.doc}</p>}
-                        {!nameOnly && <code className="block">{i.source}</code>}
+                        {!nameOnly && (i.source !== undefined ? <code className="block">{i.source}</code> : <p className="not-in-dsl">{tx.notInDsl}</p>)}
                     </div>
                 );
             })}

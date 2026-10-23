@@ -372,3 +372,30 @@ export const plain: shared.Decimal = '1';
         expect(r.code).toBe(0);
     });
 });
+
+describe('invariants without an expression', () => {
+    const FACTORY = `context Factory {
+  id TaskId: UUID
+  primitive Code: String {
+    invariant format { matches(value, "^[A-Z]+$") }
+    invariant registered "登録済みのコード"
+  }
+  aggregate Task {
+    id: TaskId
+    depends: TaskId[0..*]
+    invariant distinctDeps { unique(depends) }
+    /// depends を辺とするグラフに閉路がない
+    invariant acyclicDeps "タスク依存が循環しない"
+  }
+}
+`;
+
+    test('are documented as not expressed in the DSL, and join the invariants of the constructor error', async () => {
+        const a = await check({ 'factory.dt': FACTORY });
+        expect(a.diagnostics).toEqual([]);
+        const code = generateTypeScript(a.model!).find((f) => f.path === 'Factory.ts')!.content;
+        expect(code).toContain('/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n */\nexport interface Task {');
+        expect(code).toContain(' * @invariant registered (登録済みのコード): not expressed in the DSL\n');
+        expect(code).toContain("    readonly invariant: 'format' | 'registered';");
+    });
+});
