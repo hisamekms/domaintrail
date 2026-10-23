@@ -2,8 +2,9 @@
 
 A type-checkable domain modeling DSL shared by humans and AI.
 AI agents edit `.dt` files; humans watch the model update live in the browser and give feedback.
-The DSL is the single source of truth for domain **structure and contracts** — it generates TypeScript types and command
-contracts, never business logic.
+The DSL is the single source of truth for domain **structure and contracts** — it generates TypeScript types, command
+contracts, checks of the invariants and requirements it states, and contract tests for your implementation, never
+business logic.
 
 ## Setup
 
@@ -41,6 +42,7 @@ Try it with the example in this repository (see [Development](#development)):
 ```bash
 bun run dt -r examples/shop check
 bun run dt -r examples/shop generate ts   # then examples/shop/src/order-commands.ts type-checks against it
+(cd examples/shop && bun test)            # and passes the generated contract tests
 bun run build && bun run dt -r examples/shop view
 ```
 
@@ -49,11 +51,12 @@ bun run build && bun run dt -r examples/shop view
 **[docs/guide.md](docs/guide.md)** is the reference for writing models and using the CLI, and `dt guide` prints the
 same text, so people and AI agents get it without leaving the terminal:
 
-- [Workflow](docs/guide.md#workflow): `fmt` → `check` → `generate ts` → type-check your own code (`tsc --noEmit`)
+- [Workflow](docs/guide.md#workflow): `fmt` → `check` → `generate ts` → type-check your own code (`tsc --noEmit`) →
+  run the generated contract tests
 - [Formatting](docs/guide.md#formatting): `dt fmt`, the one canonical layout of `.dt` files
 - [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
 - [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
-  `generate.ts.contexts`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
+  `generate.ts.contexts` / `generate.ts.tests`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
 - [File layout (recommended)](docs/guide.md#file-layout-recommended): `<context>/<aggregate>.dt` and
   `<context>/context.dt` (see [ADR 0009](docs/adr/0009-file-layout.md))
 - [DSL](docs/guide.md#dsl): contexts, aggregates, entities, values, states, commands, events, errors,
@@ -67,7 +70,9 @@ same text, so people and AI agents get it without leaving the terminal:
 - [Rules](docs/guide.md#rules) (M001–M021, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
   [decisions and `decide`](docs/guide.md#decisions-and-decide),
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
-  [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [output directories](docs/guide.md#output-directories) and
+  [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [generated checks](docs/guide.md#generated-checks) and
+  [generated tests](docs/guide.md#generated-tests) (see [ADR 0020](docs/adr/0020-generated-checks-and-contract-tests.md)),
+  [output directories](docs/guide.md#output-directories) and
   [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
 
 A taste of the DSL:
@@ -100,7 +105,8 @@ command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per
 ([0016](docs/adr/0016-collection-constraints-and-declared-invariants.md)), command requirements
 ([0017](docs/adr/0017-command-requirements.md)), command events as an exact contract
 ([0018](docs/adr/0018-command-events-contract.md)), the fields a command changes and decisions
-([0019](docs/adr/0019-command-changes-and-decisions.md)) and more.
+([0019](docs/adr/0019-command-changes-and-decisions.md)), generated checks and contract tests
+([0020](docs/adr/0020-generated-checks-and-contract-tests.md)) and more.
 
 ## Live View
 
@@ -156,7 +162,7 @@ Requires [Bun](https://bun.sh) (version pinned in `mise.toml`). `bun run dt` run
 bun install
 bun run langium:generate   # after editing src/language/domain.langium
 bun run typecheck
-bun test
+bun test                   # the repository's tests (bunfig.toml: test/ only)
 bun run build              # dist/: the CLI bundled for Node and the Live View page (needed by `view` and the tests)
 ```
 
@@ -171,7 +177,7 @@ See [docs/releasing.md](docs/releasing.md).
 | `src/language` | Langium grammar, generated parser/AST, scoping |
 | `src/core` | analyzer, diagnostics, validation rules (`checker/`) |
 | `src/model` | Typed Model (serializable, resolved) |
-| `src/generator` | TypeScript generator and naming |
+| `src/generator` | TypeScript generator and naming, generated checks (`checks.ts`) and contract tests (`tests.ts`, `testing/`) |
 | `src/graph`, `src/layout` | Graph IR, diff, ELK layout |
 | `src/server`, `web` | Live View server and React + tldraw client |
 
