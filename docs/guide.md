@@ -28,6 +28,42 @@ dt generate ts --out src/domain/generated
 dt view --port 8080             # http://127.0.0.1:8080, until Ctrl+C
 ```
 
+## Looking up one element
+
+To understand one element of a large model, run `dt show <name>` instead of reading the `.dt` files: it prints the
+element resolved, close to the DSL — the fields of field sets inline (`// with Common.Tenanted`), each field's label
+with where it comes from (`(from term)`, `(from type)`; none when written inline), multiplicities, `owns` /
+`references -> X`, invariants with their expressions (or `(not expressed in the DSL)`), states with their own fields
+and invariants, commands with their transitions, `requires … else`, `changes`, the events of each outcome (`when`
+resolved), the full error union, a `// file:line` location per declaration (relative to the root), and who uses it
+(owns, references, its type or ID, emits, returns, `with`).
+
+```bash
+dt show                         # the contexts and their elements
+dt show Sales                   # a context: terms and one line per element
+dt show Sales.Order             # an element (Order alone is enough when no other context has one)
+dt show Sales.Order.confirm     # a command: its contract, the fields each outcome sets / carries / drops, payloads
+dt show Sales.Order.Confirmed   # a state: its fields, invariants, the commands that enter and leave it
+```
+
+A name may leave out leading parts (`Order`, `Order.confirm`) when it names one thing only; when it names several, they
+are listed (exit 1); an unknown name gets `did you mean …?` (exit 1). It works on a model with semantic errors as far
+as it resolves (unresolved types are marked `(unresolved)`, and a note on stderr gives the number of errors): the exit
+code is 0 whenever the name was found, whatever the diagnostics. A model with syntax errors cannot be shown (exit 1).
+
+`--format json` prints one JSON document, the Typed Model of what was found, keyed by `show`:
+
+- `{"show": "element", "element": {...}, "usedBy": {...}}`: the element (`id`, `kind`, `fields` with `label`,
+  `labelSource`, `multiplicity`, `fieldSet`, …, `invariants`, `states`, `commands`, `location`); each command has
+  `outcomes`: `[{"from", "to", "emits": [{"event", "multiplicity", "lower", "upper"}], "sets", "carries", "drops"}]`.
+  `usedBy` has the lists `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`, `idUsedBy`, `emittedBy`, `returnedBy` and
+  `discriminatorOf`, as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`).
+- `{"show": "command", "aggregate", "command"}` (with `outcomes`), `{"show": "state", "aggregate", "state", "enteredBy",
+  "leftBy"}`, `{"show": "context", "context"}` and `{"show": "overview", "contexts"}` (name, label, doc, shared, terms
+  and the elements with their location).
+- `"modelErrors": n` when the model has errors; `{"error": "...", "candidates": [...]}` when the name is unknown
+  (the suggestions) or ambiguous (the matches).
+
 ## Output and exit codes
 
 `check` (and `generate ts`, which checks first) prints one line per problem, sorted by file and position, then a
@@ -68,7 +104,7 @@ generation refused) is an `error` message in the document, e.g. `{ "error": "Roo
 | Exit code | Meaning |
 |---|---|
 | 0 | success (`check`: no errors; warnings are allowed) |
-| 1 | the model has errors, no `.dt` file was found, generation was refused, or the root / a file could not be read |
+| 1 | the model has errors, no `.dt` file was found, generation was refused, `show` did not find the name (or it is ambiguous), or the root / a file could not be read |
 | 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
 
 Commands that use the model look for a config file first; `--root` (`-r`, default `.`) is where that search starts.

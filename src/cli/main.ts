@@ -6,6 +6,7 @@ import { ConfigError, checkTsContexts, loadConfig, staysInside, type ResolvedCon
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
 import { loadWorkspace } from '../core/files.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
+import { lookup, showJson, showText } from './show.js';
 import guide from '../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
@@ -88,6 +89,7 @@ Examples:
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
+  dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
 
 New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workflow, config and exit codes.`);
 
@@ -226,6 +228,53 @@ Examples:
             const { startLanguageServer } = await import('../lsp/server.js');
             startLanguageServer({ root, configPath: program.opts().config });
             await new Promise<void>(() => {}); // the server exits the process when the client says so
+        });
+
+    program
+        .command('show')
+        .description('Print the resolved model of one element, state, command or context (all contexts without a name).')
+        .argument('[name]', 'Sales.Order, Order, Sales, Sales.Order.confirm (a command), Sales.Order.Confirmed (a state)')
+        .addOption(formatOption())
+        .addHelpText('after', `
+Prints one element close to the DSL, resolved: the fields of field sets inline, every label with where it comes from,
+states, commands with their requirements, changes, events per outcome and full error union, \`file:line\` locations
+and who uses it. A name may leave out leading parts (\`Order\`, \`Order.confirm\`) when it names one thing only;
+otherwise the candidates are listed. With --format json, prints one JSON document ({"show": "element", ...}, or
+{"error": "...", "candidates": [...]}). Works on models with semantic errors as far as they resolve (a note on stderr
+gives their count; see \`dt check\`). Exits 0 when the name was found, whatever the diagnostics, 1 when it was not found
+or is ambiguous, 2 on an invalid config.
+
+Examples:
+  dt show
+  dt show Sales.Order
+  dt show Order.confirm --format json
+  dt -r domain show Sales`)
+        .action(async (name: string | undefined, opts: { format: Format }) => {
+            const json = opts.format === 'json';
+            const cfg = await config();
+            const sources = await loadWorkspace(cfg.root, cfg.sources);
+            if (sources.length === 0) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
+            const a = await analyze(sources);
+            if (!a.model) throw new CliError('The model has syntax errors; run `dt check` and fix them first.');
+            const errors = a.diagnostics.filter((d) => d.severity === 'error').length;
+            const found = name === undefined ? undefined : lookup(a.model, name);
+            if (found && !('found' in found)) {
+                const candidates = 'ambiguous' in found ? found.ambiguous : found.suggestions;
+                const message =
+                    'ambiguous' in found ? `'${name}' is ambiguous: ${candidates.join(', ')}. Use the full name.`
+                    : `Unknown name '${name}'${found.hint ? `; ${found.hint}` : '.'}`;
+                if (json) io.out(JSON.stringify({ error: message, ...(candidates.length && { candidates }) }, null, 2));
+                else io.err(message);
+                exitCode = 1;
+                return;
+            }
+            const target = found?.found;
+            if (json) {
+                io.out(JSON.stringify({ ...showJson(a.model, target), ...(errors && { modelErrors: errors }) }, null, 2));
+                return;
+            }
+            for (const line of showText(a.model, target)) io.out(line);
+            if (errors) io.err(`note: the model has ${errors} error(s) (see \`dt check\`); shown as far as it resolves.`);
         });
 
     program

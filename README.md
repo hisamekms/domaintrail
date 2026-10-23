@@ -22,6 +22,7 @@ dt -r <root> check             # validate syntax, references, types and DDD rule
 dt -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
 dt -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host); runs until Ctrl+C
 dt lsp                         # language server over stdio: dt check's diagnostics, definitions, references, hover
+dt -r <root> show <name>        # one element resolved: field sets, labels, commands' contracts, who uses it
 ```
 
 The package installs the same command under two names: `dt` for everyday use and `domaintrail`, its full name, for

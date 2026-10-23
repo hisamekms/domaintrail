@@ -123,15 +123,7 @@ export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter)
     });
 }
 
-/** Commands that may emit the event, or return the error, with their aggregates. */
-export function commandsWithOutcome(model: DomainModel, id: string): { agg: ElementModel; command: CommandModel }[] {
-    return Object.values(model.elements).flatMap((agg) =>
-        (agg.commands ?? []).filter((c) => emittedEvents(c).includes(id) || c.errors.includes(id)).map((command) => ({ agg, command })),
-    );
-}
-
-/** Elements that take on the fields of a field set (`with`). */
-export const fieldSetUsers = (model: DomainModel, id: string): ElementModel[] => Object.values(model.elements).filter((e) => e.fieldSets?.includes(id));
+export { commandsWithOutcome, fieldSetUsers } from '../src/model/usages';
 
 /** Contexts with shared ones first. */
 export function orderedContexts(model: DomainModel): string[] {

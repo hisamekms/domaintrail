@@ -1,5 +1,6 @@
 import type { DomainModel, ElementModel, FieldModel } from './model.js';
 import { elementList, emittedEvents, ownFields } from './model.js';
+import { identityOf } from './usages.js';
 
 /**
  * How one bounded context depends on another:
@@ -95,11 +96,6 @@ export function representative(model: DomainModel, target: string): ElementModel
     if (el?.kind !== 'id') return el;
     return elementList(model).find((e) => (e.kind === 'aggregate' || e.kind === 'entity') && identityOf(e) === target) ?? el;
 }
-
-const identityOf = (el: ElementModel): string | undefined => {
-    const id = el.fields.find((f) => f.name === 'id');
-    return id?.type.kind === 'ref' ? id.type.ref : undefined;
-};
 
 const contextOf = (qname: string): string | undefined => (qname.includes('.') ? qname.slice(0, qname.indexOf('.')) : undefined);
 const shortName = (qname: string): string => qname.slice(qname.lastIndexOf('.') + 1);
