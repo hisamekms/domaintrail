@@ -39,7 +39,12 @@ export interface CheckEnv {
 interface Binding {
     js: string;
     ty: Ty;
+    /** Whether `js` is already in parentheses as a whole. */
+    wrapped?: boolean;
 }
+
+/** `!x`, with parentheses unless `x` already has them. */
+export const negate = (b: Binding): string => (b.wrapped ? `!${b.js}` : `!(${b.js})`);
 
 type Scope = Map<string, Binding>;
 
@@ -155,6 +160,7 @@ export class ExprCompiler {
 
     compile(e: ExprModel, scope: Scope): Binding {
         const bool = (js: string): Binding => ({ js, ty: { k: 'prim', name: 'Bool' } });
+        const wrapped = (js: string): Binding => ({ ...bool(`(${js})`), wrapped: true });
         switch (e.k) {
             case 'bool':
                 return bool(String(e.value));
@@ -169,9 +175,9 @@ export class ExprCompiler {
             case 'member':
                 return this.member(e.receiver, e.member, scope);
             case 'not':
-                return bool(`!${this.compile(e.operand, scope).js}`);
+                return bool(negate(this.compile(e.operand, scope)));
             case 'exists':
-                return bool(`(${this.compile(e.operand, scope).js} !== undefined)`);
+                return wrapped(`${this.compile(e.operand, scope).js} !== undefined`);
             case 'count':
             case 'length':
                 return { js: `${this.compile(e.k === 'count' ? e.collection : e.operand, scope).js}.length`, ty: { k: 'prim', name: 'Int' } };
@@ -181,7 +187,7 @@ export class ExprCompiler {
                 const v = this.compile(e.operand, scope);
                 const lo = this.compile(e.lower, scope);
                 const hi = this.compile(e.upper, scope);
-                return bool(`(${scalar(lo)} <= ${scalar(v)} && ${scalar(v)} <= ${scalar(hi)})`);
+                return wrapped(`${scalar(lo)} <= ${scalar(v)} && ${scalar(v)} <= ${scalar(hi)}`);
             }
             case 'quantifier': {
                 const c = this.compile(e.collection, scope);
@@ -216,17 +222,17 @@ export class ExprCompiler {
                 const r = this.compile(e.right, scope);
                 switch (e.op) {
                     case 'and':
-                        return bool(`(${l.js} && ${r.js})`);
+                        return wrapped(`${l.js} && ${r.js}`);
                     case 'or':
-                        return bool(`(${l.js} || ${r.js})`);
+                        return wrapped(`${l.js} || ${r.js}`);
                     case 'implies':
-                        return bool(`(!${l.js} || ${r.js})`);
+                        return wrapped(`${negate(l)} || ${r.js}`);
                     case '==':
-                        return bool(`(${this.equal(strip(l.ty), l.js, r.js, strip(r.ty))})`);
+                        return wrapped(this.equal(strip(l.ty), l.js, r.js, strip(r.ty)));
                     case '!=':
                         return bool(`!(${this.equal(strip(l.ty), l.js, r.js, strip(r.ty))})`);
                     default:
-                        return bool(`(${scalar(l)} ${e.op} ${scalar(r)})`);
+                        return wrapped(`${scalar(l)} ${e.op} ${scalar(r)}`);
                 }
             }
         }
@@ -292,8 +298,8 @@ export function params(list: { name: string; type: string }[], body: string): st
 /** An invariant of a checked value: its expression compiled in `scope`, or (declared) a call of its slot. */
 export interface CheckItem {
     name: string;
-    /** The compiled condition; absent for an invariant declared without an expression. */
-    js?: string;
+    /** The condition under which it is violated; absent for an invariant declared without an expression. */
+    violated?: string;
     /** For a declared invariant: the arguments its slot takes. */
     args?: string;
     /** Wraps the statement, e.g. `if (x.kind === 'Card') { … }` for the invariants of a union variant. */
@@ -303,14 +309,14 @@ export interface CheckItem {
 /** The statements that collect the violated invariants of `items` into `violated`. */
 export function collect(items: CheckItem[], indent: string): string[] {
     return items.map((i) => {
-        const cond = i.js ?? `checks.${i.name}(${i.args})`;
-        return `${indent}if (${i.guard ? `${i.guard} && ` : ''}!(${cond})) violated.push('${i.name}');`;
+        const cond = i.violated ?? `!checks.${i.name}(${i.args})`;
+        return `${indent}if (${i.guard ? `${i.guard} && ` : ''}${cond}) violated.push('${i.name}');`;
     });
 }
 
 /** Compiles the expressed invariants among `invs` in `scope`; declared ones call their slot with `args`. */
 export function items(compiler: ExprCompiler, invs: InvariantModel[], scope: Scope, args: string, guard?: string): CheckItem[] {
-    return invs.map((i) => ({ name: i.name, ...(i.expr ? { js: compiler.compile(i.expr, scope).js } : { args }), ...(guard && { guard }) }));
+    return invs.map((i) => ({ name: i.name, ...(i.expr ? { violated: negate(compiler.compile(i.expr, scope)) } : { args }), ...(guard && { guard }) }));
 }
 
 /** The requirement scope of a command: the aggregate's fields it sees (from `subject`) and its parameters. */
@@ -585,7 +591,7 @@ export class CheckWriter {
         const declared = hasDeclared(c.requires);
         const result = `${namesType(c.requires.map((r) => r.name))} | undefined`;
         const body = [
-            ...c.requires.map((r) => `if (!(${r.expr ? this.compiler.compile(r.expr, scope).js : `checks.${r.name}(${argNames})`})) return '${r.name}';`),
+            ...c.requires.map((r) => `if (${r.expr ? negate(this.compiler.compile(r.expr, scope)) : `!checks.${r.name}(${argNames})`}) return '${r.name}';`),
             'return undefined;',
         ];
         const text = body.join('\n');
