@@ -1088,6 +1088,13 @@ select,
     color: var(--muted);
     word-break: break-all;
 }
+/* An invariant declared without an expression, in place of its expression. */
+.not-in-dsl {
+    margin: 4px 0;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--muted);
+}
 .card-foot {
     margin-top: auto;
     font-size: 12px;

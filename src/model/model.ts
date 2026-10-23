@@ -40,7 +40,8 @@ export interface Described {
 
 export interface InvariantModel extends Described {
     name: string;
-    source: string;
+    /** The expression as written; absent for an invariant declared without one (not expressed in the DSL). */
+    source?: string;
 }
 
 export interface Location {

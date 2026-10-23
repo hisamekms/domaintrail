@@ -171,9 +171,15 @@ context Sales {
     email: EmailAddress                  // from the shared context Common
     active: Bool
     owns addresses: Address[0..*]
+    owns shipping: Address?
 
     invariant activeHasAddress { active == true implies count(addresses) > 0 }
     invariant servedArea { active == false or any(addresses, a => a.city == "Tokyo" or not (a.city == "Osaka")) }
+    invariant distinctAddresses { unique(addresses, a => a.city, a.street) }   // the combination is distinct
+    invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
+
+    /// No other customer has the same email address (spans aggregates, so not expressed in the DSL).
+    invariant uniqueEmail "メールアドレスは顧客ごとに一意"
 
     command changeEmail(email: EmailAddress) errors EmailTaken
   }
@@ -394,8 +400,24 @@ context Billing {                          // other files open the context witho
 - Field paths: `note`, `item.quantity`, `amount.amount`.
 - Operators, loosest first: `implies`, `or`, `and`, `== != < <= > >=`, `x in 1..9`, `not`.
 - Functions: `exists(x)` (an optional is present; narrows `x` on the right of `and` / `implies`), `count(c)`,
-  `all(c, x => …)`, `any(c, x => …)`, and in domain primitives `length(value)`, `matches(value, "regex")`.
+  `all(c, x => …)`, `any(c, x => …)`, `unique(c)`, `unique(c, x => key, …)`, `contains(c, x)`, and in domain
+  primitives `length(value)`, `matches(value, "regex")`.
+- `unique(c)`: the elements of a collection are distinct. With keys, `unique(lines, l => l.sku)` means no two
+  elements have the same key, and `unique(confirmations, c => c.scenario, c.reviewer)` that no two have the same
+  combination of keys. A key cannot be optional (M009); to include an optional field, group the keys into a value
+  object and use it as the key.
+- `contains(c, x)`: `x` is an element of `c`. A subset is written with `all`: `all(required, s => contains(confirmed, s))`.
+- Equality — `==`, `!=`, `unique` and `contains` compare alike: primitives and domain primitives by value, enum
+  values by name, value objects by all their fields, entities by `id`, union values by discriminator and fields.
+  Both sides must be of the same type (domain primitives also compare with literals); collections and optional values
+  cannot be compared (guard an optional with `exists(...)` first).
 - An invariant must be a Bool expression. Only its type is checked, not whether it holds.
+- A constraint the DSL cannot express is declared without an expression, with a label or a `///` description that
+  states it (M018): `invariant uniqueEmail "メールアドレスは顧客ごとに一意"`. It is documented like any invariant (in
+  the Live View and as `@invariant uniqueEmail (…): not expressed in the DSL` in the generated TypeScript) and is
+  checked by your code only. In a domain primitive, its name joins the invariants of `Invalid<Name>`.
+- `count`, `exists`, `length`, `matches`, `all`, `any`, `unique` and `contains` are also usable as field and parameter
+  names; followed by `(` they are the functions.
 
 ## Rules
 
@@ -419,6 +441,7 @@ context Billing {                          // other files open the context witho
 | M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
 | M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
 | M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
+| M018 | an invariant without an expression has a label or a `///` description |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |

@@ -2,6 +2,7 @@ import {
     isAggregate,
     isBinaryExpr,
     isBoolLiteral,
+    isContainsExpr,
     isCountExpr,
     isDecimalLiteral,
     isEnumDecl,
@@ -18,6 +19,7 @@ import {
     isQuantifierExpr,
     isEntity,
     isStringLiteral,
+    isUniqueExpr,
     isUnionDecl,
     isValueObject,
     type Aggregate,
@@ -28,7 +30,8 @@ import {
     type MatchesExpr,
     type UnionDecl,
 } from '../../language/generated/ast.js';
-import { GrammarUtils } from 'langium';
+import { GrammarUtils, type AstNode } from 'langium';
+import { docComment } from '../labels.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import {
     commonFields,
@@ -56,7 +59,7 @@ interface Scope {
     present: Set<string>;
 }
 
-/** Type-checks every invariant in the workspace (M001 for names, M008, M009, M010). */
+/** Type-checks every invariant in the workspace (M001 for names, M008, M009, M010, M018). */
 export function checkInvariants(index: ModelIndex, sink: DiagnosticSink): void {
     for (const el of index.elements) {
         const ctx = el.$container.name;
@@ -93,6 +96,7 @@ function tagOf(u: UnionDecl): Ty {
 function checkPrimitive(p: DomainPrimitive, ctx: string, index: ModelIndex, sink: DiagnosticSink): void {
     if (!p.base) return;
     for (const inv of primitiveInvariants(p)) {
+        if (inv.node !== inv.expr) checkDeclared(inv.node as Invariant, sink);
         if (!inv.expr) continue;
         const scope: Scope = { ctx, fields: new Map(), stateOnly: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
         const t = new ExprChecker(index, sink).check(inv.expr, scope);
@@ -135,7 +139,14 @@ function checkAggregate(agg: Aggregate, ctx: string, index: ModelIndex, sink: Di
     }
 }
 
+/** M018: an invariant without an expression is declared for documentation only, so it must say what it requires. */
+function checkDeclared(inv: Invariant, sink: DiagnosticSink): void {
+    if (inv.expr || inv.label || docComment(inv)) return;
+    sink.error('M018', `Invariant '${inv.name}' has no expression; give it a label or a /// description that states what it requires.`, inv, 'name');
+}
+
 function checkInvariant(inv: Invariant, scope: Scope, index: ModelIndex, sink: DiagnosticSink): void {
+    checkDeclared(inv, sink);
     if (!inv.expr) return;
     const t = new ExprChecker(index, sink).check(inv.expr, scope);
     if (t.k !== 'error' && !isBool(t)) {
@@ -228,6 +239,43 @@ class ExprChecker {
             const body = this.check(e.body, inner);
             if (body.k !== 'error' && !isBool(body)) {
                 this.sink.error('M009', `The predicate of ${e.quantifier}() must be Bool, but has type '${showType(body)}'.`, e, 'body');
+            }
+            return BOOL;
+        }
+        if (isUniqueExpr(e)) {
+            const coll = this.check(e.collection, scope);
+            let elem: Ty = ERROR;
+            if (coll.k === 'list') elem = coll.elem;
+            else if (coll.k !== 'error') {
+                this.sink.error('M009', `unique() requires a collection, but got '${showType(coll)}'.`, e, 'collection');
+            }
+            if (!e.param) {
+                if (elem.k !== 'error' && !equatable(elem, elem)) {
+                    this.sink.error('M009', `unique() requires elements that can be compared with '==', but they have type '${showType(elem)}'.`, e, 'collection');
+                }
+                return BOOL;
+            }
+            const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param.name, elem]] };
+            e.keys.forEach((key, i) => {
+                const t = this.check(key, inner);
+                if (t.k === 'error' || equatable(t, t)) return;
+                const what = `Key '${textOf(key)}' of unique()`;
+                if (t.k === 'opt') {
+                    this.sink.error('M009', `${what} is optional ('${showType(t)}'); keys must always be present. Group the keys into a value object and use it as the key.`, e, 'keys', i);
+                } else {
+                    this.sink.error('M009', `${what} has type '${showType(t)}', which cannot be compared with '=='.`, e, 'keys', i);
+                }
+            });
+            return BOOL;
+        }
+        if (isContainsExpr(e)) {
+            const coll = this.check(e.collection, scope);
+            const x = this.check(e.element, scope);
+            if (coll.k !== 'error' && coll.k !== 'list') {
+                this.sink.error('M009', `contains() requires a collection, but got '${showType(coll)}'.`, e, 'collection');
+            } else if (coll.k === 'list' && coll.elem.k !== 'error' && x.k !== 'error' && !equatable(coll.elem, x)) {
+                const hint = x.k === 'opt' ? ' Optional values must be guarded with exists(...) first.' : '';
+                this.sink.error('M009', `contains() cannot compare elements of type '${showType(coll.elem)}' with '${showType(x)}'.${hint}`, e, 'element');
             }
             return BOOL;
         }
@@ -348,6 +396,9 @@ export function regexSource(e: MatchesExpr): string {
     return text ? text.slice(1, -1).replace(/\\"/g, '"') : e.pattern;
 }
 
+/** Source text of an expression on one line. */
+const textOf = (e: AstNode): string => e.$cstNode?.text.replace(/\s+/g, ' ').trim() ?? '';
+
 /** Dotted path of a NameRef / MemberAccess chain, used to track exists() guards. */
 function pathOf(e: Expression): string | undefined {
     if (isNameRef(e)) return e.name;
@@ -385,6 +436,10 @@ function comparable(l: Ty, r: Ty, check: (a: Ty, b: Ty) => boolean): boolean {
 
 const baseOf = (t: Ty): Ty => ({ k: 'prim', name: basePrimitive(t)! });
 
+/**
+ * `==`, `!=`, `unique` and `contains` compare by this rule: value objects by all their fields, entities by `id`,
+ * unions by discriminator and fields. Lists and optionals cannot be compared.
+ */
 function equatable(l: Ty, r: Ty): boolean {
     if (l.k === 'list' || r.k === 'list' || l.k === 'opt' || r.k === 'opt') return false;
     return comparable(l, r, (a, b) => (isNumeric(a) && isNumeric(b)) || sameType(a, b));

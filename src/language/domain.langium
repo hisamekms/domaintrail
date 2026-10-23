@@ -113,8 +113,9 @@ PrimitiveType returns string:
 Multiplicity:
     optional?='?' | '[' lower=INT '..' (upper=INT | unbounded?='*') ']';
 
+// Without an expression, an invariant is declared for documentation only: it needs a label or a `///` description (M018).
 Invariant:
-    'invariant' name=ID label=STRING? '{' expr=Expression '}';
+    'invariant' name=ID label=STRING? ('{' expr=Expression '}')?;
 
 // ---- Invariant expressions ----
 
@@ -148,6 +149,8 @@ Primary infers Expression:
     | {infer ExistsExpr} 'exists' '(' operand=Expression ')'
     | {infer LengthExpr} 'length' '(' operand=Expression ')'
     | {infer MatchesExpr} 'matches' '(' operand=Expression ',' pattern=STRING ')'
+    | {infer UniqueExpr} 'unique' '(' collection=Expression (',' param=LambdaParam '=>' keys+=Expression (',' keys+=Expression)*)? ')'
+    | {infer ContainsExpr} 'contains' '(' collection=Expression ',' element=Expression ')'
     | {infer QuantifierExpr} quantifier=('all' | 'any') '(' collection=Expression ',' param=LambdaParam '=>' body=Expression ')'
     | {infer BoolLiteral} value=('true' | 'false')
     | {infer DecimalLiteral} negative?='-'? value=DECIMAL
@@ -158,8 +161,10 @@ Primary infers Expression:
 LambdaParam:
     name=FeatureName;
 
+// Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with';
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with'
+    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 QualifiedName returns string:
     ID ('.' ID)*;

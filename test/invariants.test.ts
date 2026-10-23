@@ -99,3 +99,113 @@ describe('invariant types', () => {
         expect(codes(a)).toEqual(['M008']);
     });
 });
+
+describe('unique and contains', () => {
+    const lists = (invariants: string) =>
+        checkSales(`
+  id OrderId: UUID
+  id LineId: UUID
+  primitive Sku: String
+  enum Reason { Requested Other }
+  aggregate Order {
+    id: OrderId
+    owns lines: Line[0..*]
+    skus: Sku[0..*]
+    required: Sku[1..*]
+    reasons: Reason[0..*]
+    reason: Reason?
+    prices: Money[0..*]
+    favorite: Sku
+    total: Decimal
+    ${invariants}
+  }
+  entity Line { id: LineId sku: Sku note: String? tags: String[0..*] owns price: Money? }
+  value Money { amount: Decimal }`);
+
+    test('unique over elements, one key and a combination of keys', async () => {
+        const a = await lists(`
+    invariant distinctLines { unique(lines) }
+    invariant distinctSkus { unique(lines, l => l.sku) and unique(skus) }
+    invariant distinctPairs { unique(lines, l => l.sku, l.id) }
+    invariant distinctPrices { unique(prices) }`);
+        expect(a.diagnostics).toEqual([]);
+    });
+
+    test('contains: membership, subsets and literals of a domain primitive', async () => {
+        const a = await lists(`
+    invariant member { contains(skus, favorite) and contains(skus, "ABC") }
+    invariant subset { all(required, s => contains(skus, s)) }
+    invariant guarded { exists(reason) implies contains(reasons, reason) }
+    invariant ofValues { all(lines, l => exists(l.price) implies contains(prices, l.price)) }`);
+        expect(a.diagnostics).toEqual([]);
+    });
+
+    test.each([
+        ['unique(total)', "unique() requires a collection, but got 'Decimal'."],
+        ['unique(lines, l => l.note)', "Key 'l.note' of unique() is optional ('String?'); keys must always be present. Group the keys into a value object and use it as the key."],
+        ['unique(lines, l => l.sku, l.tags)', "Key 'l.tags' of unique() has type 'String[0..*]', which cannot be compared with '=='."],
+        ['unique(lines, l => l.missing)', "'Line' has no field 'missing'."],
+        ['contains(total, 1)', "contains() requires a collection, but got 'Decimal'."],
+        ['contains(skus, total)', "contains() cannot compare elements of type 'Sku' with 'Decimal'."],
+        ['contains(reasons, reason)', "contains() cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be guarded with exists(...) first."],
+        ['contains(lines, prices)', "contains() cannot compare elements of type 'Line' with 'Money[0..*]'."],
+    ])('M009 %s', async (expr, message) => {
+        const a = await lists(`invariant i { ${expr} }`);
+        expect(a.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message)).toEqual([message]);
+    });
+
+    test('function names can still name fields and lambda parameters', async () => {
+        const a = await checkSales(`
+  id OrderId: UUID
+  aggregate Order {
+    id: OrderId
+    count: Int
+    unique: Bool
+    contains: String[0..*]
+    matches: String
+    all: Int[0..*]
+    invariant i { count > 0 and unique and count(contains) == count and contains(contains, matches) }
+    invariant j { all(all, any => any > count) and unique(all, exists => exists) }
+  }`);
+        expect(a.diagnostics).toEqual([]);
+    });
+});
+
+describe('invariants without an expression', () => {
+    test('are declared with a label or a description', async () => {
+        const a = await model(`
+    invariant labelled "明細の在庫が引当済み"
+    /// The lines were checked against stock.
+    invariant described`, 'invariant both "確定時に通知済み" { total > 0 }');
+        expect(a.diagnostics).toEqual([]);
+        const order = a.model!.elements['Sales.Order'];
+        expect(order.invariants).toEqual([
+            { name: 'labelled', label: '明細の在庫が引当済み' },
+            { name: 'described', doc: 'The lines were checked against stock.' },
+        ]);
+        expect(order.states![1].invariants).toEqual([{ name: 'both', label: '確定時に通知済み', source: 'total > 0' }]);
+    });
+
+    test('M018 an invariant without an expression needs a label or a description', async () => {
+        const a = await model('invariant bare', '', 'value Range { lo: Int invariant alsoBare }');
+        expect(only(a, 'M018').map((d) => d.message)).toEqual([
+            "Invariant 'bare' has no expression; give it a label or a /// description that states what it requires.",
+            "Invariant 'alsoBare' has no expression; give it a label or a /// description that states what it requires.",
+        ]);
+    });
+
+    test('in domain primitives, next to invariants with an expression', async () => {
+        const a = await checkSales(`
+  primitive Code: String {
+    invariant format { matches(value, "^[A-Z]+$") }
+    invariant registered "登録済みのコード"
+    invariant bare
+  }`);
+        expect(codes(a)).toEqual(['M018']);
+        expect(a.model!.elements['Sales.Code'].invariants.map((i) => [i.name, i.source])).toEqual([
+            ['format', 'matches(value, "^[A-Z]+$")'],
+            ['registered', undefined],
+            ['bare', undefined],
+        ]);
+    });
+});
