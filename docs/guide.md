@@ -652,10 +652,10 @@ context Work {
   different contexts with the same name cannot be emitted by one command.
 - The events of one command have **no order**: they are facts of one decision. With event sourcing, applying the
   events of one command must not depend on their order.
-- **When the contract and the implementation disagree**, change the DSL, not the implementation. If following the
-  contract would make the implementation do something wrong in business terms — emitting `Renamed` although the title
-  did not change — the contract is what is wrong: write `emits Renamed?`. Never emit an event only to satisfy the
-  types, and never leave out one the contract requires.
+- **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration,
+  and change the DSL, not the implementation. If following the contract would make the implementation do something
+  wrong in business terms — emitting `Renamed` although the title did not change — the contract is what is wrong:
+  write `emits Renamed?`. Never emit an event only to satisfy the types, and never leave out one the contract requires.
 - `when` is also usable as a field and parameter name.
 
 ### Pure commands
@@ -709,6 +709,9 @@ stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types wi
 command and an `<Aggregate>Commands` interface to implement, plus `index.ts` and `_runtime.ts`. A domain primitive
 gets a branded type and a constructor contract `Make<Name>` to implement by hand. A field set is an interface that the
 elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its `…Common`).
+The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's place as
+`dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:46`); editing the `.dt` sources moves
+these lines, and generating again rewrites them.
 
 Unions to name groups of them, each generated only when it has a member:
 
@@ -727,6 +730,7 @@ Unions to name groups of them, each generated only when it has a member:
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
+ * @see sales/order.dt:46
  */
 export type ConfirmOrder = (
     order: DraftOrder,
@@ -833,6 +837,7 @@ instead.
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
+ * @see sales/order.dt:46
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
@@ -860,7 +865,10 @@ dropped. A factory's aggregate is its `state` and `set`. Events and errors pass 
 data `decide` needs, a constant generated per aggregate:
 
 ```ts
-/** The fields of Order as data for `decide`: the common fields, and the fields of each state on top of them. */
+/**
+ * The fields of Order as data for `decide`: the common fields, and the fields of each state on top of them.
+ * @see sales/order.dt:13
+ */
 export const OrderShape: Shape = {
     fields: ['id', 'items', 'customer', 'note'],
     states: { Draft: [], Confirmed: ['confirmedAt'], Cancelled: ['reason'] },
@@ -929,6 +937,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  * @requires signedOff (本人の承認が記録済み) else NotSignedOff: not expressed in the DSL
  * @changes none — the command changes no common field
  * @emits nothing
+ * @see review/review.dt:18
  */
 export type AcceptReview = (
     review: ReviewingReview | EscalatedReview,

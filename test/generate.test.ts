@@ -202,7 +202,7 @@ describe('commands with several transitions', () => {
     });
 
     test('the same targets for every transition: a plain function of the union of the sources', () => {
-        expect(code).toContain('/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @changes none — the command changes no common field\n * @emits nothing\n */');
+        expect(code).toContain('/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:21\n */');
         expect(code).toContain(
             `export type CancelWork = (
     work: DraftWork | InProgressWork,
@@ -213,11 +213,11 @@ describe('commands with several transitions', () => {
     };
 }, never>;`,
         );
-        expect(code).toContain('/**\n * Work.open (new -> Draft) — factory\n * @emits nothing\n */');
+        expect(code).toContain('/**\n * Work.open (new -> Draft) — factory\n * @emits nothing\n * @see tasks.dt:14\n */');
     });
 
     test('targets that differ by transition: a contract generic over the input state, and a decision per source state', () => {
-        expect(code).toContain('/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @changes title\n * @emits WorkChanged — exactly once when the command succeeds\n */');
+        expect(code).toContain('/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @changes title\n * @emits WorkChanged — exactly once when the command succeeds\n * @see tasks.dt:15\n */');
         expect(code).toContain(
             `export type ChangeWork = <S extends DraftWork | InProgressWork>(
     work: S,
@@ -245,6 +245,7 @@ describe('commands with several transitions', () => {
  * @changes title
  * Draft -> Draft — set: title; carried over: id
  * InProgress -> InProgress — set: title; carried over: id
+ * @see tasks.dt:15
  */
 export type ChangeWorkDecision = {
     /** @emits WorkChanged — exactly once when the command succeeds */
@@ -495,8 +496,37 @@ describe('invariants without an expression', () => {
         const a = await check({ 'factory.dt': FACTORY });
         expect(a.diagnostics).toEqual([]);
         const code = generateTypeScript(a.model!).find((f) => f.path === 'Factory.ts')!.content;
-        expect(code).toContain('/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n */\nexport interface Task {');
+        expect(code).toContain('/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {');
         expect(code).toContain(' * @invariant registered (登録済みのコード): not expressed in the DSL\n');
         expect(code).toContain("    readonly invariant: 'format' | 'registered';");
+    });
+});
+
+describe('links to the DSL', () => {
+    test('every declaration that comes from the DSL ends its JSDoc with @see <file>:<line>, relative to the root', async () => {
+        const ws = await loadWorkspace(EXAMPLES);
+        const a = await analyze(ws);
+        const sources = new Map(ws.map((s) => [s.path.replace(/\\/g, '/'), s.text.split('\n')]));
+        const unlinked: string[] = [];
+        for (const f of generateTypeScript(a.model!).filter((f) => !f.path.startsWith('_') && f.path !== 'index.ts')) {
+            const lines = f.content.split('\n');
+            lines.forEach((l, i) => {
+                const name = /^export (?:type|interface|const) (\w+)/.exec(l)?.[1];
+                if (!name) return;
+                const see = /^ ?\/?\*+ @see (\S+):(\d+)(?: \*\/)?$/.exec(lines[i - 1] === ' */' ? lines[i - 2] : lines[i - 1]);
+                if (!see) return unlinked.push(name);
+                expect(sources.get(see[1])?.[Number(see[2]) - 1]).toBeDefined();
+            });
+        }
+        // the unions of a context come from no single declaration
+        expect([...new Set(unlinked)].sort()).toEqual(['Aggregate', 'DomainEvent', 'PersistentEvent']);
+        const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
+        const target = (name: string): string => {
+            const [, file, line] = new RegExp(`@see (\\S+):(\\d+)\\n \\*/\\nexport type ${name} `).exec(sales)!;
+            return sources.get(file)![Number(line) - 1].trim();
+        };
+        expect(target('ConfirmOrder')).toStartWith('command confirm(');
+        expect(target('ConfirmOrderDecision')).toStartWith('command confirm(');
+        expect(target('Order')).toStartWith('aggregate Order ');
     });
 });

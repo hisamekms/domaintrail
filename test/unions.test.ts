@@ -67,6 +67,7 @@ describe('unions', () => {
         expect(code).toContain(`/**
  * 行為者
  * 実際の行為者。
+ * @see sales.dt:8
  */
 export type Actor =
     /** 社内 */

@@ -159,10 +159,10 @@ describe('labels in views and generated code', () => {
         const a = await analyze(await loadWorkspace(EXAMPLES));
         expect(a.diagnostics).toEqual([]);
         const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
-        expect(sales).toContain('/**\n * 注文\n * 顧客からの購入依頼。確定後は明細を変更できない。\n */\nexport type Order =');
+        expect(sales).toContain('/**\n * 注文\n * 顧客からの購入依頼。確定後は明細を変更できない。\n * @see sales/order.dt:13\n */\nexport type Order =');
         expect(sales).toContain('    /** 確定日時 — 顧客が注文を確定した日時。キャンセル可否の判定に使う。 */\n    readonly confirmedAt: Timestamp;');
         expect(sales).toContain("    | 'Requested' // 顧客都合");
         expect(sales).toContain(' * @invariant hasItems (明細が1件以上): count(items) > 0');
-        expect(sales).toContain(' * 注文を確定する\n * @param at 日時\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n * @changes none — the command changes no common field\n * @emits OrderConfirmed — exactly once when the command succeeds\n */\nexport type ConfirmOrder');
+        expect(sales).toContain(' * 注文を確定する\n * @param at 日時\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n * @changes none — the command changes no common field\n * @emits OrderConfirmed — exactly once when the command succeeds\n * @see sales/order.dt:46\n */\nexport type ConfirmOrder');
     });
 });

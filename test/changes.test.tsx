@@ -215,6 +215,7 @@ describe('changes in the generated TypeScript', () => {
  * @changes title, updatedAt
  * Draft -> Draft — set: updatedAt, title; carried over: id, note, tags, draftNo
  * Review -> Review — set: updatedAt, title; carried over: id, note, tags, draftNo, reviewer
+ * @see tasks.dt:18
  */
 export type RenameWorkDecision = {`,
         );
@@ -223,7 +224,7 @@ export type RenameWorkDecision = {`,
         expect(code).toContain(' * new -> Draft — set: every field\n');
         expect(code).toContain(' * @changes color\n * Tag — set: color; carried over: id, name\n');
         // the contract says it too
-        expect(code).toContain(' * Work.submit (Draft -> Review)\n * @changes none — the command changes no common field\n * @emits nothing\n */\nexport type SubmitWork = ');
+        expect(code).toContain(' * Work.submit (Draft -> Review)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWork = ');
         expect(code).toContain("export const TagShape: Shape = { fields: ['id', 'name', 'color'] };");
         expect(code).toContain(
             "export const WorkShape: Shape = {\n    fields: ['updatedAt', 'id', 'title', 'note', 'tags'],\n    states: { Draft: ['draftNo'], Review: ['draftNo', 'reviewer'], Done: ['reviewer', 'doneAt'], Archived: ['reviewer'] },\n};",

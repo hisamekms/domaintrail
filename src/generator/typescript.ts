@@ -1,5 +1,5 @@
 import * as posix from 'node:path/posix';
-import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
+import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, Location, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
 import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
 import {
     AGGREGATE_TYPE,
@@ -204,6 +204,12 @@ const PERSISTENT_LINE = '@persistent Persisted: storing this event is part of it
 const invariantLines = (invs: InvariantModel[]): string[] =>
     invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source ?? 'not expressed in the DSL'}`);
 
+/**
+ * JSDoc line pointing to the DSL declaration a generated declaration comes from, as `dt check` prints it (relative to
+ * the config root, `/`-separated), e.g. `@see sales/order.dt:41`.
+ */
+const seeLine = (loc: Location): string => `@see ${loc.file.replace(/\\/g, '/')}:${loc.line}`;
+
 /** JSDoc lines of a command's requirements; one declared without an expression says so. */
 const requirementLines = (reqs: RequirementModel[], error: (qname: string) => string): string[] =>
     reqs.map((r) => `@requires ${r.name}${r.label ? ` (${r.label})` : ''} else ${error(r.error)}: ${r.source ?? 'not expressed in the DSL'}`);
@@ -259,7 +265,7 @@ class ContextEmitter {
                     this.primitive(el);
                     break;
                 case 'enum':
-                    this.jsdoc(describedLines(el));
+                    this.jsdoc([...describedLines(el), seeLine(el.location)]);
                     if (!el.values?.length) {
                         this.line(`export type ${el.name} = never;`);
                     } else if (el.valueLabels) {
@@ -274,11 +280,11 @@ class ContextEmitter {
                     break;
                 case 'valueObject':
                 case 'entity':
-                    this.jsdoc([...describedLines(el), ...invariantLines(el.invariants)]);
+                    this.jsdoc([...describedLines(el), ...invariantLines(el.invariants), seeLine(el.location)]);
                     this.iface(el.name, this.fieldSets(el), [], ownFields(el));
                     break;
                 case 'fieldSet':
-                    this.jsdoc([...describedLines(el), `Fields taken on with \`with ${el.name}\`.`]);
+                    this.jsdoc([...describedLines(el), `Fields taken on with \`with ${el.name}\`.`, seeLine(el.location)]);
                     this.iface(el.name, [], [], el.fields);
                     break;
                 case 'union':
@@ -286,7 +292,7 @@ class ContextEmitter {
                     break;
                 case 'event':
                 case 'error':
-                    this.jsdoc([...describedLines(el), ...(el.persistent ? [PERSISTENT_LINE] : [])]);
+                    this.jsdoc([...describedLines(el), ...(el.persistent ? [PERSISTENT_LINE] : []), seeLine(el.location)]);
                     this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.name}';`], ownFields(el));
                     break;
                 case 'aggregate':
@@ -344,15 +350,15 @@ class ContextEmitter {
     private primitive(p: ElementModel): void {
         const base = PRIMITIVES[p.base ?? 'String'];
         const summary = p.kind === 'id' && !p.label ? [`Identifier of ${p.name}.`] : [];
-        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants)]);
+        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), seeLine(p.location)]);
         this.line(`export type ${p.name} = ${base} & { readonly __domain: '${p.id}' };`);
         this.out.push('');
         if (p.invariants.length === 0) {
-            this.jsdoc([`Creates a ${p.name}. It has no invariants, so creation cannot fail.`]);
+            this.jsdoc([`Creates a ${p.name}. It has no invariants, so creation cannot fail.`, seeLine(p.location)]);
             this.line(`export type ${makeTypeName(p)} = (value: ${base}) => ${p.name};`);
             return;
         }
-        this.jsdoc([`A value that violates an invariant of ${p.name}.`]);
+        this.jsdoc([`A value that violates an invariant of ${p.name}.`, seeLine(p.location)]);
         this.line(`export interface ${invalidTypeName(p)} {`);
         this.line(`    readonly type: '${invalidTypeName(p)}';`);
         this.line(`    readonly value: ${base};`);
@@ -360,14 +366,14 @@ class ContextEmitter {
         this.line(`    readonly invariant: ${p.invariants.map((i) => `'${i.name}'`).join(' | ')};`);
         this.line('}');
         this.out.push('');
-        this.jsdoc([`Creates a ${p.name}, checking its invariants. Implement by hand.`]);
+        this.jsdoc([`Creates a ${p.name}, checking its invariants. Implement by hand.`, seeLine(p.location)]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);
     }
 
     /** A union: one type alias over object types tagged with the discriminator. */
     private union(u: ElementModel): void {
         const tag = u.discriminator ?? 'kind';
-        this.jsdoc(describedLines(u));
+        this.jsdoc([...describedLines(u), seeLine(u.location)]);
         const variants = u.variants ?? [];
         if (variants.length === 0) {
             this.line(`export type ${u.name} = never;`);
@@ -393,18 +399,18 @@ class ContextEmitter {
     private aggregate(agg: ElementModel): void {
         const states = agg.states ?? [];
         if (states.length === 0) {
-            this.jsdoc([...describedLines(agg), ...invariantLines(agg.invariants)]);
+            this.jsdoc([...describedLines(agg), ...invariantLines(agg.invariants), seeLine(agg.location)]);
             this.iface(agg.name, this.fieldSets(agg), [], ownFields(agg));
         } else {
-            this.jsdoc([`Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`, ...invariantLines(agg.invariants)]);
+            this.jsdoc([`Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`, ...invariantLines(agg.invariants), seeLine(agg.location)]);
             this.iface(commonTypeName(agg), this.fieldSets(agg), [], ownFields(agg));
             for (const s of states) {
                 this.out.push('');
-                this.jsdoc([...describedLines(s), ...invariantLines(s.invariants)]);
+                this.jsdoc([...describedLines(s), ...invariantLines(s.invariants), seeLine(s.location)]);
                 this.iface(stateTypeName(agg, s), [commonTypeName(agg)], [`readonly ${STATE_TAG}: '${s.name}';`], s.fields);
             }
             this.out.push('');
-            this.jsdoc(describedLines(agg));
+            this.jsdoc([...describedLines(agg), seeLine(agg.location)]);
             this.line(`export type ${agg.name} = ${states.map((s) => stateTypeName(agg, s)).join(' | ')};`);
         }
         this.out.push('');
@@ -420,6 +426,7 @@ class ContextEmitter {
             this.jsdoc([
                 `Command contracts of ${agg.name}. Implement this interface by hand.`,
                 'Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.',
+                seeLine(agg.location),
             ]);
             this.line(`export interface ${commandsInterfaceName(agg)} {`);
             for (const c of commands) {
@@ -431,7 +438,7 @@ class ContextEmitter {
         const events = [...new Set(commands.flatMap(emittedEvents))];
         if (events.length > 0) {
             this.out.push('');
-            this.jsdoc([`Events that the commands of ${agg.name} may emit.`]);
+            this.jsdoc([`Events that the commands of ${agg.name} may emit.`, seeLine(agg.location)]);
             this.line(`export type ${aggregateEventTypeName(agg)} = ${events.map((e) => this.ref(e)).join(' | ')};`);
         }
     }
@@ -440,7 +447,7 @@ class ContextEmitter {
     private shape(agg: ElementModel): void {
         const states = agg.states ?? [];
         const list = (fields: FieldModel[]): string => `[${fields.map((f) => `'${f.name}'`).join(', ')}]`;
-        this.jsdoc([`The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`]);
+        this.jsdoc([`The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`, seeLine(agg.location)]);
         if (states.length === 0) {
             this.line(`export const ${shapeName(agg)}: Shape = { fields: ${list(agg.fields)} };`);
             return;
@@ -485,6 +492,7 @@ class ContextEmitter {
             ...requires,
             ...changes,
             ...this.emitsLines(c.emits.map((e) => ({ e, when: e.when }))),
+            seeLine(c.location),
         ]);
         this.line(`export type ${commandTypeName(agg, c)} = ${generic ? `<S extends ${input}>` : ''}(`);
         for (const p of [...(c.factory ? [] : [`${self}: ${generic ? 'S' : input}`]), ...params]) this.line(`    ${p},`);
@@ -513,6 +521,7 @@ class ContextEmitter {
             ...changes,
             ...outcomeLines,
             ...(keyed ? [] : this.emitsLines(c.emits.map((e) => ({ e, when: e.when })))),
+            seeLine(c.location),
         ]);
         if (!keyed) {
             this.line(`export type ${decisionTypeName(agg, c)} = (`);
