@@ -2132,6 +2132,10 @@ select,
 .problem-msg {
     width: 100%;
 }
+.problem-hint {
+    color: var(--muted);
+    font-size: 12px;
+}
 .changes {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { diffModels } from '../src/graph/diff.js';
 import { highlight } from '../web/highlight.js';
-import { check, checkSales, codes } from './helpers.js';
+import { check, checkSales, codes, only } from './helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
 const review = (commands: string, extra = '') =>
@@ -167,9 +167,10 @@ describe('scope of requires', () => {
     create command open(policy: Policy) -> Reviewing requires x { count(policy.approvers) > 0 } else NotApprover`);
         // `note` is a field of Reviewing only, so it is not seen by the requirements of `accept`
         expect(errors(a)).toEqual([
-            ['M019', "Parameter 'policy' of command 'accept' has the name of a field of 'Review' that its requirements see; rename the parameter so that the name has one meaning."],
-            ['M019', "Parameter 'blockers' of command 'accept' has the name of a field of 'Review' that its requirements see; rename the parameter so that the name has one meaning."],
+            ['M019', "Parameter 'policy' of command 'accept' has the name of a field of 'Review' that its requirements see."],
+            ['M019', "Parameter 'blockers' of command 'accept' has the name of a field of 'Review' that its requirements see."],
         ]);
+        expect(only(a, 'M019')[0].hint).toBe("rename the parameter (e.g. 'newPolicy'), so that 'policy' in a requirement means the field");
     });
 });
 

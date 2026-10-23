@@ -29,7 +29,8 @@ when `dt` clashes with another command or a script should spell it out (CI, for 
 `<root>` defaults to the current directory; every `*.dt` file below it (except `node_modules`, `.git`, `.domaintrail`)
 belongs to the workspace. `dt --help` and `dt <command> --help` show the options with examples.
 
-`check` prints diagnostics as `file:line:col - error M00X: message` and exits non-zero on errors.
+`check` prints diagnostics as `file:line:col - error M00X: message` (with a `hint:` line on what to change, when there is
+one) and exits non-zero on errors; `check --format json` prints them as one JSON document (`schema/diagnostics.schema.json`).
 `generate ts` runs `check` first and generates nothing if there are errors.
 
 Try it with the example in this repository (see [Development](#development)):
@@ -46,7 +47,7 @@ bun run build && bun run dt -r examples/shop view
 same text, so people and AI agents get it without leaving the terminal:
 
 - [Workflow](docs/guide.md#workflow): `check` → `generate ts` → type-check your own code (`tsc --noEmit`)
-- [Output and exit codes](docs/guide.md#output-and-exit-codes)
+- [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
 - [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
   `generate.ts.contexts`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
 - [File layout (recommended)](docs/guide.md#file-layout-recommended): `<context>/<aggregate>.dt` and

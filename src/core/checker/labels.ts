@@ -3,6 +3,7 @@ import { isAggregate, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Par
 import type { DiagnosticSink } from '../diagnostics.js';
 import { LabelResolver } from '../labels.js';
 import { commandsOf, commonFields, fieldsOf, includedFields, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
+import { didYouMean } from '../suggest.js';
 
 /**
  * Japanese names (all warnings, except duplicate terms):
@@ -19,7 +20,7 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
         const contextLabel = labels.contextLabel(ctx);
         for (const f of fragments) {
             if (f.label && f.label !== contextLabel) {
-                sink.warning('L001', `Context '${ctx}' is named '${contextLabel}' elsewhere, but '${f.label}' here.`, f, 'label');
+                sink.warning('L001', `Context '${ctx}' is named '${contextLabel}' elsewhere, but '${f.label}' here.`, f, 'label', undefined, `use one name for the context in every file, or omit it here`);
             }
         }
 
@@ -35,7 +36,8 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
                 }
                 seen.add(entry.name);
                 if (!used.has(entry.name)) {
-                    sink.warning('L002', `Term '${entry.name}' ("${entry.label}") is not used by any field or parameter in context '${ctx}'.`, entry, 'name');
+                    const hint = didYouMean(entry.name, [...used]) ?? `remove the term, or use the name for a field or parameter`;
+                    sink.warning('L002', `Term '${entry.name}' ("${entry.label}") is not used by any field or parameter in context '${ctx}'.`, entry, 'name', undefined, hint);
                 }
             }
         }
@@ -51,9 +53,11 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
         if (term && term.label !== field.label) {
             sink.warning(
                 'L001',
-                `'${field.name}' is named '${field.label}' here, but the term '${field.name}' is '${term.label}'. Use the term, or rename the field if it means something else.`,
+                `'${field.name}' is named '${field.label}' here, but the term '${field.name}' is '${term.label}'.`,
                 field,
                 'label',
+                undefined,
+                `remove the label to use the term, or rename the field if it means something else`,
             );
         }
     }
@@ -119,7 +123,8 @@ function sameLabel(items: Labeled[], where: string, sink: DiagnosticSink): void 
         if (!first) {
             byLabel.set(item.label, item);
         } else if (first.name !== item.name && !(first.inherited && item.inherited)) {
-            sink.warning('L003', `'${item.name}' and '${first.name}' are both named '${item.label}' in ${where}.`, item.node, item.property ?? 'label');
+            const hint = `give one of them another Japanese name (with a label, or a term)`;
+            sink.warning('L003', `'${item.name}' and '${first.name}' are both named '${item.label}' in ${where}.`, item.node, item.property ?? 'label', undefined, hint);
         }
     }
 }

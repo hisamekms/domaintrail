@@ -31,16 +31,39 @@ dt view --port 8080             # http://127.0.0.1:8080, until Ctrl+C
 ## Output and exit codes
 
 `check` (and `generate ts`, which checks first) prints one line per problem, sorted by file and position, then a
-summary:
+summary. When the message does not say how to fix the problem, an indented `hint:` line follows: what to change, or
+`did you mean …?` with the closest names of the right kind visible there (at most 3) for a name that does not resolve.
 
 ```text
-sales/order.dt:2:11 - warning L002: Term 'note' ("備考") is not used by any field or parameter in context 'Sales'.
+sales/order.dt:2:11 - warning L002: Term 'notes' ("備考") is not used by any field or parameter in context 'Sales'.
+  hint: did you mean 'note'?
 sales/order.dt:8:32 - error M009: count() requires a collection, but got 'Money'.
-1 file(s) checked: 1 error(s), 1 warning(s).
+sales/order.dt:12:30 - error M006: Cannot resolve state 'Confirmd' in this aggregate.
+  hint: did you mean 'Confirmed'?
+1 file(s) checked: 2 error(s), 1 warning(s).
 ```
 
-Paths are relative to the root, lines and columns 1-based. Errors go to stderr, warnings to stdout. Fix errors first;
-warnings do not fail the check. Other failures (missing root, invalid config, port in use, …) are one line on stderr.
+Paths are relative to the root, lines and columns 1-based. Errors (and their hints) go to stderr, warnings to stdout.
+Fix errors first; warnings do not fail the check. Other failures (missing root, invalid config, port in use, …) are one
+line on stderr.
+
+With `--format json` (`check` and `generate ts`), the output is one JSON document on stdout instead, with the same
+order and exit codes (JSON Schema: `schema/diagnostics.schema.json` in the package):
+
+```json
+{
+  "diagnostics": [
+    { "file": "sales/order.dt", "line": 12, "column": 30, "endLine": 12, "endColumn": 38, "severity": "error",
+      "code": "M006", "message": "Cannot resolve state 'Confirmd' in this aggregate.", "hint": "did you mean 'Confirmed'?" }
+  ],
+  "summary": { "files": 6, "errors": 1, "warnings": 0 }
+}
+```
+
+`endLine` / `endColumn` point just past the problem; `hint` is present only when there is one. `generate ts` adds
+`written` (the output directories). A failure other than the diagnostics (missing root, invalid config, no `.dt` file,
+generation refused) is an `error` message in the document, e.g. `{ "error": "Root directory not found: domain" }`;
+`diagnostics` and `summary` are there whenever the check ran.
 
 | Exit code | Meaning |
 |---|---|
@@ -487,6 +510,9 @@ context Review {
 - `requires` and `else` are also usable as field and parameter names.
 
 ## Rules
+
+Each diagnostic names its rule. A `hint` says what to change when the message does not; unresolved names get
+`did you mean …?` instead.
 
 | Code | Check |
 |---|---|

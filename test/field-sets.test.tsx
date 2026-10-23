@@ -215,8 +215,9 @@ describe('M017: events carry the ID of their aggregate', () => {
   event Ev { note: String }
   event Ok { a: AId? }`);
         expect(only(a, 'M017').map((d) => `${d.severity} ${d.elementId} ${d.message}`)).toEqual([
-            "warning Sales.A:c Event 'Ev' emitted by 'A.c' has no field of type 'AId' to tell which 'A' it is about (e.g. 'aId: AId').",
+            "warning Sales.A:c Event 'Ev' emitted by 'A.c' has no field of type 'AId' to tell which 'A' it is about.",
         ]);
+        expect(only(a, 'M017')[0].hint).toBe("add a field such as 'aId: AId' to event 'Ev'");
     });
 
     test('a field from a field set counts; an event of several aggregates needs the ID of each', async () => {
@@ -232,14 +233,14 @@ describe('M017: events carry the ID of their aggregate', () => {
             'billing.dt': 'context Billing { event Shared { a: Sales.AId } }',
         });
         expect(only(a, 'M017').map((d) => d.message)).toEqual([
-            "Event 'Ev' emitted by 'B.c' has no field of type 'BId' to tell which 'B' it is about (e.g. 'bId: BId').",
+            "Event 'Ev' emitted by 'B.c' has no field of type 'BId' to tell which 'B' it is about.",
         ]);
         const b = await check({
             'billing.dt': 'context Billing { id IId: UUID aggregate I { id: IId command c() emits Sales.Ev } }',
             'sales.dt': 'context Sales { event Ev }',
         });
-        expect(only(b, 'M017').map((d) => d.message)).toEqual([
-            "Event 'Ev' emitted by 'I.c' has no field of type 'IId' to tell which 'I' it is about (e.g. 'iId: Billing.IId').",
+        expect(only(b, 'M017').map((d) => [d.message, d.hint])).toEqual([
+            ["Event 'Ev' emitted by 'I.c' has no field of type 'IId' to tell which 'I' it is about.", "add a field such as 'iId: Billing.IId' to event 'Ev'"],
         ]);
     });
 });

@@ -23,10 +23,11 @@ export function checkEventIds(index: ModelIndex, sink: DiagnosticSink): void {
                 const typeName = idType.$container.name === ev.$container.name ? idType.name : `${idType.$container.name}.${idType.name}`;
                 sink.warning(
                     'M017',
-                    `Event '${ev.name}' emitted by '${agg.name}.${cmd.name}' has no field of type '${idType.name}' to tell which '${agg.name}' it is about (e.g. '${camel(agg.name)}Id: ${typeName}').`,
+                    `Event '${ev.name}' emitted by '${agg.name}.${cmd.name}' has no field of type '${idType.name}' to tell which '${agg.name}' it is about.`,
                     cmd,
                     'emits',
                     i,
+                    `add a field such as '${camel(agg.name)}Id: ${typeName}' to event '${ev.name}'`,
                 );
             });
         }

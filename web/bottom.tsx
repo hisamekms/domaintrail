@@ -73,7 +73,10 @@ function Problems({ items, onLocate }: { items: Diagnostic[]; onLocate: (d: Diag
                         <td>
                             <code>{d.code}</code>
                         </td>
-                        <td className="problem-msg">{d.message}</td>
+                        <td className="problem-msg">
+                            {d.message}
+                            {d.hint && <div className="problem-hint">{d.hint}</div>}
+                        </td>
                         <td className="muted nowrap">
                             {d.file}:{d.start.line}:{d.start.column}
                         </td>

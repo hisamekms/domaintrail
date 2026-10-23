@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://domaintrail.dev/schema/diagnostics.schema.json",
+  "title": "DomainTrail diagnostics (dt check --format json, dt generate ts --format json)",
+  "description": "One document on stdout. 'diagnostics' and 'summary' are present once the check has run; 'error' only when the command failed for another reason than the diagnostics themselves (missing root, invalid config, no .dt file, generation refused). The exit code is the same as with --format text.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "diagnostics": {
+      "description": "Sorted by file, line, column and code.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/diagnostic" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "errors", "warnings"],
+      "properties": {
+        "files": { "description": "Number of .dt files checked.", "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "written": {
+      "description": "generate ts only: the output directories written, relative to the working directory.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "error": {
+      "description": "Why the command failed, as the one line that --format text prints on stderr.",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line", "column", "endLine", "endColumn", "severity", "code", "message"],
+      "properties": {
+        "file": { "description": "Path of the .dt file relative to the root.", "type": "string" },
+        "line": { "description": "1-based.", "type": "integer", "minimum": 1 },
+        "column": { "description": "1-based.", "type": "integer", "minimum": 1 },
+        "endLine": { "description": "1-based.", "type": "integer", "minimum": 1 },
+        "endColumn": { "description": "1-based, exclusive.", "type": "integer", "minimum": 1 },
+        "severity": { "enum": ["error", "warning"] },
+        "code": {
+          "description": "Rule ID (see the Rules section of `dt guide`), or SYNTAX for lexer / parser errors.",
+          "type": "string",
+          "pattern": "^(SYNTAX|[ML]\\d{3})$"
+        },
+        "message": { "type": "string" },
+        "hint": {
+          "description": "What to change, when the message does not say it: a fix, or `did you mean 'X'?` for an unresolved name.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

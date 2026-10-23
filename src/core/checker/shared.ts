@@ -28,18 +28,19 @@ export function checkShared(index: ModelIndex, sink: DiagnosticSink): void {
         const ctx = el.$container.name;
         if (!shared.has(ctx)) continue;
         if (!isPrimitiveDecl(el) && !isEnumDecl(el) && !isValueObject(el) && !isUnionDecl(el) && !isFieldSet(el)) {
-            sink.error('M014', `Shared context '${ctx}' can only contain ${ALLOWED}; found ${kind(el)} '${el.name}'.`, el, 'name');
+            sink.error('M014', `Shared context '${ctx}' can only contain ${ALLOWED}; found ${kind(el)} '${el.name}'.`, el, 'name', undefined, `move '${el.name}' to a context that is not shared`);
         }
         for (const ref of AstUtils.streamAllContents(el).filter(isTypeRef)) {
             const target = ref.decl?.ref;
             const targetCtx = target && AstUtils.getContainerOfType(target, isContext)?.name;
             if (targetCtx && !shared.has(targetCtx)) {
-                sink.error('M014', `Shared context '${ctx}' cannot depend on '${targetCtx}.${target.name}' of a non-shared context.`, ref);
+                const hint = `move '${target.name}' into a shared context, or move '${el.name}' out of '${ctx}'`;
+                sink.error('M014', `Shared context '${ctx}' cannot depend on '${targetCtx}.${target.name}' of a non-shared context.`, ref, undefined, undefined, hint);
             }
         }
         const prev = definedIn.get(el.name);
         if (prev && prev.$container.name !== ctx) {
-            sink.error('M014', `'${el.name}' is defined in shared contexts '${prev.$container.name}' and '${ctx}'; references by simple name would be ambiguous.`, el, 'name');
+            sink.error('M014', `'${el.name}' is defined in shared contexts '${prev.$container.name}' and '${ctx}'; references by simple name would be ambiguous.`, el, 'name', undefined, `rename one of them, or keep only one`);
         } else if (!prev) {
             definedIn.set(el.name, el);
         }
@@ -51,9 +52,11 @@ export function checkShared(index: ModelIndex, sink: DiagnosticSink): void {
         if (shared.has(ctx) || !sharedEl) continue;
         sink.warning(
             'M014',
-            `'${ctx}.${el.name}' hides '${sharedEl.$container.name}.${el.name}' of a shared context inside '${ctx}'. Rename it, or use the shared one.`,
+            `'${ctx}.${el.name}' hides '${sharedEl.$container.name}.${el.name}' of a shared context inside '${ctx}'.`,
             el,
             'name',
+            undefined,
+            `rename '${el.name}', or remove it and use the shared one`,
         );
     }
 }

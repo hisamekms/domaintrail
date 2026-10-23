@@ -26,6 +26,9 @@ function allFields(el: Owner): FieldLike[] {
     return fieldsOf(el.members);
 }
 
+/** The ID type an aggregate is identified by, as written in its `id` field (or the conventional name). */
+const idTypeOf = (agg: Aggregate): string => identityField(agg)?.type?.decl?.$refText ?? `${agg.name}Id`;
+
 /** Value types that hold fields: value objects and unions. */
 const isValueType = (decl: unknown): decl is ValueObject | UnionDecl => isValueObject(decl) || isUnionDecl(decl);
 
@@ -59,17 +62,21 @@ function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticS
         if (!decl || (!isEntity(decl) && !isValueType(decl))) {
             const what = f.type?.primitive ?? (decl ? `${decl.$type} '${decl.name}'` : undefined);
             if (decl && isAggregate(decl)) {
-                sink.error('M004', `'${owner.name}' cannot own aggregate '${decl.name}'; aggregates are referenced by ID ('references').`, f, 'type');
+                const hint = `write 'references ${f.name}: ${idTypeOf(decl)} -> ${decl.name}' instead`;
+                sink.error('M004', `'${owner.name}' cannot own aggregate '${decl.name}'; aggregates are referenced by ID ('references').`, f, 'type', undefined, hint);
             } else if (what) {
-                sink.error('M004', `'owns' requires an Entity, Value Object or Union, but '${f.name}' has type ${what}.`, f, 'type');
+                const hint = `drop 'owns' to make '${f.name}' a plain field, or give it an entity, value object or union type`;
+                sink.error('M004', `'owns' requires an Entity, Value Object or Union, but '${f.name}' has type ${what}.`, f, 'type', undefined, hint);
             }
             return;
         }
         if (isValueType(owner) && isEntity(decl)) {
-            sink.error('M004', `${isUnionDecl(owner) ? 'Union' : 'Value Object'} '${owner.name}' cannot own entity '${decl.name}'.`, f, 'type');
+            const hint = `own '${decl.name}' from its aggregate or another entity, or make '${decl.name}' a value object`;
+            sink.error('M004', `${isUnionDecl(owner) ? 'Union' : 'Value Object'} '${owner.name}' cannot own entity '${decl.name}'.`, f, 'type', undefined, hint);
         }
         if (decl.$container.name !== owner.$container.name && isEntity(decl)) {
-            sink.error('M004', `Entity '${decl.$container.name}.${decl.name}' belongs to another context and cannot be owned by '${owner.name}'.`, f, 'type');
+            const hint = `declare an entity in '${owner.$container.name}' for it, or reference the aggregate that owns '${decl.name}' by ID`;
+            sink.error('M004', `Entity '${decl.$container.name}.${decl.name}' belongs to another context and cannot be owned by '${owner.name}'.`, f, 'type', undefined, hint);
         }
         return;
     }
@@ -77,21 +84,24 @@ function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticS
     if (decl && isEntity(decl)) {
         sink.error('M004', `Entity '${decl.name}' cannot be embedded as a plain field; declare it with 'owns' inside its aggregate.`, f, 'type');
     } else if (decl && isAggregate(decl)) {
-        sink.error('M004', `Aggregate '${decl.name}' cannot be embedded in '${owner.name}'; use 'references ${f.name}: <Id> -> ${decl.name}'.`, f, 'type');
+        sink.error('M004', `Aggregate '${decl.name}' cannot be embedded in '${owner.name}'; use 'references ${f.name}: <Id> -> ${decl.name}'.`, f, 'type', undefined, `write 'references ${f.name}: ${idTypeOf(decl)} -> ${decl.name}'`);
     }
 }
 
 function checkReference(f: FieldLike & { $type: 'ReferenceField' }, sink: DiagnosticSink): void {
     const decl = f.type?.decl?.ref;
-    const target = f.target?.ref;
     if (f.type?.primitive || (decl && !isIdType(decl))) {
-        sink.error('M005', `Reference '${f.name}' must be typed with an ID type, not '${f.type.primitive ?? decl?.name}'.`, f, 'type');
+        const target = f.target?.ref;
+        const hint = target ? `change the type to '${idTypeOf(target)}', the ID type of '${target.name}'` : undefined;
+        sink.error('M005', `Reference '${f.name}' must be typed with an ID type, not '${f.type.primitive ?? decl?.name}'.`, f, 'type', undefined, hint);
         return;
     }
+    const target = f.target?.ref;
     if (!decl || !target) return; // unresolved, reported as M001
     const targetId = identityField(target)?.type?.decl?.ref;
     if (targetId && targetId !== decl) {
-        sink.error('M005', `Reference '${f.name}' has type '${decl.name}', but aggregate '${target.name}' is identified by '${targetId.name}'.`, f, 'type');
+        const hint = `change the type to '${idTypeOf(target)}', or point '->' at the aggregate that '${decl.name}' identifies`;
+        sink.error('M005', `Reference '${f.name}' has type '${decl.name}', but aggregate '${target.name}' is identified by '${targetId.name}'.`, f, 'type', undefined, hint);
     }
 }
 
@@ -105,7 +115,7 @@ function checkPayloads(index: ModelIndex, sink: DiagnosticSink): void {
     for (const f of fields) {
         const decl = f.type?.decl?.ref;
         if (decl && isAggregate(decl)) {
-            sink.error('M004', `Aggregate '${decl.name}' cannot be used as a value; use its ID type instead.`, f, 'type');
+            sink.error('M004', `Aggregate '${decl.name}' cannot be used as a value; use its ID type instead.`, f, 'type', undefined, `change the type to '${idTypeOf(decl)}'`);
         }
     }
 }
@@ -116,18 +126,22 @@ function checkIdentity(index: ModelIndex, sink: DiagnosticSink): void {
         const idField = identityField(el);
         const kind = isAggregate(el) ? 'Aggregate' : 'Entity';
         if (!idField) {
-            sink.error('M013', `${kind} '${el.name}' must declare an identity field 'id' with an ID type.`, el, 'name');
+            const idType = index.lookupVisible(el.$container.name, `${el.name}Id`);
+            const hint = idType && isIdType(idType) ? `add the field 'id: ${el.name}Id'` : `declare 'id ${el.name}Id: UUID' in the context and add the field 'id: ${el.name}Id'`;
+            sink.error('M013', `${kind} '${el.name}' must declare an identity field 'id' with an ID type.`, el, 'name', undefined, hint);
             continue;
         }
         const decl = idField.type?.decl?.ref;
         if (idField.type?.primitive || (decl && !isIdType(decl)) || idField.multiplicity || idField.$type !== 'Field') {
-            sink.error('M013', `The identity field of ${kind} '${el.name}' must be a single plain field of an ID type.`, idField, 'type');
+            const hint = `write it as 'id: ${el.name}Id' with an ID type of its own, without 'owns', 'references', '?' or '[..]'`;
+            sink.error('M013', `The identity field of ${kind} '${el.name}' must be a single plain field of an ID type.`, idField, 'type', undefined, hint);
             continue;
         }
         if (!decl) continue;
         const prev = usedBy.get(decl);
         if (prev) {
-            sink.error('M013', `ID type '${decl.name}' already identifies '${prev.name}'; each Aggregate/Entity needs its own ID type.`, idField, 'type');
+            const hint = `declare 'id ${el.name}Id: ${decl.base ?? 'UUID'}' and use it as the type of 'id' here`;
+            sink.error('M013', `ID type '${decl.name}' already identifies '${prev.name}'; each Aggregate/Entity needs its own ID type.`, idField, 'type', undefined, hint);
         } else {
             usedBy.set(decl, el);
         }
@@ -157,14 +171,16 @@ function checkOwningAggregates(index: ModelIndex, sink: DiagnosticSink): void {
     for (const entity of index.entities) {
         const sites = ownedBy.get(entity);
         if (!sites || sites.size === 0) {
-            sink.warning('M003', `Entity '${entity.name}' is not owned by any aggregate.`, entity, 'name');
+            const hint = `add 'owns ${entity.name[0].toLowerCase()}${entity.name.slice(1)}: ${entity.name}' to the aggregate it belongs to, or make it a value object or an aggregate`;
+            sink.warning('M003', `Entity '${entity.name}' is not owned by any aggregate.`, entity, 'name', undefined, hint);
             continue;
         }
         if (sites.size > 1) {
             const names = [...sites.keys()].map((a) => `'${a.name}'`).join(', ');
             for (const fields of [...sites.values()].slice(1)) {
                 for (const f of fields) {
-                    sink.error('M003', `Entity '${entity.name}' is owned by more than one aggregate (${names}).`, f, 'type');
+                    const hint = `keep 'owns' in one aggregate; make '${entity.name}' a value object to use it in several`;
+                    sink.error('M003', `Entity '${entity.name}' is owned by more than one aggregate (${names}).`, f, 'type', undefined, hint);
                 }
             }
         }
@@ -186,7 +202,8 @@ function checkCycles(owners: Owner[], sink: DiagnosticSink): void {
                     reported.add(f);
                     const chain = [...path, el];
                     const cycle = [...chain.slice(chain.indexOf(decl)), decl].map((x) => x.name).join(' -> ');
-                    sink.error('M012', `Ownership cycle: ${cycle}.`, f, 'type');
+                    const hint = `break the cycle: remove one of its fields, or make that part an aggregate and refer to it with 'references'`;
+                    sink.error('M012', `Ownership cycle: ${cycle}.`, f, 'type', undefined, hint);
                 }
             } else if (!state.has(decl)) {
                 visit(decl, [...path, el]);

@@ -47,7 +47,7 @@ describe('shared contexts', () => {
         });
         expect(a.model!.elements['Sales.X'].fields[1].type).toMatchObject({ ref: 'Sales.Email' });
         expect(only(a, 'M014').map((d) => [d.severity, d.message])).toEqual([
-            ['warning', "'Sales.Email' hides 'Common.Email' of a shared context inside 'Sales'. Rename it, or use the shared one."],
+            ['warning', "'Sales.Email' hides 'Common.Email' of a shared context inside 'Sales'."],
         ]);
     });
 

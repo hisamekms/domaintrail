@@ -38,6 +38,7 @@ import {
 import { GrammarUtils, type AstNode } from 'langium';
 import { docComment } from '../labels.js';
 import type { DiagnosticSink } from '../diagnostics.js';
+import { didYouMean, suggestFrom, type Candidate } from '../suggest.js';
 import {
     commandsOf,
     commonFields,
@@ -57,12 +58,17 @@ interface Scope {
     ctx: string;
     /** Fields (and the parameters of a command) visible in this invariant or requirement. */
     fields: Map<string, FieldLike | Parameter>;
-    /** M010 messages for fields of the aggregate that exist but are not in scope here, by name. */
-    hidden: Map<string, string>;
+    /** M010 diagnostics for fields of the aggregate that exist but are not in scope here, by name. */
+    hidden: Map<string, Hidden>;
     /** Lambda parameters, innermost last. */
     lambdas: Array<[string, Ty]>;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
+}
+
+interface Hidden {
+    message: string;
+    hint: string;
 }
 
 /** Type-checks every invariant and command requirement in the workspace (M001 for names, M008, M009, M010, M018, M019). */
@@ -117,8 +123,16 @@ function checkAggregate(agg: Aggregate, ctx: string, index: ModelIndex, sink: Di
     // fields taken from field sets are common fields too
     const common = new Map([...includedFields(agg).map((x) => x.field), ...commonFields(agg)].map((f) => [f.name, f]));
     const states = statesOf(agg);
-    const stateOnly = (except?: string): Map<string, string> =>
-        new Map([...statesHaving(states, common, except)].map(([name, where]) => [name, `Field '${name}' exists only in state ${quoted(where)} and is not in scope here.`]));
+    const stateOnly = (except?: string): Map<string, Hidden> =>
+        new Map(
+            [...statesHaving(states, common, except)].map(([name, where]) => [
+                name,
+                {
+                    message: `Field '${name}' exists only in state ${quoted(where)} and is not in scope here.`,
+                    hint: `move the field to the common fields of '${agg.name}', or use it only in the invariants of state ${quoted(where)}`,
+                },
+            ]),
+        );
 
     // Aggregate-level invariants: common fields only, applied to every state.
     for (const inv of invariantsOf(agg.members)) {
@@ -162,11 +176,14 @@ const quoted = (names: string[]): string => names.map((n) => `'${n}'`).join(', '
 function checkRequirements(agg: Aggregate, cmd: Command, common: Map<string, FieldLike>, ctx: string, index: ModelIndex, sink: DiagnosticSink): void {
     const states = statesOf(agg);
     const fields = new Map<string, FieldLike | Parameter>();
-    const hidden = new Map<string, string>();
+    const hidden = new Map<string, Hidden>();
     if (cmd.factory) {
         const all = [...common.keys(), ...statesHaving(states, common).keys()];
         for (const name of all) {
-            hidden.set(name, `Field '${name}' of '${agg.name}' is not in scope: the requirements of a 'create command' see only its parameters.`);
+            hidden.set(name, {
+                message: `Field '${name}' of '${agg.name}' is not in scope: the requirements of a 'create command' see only its parameters.`,
+                hint: `pass the value as a parameter of '${cmd.name}', or state the condition as an invariant of '${agg.name}'`,
+            });
         }
     } else {
         for (const [name, f] of common) fields.set(name, f);
@@ -180,12 +197,22 @@ function checkRequirements(agg: Aggregate, cmd: Command, common: Map<string, Fie
         }
         for (const [name, where] of statesHaving(states, common)) {
             if (fields.has(name)) continue;
-            hidden.set(name, `Field '${name}' is in state ${quoted(where)} only; the requirements of command '${cmd.name}' see the fields that every source state has (with the same type).`);
+            hidden.set(name, {
+                message: `Field '${name}' is in state ${quoted(where)} only; the requirements of command '${cmd.name}' see the fields that every source state has (with the same type).`,
+                hint: `declare '${name}' with the same type in every source state of '${cmd.name}' (or among the common fields), or split the command by source state`,
+            });
         }
     }
     for (const p of cmd.params) {
         if (p.name && fields.has(p.name)) {
-            sink.error('M019', `Parameter '${p.name}' of command '${cmd.name}' has the name of a field of '${agg.name}' that its requirements see; rename the parameter so that the name has one meaning.`, p, 'name');
+            sink.error(
+                'M019',
+                `Parameter '${p.name}' of command '${cmd.name}' has the name of a field of '${agg.name}' that its requirements see.`,
+                p,
+                'name',
+                undefined,
+                `rename the parameter (e.g. 'new${p.name[0].toUpperCase()}${p.name.slice(1)}'), so that '${p.name}' in a requirement means the field`,
+            );
         }
     }
     for (const p of cmd.params) if (p.name) fields.set(p.name, p);
@@ -207,7 +234,15 @@ function checkRequirements(agg: Aggregate, cmd: Command, common: Map<string, Fie
 function checkDeclared(x: Invariant | Requirement, sink: DiagnosticSink): void {
     if (x.expr || x.label || docComment(x)) return;
     const what = isRequirement(x) ? 'Requirement' : 'Invariant';
-    sink.error('M018', `${what} '${x.name}' has no expression; give it a label or a /// description that states what it requires.`, x, 'name');
+    const keyword = isRequirement(x) ? 'requires' : 'invariant';
+    sink.error(
+        'M018',
+        `${what} '${x.name}' has no expression; give it a label or a /// description that states what it requires.`,
+        x,
+        'name',
+        undefined,
+        `write '${keyword} ${x.name} "…"', put a /// line above it, or add an expression in '{ … }'`,
+    );
 }
 
 function checkInvariant(inv: Invariant, scope: Scope, index: ModelIndex, sink: DiagnosticSink): void {
@@ -385,11 +420,26 @@ class ExprChecker {
         if (this.index.contextNames.includes(name)) return { k: 'ctx', name };
         const hidden = scope.hidden.get(name);
         if (hidden) {
-            this.sink.error('M010', hidden, node);
+            this.sink.error('M010', hidden.message, node, undefined, undefined, hidden.hint);
             return ERROR;
         }
-        this.sink.error('M001', `Cannot resolve name '${name}'.`, node);
+        this.sink.error('M001', `Cannot resolve name '${name}'.`, node, undefined, undefined, didYouMean(name, this.namesIn(scope)));
         return ERROR;
+    }
+
+    /**
+     * Names usable as values here: lambda parameters, fields and parameters, the enums and unions of this context and of
+     * shared contexts, those of other contexts qualified, and context names.
+     */
+    private namesIn(scope: Scope): Candidate[] {
+        const names: Candidate[] = [...scope.lambdas.map(([name]) => ({ name })), ...[...scope.fields.keys()].map((name) => ({ name }))];
+        for (const el of this.index.elements) {
+            if (!isEnumDecl(el) && !isUnionDecl(el)) continue;
+            const owner = el.$container.name;
+            const visible = owner === scope.ctx || this.index.isShared(owner);
+            names.push(visible ? { name: el.name } : { name: `${owner}.${el.name}`, key: el.name });
+        }
+        return [...names, ...this.index.contextNames.map((name) => ({ name }))];
     }
 
     private member(e: Expression & { $type: 'MemberAccess' }, scope: Scope): Ty {
@@ -402,16 +452,17 @@ class ExprChecker {
                 const el = this.index.lookup(`${recv.name}.${m}`);
                 if (el && isEnumDecl(el)) return { k: 'enumType', decl: el };
                 if (el && isUnionDecl(el)) return { k: 'unionType', decl: el };
-                this.sink.error('M001', `Context '${recv.name}' has no enum or union named '${m}'.`, e, 'member');
+                const names = this.index.elementsOf(recv.name).filter((x) => isEnumDecl(x) || isUnionDecl(x)).map((x) => x.name);
+                this.sink.error('M001', `Context '${recv.name}' has no enum or union named '${m}'.`, e, 'member', undefined, didYouMean(m, names));
                 return ERROR;
             }
             case 'enumType':
                 if (recv.decl.values.some((v) => v.name === m)) return { k: 'enum', decl: recv.decl as EnumDecl };
-                this.sink.error('M001', `Enum '${recv.decl.name}' has no value '${m}'.`, e, 'member');
+                this.sink.error('M001', `Enum '${recv.decl.name}' has no value '${m}'.`, e, 'member', undefined, suggestFrom(m, recv.decl.values.map((v) => v.name), `a value of '${recv.decl.name}'`));
                 return ERROR;
             case 'unionType':
                 if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
-                this.sink.error('M001', `Union '${recv.decl.name}' has no variant '${m}'.`, e, 'member');
+                this.sink.error('M001', `Union '${recv.decl.name}' has no variant '${m}'.`, e, 'member', undefined, suggestFrom(m, recv.decl.variants.map((v) => v.name), `a variant of '${recv.decl.name}'`));
                 return ERROR;
             case 'union': {
                 if (m === discriminatorOf(recv.decl)) return tagOf(recv.decl);
@@ -424,14 +475,17 @@ class ExprChecker {
                         'member',
                     );
                 } else {
-                    this.sink.error('M001', `Union '${recv.decl.name}' has no field '${m}'.`, e, 'member');
+                    const hint = didYouMean(m, [discriminatorOf(recv.decl)]) ?? `only '${discriminatorOf(recv.decl)}' is accessible from outside the union`;
+                    this.sink.error('M001', `Union '${recv.decl.name}' has no field '${m}'.`, e, 'member', undefined, hint);
                 }
                 return ERROR;
             }
             case 'struct': {
-                const f = [...includedFields(recv.decl).map((x) => x.field), ...fieldsOf(recv.decl.members)].find((x) => x.name === m);
+                const fields = [...includedFields(recv.decl).map((x) => x.field), ...fieldsOf(recv.decl.members)];
+                const f = fields.find((x) => x.name === m);
                 if (f) return narrow(memberType(f), pathOf(e) ?? '', scope);
-                this.sink.error('M001', `'${recv.decl.name}' has no field '${m}'.`, e, 'member');
+                const hint = suggestFrom(m, fields.map((x) => x.name), `a field of '${recv.decl.name}'`);
+                this.sink.error('M001', `'${recv.decl.name}' has no field '${m}'.`, e, 'member', undefined, hint);
                 return ERROR;
             }
             case 'opt':
