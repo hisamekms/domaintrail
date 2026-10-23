@@ -142,8 +142,8 @@ context Sales {                          // a bounded context; may be split acro
 
     command confirm(at: Timestamp)
       Draft -> Confirmed                 // a transition: source state(s) -> target state(s)
+      requires hasItems { count(items) > 0 } else EmptyOrder   // accepted only if; otherwise returns EmptyOrder
       emits OrderConfirmed               // events that MAY be emitted (0..n)
-      errors EmptyOrder                  // errors that MAY be returned
 
     command cancel(reason: CancelReason) Draft | Confirmed -> Cancelled emits OrderCancelled   // from either
 
@@ -181,7 +181,7 @@ context Sales {
     /// No other customer has the same email address (spans aggregates, so not expressed in the DSL).
     invariant uniqueEmail "メールアドレスは顧客ごとに一意"
 
-    command changeEmail(email: EmailAddress) errors EmailTaken
+    command changeEmail(email: EmailAddress) errors EmailTaken   // errors that MAY be returned
   }
 
   error EmailTaken { email: EmailAddress }
@@ -195,6 +195,8 @@ context Sales {
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
 - Multiplicity after the type: `?`, `[0..1]`, `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
+- A command is written in this order: parameters and label, transitions, `requires` (see
+  [Command requirements](#command-requirements)), `emits`, `errors`.
 - Command transitions follow the parameters (and label), before `emits` / `errors`: `A | B -> C | D` means "in `A` or
   `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas. A state may be the
   source of one transition of a command only, so the input state decides the possible outputs; for several possible
@@ -419,21 +421,86 @@ context Billing {                          // other files open the context witho
 - `count`, `exists`, `length`, `matches`, `all`, `any`, `unique` and `contains` are also usable as field and parameter
   names; followed by `(` they are the functions.
 
+### Command requirements
+
+`requires` states when a command is accepted. Like an invariant it is a Bool expression, written after the
+transitions, any number per command; `else` names the error the command returns when it does not hold:
+
+```dt
+// review/review.dt
+context Review {
+  id ReviewId: UUID
+  id PersonId: UUID
+  value ApprovalPolicy { approvers: PersonId[1..*] }
+
+  aggregate Review "レビュー" {
+    id: ReviewId
+    policy: ApprovalPolicy
+    state Reviewing { openBlockers: Int }
+    state Escalated { openBlockers: Int }
+    state Accepted {
+      acceptedBy: PersonId
+      /// All the scenarios the policy requires are confirmed.
+      invariant fullyConfirmed "必要な確認がそろっている"   // holds whenever the review is Accepted
+    }
+
+    command accept(person: PersonId) "受入"
+      Reviewing | Escalated -> Accepted
+      requires authorizedApprover "承認者である" {        // depends on the parameters and the current state
+        contains(policy.approvers, person)
+      } else NotApprover
+      requires noOpenBlocker "未解決の阻害がない" { openBlockers == 0 } else Blocked
+      /// The reviewer's own sign-off is recorded outside this model.
+      requires signedOff "本人の承認が記録済み" else NotSignedOff   // not expressed in the DSL
+      errors Conflict
+  }
+
+  error NotApprover
+  error Blocked
+  error NotSignedOff
+  error Conflict
+}
+```
+
+- **Invariant or requirement?** An invariant holds whenever the aggregate is in a state: it describes the state
+  after a transition (an accepted review has all required confirmations). A requirement decides whether the command
+  is accepted, from its parameters and the aggregate's current data (the person is among the approvers). If a
+  condition reads "after the command, …", it is an invariant of the target state; if it reads "the command may run
+  only when …", it is a requirement.
+- **Not for application-level authorization.** Whether the logged-in user has a role is checked by the application,
+  not the model. Only when the policy is part of the aggregate's state (its approvers) is it a domain precondition.
+- **Scope**: the parameters; the aggregate's common fields (including those of field sets); and the fields that every
+  source state of the command has, with the same name and type (with one source state, all its fields). A
+  `create command` sees its parameters only, a command of an aggregate without states all its fields. Using another
+  field is M010. Other aggregates cannot be referenced; pass what is needed as parameters.
+- A parameter may not be named like a field its command's requirements see (M019), so that a name in `requires` has
+  one meaning. Commands without `requires` are not affected.
+- `else Error` is required. The error joins the command's errors: it need not be listed in `errors` (listing it
+  again is allowed), and several requirements may share one. An unknown error is M007.
+- Requirement names are unique within the command (M002). Without an expression, a requirement needs a label or a
+  `///` description (M018), like an invariant.
+- Nothing checks them at run time: they appear in the Live View (振る舞い tab) and as `@requires` JSDoc on the
+  generated command type (see [Generated TypeScript](#generated-typescript)); your command implementation returns
+  the error.
+- Not supported: requirements for some source states only (split the command instead), and a generic
+  `<Command>Rejected` error.
+- `requires` and `else` are also usable as field and parameter names.
+
 ## Rules
 
 | Code | Check |
 |---|---|
 | SYNTAX | lexer / parser errors |
-| M001 | types, aggregates and names in invariants resolve |
+| M001 | types, aggregates and names in invariants and requirements resolve |
 | M002 | names are unique in their scope (also across files of one context) |
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
 | M005 | a reference's ID type matches the identity of the target aggregate |
 | M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none |
-| M007 | `emits` / `errors` refer to existing events / errors |
-| M008 | an invariant is a Bool expression |
+| M007 | `emits` / `errors` / `else` refer to existing events / errors |
+| M008 | an invariant or requirement is a Bool expression |
 | M009 | operators and operands have compatible types |
-| M010 | state-specific fields are used only in their own state's invariants |
+| M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
 | M011 | generated TypeScript names do not collide |
 | M012 | the ownership graph has no cycles |
 | M013 | aggregates and entities have an `id` field of their own ID type |
@@ -441,7 +508,8 @@ context Billing {                          // other files open the context witho
 | M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
 | M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
 | M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
-| M018 | an invariant without an expression has a label or a `///` description |
+| M018 | an invariant or requirement without an expression has a label or a `///` description |
+| M019 | a parameter of a command with `requires` is not named like a field its requirements see |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -506,16 +574,34 @@ export const changeNote: Sales.OrderCommands['changeNote'] = byState<Sales.Chang
 (TypeScript does not narrow `S` inside a hand-written implementation of the generic contract, which is why the
 handlers exist: written directly, the implementation needs a type assertion on its result.)
 
+A command's requirements are documented on its type and on its `…ByState` type, one `@requires` line each, and the
+errors of their `else` are part of its error type (after those of `errors`, each once):
+
+```ts
+/**
+ * Review.accept (Reviewing | Escalated -> Accepted)
+ * 受入
+ * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)
+ * @requires noOpenBlocker (未解決の阻害がない) else Blocked: openBlockers == 0
+ * @requires signedOff (本人の承認が記録済み) else NotSignedOff: not expressed in the DSL
+ */
+export type AcceptReview = (
+    review: ReviewingReview | EscalatedReview,
+    person: PersonId,
+) => Result<readonly [AcceptedReview, readonly never[]], Conflict | NotApprover | Blocked | NotSignedOff>;
+```
+
 ### Generated code and your code
 
 The generated files are the **contract**, your code is the **implementation**:
 
 - Generated: types only — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`,
-  `ChangeNoteOrderByState`) and the constructor signatures of domain primitives (`MakeQuantity`). Invariants appear as
-  JSDoc (`@invariant`); nothing in the generated code checks them. The one exception is `_runtime.ts`, whose few
-  helpers (`ok`, `err`, `byState`) are the same for every model.
-- Yours: everything that runs — command implementations, `Make<Name>` constructors, invariant checks — in your own
-  files, which import the generated modules (never the other way round) and are type-checked against them.
+  `ChangeNoteOrderByState`) and the constructor signatures of domain primitives (`MakeQuantity`). Invariants and
+  command requirements appear as JSDoc (`@invariant`, `@requires`); nothing in the generated code checks them. The
+  one exception is `_runtime.ts`, whose few helpers (`ok`, `err`, `byState`) are the same for every model.
+- Yours: everything that runs — command implementations (including their requirements), `Make<Name>` constructors,
+  invariant checks — in your own files, which import the generated modules (never the other way round) and are
+  type-checked against them.
 
 ```ts
 // src/primitives.ts — your code

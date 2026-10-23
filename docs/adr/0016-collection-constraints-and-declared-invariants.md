@@ -88,7 +88,7 @@ syntax error) and are added in the same way.
 ### Deferred
 
 - **Command preconditions** (`requires` on commands): a contract on inputs rather than on the element's data; needs
-  its own scope rules (parameters, the source state).
+  its own scope rules (parameters, the source state). Decided in [ADR 0017](0017-command-requirements.md).
 - **User-defined predicates** (`predicate`): reuse across invariants is wanted, but names, parameters and recursion
   make it a language of its own.
 - **`sameSet` / `subsetOf`**: expressible as `all(a, x => contains(b, x))` (and both directions for equality).

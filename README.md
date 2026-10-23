@@ -55,9 +55,9 @@ same text, so people and AI agents get it without leaving the terminal:
   [domain primitives](docs/guide.md#domain-primitives), [unions](docs/guide.md#unions),
   [shared contexts](docs/guide.md#shared-contexts), [field sets](docs/guide.md#field-sets),
   [domain and technical fields](docs/guide.md#domain-fields-and-technical-fields),
-  [names (表示名)](docs/guide.md#names-labels-and-descriptions)
-  and [invariant expressions](docs/guide.md#invariant-expressions)
-- [Rules](docs/guide.md#rules) (M001–M018, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
+  [names (表示名)](docs/guide.md#names-labels-and-descriptions),
+  [invariant expressions](docs/guide.md#invariant-expressions) and [command requirements](docs/guide.md#command-requirements)
+- [Rules](docs/guide.md#rules) (M001–M019, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
   [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [output directories](docs/guide.md#output-directories) and
   [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
@@ -82,7 +82,8 @@ The design decisions behind the DSL are in [docs/adr](docs/adr): shared contexts
 unions ([0005](docs/adr/0005-unions.md)), persistent events ([0008](docs/adr/0008-persistent-events.md)),
 command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per state
 ([0015](docs/adr/0015-handlers-per-state.md)), collection constraints and declared invariants
-([0016](docs/adr/0016-collection-constraints-and-declared-invariants.md)) and more.
+([0016](docs/adr/0016-collection-constraints-and-declared-invariants.md)), command requirements
+([0017](docs/adr/0017-command-requirements.md)) and more.
 
 ## Live View
 
