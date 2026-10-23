@@ -76,11 +76,18 @@ context Sales "販売" {
   aggregate Order "注文" {
     id: OrderId
     state Draft
-    state Confirmed { confirmedAt: Timestamp }
+    state Confirmed {
+      confirmedAt: Timestamp
+    }
     create command place(id: OrderId) -> Draft
-    command confirm(at: Timestamp) Draft -> Confirmed emits OrderConfirmed
+    command confirm(at: Timestamp)
+      Draft -> Confirmed
+      emits OrderConfirmed
   }
-  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
+  persistent event OrderConfirmed {
+    orderId: OrderId
+    confirmedAt: Timestamp
+  }
 }
 ```
 

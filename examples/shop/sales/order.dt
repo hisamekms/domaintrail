@@ -16,9 +16,7 @@ context Sales {
     references customer: CustomerId -> Customer
     note: String?
 
-    invariant quantitiesPositive "数量は正の値" {
-      all(items, item => item.quantity > 0)
-    }
+    invariant quantitiesPositive "数量は正の値" { all(items, item => item.quantity > 0) }
     invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }
 
     create command place(id: OrderId, customer: CustomerId) "注文する"
@@ -51,7 +49,7 @@ context Sales {
     command cancel(reason: CancelReason) "注文を取り消す"
       Draft | Confirmed -> Cancelled
       emits OrderCancelled,
-            RefundRequested when Confirmed ->   // 確定済みの注文を取り消したときだけ
+            RefundRequested when Confirmed -> // 確定済みの注文を取り消したときだけ
 
     /// 確定後も備考は変更できる。状態は変わらない。
     /// 備考が変わらなければイベントは発生しない。

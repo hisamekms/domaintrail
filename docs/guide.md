@@ -204,29 +204,34 @@ The examples below are the files of one valid workspace (the file name is in the
 
 ```dt
 // sales/order.dt
-context Sales {                          // a bounded context; may be split across files
-  id OrderId: UUID                       // ID type with a base primitive type
+context Sales { // a bounded context; may be split across files
+  id OrderId: UUID // ID type with a base primitive type
   id OrderItemId: UUID
-  enum CancelReason { Requested Other }  // commas between values are optional
-  value Address { city: String street: String }
+  enum CancelReason { Requested Other } // commas between values are optional
+  value Address {
+    city: String
+    street: String
+  }
 
   aggregate Order {
-    id: OrderId                          // identity field of its own ID type (required)
-    owns items: OrderItem[0..*]          // owned entity / value inside the aggregate
-    references customer: CustomerId -> Customer   // another aggregate, by ID
-    owns shipTo: Address?                // ? = optional
+    id: OrderId // identity field of its own ID type (required)
+    owns items: OrderItem[0..*] // owned entity / value inside the aggregate
+    references customer: CustomerId -> Customer // another aggregate, by ID
+    owns shipTo: Address? // ? = optional
     note: String?
 
-    invariant quantitiesPositive {       // applies to every state; sees the common fields
+    invariant quantitiesPositive { // applies to every state; sees the common fields
       all(items, item => item.quantity > 0)
     }
 
-    create command place(id: OrderId, customer: CustomerId) -> Draft emits OrderPlaced   // factory: `-> State`, no source
+    create command place(id: OrderId, customer: CustomerId)
+      -> Draft
+      emits OrderPlaced // factory: `-> State`, no source
 
     state Draft
     state Confirmed {
-      confirmedAt: Timestamp             // exists only in this state
-      invariant hasItems { count(items) > 0 and count(items) <= 100 }   // sees common + Confirmed fields
+      confirmedAt: Timestamp // exists only in this state
+      invariant hasItems { count(items) > 0 and count(items) <= 100 } // sees common + Confirmed fields
     }
     state Cancelled {
       reason: CancelReason
@@ -234,28 +239,42 @@ context Sales {                          // a bounded context; may be split acro
     }
 
     command confirm(at: Timestamp)
-      Draft -> Confirmed                 // a transition: source state(s) -> target state(s)
-      requires hasItems { count(items) > 0 } else EmptyOrder   // accepted only if; otherwise returns EmptyOrder
-      emits OrderConfirmed               // exactly one OrderConfirmed whenever it succeeds
+      Draft -> Confirmed // a transition: source state(s) -> target state(s)
+      requires hasItems { count(items) > 0 } else EmptyOrder // accepted only if; otherwise returns EmptyOrder
+      emits OrderConfirmed // exactly one OrderConfirmed whenever it succeeds
 
     command cancel(reason: CancelReason)
-      Draft | Confirmed -> Cancelled     // from either
+      Draft | Confirmed -> Cancelled // from either
       emits OrderCancelled,
-            RefundRequested when Confirmed ->   // only when it comes from Confirmed
+            RefundRequested when Confirmed -> // only when it comes from Confirmed
 
-    command changeNote(note: String?)    // one transition per input state: the output depends on the input
+    command changeNote(note: String?) // one transition per input state: the output depends on the input
       Draft -> Draft
-      Confirmed -> Confirmed             // also on one line: `Draft -> Draft, Confirmed -> Confirmed`
-      changes note                       // the fields it may change; without `changes`, no common field
+      Confirmed -> Confirmed // also on one line: `Draft -> Draft, Confirmed -> Confirmed`
+      changes note // the fields it may change; without `changes`, no common field
   }
 
-  entity OrderItem { id: OrderItemId quantity: Quantity owns unitPrice: Money }
+  entity OrderItem {
+    id: OrderItemId
+    quantity: Quantity
+    owns unitPrice: Money
+  }
 
-  persistent event OrderPlaced { orderId: OrderId }      // storing it is part of its contract
-  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
-  event OrderCancelled { orderId: OrderId reason: CancelReason }   // not persisted (default)
-  event RefundRequested { orderId: OrderId }
-  error EmptyOrder                       // payload optional: error E { field: Type }
+  persistent event OrderPlaced { // storing it is part of its contract
+    orderId: OrderId
+  }
+  persistent event OrderConfirmed {
+    orderId: OrderId
+    confirmedAt: Timestamp
+  }
+  event OrderCancelled { // not persisted (default)
+    orderId: OrderId
+    reason: CancelReason
+  }
+  event RefundRequested {
+    orderId: OrderId
+  }
+  error EmptyOrder // payload optional: error E { field: Type }
 }
 ```
 
@@ -264,25 +283,29 @@ context Sales {                          // a bounded context; may be split acro
 context Sales {
   id CustomerId: UUID
 
-  aggregate Customer {                   // no states: commands have no transitions
+  aggregate Customer { // no states: commands have no transitions
     id: CustomerId
-    email: EmailAddress                  // from the shared context Common
+    email: EmailAddress // from the shared context Common
     active: Bool
     owns addresses: Address[0..*]
     owns shipping: Address?
 
     invariant activeHasAddress { active == true implies count(addresses) > 0 }
     invariant servedArea { active == false or any(addresses, a => a.city == "Tokyo" or not (a.city == "Osaka")) }
-    invariant distinctAddresses { unique(addresses, a => a.city, a.street) }   // the combination is distinct
+    invariant distinctAddresses { unique(addresses, a => a.city, a.street) } // the combination is distinct
     invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
 
     /// No other customer has the same email address (spans aggregates, so not expressed in the DSL).
     invariant uniqueEmail "メールアドレスは顧客ごとに一意"
 
-    command changeEmail(email: EmailAddress) changes email errors EmailTaken   // errors that MAY be returned
+    command changeEmail(email: EmailAddress)
+      changes email
+      errors EmailTaken // errors that MAY be returned
   }
 
-  error EmailTaken { email: EmailAddress }
+  error EmailTaken {
+    email: EmailAddress
+  }
 }
 ```
 
@@ -315,12 +338,12 @@ value objects.
 ```dt
 // sales/primitives.dt
 context Sales {
-  primitive Quantity "数量": Int { value in 1..999 }     // one anonymous constraint
-  primitive Sku: String {                                 // or named invariants
+  primitive Quantity "数量": Int { value in 1..999 } // one anonymous constraint
+  primitive Sku: String { // or named invariants
     invariant format "形式" { matches(value, "^[A-Z]{3}-\d{4}$") }
     invariant maxLength { length(value) <= 8 }
   }
-  id InvoiceNo: String { matches(value, "^INV-\d{8}$") }  // an ID is a domain primitive used as identity
+  id InvoiceNo: String { matches(value, "^INV-\d{8}$") } // an ID is a domain primitive used as identity
 }
 ```
 
@@ -340,14 +363,23 @@ never changes, and aggregate states for a lifecycle that commands move through.
 ```dt
 // sales/payment.dt
 context Sales {
-  union Payer "支払者" {                                  // discriminator `kind` by default
-    CUSTOMER "顧客" { customerId: CustomerId }
-    COMPANY "法人" { name: String  billingEmail: EmailAddress? }
+  union Payer "支払者" { // discriminator `kind` by default
+    CUSTOMER "顧客" {
+      customerId: CustomerId
+    }
+    COMPANY "法人" {
+      name: String
+      billingEmail: EmailAddress?
+    }
   }
   enum PaymentMethod { CARD TRANSFER }
-  union PaymentDetails by method: PaymentMethod {        // `by name`, optionally bound to an enum
-    CARD { last4: String }                               // exactly the enum's values (M015)
-    TRANSFER { bankCode: String }
+  union PaymentDetails by method: PaymentMethod { // `by name`, optionally bound to an enum
+    CARD { // exactly the enum's values (M015)
+      last4: String
+    }
+    TRANSFER {
+      bankCode: String
+    }
   }
 }
 ```
@@ -361,10 +393,15 @@ context Sales {
 
 ```dt
 // common/context.dt
-shared context Common "共通" {            // shared kernel: usable by simple name from every context
-  terms { currency: "通貨" }
+shared context Common "共通" { // shared kernel: usable by simple name from every context
+  terms {
+    currency: "通貨"
+  }
   enum Currency { JPY USD }
-  value Money { amount: Decimal currency: Currency }
+  value Money {
+    amount: Decimal
+    currency: Currency
+  }
   primitive EmailAddress: String { matches(value, "^[^@\s]+@[^@\s]+$") }
 }
 ```
@@ -383,7 +420,7 @@ and taken on with `with`.
 shared context Common {
   /// 契約者（テナント）。業務データはテナントごとに分かれる。
   primitive TenantId "テナントID": UUID
-  fields Tenanted "テナント所属" {          // a field set: plain fields only
+  fields Tenanted "テナント所属" { // a field set: plain fields only
     tenant: TenantId "テナント"
   }
 }
@@ -400,7 +437,7 @@ context Expenses "経費" {
     performedBy: StaffId "実施者"
   }
 
-  aggregate Expense "経費申請" with Tenanted {   // tenant first, then its own fields
+  aggregate Expense "経費申請" with Tenanted { // tenant first, then its own fields
     id: ExpenseId
     applicant: StaffId "申請者"
     approver: StaffId? "承認者"
@@ -410,11 +447,13 @@ context Expenses "経費" {
     command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する" emits ExpenseApproved
   }
 
-  event ExpenseSubmitted "申請受付" with Tenanted, Performed { expenseId: ExpenseId }
+  event ExpenseSubmitted "申請受付" with Tenanted, Performed {
+    expenseId: ExpenseId
+  }
   event ExpenseApproved "承認" with Tenanted {
     expenseId: ExpenseId
-    approver: StaffId "承認者"          // a business role, named by the role
-    approvedAt: Timestamp "承認日時"    // when it happened in business terms
+    approver: StaffId "承認者" // a business role, named by the role
+    approvedAt: Timestamp "承認日時" // when it happened in business terms
   }
 }
 ```
@@ -459,7 +498,7 @@ Two cases look alike but are not:
 // billing/context.dt
 /// 注文への請求と支払いを扱う。
 context Billing "請求" {
-  terms {                                  // field / parameter names, defined once per context
+  terms { // field / parameter names, defined once per context
     /// 請求書が支払われた日時。
     paidAt: "支払日時"
   }
@@ -468,22 +507,29 @@ context Billing "請求" {
 
 ```dt
 // billing/invoice.dt
-context Billing {                          // other files open the context without a name
+context Billing { // other files open the context without a name
   id InvoiceId "請求書ID": UUID
 
   /// 注文1件に対する請求。
-  aggregate Invoice "請求書" {             // declarations: a string after the name
+  aggregate Invoice "請求書" { // declarations: a string after the name
     id: InvoiceId
-    references order: Sales.OrderId -> Sales.Order "請求対象"   // an inline label on a field
+    references order: Sales.OrderId -> Sales.Order "請求対象" // an inline label on a field
     owns amount: Money "請求金額"
     state Open "未払い"
-    state Paid "支払済み" { paidAt: Timestamp }               // → 支払日時 (from terms)
+    state Paid "支払済み" {
+      paidAt: Timestamp // → 支払日時 (from terms)
+    }
     invariant positive "金額が正" { amount.amount > 0 }
     create command issue(id: InvoiceId, order: Sales.OrderId, amount: Money) "請求書を発行する" -> Open
-    command pay(at: Timestamp "支払日時") "支払う" Open -> Paid emits InvoicePaid
+    command pay(at: Timestamp "支払日時") "支払う"
+      Open -> Paid
+      emits InvoicePaid
   }
   enum InvoiceKind "請求区分" { Regular "通常" Refund "返金" }
-  event InvoicePaid "支払完了" { invoiceId: InvoiceId paidAt: Timestamp }
+  event InvoicePaid "支払完了" {
+    invoiceId: InvoiceId
+    paidAt: Timestamp
+  }
 }
 ```
 
@@ -530,27 +576,33 @@ transitions, any number per command; `else` names the error the command returns 
 context Review {
   id ReviewId: UUID
   id PersonId: UUID
-  value ApprovalPolicy { approvers: PersonId[1..*] }
+  value ApprovalPolicy {
+    approvers: PersonId[1..*]
+  }
 
   aggregate Review "レビュー" {
     id: ReviewId
     policy: ApprovalPolicy
-    state Reviewing { openBlockers: Int }
-    state Escalated { openBlockers: Int }
+    state Reviewing {
+      openBlockers: Int
+    }
+    state Escalated {
+      openBlockers: Int
+    }
     state Accepted {
       acceptedBy: PersonId
       /// All the scenarios the policy requires are confirmed.
-      invariant fullyConfirmed "必要な確認がそろっている"   // holds whenever the review is Accepted
+      invariant fullyConfirmed "必要な確認がそろっている" // holds whenever the review is Accepted
     }
 
     command accept(person: PersonId) "受入"
       Reviewing | Escalated -> Accepted
-      requires authorizedApprover "承認者である" {        // depends on the parameters and the current state
+      requires authorizedApprover "承認者である" { // depends on the parameters and the current state
         contains(policy.approvers, person)
       } else NotApprover
       requires noOpenBlocker "未解決の阻害がない" { openBlockers == 0 } else Blocked
       /// The reviewer's own sign-off is recorded outside this model.
-      requires signedOff "本人の承認が記録済み" else NotSignedOff   // not expressed in the DSL
+      requires signedOff "本人の承認が記録済み" else NotSignedOff // not expressed in the DSL
       errors Conflict
   }
 
@@ -600,21 +652,27 @@ context Tickets {
     id: TicketId
     title: String
     note: String?
-    state Open { assignee: PersonId? }
-    state InProgress { assignee: PersonId startedAt: Timestamp }
-    state Closed { closedAt: Timestamp }
+    state Open {
+      assignee: PersonId?
+    }
+    state InProgress {
+      assignee: PersonId
+      startedAt: Timestamp
+    }
+    state Closed {
+      closedAt: Timestamp
+    }
 
-    create command report(id: TicketId, title: String) -> Open   // a factory sets every field
+    create command report(id: TicketId, title: String) -> Open // a factory sets every field
     command retitle(title: String, note: String?)
-      Open -> Open, InProgress -> InProgress
-      changes title, note                // common fields
+      Open -> Open
+      InProgress -> InProgress
+      changes title, note // common fields
     command assign(assignee: PersonId?)
       Open -> Open
-      changes assignee                   // carried over from Open to Open, so listed to be changed
-    command start(assignee: PersonId, at: Timestamp)
-      Open -> InProgress                 // no `changes`: sets InProgress's assignee and startedAt, keeps the rest
-    command close(at: Timestamp)
-      Open | InProgress -> Closed        // sets closedAt; assignee and startedAt are dropped
+      changes assignee // carried over from Open to Open, so listed to be changed
+    command start(assignee: PersonId, at: Timestamp) Open -> InProgress // no `changes`: sets InProgress's assignee and startedAt, keeps the rest
+    command close(at: Timestamp) Open | InProgress -> Closed // sets closedAt; assignee and startedAt are dropped
   }
 }
 ```
@@ -656,23 +714,45 @@ context Work {
     id: WorkId
     state Draft
     state InProgress
-    state Completed { completedAt: Timestamp }
+    state Completed {
+      completedAt: Timestamp
+    }
 
-    create command open(id: WorkId) -> Draft emits WorkOpened      // the new ID is a parameter
-    command plan(steps: StepId[1..*]) Draft -> Draft emits StepPlanned[1..*]   // one per step
-    command rename(title: String) Draft -> Draft emits Renamed?      // not when the title is the same
+    create command open(id: WorkId)
+      -> Draft
+      emits WorkOpened // the new ID is a parameter
+    command plan(steps: StepId[1..*])
+      Draft -> Draft
+      emits StepPlanned[1..*] // one per step
+    command rename(title: String)
+      Draft -> Draft
+      emits Renamed? // not when the title is the same
     command start() Draft -> InProgress
     command progress(step: StepId, at: Timestamp)
       InProgress -> InProgress | Completed
       emits StepRecorded,
-            WorkCompleted when -> Completed                         // only when it ends in Completed
+            WorkCompleted when -> Completed // only when it ends in Completed
   }
 
-  event WorkOpened { workId: WorkId }
-  event StepPlanned { workId: WorkId step: StepId }
-  event Renamed { workId: WorkId title: String }
-  event StepRecorded { workId: WorkId step: StepId }
-  event WorkCompleted { workId: WorkId completedAt: Timestamp }
+  event WorkOpened {
+    workId: WorkId
+  }
+  event StepPlanned {
+    workId: WorkId
+    step: StepId
+  }
+  event Renamed {
+    workId: WorkId
+    title: String
+  }
+  event StepRecorded {
+    workId: WorkId
+    step: StepId
+  }
+  event WorkCompleted {
+    workId: WorkId
+    completedAt: Timestamp
+  }
 }
 ```
 
