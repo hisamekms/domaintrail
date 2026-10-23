@@ -82,6 +82,28 @@ export interface TransitionModel {
     to: string[];
 }
 
+/** `when A | B -> C`: the outcomes an `emits` entry applies to. An empty side matches any state (a factory has no source). */
+export interface OutcomePatternModel {
+    from: string[];
+    to: string[];
+}
+
+/**
+ * An entry of `emits`: the command emits `event` as often as its multiplicity says (once without one), for the
+ * outcomes that match `when` (every outcome without it). On failure it emits nothing.
+ */
+export interface EmitModel {
+    /** Qualified event name. */
+    event: string;
+    cardinality: Cardinality;
+    /** Multiplicity as written in the DSL (`?`, `[1..*]`, ...), empty when omitted. */
+    multiplicity: string;
+    /** How many times the event is emitted, at least and at most (`undefined`: no upper bound). */
+    lower: number;
+    upper?: number;
+    when?: OutcomePatternModel;
+}
+
 export interface CommandModel extends Described {
     id: string;
     name: string;
@@ -91,8 +113,8 @@ export interface CommandModel extends Described {
     transitions: TransitionModel[];
     /** Preconditions over the parameters and the aggregate's current data (`requires`). */
     requires: RequirementModel[];
-    /** Qualified event names. */
-    emits: string[];
+    /** The events emitted on success, per entry of `emits`. */
+    emits: EmitModel[];
     /**
      * Qualified error names: those listed in `errors`, then those named by `else` of the requirements, each once.
      * Together they make the command's error union.
@@ -165,3 +187,20 @@ export const allFieldsOf = (el: ElementModel): FieldModel[] => [
     ...(el.states ?? []).flatMap((s) => s.fields),
     ...(el.variants ?? []).flatMap((v) => v.fields),
 ];
+
+/** `when` of an `emits` entry as written, e.g. `Confirmed ->` (empty without one). */
+export const outcomePatternText = (w: OutcomePatternModel | undefined): string =>
+    w ? [w.from.join(' | '), '->', w.to.join(' | ')].filter(Boolean).join(' ') : '';
+
+/** The multiplicity and `when` written after the event of an `emits` entry, e.g. `[1..*] when -> Draft`. */
+export const emitSuffix = (e: EmitModel): string => `${e.multiplicity}${e.when ? ` when ${outcomePatternText(e.when)}` : ''}`.trim();
+
+/** The events a command may emit (qualified names, each once, in the order of `emits`). */
+export const emittedEvents = (c: CommandModel): string[] => [...new Set(c.emits.map((e) => e.event))];
+
+/**
+ * Whether an `emits` entry applies to the outcome of a command that starts in `from` (`undefined` for a factory or an
+ * aggregate without states) and ends in `to`.
+ */
+export const emitApplies = (e: { when?: OutcomePatternModel }, from: string | undefined, to: string | undefined): boolean =>
+    !e.when || ((e.when.from.length === 0 || (from !== undefined && e.when.from.includes(from))) && (e.when.to.length === 0 || (to !== undefined && e.when.to.includes(to))));

@@ -1,6 +1,6 @@
 import type { DisplayMode } from '../src/graph/ir';
 import { PRIMITIVE_LABELS, typeText } from '../src/graph/build';
-import type { CommandModel, DomainModel, ElementKind, ElementModel, StateModel, TypeExpr } from '../src/model/model';
+import { emittedEvents, type CommandModel, type DomainModel, type ElementKind, type ElementModel, type StateModel, type TypeExpr } from '../src/model/model';
 import { ownerElement } from './render';
 
 export type Select = (id: string) => void;
@@ -126,7 +126,7 @@ export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter)
 /** Commands that may emit the event, or return the error, with their aggregates. */
 export function commandsWithOutcome(model: DomainModel, id: string): { agg: ElementModel; command: CommandModel }[] {
     return Object.values(model.elements).flatMap((agg) =>
-        (agg.commands ?? []).filter((c) => c.emits.includes(id) || c.errors.includes(id)).map((command) => ({ agg, command })),
+        (agg.commands ?? []).filter((c) => emittedEvents(c).includes(id) || c.errors.includes(id)).map((command) => ({ agg, command })),
     );
 }
 

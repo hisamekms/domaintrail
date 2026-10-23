@@ -1,11 +1,12 @@
 import * as posix from 'node:path/posix';
-import type { CommandModel, Described, DomainModel, ElementModel, FieldModel, InvariantModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
-import { elementsIn, ownFields } from '../model/model.js';
+import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
+import { elementsIn, emitApplies, emittedEvents, ownFields } from '../model/model.js';
 import {
     AGGREGATE_TYPE,
     DOMAIN_EVENT_TYPE,
     EVENT_TAG,
     PERSISTENT_EVENT_TYPE,
+    NO_EVENTS_TYPE,
     STATE_TAG,
     aggregateEventTypeName,
     aggregateParamName,
@@ -15,8 +16,8 @@ import {
     commonTypeName,
     invalidTypeName,
     makeTypeName,
+    outputsVary,
     stateTypeName,
-    targetsVary,
 } from './naming.js';
 
 export interface GeneratedFile {
@@ -50,8 +51,46 @@ export interface Err<E> {
     readonly error: E;
 }
 
-export const ok = <T>(value: T): Ok<T> => ({ ok: true, value });
+/**
+ * A success value. Its type comes from where the result goes (the command's contract), not from the argument, so that
+ * the compiler checks the object literal against the contract exactly: a missing event is "Property 'X' is missing",
+ * an event the outcome does not emit "'X' does not exist in type …". Elsewhere, pass the type: \`ok<T>(value)\`.
+ */
+export const ok = <T>(value: NoInfer<T>): Ok<T> => ({ ok: true, value });
 export const err = <E>(error: E): Err<E> => ({ ok: false, error });
+
+/** The events of an outcome that emits none: only \`{}\` is assignable. */
+export type ${NO_EVENTS_TYPE} = { readonly [type: string]: never };
+
+/** The outcome of a command's success value \`{ [state]: { aggregate, events } }\`, with its key as \`to\`. */
+export type Outcome<V> = V extends unknown
+    ? NonNullable<{ [K in keyof V]: V[K] extends { readonly aggregate: infer A; readonly events: infer E } ? { readonly to: K; readonly aggregate: A; readonly events: E } : never }[keyof V]>
+    : never;
+
+type Flat<T> = T extends readonly (infer X)[] ? X : T;
+/** The events held by the \`events\` of an outcome, as one union. */
+export type EventOf<E> = E extends unknown ? { [K in keyof E]-?: Flat<NonNullable<E[K]>> }[keyof E] : never;
+
+/**
+ * The outcome of a command's success value as \`{ to, aggregate, events }\`, for code that handles any command (save the
+ * aggregate, publish the events). \`to\` is the key of the outcome: the target state, or the aggregate's name without states.
+ */
+export const outcome = <V extends object>(value: V): Outcome<V> => {
+    const [to, o] = Object.entries(value).find(([, v]) => v !== undefined) as [string, { aggregate: unknown; events: unknown }];
+    return { to, aggregate: o.aggregate, events: o.events } as Outcome<V>;
+};
+
+/**
+ * The events of an outcome as one flat list: arrays are flattened and absent optional events skipped. The contract
+ * gives the events of one command no order; this list is sorted by event type, then in the order of each array.
+ */
+export const eventList = <E extends object>(events: E): readonly EventOf<E>[] =>
+    Object.keys(events)
+        .sort()
+        .flatMap((type) => {
+            const v = (events as Record<string, unknown>)[type];
+            return v === undefined ? [] : Array.isArray(v) ? v : [v];
+        }) as EventOf<E>[];
 
 /** Arguments of a handler after the first. */
 type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A : never;
@@ -127,6 +166,35 @@ const requirementLines = (reqs: RequirementModel[], error: (qname: string) => st
 
 const unique = (names: string[]): string[] => [...new Set(names)];
 
+/** An outcome of a command: the key of its success value (the target state), the aggregate's type and the events. */
+interface Outcome {
+    key: string;
+    aggregate: string;
+    emits: EmitModel[];
+}
+
+/** How often an `emits` entry emits its event, in words; `unchecked` when the types do not enforce the bounds. */
+function times(e: EmitModel): { words: string; unchecked: boolean } {
+    const { lower, upper } = e;
+    if (lower === 1 && upper === 1) return { words: 'exactly once', unchecked: false };
+    if (lower === 0 && upper === 1) return { words: 'at most once', unchecked: false };
+    if (lower === 0 && upper === undefined) return { words: 'zero or more', unchecked: false };
+    if (lower === 1 && upper === undefined) return { words: 'one or more', unchecked: false };
+    if (upper === undefined) return { words: `${lower} or more`, unchecked: true };
+    return { words: lower === upper ? `exactly ${lower} times` : `between ${lower} and ${upper}`, unchecked: true };
+}
+
+/** `A`, `A or B`, `A, B or C`. */
+const or = (names: string[]): string => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`);
+
+/** When an `emits` entry applies, in words. */
+function condition(w: OutcomePatternModel | undefined): string {
+    if (!w || (w.from.length === 0 && w.to.length === 0)) return 'when the command succeeds';
+    if (w.to.length === 0) return `when it comes from ${or(w.from)}`;
+    if (w.from.length === 0) return `when it ends in ${or(w.to)}`;
+    return `when it comes from ${or(w.from)} and ends in ${or(w.to)}`;
+}
+
 class ContextEmitter {
     private readonly imports = new Set<string>();
     private readonly out: string[] = [];
@@ -185,7 +253,7 @@ class ContextEmitter {
         this.persistentEvents();
         this.unions();
         const body = this.out.join('\n');
-        const runtime = ['Decimal', 'Result', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
+        const runtime = ['Decimal', NO_EVENTS_TYPE, 'Result', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
             ...[...this.imports].sort().map((c) => `import type * as ${c} from '${this.moduleOf(c)}';`),
@@ -302,7 +370,10 @@ class ContextEmitter {
         }
         if (commands.length > 0) {
             this.out.push('');
-            this.jsdoc([`Command contracts of ${agg.name}. Implement this interface by hand.`]);
+            this.jsdoc([
+                `Command contracts of ${agg.name}. Implement this interface by hand.`,
+                'Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.',
+            ]);
             this.line(`export interface ${commandsInterfaceName(agg)} {`);
             for (const c of commands) {
                 if (c.label) this.line(`    /** ${oneLine(c.label)} */`);
@@ -310,7 +381,7 @@ class ContextEmitter {
             }
             this.line('}');
         }
-        const events = [...new Set(commands.flatMap((c) => c.emits))];
+        const events = [...new Set(commands.flatMap(emittedEvents))];
         if (events.length > 0) {
             this.out.push('');
             this.jsdoc([`Events that the commands of ${agg.name} may emit.`]);
@@ -323,16 +394,19 @@ class ContextEmitter {
         const stateUnion = (names: string[]): string => (stateful ? unique(names).map((n) => stateTypeName(agg, n)).join(' | ') : agg.name);
         const transitions = stateful ? c.transitions : [];
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
-        // (`A -> A, B -> B`): a handler per source state (`…ByState`), and a contract generic over the input state
-        // whose output is that of the handler of its state. `byState` turns the handlers into the contract.
-        const generic = stateful && targetsVary(c.factory, transitions.map((t) => t.to));
+        // (`A -> A, B -> B`, or `emits X when A ->`): a handler per source state (`…ByState`), and a contract generic
+        // over the input state whose output is that of the handler of its state. `byState` turns the handlers into the
+        // contract.
+        const generic = stateful && outputsVary(c.factory, transitions, c.emits);
         const input = stateUnion(transitions.flatMap((t) => t.from));
         const self = aggregateParamName(agg);
         const params = c.params.map((p) => `${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
-        const events = c.emits.length === 0 ? 'never' : c.emits.map((e) => this.ref(e)).join(' | ');
-        const eventArray = c.emits.length > 1 ? `readonly (${events})[]` : `readonly ${events}[]`;
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
-        const result = (output: string): string => `Result<readonly [${output}, ${eventArray}], ${errors}>`;
+        // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name
+        const outcomes = (from: string | undefined, targets: string[]): Outcome[] =>
+            stateful
+                ? unique(targets).map((to) => ({ key: to, aggregate: stateTypeName(agg, to), emits: c.emits.filter((e) => emitApplies(e, from, to)) }))
+                : [{ key: agg.name, aggregate: agg.name, emits: c.emits }];
         const requires = requirementLines(c.requires, (e) => this.ref(e));
 
         const transition = c.factory
@@ -343,11 +417,13 @@ class ContextEmitter {
             ...describedLines(c),
             ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
             ...requires,
+            ...this.emitsLines(c.emits.map((e) => ({ e, when: e.when }))),
         ]);
         this.line(`export type ${commandTypeName(agg, c)} = ${generic ? `<S extends ${input}>` : ''}(`);
         for (const p of [...(c.factory ? [] : [`${self}: ${generic ? 'S' : input}`]), ...params]) this.line(`    ${p},`);
         if (!generic) {
-            this.line(`) => ${result(stateUnion(transitions[0]?.to ?? []))};`);
+            const first = transitions[0];
+            this.result(') => ', outcomes(c.factory ? undefined : first?.from[0], first?.to ?? []), errors, '', ';');
             return;
         }
         this.line(`) => ReturnType<${byStateTypeName(agg, c)}[S['${STATE_TAG}']]>;`);
@@ -357,10 +433,70 @@ class ContextEmitter {
         for (const t of transitions) {
             for (const from of t.from) {
                 const args = [`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ');
-                this.line(`    readonly ${from}: (${args}) => ${result(stateUnion(t.to))};`);
+                // the entries of `emits` for this state, with `when` reduced to what still selects among its targets
+                const emits = c.emits
+                    .filter((e) => t.to.some((to) => emitApplies(e, from, to)))
+                    .map((e) => ({ e, when: e.when?.to.length && !t.to.every((to) => e.when!.to.includes(to)) ? { from: [], to: e.when.to } : undefined }));
+                const doc = this.emitsLines(emits).flatMap((l) => comment(l).split('\n'));
+                if (doc.length === 1) this.line(`    /** ${doc[0]} */`);
+                else this.out.push('    /**', ...doc.map((l) => `     * ${l}`), '     */');
+                this.result(`    readonly ${from}: (${args}) => `, outcomes(from, t.to), errors, '    ', ';');
             }
         }
         this.line('};');
+    }
+
+    /**
+     * `Result<…>` of a command, starting with `head` on the current line: the success value is keyed by the outcome's
+     * state (`{ readonly Confirmed: { aggregate, events } }`); with several outcomes, a union whose branches mark the
+     * other keys `?: never`, so that a value holds exactly one outcome.
+     */
+    private result(head: string, outcomes: Outcome[], errors: string, indent: string, end: string): void {
+        const body = (o: Outcome, pad: string): string[] => [
+            `${pad}readonly ${o.key}: {`,
+            `${pad}    readonly aggregate: ${o.aggregate};`,
+            `${pad}    readonly events: ${this.events(o.emits)};`,
+            `${pad}};`,
+        ];
+        if (outcomes.length === 1) {
+            this.line(`${head}Result<{`);
+            for (const l of body(outcomes[0], `${indent}    `)) this.line(l);
+            this.line(`${indent}}, ${errors}>${end}`);
+            return;
+        }
+        this.line(`${head}Result<`);
+        outcomes.forEach((o, i) => {
+            this.line(`${indent}    | {`);
+            for (const l of body(o, `${indent}          `)) this.line(l);
+            for (const other of outcomes) if (other !== o) this.line(`${indent}          readonly ${other.key}?: never;`);
+            this.line(`${indent}      }${i === outcomes.length - 1 ? ',' : ''}`);
+        });
+        this.line(`${indent}    ${errors}`);
+        this.line(`${indent}>${end}`);
+    }
+
+    /** The `events` of an outcome: one property per event, keyed by its name, typed by its multiplicity. */
+    private events(emits: EmitModel[]): string {
+        if (emits.length === 0) return NO_EVENTS_TYPE;
+        const props = emits.map((e) => {
+            const t = this.ref(e.event);
+            const key = e.event.slice(e.event.indexOf('.') + 1);
+            if (e.lower === 1 && e.upper === 1) return `readonly ${key}: ${t}`;
+            if (e.lower === 0 && e.upper === 1) return `readonly ${key}?: ${t}`;
+            if (e.lower === 1 && e.upper === undefined) return `readonly ${key}: readonly [${t}, ...${t}[]]`;
+            if (e.lower === 0 && e.upper === undefined) return `readonly ${key}: readonly ${t}[]`;
+            return `/** ${times(e).words} */ readonly ${key}: readonly ${t}[]`;
+        });
+        return `{ ${props.join('; ')} }`;
+    }
+
+    /** `@emits` lines: what each entry means, in words. `when` is the condition to state (absent: on every success). */
+    private emitsLines(entries: { e: EmitModel; when?: OutcomePatternModel }[]): string[] {
+        if (entries.length === 0) return ['@emits nothing'];
+        return entries.map(({ e, when }) => {
+            const { words, unchecked } = times(e);
+            return `@emits ${this.ref(e.event)}${e.multiplicity} — ${words} ${condition(when)}${unchecked ? ' (not checked by the types)' : ''}`;
+        });
     }
 
     private iface(name: string, bases: string[], extra: string[], fields: FieldModel[]): void {

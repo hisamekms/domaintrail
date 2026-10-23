@@ -164,6 +164,13 @@ function multiplicityText(m: Multiplicity | undefined): string {
     return `[${m.lower}..${m.unbounded ? '*' : m.upper}]`;
 }
 
+/** How many times a multiplicity allows: once without one, `?` at most once. */
+function bounds(m: Multiplicity | undefined): { lower: number; upper?: number } {
+    if (!m) return { lower: 1, upper: 1 };
+    if (m.optional) return { lower: 0, upper: 1 };
+    return m.unbounded ? { lower: m.lower ?? 0 } : { lower: m.lower ?? 0, upper: m.upper ?? 0 };
+}
+
 function fieldModel(f: FieldLike | Parameter, labels: LabelResolver): FieldModel {
     const out: FieldModel = {
         name: f.name,
@@ -218,7 +225,13 @@ function command(aggId: string, c: Command, loc: (n: AstNode) => Location, field
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
         requires: c.requirements.map((r) => requirement(r, qname)),
-        emits: c.emits.map(qname),
+        emits: c.emits.map((e) => ({
+            event: qname(e.event),
+            cardinality: cardinality(e.multiplicity),
+            multiplicity: multiplicityText(e.multiplicity),
+            ...bounds(e.multiplicity),
+            ...(e.when && { when: { from: e.when.from.map((r) => r.$refText), to: e.when.to.map((r) => r.$refText) } }),
+        })),
         errors: [...new Set([...c.errors, ...c.requirements.map((r) => r.error)].map(qname))],
         location: loc(c),
     };

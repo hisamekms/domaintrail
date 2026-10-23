@@ -1,5 +1,5 @@
 import type { DomainModel, ElementModel, FieldModel } from './model.js';
-import { elementList, ownFields } from './model.js';
+import { elementList, emittedEvents, ownFields } from './model.js';
 
 /**
  * How one bounded context depends on another:
@@ -44,7 +44,7 @@ export function contextDependencies(model: DomainModel): Dependency[] {
         if (el.tagType) add(el.tagType, 'by');
         for (const c of el.commands ?? []) {
             for (const p of c.params) field(p, `${c.name}(${p.name})`);
-            for (const e of [...c.emits, ...c.errors]) add(e, `${c.name} ⇒ ${shortName(e)}`);
+            for (const e of [...emittedEvents(c), ...c.errors]) add(e, `${c.name} ⇒ ${shortName(e)}`);
         }
     }
     return out;

@@ -1,4 +1,4 @@
-import type { CommandModel, DomainModel, ElementModel, FieldModel } from '../src/model/model';
+import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from '../src/model/model';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 
@@ -151,8 +151,11 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
                     {c.emits.length > 0 && (
                         <span className="bcard-outcome">
                             <span className="muted" title={tx.raisesHint}>⇒</span>
-                            {c.emits.map((e) => (
-                                <KindLink key={e} kind={model.elements[e]?.kind ?? 'event'} id={e} x={outcome(e)} names={names} onSelect={onSelect} />
+                            {c.emits.map((e, i) => (
+                                <span key={i} className="bcard-emit">
+                                    <KindLink kind={model.elements[e.event]?.kind ?? 'event'} id={e.event} x={outcome(e.event)} names={names} onSelect={onSelect} />
+                                    {emitSuffix(e) && <code className="bcard-emit-when">{emitSuffix(e)}</code>}
+                                </span>
                             ))}
                         </span>
                     )}
@@ -201,7 +204,7 @@ export function OutcomeCard({ id, commands, model, names, tx, onSelect }: { id: 
 export function outcomesOf(commands: CommandModel[], kind: 'emits' | 'errors'): Map<string, CommandModel[]> {
     const out = new Map<string, CommandModel[]>();
     for (const c of commands) {
-        for (const e of c[kind]) out.set(e, [...(out.get(e) ?? []), c]);
+        for (const e of kind === 'emits' ? emittedEvents(c) : c.errors) out.set(e, [...(out.get(e) ?? []), c]);
     }
     return out;
 }

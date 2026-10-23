@@ -1,9 +1,10 @@
 import type { AstNode } from 'langium';
 import { isAggregate, isEventDecl, isIdType, isPrimitiveDecl } from '../language/generated/ast.js';
 import { commandsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
+import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
-export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'byState'] as const;
+export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'byState', 'outcome', 'eventList', 'NoEvents', 'Outcome', 'EventOf'] as const;
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';
@@ -22,19 +23,27 @@ export const stateTypeName = (agg: Named, state: Named | string): string =>
     `${typeof state === 'string' ? state : state.name}${agg.name}`;
 export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd.name)}${agg.name}`;
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
-/** Handlers of a command per source state, e.g. `ChangeWorkByState`; generated when the targets depend on the source. */
+/** Handlers of a command per source state, e.g. `ChangeWorkByState`; generated when the outputs depend on the source. */
 export const byStateTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}ByState`;
 /**
- * Whether the targets of a command's transitions depend on its source state (`A -> A, B -> B`), which makes its
- * contract generic over the input state and adds a `…ByState` type. `targets` lists the targets of each transition.
+ * Whether the outputs of a command depend on its source state, which makes its contract generic over the input state
+ * and adds a `…ByState` type: the targets differ by transition (`A -> A, B -> B`), or the events do
+ * (`emits X when A ->`). State names only, as in the Typed Model.
  */
-export const targetsVary = (factory: boolean, targets: string[][]): boolean =>
-    !factory && new Set(targets.map((t) => [...new Set(t)].sort().join('|'))).size > 1;
+export function outputsVary(factory: boolean, transitions: OutcomePatternModel[], emits: { when?: OutcomePatternModel }[]): boolean {
+    if (factory) return false;
+    // per source state: each target with the entries of `emits` that apply to it
+    const output = (from: string, to: string[]): string =>
+        [...new Set(to)].sort().map((t) => `${t}:${emits.flatMap((e, i) => (emitApplies(e, from, t) ? [i] : [])).join(',')}`).join('|');
+    return new Set(transitions.flatMap((t) => t.from.map((f) => output(f, t.to)))).size > 1;
+}
 export const aggregateParamName = (agg: Named): string => camel(agg.name);
 /** Constructor contract of a domain primitive, e.g. `MakeQuantity`. */
 export const makeTypeName = (p: Named): string => `Make${p.name}`;
 /** Error returned when a value violates a domain primitive's invariants, e.g. `InvalidQuantity`. */
 export const invalidTypeName = (p: Named): string => `Invalid${p.name}`;
+/** Runtime type of the `events` of an outcome that emits none. */
+export const NO_EVENTS_TYPE = 'NoEvents';
 /** Union of the events of a context that are declared `persistent`; generated only when there is one. */
 export const PERSISTENT_EVENT_TYPE = 'PersistentEvent';
 /** Union of the events of a context; generated only when there is one. */
@@ -93,7 +102,10 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
         }
         for (const c of commands) {
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, node: c });
-            if (states.length > 0 && targetsVary(c.factory, c.transitions.map((t) => t.to.map((r) => r.$refText)))) {
+            const names = (refs: { $refText: string }[]): string[] => refs.map((r) => r.$refText);
+            const transitions = c.transitions.map((t) => ({ from: names(t.from), to: names(t.to) }));
+            const emits = c.emits.map((e) => (e.when ? { when: { from: names(e.when.from), to: names(e.when.to) } } : {}));
+            if (states.length > 0 && outputsVary(c.factory, transitions, emits)) {
                 out.push({ name: byStateTypeName(el, c), origin: `the handlers per state of '${el.name}.${c.name}'`, node: c });
             }
         }

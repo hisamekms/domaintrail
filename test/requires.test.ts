@@ -189,9 +189,9 @@ describe('requires in the generated TypeScript', () => {
             ' * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)',
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
         ].join('\n');
-        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n */\nexport type AcceptReview = `);
+        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n * @emits nothing\n */\nexport type AcceptReview = `);
         expect(code).toContain(`/**\n * Review.accept, one handler per source state; implement it with \`byState\` from the runtime.\n${lines}\n */\nexport type AcceptReviewByState = {`);
-        expect(code).toContain('Result<readonly [AcceptedReview, readonly never[]], Blocked | Conflict | NotApprover>;');
+        expect(code).toContain('    }, Blocked | Conflict | NotApprover>;');
         expect(code).not.toContain('Blocked | Conflict | NotApprover | Blocked');
     });
 
@@ -199,7 +199,7 @@ describe('requires in the generated TypeScript', () => {
         const a = await review('command accept() Reviewing -> Accepted requires x { blockers == 0 } else Blocked');
         const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
         expect(code).toContain(' * @requires x else Blocked: blockers == 0\n');
-        expect(code).toContain('Result<readonly [AcceptedReview, readonly never[]], Blocked>;');
+        expect(code).toContain('}, Blocked>;');
     });
 });
 
@@ -208,6 +208,11 @@ describe('requires in the Live View', () => {
         const before = await review('command accept() Reviewing -> Accepted requires x { blockers == 0 } else Blocked');
         const after = await review('command accept() Reviewing -> Accepted requires x { blockers < 1 } else Blocked');
         expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Review.Review', 'Review.Review:accept'], removed: [] });
+    });
+
+    test('when is highlighted as a keyword', () => {
+        const tokens = highlight('emits Done when Draft ->')[0].filter((t) => t.kind === 'keyword').map((t) => t.text);
+        expect(tokens).toEqual(['emits', 'when']);
     });
 
     test('requires and else are highlighted as keywords', () => {
