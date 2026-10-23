@@ -18,7 +18,7 @@ npx domaintrail <command>    # or run it without installing
 ## CLI
 
 ```bash
-dt guide                       # the guide: DSL, file layout, workflow, config, output and exit codes
+dt guide [topic]               # quick reference and topics; one topic (dt guide requires); --all for everything
 dt -r <root> fmt               # format .dt files in place in the canonical layout (--check for CI)
 dt -r <root> check             # validate syntax, references, types and DDD rules
 dt -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
@@ -48,15 +48,22 @@ bun run build && bun run dt -r examples/shop view
 
 ## Guide
 
-**[docs/guide.md](docs/guide.md)** is the reference for writing models and using the CLI, and `dt guide` prints the
-same text, so people and AI agents get it without leaving the terminal:
+**[docs/guide.md](docs/guide.md)** is the reference for writing models and using the CLI. It starts with a
+[quick reference](docs/guide.md#quick-reference) (the workflow, the DSL at a glance, the commands), and its sections are
+**topics** that the CLI prints one at a time, so people and AI agents read only what they need without leaving the
+terminal:
 
-- [Workflow](docs/guide.md#workflow): `fmt` → `check` → `generate ts` → type-check your own code (`tsc --noEmit`) →
-  run the generated contract tests
-- [Formatting](docs/guide.md#formatting): `dt fmt`, the one canonical layout of `.dt` files
-- [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
-- [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
-  `generate.ts.contexts` / `generate.ts.tests`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
+```bash
+dt guide                       # the quick reference and the list of topics (about one screen)
+dt guide requires              # one topic: a ## section with its ### sections, or one ### section
+dt guide M010                  # one rule and the topics that explain it
+dt guide --all                 # the whole guide, the same text as docs/guide.md
+```
+
+The sections, in the guide's order:
+
+- [Workflow](docs/guide.md#workflow): `fmt` → `check` → `generate ts` → implement with `decide` → type-check your own
+  code (`tsc --noEmit`) → run the generated contract tests
 - [File layout (recommended)](docs/guide.md#file-layout-recommended): `<context>/<aggregate>.dt` and
   `<context>/context.dt` (see [ADR 0009](docs/adr/0009-file-layout.md))
 - [DSL](docs/guide.md#dsl): contexts, aggregates, entities, values, states, commands, events, errors,
@@ -67,13 +74,19 @@ same text, so people and AI agents get it without leaving the terminal:
   [invariant expressions](docs/guide.md#invariant-expressions), [command requirements](docs/guide.md#command-requirements),
   [command changes](docs/guide.md#command-changes), [command events](docs/guide.md#command-events) and
   [pure commands](docs/guide.md#pure-commands)
-- [Rules](docs/guide.md#rules) (M001–M021, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
-  [decisions and `decide`](docs/guide.md#decisions-and-decide),
+- [Generated TypeScript](docs/guide.md#generated-typescript): [decisions and `decide`](docs/guide.md#decisions-and-decide),
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
   [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [generated checks](docs/guide.md#generated-checks) and
   [generated tests](docs/guide.md#generated-tests) (see [ADR 0020](docs/adr/0020-generated-checks-and-contract-tests.md)),
-  [output directories](docs/guide.md#output-directories) and
   [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
+  and [output directories](docs/guide.md#output-directories)
+- [Rules](docs/guide.md#rules): M001–M021, L001–L003
+- [Looking up one element](docs/guide.md#looking-up-one-element): `dt show`, as text or JSON
+- [Formatting](docs/guide.md#formatting): `dt fmt`, the one canonical layout of `.dt` files
+- [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
+- [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
+  `generate.ts.contexts` / `generate.ts.tests`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
+- [Language server](docs/guide.md#language-server): `dt lsp`, and how to use it from an editor or Claude Code
 
 A taste of the DSL:
 

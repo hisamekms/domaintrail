@@ -4,15 +4,113 @@
 contracts from them. The DSL describes domain **structure and contracts** only — never business logic, which is written
 by hand against the generated types.
 
-This guide is what `dt guide` prints. It is written for people and AI agents using `dt` without other documentation.
+This guide is written for people and AI agents using `dt` without other documentation. `dt guide` prints the quick
+reference below and the list of topics, `dt guide <topic>` one section (the name in the `<!-- topic: … -->` line above
+its heading, e.g. `dt guide requires`), `dt guide <rule>` one rule (`dt guide M010`), and `dt guide --all` all of it.
 
+<!-- topic: quick -->
+## Quick reference
+
+**The loop.** Edit `.dt` files → `dt fmt` → `dt check` until it exits 0 → `dt generate ts` → implement each command
+with `decide` against its generated `<Command><Aggregate>Decision` type → type-check your code (`tsc --noEmit`) → run
+the generated contract tests. Never edit generated files; change the `.dt` sources and generate again.
+
+**The DSL at a glance** (one file of a valid workspace):
+
+```dt
+// library/loan.dt
+context Library "図書館" { // a bounded context; "…" is a label (表示名)
+  id LoanId: UUID // an ID type
+  id BookId: UUID
+  value Period { // a value object
+    days: Int
+  }
+
+  aggregate Loan "貸出" {
+    id: LoanId // identity (required)
+    book: BookId
+    owns period: Period
+    renewals: Int
+    note: String? // ? = optional
+    invariant renewalsLimited { renewals >= 0 and renewals <= 2 } // holds in every state
+
+    state Lent
+    state Overdue
+    state Returned {
+      returnedAt: Timestamp // only in this state
+    }
+
+    create command lend(id: LoanId, book: BookId, period: Period) "貸し出す"
+      -> Lent
+      emits BookLent
+    command renew(extension: Period)
+      Lent -> Lent
+      requires underLimit { renewals < 2 } else RenewalLimitReached
+      changes period, renewals
+      emits LoanRenewed
+    command markOverdue() Lent -> Overdue
+    command giveBack(at: Timestamp)
+      Lent | Overdue -> Returned
+      emits BookReturned,
+            FeeCharged? when Overdue ->
+      errors BookDamaged
+  }
+
+  event BookLent {
+    loanId: LoanId
+    book: BookId
+  }
+  event LoanRenewed {
+    loanId: LoanId
+    period: Period
+  }
+  event BookReturned {
+    loanId: LoanId
+    returnedAt: Timestamp
+  }
+  event FeeCharged {
+    loanId: LoanId
+    days: Int
+  }
+  error RenewalLimitReached
+  error BookDamaged
+}
+```
+
+**The contract keywords:**
+
+- `owns x: T` — an entity or value held by the aggregate; `references x: XId -> X` — another aggregate, by ID only.
+- `invariant name { expr }` — holds whenever the aggregate (or, inside a `state`, that state) exists.
+- `state S { … }` — a lifecycle state with its own fields; without states, commands have no transitions.
+- `create command c(…) -> S` — makes a new aggregate; it takes the new ID as a parameter (commands are pure).
+- `A | B -> C | D` — the command runs in `A` or `B` and ends in `C` or `D`; one transition per source state.
+- `requires name { expr } else E` — the command is accepted only if; otherwise it returns `E` (the first one failing).
+- `changes a, b` — the fields it may change; without `changes`, no common field (a target state's new fields are set).
+- `emits X` — exactly one `X` on success; `X?` at most one, `X[1..*]` one or more; `X when A -> B` only then.
+- `errors E` — errors it may return besides those of `else`; on an error it emits no event.
+
+**The commands:**
+
+- `dt guide [topic]` — this reference, one section, or `--all`.
+- `dt fmt` — format the `.dt` files in place (`--check` for CI).
+- `dt check` — check the model; exit 0 when there are no errors (`--format json` for one JSON document).
+- `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
+- `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
+- `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
+- `dt view` — the Live View in the browser; it runs until Ctrl+C, so run it in the background.
+
+**When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration and
+change the DSL, not the implementation: never emit an event or set a field only to satisfy the types.
+
+<!-- topic: workflow -->
 ## Workflow
 
 1. Write or edit `.dt` files (see [DSL](#dsl) and [File layout](#file-layout-recommended)).
 2. Run `dt fmt` to put them in the canonical layout (see [Formatting](#formatting)).
 3. Run `dt check` and fix every reported problem until it exits 0.
 4. Run `dt generate ts` to write the TypeScript (it runs `check` first and writes nothing on errors).
-5. Implement the generated contracts in your own code, and type-check that code with your own TypeScript setup
+5. Implement the generated contracts in your own code — each command as a decision with `decide` (see
+   [Decisions and `decide`](#decisions-and-decide)) — and type-check that code with your own TypeScript setup
    (e.g. `tsc --noEmit`). `dt` does not run the TypeScript compiler.
 6. With `generate.ts.tests` configured, run the generated contract tests against your implementation with your test
    runner (see [Generated tests](#generated-tests)).
@@ -32,190 +130,7 @@ dt generate ts --out src/domain/generated
 dt view --port 8080             # http://127.0.0.1:8080, until Ctrl+C
 ```
 
-## Looking up one element
-
-To understand one element of a large model, run `dt show <name>` instead of reading the `.dt` files: it prints the
-element resolved, close to the DSL — the fields of field sets inline (`// with Common.Tenanted`), each field's label
-with where it comes from (`(from term)`, `(from type)`; none when written inline), multiplicities, `owns` /
-`references -> X`, invariants with their expressions (or `(not expressed in the DSL)`), states with their own fields
-and invariants, commands with their transitions, `requires … else`, `changes`, the events of each outcome (`when`
-resolved), the full error union, a `// file:line` location per declaration (relative to the root), and who uses it
-(owns, references, its type or ID, emits, returns, `with`).
-
-```bash
-dt show                         # the contexts and their elements
-dt show Sales                   # a context: terms and one line per element
-dt show Sales.Order             # an element (Order alone is enough when no other context has one)
-dt show Sales.Order.confirm     # a command: its contract, the fields each outcome sets / carries / drops, payloads
-dt show Sales.Order.Confirmed   # a state: its fields, invariants, the commands that enter and leave it
-```
-
-A name may leave out leading parts (`Order`, `Order.confirm`) when it names one thing only; when it names several, they
-are listed (exit 1); an unknown name gets `did you mean …?` (exit 1). It works on a model with semantic errors as far
-as it resolves (unresolved types are marked `(unresolved)`, and a note on stderr gives the number of errors): the exit
-code is 0 whenever the name was found, whatever the diagnostics. A model with syntax errors cannot be shown (exit 1).
-
-`--format json` prints one JSON document, the Typed Model of what was found, keyed by `show`:
-
-- `{"show": "element", "element": {...}, "usedBy": {...}}`: the element (`id`, `kind`, `fields` with `label`,
-  `labelSource`, `multiplicity`, `fieldSet`, …, `invariants`, `states`, `commands`, `location`); each command has
-  `outcomes`: `[{"from", "to", "emits": [{"event", "multiplicity", "lower", "upper"}], "sets", "carries", "drops"}]`.
-  `usedBy` has the lists `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`, `idUsedBy`, `emittedBy`, `returnedBy` and
-  `discriminatorOf`, as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`).
-- `{"show": "command", "aggregate", "command"}` (with `outcomes`), `{"show": "state", "aggregate", "state", "enteredBy",
-  "leftBy"}`, `{"show": "context", "context"}` and `{"show": "overview", "contexts"}` (name, label, doc, shared, terms
-  and the elements with their location).
-- `"modelErrors": n` when the model has errors; `{"error": "...", "candidates": [...]}` when the name is unknown
-  (the suggestions) or ambiguous (the matches).
-
-## Output and exit codes
-
-`check` (and `generate ts`, which checks first) prints one line per problem, sorted by file and position, then a
-summary. When the message does not say how to fix the problem, an indented `hint:` line follows: what to change, or
-`did you mean …?` with the closest names of the right kind visible there (at most 3) for a name that does not resolve.
-
-```text
-sales/order.dt:2:11 - warning L002: Term 'notes' ("備考") is not used by any field or parameter in context 'Sales'.
-  hint: did you mean 'note'?
-sales/order.dt:8:32 - error M009: count() requires a collection, but got 'Money'.
-sales/order.dt:12:30 - error M006: Cannot resolve state 'Confirmd' in this aggregate.
-  hint: did you mean 'Confirmed'?
-1 file(s) checked: 2 error(s), 1 warning(s).
-```
-
-Paths are relative to the root, lines and columns 1-based. Errors (and their hints) go to stderr, warnings to stdout.
-Fix errors first; warnings do not fail the check. Other failures (missing root, invalid config, port in use, …) are one
-line on stderr.
-
-With `--format json` (`check` and `generate ts`), the output is one JSON document on stdout instead, with the same
-order and exit codes (JSON Schema: `schema/diagnostics.schema.json` in the package):
-
-```json
-{
-  "diagnostics": [
-    { "file": "sales/order.dt", "line": 12, "column": 30, "endLine": 12, "endColumn": 38, "severity": "error",
-      "code": "M006", "message": "Cannot resolve state 'Confirmd' in this aggregate.", "hint": "did you mean 'Confirmed'?" }
-  ],
-  "summary": { "files": 6, "errors": 1, "warnings": 0 }
-}
-```
-
-`endLine` / `endColumn` point just past the problem; `hint` is present only when there is one. `generate ts` adds
-`written` (the output directories). A failure other than the diagnostics (missing root, invalid config, no `.dt` file,
-generation refused) is an `error` message in the document, e.g. `{ "error": "Root directory not found: domain" }`;
-`diagnostics` and `summary` are there whenever the check ran.
-
-| Exit code | Meaning |
-|---|---|
-| 0 | success (`check`: no errors; warnings are allowed) |
-| 1 | the model has errors, no `.dt` file was found, generation was refused, `show` did not find the name (or it is ambiguous), or the root / a file could not be read |
-| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
-
-Commands that use the model look for a config file first; `--root` (`-r`, default `.`) is where that search starts.
-
-## Configuration
-
-`domaintrail.jsonc` (comments and trailing commas allowed) or `domaintrail.json` is looked up in `--root` and its
-parents, like `tsconfig.json`; `--config <file>` (`-c`) picks one explicitly. All paths in it are relative to the config
-file, and its directory becomes the root. Without a config file, the defaults apply with `--root` as the root.
-Every key is optional.
-
-```jsonc
-{
-  "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
-  // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
-  "sources": ["domain/**/*.dt", "!domain/drafts/**"],      // default: ["**/*.dt"]
-  "generate": {
-    "ts": {
-      "out": "src/domain/generated",                        // default: "generated/domain"
-      // contexts written elsewhere than "out" (optional)
-      "contexts": { "Common": { "out": "packages/shared/src/generated" } },
-      // contract tests, written only with this key (optional); needs fast-check in your project
-      "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
-    }
-  },
-  "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
-}
-```
-
-CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. `--out` replaces `generate.ts.out`
-only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
-included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
-`..` is a config error, and an output directory reached through a symlink stops generation. A name in `generate.ts.contexts` that is not a context of the model is a config
-error, reported by `generate ts` once the model has been checked. Without `generate.ts.tests.out`, the tests follow
-`--out` (`<out>/tests`).
-
-## Language server
-
-`dt lsp` is a language server (LSP) for `.dt` files, speaking over stdin/stdout. Editors and AI agents start it; it
-runs until the client shuts it down. It offers:
-
-- **Diagnostics equal to `dt check`**: the same rules, severities, codes (the rule ID, e.g. `M009`) and messages,
-  computed over the whole workspace (the config's `sources`) with the unsaved text of open files, after every change.
-  A hint follows the message on a second line (`hint: did you mean 'Confirmed'?`) and is also in the diagnostic's
-  `data.hint`.
-- **Go to definition** and **find references** for types, states, events, errors and field sets, across files and
-  contexts (`Sales.Order` included).
-- **Hover**: kind, name, Japanese name, `///` description, the expression of an invariant or requirement, and the
-  `emits` entries of a command.
-- **Outline** (document symbols), **completion** of names, and **rename** of context elements and states, which updates
-  every reference (a qualified `Sales.Order` keeps its context). Contexts, fields and parameters are not renamed, since
-  their names also appear outside references (in qualified names, expressions and terms).
-
-The workspace is the config found from `--root` or `--config` when given, else from the client's (first) workspace
-folder, else from the current directory, exactly as `dt check` would find it there.
-
-A client needs only: command `dt lsp` (with `dt` on the `PATH`, or e.g. `npx dt lsp`), transport stdio, file
-extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the plugin root (load it with
-`claude --plugin-dir <plugin directory>`); Claude then sees the diagnostics after each edit of a `.dt` file:
-
-```json
-{
-  "domaintrail": {
-    "command": "dt",
-    "args": ["lsp"],
-    "extensionToLanguage": { ".dt": "domaintrail" }
-  }
-}
-```
-
-## Formatting
-
-`dt fmt` rewrites every file of the workspace (the config's `sources`, like `check`) in the one canonical layout;
-`dt fmt <files…>` formats only those files (paths relative to the current directory). Run it after every edit, so that
-the same model is always written the same way and a diff shows only what changed. `dt fmt --check` writes nothing,
-lists the files that are not formatted and exits 1 if there is one (for CI). A file with syntax errors is reported
-like `dt check` does and left untouched (exit 1). The language server formats a document the same way.
-
-Formatting changes only whitespace and three spellings: `[0..1]` becomes `?`, `[1..1]` is removed, and the commas
-between enum values or between transitions are dropped. The model never changes, strings (regular expressions
-included) are untouched, and every comment stays in its place: on the line of the code before it, or on a line of its
-own. The layout:
-
-- 2 spaces of indentation per level. Every member of a block (`context`, `aggregate`, `state`, `value`, `event`, `terms`,
-  …) is on its own line; a block without members is `{}`. One blank line between members is kept where the author wrote
-  one or more, none after `{` or before `}`. Contexts in one file are separated by one blank line.
-- An enum stays on one line (`enum Currency { JPY "日本円" USD "米ドル" }`), unless it has comments or would be longer
-  than 120 columns (a Japanese character counts as two); then one value per line.
-- An expression body stays inline (`invariant positive { amount > 0 }`), unless it has comments or its line would be
-  longer than 120 columns; then the expression goes on a line of its own between `{` and `}`. An expression is never
-  broken.
-- A command with at most one clause — a transition, `requires`, `changes`, `emits` with one event, or `errors` — and
-  no comments stays on one line if it fits in 120 columns: `command start() Draft -> InProgress`. Otherwise each clause
-  goes on a line of its own, one level deeper, in the order of the grammar, and a list of several events after `emits`
-  takes one line per event, aligned after `emits `:
-
-  ```text
-  command cancel(reason: CancelReason)
-    Draft | Confirmed -> Cancelled
-    emits OrderCancelled,
-          RefundRequested when Confirmed ->
-  ```
-
-- Parameters, `with`, `changes` and `errors` lists stay on one line. One space after `:` and `,` and around `->`, `|`,
-  `=>` and operators; none inside `( )`, `[ ]`, around `.` and `..`, or before `?`. One space before a comment at the
-  end of a line.
-
+<!-- topic: layout -->
 ## File layout (recommended)
 
 File names and directories carry no meaning: every matching `.dt` file belongs to the workspace, and a context may be
@@ -232,18 +147,21 @@ billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { .
 
 - `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
   primitives and values.
-- `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several
-  of its aggregates or by none (field sets, for example). The other files open the context without a name: `context Sales { ... }`.
+- `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several of
+  its aggregates or by none (field sets, for example). The other files open the context without a name: `context Sales {
+  ... }`.
 - An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
 - Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
   `order-fulfillment/`.
 
 This is a convention, not a rule: `check` neither requires nor warns about any layout.
 
+<!-- topic: dsl -->
 ## DSL
 
 The examples below are the files of one valid workspace (the file name is in the first comment).
 
+<!-- topic: aggregates -->
 ### Contexts and aggregates
 
 ```dt
@@ -344,7 +262,7 @@ context Sales {
 
     command changeEmail(email: EmailAddress)
       changes email
-      errors EmailTaken // errors that MAY be returned
+      errors EmailTaken // errors it may return (besides those of `else`)
   }
 
   error EmailTaken {
@@ -363,10 +281,10 @@ context Sales {
 - A command is written in this order: parameters and label, transitions, `requires` (see
   [Command requirements](#command-requirements)), `changes` (see [Command changes](#command-changes)), `emits` (see
   [Command events](#command-events)), `errors`.
-- Command transitions follow the parameters (and label), before `emits` / `errors`: `A | B -> C | D` means "in `A` or
-  `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas (`dt fmt` writes one per
-  line). A state may be the source of one transition of a command only, so the input state decides the possible
-  outputs; for several possible outcomes, list them on the right: `InProgress -> InProgress | Completed`.
+- Transitions: `A | B -> C | D` means "in `A` or `B`, the command ends in `C` or `D`". Separate several transitions by
+  line breaks or commas (`dt fmt` writes one per line). A state may be the source of one transition of a command only,
+  so the input state decides the possible outputs; for several possible outcomes, list them on the right: `InProgress ->
+  InProgress | Completed`.
 - In an aggregate with states, a `create command` makes a new aggregate and has exactly one transition without
   sources (`-> Draft`, or `-> A | B`); every other command has one or more transitions, each with sources. Without
   states, commands have no transitions. A command that keeps the state writes it out: `Draft -> Draft`.
@@ -374,6 +292,7 @@ context Sales {
 - Other contexts' elements are referenced with qualified names: `Sales.OrderId`, `-> Sales.Order`.
 - Comments: `// …` and `/* … */`; `///` is a description (see [Names](#names-labels-and-descriptions)).
 
+<!-- topic: primitives -->
 ### Domain primitives
 
 A single value with domain meaning and constraints, wrapping a primitive type. Values combining several fields are
@@ -401,6 +320,7 @@ context Sales {
 - The generated code includes the constructor: `makeQuantity` checks the invariants and returns the first one
   violated (`makeSkuWith(checks)` when an invariant has no expression); see [Generated checks](#generated-checks).
 
+<!-- topic: unions -->
 ### Unions
 
 A value whose shape depends on a kind fixed when it is made (a tagged union). Use a union for a classification that
@@ -435,6 +355,7 @@ context Sales {
 - In invariants, `payer.kind` compares with `Payer.COMPANY` (or the bound enum's values); variant fields are not
   accessible from outside the union.
 
+<!-- topic: shared -->
 ### Shared contexts
 
 ```dt
@@ -456,6 +377,7 @@ shared context Common "共通" { // shared kernel: usable by simple name from ev
 - A shared context holds only domain primitives, enums, value objects, unions, field sets and terms, and depends only on
   shared contexts. Its `terms` apply to fields of every context that has no term of its own for the name.
 
+<!-- topic: field-sets -->
 ### Field sets
 
 Fields that several aggregates, entities or events have for the same domain reason are written once as a field set
@@ -490,7 +412,9 @@ context Expenses "経費" {
     invariant notSelfApproved "申請者は承認できない" { exists(approver) implies approver != applicant }
 
     create command submit(id: ExpenseId, applicant: StaffId "申請者") "申請する" emits ExpenseSubmitted
-    command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する" emits ExpenseApproved
+    command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する"
+      changes approver
+      emits ExpenseApproved
   }
 
   event ExpenseSubmitted "申請受付" with Tenanted, Performed {
@@ -515,6 +439,7 @@ context Expenses "経費" {
   from a field set (M017 warning). An event emitted by several aggregates needs the ID type of each (optional fields
   count).
 
+<!-- topic: fields -->
 ### Domain fields and technical fields
 
 Write a field in the DSL when **domain experts talk about it, or a business rule (an invariant, a transition, a
@@ -536,8 +461,10 @@ Two cases look alike but are not:
 - **Who**: a business role (approver, person in charge) is domain — rules refer to it ("the applicant cannot
   approve"). Name it by the role (`approvedBy: StaffId "承認者"`), usually passed from the command's parameters to the
   event. If regulations require recording the performer of every operation,
-  `fields Performed { performedBy: StaffId "実施者" }`. The login account, service account or IP address is technical; it differs with proxy entry and batches.
+  `fields Performed { performedBy: StaffId "実施者" }`. The login account, service account or IP address is
+  technical; it differs with proxy entry and batches.
 
+<!-- topic: names -->
 ### Names (labels and descriptions)
 
 ```dt
@@ -587,6 +514,7 @@ context Billing { // other files open the context without a name
 - Labels appear in the Live View and as JSDoc in the generated TypeScript; identifiers and generated type names stay
   English.
 
+<!-- topic: expressions -->
 ### Invariant expressions
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
@@ -615,6 +543,7 @@ context Billing { // other files open the context without a name
 - `count`, `exists`, `length`, `matches`, `all`, `any`, `unique` and `contains` are also usable as field and parameter
   names; followed by `(` they are the functions.
 
+<!-- topic: requires -->
 ### Command requirements
 
 `requires` states when a command is accepted. Like an invariant it is a Bool expression, written after the
@@ -690,6 +619,7 @@ context Review {
   `<Command>Rejected` error.
 - `requires` and `else` are also usable as field and parameter names.
 
+<!-- topic: changes -->
 ### Command changes
 
 `changes` lists the fields a command may change, after `requires` and before `emits`. What a command does to the
@@ -752,6 +682,7 @@ The generated decision of each command enforces these rules (see [Decisions and 
 - A field is listed once (M002).
 - `changes` is also usable as a field and parameter name.
 
+<!-- topic: events -->
 ### Command events
 
 `emits` is the exact list of the events a command emits **when it succeeds**; on failure (an error) it emits none.
@@ -827,6 +758,7 @@ context Work {
   write `emits Renamed?`. Never emit an event only to satisfy the types, and never leave out one the contract requires.
 - `when` is also usable as a field and parameter name.
 
+<!-- topic: pure -->
 ### Pure commands
 
 A command is a **pure function** of the aggregate and its parameters: no I/O, no clock, no randomness, no generated
@@ -838,50 +770,22 @@ and events, so commands are tested without mocks.
 A `create command` without a parameter of the aggregate's ID type is a warning (M020): it would have to make the ID
 itself.
 
-## Rules
-
-Each diagnostic names its rule. A `hint` says what to change when the message does not; unresolved names get
-`did you mean …?` instead.
-
-| Code | Check |
-|---|---|
-| SYNTAX | lexer / parser errors |
-| M001 | types, aggregates and names in invariants and requirements resolve |
-| M002 | names are unique in their scope (also across files of one context) |
-| M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
-| M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
-| M005 | a reference's ID type matches the identity of the target aggregate |
-| M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
-| M007 | `emits` / `errors` / `else` refer to existing events / errors |
-| M008 | an invariant or requirement is a Bool expression |
-| M009 | operators and operands have compatible types |
-| M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
-| M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
-| M012 | the ownership graph has no cycles |
-| M013 | aggregates and entities have an `id` field of their own ID type |
-| M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
-| M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
-| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
-| M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
-| M018 | an invariant or requirement without an expression has a label or a `///` description |
-| M019 | a parameter of a command with `requires` is not named like a field its requirements see |
-| M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
-| M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
-| L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
-| L002 | (warning) a term is not used by any field or parameter |
-| L003 | (warning) different things in one scope share a Japanese name |
-
+<!-- topic: generated -->
 ## Generated TypeScript
 
 Per context a module (`Sales.ts`, …) with ID brands, enums, value objects, entities, unions, a discriminated union per
 stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types with a `type` tag, a function type per
-command and an `<Aggregate>Commands` interface to implement, plus `index.ts` and `_runtime.ts`. A domain primitive
-gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`; invariants and
-requirements get check functions (see [Generated checks](#generated-checks)). A field set is an interface that the
-elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its `…Common`).
-The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's place as
-`dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:44`); editing the `.dt` sources moves
-these lines, and generating again rewrites them.
+command and an `<Aggregate>Commands` interface to implement, a decision type per command and a shape constant per
+aggregate for `decide` (see [Decisions and `decide`](#decisions-and-decide)), plus `index.ts` and `_runtime.ts`. A
+domain primitive gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`;
+invariants and requirements get check functions (see [Generated checks](#generated-checks)). A field set is an interface
+that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
+`…Common`). The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's
+place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:44`); editing the `.dt` sources
+moves these lines, and generating again rewrites them.
+
+The examples in this section are generated from `examples/shop` in the repository, a fuller version of the Sales
+context of the DSL examples (with labels, and `emits NoteChanged?` on `changeNote`).
 
 Unions to name groups of them, each generated only when it has a member:
 
@@ -992,6 +896,7 @@ export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
 }[S['state']];
 ```
 
+<!-- topic: decide -->
 ### Decisions and `decide`
 
 A command is implemented as a **decision**: for its outcome, the fields to `set` and the `events`. `decide` from the
@@ -1120,6 +1025,7 @@ export type AcceptReview = (
 }, Conflict | NotApprover | Blocked | NotSignedOff>;
 ```
 
+<!-- topic: your-code -->
 ### Generated code and your code
 
 The generated files are the **contract**, your code is the **implementation**:
@@ -1148,6 +1054,7 @@ export const makeQuantity: Sales.MakeQuantity = (value) =>
 Do not edit generated files: change the `.dt` sources and generate again. Adding properties or methods to generated
 types (declaration merging, editing the output) is not supported; write functions that take the generated types.
 
+<!-- topic: checks -->
 ### Generated checks
 
 Every invariant and requirement with an expression becomes a pure function in the context's module, translated 1:1
@@ -1191,6 +1098,7 @@ aggregates (one object per aggregate, keyed by invariant name, for all its state
 `<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements. A type without such a
 constraint has only the plain function.
 
+<!-- topic: tests -->
 ### Generated tests
 
 With `generate.ts.tests` in the config, `dt generate ts` also writes **contract tests** into `<out>/tests` (or
@@ -1245,6 +1153,7 @@ Options, all optional:
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
 
+<!-- topic: metadata -->
 ### Technical metadata
 
 Technical fields (see [Domain fields and technical fields](#domain-fields-and-technical-fields)) are added by your code,
@@ -1305,6 +1214,7 @@ export const channelOf = (s: StoredEvent<Sales.OrderPlaced>): 'web' | 'store' =>
 export type StoredSalesEvents = StoredEvent<Sales.DomainEvent>;
 ```
 
+<!-- topic: output-dirs -->
 ### Output directories
 
 By default every context goes to `generate.ts.out`. Contexts listed in `generate.ts.contexts` go to their own
@@ -1318,3 +1228,223 @@ Each run replaces the files generated before (recognized by their header). The f
 directory moved, a context removed) are deleted, along with a directory left empty. Only recorded paths inside the root
 and not reached through a symlink are deleted; other entries in that file are ignored. Other files are never deleted —
 neither hand-written files nor generated files you edited — and generation stops instead of overwriting one.
+<!-- topic: rules -->
+## Rules
+
+Each diagnostic names its rule. A `hint` says what to change when the message does not; unresolved names get
+`did you mean …?` instead.
+
+| Code | Check |
+|---|---|
+| SYNTAX | lexer / parser errors |
+| M001 | types, aggregates and names in invariants and requirements resolve |
+| M002 | names are unique in their scope (also across files of one context) |
+| M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
+| M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
+| M005 | a reference's ID type matches the identity of the target aggregate |
+| M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
+| M007 | `emits` / `errors` / `else` refer to existing events / errors |
+| M008 | an invariant or requirement is a Bool expression |
+| M009 | operators and operands have compatible types |
+| M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
+| M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
+| M012 | the ownership graph has no cycles |
+| M013 | aggregates and entities have an `id` field of their own ID type |
+| M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
+| M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
+| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
+| M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
+| M018 | an invariant or requirement without an expression has a label or a `///` description |
+| M019 | a parameter of a command with `requires` is not named like a field its requirements see |
+| M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
+| M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
+| L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
+| L002 | (warning) a term is not used by any field or parameter |
+| L003 | (warning) different things in one scope share a Japanese name |
+
+<!-- topic: show -->
+## Looking up one element
+
+To understand one element of a large model, run `dt show <name>` instead of reading the `.dt` files: it prints the
+element resolved, close to the DSL — the fields of field sets inline (`// with Common.Tenanted`), each field's label
+with where it comes from (`(from term)`, `(from type)`; none when written inline), multiplicities, `owns` /
+`references -> X`, invariants with their expressions (or `(not expressed in the DSL)`), states with their own fields
+and invariants, commands with their transitions, `requires … else`, `changes`, the events of each outcome (`when`
+resolved), the full error union, a `// file:line` location per declaration (relative to the root), and who uses it
+(owns, references, its type or ID, emits, returns, `with`).
+
+```bash
+dt show                         # the contexts and their elements
+dt show Sales                   # a context: terms and one line per element
+dt show Sales.Order             # an element (Order alone is enough when no other context has one)
+dt show Sales.Order.confirm     # a command: its contract, the fields each outcome sets / carries / drops, payloads
+dt show Sales.Order.Confirmed   # a state: its fields, invariants, the commands that enter and leave it
+```
+
+A name may leave out leading parts (`Order`, `Order.confirm`) when it names one thing only; when it names several, they
+are listed (exit 1); an unknown name gets `did you mean …?` (exit 1). It works on a model with semantic errors as far
+as it resolves (unresolved types are marked `(unresolved)`, and a note on stderr gives the number of errors): the exit
+code is 0 whenever the name was found, whatever the diagnostics. A model with syntax errors cannot be shown (exit 1).
+
+`--format json` prints one JSON document, the Typed Model of what was found, keyed by `show`:
+
+- `{"show": "element", "element": {...}, "usedBy": {...}}`: the element (`id`, `kind`, `fields` with `label`,
+  `labelSource`, `multiplicity`, `fieldSet`, …, `invariants`, `states`, `commands`, `location`); each command has
+  `outcomes`: `[{"from", "to", "emits": [{"event", "multiplicity", "lower", "upper"}], "sets", "carries", "drops"}]`.
+  `usedBy` has the lists `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`, `idUsedBy`, `emittedBy`, `returnedBy` and
+  `discriminatorOf`, as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`).
+- `{"show": "command", "aggregate", "command"}` (with `outcomes`), `{"show": "state", "aggregate", "state", "enteredBy",
+  "leftBy"}`, `{"show": "context", "context"}` and `{"show": "overview", "contexts"}` (name, label, doc, shared, terms
+  and the elements with their location).
+- `"modelErrors": n` when the model has errors; `{"error": "...", "candidates": [...]}` when the name is unknown
+  (the suggestions) or ambiguous (the matches).
+
+<!-- topic: fmt -->
+## Formatting
+
+`dt fmt` rewrites every file of the workspace (the config's `sources`, like `check`) in the one canonical layout;
+`dt fmt <files…>` formats only those files (paths relative to the current directory). Run it after every edit, so that
+the same model is always written the same way and a diff shows only what changed. `dt fmt --check` writes nothing,
+lists the files that are not formatted and exits 1 if there is one (for CI). A file with syntax errors is reported
+like `dt check` does and left untouched (exit 1). The language server formats a document the same way.
+
+Formatting changes only whitespace and three spellings: `[0..1]` becomes `?`, `[1..1]` is removed, and the commas
+between enum values or between transitions are dropped. The model never changes, strings (regular expressions
+included) are untouched, and every comment stays in its place: on the line of the code before it, or on a line of its
+own. The layout:
+
+- 2 spaces of indentation per level. Every member of a block (`context`, `aggregate`, `state`, `value`, `event`, `terms`,
+  …) is on its own line; a block without members is `{}`. One blank line between members is kept where the author wrote
+  one or more, none after `{` or before `}`. Contexts in one file are separated by one blank line.
+- An enum stays on one line (`enum Currency { JPY "日本円" USD "米ドル" }`), unless it has comments or would be longer
+  than 120 columns (a Japanese character counts as two); then one value per line.
+- An expression body stays inline (`invariant positive { amount > 0 }`), unless it has comments or its line would be
+  longer than 120 columns; then the expression goes on a line of its own between `{` and `}`. An expression is never
+  broken.
+- A command with at most one clause — a transition, `requires`, `changes`, `emits` with one event, or `errors` — and
+  no comments stays on one line if it fits in 120 columns: `command start() Draft -> InProgress`. Otherwise each clause
+  goes on a line of its own, one level deeper, in the order of the grammar, and a list of several events after `emits`
+  takes one line per event, aligned after `emits `:
+
+  ```text
+  command cancel(reason: CancelReason)
+    Draft | Confirmed -> Cancelled
+    emits OrderCancelled,
+          RefundRequested when Confirmed ->
+  ```
+
+- Parameters, `with`, `changes` and `errors` lists stay on one line. One space after `:` and `,` and around `->`, `|`,
+  `=>` and operators; none inside `( )`, `[ ]`, around `.` and `..`, or before `?`. One space before a comment at the
+  end of a line.
+
+<!-- topic: output -->
+## Output and exit codes
+
+`check` (and `generate ts`, which checks first) prints one line per problem, sorted by file and position, then a
+summary. When the message does not say how to fix the problem, an indented `hint:` line follows: what to change, or
+`did you mean …?` with the closest names of the right kind visible there (at most 3) for a name that does not resolve.
+
+```text
+sales/order.dt:2:11 - warning L002: Term 'notes' ("備考") is not used by any field or parameter in context 'Sales'.
+  hint: did you mean 'note'?
+sales/order.dt:8:32 - error M009: count() requires a collection, but got 'Money'.
+sales/order.dt:12:30 - error M006: Cannot resolve state 'Confirmd' in this aggregate.
+  hint: did you mean 'Confirmed'?
+1 file(s) checked: 2 error(s), 1 warning(s).
+```
+
+Paths are relative to the root, lines and columns 1-based. Errors (and their hints) go to stderr, warnings to stdout.
+Fix errors first; warnings do not fail the check. Other failures (missing root, invalid config, port in use, …) are one
+line on stderr.
+
+With `--format json` (`check` and `generate ts`), the output is one JSON document on stdout instead, with the same
+order and exit codes (JSON Schema: `schema/diagnostics.schema.json` in the package):
+
+```json
+{
+  "diagnostics": [
+    { "file": "sales/order.dt", "line": 12, "column": 30, "endLine": 12, "endColumn": 38, "severity": "error",
+      "code": "M006", "message": "Cannot resolve state 'Confirmd' in this aggregate.", "hint": "did you mean 'Confirmed'?" }
+  ],
+  "summary": { "files": 6, "errors": 1, "warnings": 0 }
+}
+```
+
+`endLine` / `endColumn` point just past the problem; `hint` is present only when there is one. `generate ts` adds
+`written` (the output directories). A failure other than the diagnostics (missing root, invalid config, no `.dt` file,
+generation refused) is an `error` message in the document, e.g. `{ "error": "Root directory not found: domain" }`;
+`diagnostics` and `summary` are there whenever the check ran.
+
+| Exit code | Meaning |
+|---|---|
+| 0 | success (`check`: no errors; warnings are allowed) |
+| 1 | the model has errors, no `.dt` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, or the root / a file could not be read |
+| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
+
+<!-- topic: config -->
+## Configuration
+
+`domaintrail.jsonc` (comments and trailing commas allowed) or `domaintrail.json` is looked up in `--root` (`-r`,
+default `.`) and its parents, like `tsconfig.json`; `--config <file>` (`-c`) picks one explicitly. All paths in it are
+relative to the config file, and its directory becomes the root. Without a config file, the defaults apply with
+`--root` as the root. Every key is optional.
+
+```jsonc
+{
+  "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
+  // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
+  "sources": ["domain/**/*.dt", "!domain/drafts/**"],      // default: ["**/*.dt"]
+  "generate": {
+    "ts": {
+      "out": "src/domain/generated",                        // default: "generated/domain"
+      // contexts written elsewhere than "out" (optional)
+      "contexts": { "Common": { "out": "packages/shared/src/generated" } },
+      // contract tests, written only with this key (optional); needs fast-check in your project
+      "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
+    }
+  },
+  "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
+}
+```
+
+CLI options win over the file: `generate ts --out`, `view --port`, `view --host`. `--out` replaces `generate.ts.out`
+only; contexts listed in `generate.ts.contexts` keep their own directories. Sources and output directories, `--out`
+included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
+`..` is a config error, and an output directory reached through a symlink stops generation. A name in
+`generate.ts.contexts` that is not a context of the model is a config error, reported by `generate ts` once the model
+has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`).
+
+<!-- topic: lsp -->
+## Language server
+
+`dt lsp` is a language server (LSP) for `.dt` files, speaking over stdin/stdout. Editors and AI agents start it; it
+runs until the client shuts it down. It offers:
+
+- **Diagnostics equal to `dt check`**: the same rules, severities, codes (the rule ID, e.g. `M009`) and messages,
+  computed over the whole workspace (the config's `sources`) with the unsaved text of open files, after every change.
+  A hint follows the message on a second line (`hint: did you mean 'Confirmed'?`) and is also in the diagnostic's
+  `data.hint`.
+- **Go to definition** and **find references** for types, states, events, errors and field sets, across files and
+  contexts (`Sales.Order` included).
+- **Hover**: kind, name, Japanese name, `///` description, the expression of an invariant or requirement, and the
+  `emits` entries of a command.
+- **Outline** (document symbols), **completion** of names, and **rename** of context elements and states, which updates
+  every reference (a qualified `Sales.Order` keeps its context). Contexts, fields and parameters are not renamed, since
+  their names also appear outside references (in qualified names, expressions and terms).
+
+The workspace is the config found from `--root` or `--config` when given, else from the client's (first) workspace
+folder, else from the current directory, exactly as `dt check` would find it there.
+
+A client needs only: command `dt lsp` (with `dt` on the `PATH`, or e.g. `npx dt lsp`), transport stdio, file
+extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the plugin root (load it with
+`claude --plugin-dir <plugin directory>`); Claude then sees the diagnostics after each edit of a `.dt` file:
+
+```json
+{
+  "domaintrail": {
+    "command": "dt",
+    "args": ["lsp"],
+    "extensionToLanguage": { ".dt": "domaintrail" }
+  }
+}
+```

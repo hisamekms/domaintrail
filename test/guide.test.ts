@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { parseGuide } from '../src/cli/guide.js';
 import { runCli } from '../src/cli/main.js';
 import { analyze } from '../src/core/analyze.js';
 import { parseJsonc } from '../src/core/config.js';
 import { loadWorkspace } from '../src/core/files.js';
+import { formatDomain } from '../src/format/format.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { EXAMPLES, check } from './helpers.js';
 
@@ -28,12 +30,79 @@ function workspace(): Record<string, string> {
     return files;
 }
 
-describe('dt guide', () => {
-    test('prints docs/guide.md', async () => {
-        const out: string[] = [];
-        expect(await runCli(['guide'], { out: (l) => out.push(l), err: () => {} })).toBe(0);
-        expect(out).toEqual([guide.trimEnd()]);
+/** Runs `dt guide …` and returns the exit code with what it printed. */
+async function runGuide(...args: string[]): Promise<{ code: number; out: string; err: string }> {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await runCli(['guide', ...args], { out: (l) => out.push(l), err: (l) => err.push(l) });
+    return { code, out: out.join('\n'), err: err.join('\n') };
+}
+
+describe('dt guide topics', () => {
+    const parsed = parseGuide(guide);
+
+    test('--all prints docs/guide.md', async () => {
+        expect(await runGuide('--all')).toEqual({ code: 0, out: guide.trimEnd(), err: '' });
     });
+
+    test('every ## and ### heading has a topic, and every topic a unique name and a non-empty section', async () => {
+        const headings = guide.replace(/^```[\s\S]*?^```/gm, '').match(/^#{2,3} .+$/gm)!;
+        expect(parsed.topics.map((t) => `${'#'.repeat(t.level)} ${t.title}`)).toEqual(headings);
+        expect(new Set(parsed.topics.map((t) => t.name)).size).toBe(parsed.topics.length);
+        for (const t of parsed.topics) {
+            const r = await runGuide(t.name);
+            expect(r.code).toBe(0);
+            expect(r.out).toBe(t.text);
+            expect(r.out.startsWith(`${'#'.repeat(t.level)} ${t.title}\n\n`)).toBe(true);
+            expect(r.out.split('\n').length).toBeGreaterThan(2);
+            expect(r.out).not.toContain('<!-- topic:');
+        }
+    });
+
+    test('a ## topic includes its ### topics, a ### topic only itself', async () => {
+        const dsl = (await runGuide('dsl')).out;
+        expect(dsl).toContain('### Command requirements');
+        expect(dsl).not.toContain('## Generated TypeScript');
+        const requires = (await runGuide('requires')).out;
+        expect(requires).not.toContain('### Command changes');
+    });
+
+    test('without a topic, prints the intro, the quick reference and the list of topics, about one screen', async () => {
+        const r = await runGuide();
+        expect(r.code).toBe(0);
+        expect(r.out.startsWith(parsed.intro)).toBe(true);
+        expect(r.out).toContain(parsed.topics.find((t) => t.name === 'quick')!.text);
+        for (const t of parsed.topics) expect(r.out).toMatch(new RegExp(`^ +${t.name} +`, 'm'));
+        expect(r.out.split('\n').length).toBeLessThanOrEqual(150);
+    });
+
+    test('the quick reference example is a file that checks without any diagnostic and is formatted', async () => {
+        const quick = parsed.topics.find((t) => t.name === 'quick')!.text;
+        const [example] = blocks('dt', quick);
+        expect(example).toContain('aggregate');
+        const a = await check({ 'library/loan.dt': example });
+        expect(a.diagnostics).toEqual([]);
+        expect(formatDomain(example)).toBe(example);
+    });
+
+    test('an unknown topic is an error with a suggestion and the topics', async () => {
+        const r = await runGuide('requries');
+        expect(r.code).toBe(1);
+        expect(r.out).toBe('');
+        expect(r.err).toContain("did you mean 'requires'?");
+        expect(r.err).toContain('workflow, layout, dsl');
+        expect((await runGuide('requires', '--all')).code).toBe(1);
+    });
+
+    test('a rule code prints its row of the rules table and the topics that explain it', async () => {
+        const r = await runGuide('m010');
+        expect(r.code).toBe(0);
+        expect(r.out).toContain('| M010 | state-specific fields');
+        expect(r.out).toContain('`dt guide requires`');
+    });
+});
+
+describe('dt guide', () => {
 
     test('its DSL examples are one workspace that checks without any diagnostic', async () => {
         const files = workspace();

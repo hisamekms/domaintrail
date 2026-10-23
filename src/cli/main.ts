@@ -7,6 +7,7 @@ import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/d
 import { findDomainFiles, loadWorkspace } from '../core/files.js';
 import { formatDomain } from '../format/format.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
+import { guideTopic, parseGuide, quickReference } from './guide.js';
 import { lookup, showJson, showText } from './show.js';
 import guide from '../../docs/guide.md' with { type: 'text' };
 
@@ -93,7 +94,8 @@ Examples:
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
 
-New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workflow, config and exit codes.`);
+New to dt, or an AI agent? Run \`dt guide\` first: the workflow, the DSL at a glance and the commands, then the list
+of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when you need one.`);
 
     program
         .command('check')
@@ -128,7 +130,7 @@ left over from earlier runs (a moved output directory, a removed context) are de
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
 directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
 With generate.ts.tests in the config, also writes the contract tests (fast-check arbitraries and a suite per
-context, by default into <out>/tests); see \`dt guide\`, "Generated tests".
+context, by default into <out>/tests); see \`dt guide tests\`.
 With --format json, prints one JSON document like \`check\`, with the directories written ("written") or why
 nothing was written ("error").
 Type-check your own code against the output with \`tsc --noEmit\`.
@@ -195,7 +197,7 @@ Examples:
         .argument('[files...]', 'files to format, relative to the current directory (default: the sources of the workspace)')
         .option('--check', 'write nothing; list the files that are not formatted and exit 1 if there are any')
         .addHelpText('after', `
-Rewrites each file in the layout described in \`dt guide\` (Formatting): 2-space indentation, one member per line,
+Rewrites each file in the layout described in \`dt guide fmt\`: 2-space indentation, one member per line,
 a command's clauses on lines of their own unless it is short, and \`[0..1]\` written as \`?\`. Only whitespace and
 these spellings change, never the model; comments stay where they are. Run it after editing .dt files.
 A file with syntax errors is reported like \`dt check\` does and left untouched (exit 1).
@@ -335,14 +337,32 @@ Examples:
 
     program
         .command('guide')
-        .description('Print the guide (Markdown): DSL, file layout, workflow, config, output and exit codes.')
+        .description('Print the guide (Markdown): a quick reference and the topics, one topic, or all of it.')
+        .argument('[topic]', 'a topic (workflow, dsl, requires, decide, …) or a rule code (M010)')
+        .option('--all', 'print the whole guide')
         .addHelpText('after', `
-The same text as docs/guide.md in the repository. Read it before writing .dt files.
+Without a topic, prints the quick reference (the workflow, the DSL at a glance, the commands) and the list of
+topics. With a topic, prints that section of the guide (a ## section with its ### sections); with a rule code, the
+rule and the topics that explain it. An unknown topic is an error with suggestions (exit 1). With --all, prints the
+whole guide, the same text as docs/guide.md in the repository.
 
 Examples:
   dt guide
-  dt guide > domaintrail-guide.md`)
-        .action(() => io.out(guide.trimEnd()));
+  dt guide requires
+  dt guide M010
+  dt guide --all > domaintrail-guide.md`)
+        .action((topic: string | undefined, opts: { all?: boolean }) => {
+            if (opts.all) {
+                if (topic) throw new CliError('Give a topic or --all, not both.');
+                io.out(guide.trimEnd());
+                return;
+            }
+            const parsed = parseGuide(guide);
+            if (!topic) return io.out(quickReference(parsed));
+            const found = guideTopic(parsed, topic);
+            if ('error' in found) throw new CliError(found.error);
+            io.out(found.text);
+        });
 
     const config = async () => {
         const start = path.resolve(program.opts().root);
