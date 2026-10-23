@@ -1,7 +1,23 @@
 import { AstUtils, type AstNode } from 'langium';
 import {
     isAggregate,
+    isBinaryExpr,
+    isBoolLiteral,
+    isContainsExpr,
+    isCountExpr,
+    isDecimalLiteral,
     isEntity,
+    isExistsExpr,
+    isIntLiteral,
+    isLengthExpr,
+    isMatchesExpr,
+    isMemberAccess,
+    isNameRef,
+    isNotExpr,
+    isQuantifierExpr,
+    isRangeExpr,
+    isStringLiteral,
+    isUniqueExpr,
     isEnumDecl,
     isErrorDecl,
     isEventDecl,
@@ -14,6 +30,7 @@ import {
     isValueObject,
     type Command,
     type ContextElement,
+    type Expression,
     type Invariant,
     type Multiplicity,
     type Parameter,
@@ -24,6 +41,7 @@ import {
 import { LabelResolver, docComment } from '../core/labels.js';
 import { expressionText } from '../format/format.js';
 import { cardinality, multiplicityText } from '../core/types.js';
+import { regexSource } from '../core/checker/expressions.js';
 import {
     commandsOf,
     commonFields,
@@ -39,7 +57,7 @@ import {
     type WithFieldSets,
 } from '../core/model-index.js';
 import { commandId, elementId, stateId } from './ids.js';
-import type { CommandModel, Described, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, RequirementModel, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
+import type { CommandModel, Described, ExprModel, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, RequirementModel, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
 
 export type FileResolver = (uri: string) => string;
 
@@ -80,6 +98,7 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
             base.invariants = primitiveInvariants(el).map((i) => ({
                 name: i.name,
                 ...optional('source', i.expr && sourceText(i.expr)),
+                ...(i.expr && { expr: exprModel(i.expr) }),
                 ...optional('label', i.label),
                 ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
             }));
@@ -189,11 +208,32 @@ function fieldModel(f: FieldLike | Parameter, labels: LabelResolver): FieldModel
 }
 
 function invariant(inv: Invariant): InvariantModel {
-    return { name: inv.name, ...optional('source', inv.expr && sourceText(inv.expr)), ...described(inv) };
+    return { name: inv.name, ...optional('source', inv.expr && sourceText(inv.expr)), ...(inv.expr && { expr: exprModel(inv.expr) }), ...described(inv) };
 }
 
 function requirement(r: Requirement, qname: (r: { ref?: ContextElement; $refText: string }) => string): RequirementModel {
-    return { name: r.name, ...optional('source', r.expr && sourceText(r.expr)), error: qname(r.error), ...described(r) };
+    return { name: r.name, ...optional('source', r.expr && sourceText(r.expr)), ...(r.expr && { expr: exprModel(r.expr) }), error: qname(r.error), ...described(r) };
+}
+
+/** The tree of an expression (syntax only; the model has no errors when it is read for generated checks). */
+function exprModel(e: Expression): ExprModel {
+    if (isBoolLiteral(e)) return { k: 'bool', value: e.value === 'true' };
+    if (isIntLiteral(e)) return { k: 'int', value: e.negative ? -e.value : e.value };
+    if (isDecimalLiteral(e)) return { k: 'decimal', value: `${e.negative ? '-' : ''}${e.value}` };
+    if (isStringLiteral(e)) return { k: 'string', value: e.value };
+    if (isNameRef(e)) return { k: 'name', name: e.name };
+    if (isMemberAccess(e)) return { k: 'member', receiver: exprModel(e.receiver), member: e.member };
+    if (isNotExpr(e)) return { k: 'not', operand: exprModel(e.operand) };
+    if (isBinaryExpr(e)) return { k: 'binary', op: e.op, left: exprModel(e.left), right: exprModel(e.right) };
+    if (isRangeExpr(e)) return { k: 'range', operand: exprModel(e.operand), lower: exprModel(e.lower), upper: exprModel(e.upper) };
+    if (isCountExpr(e)) return { k: 'count', collection: exprModel(e.collection) };
+    if (isExistsExpr(e)) return { k: 'exists', operand: exprModel(e.operand) };
+    if (isLengthExpr(e)) return { k: 'length', operand: exprModel(e.operand) };
+    if (isMatchesExpr(e)) return { k: 'matches', operand: exprModel(e.operand), pattern: regexSource(e) };
+    if (isUniqueExpr(e)) return { k: 'unique', collection: exprModel(e.collection), ...(e.param && { param: e.param.name }), keys: e.keys.map(exprModel) };
+    if (isContainsExpr(e)) return { k: 'contains', collection: exprModel(e.collection), element: exprModel(e.element) };
+    if (isQuantifierExpr(e)) return { k: 'quantifier', quantifier: e.quantifier, collection: exprModel(e.collection), param: e.param.name, body: exprModel(e.body) };
+    return { k: 'bool', value: false }; // unreachable for a parsed expression
 }
 
 const sourceText = (e: AstNode | undefined): string => (e ? expressionText(e) : '');

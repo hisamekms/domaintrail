@@ -183,7 +183,9 @@ describe('invariants without an expression', () => {
             { name: 'labelled', label: '明細の在庫が引当済み' },
             { name: 'described', doc: 'The lines were checked against stock.' },
         ]);
-        expect(order.states![1].invariants).toEqual([{ name: 'both', label: '確定時に通知済み', source: 'total > 0' }]);
+        expect(order.states![1].invariants).toEqual([
+            { name: 'both', label: '確定時に通知済み', source: 'total > 0', expr: { k: 'binary', op: '>', left: { k: 'name', name: 'total' }, right: { k: 'int', value: 0 } } },
+        ]);
     });
 
     test('M018 an invariant without an expression needs a label or a description', async () => {

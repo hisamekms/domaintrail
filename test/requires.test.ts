@@ -44,7 +44,13 @@ describe('requires', () => {
         expect(a.diagnostics).toEqual([]);
         const accept = a.model!.elements['Review.Review'].commands![0];
         expect(accept.requires).toEqual([
-            { name: 'authorizedApprover', label: '承認者である', source: 'contains(policy.approvers, person)', error: 'Review.NotApprover' },
+            {
+                name: 'authorizedApprover',
+                label: '承認者である',
+                source: 'contains(policy.approvers, person)',
+                expr: { k: 'contains', collection: { k: 'member', receiver: { k: 'name', name: 'policy' }, member: 'approvers' }, element: { k: 'name', name: 'person' } },
+                error: 'Review.NotApprover',
+            },
             { name: 'noOpenBlocker', label: '未解決の阻害がない', doc: '阻害がすべて解決済み', error: 'Review.Blocked' },
         ]);
         // the errors of `else` join the listed ones, after them

@@ -1,6 +1,7 @@
 import * as posix from 'node:path/posix';
 import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, Location, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
 import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
+import { CheckWriter } from './checks.js';
 import {
     AGGREGATE_TYPE,
     DOMAIN_EVENT_TYPE,
@@ -150,6 +151,18 @@ export const decide = <D>(shape: Shape, decision: D): Decide<D> =>
         return { ok: true, value };
     }) as Decide<D>;
 
+/** Whether two optional values are equal: both absent, or both present and equal by \`same\` (for generated checks). */
+export const sameOptional = <T>(a: T | undefined, b: T | undefined, same: (x: T, y: T) => boolean): boolean =>
+    a === undefined || b === undefined ? a === b : same(a, b);
+
+/** Whether two lists are equal: the same length, and equal by \`same\` element by element (for generated checks). */
+export const sameList = <T>(a: readonly T[], b: readonly T[], same: (x: T, y: T) => boolean): boolean =>
+    a.length === b.length && a.every((x, i) => same(x, b[i]));
+
+/** Whether no two elements of a list are equal by \`same\`: \`unique(…)\` of the DSL (for generated checks). */
+export const distinct = <T>(xs: readonly T[], same: (x: T, y: T) => boolean): boolean =>
+    xs.every((x, i) => xs.every((y, j) => j <= i || !same(x, y)));
+
 /** Decimal values are carried as strings so that no precision is lost. */
 export type Decimal = string & { readonly __brand: 'Decimal' };
 
@@ -248,14 +261,41 @@ function condition(w: OutcomePatternModel | undefined): string {
 
 class ContextEmitter {
     private readonly imports = new Set<string>();
+    /** Contexts whose module is imported as a value (its generated checks are called), not only for types. */
+    private readonly valueImports = new Set<string>();
     private readonly out: string[] = [];
+    private readonly checks: CheckWriter;
 
     constructor(
         private readonly model: DomainModel,
         private readonly ctx: string,
         /** Import specifier of another context's module. */
         private readonly moduleOf: (ctx: string) => string,
-    ) {}
+    ) {
+        this.checks = new CheckWriter({
+            model,
+            ctx,
+            typeRef: (qname) => this.ref(qname),
+            valueRef: (qname, name) => {
+                const ctx = qname.slice(0, qname.indexOf('.'));
+                if (ctx === this.ctx) return name;
+                this.imports.add(ctx);
+                this.valueImports.add(ctx);
+                return `${ctx}.${name}`;
+            },
+            fieldType: (f) => this.fieldType(f),
+            jsdoc: (lines, loc) => {
+                const start = this.out.length;
+                this.jsdoc([...lines, seeLine(loc)]);
+                return this.out.splice(start);
+            },
+        });
+    }
+
+    /** Lines of generated checks, after a blank line (nothing when there are none). */
+    private push(lines: string[]): void {
+        if (lines.length) this.out.push('', ...lines);
+    }
 
     emit(): string {
         for (const el of elementsIn(this.model, this.ctx)) {
@@ -282,6 +322,8 @@ class ContextEmitter {
                 case 'entity':
                     this.jsdoc([...describedLines(el), ...invariantLines(el.invariants), seeLine(el.location)]);
                     this.iface(el.name, this.fieldSets(el), [], ownFields(el));
+                    this.push(this.checks.equality(el));
+                    this.push(this.checks.struct(el));
                     break;
                 case 'fieldSet':
                     this.jsdoc([...describedLines(el), `Fields taken on with \`with ${el.name}\`.`, seeLine(el.location)]);
@@ -289,6 +331,8 @@ class ContextEmitter {
                     break;
                 case 'union':
                     this.union(el);
+                    if (el.variants?.length) this.push(this.checks.equality(el));
+                    this.push(this.checks.union(el));
                     break;
                 case 'event':
                 case 'error':
@@ -304,10 +348,13 @@ class ContextEmitter {
         this.persistentEvents();
         this.unions();
         const body = this.out.join('\n');
-        const runtime = ['Decimal', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
+        const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(body);
+        const runtime = ['Decimal', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
+        const values = ['distinct', 'err', 'ok', 'sameList', 'sameOptional'].filter((n) => new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(body));
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
-            ...[...this.imports].sort().map((c) => `import type * as ${c} from '${this.moduleOf(c)}';`),
+            ...(values.length ? [`import { ${values.join(', ')} } from './_runtime.js';`] : []),
+            ...[...this.imports].sort().map((c) => `import ${this.valueImports.has(c) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`),
         ];
         return [HEADER, ...imports, '', body].join('\n');
     }
@@ -356,6 +403,7 @@ class ContextEmitter {
         if (p.invariants.length === 0) {
             this.jsdoc([`Creates a ${p.name}. It has no invariants, so creation cannot fail.`, seeLine(p.location)]);
             this.line(`export type ${makeTypeName(p)} = (value: ${base}) => ${p.name};`);
+            this.push(this.checks.primitive(p));
             return;
         }
         this.jsdoc([`A value that violates an invariant of ${p.name}.`, seeLine(p.location)]);
@@ -366,8 +414,9 @@ class ContextEmitter {
         this.line(`    readonly invariant: ${p.invariants.map((i) => `'${i.name}'`).join(' | ')};`);
         this.line('}');
         this.out.push('');
-        this.jsdoc([`Creates a ${p.name}, checking its invariants. Implement by hand.`, seeLine(p.location)]);
+        this.jsdoc([`Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`, seeLine(p.location)]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);
+        this.push(this.checks.primitive(p));
     }
 
     /** A union: one type alias over object types tagged with the discriminator. */
@@ -415,11 +464,13 @@ class ContextEmitter {
         }
         this.out.push('');
         this.shape(agg);
+        this.push(this.checks.aggregate(agg));
 
         const commands = agg.commands ?? [];
         for (const c of commands) {
             this.out.push('');
             this.command(agg, c);
+            this.push(this.requiresCheck(agg, c));
         }
         if (commands.length > 0) {
             this.out.push('');
@@ -535,6 +586,16 @@ class ContextEmitter {
             this.result(`    readonly ${from}: (${[`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ')}) => `, outcomes(from, to, true), errors, '    ', ';');
         }
         this.line('};');
+    }
+
+    /** The generated check of a command's requirements, with the parameters of its contract. */
+    private requiresCheck(agg: ElementModel, c: CommandModel): string[] {
+        const states = agg.states ?? [];
+        const sources = unique(c.transitions.flatMap((t) => t.from));
+        const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') : agg.name;
+        const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
+        const ps = c.params.map((p) => ({ name: p.name, type: `${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}` }));
+        return this.checks.requires(agg, c, commandTypeName(agg, c), subject, ps);
     }
 
     /** The entries of `emits` for a source state, with `when` reduced to what still selects among its targets. */

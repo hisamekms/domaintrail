@@ -1,10 +1,10 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isEventDecl, isIdType, isPrimitiveDecl } from '../language/generated/ast.js';
-import { commandsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
+import { isAggregate, isEntity, isEventDecl, isIdType, isPrimitiveDecl, isUnionDecl, isValueObject } from '../language/generated/ast.js';
+import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
-export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'decide', 'Decide', 'Shape', 'NoChanges', 'outcome', 'eventList', 'NoEvents', 'Outcome', 'EventOf'] as const;
+export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'decide', 'Decide', 'Shape', 'NoChanges', 'outcome', 'eventList', 'NoEvents', 'Outcome', 'EventOf', 'sameOptional', 'sameList', 'distinct'] as const;
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';
@@ -88,7 +88,15 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
             out.push({ name: el.name, origin: `${KIND_LABELS[el.$type]} '${el.name}'`, node: el });
             if (isIdType(el) || isPrimitiveDecl(el)) {
                 out.push({ name: makeTypeName(el), origin: `the constructor of '${el.name}'`, node: el });
-                if (primitiveInvariants(el).length) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, node: el });
+                const invs = primitiveInvariants(el);
+                if (invs.length) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, node: el });
+                const declared = invs.some((i) => !i.expr);
+                out.push({ name: `make${el.name}${declared ? 'With' : ''}`, origin: `the generated constructor of '${el.name}'`, node: el });
+                if (invs.length) out.push(...checkNames(el.name, declared, el));
+            } else if (isValueObject(el) || isEntity(el) || isUnionDecl(el)) {
+                out.push({ name: `equal${el.name}`, origin: `the equality of '${el.name}'`, node: el });
+                const invs = isUnionDecl(el) ? el.variants.flatMap((v) => invariantsOf(v.members)) : invariantsOf(el.members);
+                if (invs.length) out.push(...checkNames(el.name, invs.some((i) => !i.expr), el));
             }
             continue;
         }
@@ -105,9 +113,23 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
         if (commands.length > 0) {
             out.push({ name: commandsInterfaceName(el), origin: `commands of '${el.name}'`, node: el });
         }
+        const invs = [...invariantsOf(el.members), ...states.flatMap((s) => invariantsOf(s.members))];
+        if (invs.length) {
+            const declared = invs.some((i) => !i.expr);
+            out.push(...checkNames(el.name, declared, el));
+            for (const s of states) out.push(...checkNames(stateTypeName(el, s), false, s).map((n) => (declared ? { ...n, name: `${n.name}With` } : n)));
+        }
         for (const c of commands) {
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, node: c });
             out.push({ name: decisionTypeName(el, c), origin: `the decision of '${el.name}.${c.name}'`, node: c });
+            if (!c.requirements.length) continue;
+            const t = commandTypeName(el, c);
+            const origin = `the check of the requirements of '${el.name}.${c.name}'`;
+            if (c.requirements.some((r) => !r.expr)) {
+                out.push({ name: `check${t}RequiresWith`, origin, node: c }, { name: `${t}DeclaredRequires`, origin, node: c });
+            } else {
+                out.push({ name: `check${t}Requires`, origin, node: c });
+            }
         }
         if (commands.some((c) => c.emits.length > 0)) {
             out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, node: el });
@@ -120,6 +142,12 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
     const aggregate = index.elementsOf(ctx).find(isAggregate);
     if (aggregate) out.push({ name: AGGREGATE_TYPE, origin: 'the union of the aggregates', node: aggregate });
     return out;
+}
+
+/** The names of the generated check of a type: `check<T>`, or `check<T>With` and `<T>DeclaredChecks` with a slot. */
+function checkNames(type: string, declared: boolean, node: AstNode): GeneratedName[] {
+    const origin = `the check of the invariants of '${type}'`;
+    return declared ? [{ name: `check${type}With`, origin, node }, { name: `${type}DeclaredChecks`, origin, node }] : [{ name: `check${type}`, origin, node }];
 }
 
 /** Drops repeated names (reported by M002) so that they do not also count as generated-name collisions. */
