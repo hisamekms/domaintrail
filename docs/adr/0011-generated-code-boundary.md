@@ -2,6 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-18
+- Amended by: [ADR 0019](0019-command-changes-and-decisions.md) (generated code may also hold data without logic: the
+  shape constants read by `decide`)
 
 ## Context
 
@@ -15,7 +17,9 @@ boundary has to be stated.
 
 - **Generated code is the contract: types only.** The shapes of the model, command signatures
   (`ConfirmOrder`, `<Aggregate>Commands`) and constructor signatures of domain primitives (`Make<Name>`). Invariants
-  are documented as JSDoc (`@invariant`) and not checked.
+  are documented as JSDoc (`@invariant`) and not checked. (Amended by [ADR 0019](0019-command-changes-and-decisions.md):
+  besides types, **data without logic** — one constant per aggregate, `<Aggregate>Shape`, restating its field names
+  for `decide` of the runtime. Behaviour stays in the runtime, which is the same for every model, and in users' code.)
 - **Users write the implementation**: command implementations, `Make<Name>` constructors and invariant checks, in
   their own files.
 - **Generated files are never edited.** They hold only what follows from the DSL and are replaced on every run.

@@ -4,6 +4,8 @@
 - Date: 2026-10-23
 - Amends: the `emits` of [ADR 0014](0014-command-transitions.md), the generated contract of
   [ADR 0015](0015-handlers-per-state.md), and the event list of [ADR 0001](0001-mvp-implementation-decisions.md)
+- Amended by: [ADR 0019](0019-command-changes-and-decisions.md) (`…ByState` and `byState` replaced by decisions and
+  `decide`; the JSDoc of each handler moves to the decision type)
 
 ## Context
 
