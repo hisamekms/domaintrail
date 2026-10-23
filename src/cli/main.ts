@@ -87,6 +87,7 @@ Examples:
   dt check                      validate every .dt file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
+  dt lsp                        language server over stdio, started by editors and AI agents
 
 New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workflow, config and exit codes.`);
 
@@ -204,6 +205,27 @@ Examples:
             if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
             io.out(`Live View: ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
+        });
+
+    program
+        .command('lsp')
+        .description('Start the language server over stdio, for editors and AI agents (runs until the client exits).')
+        .option('--stdio', 'talk over stdin/stdout (the default and only transport; accepted for clients that pass it)')
+        .addHelpText('after', `
+Speaks the Language Server Protocol on stdin/stdout for .dt files: the diagnostics of \`dt check\` (same rules, codes
+and messages, over the whole workspace and the unsaved text of open files), go to definition, find references, hover,
+outline, rename of declarations and completion. The workspace is the config found from --root or --config, else from
+the client's workspace folder, else from the current directory. Started by an LSP client, not by hand.
+
+Examples:
+  dt lsp
+  dt -r domain lsp`)
+        .action(async () => {
+            const root = program.getOptionValueSource('root') === 'default' ? undefined : path.resolve(program.opts().root);
+            if (root !== undefined || program.opts().config) await config(); // fail early on a bad --root or --config
+            const { startLanguageServer } = await import('../lsp/server.js');
+            startLanguageServer({ root, configPath: program.opts().config });
+            await new Promise<void>(() => {}); // the server exits the process when the client says so
         });
 
     program
