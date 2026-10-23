@@ -1470,6 +1470,17 @@ select,
 .bcard-require .bcard-doc {
     flex-basis: 100%;
 }
+/* The fields a command changes. */
+.bcard-changes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    margin-top: 2px;
+}
+.bcard-change {
+    font-family: var(--mono);
+    font-size: 12px;
+}
 .bcard-fields {
     display: grid;
     grid-template-columns: minmax(0, max-content) minmax(0, 1fr);

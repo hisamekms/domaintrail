@@ -41,6 +41,7 @@ context Sales {
     command addItem(item: OrderItem "追加する明細") "明細を追加する"
       Draft -> Draft
       requires newSku "同じ商品コードの明細がない" { all(items, i => i.sku != item.sku) } else DuplicateSku
+      changes items
 
     command confirm(at: Timestamp) "注文を確定する"
       Draft -> Confirmed
@@ -57,6 +58,7 @@ context Sales {
     command changeNote(note: String?) "備考を変更する"
       Draft -> Draft
       Confirmed -> Confirmed
+      changes note
       emits NoteChanged?
   }
 

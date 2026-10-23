@@ -210,6 +210,7 @@ context Sales {                          // a bounded context; may be split acro
     command changeNote(note: String?)    // one transition per input state: the output depends on the input
       Draft -> Draft
       Confirmed -> Confirmed             // also on one line: `Draft -> Draft, Confirmed -> Confirmed`
+      changes note                       // the fields it may change; without `changes`, no common field
   }
 
   entity OrderItem { id: OrderItemId quantity: Quantity owns unitPrice: Money }
@@ -242,7 +243,7 @@ context Sales {
     /// No other customer has the same email address (spans aggregates, so not expressed in the DSL).
     invariant uniqueEmail "メールアドレスは顧客ごとに一意"
 
-    command changeEmail(email: EmailAddress) errors EmailTaken   // errors that MAY be returned
+    command changeEmail(email: EmailAddress) changes email errors EmailTaken   // errors that MAY be returned
   }
 
   error EmailTaken { email: EmailAddress }
@@ -257,7 +258,8 @@ context Sales {
 - Multiplicity after the type: `?`, `[0..1]`, `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
 - A command is written in this order: parameters and label, transitions, `requires` (see
-  [Command requirements](#command-requirements)), `emits` (see [Command events](#command-events)), `errors`.
+  [Command requirements](#command-requirements)), `changes` (see [Command changes](#command-changes)), `emits` (see
+  [Command events](#command-events)), `errors`.
 - Command transitions follow the parameters (and label), before `emits` / `errors`: `A | B -> C | D` means "in `A` or
   `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas. A state may be the
   source of one transition of a command only, so the input state decides the possible outputs; for several possible
@@ -547,6 +549,62 @@ context Review {
   `<Command>Rejected` error.
 - `requires` and `else` are also usable as field and parameter names.
 
+### Command changes
+
+`changes` lists the fields a command may change, after `requires` and before `emits`. What a command does to the
+other fields follows from its transition:
+
+```dt
+// tickets/ticket.dt
+context Tickets {
+  id TicketId: UUID
+  id PersonId: UUID
+
+  aggregate Ticket {
+    id: TicketId
+    title: String
+    note: String?
+    state Open { assignee: PersonId? }
+    state InProgress { assignee: PersonId startedAt: Timestamp }
+    state Closed { closedAt: Timestamp }
+
+    create command report(id: TicketId, title: String) -> Open   // a factory sets every field
+    command retitle(title: String, note: String?)
+      Open -> Open, InProgress -> InProgress
+      changes title, note                // common fields
+    command assign(assignee: PersonId?)
+      Open -> Open
+      changes assignee                   // carried over from Open to Open, so listed to be changed
+    command start(assignee: PersonId, at: Timestamp)
+      Open -> InProgress                 // no `changes`: sets InProgress's assignee and startedAt, keeps the rest
+    command close(at: Timestamp)
+      Open | InProgress -> Closed        // sets closedAt; assignee and startedAt are dropped
+  }
+}
+```
+
+1. Without `changes`, a command changes **no** common field (strict, like `emits`).
+2. A state-specific field that both the source and the target state have, with the same name and type, is **carried
+   over**: it keeps its value, unless it is listed in `changes`. `assignee` is carried over by `assign`
+   (`Open -> Open`), not by `start`: it is `PersonId?` in Open and `PersonId` in InProgress.
+3. The target state's other own fields are new, and the command always sets them, without `changes` (`startedAt`,
+   and `assignee` in `start`). The source state's own fields that the target does not carry over are dropped.
+4. A `create command` sets every field; `changes` on it is an error.
+5. Without states, a command changes only the fields in `changes`.
+6. A field in `changes` is **given every time**: there is no "absent = keep". An optional field is cleared by giving
+   `undefined`. A command that changes a field only in some cases gives the old value in the others.
+7. The unit is a top-level field: `changes items` for adding, removing or editing elements of `items`.
+
+The generated decision of each command enforces these rules (see [Decisions and `decide`](#decisions-and-decide)).
+
+- M021: the names are fields of the aggregate — common fields (also from field sets) or fields of its states — other
+  than its identity; not on a `create command`. A state-specific field must be carried over by at least one outcome of
+  the command (from a state that has it to one that has it, with the same type): in the other outcomes it is new in
+  the target and set anyway, or not in the target and dropped, so listing a field that no outcome carries over would
+  change nothing. `retitle` above may list `assignee` (`Open -> Open` carries it over); `start` may not.
+- A field is listed once (M002).
+- `changes` is also usable as a field and parameter name.
+
 ### Command events
 
 `emits` is the exact list of the events a command emits **when it succeeds**; on failure (an error) it emits none.
@@ -639,6 +697,7 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
+| M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -666,6 +725,7 @@ Unions to name groups of them, each generated only when it has a member:
  * 注文を確定する
  * @param at 日時
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
  */
 export type ConfirmOrder = (
@@ -731,55 +791,109 @@ return ok({ Confirmed: { aggregate: confirmed, events: { OrderConfirmed: { type:
 
 A command takes the aggregate in any source state of its transitions. When every source state has the same outputs
 (`Draft | Confirmed -> Cancelled`), it is a plain function, as above. When the outputs differ by source state — the
-targets differ by transition, or the events do (`emits RefundRequested when Confirmed ->`) — the command also gets a
-`<Command>ByState` type with one handler per source state (keyed by the state's name), and the command is generic over
-the input state, returning what the handler of that state returns. A caller with a `DraftOrder` gets a `DraftOrder`
-back, never a `ConfirmedOrder`; a caller with `DraftOrder | ConfirmedOrder` gets either:
+targets differ by transition, or the events do (`emits RefundRequested when Confirmed ->`) — the command is generic
+over the input state, and its result is the one of that state, looked up in an object keyed by the source states. A
+caller with a `DraftOrder` gets a `DraftOrder` back, never a `ConfirmedOrder`; a caller with
+`DraftOrder | ConfirmedOrder` gets either:
 
 ```ts
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
     note: string | undefined,
-) => ReturnType<ChangeNoteOrderByState[S['state']]>;
-
-export type ChangeNoteOrderByState = {
+) => {
     /** @emits NoteChanged? — at most once when the command succeeds */
-    readonly Draft: (order: DraftOrder, note: string | undefined) => Result<{
+    readonly Draft: Result<{
         readonly Draft: {
             readonly aggregate: DraftOrder;
             readonly events: { readonly NoteChanged?: NoteChanged };
         };
     }, never>;
     /** @emits NoteChanged? — at most once when the command succeeds */
-    readonly Confirmed: (order: ConfirmedOrder, note: string | undefined) => Result<{
+    readonly Confirmed: Result<{
         readonly Confirmed: {
             readonly aggregate: ConfirmedOrder;
             readonly events: { readonly NoteChanged?: NoteChanged };
         };
     }, never>;
+}[S['state']];
+```
+
+### Decisions and `decide`
+
+A command is implemented as a **decision**: for its outcome, the fields to `set` and the `events`. `decide` from the
+runtime turns a decision into the command, making the aggregate. Every command has a `<Command><Aggregate>Decision`
+type with **one handler per source state**, keyed by the state's name — also with a single source state, so that every
+command is written the same way. A `create command` and a command of an aggregate without states have one function
+instead.
+
+```ts
+/**
+ * Order.confirm, decided per source state; implement it with `decide(OrderShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @changes none — the command changes no common field
+ * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
+ */
+export type ConfirmOrderDecision = {
+    /** @emits OrderConfirmed — exactly once when the command succeeds */
+    readonly Draft: (order: DraftOrder, at: Timestamp) => Result<{
+        readonly Confirmed: {
+            readonly set: { readonly confirmedAt: Timestamp };
+            readonly events: { readonly OrderConfirmed: OrderConfirmed };
+        };
+    }, EmptyOrder>;
 };
 ```
 
-Implement such a command with `byState` from the runtime: it takes the handlers and calls the one of the aggregate's
-`state`. Each handler is checked against its own transition — returning a `ConfirmedOrder` from the `Draft` handler,
-or leaving a handler out, is a compile error — and no type assertion is needed. Pass the `…ByState` type as the type
-argument so that the handlers' parameters are typed from it:
+`set` holds exactly what the command decides, by the rules of [Command changes](#command-changes): the target state's
+new fields and the fields in `changes`. Every one is required; an optional field is typed `T | undefined`, and an
+outcome with nothing to set has `NoChanges` (only `{}` is assignable). Anything else is a compile error that names the
+field: `items` in the `set` of `confirm` is reported as
+`'items' does not exist in type '{ readonly confirmedAt: Timestamp; }'`, a missing `confirmedAt` as
+`Property 'confirmedAt' is missing in type '{}' …`. The JSDoc lists `@changes` and, per outcome, what is set, carried
+over and dropped.
+
+`decide(shape, decision)` calls the handler of the aggregate's `state` with the command's arguments. For the outcome
+it returns, it makes the aggregate from the fields of `set`, the other fields of the target state taken from the input
+(the common fields and the carried-over state-specific fields) and the target `state`; the input's other fields are
+dropped. A factory's aggregate is its `state` and `set`. Events and errors pass through unchanged. The shape is the
+data `decide` needs, a constant generated per aggregate:
+
+```ts
+/** The fields of Order as data for `decide`: the common fields, and the fields of each state on top of them. */
+export const OrderShape: Shape = {
+    fields: ['id', 'items', 'customer', 'note'],
+    states: { Draft: [], Confirmed: ['confirmedAt'], Cancelled: ['reason'] },
+};
+```
+
+Pass the decision type as the type argument, so that the handlers are typed from it. The result is assignable to the
+command's contract without a type assertion, and each handler is checked against its own transition — deciding the
+Confirmed outcome in the `Draft` handler of `changeNote`, or leaving a handler out, is a compile error:
 
 ```ts
 // src/note.ts — your code
-import { byState, ok, type Sales } from '../generated/domain/index.js';
+import { Sales, decide, err, ok } from '../generated/domain/index.js';
 
 const noteChanged = (order: Sales.Order, note: string | undefined) =>
     note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
 
-export const changeNote: Sales.OrderCommands['changeNote'] = byState<Sales.ChangeNoteOrderByState>({
-    Draft: (order, note) => ok({ Draft: { aggregate: { ...order, note }, events: noteChanged(order, note) } }),
-    Confirmed: (order, note) => ok({ Confirmed: { aggregate: { ...order, note }, events: noteChanged(order, note) } }),
+export const changeNote: Sales.OrderCommands['changeNote'] = decide<Sales.ChangeNoteOrderDecision>(Sales.OrderShape, {
+    Draft: (order, note) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
+    Confirmed: (order, note) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
+});
+
+export const confirm: Sales.OrderCommands['confirm'] = decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
+    Draft: (order, at) => {
+        if (order.items.length === 0) return err({ type: 'EmptyOrder' });
+        return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
+    },
 });
 ```
 
-(TypeScript does not narrow `S` inside a hand-written implementation of the generic contract, which is why the
-handlers exist: written directly, the implementation needs a type assertion on its result.)
+The contract can still be implemented directly, returning the aggregate itself; then nothing keeps the command from
+changing a field it does not list, and a generic contract needs a type assertion on its result (TypeScript does not
+narrow `S` inside the implementation).
 
 Code that handles any command — saving the aggregate, publishing the events — uses `outcome` and `eventList` from the
 runtime. `outcome(value)` gives `{ to, aggregate, events }` (`to` is the key: the target state). `eventList(events)`
@@ -803,7 +917,7 @@ export async function confirm(commands: Sales.OrderCommands, store: OrderStore, 
 }
 ```
 
-A command's requirements are documented on its type and on its `…ByState` type, one `@requires` line each, and the
+A command's requirements are documented on its type and on its decision, one `@requires` line each, and the
 errors of their `else` are part of its error type (after those of `errors`, each once):
 
 ```ts
@@ -813,6 +927,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)
  * @requires noOpenBlocker (未解決の阻害がない) else Blocked: openBlockers == 0
  * @requires signedOff (本人の承認が記録済み) else NotSignedOff: not expressed in the DSL
+ * @changes none — the command changes no common field
  * @emits nothing
  */
 export type AcceptReview = (
@@ -830,10 +945,11 @@ export type AcceptReview = (
 
 The generated files are the **contract**, your code is the **implementation**:
 
-- Generated: types only — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`,
-  `ChangeNoteOrderByState`) and the constructor signatures of domain primitives (`MakeQuantity`). Invariants and
+- Generated: types — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`) and their
+  decisions (`ConfirmOrderDecision`), and the constructor signatures of domain primitives (`MakeQuantity`) — plus
+  data without logic: one shape constant per aggregate (`OrderShape`), the field names `decide` needs. Invariants and
   command requirements appear as JSDoc (`@invariant`, `@requires`); nothing in the generated code checks them. The
-  one exception is `_runtime.ts`, whose few helpers (`ok`, `err`, `byState`, `outcome`, `eventList`) are the same for
+  one exception is `_runtime.ts`, whose few helpers (`ok`, `err`, `decide`, `outcome`, `eventList`) are the same for
   every model.
 - Yours: everything that runs — command implementations (including their requirements; pure functions, see
   [Pure commands](#pure-commands)), `Make<Name>` constructors,

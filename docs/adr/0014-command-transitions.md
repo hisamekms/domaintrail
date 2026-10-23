@@ -5,7 +5,8 @@
 - Supersedes: the command syntax (`from` / `to`) of ADR 0001
 - Amended by: [ADR 0015](0015-handlers-per-state.md) (the generated contract of a command whose output depends on its
   input), [ADR 0018](0018-command-events-contract.md) (`emits` is exact, with multiplicities and `when`; the success
-  value is keyed by the outcome)
+  value is keyed by the outcome), [ADR 0019](0019-command-changes-and-decisions.md) (`changes`; a contract whose output
+  depends on the input looks its result up by the input state, and commands are implemented as decisions with `decide`)
 
 ## Context
 

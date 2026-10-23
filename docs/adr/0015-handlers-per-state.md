@@ -1,6 +1,7 @@
 # ADR 0015: Handlers per state for commands whose output depends on the input
 
-- Status: accepted
+- Status: superseded by [ADR 0019](0019-command-changes-and-decisions.md) (decisions per source state for every
+  command, assembled by `decide`; `…ByState` and `byState` are removed)
 - Date: 2026-10-19
 - Amends: the generated TypeScript of ADR 0014
 - Amended by: [ADR 0018](0018-command-events-contract.md) (handlers also when the events differ by source state; the

@@ -59,8 +59,10 @@ same text, so people and AI agents get it without leaving the terminal:
   [domain and technical fields](docs/guide.md#domain-fields-and-technical-fields),
   [names (表示名)](docs/guide.md#names-labels-and-descriptions),
   [invariant expressions](docs/guide.md#invariant-expressions), [command requirements](docs/guide.md#command-requirements),
-  [command events](docs/guide.md#command-events) and [pure commands](docs/guide.md#pure-commands)
-- [Rules](docs/guide.md#rules) (M001–M020, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
+  [command changes](docs/guide.md#command-changes), [command events](docs/guide.md#command-events) and
+  [pure commands](docs/guide.md#pure-commands)
+- [Rules](docs/guide.md#rules) (M001–M021, L001–L003) and [Generated TypeScript](docs/guide.md#generated-typescript):
+  [decisions and `decide`](docs/guide.md#decisions-and-decide),
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
   [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [output directories](docs/guide.md#output-directories) and
   [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
@@ -84,10 +86,11 @@ context Sales "販売" {
 The design decisions behind the DSL are in [docs/adr](docs/adr): shared contexts ([0004](docs/adr/0004-shared-contexts.md)),
 unions ([0005](docs/adr/0005-unions.md)), persistent events ([0008](docs/adr/0008-persistent-events.md)),
 command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per state
-([0015](docs/adr/0015-handlers-per-state.md)), collection constraints and declared invariants
+([0015](docs/adr/0015-handlers-per-state.md), superseded), collection constraints and declared invariants
 ([0016](docs/adr/0016-collection-constraints-and-declared-invariants.md)), command requirements
 ([0017](docs/adr/0017-command-requirements.md)), command events as an exact contract
-([0018](docs/adr/0018-command-events-contract.md)) and more.
+([0018](docs/adr/0018-command-events-contract.md)), the fields a command changes and decisions
+([0019](docs/adr/0019-command-changes-and-decisions.md)) and more.
 
 ## Live View
 

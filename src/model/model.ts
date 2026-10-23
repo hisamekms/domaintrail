@@ -113,6 +113,11 @@ export interface CommandModel extends Described {
     transitions: TransitionModel[];
     /** Preconditions over the parameters and the aggregate's current data (`requires`). */
     requires: RequirementModel[];
+    /**
+     * `changes`: the fields the command may change, as written — common fields, and state-specific fields it would
+     * otherwise carry over. Empty: it changes no common field (a factory sets every field).
+     */
+    changes: string[];
     /** The events emitted on success, per entry of `emits`. */
     emits: EmitModel[];
     /**
@@ -204,3 +209,33 @@ export const emittedEvents = (c: CommandModel): string[] => [...new Set(c.emits.
  */
 export const emitApplies = (e: { when?: OutcomePatternModel }, from: string | undefined, to: string | undefined): boolean =>
     !e.when || ((e.when.from.length === 0 || (from !== undefined && e.when.from.includes(from))) && (e.when.to.length === 0 || (to !== undefined && e.when.to.includes(to))));
+
+/** Whether two fields have the same type: base type, multiplicity, and kind (with the target of a reference). */
+export const sameFieldType = (a: FieldModel, b: FieldModel): boolean =>
+    a.kind === b.kind &&
+    a.multiplicity === b.multiplicity &&
+    a.target === b.target &&
+    (a.type.kind === 'primitive' ? b.type.kind === 'primitive' && a.type.name === b.type.name : b.type.kind === 'ref' && a.type.ref === b.type.ref);
+
+/**
+ * What a decision of a command gives for one of its outcomes (ADR 0019), from source state `from` (`undefined` for a
+ * factory or an aggregate without states) to target state `to` (`undefined` without states):
+ *   - `set`: the fields the decision must give — every field for a factory; else the target's own fields that are not
+ *     carried over, and the fields in `changes` that the outcome has;
+ *   - `carried`: the fields taken from the input unchanged — the common fields not in `changes`, and the state-specific
+ *     fields that source and target both have with the same name and type (not in `changes`);
+ *   - `dropped`: the source's own fields that are not carried over.
+ */
+export function outcomeFields(agg: ElementModel, c: CommandModel, from: string | undefined, to: string | undefined): { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } {
+    const own = (state: string | undefined): FieldModel[] => agg.states?.find((s) => s.name === state)?.fields ?? [];
+    const target = own(to);
+    if (c.factory) return { set: [...agg.fields, ...target], carried: [], dropped: [] };
+    const source = own(from);
+    const changes = new Set(c.changes);
+    const keeps = (f: FieldModel): boolean => source.some((g) => g.name === f.name && sameFieldType(f, g));
+    return {
+        set: [...agg.fields.filter((f) => changes.has(f.name)), ...target.filter((f) => !keeps(f) || changes.has(f.name))],
+        carried: [...agg.fields, ...target].filter((f) => !changes.has(f.name) && (agg.fields.includes(f) || keeps(f))),
+        dropped: source.filter((f) => !target.some((g) => g.name === f.name && sameFieldType(f, g))),
+    };
+}

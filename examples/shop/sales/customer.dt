@@ -10,6 +10,7 @@ context Sales {
       emits CustomerRegistered
 
     command rename(name: String) "氏名を変更する"
+      changes name
   }
 
   event CustomerRegistered "顧客登録" {

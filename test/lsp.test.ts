@@ -321,6 +321,21 @@ describe('dt lsp', () => {
         expect(edits.filter((e) => e.range.start.line === at(sales, 'when Draft').line)).toHaveLength(2); // the transition and `when`
     });
 
+    test('hovers on a command list its changes; the outline and renames are unaffected by them', async () => {
+        const sales = SALES.replace('command place() Draft -> Placed', 'command place() Draft -> Placed changes total, lines');
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': sales });
+        expect(await client.until('sales.dt', () => true)).toEqual([]);
+        const hover = await client.request<{ contents: { value: string } } | null>('textDocument/hover', 'sales.dt', at(sales, 'place'));
+        expect(hover?.contents.value).toBe('**command `place`** — `Sales.Order:place`\n\n```dt\nchanges total, lines\n```\n\n```dt\nemits OrderPlaced\n```');
+        type Symbol = { name: string; children?: Symbol[] };
+        const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('sales.dt') } });
+        expect(symbols[0].children![1].children!.map((s) => s.name)).toEqual(['id', 'total', 'lines', 'Draft', 'Placed', 'positive', 'place']);
+        // the names in `changes` are fields, which are not renamed (as in expressions)
+        expect(await client.request('textDocument/prepareRename', 'sales.dt', at(sales, 'changes total', 'changes '.length))).toBeNull();
+        const edit = await client.request<{ changes: Record<string, unknown[]> }>('textDocument/rename', 'sales.dt', at(sales, 'state Placed', 'state '.length), { newName: 'Ordered' });
+        expect(edit.changes[client.uri('sales.dt')]).toHaveLength(2);
+    });
+
     test('uses the config of --root and its sources', async () => {
         const dir = await workspace({});
         const root = path.join(dir, 'domain');

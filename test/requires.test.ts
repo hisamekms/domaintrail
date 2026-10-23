@@ -175,7 +175,7 @@ describe('scope of requires', () => {
 });
 
 describe('requires in the generated TypeScript', () => {
-    test('documents the requirements on the command and its handlers, and adds their errors to the error type', async () => {
+    test('documents the requirements on the command and its decision, and adds their errors to the error type', async () => {
         const a = await review(`
     command accept(person: PersonId) "受入"
       Reviewing -> Accepted
@@ -189,8 +189,9 @@ describe('requires in the generated TypeScript', () => {
             ' * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)',
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
         ].join('\n');
-        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n * @emits nothing\n */\nexport type AcceptReview = `);
-        expect(code).toContain(`/**\n * Review.accept, one handler per source state; implement it with \`byState\` from the runtime.\n${lines}\n */\nexport type AcceptReviewByState = {`);
+        const changes = ' * @changes none — the command changes no common field';
+        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n */\nexport type AcceptReview = `);
+        expect(code).toContain(`/**\n * Review.accept, decided per source state; implement it with \`decide(ReviewShape, …)\` from the runtime.\n * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.\n${lines}\n${changes}\n`);
         expect(code).toContain('    }, Blocked | Conflict | NotApprover>;');
         expect(code).not.toContain('Blocked | Conflict | NotApprover | Blocked');
     });
