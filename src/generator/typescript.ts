@@ -1,5 +1,5 @@
 import * as posix from 'node:path/posix';
-import type { CommandModel, Described, DomainModel, ElementModel, FieldModel, InvariantModel, PrimitiveName, TypeExpr } from '../model/model.js';
+import type { CommandModel, Described, DomainModel, ElementModel, FieldModel, InvariantModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
 import { elementsIn, ownFields } from '../model/model.js';
 import {
     AGGREGATE_TYPE,
@@ -120,6 +120,10 @@ const PERSISTENT_LINE = '@persistent Persisted: storing this event is part of it
 /** JSDoc lines of invariants; one declared without an expression says so. */
 const invariantLines = (invs: InvariantModel[]): string[] =>
     invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source ?? 'not expressed in the DSL'}`);
+
+/** JSDoc lines of a command's requirements; one declared without an expression says so. */
+const requirementLines = (reqs: RequirementModel[], error: (qname: string) => string): string[] =>
+    reqs.map((r) => `@requires ${r.name}${r.label ? ` (${r.label})` : ''} else ${error(r.error)}: ${r.source ?? 'not expressed in the DSL'}`);
 
 const unique = (names: string[]): string[] => [...new Set(names)];
 
@@ -329,6 +333,7 @@ class ContextEmitter {
         const eventArray = c.emits.length > 1 ? `readonly (${events})[]` : `readonly ${events}[]`;
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
         const result = (output: string): string => `Result<readonly [${output}, ${eventArray}], ${errors}>`;
+        const requires = requirementLines(c.requires, (e) => this.ref(e));
 
         const transition = c.factory
             ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
@@ -337,6 +342,7 @@ class ContextEmitter {
             `${agg.name}.${c.name}${transition ? ` (${transition})` : ''}${c.factory ? ' — factory' : ''}`,
             ...describedLines(c),
             ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
+            ...requires,
         ]);
         this.line(`export type ${commandTypeName(agg, c)} = ${generic ? `<S extends ${input}>` : ''}(`);
         for (const p of [...(c.factory ? [] : [`${self}: ${generic ? 'S' : input}`]), ...params]) this.line(`    ${p},`);
@@ -346,7 +352,7 @@ class ContextEmitter {
         }
         this.line(`) => ReturnType<${byStateTypeName(agg, c)}[S['${STATE_TAG}']]>;`);
         this.out.push('');
-        this.jsdoc([`${agg.name}.${c.name}, one handler per source state; implement it with \`byState\` from the runtime.`]);
+        this.jsdoc([`${agg.name}.${c.name}, one handler per source state; implement it with \`byState\` from the runtime.`, ...requires]);
         this.line(`export type ${byStateTypeName(agg, c)} = {`);
         for (const t of transitions) {
             for (const from of t.from) {

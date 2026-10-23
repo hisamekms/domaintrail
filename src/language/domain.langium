@@ -86,6 +86,7 @@ ReferenceField:
 Command:
     (factory?='create')? 'command' name=FeatureName '(' (params+=Parameter (',' params+=Parameter)*)? ')' label=STRING?
     (transitions+=Transition (','? transitions+=Transition)*)?
+    requirements+=Requirement*
     ('emits' emits+=[EventDecl:QualifiedName] (',' emits+=[EventDecl:QualifiedName])*)?
     ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?;
 
@@ -93,6 +94,12 @@ Command:
 // (`create command`) has a single transition without sources: `-> Draft`.
 Transition:
     (from+=[State:ID] ('|' from+=[State:ID])*)? '->' to+=[State:ID] ('|' to+=[State:ID])*;
+
+// `requires name "label" { expr } else Error`: the command is accepted only if the expression holds over its
+// parameters and the aggregate's current data; otherwise it returns the error, which joins its `errors`. Like an
+// invariant, a requirement without an expression needs a label or a `///` description (M018).
+Requirement:
+    'requires' name=ID label=STRING? ('{' expr=Expression '}')? 'else' error=[ErrorDecl:QualifiedName];
 
 Parameter:
     name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;
@@ -163,7 +170,7 @@ LambdaParam:
 
 // Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with'
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 QualifiedName returns string:

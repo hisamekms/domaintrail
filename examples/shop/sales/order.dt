@@ -40,11 +40,12 @@ context Sales {
 
     command addItem(item: OrderItem "追加する明細") "明細を追加する"
       Draft -> Draft
+      requires newSku "同じ商品コードの明細がない" { all(items, i => i.sku != item.sku) } else DuplicateSku
 
     command confirm(at: Timestamp) "注文を確定する"
       Draft -> Confirmed
+      requires hasItems "明細が1件以上" { count(items) > 0 } else EmptyOrder
       emits OrderConfirmed
-      errors EmptyOrder
 
     command cancel(reason: CancelReason) "注文を取り消す"
       Draft | Confirmed -> Cancelled
@@ -79,4 +80,9 @@ context Sales {
 
   /// 明細が1件もない注文は確定できない。
   error EmptyOrder "明細なし"
+
+  /// 追加しようとした明細と同じ商品コードの明細が、すでに注文にある。
+  error DuplicateSku "商品コードの重複" {
+    sku: Sku
+  }
 }

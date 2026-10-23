@@ -6,7 +6,7 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { CommandModel, DomainModel, ElementModel, FieldModel, InvariantModel, Location } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
-import { CommandCard, OutcomeCard, outcomesOf, PersistenceBadge } from './behavior';
+import { CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
 import { KIND_ORDER, fieldSetUsers, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
@@ -250,6 +250,11 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                     <Section title={tx.transition}>
                         <code className="block">{names.transition(agg, c) || tx.noStates}</code>
                     </Section>
+                    {c.requires.length > 0 && (
+                        <Section title={tx.requirements}>
+                            <Requirements c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
+                        </Section>
+                    )}
                     <Section title={tx.mayRaise}>
                         {c.emits.length ? c.emits.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
                     </Section>

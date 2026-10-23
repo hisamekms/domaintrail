@@ -17,6 +17,7 @@ import {
     type Invariant,
     type Multiplicity,
     type Parameter,
+    type Requirement,
     type State,
     type TypeRef,
 } from '../language/generated/ast.js';
@@ -37,7 +38,7 @@ import {
     type WithFieldSets,
 } from '../core/model-index.js';
 import { commandId, elementId, stateId } from './ids.js';
-import type { CommandModel, Described, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
+import type { CommandModel, Described, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, RequirementModel, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
 
 export type FileResolver = (uri: string) => string;
 
@@ -189,6 +190,10 @@ function invariant(inv: Invariant): InvariantModel {
     return { name: inv.name, ...optional('source', inv.expr && sourceText(inv.expr)), ...described(inv) };
 }
 
+function requirement(r: Requirement, qname: (r: { ref?: ContextElement; $refText: string }) => string): RequirementModel {
+    return { name: r.name, ...optional('source', r.expr && sourceText(r.expr)), error: qname(r.error), ...described(r) };
+}
+
 const sourceText = (e: AstNode | undefined): string => e?.$cstNode?.text.replace(/\s+/g, ' ').trim() ?? '';
 
 function state(aggId: string, s: State, loc: (n: AstNode) => Location, field: (f: FieldLike) => FieldModel): StateModel {
@@ -212,8 +217,9 @@ function command(aggId: string, c: Command, loc: (n: AstNode) => Location, field
         factory: c.factory,
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
+        requires: c.requirements.map((r) => requirement(r, qname)),
         emits: c.emits.map(qname),
-        errors: c.errors.map(qname),
+        errors: [...new Set([...c.errors, ...c.requirements.map((r) => r.error)].map(qname))],
         location: loc(c),
     };
 }

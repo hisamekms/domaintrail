@@ -101,6 +101,30 @@ function Transition({ agg, c, names, onSelect }: { agg: ElementModel; c: Command
     ));
 }
 
+/**
+ * The command's requirements (`requires`): each with its expression, or that it is not expressed in the DSL, and the
+ * error the command returns when it does not hold.
+ */
+export function Requirements({ c, model, names, tx, onSelect }: { c: CommandModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {
+    return (
+        <div className="bcard-requires">
+            {c.requires.map((r) => (
+                <div key={r.name} className="bcard-require">
+                    <span className="bcard-rname">
+                        <Named x={r} names={names} />
+                    </span>
+                    {r.source !== undefined ? <code>{r.source}</code> : <em className="not-in-dsl">{tx.notInDsl}</em>}
+                    <span className="bcard-outcome">
+                        <span className="muted" title={tx.requirementElseHint}>else</span>
+                        <KindLink kind={model.elements[r.error]?.kind ?? 'error'} id={r.error} x={model.elements[r.error] ?? { name: r.error }} names={names} onSelect={onSelect} />
+                    </span>
+                    {r.doc && <div className="bcard-doc">{r.doc}</div>}
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: ElementModel; c: CommandModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {
     const outcome = (id: string) => model.elements[id] ?? { name: id };
     return (
@@ -114,6 +138,12 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
                 <div className="bcard-part">
                     <div className="bcard-caption">{tx.params}</div>
                     <FieldGrid fields={c.params} ctx={agg.context} names={names} onSelect={onSelect} />
+                </div>
+            )}
+            {c.requires.length > 0 && (
+                <div className="bcard-part">
+                    <div className="bcard-caption">{tx.requirements}</div>
+                    <Requirements c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
                 </div>
             )}
             {c.emits.length + c.errors.length > 0 && (

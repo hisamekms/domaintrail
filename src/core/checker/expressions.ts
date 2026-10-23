@@ -17,23 +17,29 @@ import {
     isNameRef,
     isNotExpr,
     isQuantifierExpr,
+    isRequirement,
     isEntity,
     isStringLiteral,
     isUniqueExpr,
     isUnionDecl,
     isValueObject,
     type Aggregate,
+    type Command,
     type DataMember,
     type EnumDecl,
     type Expression,
     type Invariant,
     type MatchesExpr,
+    type Parameter,
+    type Requirement,
+    type State,
     type UnionDecl,
 } from '../../language/generated/ast.js';
 import { GrammarUtils, type AstNode } from 'langium';
 import { docComment } from '../labels.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import {
+    commandsOf,
     commonFields,
     discriminatorOf,
     fieldsOf,
@@ -49,17 +55,17 @@ import { BOOL, ERROR, INT, basePrimitive, isBool, isDomainPrimitive, isNumeric, 
 
 interface Scope {
     ctx: string;
-    /** Fields visible in this invariant. */
-    fields: Map<string, FieldLike>;
-    /** Fields that exist only in other states of the aggregate (for M010 messages). */
-    stateOnly: Map<string, string[]>;
+    /** Fields (and the parameters of a command) visible in this invariant or requirement. */
+    fields: Map<string, FieldLike | Parameter>;
+    /** M010 messages for fields of the aggregate that exist but are not in scope here, by name. */
+    hidden: Map<string, string>;
     /** Lambda parameters, innermost last. */
     lambdas: Array<[string, Ty]>;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
 }
 
-/** Type-checks every invariant in the workspace (M001 for names, M008, M009, M010, M018). */
+/** Type-checks every invariant and command requirement in the workspace (M001 for names, M008, M009, M010, M018, M019). */
 export function checkInvariants(index: ModelIndex, sink: DiagnosticSink): void {
     for (const el of index.elements) {
         const ctx = el.$container.name;
@@ -69,14 +75,14 @@ export function checkInvariants(index: ModelIndex, sink: DiagnosticSink): void {
             const members: DataMember[] = el.members;
             const fields = new Map([...includedFields(el).map((x) => x.field), ...fieldsOf(members)].map((f) => [f.name, f]));
             for (const inv of invariantsOf(members)) {
-                checkInvariant(inv, { ctx, fields, stateOnly: new Map(), lambdas: [], present: new Set() }, index, sink);
+                checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, index, sink);
             }
         } else if (isUnionDecl(el)) {
             // Variant invariants see the fields of their own variant.
             for (const v of el.variants) {
                 const fields = new Map(fieldsOf(v.members).map((f) => [f.name, f]));
                 for (const inv of invariantsOf(v.members)) {
-                    checkInvariant(inv, { ctx, fields, stateOnly: new Map(), lambdas: [], present: new Set() }, index, sink);
+                    checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, index, sink);
                 }
             }
         } else if (isIdType(el) || isPrimitiveDecl(el)) {
@@ -98,7 +104,7 @@ function checkPrimitive(p: DomainPrimitive, ctx: string, index: ModelIndex, sink
     for (const inv of primitiveInvariants(p)) {
         if (inv.node !== inv.expr) checkDeclared(inv.node as Invariant, sink);
         if (!inv.expr) continue;
-        const scope: Scope = { ctx, fields: new Map(), stateOnly: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
+        const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
         const t = new ExprChecker(index, sink).check(inv.expr, scope);
         if (t.k !== 'error' && !isBool(t)) {
             const what = inv.node === inv.expr ? `The constraint of '${p.name}'` : `Invariant '${inv.name}'`;
@@ -111,21 +117,12 @@ function checkAggregate(agg: Aggregate, ctx: string, index: ModelIndex, sink: Di
     // fields taken from field sets are common fields too
     const common = new Map([...includedFields(agg).map((x) => x.field), ...commonFields(agg)].map((f) => [f.name, f]));
     const states = statesOf(agg);
-    const stateOnly = (except?: string): Map<string, string[]> => {
-        const m = new Map<string, string[]>();
-        for (const s of states) {
-            if (s.name === except) continue;
-            for (const f of fieldsOf(s.members)) {
-                if (common.has(f.name)) continue;
-                m.set(f.name, [...(m.get(f.name) ?? []), s.name]);
-            }
-        }
-        return m;
-    };
+    const stateOnly = (except?: string): Map<string, string> =>
+        new Map([...statesHaving(states, common, except)].map(([name, where]) => [name, `Field '${name}' exists only in state ${quoted(where)} and is not in scope here.`]));
 
     // Aggregate-level invariants: common fields only, applied to every state.
     for (const inv of invariantsOf(agg.members)) {
-        checkInvariant(inv, { ctx, fields: common, stateOnly: stateOnly(), lambdas: [], present: new Set() }, index, sink);
+        checkInvariant(inv, { ctx, fields: common, hidden: stateOnly(), lambdas: [], present: new Set() }, index, sink);
     }
     // State-level invariants: common + that state's own fields.
     for (const s of states) {
@@ -134,15 +131,83 @@ function checkAggregate(agg: Aggregate, ctx: string, index: ModelIndex, sink: Di
         const hidden = stateOnly(s.name);
         for (const name of fields.keys()) hidden.delete(name);
         for (const inv of invariantsOf(s.members)) {
-            checkInvariant(inv, { ctx, fields, stateOnly: hidden, lambdas: [], present: new Set() }, index, sink);
+            checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, index, sink);
+        }
+    }
+    for (const cmd of commandsOf(agg)) {
+        if (cmd.requirements.length) checkRequirements(agg, cmd, common, ctx, index, sink);
+    }
+}
+
+/** Fields of the states (other than `except`) that are not common fields, with the states that have each. */
+function statesHaving(states: State[], common: Map<string, FieldLike>, except?: string): Map<string, string[]> {
+    const m = new Map<string, string[]>();
+    for (const s of states) {
+        if (s.name === except) continue;
+        for (const f of fieldsOf(s.members)) {
+            if (common.has(f.name)) continue;
+            m.set(f.name, [...(m.get(f.name) ?? []), s.name]);
+        }
+    }
+    return m;
+}
+
+const quoted = (names: string[]): string => names.map((n) => `'${n}'`).join(', ');
+
+/**
+ * Requirements (`requires`) see the command's parameters and the aggregate's current data: its common fields, plus
+ * the fields every source state has with the same name and type. A factory sees its parameters only, an aggregate
+ * without states all its fields. M019: a parameter is not named like a field its requirements see.
+ */
+function checkRequirements(agg: Aggregate, cmd: Command, common: Map<string, FieldLike>, ctx: string, index: ModelIndex, sink: DiagnosticSink): void {
+    const states = statesOf(agg);
+    const fields = new Map<string, FieldLike | Parameter>();
+    const hidden = new Map<string, string>();
+    if (cmd.factory) {
+        const all = [...common.keys(), ...statesHaving(states, common).keys()];
+        for (const name of all) {
+            hidden.set(name, `Field '${name}' of '${agg.name}' is not in scope: the requirements of a 'create command' see only its parameters.`);
+        }
+    } else {
+        for (const [name, f] of common) fields.set(name, f);
+        const sources = [...new Set(cmd.transitions.flatMap((t) => t.from.map((r) => r.ref)))].filter((s): s is State => !!s);
+        const [first, ...rest] = sources;
+        for (const f of first ? fieldsOf(first.members) : []) {
+            if (common.has(f.name)) continue;
+            const t = memberType(f);
+            const inAll = rest.every((s) => fieldsOf(s.members).some((g) => g.name === f.name && sameType(memberType(g), t)));
+            if (inAll) fields.set(f.name, f);
+        }
+        for (const [name, where] of statesHaving(states, common)) {
+            if (fields.has(name)) continue;
+            hidden.set(name, `Field '${name}' is in state ${quoted(where)} only; the requirements of command '${cmd.name}' see the fields that every source state has (with the same type).`);
+        }
+    }
+    for (const p of cmd.params) {
+        if (p.name && fields.has(p.name)) {
+            sink.error('M019', `Parameter '${p.name}' of command '${cmd.name}' has the name of a field of '${agg.name}' that its requirements see; rename the parameter so that the name has one meaning.`, p, 'name');
+        }
+    }
+    for (const p of cmd.params) if (p.name) fields.set(p.name, p);
+
+    for (const req of cmd.requirements) {
+        checkDeclared(req, sink);
+        if (!req.expr) continue;
+        const t = new ExprChecker(index, sink).check(req.expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
+        if (t.k !== 'error' && !isBool(t)) {
+            sink.error('M008', `Requirement '${req.name}' of command '${cmd.name}' must be a Bool expression, but has type '${showType(t)}'.`, req, 'expr');
         }
     }
 }
 
-/** M018: an invariant without an expression is declared for documentation only, so it must say what it requires. */
-function checkDeclared(inv: Invariant, sink: DiagnosticSink): void {
-    if (inv.expr || inv.label || docComment(inv)) return;
-    sink.error('M018', `Invariant '${inv.name}' has no expression; give it a label or a /// description that states what it requires.`, inv, 'name');
+/**
+ * M018: an invariant or requirement without an expression is declared for documentation only, so it must say what it
+ * requires.
+ */
+function checkDeclared(x: Invariant | Requirement, sink: DiagnosticSink): void {
+    if (x.expr || x.label || docComment(x)) return;
+    const what = isRequirement(x) ? 'Requirement' : 'Invariant';
+    sink.error('M018', `${what} '${x.name}' has no expression; give it a label or a /// description that states what it requires.`, x, 'name');
 }
 
 function checkInvariant(inv: Invariant, scope: Scope, index: ModelIndex, sink: DiagnosticSink): void {
@@ -318,10 +383,9 @@ class ExprChecker {
         if (decl && isEnumDecl(decl)) return { k: 'enumType', decl };
         if (decl && isUnionDecl(decl)) return { k: 'unionType', decl };
         if (this.index.contextNames.includes(name)) return { k: 'ctx', name };
-        const states = scope.stateOnly.get(name);
-        if (states) {
-            const where = states.map((s) => `'${s}'`).join(', ');
-            this.sink.error('M010', `Field '${name}' exists only in state ${where} and is not in scope here.`, node);
+        const hidden = scope.hidden.get(name);
+        if (hidden) {
+            this.sink.error('M010', hidden, node);
             return ERROR;
         }
         this.sink.error('M001', `Cannot resolve name '${name}'.`, node);

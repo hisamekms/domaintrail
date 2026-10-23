@@ -55,6 +55,7 @@ function checkAggregate(agg: Aggregate, sink: DiagnosticSink): void {
     unique(commands, (c) => `Command '${c.name}' is declared more than once in '${agg.name}'.`, sink);
     for (const c of commands) {
         unique(c.params, (p) => `Parameter '${p.name}' is declared more than once in command '${c.name}'.`, sink);
+        unique(c.requirements, (r) => `Requirement '${r.name}' is declared more than once in command '${c.name}'.`, sink);
     }
 }
 
