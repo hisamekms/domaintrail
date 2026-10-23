@@ -6,11 +6,9 @@ context Sales {
     name: String
     email: EmailAddress
 
-    create command register(id: CustomerId, name: String, email: EmailAddress) "顧客を登録する"
-      emits CustomerRegistered
+    create command register(id: CustomerId, name: String, email: EmailAddress) "顧客を登録する" emits CustomerRegistered
 
-    command rename(name: String) "氏名を変更する"
-      changes name
+    command rename(name: String) "氏名を変更する" changes name
   }
 
   event CustomerRegistered "顧客登録" {

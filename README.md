@@ -18,6 +18,7 @@ npx domaintrail <command>    # or run it without installing
 
 ```bash
 dt guide                       # the guide: DSL, file layout, workflow, config, output and exit codes
+dt -r <root> fmt               # format .dt files in place in the canonical layout (--check for CI)
 dt -r <root> check             # validate syntax, references, types and DDD rules
 dt -r <root> generate ts       # generate TypeScript into <root>/generated/domain (--out to change)
 dt -r <root> view              # Live View at http://127.0.0.1:4321 (--port, --host); runs until Ctrl+C
@@ -48,7 +49,8 @@ bun run build && bun run dt -r examples/shop view
 **[docs/guide.md](docs/guide.md)** is the reference for writing models and using the CLI, and `dt guide` prints the
 same text, so people and AI agents get it without leaving the terminal:
 
-- [Workflow](docs/guide.md#workflow): `check` → `generate ts` → type-check your own code (`tsc --noEmit`)
+- [Workflow](docs/guide.md#workflow): `fmt` → `check` → `generate ts` → type-check your own code (`tsc --noEmit`)
+- [Formatting](docs/guide.md#formatting): `dt fmt`, the one canonical layout of `.dt` files
 - [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
 - [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
   `generate.ts.contexts`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
@@ -76,11 +78,18 @@ context Sales "販売" {
   aggregate Order "注文" {
     id: OrderId
     state Draft
-    state Confirmed { confirmedAt: Timestamp }
+    state Confirmed {
+      confirmedAt: Timestamp
+    }
     create command place(id: OrderId) -> Draft
-    command confirm(at: Timestamp) Draft -> Confirmed emits OrderConfirmed
+    command confirm(at: Timestamp)
+      Draft -> Confirmed
+      emits OrderConfirmed
   }
-  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
+  persistent event OrderConfirmed {
+    orderId: OrderId
+    confirmedAt: Timestamp
+  }
 }
 ```
 

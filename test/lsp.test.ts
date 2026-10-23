@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { URI } from 'langium';
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from 'vscode-jsonrpc/node';
 import { runCli } from '../src/cli/main.js';
+import { formatDomain } from '../src/format/format.js';
 
 const BIN = path.join(import.meta.dir, '..', 'bin', 'dt.ts');
 
@@ -171,7 +172,18 @@ describe('dt lsp', () => {
             documentSymbolProvider: true,
             renameProvider: { prepareProvider: true },
             completionProvider: expect.any(Object),
+            documentFormattingProvider: true,
         });
+    });
+
+    test('formats a document as dt fmt does, and leaves one with syntax errors alone', async () => {
+        const client = await start({ 'common.dt': COMMON, 'broken.dt': 'context Broken { id X UUID }\n' });
+        await client.until('broken.dt', () => true);
+        const format = (file: string) =>
+            client.connection.sendRequest<{ newText: string }[]>('textDocument/formatting', { textDocument: { uri: client.uri(file) }, options: { tabSize: 2, insertSpaces: true } });
+        expect((await format('common.dt')).map((e) => e.newText)).toEqual([formatDomain(COMMON)]);
+        expect(formatDomain(COMMON)).not.toBe(COMMON);
+        expect(await format('broken.dt')).toEqual([]);
     });
 
     test('publishes the diagnostics of dt check, cross-file and rule-only ones included', async () => {

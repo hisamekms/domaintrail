@@ -4,7 +4,8 @@ import { Command, InvalidArgumentError, Option } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
 import { ConfigError, checkTsContexts, loadConfig, staysInside, type ResolvedConfig } from '../core/config.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
-import { loadWorkspace } from '../core/files.js';
+import { findDomainFiles, loadWorkspace } from '../core/files.js';
+import { formatDomain } from '../format/format.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
 import { lookup, showJson, showText } from './show.js';
 import guide from '../../docs/guide.md' with { type: 'text' };
@@ -87,6 +88,7 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
 Examples:
   dt check                      validate every .dt file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
+  dt fmt                        rewrite every .dt file in the canonical layout (run it after editing)
   dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
@@ -183,6 +185,54 @@ Examples:
         });
 
     program
+        .command('fmt')
+        .description('Format .dt files in place: one canonical layout, keeping every comment.')
+        .argument('[files...]', 'files to format, relative to the current directory (default: the sources of the workspace)')
+        .option('--check', 'write nothing; list the files that are not formatted and exit 1 if there are any')
+        .addHelpText('after', `
+Rewrites each file in the layout described in \`dt guide\` (Formatting): 2-space indentation, one member per line,
+a command's clauses on lines of their own unless it is short, and \`[0..1]\` written as \`?\`. Only whitespace and
+these spellings change, never the model; comments stay where they are. Run it after editing .dt files.
+A file with syntax errors is reported like \`dt check\` does and left untouched (exit 1).
+Prints the files it changed (with --check, those it would change), then a summary. Exits 0 when every file is
+formatted (or, without --check, was formatted), 1 on syntax errors, with --check on a file to change, or when no
+.dt file is found, 2 on an invalid config.
+
+Examples:
+  dt fmt
+  dt fmt --check
+  dt fmt sales/order.dt
+  dt -r domain fmt`)
+        .action(async (files: string[], opts: { check?: boolean }) => {
+            let entries: { path: string; file: string }[];
+            if (files.length) entries = files.map((f) => ({ path: f, file: path.resolve(f) }));
+            else {
+                const cfg = await config();
+                entries = (await findDomainFiles(cfg.root, cfg.sources)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
+                if (!entries.length) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
+            }
+            const sources = await Promise.all(entries.map(async (e) => ({ path: e.path, text: await readFile(e.file, 'utf8') })));
+            const syntax = (await analyze(sources)).diagnostics.filter((d) => d.code === 'SYNTAX');
+            for (const d of syntax) for (const line of formatDiagnostic(d).split('\n')) io.err(line);
+            const broken = new Set(syntax.map((d) => d.file));
+            let changed = 0;
+            for (const [i, source] of sources.entries()) {
+                if (broken.has(source.path)) continue;
+                const formatted = formatDomain(source.text);
+                if (formatted === source.text) continue;
+                changed++;
+                io.out(source.path);
+                if (!opts.check) await writeFile(entries[i].file, formatted);
+            }
+            const skipped = broken.size ? `, ${broken.size} not formatted because of syntax errors` : '';
+            const summary = opts.check
+                ? `${sources.length} file(s) checked: ${changed} not formatted${skipped}.${changed ? ' Run `dt fmt` to format them.' : ''}`
+                : `${sources.length} file(s): ${changed} formatted${skipped}.`;
+            (broken.size || (opts.check && changed) ? io.err : io.out)(summary);
+            exitCode = broken.size || (opts.check && changed) ? 1 : 0;
+        });
+
+    program
         .command('view')
         .description('Start the Live View server and watch .dt files (runs until Ctrl+C).')
         .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)', parsePort)
@@ -216,8 +266,9 @@ Examples:
         .addHelpText('after', `
 Speaks the Language Server Protocol on stdin/stdout for .dt files: the diagnostics of \`dt check\` (same rules, codes
 and messages, over the whole workspace and the unsaved text of open files), go to definition, find references, hover,
-outline, rename of declarations and completion. The workspace is the config found from --root or --config, else from
-the client's workspace folder, else from the current directory. Started by an LSP client, not by hand.
+outline, rename of declarations, completion and formatting (as \`dt fmt\`). The workspace is the config found from
+--root or --config, else from the client's workspace folder, else from the current directory. Started by an LSP
+client, not by hand.
 
 Examples:
   dt lsp

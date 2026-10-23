@@ -9,9 +9,10 @@ This guide is what `dt guide` prints. It is written for people and AI agents usi
 ## Workflow
 
 1. Write or edit `.dt` files (see [DSL](#dsl) and [File layout](#file-layout-recommended)).
-2. Run `dt check` and fix every reported problem until it exits 0.
-3. Run `dt generate ts` to write the TypeScript (it runs `check` first and writes nothing on errors).
-4. Implement the generated contracts in your own code, and type-check that code with your own TypeScript setup
+2. Run `dt fmt` to put them in the canonical layout (see [Formatting](#formatting)).
+3. Run `dt check` and fix every reported problem until it exits 0.
+4. Run `dt generate ts` to write the TypeScript (it runs `check` first and writes nothing on errors).
+5. Implement the generated contracts in your own code, and type-check that code with your own TypeScript setup
    (e.g. `tsc --noEmit`). `dt` does not run the TypeScript compiler.
 
 `dt view` starts the Live View, a browser page where people watch the model update as files are saved. It is a server
@@ -21,6 +22,7 @@ background, or use `dt check` for a result.
 `dt --help` and `dt <command> --help` list the options with examples.
 
 ```bash
+dt fmt                          # format every *.dt file below the current directory in place
 dt check                        # every *.dt file below the current directory
 dt -r domain check              # below domain/ (or as configured by a domaintrail.jsonc found there or above)
 dt generate ts                  # into <root>/generated/domain
@@ -172,6 +174,43 @@ extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the 
 }
 ```
 
+## Formatting
+
+`dt fmt` rewrites every file of the workspace (the config's `sources`, like `check`) in the one canonical layout;
+`dt fmt <files…>` formats only those files (paths relative to the current directory). Run it after every edit, so that
+the same model is always written the same way and a diff shows only what changed. `dt fmt --check` writes nothing,
+lists the files that are not formatted and exits 1 if there is one (for CI). A file with syntax errors is reported
+like `dt check` does and left untouched (exit 1). The language server formats a document the same way.
+
+Formatting changes only whitespace and three spellings: `[0..1]` becomes `?`, `[1..1]` is removed, and the commas
+between enum values or between transitions are dropped. The model never changes, strings (regular expressions
+included) are untouched, and every comment stays in its place: on the line of the code before it, or on a line of its
+own. The layout:
+
+- 2 spaces of indentation per level. Every member of a block (`context`, `aggregate`, `state`, `value`, `event`, `terms`,
+  …) is on its own line; a block without members is `{}`. One blank line between members is kept where the author wrote
+  one or more, none after `{` or before `}`. Contexts in one file are separated by one blank line.
+- An enum stays on one line (`enum Currency { JPY "日本円" USD "米ドル" }`), unless it has comments or would be longer
+  than 120 columns (a Japanese character counts as two); then one value per line.
+- An expression body stays inline (`invariant positive { amount > 0 }`), unless it has comments or its line would be
+  longer than 120 columns; then the expression goes on a line of its own between `{` and `}`. An expression is never
+  broken.
+- A command with at most one clause — a transition, `requires`, `changes`, `emits` with one event, or `errors` — and
+  no comments stays on one line if it fits in 120 columns: `command start() Draft -> InProgress`. Otherwise each clause
+  goes on a line of its own, one level deeper, in the order of the grammar, and a list of several events after `emits`
+  takes one line per event, aligned after `emits `:
+
+  ```text
+  command cancel(reason: CancelReason)
+    Draft | Confirmed -> Cancelled
+    emits OrderCancelled,
+          RefundRequested when Confirmed ->
+  ```
+
+- Parameters, `with`, `changes` and `errors` lists stay on one line. One space after `:` and `,` and around `->`, `|`,
+  `=>` and operators; none inside `( )`, `[ ]`, around `.` and `..`, or before `?`. One space before a comment at the
+  end of a line.
+
 ## File layout (recommended)
 
 File names and directories carry no meaning: every matching `.dt` file belongs to the workspace, and a context may be
@@ -204,29 +243,34 @@ The examples below are the files of one valid workspace (the file name is in the
 
 ```dt
 // sales/order.dt
-context Sales {                          // a bounded context; may be split across files
-  id OrderId: UUID                       // ID type with a base primitive type
+context Sales { // a bounded context; may be split across files
+  id OrderId: UUID // ID type with a base primitive type
   id OrderItemId: UUID
-  enum CancelReason { Requested Other }  // commas between values are optional
-  value Address { city: String street: String }
+  enum CancelReason { Requested Other } // values separated by spaces (commas are allowed; `dt fmt` drops them)
+  value Address {
+    city: String
+    street: String
+  }
 
   aggregate Order {
-    id: OrderId                          // identity field of its own ID type (required)
-    owns items: OrderItem[0..*]          // owned entity / value inside the aggregate
-    references customer: CustomerId -> Customer   // another aggregate, by ID
-    owns shipTo: Address?                // ? = optional
+    id: OrderId // identity field of its own ID type (required)
+    owns items: OrderItem[0..*] // owned entity / value inside the aggregate
+    references customer: CustomerId -> Customer // another aggregate, by ID
+    owns shipTo: Address? // ? = optional
     note: String?
 
-    invariant quantitiesPositive {       // applies to every state; sees the common fields
+    invariant quantitiesPositive { // applies to every state; sees the common fields
       all(items, item => item.quantity > 0)
     }
 
-    create command place(id: OrderId, customer: CustomerId) -> Draft emits OrderPlaced   // factory: `-> State`, no source
+    create command place(id: OrderId, customer: CustomerId)
+      -> Draft
+      emits OrderPlaced // factory: `-> State`, no source
 
     state Draft
     state Confirmed {
-      confirmedAt: Timestamp             // exists only in this state
-      invariant hasItems { count(items) > 0 and count(items) <= 100 }   // sees common + Confirmed fields
+      confirmedAt: Timestamp // exists only in this state
+      invariant hasItems { count(items) > 0 and count(items) <= 100 } // sees common + Confirmed fields
     }
     state Cancelled {
       reason: CancelReason
@@ -234,28 +278,42 @@ context Sales {                          // a bounded context; may be split acro
     }
 
     command confirm(at: Timestamp)
-      Draft -> Confirmed                 // a transition: source state(s) -> target state(s)
-      requires hasItems { count(items) > 0 } else EmptyOrder   // accepted only if; otherwise returns EmptyOrder
-      emits OrderConfirmed               // exactly one OrderConfirmed whenever it succeeds
+      Draft -> Confirmed // a transition: source state(s) -> target state(s)
+      requires hasItems { count(items) > 0 } else EmptyOrder // accepted only if; otherwise returns EmptyOrder
+      emits OrderConfirmed // exactly one OrderConfirmed whenever it succeeds
 
     command cancel(reason: CancelReason)
-      Draft | Confirmed -> Cancelled     // from either
+      Draft | Confirmed -> Cancelled // from either
       emits OrderCancelled,
-            RefundRequested when Confirmed ->   // only when it comes from Confirmed
+            RefundRequested when Confirmed -> // only when it comes from Confirmed
 
-    command changeNote(note: String?)    // one transition per input state: the output depends on the input
+    command changeNote(note: String?) // one transition per input state: the output depends on the input
       Draft -> Draft
-      Confirmed -> Confirmed             // also on one line: `Draft -> Draft, Confirmed -> Confirmed`
-      changes note                       // the fields it may change; without `changes`, no common field
+      Confirmed -> Confirmed // one transition per line (`Draft -> Draft, Confirmed -> Confirmed` is allowed too)
+      changes note // the fields it may change; without `changes`, no common field
   }
 
-  entity OrderItem { id: OrderItemId quantity: Quantity owns unitPrice: Money }
+  entity OrderItem {
+    id: OrderItemId
+    quantity: Quantity
+    owns unitPrice: Money
+  }
 
-  persistent event OrderPlaced { orderId: OrderId }      // storing it is part of its contract
-  persistent event OrderConfirmed { orderId: OrderId confirmedAt: Timestamp }
-  event OrderCancelled { orderId: OrderId reason: CancelReason }   // not persisted (default)
-  event RefundRequested { orderId: OrderId }
-  error EmptyOrder                       // payload optional: error E { field: Type }
+  persistent event OrderPlaced { // storing it is part of its contract
+    orderId: OrderId
+  }
+  persistent event OrderConfirmed {
+    orderId: OrderId
+    confirmedAt: Timestamp
+  }
+  event OrderCancelled { // not persisted (default)
+    orderId: OrderId
+    reason: CancelReason
+  }
+  event RefundRequested {
+    orderId: OrderId
+  }
+  error EmptyOrder // payload optional: error E { field: Type }
 }
 ```
 
@@ -264,25 +322,29 @@ context Sales {                          // a bounded context; may be split acro
 context Sales {
   id CustomerId: UUID
 
-  aggregate Customer {                   // no states: commands have no transitions
+  aggregate Customer { // no states: commands have no transitions
     id: CustomerId
-    email: EmailAddress                  // from the shared context Common
+    email: EmailAddress // from the shared context Common
     active: Bool
     owns addresses: Address[0..*]
     owns shipping: Address?
 
     invariant activeHasAddress { active == true implies count(addresses) > 0 }
     invariant servedArea { active == false or any(addresses, a => a.city == "Tokyo" or not (a.city == "Osaka")) }
-    invariant distinctAddresses { unique(addresses, a => a.city, a.street) }   // the combination is distinct
+    invariant distinctAddresses { unique(addresses, a => a.city, a.street) } // the combination is distinct
     invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
 
     /// No other customer has the same email address (spans aggregates, so not expressed in the DSL).
     invariant uniqueEmail "メールアドレスは顧客ごとに一意"
 
-    command changeEmail(email: EmailAddress) changes email errors EmailTaken   // errors that MAY be returned
+    command changeEmail(email: EmailAddress)
+      changes email
+      errors EmailTaken // errors that MAY be returned
   }
 
-  error EmailTaken { email: EmailAddress }
+  error EmailTaken {
+    email: EmailAddress
+  }
 }
 ```
 
@@ -291,15 +353,15 @@ context Sales {
 - Fields: `name: Type`, `owns name: Type` (entities and values held by the aggregate),
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
-- Multiplicity after the type: `?`, `[0..1]`, `[0..*]`, `[1..*]`, `[n..m]`.
+- Multiplicity after the type: `?` (also `[0..1]`, which `dt fmt` writes as `?`), `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
 - A command is written in this order: parameters and label, transitions, `requires` (see
   [Command requirements](#command-requirements)), `changes` (see [Command changes](#command-changes)), `emits` (see
   [Command events](#command-events)), `errors`.
 - Command transitions follow the parameters (and label), before `emits` / `errors`: `A | B -> C | D` means "in `A` or
-  `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas. A state may be the
-  source of one transition of a command only, so the input state decides the possible outputs; for several possible
-  outcomes, list them on the right: `InProgress -> InProgress | Completed`.
+  `B`, the command ends in `C` or `D`". Separate several transitions by line breaks or commas (`dt fmt` writes one per
+  line). A state may be the source of one transition of a command only, so the input state decides the possible
+  outputs; for several possible outcomes, list them on the right: `InProgress -> InProgress | Completed`.
 - In an aggregate with states, a `create command` makes a new aggregate and has exactly one transition without
   sources (`-> Draft`, or `-> A | B`); every other command has one or more transitions, each with sources. Without
   states, commands have no transitions. A command that keeps the state writes it out: `Draft -> Draft`.
@@ -315,12 +377,12 @@ value objects.
 ```dt
 // sales/primitives.dt
 context Sales {
-  primitive Quantity "数量": Int { value in 1..999 }     // one anonymous constraint
-  primitive Sku: String {                                 // or named invariants
+  primitive Quantity "数量": Int { value in 1..999 } // one anonymous constraint
+  primitive Sku: String { // or named invariants
     invariant format "形式" { matches(value, "^[A-Z]{3}-\d{4}$") }
     invariant maxLength { length(value) <= 8 }
   }
-  id InvoiceNo: String { matches(value, "^INV-\d{8}$") }  // an ID is a domain primitive used as identity
+  id InvoiceNo: String { matches(value, "^INV-\d{8}$") } // an ID is a domain primitive used as identity
 }
 ```
 
@@ -340,14 +402,23 @@ never changes, and aggregate states for a lifecycle that commands move through.
 ```dt
 // sales/payment.dt
 context Sales {
-  union Payer "支払者" {                                  // discriminator `kind` by default
-    CUSTOMER "顧客" { customerId: CustomerId }
-    COMPANY "法人" { name: String  billingEmail: EmailAddress? }
+  union Payer "支払者" { // discriminator `kind` by default
+    CUSTOMER "顧客" {
+      customerId: CustomerId
+    }
+    COMPANY "法人" {
+      name: String
+      billingEmail: EmailAddress?
+    }
   }
   enum PaymentMethod { CARD TRANSFER }
-  union PaymentDetails by method: PaymentMethod {        // `by name`, optionally bound to an enum
-    CARD { last4: String }                               // exactly the enum's values (M015)
-    TRANSFER { bankCode: String }
+  union PaymentDetails by method: PaymentMethod { // `by name`, optionally bound to an enum
+    CARD { // exactly the enum's values (M015)
+      last4: String
+    }
+    TRANSFER {
+      bankCode: String
+    }
   }
 }
 ```
@@ -361,10 +432,15 @@ context Sales {
 
 ```dt
 // common/context.dt
-shared context Common "共通" {            // shared kernel: usable by simple name from every context
-  terms { currency: "通貨" }
+shared context Common "共通" { // shared kernel: usable by simple name from every context
+  terms {
+    currency: "通貨"
+  }
   enum Currency { JPY USD }
-  value Money { amount: Decimal currency: Currency }
+  value Money {
+    amount: Decimal
+    currency: Currency
+  }
   primitive EmailAddress: String { matches(value, "^[^@\s]+@[^@\s]+$") }
 }
 ```
@@ -383,7 +459,7 @@ and taken on with `with`.
 shared context Common {
   /// 契約者（テナント）。業務データはテナントごとに分かれる。
   primitive TenantId "テナントID": UUID
-  fields Tenanted "テナント所属" {          // a field set: plain fields only
+  fields Tenanted "テナント所属" { // a field set: plain fields only
     tenant: TenantId "テナント"
   }
 }
@@ -400,7 +476,7 @@ context Expenses "経費" {
     performedBy: StaffId "実施者"
   }
 
-  aggregate Expense "経費申請" with Tenanted {   // tenant first, then its own fields
+  aggregate Expense "経費申請" with Tenanted { // tenant first, then its own fields
     id: ExpenseId
     applicant: StaffId "申請者"
     approver: StaffId? "承認者"
@@ -410,11 +486,13 @@ context Expenses "経費" {
     command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する" emits ExpenseApproved
   }
 
-  event ExpenseSubmitted "申請受付" with Tenanted, Performed { expenseId: ExpenseId }
+  event ExpenseSubmitted "申請受付" with Tenanted, Performed {
+    expenseId: ExpenseId
+  }
   event ExpenseApproved "承認" with Tenanted {
     expenseId: ExpenseId
-    approver: StaffId "承認者"          // a business role, named by the role
-    approvedAt: Timestamp "承認日時"    // when it happened in business terms
+    approver: StaffId "承認者" // a business role, named by the role
+    approvedAt: Timestamp "承認日時" // when it happened in business terms
   }
 }
 ```
@@ -459,7 +537,7 @@ Two cases look alike but are not:
 // billing/context.dt
 /// 注文への請求と支払いを扱う。
 context Billing "請求" {
-  terms {                                  // field / parameter names, defined once per context
+  terms { // field / parameter names, defined once per context
     /// 請求書が支払われた日時。
     paidAt: "支払日時"
   }
@@ -468,22 +546,29 @@ context Billing "請求" {
 
 ```dt
 // billing/invoice.dt
-context Billing {                          // other files open the context without a name
+context Billing { // other files open the context without a name
   id InvoiceId "請求書ID": UUID
 
   /// 注文1件に対する請求。
-  aggregate Invoice "請求書" {             // declarations: a string after the name
+  aggregate Invoice "請求書" { // declarations: a string after the name
     id: InvoiceId
-    references order: Sales.OrderId -> Sales.Order "請求対象"   // an inline label on a field
+    references order: Sales.OrderId -> Sales.Order "請求対象" // an inline label on a field
     owns amount: Money "請求金額"
     state Open "未払い"
-    state Paid "支払済み" { paidAt: Timestamp }               // → 支払日時 (from terms)
+    state Paid "支払済み" {
+      paidAt: Timestamp // → 支払日時 (from terms)
+    }
     invariant positive "金額が正" { amount.amount > 0 }
     create command issue(id: InvoiceId, order: Sales.OrderId, amount: Money) "請求書を発行する" -> Open
-    command pay(at: Timestamp "支払日時") "支払う" Open -> Paid emits InvoicePaid
+    command pay(at: Timestamp "支払日時") "支払う"
+      Open -> Paid
+      emits InvoicePaid
   }
   enum InvoiceKind "請求区分" { Regular "通常" Refund "返金" }
-  event InvoicePaid "支払完了" { invoiceId: InvoiceId paidAt: Timestamp }
+  event InvoicePaid "支払完了" {
+    invoiceId: InvoiceId
+    paidAt: Timestamp
+  }
 }
 ```
 
@@ -530,27 +615,33 @@ transitions, any number per command; `else` names the error the command returns 
 context Review {
   id ReviewId: UUID
   id PersonId: UUID
-  value ApprovalPolicy { approvers: PersonId[1..*] }
+  value ApprovalPolicy {
+    approvers: PersonId[1..*]
+  }
 
   aggregate Review "レビュー" {
     id: ReviewId
     policy: ApprovalPolicy
-    state Reviewing { openBlockers: Int }
-    state Escalated { openBlockers: Int }
+    state Reviewing {
+      openBlockers: Int
+    }
+    state Escalated {
+      openBlockers: Int
+    }
     state Accepted {
       acceptedBy: PersonId
       /// All the scenarios the policy requires are confirmed.
-      invariant fullyConfirmed "必要な確認がそろっている"   // holds whenever the review is Accepted
+      invariant fullyConfirmed "必要な確認がそろっている" // holds whenever the review is Accepted
     }
 
     command accept(person: PersonId) "受入"
       Reviewing | Escalated -> Accepted
-      requires authorizedApprover "承認者である" {        // depends on the parameters and the current state
+      requires authorizedApprover "承認者である" { // depends on the parameters and the current state
         contains(policy.approvers, person)
       } else NotApprover
       requires noOpenBlocker "未解決の阻害がない" { openBlockers == 0 } else Blocked
       /// The reviewer's own sign-off is recorded outside this model.
-      requires signedOff "本人の承認が記録済み" else NotSignedOff   // not expressed in the DSL
+      requires signedOff "本人の承認が記録済み" else NotSignedOff // not expressed in the DSL
       errors Conflict
   }
 
@@ -600,21 +691,27 @@ context Tickets {
     id: TicketId
     title: String
     note: String?
-    state Open { assignee: PersonId? }
-    state InProgress { assignee: PersonId startedAt: Timestamp }
-    state Closed { closedAt: Timestamp }
+    state Open {
+      assignee: PersonId?
+    }
+    state InProgress {
+      assignee: PersonId
+      startedAt: Timestamp
+    }
+    state Closed {
+      closedAt: Timestamp
+    }
 
-    create command report(id: TicketId, title: String) -> Open   // a factory sets every field
+    create command report(id: TicketId, title: String) -> Open // a factory sets every field
     command retitle(title: String, note: String?)
-      Open -> Open, InProgress -> InProgress
-      changes title, note                // common fields
+      Open -> Open
+      InProgress -> InProgress
+      changes title, note // common fields
     command assign(assignee: PersonId?)
       Open -> Open
-      changes assignee                   // carried over from Open to Open, so listed to be changed
-    command start(assignee: PersonId, at: Timestamp)
-      Open -> InProgress                 // no `changes`: sets InProgress's assignee and startedAt, keeps the rest
-    command close(at: Timestamp)
-      Open | InProgress -> Closed        // sets closedAt; assignee and startedAt are dropped
+      changes assignee // carried over from Open to Open, so listed to be changed
+    command start(assignee: PersonId, at: Timestamp) Open -> InProgress // no `changes`: sets InProgress's assignee and startedAt, keeps the rest
+    command close(at: Timestamp) Open | InProgress -> Closed // sets closedAt; assignee and startedAt are dropped
   }
 }
 ```
@@ -656,23 +753,45 @@ context Work {
     id: WorkId
     state Draft
     state InProgress
-    state Completed { completedAt: Timestamp }
+    state Completed {
+      completedAt: Timestamp
+    }
 
-    create command open(id: WorkId) -> Draft emits WorkOpened      // the new ID is a parameter
-    command plan(steps: StepId[1..*]) Draft -> Draft emits StepPlanned[1..*]   // one per step
-    command rename(title: String) Draft -> Draft emits Renamed?      // not when the title is the same
+    create command open(id: WorkId)
+      -> Draft
+      emits WorkOpened // the new ID is a parameter
+    command plan(steps: StepId[1..*])
+      Draft -> Draft
+      emits StepPlanned[1..*] // one per step
+    command rename(title: String)
+      Draft -> Draft
+      emits Renamed? // not when the title is the same
     command start() Draft -> InProgress
     command progress(step: StepId, at: Timestamp)
       InProgress -> InProgress | Completed
       emits StepRecorded,
-            WorkCompleted when -> Completed                         // only when it ends in Completed
+            WorkCompleted when -> Completed // only when it ends in Completed
   }
 
-  event WorkOpened { workId: WorkId }
-  event StepPlanned { workId: WorkId step: StepId }
-  event Renamed { workId: WorkId title: String }
-  event StepRecorded { workId: WorkId step: StepId }
-  event WorkCompleted { workId: WorkId completedAt: Timestamp }
+  event WorkOpened {
+    workId: WorkId
+  }
+  event StepPlanned {
+    workId: WorkId
+    step: StepId
+  }
+  event Renamed {
+    workId: WorkId
+    title: String
+  }
+  event StepRecorded {
+    workId: WorkId
+    step: StepId
+  }
+  event WorkCompleted {
+    workId: WorkId
+    completedAt: Timestamp
+  }
 }
 ```
 
@@ -746,7 +865,7 @@ command and an `<Aggregate>Commands` interface to implement, plus `index.ts` and
 gets a branded type and a constructor contract `Make<Name>` to implement by hand. A field set is an interface that the
 elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its `…Common`).
 The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's place as
-`dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:46`); editing the `.dt` sources moves
+`dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:44`); editing the `.dt` sources moves
 these lines, and generating again rewrites them.
 
 Unions to name groups of them, each generated only when it has a member:
@@ -766,7 +885,7 @@ Unions to name groups of them, each generated only when it has a member:
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
- * @see sales/order.dt:46
+ * @see sales/order.dt:44
  */
 export type ConfirmOrder = (
     order: DraftOrder,
@@ -873,7 +992,7 @@ instead.
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
- * @see sales/order.dt:46
+ * @see sales/order.dt:44
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
@@ -973,7 +1092,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  * @requires signedOff (本人の承認が記録済み) else NotSignedOff: not expressed in the DSL
  * @changes none — the command changes no common field
  * @emits nothing
- * @see review/review.dt:18
+ * @see review/review.dt:24
  */
 export type AcceptReview = (
     review: ReviewingReview | EscalatedReview,

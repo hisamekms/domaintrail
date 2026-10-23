@@ -11,8 +11,7 @@ context Billing {
       paidAt: Timestamp
     }
 
-    create command issue(id: InvoiceId, order: Sales.OrderId, billedAmount: Money "請求金額") "請求書を発行する"
-      -> Open
+    create command issue(id: InvoiceId, order: Sales.OrderId, billedAmount: Money "請求金額") "請求書を発行する" -> Open
 
     command pay(at: Timestamp) "支払う"
       Open -> Paid
