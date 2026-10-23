@@ -225,6 +225,7 @@ function command(aggId: string, c: Command, loc: (n: AstNode) => Location, field
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
         requires: c.requirements.map((r) => requirement(r, qname)),
+        changes: [...c.changes],
         emits: c.emits.map((e) => ({
             event: qname(e.event),
             cardinality: cardinality(e.multiplicity),

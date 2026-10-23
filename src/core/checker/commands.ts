@@ -1,7 +1,9 @@
-import { isIdType, type Command } from '../../language/generated/ast.js';
+import { isIdType, isReferenceField, type Command, type State } from '../../language/generated/ast.js';
 import { emitApplies } from '../../model/model.js';
 import type { DiagnosticSink } from '../diagnostics.js';
-import { commandsOf, identityField, statesOf, type ModelIndex } from '../model-index.js';
+import { commandsOf, commonFields, fieldsOf, identityField, includedFields, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
+import { suggestFrom } from '../suggest.js';
+import { baseType, sameType } from '../types.js';
 
 /**
  * M006: state transitions of commands (`A | B -> C`). Unresolved state names are reported from linking;
@@ -120,6 +122,78 @@ export function checkFactoryIds(index: ModelIndex, sink: DiagnosticSink): void {
                 undefined,
                 `pass the ID in: 'create command ${cmd.name}(id: ${idType.name}${cmd.params.length ? ', …' : ''})', and let the caller generate it`,
             );
+        }
+    }
+}
+
+/** Multiplicity as written, normalized (`?`, `0..*`, `2..5`; empty without one). */
+const multiplicityOf = (f: FieldLike): string => {
+    const m = f.multiplicity;
+    if (!m) return '';
+    return m.optional ? '?' : `${m.lower}..${m.unbounded ? '*' : m.upper}`;
+};
+
+/**
+ * Whether two fields have the same type: base type, multiplicity, and kind (with the target of a reference). The
+ * Typed Model's `sameFieldType` says the same for the generator.
+ */
+const sameField = (a: FieldLike, b: FieldLike): boolean =>
+    a.$type === b.$type &&
+    sameType(baseType(a.type), baseType(b.type)) &&
+    multiplicityOf(a) === multiplicityOf(b) &&
+    (!isReferenceField(a) || !isReferenceField(b) || a.target?.ref === b.target?.ref);
+
+const quotedList = (names: string[]): string => names.map((n) => `'${n}'`).join(', ');
+
+/**
+ * M021: `changes` lists fields that the command can change (ADR 0019):
+ *   - not on a `create command`, which sets every field;
+ *   - a field of the aggregate — a common field (also from a field set) or a field of a state — other than its identity;
+ *   - a state-specific field is carried over by at least one outcome of the command: a transition from a state that
+ *     has it to a state that has it, with the same type. In the other outcomes it is new in the target (and set
+ *     anyway) or not in the target (and dropped), so listing a field no outcome carries over would change nothing.
+ * A field listed twice is M002.
+ */
+export function checkChanges(index: ModelIndex, sink: DiagnosticSink): void {
+    for (const agg of index.aggregates) {
+        const common = [...includedFields(agg).map((x) => x.field), ...commonFields(agg)];
+        const states = statesOf(agg);
+        const fieldIn = (s: State | undefined, name: string): FieldLike | undefined => s && fieldsOf(s.members).find((f) => f.name === name);
+        const identity = identityField(agg)?.name;
+        for (const cmd of commandsOf(agg)) {
+            if (!cmd.changes.length) continue;
+            if (cmd.factory) {
+                const hint = `remove 'changes ${cmd.changes.join(', ')}'; the decision of '${cmd.name}' gives every field`;
+                sink.error('M021', `Factory command '${cmd.name}' sets every field of the new '${agg.name}'; 'changes' does not apply to it.`, cmd, 'changes', 0, hint);
+                continue;
+            }
+            const outcomes = cmd.transitions.flatMap((t) => t.from.flatMap((f) => t.to.map((to) => ({ from: f.ref, to: to.ref }))));
+            cmd.changes.forEach((name, i) => {
+                if (name === identity) {
+                    sink.error('M021', `Field '${name}' is the identity of '${agg.name}' and never changes.`, cmd, 'changes', i, `remove '${name}' from 'changes'`);
+                    return;
+                }
+                if (common.some((f) => f.name === name)) return;
+                const where = states.filter((s) => fieldIn(s, name)).map((s) => s.name);
+                if (!where.length) {
+                    const fields = [...common.map((f) => f.name), ...states.flatMap((s) => fieldsOf(s.members).map((f) => f.name))].filter((f) => f !== identity);
+                    sink.error('M021', `'${agg.name}' has no field '${name}'.`, cmd, 'changes', i, suggestFrom(name, fields, `a field of '${agg.name}'`));
+                    return;
+                }
+                if (outcomes.some(({ from, to }) => { const a = fieldIn(from, name); const b = fieldIn(to, name); return !!a && !!b && sameField(a, b); })) return;
+                const entered = outcomes.filter(({ to }) => fieldIn(to, name)).map(({ to }) => to!.name);
+                const hint = entered.length
+                    ? `every outcome of '${cmd.name}' that ends in ${quotedList([...new Set(entered)])} sets '${name}' anyway; remove it from 'changes'`
+                    : `'${cmd.name}' never ends in ${quotedList(where)}, so '${name}' is not kept; remove it from 'changes'`;
+                sink.error(
+                    'M021',
+                    `Field '${name}' is in state ${quotedList(where)} only, and no transition of '${cmd.name}' carries it over (from a state that has it to one that has it, with the same type), so 'changes' cannot apply to it.`,
+                    cmd,
+                    'changes',
+                    i,
+                    hint,
+                );
+            });
         }
     }
 }

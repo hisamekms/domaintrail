@@ -184,6 +184,8 @@ const ja = {
     /** A command's `requires`: when it is accepted. */
     requirements: '前提条件',
     requirementElseHint: '前提条件を満たさないときに返すエラー',
+    /** A command's `changes`: the fields it may change. */
+    changedFields: '変更するフィールド',
     params: 'パラメータ',
     noParams: 'パラメータはありません。',
     contract: '契約',
@@ -384,6 +386,7 @@ const en: Messages = {
     mayReturn: 'Errors it may return',
     requirements: 'Requirements',
     requirementElseHint: 'Error returned when the requirement does not hold',
+    changedFields: 'Fields it changes',
     params: 'Parameters',
     noParams: 'No parameters.',
     contract: 'Contract',

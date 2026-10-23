@@ -19,7 +19,7 @@ import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
 import type { DomainModel } from '../model/model.js';
-import { checkCommands, checkFactoryIds } from './checker/commands.js';
+import { checkChanges, checkCommands, checkFactoryIds } from './checker/commands.js';
 import { checkEventIds } from './checker/events.js';
 import { checkFieldSets } from './checker/field-sets.js';
 import { checkInvariants } from './checker/expressions.js';
@@ -113,6 +113,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkFieldSets(index, sink);
         checkCommands(index, sink);
         checkFactoryIds(index, sink);
+        checkChanges(index, sink);
         checkEventIds(index, sink);
         checkInvariants(index, sink);
         checkTsNames(index, sink);

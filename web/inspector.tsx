@@ -6,7 +6,7 @@ import type { ModelDiff } from '../src/graph/diff';
 import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel, type InvariantModel, type Location } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
-import { CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, Requirements } from './behavior';
+import { Changes, CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
 import { KIND_ORDER, fieldSetUsers, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
@@ -255,6 +255,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                             <Requirements c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
                         </Section>
                     )}
+                    {!c.factory && <Section title={tx.changedFields}>{c.changes.length ? <Changes agg={agg} c={c} names={names} /> : <span className="muted">{tx.none}</span>}</Section>}
                     <Section title={tx.mayRaise}>
                         {c.emits.length ? c.emits.map((e, i) => <OutcomeRow key={i} model={model} id={e.event} suffix={emitSuffix(e)} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
                     </Section>

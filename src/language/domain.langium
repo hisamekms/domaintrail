@@ -83,10 +83,14 @@ OwnsField:
 ReferenceField:
     'references' name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? '->' target=[Aggregate:QualifiedName] label=STRING?;
 
+// `changes a, b` (after `requires`, before `emits`): the fields the command may change — common fields, and
+// state-specific fields it would otherwise carry over. Without it, a command changes no common field. Field names,
+// checked by M021.
 Command:
     (factory?='create')? 'command' name=FeatureName '(' (params+=Parameter (',' params+=Parameter)*)? ')' label=STRING?
     (transitions+=Transition (','? transitions+=Transition)*)?
     requirements+=Requirement*
+    ('changes' changes+=FeatureName (',' changes+=FeatureName)*)?
     ('emits' emits+=Emit (',' emits+=Emit)*)?
     ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?;
 
@@ -179,7 +183,7 @@ LambdaParam:
 
 // Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when'
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 QualifiedName returns string:

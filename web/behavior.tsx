@@ -1,4 +1,4 @@
-import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from '../src/model/model';
+import { allFieldsOf, emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from '../src/model/model';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 
@@ -125,6 +125,20 @@ export function Requirements({ c, model, names, tx, onSelect }: { c: CommandMode
     );
 }
 
+/** The fields a command may change (`changes`), by their names in the display mode. */
+export function Changes({ agg, c, names }: { agg: ElementModel; c: CommandModel; names: Namer }) {
+    const fields = allFieldsOf(agg);
+    return (
+        <div className="bcard-changes">
+            {c.changes.map((name) => (
+                <code key={name} className="bcard-change">
+                    <Named x={fields.find((f) => f.name === name) ?? { name }} names={names} />
+                </code>
+            ))}
+        </div>
+    );
+}
+
 export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: ElementModel; c: CommandModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {
     const outcome = (id: string) => model.elements[id] ?? { name: id };
     return (
@@ -144,6 +158,12 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
                 <div className="bcard-part">
                     <div className="bcard-caption">{tx.requirements}</div>
                     <Requirements c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
+                </div>
+            )}
+            {c.changes.length > 0 && (
+                <div className="bcard-part">
+                    <div className="bcard-caption">{tx.changedFields}</div>
+                    <Changes agg={agg} c={c} names={names} />
                 </div>
             )}
             {c.emits.length + c.errors.length > 0 && (

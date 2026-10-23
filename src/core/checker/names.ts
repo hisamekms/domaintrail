@@ -56,6 +56,9 @@ function checkAggregate(agg: Aggregate, sink: DiagnosticSink): void {
     for (const c of commands) {
         unique(c.params, (p) => `Parameter '${p.name}' is declared more than once in command '${c.name}'.`, sink);
         unique(c.requirements, (r) => `Requirement '${r.name}' is declared more than once in command '${c.name}'.`, sink);
+        c.changes.forEach((name, i) => {
+            if (c.changes.indexOf(name) < i) sink.error('M002', `Field '${name}' is listed more than once in 'changes' of command '${c.name}'.`, c, 'changes', i);
+        });
     }
 }
 
