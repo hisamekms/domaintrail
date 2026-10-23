@@ -74,7 +74,7 @@ describe('label diagnostics', () => {
     test('L001 an inline label disagrees with the term', async () => {
         const a = await check({ 'a.dt': SALES });
         expect(only(a, 'L001').map((d) => d.message)).toEqual([
-            "'note' is named '注文メモ' here, but the term 'note' is '備考'. Use the term, or rename the field if it means something else.",
+            "'note' is named '注文メモ' here, but the term 'note' is '備考'.",
         ]);
         expect(a.ok).toBe(true); // label rules are warnings
     });

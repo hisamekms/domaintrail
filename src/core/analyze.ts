@@ -1,6 +1,20 @@
 import * as path from 'node:path';
-import { URI, type LangiumDocument } from 'langium';
-import type { Model } from '../language/generated/ast.js';
+import { AstUtils, URI, type AstNode, type LangiumDocument } from 'langium';
+import {
+    isAggregate,
+    isContext,
+    isEntity,
+    isEnumDecl,
+    isErrorDecl,
+    isEventDecl,
+    isFieldSet,
+    isIdType,
+    isPrimitiveDecl,
+    isUnionDecl,
+    isValueObject,
+    type ContextElement,
+    type Model,
+} from '../language/generated/ast.js';
 import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
@@ -16,7 +30,8 @@ import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
 import { checkUnions } from './checker/unions.js';
 import { DiagnosticSink, compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from './diagnostics.js';
-import { ModelIndex } from './model-index.js';
+import { ModelIndex, statesOf } from './model-index.js';
+import { didYouMean, suggestFrom, type Candidate } from './suggest.js';
 
 export interface SourceFile {
     /** Path used in diagnostics (typically relative to the workspace root). */
@@ -64,6 +79,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
     await shared.workspace.DocumentBuilder.build(documents, { validation: { categories: ['built-in'] } });
 
     const resolveFile = (uri: string): string => fileOf.get(uri) ?? uri;
+    const index = new ModelIndex(documents.map((d) => d.parseResult.value));
     const diagnostics: Diagnostic[] = [];
     let syntaxOk = true;
     for (const doc of documents) {
@@ -73,6 +89,8 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
             if (!isLink) syntaxOk = false;
             const data = d.data as { property?: string; refText?: string } | undefined;
             const property = data?.property ?? '';
+            const node = isLink ? nodeAt(doc, d.range.start.line, d.range.start.character) : undefined;
+            const hint = node && linkHint(index, node, property, data?.refText ?? '');
             diagnostics.push({
                 file: resolveFile(doc.uri.toString()),
                 start: { line: d.range.start.line + 1, column: d.range.start.character + 1 },
@@ -80,12 +98,12 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
                 severity: d.severity === 2 ? 'warning' : 'error',
                 code: isLink ? (LINK_RULES[property] ?? 'M001') : 'SYNTAX',
                 message: isLink ? linkMessage(property, data?.refText ?? '') : typeof d.message === 'string' ? d.message : d.message.value,
-                elementId: isLink ? elementAt(doc, d.range.start.line, d.range.start.character) : undefined,
+                ...(hint ? { hint } : {}),
+                elementId: node && elementIdOf(node),
             });
         }
     }
 
-    const index = new ModelIndex(documents.map((d) => d.parseResult.value));
     if (syntaxOk) {
         const sink = new DiagnosticSink(resolveFile);
         checkNames(index, sink);
@@ -121,6 +139,7 @@ const LINK_KINDS: Record<string, string> = {
     error: 'error',
     fieldSets: 'field set',
     target: 'aggregate',
+    tagType: 'enum',
     decl: 'type',
 };
 
@@ -130,7 +149,47 @@ function linkMessage(property: string, refText: string): string {
     return `Cannot resolve ${kind} '${refText}'${hint}.`;
 }
 
-function elementAt(doc: LangiumDocument, line: number, character: number): string | undefined {
+/** What each cross-reference property may point to (states are looked up in the aggregate instead). */
+const LINK_TARGETS: Record<string, (el: ContextElement) => boolean> = {
+    emits: isEventDecl,
+    errors: isErrorDecl,
+    error: isErrorDecl,
+    fieldSets: isFieldSet,
+    target: isAggregate,
+    tagType: isEnumDecl,
+    decl: (el) => isIdType(el) || isPrimitiveDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
+};
+
+const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'];
+
+/**
+ * The names of the right kind visible where an unresolved reference is: for a simple name the elements of its context,
+ * of shared contexts and (qualified) of other contexts; for a qualified name every qualified name.
+ */
+function linkHint(index: ModelIndex, node: AstNode, property: string, refText: string): string | undefined {
+    if (property === 'from' || property === 'to') {
+        const agg = AstUtils.getContainerOfType(node, isAggregate);
+        return agg && suggestFrom(refText, statesOf(agg).map((s) => s.name), `a state of '${agg.name}'`);
+    }
+    const accepts = LINK_TARGETS[property];
+    if (!accepts) return undefined;
+    const ctx = AstUtils.getContainerOfType(node, isContext)?.name ?? '';
+    const elements = index.elements.filter(accepts);
+    const candidates: Candidate[] = [];
+    if (refText.includes('.')) {
+        for (const el of elements) candidates.push({ name: `${el.$container.name}.${el.name}` });
+    } else {
+        if (property === 'decl') candidates.push(...PRIMITIVE_TYPES.map((name) => ({ name })));
+        for (const el of elements) {
+            const owner = el.$container.name;
+            const visible = owner === ctx || index.isShared(owner);
+            candidates.push(visible ? { name: el.name } : { name: `${owner}.${el.name}`, key: el.name });
+        }
+    }
+    return didYouMean(refText, candidates);
+}
+
+function nodeAt(doc: LangiumDocument, line: number, character: number): AstNode | undefined {
     const root = doc.parseResult.value.$cstNode;
     if (!root) return undefined;
     const offset = doc.textDocument.offsetAt({ line, character });
@@ -141,7 +200,7 @@ function elementAt(doc: LangiumDocument, line: number, character: number): strin
         if (!next) break;
         node = next;
     }
-    return elementIdOf(node.astNode);
+    return node.astNode;
 }
 
 function dedupe(items: Diagnostic[]): Diagnostic[] {

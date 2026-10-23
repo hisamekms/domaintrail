@@ -17,9 +17,11 @@ export function checkFieldSets(index: ModelIndex, sink: DiagnosticSink): void {
                 sink.error('M016', `Field set '${fs.name}' cannot hold invariants; write invariant '${m.name}' in the elements that use it.`, m, 'name');
             } else if (isOwnsField(m) || isReferenceField(m)) {
                 const keyword = isOwnsField(m) ? 'owns' : 'references';
-                sink.error('M016', `A field set holds plain fields only; '${m.name}' is declared with '${keyword}'.`, m, 'name');
+                const hint = `declare '${m.name}' in each element that uses '${fs.name}', or make it a plain field`;
+                sink.error('M016', `A field set holds plain fields only; '${m.name}' is declared with '${keyword}'.`, m, 'name', undefined, hint);
             } else if (m.name === 'id') {
-                sink.error('M016', `Field set '${fs.name}' cannot declare 'id'; the identity is declared by each aggregate and entity itself.`, m, 'name');
+                const hint = `remove 'id' from '${fs.name}' and declare it in each aggregate and entity with an ID type of its own`;
+                sink.error('M016', `Field set '${fs.name}' cannot declare 'id'; the identity is declared by each aggregate and entity itself.`, m, 'name', undefined, hint);
             }
         }
     }
@@ -28,7 +30,8 @@ export function checkFieldSets(index: ModelIndex, sink: DiagnosticSink): void {
         if (!('fieldSets' in el) || el.fieldSets.length === 0) continue;
         if (isFieldSet(el) || isValueObject(el) || isErrorDecl(el)) {
             const what = isFieldSet(el) ? `field set '${el.name}' cannot include other field sets` : `${isValueObject(el) ? 'value object' : 'error'} '${el.name}' cannot take field sets`;
-            sink.error('M016', `'with' is only for aggregates, entities and events; ${what}.`, el, 'fieldSets');
+            const hint = isFieldSet(el) ? `list the field sets on the elements that use '${el.name}' instead` : `remove 'with' and declare the fields in '${el.name}'`;
+            sink.error('M016', `'with' is only for aggregates, entities and events; ${what}.`, el, 'fieldSets', undefined, hint);
             continue;
         }
         if (isAggregate(el) || isEntity(el) || isEventDecl(el)) checkUses(el, sink);
@@ -51,20 +54,21 @@ function checkUses(el: WithFieldSets, sink: DiagnosticSink): void {
             from.set(field.name, fieldSet.name);
         } else if (first !== fieldSet.name) {
             const at = el.fieldSets.findIndex((r) => r.ref === fieldSet);
-            sink.error('M016', `Field '${field.name}' of field set '${fieldSet.name}' is also declared in field set '${first}', both used by '${el.name}'.`, el, 'fieldSets', at);
+            const hint = `remove '${field.name}' from one of the two field sets, or take only one of them in '${el.name}'`;
+            sink.error('M016', `Field '${field.name}' of field set '${fieldSet.name}' is also declared in field set '${first}', both used by '${el.name}'.`, el, 'fieldSets', at, hint);
         }
     }
 
     const own: FieldLike[] = isAggregate(el) ? commonFields(el) : fieldsOf(el.members);
     for (const f of own) {
         const fs = from.get(f.name);
-        if (fs) sink.error('M016', `Field '${f.name}' of '${el.name}' is already taken from field set '${fs}'.`, f, 'name');
+        if (fs) sink.error('M016', `Field '${f.name}' of '${el.name}' is already taken from field set '${fs}'.`, f, 'name', undefined, `remove the field here, or rename it if it means something else`);
     }
     if (isAggregate(el)) {
         for (const s of statesOf(el)) {
             for (const f of fieldsOf(s.members)) {
                 const fs = from.get(f.name);
-                if (fs) sink.error('M016', `Field '${f.name}' of state '${s.name}' shadows the field of field set '${fs}' in '${el.name}'.`, f, 'name');
+                if (fs) sink.error('M016', `Field '${f.name}' of state '${s.name}' shadows the field of field set '${fs}' in '${el.name}'.`, f, 'name', undefined, `remove the field from the state, or rename it`);
             }
         }
     }

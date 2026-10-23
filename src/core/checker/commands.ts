@@ -16,7 +16,8 @@ export function checkCommands(index: ModelIndex, sink: DiagnosticSink): void {
             const label = `${cmd.factory ? 'Factory command' : 'Command'} '${cmd.name}'`;
             if (!stateful) {
                 if (cmd.transitions.length > 0) {
-                    sink.error('M006', `${label} declares state transitions, but aggregate '${agg.name}' has no states.`, cmd, 'transitions', 0);
+                    const hint = `remove the transitions, or declare the states of '${agg.name}' with 'state Name'`;
+                    sink.error('M006', `${label} declares state transitions, but aggregate '${agg.name}' has no states.`, cmd, 'transitions', 0, hint);
                 }
                 continue;
             }

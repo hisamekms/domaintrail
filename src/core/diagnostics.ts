@@ -29,6 +29,8 @@ export interface Diagnostic {
     severity: Severity;
     code: RuleId;
     message: string;
+    /** One line on what to change, when the message does not say it (e.g. `did you mean 'OrderConfirmed'?`). */
+    hint?: string;
     /** Stable ID of the nearest model element (e.g. `Sales.Order`), when known. */
     elementId?: string;
 }
@@ -41,7 +43,7 @@ export class DiagnosticSink {
 
     constructor(private readonly fileOf: FileResolver) {}
 
-    report(severity: Severity, code: RuleId, message: string, node: AstNode, property?: string, index?: number, elementId?: string): void {
+    report(severity: Severity, code: RuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
         const cst = selectCst(node, property, index);
         const doc = AstUtils.getDocument(node);
         const range = cst?.range ?? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
@@ -52,16 +54,17 @@ export class DiagnosticSink {
             severity,
             code,
             message,
-            elementId: elementId ?? elementIdOf(node),
+            ...(hint ? { hint } : {}),
+            elementId: elementIdOf(node),
         });
     }
 
-    error(code: RuleId, message: string, node: AstNode, property?: string, index?: number): void {
-        this.report('error', code, message, node, property, index);
+    error(code: RuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
+        this.report('error', code, message, node, property, index, hint);
     }
 
-    warning(code: RuleId, message: string, node: AstNode, property?: string, index?: number): void {
-        this.report('warning', code, message, node, property, index);
+    warning(code: RuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
+        this.report('warning', code, message, node, property, index, hint);
     }
 }
 
@@ -77,8 +80,37 @@ export function hasErrors(diagnostics: readonly Diagnostic[]): boolean {
     return diagnostics.some((d) => d.severity === 'error');
 }
 
+/** `file:line:col - severity CODE: message`, and the hint on an indented second line. */
 export function formatDiagnostic(d: Diagnostic): string {
-    return `${d.file}:${d.start.line}:${d.start.column} - ${d.severity} ${d.code}: ${d.message}`;
+    const line = `${d.file}:${d.start.line}:${d.start.column} - ${d.severity} ${d.code}: ${d.message}`;
+    return d.hint ? `${line}\n  hint: ${d.hint}` : line;
+}
+
+/** A diagnostic as written by `dt check --format json` (see schema/diagnostics.schema.json). */
+export interface JsonDiagnostic {
+    file: string;
+    line: number;
+    column: number;
+    endLine: number;
+    endColumn: number;
+    severity: Severity;
+    code: RuleId;
+    message: string;
+    hint?: string;
+}
+
+export function jsonDiagnostic(d: Diagnostic): JsonDiagnostic {
+    return {
+        file: d.file,
+        line: d.start.line,
+        column: d.start.column,
+        endLine: d.end.line,
+        endColumn: d.end.column,
+        severity: d.severity,
+        code: d.code,
+        message: d.message,
+        ...(d.hint ? { hint: d.hint } : {}),
+    };
 }
 
 export function compareDiagnostics(a: Diagnostic, b: Diagnostic): number {
