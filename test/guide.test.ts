@@ -88,6 +88,18 @@ describe('dt guide', () => {
         expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
     });
 
+    test('its JSON output example has the properties of the schema', async () => {
+        const schema = JSON.parse(await readFile(path.join(ROOT, 'schema', 'diagnostics.schema.json'), 'utf8'));
+        const [example] = blocks('json');
+        const report = JSON.parse(example);
+        expect(Object.keys(report)).toEqual(Object.keys(schema.properties).filter((k) => k in report));
+        const diagnostic = schema.definitions.diagnostic;
+        for (const d of report.diagnostics) {
+            for (const key of diagnostic.required) expect(d).toHaveProperty(key);
+            for (const key of Object.keys(d)) expect(Object.keys(diagnostic.properties)).toContain(key);
+        }
+    });
+
     test('the README links to it and its DSL example checks', async () => {
         expect(readme).toContain('(docs/guide.md)');
         for (const anchor of readme.matchAll(/docs\/guide\.md#([a-z-]+)/g)) {
