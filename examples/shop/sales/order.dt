@@ -21,7 +21,7 @@ context Sales {
     }
     invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }
 
-    create command place(customer: CustomerId) "注文する"
+    create command place(id: OrderId, customer: CustomerId) "注文する"
       -> Draft
       emits OrderPlaced
 
@@ -49,12 +49,15 @@ context Sales {
 
     command cancel(reason: CancelReason) "注文を取り消す"
       Draft | Confirmed -> Cancelled
-      emits OrderCancelled
+      emits OrderCancelled,
+            RefundRequested when Confirmed ->   // 確定済みの注文を取り消したときだけ
 
     /// 確定後も備考は変更できる。状態は変わらない。
+    /// 備考が変わらなければイベントは発生しない。
     command changeNote(note: String?) "備考を変更する"
       Draft -> Draft
       Confirmed -> Confirmed
+      emits NoteChanged?
   }
 
   entity OrderItem "注文明細" {
@@ -76,6 +79,16 @@ context Sales {
   event OrderCancelled "注文取消" {
     orderId: OrderId
     reason: CancelReason
+  }
+
+  /// 確定済みの注文の取消により、支払いの払い戻しが必要になった。
+  event RefundRequested "返金依頼" {
+    orderId: OrderId
+  }
+
+  event NoteChanged "備考変更" {
+    orderId: OrderId
+    note: String?
   }
 
   /// 明細が1件もない注文は確定できない。
