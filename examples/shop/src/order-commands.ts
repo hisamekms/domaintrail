@@ -9,7 +9,10 @@ export const orderCommands: Sales.OrderCommands = {
         return ok([order, [{ type: 'OrderPlaced', orderId: order.id }]] as const);
     },
 
-    addItem: (order, item) => ok([{ ...order, items: [...order.items, item] }, []] as const),
+    addItem: (order, item) => {
+        if (order.items.some((i) => i.sku === item.sku)) return err({ type: 'DuplicateSku', sku: item.sku });
+        return ok([{ ...order, items: [...order.items, item] }, []] as const);
+    },
 
     confirm: (order, at) => {
         if (order.items.length === 0) return err({ type: 'EmptyOrder' });

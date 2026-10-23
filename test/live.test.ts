@@ -132,7 +132,7 @@ describe('Live View', () => {
 
     test('semantic errors still update the diagram and mark the element', async () => {
         const src = await readFile(order(), 'utf8');
-        await writeFile(order(), src.replace('-> Confirmed\n      emits OrderConfirmed', '-> Archived\n      emits OrderConfirmed'));
+        await writeFile(order(), src.replace('Draft -> Confirmed\n', 'Draft -> Archived\n'));
         const p = await nextUpdate((u) => u.status === 'invalid');
         expect(p.diagnostics.find((d) => d.code === 'M006')?.elementId).toBe('Sales.Order:confirm');
         expect(p.diff.changed).toContain('Sales.Order:confirm');

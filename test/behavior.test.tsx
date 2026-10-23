@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
 import type { DomainModel, ElementModel } from '../src/model/model.js';
-import { CommandCard, OutcomeCard, outcomesOf } from '../web/behavior.js';
+import { CommandCard, OutcomeCard, outcomesOf, Requirements } from '../web/behavior.js';
 import { MESSAGES } from '../web/i18n.js';
 import { tabsFor } from '../web/inspector.js';
 import { namer, resolve } from '../web/model-utils.js';
@@ -34,12 +34,12 @@ function clickables(node: ReactNode): { text: string; click: () => void }[] {
     });
 }
 
-/** Clicks the element whose text is `label` and returns what was selected. */
-function clickOn(card: (onSelect: (id: string) => void) => ReactNode, label: string): string[] {
+/** Clicks the elements whose text is `label` (`count` of them) and returns what was selected. */
+function clickOn(card: (onSelect: (id: string) => void) => ReactNode, label: string, count = 1): string[] {
     const selected: string[] = [];
-    const target = clickables(card((id) => selected.push(id))).filter((c) => c.text === label);
-    expect(target).toHaveLength(1);
-    target[0].click();
+    const targets = clickables(card((id) => selected.push(id))).filter((c) => c.text === label);
+    expect(targets).toHaveLength(count);
+    for (const t of targets) t.click();
     return selected;
 }
 
@@ -81,7 +81,29 @@ describe('behaviour cards', () => {
         expect(clickOn(card, '注文を確定するconfirm')).toEqual([command('confirm').id]);
         expect(clickOn(card, '確定済み')).toEqual([order.states!.find((s) => s.name === 'Confirmed')!.id]);
         expect(clickOn(card, '注文確定 OrderConfirmed')).toEqual([command('confirm').emits[0]]);
-        expect(clickOn(card, '明細なし EmptyOrder')).toEqual([command('confirm').errors[0]]);
+        // once as the error of its requirement, once among the errors it may return
+        expect(clickOn(card, '明細なし EmptyOrder', 2)).toEqual([command('confirm').errors[0], command('confirm').errors[0]]);
+    });
+
+    test('a command card lists its requirements with their expression and the error of else', () => {
+        const html = renderToStaticMarkup(<CommandCard agg={order} c={command('addItem')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
+        expect(html).toContain(`<div class="bcard-caption">${tx.requirements}</div>`);
+        expect(html).toContain('<code>all(items, i =&gt; i.sku != item.sku)</code>');
+        const card = (onSelect: (id: string) => void) => CommandCard({ agg: order, c: command('addItem'), model, names: names(), tx, onSelect });
+        expect(clickOn(card, '商品コードの重複 DuplicateSku', 2)).toEqual(['Sales.DuplicateSku', 'Sales.DuplicateSku']);
+        expect(text(html)).toContain('同じ商品コードの明細がない newSku');
+    });
+
+    test('a requirement without an expression says it is not expressed in the DSL', () => {
+        const c = { ...command('addItem'), requires: [{ name: 'inStock', label: '在庫がある', error: 'Sales.DuplicateSku' }] };
+        const html = renderToStaticMarkup(<Requirements c={c} model={model} names={names()} tx={tx} onSelect={() => {}} />);
+        expect(html).toContain(`<em class="not-in-dsl">${tx.notInDsl}</em>`);
+        expect(html).not.toContain('<code>');
+    });
+
+    test('a command without requirements has no requirements part', () => {
+        const html = renderToStaticMarkup(<CommandCard agg={order} c={command('cancel')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
+        expect(html).not.toContain(tx.requirements);
     });
 
     test('an event card shows its commands and payload, and selects them on click', () => {

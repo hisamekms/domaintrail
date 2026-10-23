@@ -163,6 +163,6 @@ describe('labels in views and generated code', () => {
         expect(sales).toContain('    /** 確定日時 — 顧客が注文を確定した日時。キャンセル可否の判定に使う。 */\n    readonly confirmedAt: Timestamp;');
         expect(sales).toContain("    | 'Requested' // 顧客都合");
         expect(sales).toContain(' * @invariant hasItems (明細が1件以上): count(items) > 0');
-        expect(sales).toContain(' * 注文を確定する\n * @param at 日時\n */\nexport type ConfirmOrder');
+        expect(sales).toContain(' * 注文を確定する\n * @param at 日時\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n */\nexport type ConfirmOrder');
     });
 });
