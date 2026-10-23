@@ -3,7 +3,7 @@ import { emitApplies } from '../../model/model.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { commandsOf, commonFields, fieldsOf, identityField, includedFields, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
 import { suggestFrom } from '../suggest.js';
-import { baseType, sameType } from '../types.js';
+import { baseType, multiplicityText, sameType } from '../types.js';
 
 /**
  * M006: state transitions of commands (`A | B -> C`). Unresolved state names are reported from linking;
@@ -113,7 +113,7 @@ export function checkFactoryIds(index: ModelIndex, sink: DiagnosticSink): void {
         const idType = identityField(agg)?.type?.decl?.ref;
         if (!idType || !isIdType(idType)) continue; // reported by M013
         for (const cmd of commandsOf(agg)) {
-            if (!cmd.factory || cmd.params.some((p) => p.type?.decl?.ref === idType && !p.multiplicity)) continue;
+            if (!cmd.factory || cmd.params.some((p) => p.type?.decl?.ref === idType && !multiplicityText(p.multiplicity))) continue;
             sink.warning(
                 'M020',
                 `Factory command '${cmd.name}' of '${agg.name}' has no parameter of type '${idType.name}', so it would have to make the new ${agg.name}'s ID itself; commands are pure.`,
@@ -126,12 +126,6 @@ export function checkFactoryIds(index: ModelIndex, sink: DiagnosticSink): void {
     }
 }
 
-/** Multiplicity as written, normalized (`?`, `0..*`, `2..5`; empty without one). */
-const multiplicityOf = (f: FieldLike): string => {
-    const m = f.multiplicity;
-    if (!m) return '';
-    return m.optional ? '?' : `${m.lower}..${m.unbounded ? '*' : m.upper}`;
-};
 
 /**
  * Whether two fields have the same type: base type, multiplicity, and kind (with the target of a reference). The
@@ -140,7 +134,7 @@ const multiplicityOf = (f: FieldLike): string => {
 const sameField = (a: FieldLike, b: FieldLike): boolean =>
     a.$type === b.$type &&
     sameType(baseType(a.type), baseType(b.type)) &&
-    multiplicityOf(a) === multiplicityOf(b) &&
+    multiplicityText(a.multiplicity) === multiplicityText(b.multiplicity) &&
     (!isReferenceField(a) || !isReferenceField(b) || a.target?.ref === b.target?.ref);
 
 const quotedList = (names: string[]): string => names.map((n) => `'${n}'`).join(', ');

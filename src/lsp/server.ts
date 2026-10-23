@@ -15,6 +15,7 @@ import {
     addFileOperationHandler,
     addFindReferencesHandler,
     addFoldingRangeHandler,
+    addFormattingHandler,
     addGoToDeclarationHandler,
     addGotoDefinitionHandler,
     addHoverHandler,
@@ -22,6 +23,7 @@ import {
     addWorkspaceSymbolHandler,
     createDefaultModule,
     createDefaultSharedModule,
+    type Formatter,
     type LangiumServices,
     type LangiumSharedServices,
 } from 'langium/lsp';
@@ -38,6 +40,7 @@ import {
     type Position,
     type Range,
     type RenameParams,
+    type TextEdit,
     type TextDocumentPositionParams,
     type WorkspaceEdit,
     type WorkspaceFolder,
@@ -50,6 +53,7 @@ import { ModelIndex } from '../core/model-index.js';
 import * as ast from '../language/generated/ast.js';
 import { DomainGeneratedModule, DomainGeneratedSharedModule } from '../language/generated/module.js';
 import { DomainModule } from '../language/domain-module.js';
+import { formatDomain } from '../format/format.js';
 import { elementIdOf } from '../model/ids.js';
 
 export interface LanguageServerOptions {
@@ -340,6 +344,33 @@ class DomainRenameProvider extends DefaultRenameProvider {
     }
 }
 
+/**
+ * Document formatting: the whole file as `dt fmt` writes it, as one edit; nothing for a file with syntax errors. A range
+ * is formatted as the whole file, since the layout of a line depends on its block; there is no on-type formatting.
+ */
+class DomainFormatter implements Formatter {
+    formatDocument(document: LangiumDocument): TextEdit[] {
+        const { lexerErrors, parserErrors } = document.parseResult;
+        if (lexerErrors.length || parserErrors.length) return [];
+        const text = document.textDocument.getText();
+        const formatted = formatDomain(text);
+        if (formatted === text) return [];
+        return [{ range: { start: { line: 0, character: 0 }, end: document.textDocument.positionAt(text.length) }, newText: formatted }];
+    }
+
+    formatDocumentRange(document: LangiumDocument): TextEdit[] {
+        return this.formatDocument(document);
+    }
+
+    formatDocumentOnType(): TextEdit[] {
+        return [];
+    }
+
+    get formatOnTypeOptions(): undefined {
+        return undefined;
+    }
+}
+
 /** The range of the last identifier in `range` (the name in `Context.Name`). */
 function lastSegment(document: LangiumDocument, range: Range): Range {
     const text = document.textDocument.getText(range);
@@ -361,6 +392,7 @@ export function createDomainLspServices(connection: Connection, options: Languag
             HoverProvider: (s: LangiumServices) => new DomainHoverProvider(s),
             DocumentSymbolProvider: (s: LangiumServices) => new DomainDocumentSymbolProvider(s),
             RenameProvider: (s: LangiumServices) => new DomainRenameProvider(s),
+            Formatter: () => new DomainFormatter(),
         },
     });
     shared.ServiceRegistry.register(Domain);
@@ -387,6 +419,7 @@ export function startLanguageServer(options: LanguageServerOptions = {}, connect
     addGoToDeclarationHandler(connection, shared);
     addDocumentHighlightHandler(connection, shared);
     addFoldingRangeHandler(connection, shared);
+    addFormattingHandler(connection, shared);
     addRenameHandler(connection, shared);
     addHoverHandler(connection, shared);
     addWorkspaceSymbolHandler(connection, shared);

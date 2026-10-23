@@ -22,7 +22,8 @@ import {
     type TypeRef,
 } from '../language/generated/ast.js';
 import { LabelResolver, docComment } from '../core/labels.js';
-import { cardinality } from '../core/types.js';
+import { expressionText } from '../format/format.js';
+import { cardinality, multiplicityText } from '../core/types.js';
 import {
     commandsOf,
     commonFields,
@@ -158,12 +159,6 @@ function typeExpr(ref: TypeRef | undefined): TypeExpr {
     return { kind: 'ref', ref: elementId(target.$container.name, target.name), text, target: kindOf(target) };
 }
 
-function multiplicityText(m: Multiplicity | undefined): string {
-    if (!m) return '';
-    if (m.optional) return '?';
-    return `[${m.lower}..${m.unbounded ? '*' : m.upper}]`;
-}
-
 /** How many times a multiplicity allows: once without one, `?` at most once. */
 function bounds(m: Multiplicity | undefined): { lower: number; upper?: number } {
     if (!m) return { lower: 1, upper: 1 };
@@ -201,7 +196,7 @@ function requirement(r: Requirement, qname: (r: { ref?: ContextElement; $refText
     return { name: r.name, ...optional('source', r.expr && sourceText(r.expr)), error: qname(r.error), ...described(r) };
 }
 
-const sourceText = (e: AstNode | undefined): string => e?.$cstNode?.text.replace(/\s+/g, ' ').trim() ?? '';
+const sourceText = (e: AstNode | undefined): string => (e ? expressionText(e) : '');
 
 function state(aggId: string, s: State, loc: (n: AstNode) => Location, field: (f: FieldLike) => FieldModel): StateModel {
     return {

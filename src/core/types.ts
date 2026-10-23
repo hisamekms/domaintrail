@@ -48,6 +48,17 @@ export const ERROR: Ty = { k: 'error' };
 
 export type Cardinality = 'one' | 'optional' | 'many' | 'nonEmpty';
 
+/**
+ * A multiplicity as `dt fmt` writes it: `?` for `[0..1]`, empty without one or for `[1..1]`, else `[lower..upper]`.
+ * Two fields with the same text have the same multiplicity.
+ */
+export function multiplicityText(m: Multiplicity | undefined): string {
+    if (!m) return '';
+    if (m.optional || (m.lower === 0 && m.upper === 1)) return '?';
+    if (m.lower === 1 && m.upper === 1) return '';
+    return `[${m.lower}..${m.unbounded ? '*' : m.upper}]`;
+}
+
 export function cardinality(m: Multiplicity | undefined): Cardinality {
     if (!m) return 'one';
     if (m.optional) return 'optional';

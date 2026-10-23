@@ -16,6 +16,7 @@ import {
 } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { commandsOf, commonFields, fieldsOf, identityField, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
+import { multiplicityText } from '../types.js';
 
 type Owner = Aggregate | Entity | ValueObject | UnionDecl;
 
@@ -132,7 +133,7 @@ function checkIdentity(index: ModelIndex, sink: DiagnosticSink): void {
             continue;
         }
         const decl = idField.type?.decl?.ref;
-        if (idField.type?.primitive || (decl && !isIdType(decl)) || idField.multiplicity || idField.$type !== 'Field') {
+        if (idField.type?.primitive || (decl && !isIdType(decl)) || multiplicityText(idField.multiplicity) || idField.$type !== 'Field') {
             const hint = `write it as 'id: ${el.name}Id' with an ID type of its own, without 'owns', 'references', '?' or '[..]'`;
             sink.error('M013', `The identity field of ${kind} '${el.name}' must be a single plain field of an ID type.`, idField, 'type', undefined, hint);
             continue;
