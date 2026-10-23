@@ -87,6 +87,7 @@ Examples:
   dt check                      validate every .dt file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
+  dt lsp                        language server over stdio, started by editors and AI agents
 
 New to dt, or an AI agent? Read \`dt guide\` first: the DSL, file layout, workflow, config and exit codes.`);
 

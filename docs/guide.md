@@ -102,6 +102,37 @@ included, must stay inside the config file's directory (the root without a confi
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in `generate.ts.contexts` that is not a context of the model is a config
 error, reported by `generate ts` once the model has been checked.
 
+## Language server
+
+`dt lsp` is a language server (LSP) for `.dt` files, speaking over stdin/stdout. Editors and AI agents start it; it
+runs until the client shuts it down. It offers:
+
+- **Diagnostics equal to `dt check`**: the same rules, severities, codes (the rule ID, e.g. `M009`) and messages,
+  computed over the whole workspace (the config's `sources`) with the unsaved text of open files, after every change.
+- **Go to definition** and **find references** for types, states, events, errors and field sets, across files and
+  contexts (`Sales.Order` included).
+- **Hover**: kind, name, Japanese name, `///` description, and the expression of an invariant or requirement.
+- **Outline** (document symbols), **completion** of names, and **rename** of context elements and states, which updates
+  every reference (a qualified `Sales.Order` keeps its context). Contexts, fields and parameters are not renamed, since
+  their names also appear outside references (in qualified names, expressions and terms).
+
+The workspace is the config found from `--root` or `--config` when given, else from the client's (first) workspace
+folder, else from the current directory, exactly as `dt check` would find it there.
+
+A client needs only: command `dt lsp` (with `dt` on the `PATH`, or e.g. `npx dt lsp`), transport stdio, file
+extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the plugin root (load it with
+`claude --plugin-dir <plugin directory>`); Claude then sees the diagnostics after each edit of a `.dt` file:
+
+```json
+{
+  "domaintrail": {
+    "command": "dt",
+    "args": ["lsp"],
+    "extensionToLanguage": { ".dt": "domaintrail" }
+  }
+}
+```
+
 ## File layout (recommended)
 
 File names and directories carry no meaning: every matching `.dt` file belongs to the workspace, and a context may be
