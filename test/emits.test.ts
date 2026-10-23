@@ -175,6 +175,7 @@ describe('emits in the generated TypeScript', () => {
         expect(code).toContain(
             `/**
  * Work.progress (InProgress -> InProgress | Completed)
+ * @changes none — the command changes no common field
  * @emits StepRecorded — exactly once when the command succeeds
  * @emits WorkCompleted — exactly once when it ends in Completed
  */
@@ -207,12 +208,12 @@ export type ProgressWork = (
         expect(code).toContain(' * @emits ItemAdded[2..5] — between 2 and 5 when the command succeeds (not checked by the types)\n');
     });
 
-    test('events that depend on the source state get handlers per state, documented per handler', () => {
+    test('events that depend on the source state make the contract generic, documented per source state', () => {
         expect(code).toContain(' * @emits RefundRequested — exactly once when it comes from InProgress\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(');
         expect(code).toContain(
-            `export type CancelWorkByState = {
+            `) => {
     /** @emits WorkCancelled — exactly once when the command succeeds */
-    readonly Draft: (work: DraftWork) => Result<{
+    readonly Draft: Result<{
         readonly Cancelled: {
             readonly aggregate: CancelledWork;
             readonly events: { readonly WorkCancelled: WorkCancelled };
@@ -222,22 +223,32 @@ export type ProgressWork = (
      * @emits WorkCancelled — exactly once when the command succeeds
      * @emits RefundRequested — exactly once when the command succeeds
      */
-    readonly InProgress: (work: InProgressWork) => Result<{
+    readonly InProgress: Result<{
         readonly Cancelled: {
             readonly aggregate: CancelledWork;
             readonly events: { readonly WorkCancelled: WorkCancelled; readonly RefundRequested: RefundRequested };
         };
     }, never>;
-};`,
+}[S['state']];`,
         );
-        // events that depend on the target only: the input state still decides nothing, so no handlers
-        expect(code).not.toContain('ProgressWorkByState');
+        expect(code).toContain(
+            `export type CancelWorkDecision = {
+    /** @emits WorkCancelled — exactly once when the command succeeds */
+    readonly Draft: (work: DraftWork) => Result<{
+        readonly Cancelled: {
+            readonly set: NoChanges;
+            readonly events: { readonly WorkCancelled: WorkCancelled };
+        };
+    }, never>;`,
+        );
+        // events that depend on the target only: the input state decides nothing, so a plain function
+        expect(code).toContain('export type ProgressWork = (\n    work: InProgressWork,');
     });
 
     test('implementations that follow the contract compile; outcome and eventList type what they return', async () => {
         await writeFile(
             path.join(dir, 'src', 'ok.ts'),
-            `import { byState, eventList, ok, outcome, err, type Tasks } from '../generated/index.js';
+            `import { Tasks, decide, eventList, ok, outcome, err } from '../generated/index.js';
 const ev = <T extends string>(type: T, work: Tasks.Work) => ({ type, workId: work.id });
 
 export const commands: Tasks.WorkCommands = {
@@ -252,10 +263,9 @@ export const commands: Tasks.WorkCommands = {
             },
         });
     },
-    cancel: byState<Tasks.CancelWorkByState>({
-        Draft: (work) => ok({ Cancelled: { aggregate: { ...work, state: 'Cancelled' }, events: { WorkCancelled: ev('WorkCancelled', work) } } }),
-        InProgress: (work) =>
-            ok({ Cancelled: { aggregate: { ...work, state: 'Cancelled' }, events: { WorkCancelled: ev('WorkCancelled', work), RefundRequested: ev('RefundRequested', work) } } }),
+    cancel: decide<Tasks.CancelWorkDecision>(Tasks.WorkShape, {
+        Draft: (work) => ok({ Cancelled: { set: {}, events: { WorkCancelled: ev('WorkCancelled', work) } } }),
+        InProgress: (work) => ok({ Cancelled: { set: {}, events: { WorkCancelled: ev('WorkCancelled', work), RefundRequested: ev('RefundRequested', work) } } }),
     }),
     add: (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [ev('ItemAdded', work)] } } }),
     batch: (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [ev('ItemAdded', work), ev('ItemAdded', work)] } } }),

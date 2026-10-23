@@ -59,7 +59,7 @@ describe('generated TypeScript', () => {
         );
         // no events -> NoEvents; factory -> no aggregate parameter, the new ID passed in
         expect(sales).toContain('        readonly events: NoEvents;\n    };\n}, DuplicateSku>;');
-        expect(sales).toContain("import type { NoEvents, Result, Timestamp } from './_runtime.js';");
+        expect(sales).toContain("import type { NoEvents, Result, Shape, Timestamp } from './_runtime.js';");
         expect(sales).toContain('export type PlaceOrder = (\n    id: OrderId,\n    customer: CustomerId,\n)');
         // an aggregate without states: keyed by the aggregate's name
         expect(sales).toContain(') => Result<{\n    readonly Customer: {\n        readonly aggregate: Customer;\n');
@@ -175,6 +175,7 @@ describe('commands with several transitions', () => {
     command change(title: Title)
       Draft -> Draft
       InProgress -> InProgress
+      changes title
       emits WorkChanged
     command start() Draft -> InProgress
     command cancel() Draft -> Cancelled, InProgress -> Cancelled
@@ -201,7 +202,7 @@ describe('commands with several transitions', () => {
     });
 
     test('the same targets for every transition: a plain function of the union of the sources', () => {
-        expect(code).toContain('/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @emits nothing\n */');
+        expect(code).toContain('/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @changes none — the command changes no common field\n * @emits nothing\n */');
         expect(code).toContain(
             `export type CancelWork = (
     work: DraftWork | InProgressWork,
@@ -215,27 +216,48 @@ describe('commands with several transitions', () => {
         expect(code).toContain('/**\n * Work.open (new -> Draft) — factory\n * @emits nothing\n */');
     });
 
-    test('targets that differ by transition: a handler per source state, and a contract generic over the input state', () => {
-        expect(code).toContain('/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @emits WorkChanged — exactly once when the command succeeds\n */');
+    test('targets that differ by transition: a contract generic over the input state, and a decision per source state', () => {
+        expect(code).toContain('/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @changes title\n * @emits WorkChanged — exactly once when the command succeeds\n */');
         expect(code).toContain(
             `export type ChangeWork = <S extends DraftWork | InProgressWork>(
     work: S,
     title: Title,
-) => ReturnType<ChangeWorkByState[S['state']]>;
-
-/** Work.change, one handler per source state; implement it with \`byState\` from the runtime. */
-export type ChangeWorkByState = {
+) => {
     /** @emits WorkChanged — exactly once when the command succeeds */
-    readonly Draft: (work: DraftWork, title: Title) => Result<{
+    readonly Draft: Result<{
         readonly Draft: {
             readonly aggregate: DraftWork;
             readonly events: { readonly WorkChanged: WorkChanged };
         };
     }, never>;
     /** @emits WorkChanged — exactly once when the command succeeds */
-    readonly InProgress: (work: InProgressWork, title: Title) => Result<{
+    readonly InProgress: Result<{
         readonly InProgress: {
             readonly aggregate: InProgressWork;
+            readonly events: { readonly WorkChanged: WorkChanged };
+        };
+    }, never>;
+}[S['state']];
+
+/**
+ * Work.change, decided per source state; implement it with \`decide(WorkShape, …)\` from the runtime.
+ * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
+ * @changes title
+ * Draft -> Draft — set: title; carried over: id
+ * InProgress -> InProgress — set: title; carried over: id
+ */
+export type ChangeWorkDecision = {
+    /** @emits WorkChanged — exactly once when the command succeeds */
+    readonly Draft: (work: DraftWork, title: Title) => Result<{
+        readonly Draft: {
+            readonly set: { readonly title: Title };
+            readonly events: { readonly WorkChanged: WorkChanged };
+        };
+    }, never>;
+    /** @emits WorkChanged — exactly once when the command succeeds */
+    readonly InProgress: (work: InProgressWork, title: Title) => Result<{
+        readonly InProgress: {
+            readonly set: { readonly title: Title };
             readonly events: { readonly WorkChanged: WorkChanged };
         };
     }, never>;
@@ -246,14 +268,14 @@ export type ChangeWorkByState = {
             `    readonly InProgress: (work: InProgressWork, at: Timestamp) => Result<
         | {
               readonly InProgress: {
-                  readonly aggregate: InProgressWork;
+                  readonly set: NoChanges;
                   readonly events: NoEvents;
               };
               readonly Completed?: never;
           }
         | {
               readonly Completed: {
-                  readonly aggregate: CompletedWork;
+                  readonly set: { readonly completedAt: Timestamp };
                   readonly events: NoEvents;
               };
               readonly InProgress?: never;
@@ -261,16 +283,25 @@ export type ChangeWorkByState = {
         NotReady
     >;`,
         );
-        // several sources of one transition: a handler each, with the same output
-        expect(code).toContain('    readonly Completed: (work: CompletedWork) => Result<{\n        readonly Cancelled: {\n            readonly aggregate: CancelledWork;');
-        expect(code).toContain('    readonly Cancelled: (work: CancelledWork) => Result<{\n        readonly Cancelled: {\n            readonly aggregate: CancelledWork;');
+        // several sources of one transition: a handler each, with the same outcome; the source's own fields dropped
+        expect(code).toContain('    readonly Completed: (work: CompletedWork) => Result<{\n        readonly Cancelled: {\n            readonly set: NoChanges;');
+        expect(code).toContain('    readonly Cancelled: (work: CancelledWork) => Result<{\n        readonly Cancelled: {\n            readonly set: NoChanges;');
+        expect(code).toContain(' * Completed -> Cancelled — set: nothing; carried over: id, title; dropped: completedAt\n');
         // the commands interface is unchanged
         expect(code).toContain('    readonly change: ChangeWork;');
     });
 
-    test('no handlers per state for commands whose transitions share their targets, nor for factories', () => {
-        expect(code).not.toMatch(/(Open|Start|Cancel)WorkByState/);
-        expect([...code.matchAll(/export type (\w+ByState) =/g)].map((m) => m[1])).toEqual(['ChangeWorkByState', 'ReviewWorkByState', 'StepWorkByState']);
+    test('every command has a decision: keyed by source state, or one function for a factory', () => {
+        expect([...code.matchAll(/export type (\w+Decision) = (\{|\()/g)].map((m) => [m[1], m[2]])).toEqual([
+            ['OpenWorkDecision', '('],
+            ['ChangeWorkDecision', '{'],
+            ['StartWorkDecision', '{'],
+            ['CancelWorkDecision', '{'],
+            ['ReviewWorkDecision', '{'],
+            ['StepWorkDecision', '{'],
+        ]);
+        expect(code).not.toContain('ByState');
+        expect(code).toContain("export const WorkShape: Shape = {\n    fields: ['id', 'title'],\n    states: { Draft: [], InProgress: [], Completed: ['completedAt'], Cancelled: [] },\n};");
     });
 
     test('callers get the output of the transition of their input state; anything else is a compile error', async () => {
@@ -322,31 +353,34 @@ export const wrong: Tasks.ChangeWork = (work, title) =>
         expect(r.code).toBe(0);
     });
 
-    test('byState: handlers per state implement the commands, typed without assertions', async () => {
+    test('decide: decisions implement the commands, typed without assertions', async () => {
         await writeFile(
             path.join(work, 'src', 'impl.ts'),
-            `import { byState, ok, type Tasks } from '../generated/index.js';
+            `import { Tasks, decide, err, ok } from '../generated/index.js';
 
 const changed = (work: Tasks.Work) => ({ WorkChanged: { type: 'WorkChanged', workId: work.id } }) as const;
 declare const now: Date;
 
 export const commands: Tasks.WorkCommands = {
-    open: (id, title) => ok({ Draft: { aggregate: { state: 'Draft', id, title }, events: {} } }),
-    change: byState<Tasks.ChangeWorkByState>({
-        Draft: (work, title) => ok({ Draft: { aggregate: { ...work, title }, events: changed(work) } }),
-        InProgress: (work, title) => ok({ InProgress: { aggregate: { ...work, title }, events: changed(work) } }),
+    open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, (id, title) => ok({ Draft: { set: { id, title }, events: {} } })),
+    change: decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
+        Draft: (work, title) => ok({ Draft: { set: { title }, events: changed(work) } }),
+        InProgress: (work, title) => ok({ InProgress: { set: { title }, events: changed(work) } }),
     }),
-    start: (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: {} } }),
-    cancel: (work) => ok({ Cancelled: { aggregate: { ...work, state: 'Cancelled' }, events: {} } }),
-    review: byState<Tasks.ReviewWorkByState>({
-        InProgress: (work, at) => ok({ Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: {} } }),
-        Draft: (work) => ok({ Draft: { aggregate: work, events: {} } }),
+    start: decide<Tasks.StartWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ InProgress: { set: {}, events: {} } }) }),
+    cancel: decide<Tasks.CancelWorkDecision>(Tasks.WorkShape, {
+        Draft: () => ok({ Cancelled: { set: {}, events: {} } }),
+        InProgress: () => ok({ Cancelled: { set: {}, events: {} } }),
     }),
-    step: byState<Tasks.StepWorkByState>({
-        Draft: (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: {} } }),
-        InProgress: (work) => ok({ Completed: { aggregate: { ...work, state: 'Completed', completedAt: now }, events: {} } }),
-        Completed: ({ completedAt, ...work }) => ok({ Cancelled: { aggregate: { ...work, state: 'Cancelled' }, events: {} } }),
-        Cancelled: (work) => ok({ Cancelled: { aggregate: work, events: {} } }),
+    review: decide<Tasks.ReviewWorkDecision>(Tasks.WorkShape, {
+        InProgress: (work, at) => (at < now ? err({ type: 'NotReady' }) : ok({ Completed: { set: { completedAt: at }, events: {} } })),
+        Draft: () => ok({ Draft: { set: {}, events: {} } }),
+    }),
+    step: decide<Tasks.StepWorkDecision>(Tasks.WorkShape, {
+        Draft: () => ok({ InProgress: { set: {}, events: {} } }),
+        InProgress: () => ok({ Completed: { set: { completedAt: now }, events: {} } }),
+        Completed: () => ok({ Cancelled: { set: {}, events: {} } }),
+        Cancelled: () => ok({ Cancelled: { set: {}, events: {} } }),
     }),
 };
 
@@ -357,46 +391,31 @@ if (r.ok) {
     const stays: Tasks.DraftWork = r.value.Draft.aggregate;
 }
 
-export const draftToInProgress: Tasks.ChangeWork = byState<Tasks.ChangeWorkByState>({
-    // @ts-expect-error the Draft handler must return a Draft work
-    Draft: (work, title) => ok({ InProgress: { aggregate: { ...work, title, state: 'InProgress' }, events: changed(work) } }),
-    InProgress: (work, title) => ok({ InProgress: { aggregate: { ...work, title }, events: changed(work) } }),
+export const draftToInProgress: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
+    // @ts-expect-error the Draft handler decides the Draft outcome
+    Draft: (work, title) => ok({ InProgress: { set: { title }, events: changed(work) } }),
+    InProgress: (work, title) => ok({ InProgress: { set: { title }, events: changed(work) } }),
 });
 
 // @ts-expect-error a handler for every source state is required
-export const missing: Tasks.ChangeWork = byState<Tasks.ChangeWorkByState>({
-    Draft: (work, title) => ok({ Draft: { aggregate: { ...work, title }, events: changed(work) } }),
+export const missing: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
+    Draft: (work, title) => ok({ Draft: { set: { title }, events: changed(work) } }),
 });
 
-// handlers typed by hand are checked against the contract as well
-declare const swapped: { Draft: Tasks.ChangeWorkByState['InProgress']; InProgress: Tasks.ChangeWorkByState['InProgress'] };
-// @ts-expect-error Draft -> InProgress is not a transition of change
-export const fromSwapped: Tasks.ChangeWork = byState(swapped);
+// the decision of another command does not make this one
+// @ts-expect-error start decides InProgress from Draft, not change
+export const otherDecision: Tasks.ChangeWork = decide<Tasks.StartWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ InProgress: { set: {}, events: {} } }) });
 
-export const wrongArgs: Tasks.ChangeWorkByState = {
-    Draft: (work, title) => ok({ Draft: { aggregate: { ...work, title }, events: changed(work) } }),
+export const wrongArgs: Tasks.ChangeWorkDecision = {
+    Draft: (work, title) => ok({ Draft: { set: { title }, events: changed(work) } }),
     // @ts-expect-error parameters are those of the command
-    InProgress: (work, title: number) => ok({ InProgress: { aggregate: work, events: changed(work) } }),
+    InProgress: (work, title: number) => ok({ InProgress: { set: { title: work.title }, events: changed(work) } }),
 };
 `,
         );
         const r = tscIn(work, 'src/impl.ts');
         expect(r.output).toBe('');
         expect(r.code).toBe(0);
-    });
-
-    test('byState calls the handler of the state of its first argument with the same arguments', async () => {
-        const { byState } = await import(path.join(work, 'generated', '_runtime.ts'));
-        const calls: unknown[][] = [];
-        const f = byState({
-            Draft: (...args: unknown[]) => (calls.push(['Draft', ...args]), 'draft'),
-            InProgress: (...args: unknown[]) => (calls.push(['InProgress', ...args]), 'inProgress'),
-        });
-        const draft = { state: 'Draft', id: 1 };
-        const inProgress = { state: 'InProgress', id: 2 };
-        expect(f(draft, 'a', 3)).toBe('draft');
-        expect(f(inProgress, 'b')).toBe('inProgress');
-        expect(calls).toEqual([['Draft', draft, 'a', 3], ['InProgress', inProgress, 'b']]);
     });
 });
 

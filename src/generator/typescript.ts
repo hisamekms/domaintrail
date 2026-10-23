@@ -1,22 +1,24 @@
 import * as posix from 'node:path/posix';
 import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
-import { elementsIn, emitApplies, emittedEvents, ownFields } from '../model/model.js';
+import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
 import {
     AGGREGATE_TYPE,
     DOMAIN_EVENT_TYPE,
     EVENT_TAG,
     PERSISTENT_EVENT_TYPE,
+    NO_CHANGES_TYPE,
     NO_EVENTS_TYPE,
     STATE_TAG,
     aggregateEventTypeName,
     aggregateParamName,
-    byStateTypeName,
     commandTypeName,
     commandsInterfaceName,
     commonTypeName,
+    decisionTypeName,
     invalidTypeName,
     makeTypeName,
     outputsVary,
+    shapeName,
     stateTypeName,
 } from './naming.js';
 
@@ -92,19 +94,61 @@ export const eventList = <E extends object>(events: E): readonly EventOf<E>[] =>
             return v === undefined ? [] : Array.isArray(v) ? v : [v];
         }) as EventOf<E>[];
 
-/** Arguments of a handler after the first. */
-type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A : never;
+declare const nothing: unique symbol;
+/** The \`set\` of an outcome that gives no field: only \`{}\` is assignable ("'x' does not exist in type 'NoChanges'"). */
+export type ${NO_CHANGES_TYPE} = { readonly [nothing]?: never };
 
 /**
- * Implements a command from one handler per state (a generated \`<Command>ByState\` type): the result calls the handler
- * of its first argument's \`${STATE_TAG}\` with the same arguments, and is assignable to the command's contract.
- *
- *     changeNote: byState<Sales.ChangeNoteOrderByState>({ Draft: (order, note) => …, Confirmed: (order, note) => … })
+ * The fields of an aggregate, as data for \`decide\`: its common fields (all its fields without states), and the fields
+ * each state has on top of them.
  */
-export const byState =
-    <H extends { readonly [state: string]: (subject: any, ...args: any[]) => unknown }>(handlers: H) =>
-    <S extends { readonly ${STATE_TAG}: keyof H }>(subject: S, ...args: ArgsAfterFirst<H[keyof H]>): ReturnType<H[S['${STATE_TAG}']]> =>
-        handlers[subject.${STATE_TAG}](subject, ...args) as ReturnType<H[S['${STATE_TAG}']]>;
+export interface Shape {
+    readonly fields: readonly string[];
+    readonly states?: { readonly [state: string]: readonly string[] };
+}
+
+type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A : never;
+/** The aggregate an outcome makes: the input's fields that \`set\` does not give, the target state, and \`set\`. */
+type Made<From, To, Set> = (From extends object ? Omit<From, '${STATE_TAG}' | keyof Set> : {}) & { readonly ${STATE_TAG}: To } & Set;
+/** A decision's result as the command's: each outcome's \`set\` replaced by the aggregate it makes. */
+type Decided<R, From> = R extends Ok<infer V>
+    ? Ok<V extends unknown ? { readonly [K in keyof V]: [V[K]] extends [never] ? never : V[K] extends { readonly set: infer S; readonly events: infer E } ? { readonly aggregate: Made<From, K, S>; readonly events: E } : V[K] } : never>
+    : R;
+type DecidedBy<F> = F extends (...args: infer A) => infer R ? Decided<R, A[0]> : never;
+
+/** The command \`decide\` makes of a decision: assignable to the command's contract. */
+export type Decide<D> = D extends (...args: any[]) => unknown
+    ? (...args: Parameters<D>) => DecidedBy<D>
+    : <S extends { readonly ${STATE_TAG}: keyof D }>(subject: S, ...args: ArgsAfterFirst<D[keyof D]>) => { [K in keyof D]: DecidedBy<D[K]> }[S['${STATE_TAG}']];
+
+/**
+ * Implements a command from its decision (a generated \`<Command><Aggregate>Decision\`): one handler per source state,
+ * or one function for a factory and for an aggregate without states. The result calls the handler of the input's
+ * \`${STATE_TAG}\` with the same arguments; an error passes through unchanged. Each outcome's aggregate is made from the
+ * shape: the fields \`set\` gives, the other fields of the target state from the input (common fields, and the
+ * state-specific fields carried over), and the target \`${STATE_TAG}\`. The input's other fields are dropped. Events
+ * pass through.
+ *
+ *     confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, { Draft: (order, at) => ok({ Confirmed: { set: …, events: … } }) })
+ */
+export const decide = <D>(shape: Shape, decision: D): Decide<D> =>
+    ((...args: any[]) => {
+        const subject = args[0];
+        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject.${STATE_TAG}]) as (...args: any[]) => Result<object, unknown>;
+        const r = handler(...args);
+        if (!r.ok) return r;
+        const value: Record<string, unknown> = {};
+        for (const [to, o] of Object.entries(r.value as Record<string, { set: Record<string, unknown>; events: unknown } | undefined>)) {
+            if (o === undefined) continue;
+            const aggregate: Record<string, unknown> = shape.states ? { ${STATE_TAG}: to } : {};
+            for (const f of [...shape.fields, ...(shape.states?.[to] ?? [])]) {
+                const v = f in o.set ? o.set[f] : subject?.[f];
+                if (v !== undefined) aggregate[f] = v;
+            }
+            value[to] = { aggregate, events: o.events };
+        }
+        return { ok: true, value };
+    }) as Decide<D>;
 
 /** Decimal values are carried as strings so that no precision is lost. */
 export type Decimal = string & { readonly __brand: 'Decimal' };
@@ -166,10 +210,11 @@ const requirementLines = (reqs: RequirementModel[], error: (qname: string) => st
 
 const unique = (names: string[]): string[] => [...new Set(names)];
 
-/** An outcome of a command: the key of its success value (the target state), the aggregate's type and the events. */
+/** An outcome of a command: the key of its success value (the target state), its first property and the events. */
 interface Outcome {
     key: string;
-    aggregate: string;
+    /** `aggregate: …` in the contract, `set: …` in the decision. */
+    first: string;
     emits: EmitModel[];
 }
 
@@ -253,7 +298,7 @@ class ContextEmitter {
         this.persistentEvents();
         this.unions();
         const body = this.out.join('\n');
-        const runtime = ['Decimal', NO_EVENTS_TYPE, 'Result', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
+        const runtime = ['Decimal', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter((n) => new RegExp(`\\b${n}\\b`).test(body));
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
             ...[...this.imports].sort().map((c) => `import type * as ${c} from '${this.moduleOf(c)}';`),
@@ -362,6 +407,8 @@ class ContextEmitter {
             this.jsdoc(describedLines(agg));
             this.line(`export type ${agg.name} = ${states.map((s) => stateTypeName(agg, s)).join(' | ')};`);
         }
+        this.out.push('');
+        this.shape(agg);
 
         const commands = agg.commands ?? [];
         for (const c of commands) {
@@ -389,25 +436,44 @@ class ContextEmitter {
         }
     }
 
+    /** The fields of an aggregate as data for `decide` (`OrderShape`): the common fields, and each state's own fields. */
+    private shape(agg: ElementModel): void {
+        const states = agg.states ?? [];
+        const list = (fields: FieldModel[]): string => `[${fields.map((f) => `'${f.name}'`).join(', ')}]`;
+        this.jsdoc([`The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`]);
+        if (states.length === 0) {
+            this.line(`export const ${shapeName(agg)}: Shape = { fields: ${list(agg.fields)} };`);
+            return;
+        }
+        this.line(`export const ${shapeName(agg)}: Shape = {`);
+        this.line(`    fields: ${list(agg.fields)},`);
+        this.line(`    states: { ${states.map((s) => `${s.name}: ${list(s.fields)}`).join(', ')} },`);
+        this.line('};');
+    }
+
     private command(agg: ElementModel, c: CommandModel): void {
         const stateful = (agg.states ?? []).length > 0;
         const stateUnion = (names: string[]): string => (stateful ? unique(names).map((n) => stateTypeName(agg, n)).join(' | ') : agg.name);
         const transitions = stateful ? c.transitions : [];
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
-        // (`A -> A, B -> B`, or `emits X when A ->`): a handler per source state (`…ByState`), and a contract generic
-        // over the input state whose output is that of the handler of its state. `byState` turns the handlers into the
-        // contract.
+        // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
+        // its state, looked up in an object keyed by the source states.
         const generic = stateful && outputsVary(c.factory, transitions, c.emits);
         const input = stateUnion(transitions.flatMap((t) => t.from));
         const self = aggregateParamName(agg);
         const params = c.params.map((p) => `${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
-        // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name
-        const outcomes = (from: string | undefined, targets: string[]): Outcome[] =>
-            stateful
-                ? unique(targets).map((to) => ({ key: to, aggregate: stateTypeName(agg, to), emits: c.emits.filter((e) => emitApplies(e, from, to)) }))
-                : [{ key: agg.name, aggregate: agg.name, emits: c.emits }];
+        // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name; the
+        // contract holds the aggregate, the decision what to `set`
+        const outcomes = (from: string | undefined, targets: string[], decision: boolean): Outcome[] =>
+            (stateful ? unique(targets) : [undefined]).map((to) => ({
+                key: to ?? agg.name,
+                first: decision ? `set: ${this.setType(outcomeFields(agg, c, from, to).set)}` : `aggregate: ${to ? stateTypeName(agg, to) : agg.name}`,
+                emits: c.emits.filter((e) => emitApplies(e, from, to)),
+            }));
         const requires = requirementLines(c.requires, (e) => this.ref(e));
+        const changes = c.factory ? [] : [`@changes ${c.changes.length ? c.changes.join(', ') : `none — the command changes no ${stateful ? 'common ' : ''}field`}`];
+        const sources = transitions.flatMap((t) => t.from.map((from) => ({ from, to: t.to })));
 
         const transition = c.factory
             ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
@@ -417,44 +483,94 @@ class ContextEmitter {
             ...describedLines(c),
             ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
             ...requires,
+            ...changes,
             ...this.emitsLines(c.emits.map((e) => ({ e, when: e.when }))),
         ]);
         this.line(`export type ${commandTypeName(agg, c)} = ${generic ? `<S extends ${input}>` : ''}(`);
         for (const p of [...(c.factory ? [] : [`${self}: ${generic ? 'S' : input}`]), ...params]) this.line(`    ${p},`);
+        const first = transitions[0];
         if (!generic) {
-            const first = transitions[0];
-            this.result(') => ', outcomes(c.factory ? undefined : first?.from[0], first?.to ?? []), errors, '', ';');
+            this.result(') => ', outcomes(c.factory ? undefined : first?.from[0], first?.to ?? [], false), errors, '', ';');
+        } else {
+            this.line(') => {');
+            for (const { from, to } of sources) {
+                this.memberDoc(this.emitsLines(this.emitsFrom(c, from, to)));
+                this.result(`    readonly ${from}: `, outcomes(from, to, false), errors, '    ', ';');
+            }
+            this.line(`}[S['${STATE_TAG}']];`);
+        }
+
+        // The decision: one handler per source state, or one function for a factory and without states.
+        const keyed = stateful && !c.factory;
+        const outcomeLines = keyed
+            ? sources.flatMap(({ from, to }) => unique(to).map((t) => this.outcomeLine(agg, c, from, t)))
+            : (stateful ? unique(first?.to ?? []) : [undefined]).map((t) => this.outcomeLine(agg, c, undefined, t));
+        this.out.push('');
+        this.jsdoc([
+            `${agg.name}.${c.name}, decided ${keyed ? 'per source state' : 'by one function'}; implement it with \`decide(${shapeName(agg)}, …)\` from the runtime.`,
+            `Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate${c.factory ? ' from them' : ', taking the other fields from the input'}.`,
+            ...requires,
+            ...changes,
+            ...outcomeLines,
+            ...(keyed ? [] : this.emitsLines(c.emits.map((e) => ({ e, when: e.when })))),
+        ]);
+        if (!keyed) {
+            this.line(`export type ${decisionTypeName(agg, c)} = (`);
+            for (const p of [...(c.factory ? [] : [`${self}: ${input}`]), ...params]) this.line(`    ${p},`);
+            this.result(') => ', outcomes(undefined, first?.to ?? [], true), errors, '', ';');
             return;
         }
-        this.line(`) => ReturnType<${byStateTypeName(agg, c)}[S['${STATE_TAG}']]>;`);
-        this.out.push('');
-        this.jsdoc([`${agg.name}.${c.name}, one handler per source state; implement it with \`byState\` from the runtime.`, ...requires]);
-        this.line(`export type ${byStateTypeName(agg, c)} = {`);
-        for (const t of transitions) {
-            for (const from of t.from) {
-                const args = [`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ');
-                // the entries of `emits` for this state, with `when` reduced to what still selects among its targets
-                const emits = c.emits
-                    .filter((e) => t.to.some((to) => emitApplies(e, from, to)))
-                    .map((e) => ({ e, when: e.when?.to.length && !t.to.every((to) => e.when!.to.includes(to)) ? { from: [], to: e.when.to } : undefined }));
-                const doc = this.emitsLines(emits).flatMap((l) => comment(l).split('\n'));
-                if (doc.length === 1) this.line(`    /** ${doc[0]} */`);
-                else this.out.push('    /**', ...doc.map((l) => `     * ${l}`), '     */');
-                this.result(`    readonly ${from}: (${args}) => `, outcomes(from, t.to), errors, '    ', ';');
-            }
+        this.line(`export type ${decisionTypeName(agg, c)} = {`);
+        for (const { from, to } of sources) {
+            this.memberDoc(this.emitsLines(this.emitsFrom(c, from, to)));
+            this.result(`    readonly ${from}: (${[`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ')}) => `, outcomes(from, to, true), errors, '    ', ';');
         }
         this.line('};');
     }
 
+    /** The entries of `emits` for a source state, with `when` reduced to what still selects among its targets. */
+    private emitsFrom(c: CommandModel, from: string, targets: string[]): { e: EmitModel; when?: OutcomePatternModel }[] {
+        return c.emits
+            .filter((e) => targets.some((to) => emitApplies(e, from, to)))
+            .map((e) => ({ e, when: e.when?.to.length && !targets.every((to) => e.when!.to.includes(to)) ? { from: [], to: e.when.to } : undefined }));
+    }
+
+    /** What the decision gives for an outcome, and what `decide` carries over and drops, in words. */
+    private outcomeLine(agg: ElementModel, c: CommandModel, from: string | undefined, to: string | undefined): string {
+        const head = c.factory ? `new -> ${to ?? agg.name}` : to ? `${from} -> ${to}` : agg.name;
+        if (c.factory) return `${head} — set: every field`;
+        const { set, carried, dropped } = outcomeFields(agg, c, from, to);
+        const names = (fields: FieldModel[]): string => fields.map((f) => f.name).join(', ');
+        const fresh = (f: FieldModel): boolean => !agg.fields.includes(f) && !carried.includes(f) && !c.changes.includes(f.name);
+        return [
+            `${head} — set: ${set.length ? set.map((f) => `${f.name}${fresh(f) ? ` (new in ${to})` : ''}`).join(', ') : 'nothing'}`,
+            ...(carried.length ? [`carried over: ${names(carried)}`] : []),
+            ...(dropped.length ? [`dropped: ${names(dropped)}`] : []),
+        ].join('; ');
+    }
+
+    /** The type of the `set` of an outcome: every field required, an optional one cleared with `undefined`. */
+    private setType(fields: FieldModel[]): string {
+        if (fields.length === 0) return NO_CHANGES_TYPE;
+        return `{ ${fields.map((f) => `readonly ${f.name}: ${this.fieldType(f)}${f.cardinality === 'optional' ? ' | undefined' : ''}`).join('; ')} }`;
+    }
+
+    /** A JSDoc block for a member of a type (single line when short). */
+    private memberDoc(lines: string[]): void {
+        const doc = lines.flatMap((l) => comment(l).split('\n'));
+        if (doc.length === 1) this.line(`    /** ${doc[0]} */`);
+        else if (doc.length > 1) this.out.push('    /**', ...doc.map((l) => `     * ${l}`), '     */');
+    }
+
     /**
-     * `Result<…>` of a command, starting with `head` on the current line: the success value is keyed by the outcome's
-     * state (`{ readonly Confirmed: { aggregate, events } }`); with several outcomes, a union whose branches mark the
-     * other keys `?: never`, so that a value holds exactly one outcome.
+     * `Result<…>` of a command or a decision, starting with `head` on the current line: the success value is keyed by
+     * the outcome's state (`{ readonly Confirmed: { aggregate, events } }`, or `{ set, events }` in a decision); with
+     * several outcomes, a union whose branches mark the other keys `?: never`, so that a value holds exactly one outcome.
      */
     private result(head: string, outcomes: Outcome[], errors: string, indent: string, end: string): void {
         const body = (o: Outcome, pad: string): string[] => [
             `${pad}readonly ${o.key}: {`,
-            `${pad}    readonly aggregate: ${o.aggregate};`,
+            `${pad}    readonly ${o.first};`,
             `${pad}    readonly events: ${this.events(o.emits)};`,
             `${pad}};`,
         ];
