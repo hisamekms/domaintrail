@@ -19,6 +19,7 @@ context Sales {
     invariant quantitiesPositive "数量は正の値" {
       all(items, item => item.quantity > 0)
     }
+    invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }
 
     create command place(customer: CustomerId) "注文する"
       -> Draft
