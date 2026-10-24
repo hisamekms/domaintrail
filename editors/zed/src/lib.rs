@@ -16,7 +16,7 @@ use zed_extension_api::{self as zed, LanguageServerId, Result, settings::LspSett
 const SERVER: &str = "domaintrail";
 const PACKAGE: &str = "domaintrail";
 /// The domaintrail version installed when neither the settings nor the PATH give `dt`.
-const PINNED_VERSION: &str = "0.4.0";
+const PINNED_VERSION: &str = "0.5.0";
 const PACKAGE_CLI: &str = "node_modules/domaintrail/dist/dt.js";
 
 struct DomainTrailExtension;

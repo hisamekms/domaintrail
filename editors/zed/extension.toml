@@ -1,7 +1,7 @@
 id = "domaintrail"
 name = "DomainTrail"
 description = "DomainTrail DSL (.dt files): highlighting, outline and the `dt lsp` language server."
-version = "0.4.0"
+version = "0.5.0"
 schema_version = 1
 authors = ["hisamekms"]
 repository = "https://github.com/hisamekms/domaintrail"
