@@ -138,8 +138,9 @@ describe('generated TypeScript for domain primitives', () => {
         expect(common).toContain(' * @invariant format (形式): matches(value, "^[^@\\s]+@[^@\\s]+$")');
     });
 
-    test('hand-written constructors compile; misuse is rejected', async () => {
-        await writeFile(path.join(dir, 'src', 'primitives.ts'), await readFile(path.join(EXAMPLES, 'src', 'primitives.ts'), 'utf8'));
+    test("the example's constructors compile; misuse is rejected", async () => {
+        await mkdir(path.join(dir, 'src', 'domain'));
+        await writeFile(path.join(dir, 'src', 'domain', 'primitives.ts'), await readFile(path.join(EXAMPLES, 'src', 'domain', 'primitives.ts'), 'utf8'));
         await writeFile(
             path.join(dir, 'src', 'misuse.ts'),
             `import { err, type Common, type Decimal, type Sales } from '../generated/domain/index.js';
@@ -156,6 +157,6 @@ export const bad: Common.MakeEmailAddress = (value) =>
 export const amount: Decimal = price.amount; // Decimal-based values keep their brand
 `,
         );
-        expect(tsc('src/primitives.ts', 'src/misuse.ts')).toBe('');
+        expect(tsc('src/domain/primitives.ts', 'src/misuse.ts')).toBe('');
     });
 });

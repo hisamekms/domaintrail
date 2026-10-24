@@ -295,11 +295,17 @@ describe('the shop example', () => {
         expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} })).toBe(0);
         const manifest = JSON.parse(await readFile(path.join(shop, '.domaintrail', 'generated.json'), 'utf8'));
         expect(manifest.files).toEqual(expect.arrayContaining(['generated/domain/tests/_testing.ts', 'generated/domain/tests/_register.ts', 'generated/domain/tests/Sales.ts', 'generated/domain/tests/index.ts']));
-        const files = ['src/contract.test.ts', 'src/order-commands.ts', 'src/primitives.ts'];
-        expect(tsc(shop, files, false)).toBe('');
+        // all of src/ (domain, application, demo, tests), with the example's own tsconfig.json
+        const typecheck = Bun.spawnSync([process.execPath, path.join(ROOT, 'node_modules', '.bin', 'tsc'), '-p', shop]);
+        expect(typecheck.stdout.toString() + typecheck.stderr.toString()).toBe('');
         const r = Bun.spawnSync([process.execPath, 'test'], { cwd: shop });
         const output = r.stdout.toString() + r.stderr.toString();
         expect(output).toContain(' 0 fail');
+        expect(output).toMatch(/Ran \d+ tests across 2 files/);
         expect(r.exitCode).toBe(0);
+        const demo = Bun.spawnSync([process.execPath, 'src/demo.ts'], { cwd: shop });
+        expect(demo.stderr.toString()).toBe('');
+        expect(demo.stdout.toString()).toContain('policy: issued invoice-1 for order-1: 3380 JPY');
+        expect(demo.exitCode).toBe(0);
     }, 30_000);
 });

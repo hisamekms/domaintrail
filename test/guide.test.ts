@@ -155,7 +155,17 @@ describe('dt guide', () => {
         }
     });
 
-    test('its config example is valid JSONC', () => {
+    test('its blocks that name a file of examples/shop show that file', async () => {
+        const quoted = blocks('ts').filter((b) => b.startsWith('// examples/shop/'));
+        expect(quoted.length).toBeGreaterThan(0);
+        for (const b of quoted) {
+            const [first, ...rest] = b.split('\n');
+            const file = await readFile(path.join(ROOT, first.slice(3)), 'utf8');
+            expect(file).toContain(rest.join('\n').trim());
+        }
+    });
+
+        test('its config example is valid JSONC', () => {
         const [config] = blocks('jsonc');
         expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
     });

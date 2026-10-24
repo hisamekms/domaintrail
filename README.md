@@ -37,12 +37,15 @@ and what `.gitignore` ignores) belongs to the workspace, unless a `domaintrail.j
 one) and exits non-zero on errors; `check --format json` prints them as one JSON document (`schema/diagnostics.schema.json`).
 `generate ts` runs `check` first and generates nothing if there are errors.
 
-Try it with the example in this repository (see [Development](#development)):
+Try it with the example in this repository (see [Development](#development)). [examples/shop](examples/shop/README.md)
+is a complete one: the model, the generated code, and the code an AI agent writes against it — the domain
+implementations and a small application layer.
 
 ```bash
 bun run dt -r examples/shop check
-bun run dt -r examples/shop generate ts   # then examples/shop/src/order-commands.ts type-checks against it
-(cd examples/shop && bun test)            # and passes the generated contract tests
+bun run dt -r examples/shop generate ts      # then examples/shop/src type-checks against it
+(cd examples/shop && bun test)               # passes the generated contract tests and the application's tests
+(cd examples/shop && bun src/demo.ts)        # a walk through the shop: orders, an invoice, a refund request
 bun run build && bun run dt -r examples/shop view
 ```
 

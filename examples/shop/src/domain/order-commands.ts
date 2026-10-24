@@ -1,9 +1,11 @@
-// Hand-written command implementations, checked against the generated contracts.
-// Run `domain -r examples/shop generate ts` first; the TypeScript compiler then verifies that every command decides
+// The commands of Sales.Order, checked against the generated contracts.
+// Run `dt -r examples/shop generate ts` first; the TypeScript compiler then verifies that every command decides
 // exactly its declared outcomes: the fields it may set (`changes`, and the new fields of the target state) and its events.
 // `decide` makes the aggregates: it carries over every other field and drops those the target state does not have.
 // Commands are pure: the new order's ID and the confirmation time are parameters.
-import { Sales, decide, err, ok } from '../generated/domain/index.js';
+// The requirements are checked with the generated `check…Requires`: their expressions are the DSL's, so the two cannot
+// drift apart. What is written here is the rest: which error each requirement returns, and what the outcome sets.
+import { Sales, decide, err, ok } from '../../generated/domain/index.js';
 
 const noteChanged = (order: Sales.Order, note: string | undefined) =>
     note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
@@ -13,10 +15,15 @@ export const orderCommands: Sales.OrderCommands = {
         ok({ Draft: { set: { id, items: [], customer, note: undefined }, events: { OrderPlaced: { type: 'OrderPlaced', orderId: id } } } }),
     ),
 
-    // `changes items`: the only field it sets.
+    // `changes items`: the only field it sets. The requirements in declaration order: the first that fails decides the error.
     addItem: decide<Sales.AddItemOrderDecision>(Sales.OrderShape, {
         Draft: (order, item) => {
-            if (order.items.some((i) => i.sku === item.sku)) return err({ type: 'DuplicateSku', sku: item.sku });
+            switch (Sales.checkAddItemOrderRequires(order, item)) {
+                case 'newSku':
+                    return err({ type: 'DuplicateSku', sku: item.sku });
+                case 'sameCurrency':
+                    return err({ type: 'CurrencyMismatch' });
+            }
             return ok({ Draft: { set: { items: [...order.items, item] }, events: {} } });
         },
     }),
@@ -24,20 +31,19 @@ export const orderCommands: Sales.OrderCommands = {
     // Changes no common field: only `confirmedAt`, new in Confirmed, is set.
     confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
         Draft: (order, at) => {
-            if (order.items.length === 0) return err({ type: 'EmptyOrder' });
+            if (Sales.checkConfirmOrderRequires(order, at) === 'hasItems') return err({ type: 'EmptyOrder' });
             return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
         },
     }),
 
     // The events depend on the input state (`RefundRequested when Confirmed ->`); `confirmedAt` is dropped by `decide`.
-    // Both handlers check the requirement `noteForOther` first.
     cancel: decide<Sales.CancelOrderDecision>(Sales.OrderShape, {
         Draft: (order, reason) => {
-            if (reason === 'Other' && order.note === undefined) return err({ type: 'NoteRequired' });
+            if (Sales.checkCancelOrderRequires(order, reason) === 'noteForOther') return err({ type: 'NoteRequired' });
             return ok({ Cancelled: { set: { reason }, events: { OrderCancelled: { type: 'OrderCancelled', orderId: order.id, reason } } } });
         },
         Confirmed: (order, reason) => {
-            if (reason === 'Other' && order.note === undefined) return err({ type: 'NoteRequired' });
+            if (Sales.checkCancelOrderRequires(order, reason) === 'noteForOther') return err({ type: 'NoteRequired' });
             return ok({
                 Cancelled: {
                     set: { reason },

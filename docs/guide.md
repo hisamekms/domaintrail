@@ -795,7 +795,7 @@ domain primitive gets a branded type, a constructor contract `Make<Name>` and a 
 invariants and requirements get check functions (see [Generated checks](#generated-checks)). A field set is an interface
 that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
 `…Common`). The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's
-place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:44`); editing the `.dt` sources
+place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:51`); editing the `.dt` sources
 moves these lines, and generating again rewrites them.
 
 The examples in this section are generated from `examples/shop` in the repository, a fuller version of the Sales
@@ -818,7 +818,7 @@ Unions to name groups of them, each generated only when it has a member:
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
- * @see sales/order.dt:44
+ * @see sales/order.dt:51
  */
 export type ConfirmOrder = (
     order: DraftOrder,
@@ -926,7 +926,7 @@ instead.
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
- * @see sales/order.dt:44
+ * @see sales/order.dt:51
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
@@ -1068,6 +1068,11 @@ export const makeQuantity: Sales.MakeQuantity = (value) =>
 Do not edit generated files: change the `.dt` sources and generate again. Adding properties or methods to generated
 types (declaration merging, editing the output) is not supported; write functions that take the generated types.
 
+A complete example is [`examples/shop`](https://github.com/hisamekms/domaintrail/tree/main/examples/shop) in the
+repository: the model, what `dt generate ts` writes from it, and the code written against it — the command
+implementations and a small application layer around them (repositories, an event store, policies across contexts),
+with the contract tests and a demo.
+
 <!-- topic: checks -->
 ### Generated checks
 
@@ -1142,12 +1147,21 @@ registers a suite with that runner, and the test file is a few lines:
 
 ```ts
 // examples/shop/src/contract.test.ts
-import { Common, Sales, register } from '../generated/domain/tests/index.js';
-import { orderCommands } from './order-commands.js';
-import { makeEmailAddress, makeOrderId, makeQuantity, makeSku } from './primitives.js';
+import { Billing, Common, Sales, register } from '../generated/domain/tests/index.js';
+import { customerCommands } from './domain/customer-commands.js';
+import { invoiceCommands } from './domain/invoice-commands.js';
+import { orderCommands } from './domain/order-commands.js';
+import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderId, makeOrderItemId, makeQuantity, makeSku } from './domain/primitives.js';
 
-register(Sales.contract({ make: { Quantity: makeQuantity, Sku: makeSku, OrderId: makeOrderId }, Order: orderCommands }));
-register(Common.contract({ make: { EmailAddress: makeEmailAddress } }));
+register(
+    Sales.contract({
+        make: { Quantity: makeQuantity, Sku: makeSku, CustomerId: makeCustomerId, OrderId: makeOrderId, OrderItemId: makeOrderItemId },
+        Order: orderCommands,
+        Customer: customerCommands,
+    }),
+);
+register(Billing.contract({ make: { InvoiceId: makeInvoiceId }, Invoice: invoiceCommands }));
+register(Common.contract({ make: { EmailAddress: makeEmailAddress, Amount: makeAmount } }));
 ```
 
 Options, all optional:

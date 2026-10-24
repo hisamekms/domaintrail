@@ -1,0 +1,17 @@
+{
+  // Type-checks the code written against the generated contracts: `tsc --noEmit -p examples/shop`
+  // (after `dt -r examples/shop generate ts`).
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "Preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM"],
+    "types": ["bun"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true
+  },
+  "include": ["src", "generated"]
+}
