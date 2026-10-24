@@ -6,7 +6,8 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { watch, type FSWatcher } from 'chokidar';
 import { WebSocket, WebSocketServer } from 'ws';
-import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from '../core/config.js';
+import { DEFAULT_SOURCES, IGNORED_DIRS } from '../core/config.js';
+import { SourceScope } from '../core/files.js';
 import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
@@ -16,6 +17,8 @@ export interface ViewServerOptions {
     root: string;
     /** Globs of DSL files relative to `root` (default `**\/*.dt`). */
     sources?: readonly string[];
+    /** Whether files ignored by `.gitignore` are skipped (default true). */
+    respectGitignore?: boolean;
     port?: number;
     host?: string;
     /** Debounce for bursts of file events (e.g. an AI saving several files). */
@@ -118,8 +121,8 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const log = options.log ?? (() => {});
     const engine = options.engine ?? new ElkLayoutEngine();
     const sources = options.sources ?? DEFAULT_SOURCES;
-    const isSource = sourceMatcher(sources);
-    const session = new ViewSession(options.root, engine, sources);
+    const respectGitignore = options.respectGitignore ?? true;
+    const session = new ViewSession(options.root, engine, sources, respectGitignore);
     await session.refresh();
 
     const assets = await loadAssets(options.webDir ?? defaultWebDir());
@@ -179,9 +182,13 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         }, options.debounceMs ?? 80);
     };
 
+    const scope = new SourceScope(options.root, sources, respectGitignore);
     const watcher: FSWatcher = watch(options.root, {
         ignoreInitial: true,
-        ignored: (p, stats) => IGNORED_DIRS.has(path.basename(p)) || (!!stats?.isFile() && !isSource(path.relative(options.root, p))),
+        ignored: (p, stats) => {
+            if (stats?.isDirectory()) return p !== scope.root && !scope.includesDirectory(p);
+            return IGNORED_DIRS.has(path.basename(p)) || (!!stats?.isFile() && scope.sourcePath(p) === undefined);
+        },
     });
     for (const event of ['add', 'change', 'unlink'] as const) {
         watcher.on(event, (file: string) => onChange(event, file));

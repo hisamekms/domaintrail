@@ -17,6 +17,8 @@ export interface DomainTrailConfigFile {
     $schema?: string;
     /** Globs of DSL files; `!pattern` excludes. Default: `**\/*.dt`. */
     sources?: string[];
+    /** Whether files and directories ignored by `.gitignore` are skipped when finding sources. Default: true. */
+    respectGitignore?: boolean;
     generate?: { ts?: { out?: string; contexts?: Record<string, { out: string }>; tests?: { out?: string; runner?: Runner } } };
     view?: { port?: number; host?: string };
 }
@@ -27,6 +29,7 @@ export interface ResolvedConfig {
     /** Absolute path of the config file, if one was found. */
     file?: string;
     sources: string[];
+    respectGitignore: boolean;
     tsOut: string;
     /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
     tsContexts: Record<string, string>;
@@ -69,6 +72,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
         root: path.dirname(file),
         file,
         sources: config.sources ?? DEFAULT_SOURCES,
+        respectGitignore: config.respectGitignore ?? true,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
         tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).map(([ctx, c]) => [ctx, c.out])),
         ...(config.generate?.ts?.tests && { tsTests: config.generate.ts.tests }),
@@ -77,7 +81,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
 }
 
 function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
-    return { sources: DEFAULT_SOURCES, tsOut: DEFAULT_TS_OUT, tsContexts: {}, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+    return { sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
 }
 
 /** JSON with comments and trailing commas (JSONC). */
@@ -114,7 +118,7 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('expected an object');
     const c = raw as Record<string, unknown>;
     for (const key of Object.keys(c)) {
-        if (!['$schema', 'sources', 'generate', 'view'].includes(key)) fail(`unknown key '${key}'`);
+        if (!['$schema', 'sources', 'respectGitignore', 'generate', 'view'].includes(key)) fail(`unknown key '${key}'`);
     }
     if (c.sources !== undefined && (!Array.isArray(c.sources) || c.sources.some((s) => typeof s !== 'string'))) {
         fail("'sources' must be an array of glob strings");
@@ -125,6 +129,7 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
             fail(`'sources' must stay inside the directory of the config file: '${s}'`);
         }
     }
+    if (c.respectGitignore !== undefined && typeof c.respectGitignore !== 'boolean') fail("'respectGitignore' must be true or false");
     const gen = c.generate as Record<string, unknown> | undefined;
     if (gen !== undefined) {
         if (typeof gen !== 'object' || gen === null) fail("'generate' must be an object");

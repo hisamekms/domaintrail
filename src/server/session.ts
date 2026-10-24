@@ -53,6 +53,7 @@ export class ViewSession {
         readonly root: string,
         private readonly engine: LayoutEngine,
         private readonly sources: readonly string[] = DEFAULT_SOURCES,
+        private readonly respectGitignore = true,
     ) {
         this.current = this.payload({
             files: [],
@@ -84,7 +85,7 @@ export class ViewSession {
 
     private async doRefresh(): Promise<ViewPayload> {
         await this.loadLayouts();
-        const sources = await loadWorkspace(this.root, this.sources);
+        const sources = await loadWorkspace(this.root, this.sources, this.respectGitignore);
         const analysis = await analyze(sources);
         const files = sources.map((s) => s.path);
 
