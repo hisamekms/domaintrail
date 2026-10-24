@@ -51,8 +51,8 @@ describe('tree-sitter grammar', () => {
         for (const s of sources) expect({ file: s.path, problems: problems(s.text) }).toEqual({ file: s.path, problems: [] });
     });
 
-    test('parses every dt block of the guide and the README', async () => {
-        for (const file of ['docs/guide.md', 'README.md']) {
+    test('parses every dt block of the guide, the README and Getting started', async () => {
+        for (const file of ['docs/guide.md', 'README.md', 'docs/getting-started.md', 'docs/getting-started.ja.md']) {
             const blocks = await dtBlocks(file);
             expect(blocks.length).toBeGreaterThan(0);
             blocks.forEach((text, k) => expect({ file, block: k + 1, problems: problems(text) }).toEqual({ file, block: k + 1, problems: [] }));
