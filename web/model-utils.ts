@@ -1,6 +1,6 @@
 import type { DisplayMode } from '../src/graph/ir';
 import { PRIMITIVE_LABELS, typeText } from '../src/graph/build';
-import { emittedEvents, type CommandModel, type DomainModel, type ElementKind, type ElementModel, type StateModel, type TypeExpr } from '../src/model/model';
+import { type CommandModel, type DomainModel, type ElementKind, type ElementModel, type StateModel, type TypeExpr } from '../src/model/model';
 import { ownerElement } from './render';
 
 export type Select = (id: string) => void;
@@ -67,7 +67,7 @@ export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[
 ];
 
 /** Kinds shown in the catalog. */
-export const inCatalog = (kind: string): boolean => CATALOG_SECTIONS.some((s) => s.kinds.includes(kind as ElementKind));
+export const inCatalog = (kind: string): boolean => CATALOG_SECTIONS.some((s) => (s.kinds as readonly string[]).includes(kind));
 
 export interface CatalogSection {
     key: CatalogSectionKey;
@@ -144,7 +144,7 @@ export function orderedContexts(model: DomainModel): string[] {
 export interface Namer {
     mode: DisplayMode;
     /** Any named item (element, state, command, invariant, enum value…). */
-    of(x: { name: string; label?: string }): string;
+    of: (x: { name: string; label?: string }) => string;
     /** A field or parameter: its resolved label (inline, term or type). */
     field(f: { name: string; label?: string }): string;
     /** A type as written in `ctx`; in `label` mode built-in types and labelled elements use their labels. */
@@ -156,7 +156,7 @@ export interface Namer {
     /** `Draft | Confirmed → Cancelled` with display names. */
     transition(agg: ElementModel, c: CommandModel): string;
     /** An element, state or command by ID. */
-    id(id: string): string;
+    id: (id: string) => string;
     /** A short name of an element by ID: in 両方 its label alone (the name is in a tooltip, or nearby). */
     short(id: string): string;
 }

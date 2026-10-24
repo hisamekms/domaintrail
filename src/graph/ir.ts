@@ -40,12 +40,14 @@ export const TEXT_VARIANTS: [Lang, DisplayMode][] = LANGS.flatMap((l) => DISPLAY
 /** A text with no words of the Live View's own: the same in every language. */
 export const anyLang = (t: ModeTexts): Texts => ({ ja: t, en: t });
 export const sameText = (s: string): Texts => anyLang({ label: s, name: s, both: s });
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Object.fromEntries over LANGS and DISPLAY_MODES gives every key */
 /** Builds a text from another, variant by variant. */
 export const mapTexts = (t: Texts, f: (s: string, lang: Lang, mode: DisplayMode) => string): Texts =>
     Object.fromEntries(LANGS.map((l) => [l, Object.fromEntries(DISPLAY_MODES.map((m) => [m, f(t[l][m], l, m)]))])) as Texts;
 /** One text per language, the same in every display mode. */
 export const perLang = (words: Record<Lang, string>): Texts =>
     Object.fromEntries(LANGS.map((l) => [l, { label: words[l], name: words[l], both: words[l] }])) as Texts;
+/* oxlint-enable typescript/no-unsafe-type-assertion */
 
 export interface GraphNode {
     id: string;

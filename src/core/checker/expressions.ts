@@ -9,6 +9,7 @@ import {
     isExistsExpr,
     isIdType,
     isIntLiteral,
+    isInvariant,
     isLengthExpr,
     isMatchesExpr,
     isMemberAccess,
@@ -108,7 +109,7 @@ function tagOf(u: UnionDecl): Ty {
 function checkPrimitive(p: DomainPrimitive, ctx: string, index: ModelIndex, sink: DiagnosticSink): void {
     if (!p.base) return;
     for (const inv of primitiveInvariants(p)) {
-        if (inv.node !== inv.expr) checkDeclared(inv.node as Invariant, sink);
+        if (isInvariant(inv.node)) checkDeclared(inv.node, sink);
         if (!inv.expr) continue;
         const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
         const t = new ExprChecker(index, sink).check(inv.expr, scope);
@@ -314,7 +315,7 @@ class ExprChecker {
             try {
                 new RegExp(pattern);
             } catch (err) {
-                const reason = (err as Error).message.replace(/^Invalid regular expression:\s*/, '');
+                const reason = String(err instanceof Error ? err.message : err).replace(/^Invalid regular expression:\s*/, '');
                 this.sink.error('M009', `Invalid regular expression "${pattern}": ${reason}`, e, 'pattern');
             }
             return BOOL;

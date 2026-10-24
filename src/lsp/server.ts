@@ -336,12 +336,12 @@ class DomainHoverProvider extends AstNodeHoverProvider {
 
     protected override getAstNodeHoverContent(node: AstNode): string | undefined {
         const kind = kindOf(node);
-        const name = (node as { name?: string }).name;
+        const name = 'name' in node && typeof node.name === 'string' ? node.name : undefined;
         if (!kind || !name) return undefined;
-        const documents = this.services.shared.workspace.LangiumDocuments.all.map((d) => d.parseResult.value as ast.Model).toArray();
+        const documents = this.services.shared.workspace.LangiumDocuments.all.map((d) => d.parseResult.value).filter(ast.isModel).toArray();
         const labels = new LabelResolver(new ModelIndex(documents));
         let title = `${kind} \`${name}\``;
-        let label = (node as { label?: string }).label;
+        let label = 'label' in node && typeof node.label === 'string' ? node.label : undefined;
         let doc = docComment(node);
         if (ast.isContext(node)) {
             label = labels.contextLabel(name);
@@ -377,7 +377,7 @@ class DomainHoverProvider extends AstNodeHoverProvider {
 
     /** The policies that run a command or react to an event, in any file. */
     private policiesOf(node: ast.Command | ast.EventDecl): ast.Policy[] {
-        const all = this.services.shared.workspace.LangiumDocuments.all.flatMap((d) => (d.parseResult.value as ast.Model).contexts.flatMap((c) => c.elements.filter(ast.isPolicy))).toArray();
+        const all = this.services.shared.workspace.LangiumDocuments.all.map((d) => d.parseResult.value).filter(ast.isModel).flatMap((m) => m.contexts.flatMap((c) => c.elements.filter(ast.isPolicy))).toArray();
         return all.filter((p) => (ast.isCommand(node) ? p.command.ref === node : p.event.ref === node));
     }
 }

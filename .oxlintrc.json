@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // `bun run lint`: oxlint --type-aware (type information from oxlint-tsgolint)
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    // a cast that narrows a type needs `// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- <reason>`
+    "typescript/no-unsafe-type-assertion": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+  },
+  "overrides": [
+    {
+      // tests cast partial fixtures and the JSON of the servers they test; their assertions check the values
+      "files": ["test/**"],
+      "rules": { "typescript/no-unsafe-type-assertion": "off" }
+    }
+  ],
+  "ignorePatterns": [
+    "dist/**",
+    "src/language/generated/**",
+    "**/generated/**",
+    "tree-sitter-domaintrail/src/**",
+    "tree-sitter-domaintrail/bindings/**",
+    "editors/zed/target/**",
+    "editors/zed/grammars/**",
+    ".domaintrail/**"
+  ]
+}

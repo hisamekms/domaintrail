@@ -27,6 +27,7 @@ export const SHARED_PREFIX = '$shared.';
  */
 export class DomainScopeComputation extends DefaultScopeComputation {
     override async collectExportedSymbols(document: LangiumDocument): Promise<AstNodeDescription[]> {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the grammar's entry rule is Model
         const model = document.parseResult.value as Model;
         const exports: AstNodeDescription[] = [];
         for (const ctx of model.contexts ?? []) {

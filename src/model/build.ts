@@ -165,6 +165,7 @@ function described(node: AstNode & { label?: string }): Described {
 }
 
 const optional = <K extends string>(key: K, value: string | undefined): Partial<Record<K, string>> =>
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a computed key is typed as a string index
     (value ? { [key]: value } : {}) as Partial<Record<K, string>>;
 
 function kindOf(el: ContextElement): ElementKind {

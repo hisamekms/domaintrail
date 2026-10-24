@@ -373,14 +373,14 @@ Examples:
     };
 
     try {
-        await program.parseAsync(argv as string[], { from: 'user' });
+        await program.parseAsync([...argv], { from: 'user' });
     } catch (e) {
         if (e instanceof ConfigError) fail(e.message, 2);
         else if (e instanceof CliError) fail(e.message, e.exitCode);
         // File system and network failures (unreadable directories, permissions…) are reported, not thrown.
-        else if (errorCode(e)) fail((e as Error).message, 1);
+        else if (errorCode(e)) fail(e instanceof Error ? e.message : String(e), 1);
         else {
-            const code = (e as { exitCode?: number }).exitCode;
+            const code = typeof e === 'object' && e !== null && 'exitCode' in e ? e.exitCode : undefined;
             if (typeof code === 'number') return code;
             throw e;
         }
@@ -397,7 +397,7 @@ function parsePort(value: string): number {
 
 /** The Node.js error code (`ENOENT`, `EACCES`, `EADDRINUSE`…) of a system error. */
 function errorCode(e: unknown): string | undefined {
-    const code = (e as { code?: unknown } | undefined)?.code;
+    const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
     return typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : undefined;
 }
 
@@ -464,7 +464,7 @@ interface Manifest {
 
 async function readManifest(root: string): Promise<string[]> {
     try {
-        const m = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8')) as Manifest;
+        const m: { version?: unknown; files?: unknown } = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8'));
         // the file may have been crafted: entries that would leave the root are dropped
         return m.version === 1 && Array.isArray(m.files) ? m.files.filter((f) => typeof f === 'string' && f !== '' && staysInside(f)) : [];
     } catch {

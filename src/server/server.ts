@@ -105,10 +105,12 @@ function isTrusted(headers: IncomingHttpHeaders, allowedHost: (hostname: string)
     }
 }
 
+const isStructureLevel = (s: string | null): s is StructureLevel => (STRUCTURE_LEVELS as readonly (string | null)[]).includes(s);
+
 /** The Structure View level asked for: `level=…`, or `overview=1` as asked before there were three levels. */
 function structureLevel(params: URLSearchParams): StructureLevel {
     const level = params.get('level');
-    if (STRUCTURE_LEVELS.includes(level as StructureLevel)) return level as StructureLevel;
+    if (isStructureLevel(level)) return level;
     return params.get('overview') === '1' ? 'overview' : 'detail';
 }
 
@@ -167,6 +169,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         http.once('error', reject);
         http.listen(options.port ?? 4321, host, () => resolve());
     });
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- listening on TCP, so the address is an AddressInfo
     const { port } = http.address() as AddressInfo;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -206,7 +209,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
             wss.close();
             http.closeAllConnections();
             await new Promise<void>((resolve) => http.close(() => resolve()));
-            (engine as { dispose?: () => void }).dispose?.();
+            if ('dispose' in engine && typeof engine.dispose === 'function') engine.dispose();
         },
     };
 }

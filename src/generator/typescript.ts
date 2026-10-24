@@ -207,7 +207,7 @@ export function generateTypeScript(
 ): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     const files: GeneratedFile[] = [];
-    for (const dir of [...new Set(model.contexts.map(dirOf))]) {
+    for (const dir of new Set(model.contexts.map(dirOf))) {
         const contexts = model.contexts.filter((c) => dirOf(c) === dir);
         files.push({ path: posix.join(dir, '_runtime.ts'), content: RUNTIME });
         for (const ctx of contexts) {

@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { AstUtils, URI, type AstNode, type LangiumDocument } from 'langium';
+import { AstUtils, URI, isCompositeCstNode, type AstNode, type LangiumDocument } from 'langium';
 import {
     isAggregate,
     isContext,
@@ -70,7 +70,7 @@ const LINK_RULES: Record<string, RuleId> = {
 
 /** Parses, links and validates a set of `.dt` sources as one workspace. */
 export async function analyze(sources: readonly SourceFile[]): Promise<Analysis> {
-    const { shared, Domain } = createDomainServices();
+    const { shared } = createDomainServices();
     const factory = shared.workspace.LangiumDocumentFactory;
     const fileOf = new Map<string, string>();
 
@@ -90,10 +90,10 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
     let syntaxOk = true;
     for (const doc of documents) {
         for (const d of doc.diagnostics ?? []) {
-            const code = (d.data as { code?: string } | undefined)?.code;
-            const isLink = code === 'linking-error';
+            // Langium's diagnostic data (typed `any` by the LSP types)
+            const data: { code?: string; property?: string; refText?: string } | undefined = d.data;
+            const isLink = data?.code === 'linking-error';
             if (!isLink) syntaxOk = false;
-            const data = d.data as { property?: string; refText?: string } | undefined;
             const property = data?.property ?? '';
             const node = isLink ? nodeAt(doc, d.range.start.line, d.range.start.character) : undefined;
             const policy = node && AstUtils.getContainerOfType(node, isPolicy);
@@ -237,7 +237,7 @@ function nodeAt(doc: LangiumDocument, line: number, character: number): AstNode 
     const offset = doc.textDocument.offsetAt({ line, character });
     let node = root;
     for (;;) {
-        const children = (node as { content?: typeof root[] }).content;
+        const children = isCompositeCstNode(node) ? node.content : undefined;
         const next = children?.find((c) => c.offset <= offset && offset < c.end);
         if (!next) break;
         node = next;

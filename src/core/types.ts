@@ -152,7 +152,7 @@ export function sameType(a: Ty, b: Ty): boolean {
     if (a.k !== b.k) return false;
     switch (a.k) {
         case 'prim':
-            return a.name === (b as typeof a).name;
+            return b.k === 'prim' && a.name === b.name;
         case 'id':
         case 'dp':
         case 'enum':
@@ -161,13 +161,13 @@ export function sameType(a: Ty, b: Ty): boolean {
         case 'tag':
         case 'enumType':
         case 'unionType':
-            return a.decl === (b as typeof a).decl;
+            return 'decl' in b && a.decl === b.decl;
         case 'list':
-            return sameType(a.elem, (b as typeof a).elem);
+            return b.k === 'list' && sameType(a.elem, b.elem);
         case 'opt':
-            return sameType(a.inner, (b as typeof a).inner);
+            return b.k === 'opt' && sameType(a.inner, b.inner);
         case 'ctx':
-            return a.name === (b as typeof a).name;
+            return b.k === 'ctx' && a.name === b.name;
         case 'error':
             return true;
     }

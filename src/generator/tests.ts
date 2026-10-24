@@ -24,6 +24,7 @@ interface File {
 }
 
 /** The generic helpers of the tests (`_testing.ts`), the same for every model. Imported as text, see `./testing`. */
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- TypeScript types the import as the module, Bun gives the text
 const TESTING = (testingSource as unknown as { default: string }).default;
 
 /** `register(suite)` per runner: one `describe` per suite, one test per case. */
@@ -84,7 +85,8 @@ export function hintsOf(invs: InvariantModel[]): Record<string, number | string>
     const isLength = (e: ExprModel): boolean => e.k === 'length' && isValue(e.operand);
     const set = (key: string, v: number | undefined, keep: (a: number, b: number) => number): void => {
         if (v === undefined) return;
-        h[key] = key in h ? keep(h[key] as number, v) : v;
+        const was = h[key];
+        h[key] = typeof was === 'number' ? keep(was, v) : v;
     };
     const flip: Record<string, string> = { '<': '>', '<=': '>=', '>': '<', '>=': '<=' };
     const bound = (subject: 'value' | 'length', op: string, v: number | undefined): void => {

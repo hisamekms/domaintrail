@@ -184,6 +184,8 @@ Requires [Bun](https://bun.sh) (version pinned in `mise.toml`). `bun run dt` run
 bun install
 bun run langium:generate   # after editing src/language/domain.langium
 bun run typecheck
+bun run lint               # oxlint --type-aware, no narrowing casts without a reason (after `bun run dt -r examples/shop generate ts`)
+bun run fmt                # oxfmt (`fmt:check` in CI); the .dt files are formatted by `dt fmt`
 bun test                   # the repository's tests (bunfig.toml: test/ only)
 bun run build              # dist/: the CLI bundled for Node and the Live View page (needed by `view` and the tests)
 ```

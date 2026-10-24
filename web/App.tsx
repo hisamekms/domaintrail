@@ -34,7 +34,7 @@ const MIN_CANVAS_WIDTH = 320;
 /** The display mode saved under its former key and values (日本語 / English / 両方), if any. */
 function savedDisplayMode(): DisplayMode {
     try {
-        const old = JSON.parse(localStorage.getItem('domaintrail.displayMode') ?? 'null') as string | null;
+        const old: unknown = JSON.parse(localStorage.getItem('domaintrail.displayMode') ?? 'null');
         return old === 'ja' ? 'label' : old === 'en' ? 'name' : 'both';
     } catch {
         return 'both';
@@ -108,6 +108,7 @@ export function App() {
         let cancelled = false;
         const params = new URLSearchParams({ contexts: focused.join(','), level: structureLevel, hide: hidden.join(',') });
         fetch(`/api/focus?${params}`)
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the response of our own server's api/focus
             .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
             .then((graph) => {
                 if (!cancelled && graph) setFocusGraph({ key: focusKey, graph });
@@ -251,7 +252,7 @@ export function App() {
 
     const onMount = useCallback((e: Editor) => {
         e.updateInstanceState({ isReadonly: true });
-        (window as unknown as { __domaintrailEditor?: Editor }).__domaintrailEditor = e; // for debugging / e2e checks
+        Object.assign(window, { __domaintrailEditor: e }); // for debugging / e2e checks
         setEditor(e);
     }, []);
 

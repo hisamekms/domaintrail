@@ -102,6 +102,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
                 props: { ...nodeProps(opts.previous, n, l, opts), change: 'removed', diag: 'none' },
             });
             for (const row of internalRows(opts.previous, n, l, opts, () => ({ change: 'removed', diag: 'none' }))) {
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- internal rows carry their edge in meta
                 ghosts.push({ ...row, id: ghostShapeId(`i:${(row.meta as { edge: string }).edge}`), meta: { ...row.meta, ghost: true } });
             }
         }
@@ -124,12 +125,14 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         const create: TLShapePartial[] = [];
         const update: TLShapePartial[] = [];
         for (const s of wanted) (editor.getShape(s.id) ? update : create).push(s);
+        /* oxlint-disable typescript/no-unsafe-type-assertion -- tldraw's shape types do not know our custom shapes */
         editor.createShapes(create as never);
         editor.updateShapes(update as never);
 
         // z-order: contexts < aggregate boundaries < nodes < internal transitions < edges
         const boundaryIds = groups.filter((g) => (g.props as { kind: string }).kind === 'aggregateBoundary').map((g) => g.id);
         const contextIds = groups.filter((g) => (g.props as { kind: string }).kind !== 'aggregateBoundary').map((g) => g.id);
+        /* oxlint-enable typescript/no-unsafe-type-assertion */
         if (boundaryIds.length) editor.sendToBack(boundaryIds);
         if (contextIds.length) editor.sendToBack(contextIds);
         if (internal.length) editor.bringToFront(internal.map((r) => r.id));
