@@ -8,6 +8,15 @@ const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8')) 
 const en = sections(changelogs.en);
 const ja = sections(changelogs.ja);
 
+/** The `###` headings of the Japanese changelog, and the English ones they stand for. */
+const JA_SECTIONS: Record<string, string> = {
+    '### 追加': '### Added',
+    '### 変更': '### Changed',
+    '### 削除': '### Removed',
+    '### 修正': '### Fixed',
+    '### アップグレード手順': '### Upgrading',
+};
+
 /** The versions of the release tags (`v0.2.0` → `0.2.0`); none in a clone without tags. */
 const tagged = (): string[] => {
     const r = Bun.spawnSync(['git', 'tag', '--list', 'v*.*.*'], { cwd: ROOT });
@@ -39,12 +48,14 @@ describe('changelogs', () => {
     });
 
     test('the Japanese one has the versions, dates and ### sections of the English one, in the same order', () => {
-        const outline = (ss: typeof en) => ss.map((s) => ({ version: s.version, date: s.date, sections: subsections(s.body) }));
-        expect(outline(ja)).toEqual(outline(en));
+        const outline = (ss: typeof en, names: Record<string, string>) =>
+            ss.map((s) => ({ version: s.version, date: s.date, sections: subsections(s.body).map((h) => names[h] ?? h) }));
+        expect(outline(ja, JA_SECTIONS)).toEqual(outline(en, {}));
     });
 
-    test('use only the sections of Keep a Changelog and Upgrading', () => {
-        for (const s of en) for (const h of subsections(s.body)) expect(['### Added', '### Changed', '### Removed', '### Fixed', '### Upgrading']).toContain(h);
+    test('use only the sections of Keep a Changelog and Upgrading, with Japanese headings in the Japanese one', () => {
+        for (const s of en) for (const h of subsections(s.body)) expect(Object.values(JA_SECTIONS)).toContain(h);
+        for (const s of ja) for (const h of subsections(s.body)) expect(Object.keys(JA_SECTIONS)).toContain(h);
     });
 
     test('have a section for the version in package.json and for every release tag', () => {

@@ -637,6 +637,6 @@ VS Code の拡張はまだありませんが、汎用の LSP クライアント�
 - `dt guide` と [guide.md](guide.md)（英語）: 言語と CLI のリファレンス。トピックごとに読めます。
 - [examples/shop](../examples/shop/README.md)（英語）: 実装まで含めた完全な例。
 - [Live View](live-view.md)（英語）: `dt view` のすべてのペインとビュー。
-- [CHANGELOG.ja.md](../CHANGELOG.ja.md): バージョンごとの変更点と、モデルとコードを更新する手順（Upgrading）。パッケージにも
+- [CHANGELOG.ja.md](../CHANGELOG.ja.md): バージョンごとの変更点と、モデルとコードを更新する手順（アップグレード手順）。パッケージにも
   含まれ、エージェントは更新後にそれを読みます（指示のブロックの最後の項目）。
 - [docs/adr](adr): 言語の背後にある設計判断。

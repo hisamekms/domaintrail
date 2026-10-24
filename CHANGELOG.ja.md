@@ -6,13 +6,13 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 [セマンティック バージョニング](https://semver.org/lang/ja/) に従います（1.0.0 より前は、マイナーバージョンでもモデルやコードに
 影響する変更があります）。
 
-**domaintrail を更新したら**、更新前から更新後までの各バージョンの **Upgrading**（アップグレード手順）を古い順に読み、その手順に
+**domaintrail を更新したら**、更新前から更新後までの各バージョンの **アップグレード手順**を古い順に読み、その手順に
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
 ## [0.5.0] - 2026-10-24
 
-### Added
+### 追加
 
 - **ポリシー**（`dt guide reactions`、ADR 0022）: `policy P when Event -> Aggregate.command` — イベントが起きたら、
   ポリシーを宣言したコンテキスト自身のコマンドがいずれ実行される、という反応を書けます。M023 がイベント・集約・コマンドを
@@ -37,7 +37,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
   イベントストア、ポリシー、検証済み型のファクトリ）、テスト、デモ。README で説明しています。
 - 言語サーバー: コマンドの名前を変更（リネーム）できます。
 
-### Changed
+### 変更
 
 - ワークスペースのファイルを集めるすべてのコマンド（`check`、`generate`、`view`、`fmt`、`show`、`lsp`）は、
   `.gitignore`（ルート、そのサブディレクトリ、リポジトリの最上位までの親ディレクトリのもの）と `.git/info/exclude` が
@@ -46,11 +46,11 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - 言語サーバーが設定ファイルを見つけられないとき、設定を持つディレクトリの下で最初に開いた `.dt` ファイルによって、
   その設定がワークスペースになります。
 
-### Fixed
+### 修正
 
 - `Int` や `Decimal` を基にするドメインプリミティブを、`count()` や `length()` が計算する数と比較できるようにしました。
 
-### Upgrading
+### アップグレード手順
 
 1. モデルの `.dt` ファイルが `.gitignore` で無視されるディレクトリにあると、ワークスペースに含まれなくなります。
    ファイルを移すか、`domaintrail.jsonc` に `"respectGitignore": false` を書いてください。`dt check` を実行し、
@@ -63,7 +63,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 
 ## [0.4.0] - 2026-10-24
 
-### Added
+### 追加
 
 - コマンドの **`requires`**（`dt guide requires`、ADR 0017）: `requires name { expr } else Error` — 式が成り立つときだけ
   コマンドを受け付け、成り立たなければそのエラーを返します（M019）。
@@ -91,7 +91,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
   `eventList(events)`。
 - M020（警告）: 集約の ID 型の引数を持たない `create command`。
 
-### Changed
+### 変更
 
 - **`emits X` は、コマンドが成功したときにちょうど 1 つの `X`** を意味します（以前は「発生させうる」）。エラーのときは
   何も発生させません。
@@ -107,11 +107,11 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - `[0..1]` は `?` と、`[1..1]` は多重度なしと同じ意味になりました。
 - Live View は各イベントの多重度と `when`、`requires` と `changes`、問題ペインのヒントを表示します。
 
-### Removed
+### 削除
 
 - `byState` と `<Command><Aggregate>ByState` 型（0.3.0）: すべてのコマンドを `decide` で実装します。
 
-### Upgrading
+### アップグレード手順
 
 まずモデルを変え、次に生成し、最後にコードを直します。規則の詳細は `dt guide events`、`dt guide changes`、
 `dt guide decide` にあります。
@@ -200,13 +200,13 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 
 ## [0.3.0] - 2026-10-19
 
-### Added
+### 追加
 
 - 遷移元の状態ごとのハンドラ: 遷移先が遷移元の状態によって決まるコマンドには `<Command><Aggregate>ByState` も生成され、
   ランタイムの `byState({...})` で実装します（ADR 0015）。
 - 状態遷移図は遷移ごとに辺を描き、インスペクタは遷移ごとに行を表示します。
 
-### Changed
+### 変更
 
 - **コマンドは `from … to …` の代わりに遷移を並べます**（ADR 0014）: `Draft -> Confirmed`、
   `Draft | Confirmed -> Cancelled`、`Draft -> Draft, Confirmed -> Confirmed`。ファクトリは遷移元のない遷移を一つ
@@ -215,11 +215,11 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - 遷移先が遷移元の状態によって決まるコマンドの生成される契約は、入力の状態についてジェネリックになり、`Draft` からは
   `Draft`、`Confirmed` からは `Confirmed` が返ります。
 
-### Fixed
+### 修正
 
 - `npm publish` が警告しないよう、パッケージの `bin` のパスの書き方を直しました。
 
-### Upgrading
+### アップグレード手順
 
 1. 各コマンドの `from … to …` を遷移に書き換えます:
 
@@ -242,7 +242,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 
 ## [0.2.0] - 2026-10-18
 
-### Added
+### 追加
 
 - **項目セット**（`dt guide field-sets`、ADR 0013）: `fields Name { ... }` で普通のフィールドの集まりを宣言し、集約・
   エンティティ・イベントが `with A, B` でそれを持ちます（M016）。共有コンテキストにも置けます。要素が継承する
@@ -254,12 +254,12 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View: カタログのフィルタ（テキスト、種類、コンテキスト）。エクスプローラ、カタログ、インスペクタ、構造図での
   項目セットの表示。
 
-### Changed
+### 変更
 
 - Live View: カタログのカードは、バッジを見出しの上に、ラベルを名前の上に置きます。カタログのセクションへのリンクは
   なくなりました（フィルタでセクションを探せます）。
 
-### Upgrading
+### アップグレード手順
 
 1. M011: `DomainEvent`、`Aggregate`、`<Aggregate>Event` は生成される名前になりました。これらと名前が衝突する
    コンテキストの要素の名前を変え、`dt check` を実行します。
@@ -270,7 +270,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 
 最初に公開したバージョンです。
 
-### Added
+### 追加
 
 - DomainTrail DSL: 境界づけられたコンテキスト、状態を持つ集約、エンティティ、値オブジェクト、ID、ドメインプリミティブ、
   列挙型、union、コマンド（`from … to …`）、イベント（`persistent`）、エラー、共有コンテキスト、ラベルと説明、

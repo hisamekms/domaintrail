@@ -8,7 +8,7 @@ changelogs; a maintainer reviews it and publishes it.
 ## The changelog
 
 `CHANGELOG.md` (English, the source of truth) and `CHANGELOG.ja.md` (Japanese, the same versions and the same `###`
-sections) are shipped in the package: users and their AI agents read them in `node_modules/domaintrail/` after
+sections, headed in Japanese: 追加, 変更, 削除, 修正, アップグレード手順) are shipped in the package: users and their AI agents read them in `node_modules/domaintrail/` after
 upgrading. They have no `Unreleased` section: entries are written when releasing, in `### Added`, `### Changed`,
 `### Removed` or `### Fixed`. A change that breaks models or code also gets steps in `### Upgrading`: what to change in
 the `.dt` files and in the code, old → new, with short before / after snippets, so that an agent can follow them.
