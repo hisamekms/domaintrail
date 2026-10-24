@@ -1472,7 +1472,10 @@ extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the 
 commands of aggregates), and starts `dt lsp` (diagnostics, navigation, hover, rename, formatting; see [Language
 server](#language-server)). Install it with *zed: install dev extension* and the `editors/zed` directory of a clone
 (it needs Rust, installed with rustup). The language server is the first of: `lsp.domaintrail.binary` in Zed's
-settings, the project's `node_modules/.bin/dt`, `dt` on the `PATH`, `npx -y domaintrail lsp`:
+settings, `dt` on the `PATH`, else domaintrail at the version the extension pins, installed into the extension's own
+directory and run with Zed's Node. The extension never runs anything from the project (such as its
+`node_modules/.bin/dt`), so opening an untrusted repository does not run its code; to use the project's own `dt`, name
+it in the settings:
 
 ```json
 { "lsp": { "domaintrail": { "binary": { "path": "/path/to/dt", "arguments": ["lsp"] } } } }
