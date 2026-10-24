@@ -28,6 +28,9 @@ const withOrder = (invariants: string) =>
     price: Price
     rawCount: Int
     email: Email?
+    notes: String[0..*]
+    title: String
+    temperature: Celsius
     ${invariants}
   }`);
 
@@ -94,9 +97,26 @@ describe('domain primitives in other invariants', () => {
         ['quantity > rawCount', "Operator '>' cannot be applied to 'Quantity' and 'Int'."],
         ['quantity == "1"', "Operator '==' cannot be applied to 'Quantity' and 'String'."],
         ['quantity in 0..rawCount', "Range 'Int..Int' cannot be applied to 'Quantity'."],
+        ['exists(email) implies email == count(notes)', "Operator '==' cannot be applied to 'Email' and 'Int'."],
+        ['count(notes) <= price and price > rawCount', "Operator '>' cannot be applied to 'Price' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
         const a = await withOrder(`invariant i { ${expr} }`);
         expect(only(a, 'M009').map((d) => d.message)).toEqual([message]);
+    });
+
+    test('Int and Decimal domain primitives compare with the numbers count() and length() compute, on either side', async () => {
+        const exprs = [
+            'count(notes) >= quantity',
+            'quantity == count(notes)',
+            'price != length(title)',
+            '(count(notes)) < (price)',
+            'quantity in 0..count(notes)',
+            'count(notes) in quantity..maxQuantity',
+            'length(title) <= temperature',
+            'exists(email) implies length(email) <= quantity',
+        ];
+        const a = await withOrder(exprs.map((x, i) => `invariant i${i} { ${x} }`).join('\n    '));
+        expect(codes(a)).toEqual([]);
     });
 
     test('field labels fall back to the primitive label', async () => {

@@ -21,8 +21,11 @@ import type { FieldLike } from './model-index.js';
 
 /** Static types used by the invariant expression checker. */
 export type Ty =
-    /** `literal` marks values written in the source (`0`, `"x"`), which may be compared with domain primitives. */
-    | { k: 'prim'; name: PrimitiveType; literal?: boolean }
+    /**
+     * `literal` marks values written in the source (`0`, `"x"`), `computed` the numbers `count(…)` and `length(…)`
+     * compute; both have no concept of their own and may be compared with domain primitives.
+     */
+    | { k: 'prim'; name: PrimitiveType; literal?: boolean; computed?: boolean }
     | { k: 'id'; decl: IdType }
     /** A domain primitive declared with `primitive`. */
     | { k: 'dp'; decl: PrimitiveDecl }
@@ -43,7 +46,8 @@ export type Ty =
     | { k: 'error' };
 
 export const BOOL: Ty = { k: 'prim', name: 'Bool' };
-export const INT: Ty = { k: 'prim', name: 'Int' };
+/** The result of `count(…)` and `length(…)`. */
+export const COMPUTED_INT: Ty = { k: 'prim', name: 'Int', computed: true };
 export const ERROR: Ty = { k: 'error' };
 
 export type Cardinality = 'one' | 'optional' | 'many' | 'nonEmpty';

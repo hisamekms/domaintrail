@@ -178,6 +178,17 @@ describe('scope of requires', () => {
         ]);
         expect(only(a, 'M019')[0].hint).toBe("rename the parameter (e.g. 'newPolicy'), so that 'policy' in a requirement means the field");
     });
+
+    test('a domain primitive parameter compares with count(), a plain Int parameter does not (M009)', async () => {
+        const a = await review(
+            `
+    command accept(needed: Count, limit: Int) Reviewing -> Accepted
+      requires enough { count(policy.approvers) >= needed } else NotApprover
+      requires inLimit { needed <= limit } else Blocked`,
+            'primitive Count: Int { value in 0..100 }',
+        );
+        expect(errors(a)).toEqual([['M009', "Operator '<=' cannot be applied to 'Count' and 'Int'."]]);
+    });
 });
 
 describe('requires in the generated TypeScript', () => {

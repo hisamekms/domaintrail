@@ -35,6 +35,7 @@ shared context Common {
   enum Currency { JPY USD }
   primitive Amount: Decimal { invariant nonNegative { value >= 0 } }
   value Money { amount: Amount  currency: Currency }
+  value Caption { text: String  max: Amount  invariant fits { length(text) <= max } }
 }`,
     'sales.dt': `
 context Sales {
@@ -54,6 +55,12 @@ context Sales {
     invariant ordered { exists(until) implies from <= until }
   }
   value Tags { names: String[0..*]  invariant distinctNames { unique(names) } }
+  value Approval {
+    needed: Quantity
+    confirmedBy: String[0..*]
+    invariant enough { count(confirmedBy) >= needed }
+    invariant exact { needed == count(confirmedBy) or (count(confirmedBy) in 0..needed) }
+  }
   entity Line {
     id: LineId
     sku: Sku
@@ -118,6 +125,14 @@ describe('generated checks', () => {
         expect(Common.checkAmount('0')).toEqual([]);
         expect(Common.checkAmount('10.5')).toEqual([]);
         expect(Common.checkAmount('-0.01')).toEqual(['nonNegative']);
+    });
+
+    test('domain primitives compare with the numbers count() and length() compute (Decimals as numbers)', () => {
+        expect(Sales.checkApproval({ needed: 2, confirmedBy: ['a', 'b'] })).toEqual([]);
+        expect(Sales.checkApproval({ needed: 2, confirmedBy: ['a'] })).toEqual(['enough']);
+        expect(Sales.checkApproval({ needed: 2, confirmedBy: ['a', 'b', 'c'] })).toEqual(['exact']);
+        expect(Common.checkCaption({ text: 'abc', max: '3.0' })).toEqual([]);
+        expect(Common.checkCaption({ text: 'abcd', max: '3.5' })).toEqual(['fits']);
     });
 
     test('make<Name> reports the first violated invariant, and creation without invariants cannot fail', () => {

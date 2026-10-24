@@ -115,6 +115,10 @@ describe('dt guide', () => {
         expect(a.ok).toBe(true);
     });
 
+    test('its DSL examples are formatted', () => {
+        for (const block of blocks('dt')) expect(formatDomain(block)).toBe(block);
+    });
+
     test('its DSL examples use every keyword of the grammar', async () => {
         const grammar = await readFile(path.join(ROOT, 'src', 'language', 'domain.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
