@@ -21,6 +21,8 @@ interface PublishedDiagnostics {
 /** A language server started with `dt lsp` over stdio, and the diagnostics it last published per file. */
 class Client {
     readonly diagnostics = new Map<string, PublishedDiagnostics['diagnostics']>();
+    /** The messages of `window/showMessage`. */
+    readonly messages: string[] = [];
     private readonly waiters: (() => void)[] = [];
 
     constructor(
@@ -34,7 +36,7 @@ class Client {
         });
         connection.onRequest('client/registerCapability', () => null);
         connection.onRequest('workspace/configuration', () => []);
-        connection.onNotification('window/showMessage', () => {});
+        connection.onNotification('window/showMessage', (p: { message: string }) => void this.messages.push(p.message));
         connection.onNotification('window/logMessage', () => {});
     }
 
@@ -71,6 +73,10 @@ class Client {
             });
         }
         return this.diagnostics.get(file)!;
+    }
+
+    open(file: string, text: string): Promise<void> {
+        return this.connection.sendNotification('textDocument/didOpen', { textDocument: { uri: this.uri(file), languageId: 'domaintrail', version: 1, text } });
     }
 
     request<T>(method: string, file: string, position: { line: number; character: number }, extra: object = {}): Promise<T> {
@@ -359,5 +365,73 @@ describe('dt lsp', () => {
         const sales = await client.until(path.join('domain', 'model', 'sales.dt'), (d) => d.length > 0);
         expect(sales.map((d) => d.code)).toEqual(['M001']);
         expect(client.diagnostics.has(path.join('domain', 'ignored.dt'))).toBe(false);
+    });
+
+    test('loads the files dt check loads: those ignored by .gitignore are not', async () => {
+        const dir = await workspace({ '.gitignore': 'copy/\n', 'common.dt': COMMON, 'sales.dt': SALES.replace('total: Money', 'total: Missing') });
+        await Bun.write(path.join(dir, 'copy', 'common.dt'), COMMON);
+        await Bun.write(path.join(dir, 'copy', 'sales.dt'), SALES);
+        const client = await Client.start(dir);
+        clients.push(client);
+        const sales = await client.until('sales.dt', (d) => d.length > 0);
+        expect(asCheckLines(sales)).toEqual(await checkOutput(dir, 'sales.dt'));
+        expect(sales.map((d) => d.code)).toEqual(['M001']);
+        expect(await client.until('common.dt', () => true)).toEqual([]);
+        expect([...client.diagnostics.keys()].filter((f) => f.startsWith('copy'))).toEqual([]);
+    });
+
+    test('without a config file, the nearest config of an opened document becomes the workspace', async () => {
+        const dir = await workspace({ 'other.dt': 'context {' });
+        await Bun.write(path.join(dir, 'shop', 'domaintrail.jsonc'), JSON.stringify({ sources: ['model/**/*.dt'] }));
+        await Bun.write(path.join(dir, 'shop', 'model', 'common.dt'), COMMON);
+        const sales = SALES.replace('total: Money', 'total: Missing');
+        await Bun.write(path.join(dir, 'shop', 'model', 'sales.dt'), sales);
+        await Bun.write(path.join(dir, 'shop', 'scratch.dt'), 'context {');
+        const client = await Client.start(dir);
+        clients.push(client);
+        // every .dt file below the workspace folder at first
+        await client.until('other.dt', (d) => d.length > 0);
+        await client.until(path.join('shop', 'scratch.dt'), (d) => d.length > 0);
+
+        await client.open(path.join('shop', 'model', 'sales.dt'), sales);
+        const expected = await checkOutput(path.join(dir, 'shop'), path.join('model', 'sales.dt'));
+        const diagnostics = await client.until(path.join('shop', 'model', 'sales.dt'), (d) => asCheckLines(d).join() === expected.join());
+        expect(diagnostics.map((d) => d.code)).toEqual(['M001']);
+        // the files outside the shop's sources are cleared and no longer checked
+        await client.until('other.dt', (d) => d.length === 0);
+        await client.until(path.join('shop', 'scratch.dt'), (d) => d.length === 0);
+        expect(await client.until(path.join('shop', 'model', 'common.dt'), (d) => d.length === 0)).toEqual([]);
+
+        // an opened file outside the workspace gets no diagnostics
+        await client.open('other.dt', 'context {');
+        await client.open(path.join('shop', 'model', 'common.dt'), COMMON.replace('amount: Decimal', 'amount: Nope'));
+        await client.until(path.join('shop', 'model', 'common.dt'), (d) => d.length > 0);
+        expect(client.diagnostics.get('other.dt')).toEqual([]);
+        expect(client.messages).toEqual([]);
+    });
+
+    test('a document under another config than the workspace one gets no diagnostics, and a warning once', async () => {
+        const dir = await workspace({});
+        for (const name of ['a', 'b']) {
+            await Bun.write(path.join(dir, name, 'domaintrail.json'), '{}');
+            await Bun.write(path.join(dir, name, 'sales.dt'), SALES.replace('total: Money', 'total: Missing'));
+        }
+        const client = await Client.start(dir);
+        clients.push(client);
+        await client.until(path.join('b', 'sales.dt'), (d) => d.length > 0);
+        await client.open(path.join('a', 'sales.dt'), SALES.replace('total: Money', 'total: Missing'));
+        await client.until(path.join('b', 'sales.dt'), (d) => d.length === 0);
+        expect((await client.until(path.join('a', 'sales.dt'), (d) => d.length > 0)).map((d) => d.code)).toEqual(['M001']);
+
+        await client.open(path.join('b', 'sales.dt'), 'context {');
+        await client.connection.sendNotification('textDocument/didClose', { textDocument: { uri: client.uri(path.join('b', 'sales.dt')) } });
+        await client.open(path.join('b', 'sales.dt'), 'context {');
+        const deadline = Date.now() + 10_000;
+        while (client.messages.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 300)); // a second warning would have come by now
+        expect(client.messages).toEqual([
+            `${path.join(dir, 'b', 'sales.dt')} belongs to ${path.join(dir, 'b', 'domaintrail.json')}, not to the workspace of this session (${path.join(dir, 'a', 'domaintrail.json')}): its diagnostics are not computed. Open ${path.join(dir, 'b')} as its own project to check it.`,
+        ]);
+        expect(client.diagnostics.get(path.join('b', 'sales.dt'))).toEqual([]);
     });
 });

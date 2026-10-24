@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { format } from 'node:util';
 import { AstUtils, CstUtils, DefaultWorkspaceManager, DocumentState, URI, inject, type AstNode, type FileSystemNode, type LangiumDocument, type LangiumSharedCoreServices } from 'langium';
@@ -31,6 +32,8 @@ import { NodeFileSystem } from 'langium/node';
 import {
     CompletionItemKind,
     DiagnosticSeverity,
+    MessageType,
+    ShowMessageNotification,
     SymbolKind,
     createConnection,
     type Connection,
@@ -46,8 +49,9 @@ import {
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
 import { analyze } from '../core/analyze.js';
-import { ConfigError, DEFAULT_SOURCES, IGNORED_DIRS, loadConfig, sourceMatcher, type ResolvedConfig } from '../core/config.js';
+import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, loadConfig, type ResolvedConfig } from '../core/config.js';
 import type { Diagnostic } from '../core/diagnostics.js';
+import { SourceScope, findDomainFiles } from '../core/files.js';
 import { LabelResolver, docComment } from '../core/labels.js';
 import { ModelIndex } from '../core/model-index.js';
 import * as ast from '../language/generated/ast.js';
@@ -65,36 +69,75 @@ export interface LanguageServerOptions {
 
 /**
  * The workspace as `dt check` sees it: the config found from `--root`, else from the client's first workspace folder,
- * else from the current directory; its `sources` decide which files are loaded and checked.
+ * else from the current directory; its `sources` (and `.gitignore`, unless `respectGitignore` is false) decide which
+ * files are loaded and checked. When no config file is found there, the first `.dt` document opened below that
+ * directory whose own directory or a parent (up to it) has a config file makes that config the workspace instead (see
+ * `NearestConfig`). There is one workspace per session.
  */
 export class DomainWorkspace {
-    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, tsOut: '', tsContexts: {}, view: { port: 0, host: '' } };
-    private matches = sourceMatcher(DEFAULT_SOURCES);
+    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: '', tsContexts: {}, view: { port: 0, host: '' } };
+    /** Where the config was searched from: the nearest config of a document is only searched up to it. */
+    start = process.cwd();
+    /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */
+    adoptable = false;
+    private scope = new SourceScope(this.config.root);
 
     constructor(private readonly options: LanguageServerOptions) {}
 
     async resolve(folder: string | undefined, warn: (message: string) => void): Promise<void> {
-        const start = this.options.root ?? folder ?? process.cwd();
+        this.start = path.resolve(this.options.root ?? folder ?? process.cwd());
         try {
-            this.config = await loadConfig({ start, configPath: this.options.configPath });
+            this.config = await loadConfig({ start: this.start, configPath: this.options.configPath });
+            this.adoptable = !this.config.file;
         } catch (e) {
             if (!(e instanceof ConfigError)) throw e;
-            warn(`${e.message} (using the default sources ${DEFAULT_SOURCES.join(', ')} under ${start})`);
-            this.config = { ...this.config, root: path.resolve(start) };
+            warn(`${e.message} (using the default sources ${DEFAULT_SOURCES.join(', ')} under ${this.start})`);
+            this.config = { ...this.config, root: this.start };
         }
-        this.matches = sourceMatcher(this.config.sources);
+        this.scope = new SourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
+    }
+
+    /** Makes the config file `file` the workspace's. Returns false, after warning, when it is invalid. */
+    async adopt(file: string, warn: (message: string) => void): Promise<boolean> {
+        try {
+            this.config = await loadConfig({ start: this.start, configPath: file });
+        } catch (e) {
+            if (!(e instanceof ConfigError)) throw e;
+            warn(e.message);
+            return false;
+        }
+        this.adoptable = false;
+        this.scope = new SourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
+        return true;
+    }
+
+    /** The config file nearest to `file`: in its directory or a parent, up to where the config was searched from. */
+    nearestConfig(file: string): string | undefined {
+        const rel = path.relative(this.start, file);
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
+        for (let dir = path.dirname(file); ; dir = path.dirname(dir)) {
+            for (const name of CONFIG_FILES) {
+                const candidate = path.join(dir, name);
+                if (existsSync(candidate)) return candidate;
+            }
+            if (dir === this.start || dir === path.dirname(dir)) return undefined;
+        }
     }
 
     /** Path of a file relative to the root, when it is one of the workspace's sources. */
     sourcePath(uri: URI): string | undefined {
-        if (uri.scheme !== 'file') return undefined;
-        const rel = path.relative(this.config.root, uri.fsPath);
-        return rel.startsWith('..') || path.isAbsolute(rel) || !this.matches(rel) ? undefined : rel;
+        return uri.scheme === 'file' ? this.scope.sourcePath(uri.fsPath) : undefined;
     }
 
     /** Directories walked when loading the workspace: those `dt check` walks. */
     includesDirectory(uri: URI): boolean {
-        return !IGNORED_DIRS.has(path.basename(uri.fsPath));
+        return this.scope.includesDirectory(uri.fsPath);
+    }
+
+    /** The sources of the workspace, as `dt check` finds them. */
+    async files(): Promise<URI[]> {
+        const { root, sources, respectGitignore } = this.config;
+        return (await findDomainFiles(root, sources, respectGitignore)).map((f) => URI.file(path.join(root, f)));
     }
 }
 
@@ -124,6 +167,58 @@ class DomainWorkspaceManager extends DefaultWorkspaceManager {
     override shouldIncludeEntry(entry: FileSystemNode): boolean {
         if (entry.isDirectory) return this.workspace.includesDirectory(entry.uri);
         return entry.isFile && this.serviceRegistry.hasServices(entry.uri) && this.workspace.sourcePath(entry.uri) !== undefined;
+    }
+}
+
+/**
+ * The nearest-config rule: when the workspace has no config file and a `.dt` document is opened below the directory
+ * the config was searched from, the config file nearest to the document (see `DomainWorkspace.nearestConfig`) becomes
+ * the workspace's: its sources are loaded instead, and the diagnostics of the files no longer in the workspace are
+ * cleared. A document under another config file than the workspace's afterwards gets no diagnostics, and a warning
+ * says so once per config file.
+ */
+class NearestConfig {
+    private queue: Promise<void> = Promise.resolve();
+    private readonly warned = new Set<string>();
+
+    constructor(
+        private readonly shared: LangiumSharedServices,
+        private readonly workspace: DomainWorkspace,
+        private readonly diagnostics: DiagnosticsPublisher,
+        private readonly warn: (message: string) => void,
+    ) {}
+
+    opened(uri: URI): void {
+        this.queue = this.queue.then(() => this.check(uri)).catch((e) => console.error(e));
+    }
+
+    private async check(uri: URI): Promise<void> {
+        await this.shared.workspace.WorkspaceManager.ready;
+        if (uri.scheme !== 'file' || !this.shared.ServiceRegistry.hasServices(uri)) return;
+        const file = this.workspace.nearestConfig(uri.fsPath);
+        if (!file || file === this.workspace.config.file) return;
+        if (this.workspace.adoptable) {
+            if (await this.workspace.adopt(file, this.warn)) await this.reload();
+            return;
+        }
+        if (this.warned.has(file)) return;
+        this.warned.add(file);
+        const active = this.workspace.config.file ?? `${this.workspace.config.root} (no config file)`;
+        this.warn(
+            `${uri.fsPath} belongs to ${file}, not to the workspace of this session (${active}): its diagnostics are not computed. ` +
+                `Open ${path.dirname(file)} as its own project to check it.`,
+        );
+    }
+
+    /** Loads the workspace's sources, and unloads the other documents except open ones. */
+    private async reload(): Promise<void> {
+        const { LangiumDocuments, DocumentBuilder, TextDocuments, WorkspaceLock } = this.shared.workspace;
+        const wanted = await this.workspace.files();
+        const keep = new Set([...wanted.map((u) => u.toString()), ...TextDocuments.all().map((d) => d.uri)]);
+        const deleted = LangiumDocuments.all.filter((d) => !keep.has(d.uri.toString())).map((d) => d.uri).toArray();
+        const added = wanted.filter((u) => !LangiumDocuments.hasDocument(u));
+        await WorkspaceLock.write((token) => DocumentBuilder.update(added, deleted, token));
+        this.diagnostics.schedule();
     }
 }
 
@@ -382,7 +477,7 @@ function lastSegment(document: LangiumDocument, range: Range): Range {
 
 export function createDomainLspServices(connection: Connection, options: LanguageServerOptions = {}) {
     const workspace = new DomainWorkspace(options);
-    const warn = (message: string) => void connection.window.showWarningMessage(message);
+    const warn = (message: string) => void connection.sendNotification(ShowMessageNotification.type, { type: MessageType.Warning, message });
     const shared = inject(createDefaultSharedModule({ connection, ...NodeFileSystem }), DomainGeneratedSharedModule, {
         workspace: { WorkspaceManager: (s: LangiumSharedServices) => new DomainWorkspaceManager(s, workspace, warn) },
         lsp: { NodeKindProvider: () => new DomainNodeKindProvider() },
@@ -396,7 +491,7 @@ export function createDomainLspServices(connection: Connection, options: Languag
         },
     });
     shared.ServiceRegistry.register(Domain);
-    return { shared, Domain, workspace };
+    return { shared, Domain, workspace, warn };
 }
 
 /**
@@ -406,9 +501,11 @@ export function createDomainLspServices(connection: Connection, options: Languag
 export function startLanguageServer(options: LanguageServerOptions = {}, connection: Connection = createConnection(process.stdin, process.stdout)) {
     // stdout carries the protocol: anything logged goes to the client instead.
     console.log = console.info = (...args: unknown[]) => connection.console.log(format(...args));
-    const { shared, workspace } = createDomainLspServices(connection, options);
+    const { shared, workspace, warn } = createDomainLspServices(connection, options);
     const diagnostics = new DiagnosticsPublisher(shared, workspace, connection);
     shared.workspace.DocumentBuilder.onBuildPhase(DocumentState.IndexedReferences, () => diagnostics.schedule());
+    const nearest = new NearestConfig(shared, workspace, diagnostics, warn);
+    shared.workspace.TextDocuments.onDidOpen((e) => nearest.opened(URI.parse(e.document.uri)));
 
     addDocumentUpdateHandler(connection, shared);
     addFileOperationHandler(connection, shared);

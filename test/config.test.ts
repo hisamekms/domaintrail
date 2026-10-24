@@ -54,6 +54,7 @@ describe('config file', () => {
     test.each([
         ['{ "source": [] }', "unknown key 'source'"],
         ['{ "sources": "a" }', "'sources' must be an array of glob strings"],
+        ['{ "respectGitignore": "no" }', "'respectGitignore' must be true or false"],
         ['{ "sources": ["!x/**"] }', "'sources' needs at least one include pattern"],
         ['{ "generate": { "rust": {} } }', "unknown generator 'generate.rust' (supported: ts)"],
         ['{ "view": { "port": "80" } }', "'view.port' must be a port number"],
@@ -87,6 +88,81 @@ describe('sources', () => {
         });
         expect(await findDomainFiles(dir)).toEqual(['domain/drafts/wip.dt', 'domain/sales/order.dt', 'other/x.dt']);
         expect(await findDomainFiles(dir, ['domain/**/*.dt', '!domain/drafts/**'])).toEqual(['domain/sales/order.dt']);
+    });
+});
+
+describe('.gitignore', () => {
+    const OTHER = 'context T { id BId: UUID aggregate B { id: BId } }';
+
+    test('an ignored directory holding a copy of the model is not loaded (a grammar cloned by an editor extension)', async () => {
+        const dir = await project({
+            'examples/shop/s.dt': MODEL,
+            'editors/zed/.gitignore': '/target/\n/grammars/\n*.wasm\n',
+            'editors/zed/grammars/domaintrail/examples/shop/s.dt': MODEL,
+        });
+        expect(await findDomainFiles(dir)).toEqual(['examples/shop/s.dt']);
+        expect(await run('-r', dir, 'check')).toMatchObject({ code: 0, out: ['1 file(s) checked: 0 error(s), 0 warning(s).'] });
+    });
+
+    test("git's rules: negation, directory patterns, anchoring, comments", async () => {
+        const dir = await project({
+            '.gitignore': '# drafts stay local\ndrafts/*.dt\n!drafts/keep.dt\nbuild/\n/top.dt\n',
+            'drafts/wip.dt': MODEL,
+            'drafts/keep.dt': MODEL,
+            'build/x.dt': MODEL,
+            'src/build/y.dt': MODEL,
+            'build.dt': MODEL,
+            'top.dt': MODEL,
+            'sub/top.dt': MODEL,
+        });
+        expect(await findDomainFiles(dir)).toEqual(['build.dt', 'drafts/keep.dt', 'sub/top.dt']);
+    });
+
+    test('a nested .gitignore applies below its directory and wins over the ones above it', async () => {
+        const dir = await project({
+            '.gitignore': '*.local.dt\na/b/\n',
+            'a/.gitignore': '!b/\nscratch.dt\n!keep.local.dt\n',
+            'a/b/s.dt': MODEL,
+            'a/c/scratch.dt': MODEL,
+            'scratch.dt': MODEL,
+            'a/keep.local.dt': MODEL,
+            'a/other.local.dt': MODEL,
+            'x.local.dt': MODEL,
+        });
+        expect(await findDomainFiles(dir)).toEqual(['a/b/s.dt', 'a/keep.local.dt', 'scratch.dt']);
+    });
+
+    test('the .gitignore files above the root up to the top of the git repository apply, and .git/info/exclude', async () => {
+        const dir = await project({
+            '.git/info/exclude': 'private/\n',
+            '.gitignore': 'scratch/\n/domain/top-only.dt\n',
+            'domain/s.dt': MODEL,
+            'domain/top-only.dt': MODEL,
+            'domain/scratch/s.dt': MODEL,
+            'domain/private/s.dt': MODEL,
+        });
+        expect(await findDomainFiles(path.join(dir, 'domain'))).toEqual(['s.dt']);
+        // a root inside an ignored directory is checked as it is, with the rules from the root down only
+        expect(await findDomainFiles(path.join(dir, 'domain', 'scratch'))).toEqual(['s.dt']);
+    });
+
+    test('"respectGitignore": false loads the ignored files too; explicit files are formatted whatever .gitignore says', async () => {
+        const dir = await project({ '.gitignore': 'copy/\n', 's.dt': MODEL, 'copy/s.dt': MODEL, 't.dt': OTHER });
+        expect(await findDomainFiles(dir, undefined, false)).toEqual(['copy/s.dt', 's.dt', 't.dt']);
+        expect((await run('-r', dir, 'check')).code).toBe(0);
+        await writeFile(path.join(dir, 'domaintrail.jsonc'), '{ "respectGitignore": false }');
+        const off = await run('-r', dir, 'check', '--format', 'json');
+        expect(JSON.parse(off.out.join('\n')).summary.files).toBe(3);
+        expect(off.code).toBe(1);
+
+        await writeFile(path.join(dir, 'copy', 's.dt'), 'context S {\nid AId: UUID }\n');
+        const cwd = process.cwd();
+        process.chdir(dir);
+        try {
+            expect((await run('fmt', '--check', path.join('copy', 's.dt'))).out).toEqual([path.join('copy', 's.dt')]);
+        } finally {
+            process.chdir(cwd);
+        }
     });
 });
 

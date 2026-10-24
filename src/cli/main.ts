@@ -48,7 +48,7 @@ interface JsonReport {
  */
 async function runCheck(config: ResolvedConfig, io: CliIO, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
-    const sources = await loadWorkspace(root, config.sources);
+    const sources = await loadWorkspace(root, config.sources, config.respectGitignore);
     const analysis = await analyze(sources);
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
@@ -215,7 +215,7 @@ Examples:
             if (files.length) entries = files.map((f) => ({ path: f, file: path.resolve(f) }));
             else {
                 const cfg = await config();
-                entries = (await findDomainFiles(cfg.root, cfg.sources)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
+                entries = (await findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
                 if (!entries.length) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
             }
             const sources = await Promise.all(entries.map(async (e) => ({ path: e.path, text: await readFile(e.file, 'utf8') })));
@@ -257,7 +257,7 @@ Examples:
             const { startViewServer } = await import('../server/server.js');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
-            const server = await startViewServer({ root: cfg.root, sources: cfg.sources, port, host, log: io.out }).catch((e: unknown) => {
+            const server = await startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, log: io.out }).catch((e: unknown) => {
                 if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
                 throw e;
             });
@@ -274,8 +274,8 @@ Examples:
 Speaks the Language Server Protocol on stdin/stdout for .dt files: the diagnostics of \`dt check\` (same rules, codes
 and messages, over the whole workspace and the unsaved text of open files), go to definition, find references, hover,
 outline, rename of declarations, completion and formatting (as \`dt fmt\`). The workspace is the config found from
---root or --config, else from the client's workspace folder, else from the current directory. Started by an LSP
-client, not by hand.
+--root or --config, else from the client's workspace folder, else from the current directory; when none is found
+there, the nearest config of the first .dt file opened below it. Started by an LSP client, not by hand.
 
 Examples:
   dt lsp
@@ -310,7 +310,7 @@ Examples:
         .action(async (name: string | undefined, opts: { format: Format }) => {
             const json = opts.format === 'json';
             const cfg = await config();
-            const sources = await loadWorkspace(cfg.root, cfg.sources);
+            const sources = await loadWorkspace(cfg.root, cfg.sources, cfg.respectGitignore);
             if (sources.length === 0) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
             const a = await analyze(sources);
             if (!a.model) throw new CliError('The model has syntax errors; run `dt check` and fix them first.');

@@ -30,8 +30,8 @@ dt -r <root> show <name>        # one element resolved: field sets, labels, comm
 The package installs the same command under two names: `dt` for everyday use and `domaintrail`, its full name, for
 when `dt` clashes with another command or a script should spell it out (CI, for example).
 
-`<root>` defaults to the current directory; every `*.dt` file below it (except `node_modules`, `.git`, `.domaintrail`)
-belongs to the workspace. `dt --help` and `dt <command> --help` show the options with examples.
+`<root>` defaults to the current directory; every `*.dt` file below it (except in `node_modules`, `.git`, `.domaintrail`
+and what `.gitignore` ignores) belongs to the workspace, unless a `domaintrail.jsonc` says otherwise. `dt --help` and `dt <command> --help` show the options with examples.
 
 `check` prints diagnostics as `file:line:col - error M00X: message` (with a `hint:` line on what to change, when there is
 one) and exits non-zero on errors; `check --format json` prints them as one JSON document (`schema/diagnostics.schema.json`).

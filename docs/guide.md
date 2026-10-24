@@ -1409,6 +1409,8 @@ relative to the config file, and its directory becomes the root. Without a confi
   "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
   // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
   "sources": ["domain/**/*.dt", "!domain/drafts/**"],      // default: ["**/*.dt"]
+  // skip what .gitignore ignores when finding sources
+  "respectGitignore": true,                                 // default: true
   "generate": {
     "ts": {
       "out": "src/domain/generated",                        // default: "generated/domain"
@@ -1429,6 +1431,18 @@ included, must stay inside the config file's directory (the root without a confi
 `generate.ts.contexts` that is not a context of the model is a config error, reported by `generate ts` once the model
 has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`).
 
+**Sources and `.gitignore`.** The sources are the files below the root that match `sources`, outside `node_modules`,
+`.git` and `.domaintrail`, and not ignored by git: every command that finds them (`check`, `generate`, `view`, `fmt`,
+`show`, `lsp`) skips the files and directories that the `.gitignore` files ignore, with git's rules (`!` negation,
+`dir/` for directories only, a leading or inner `/` anchoring to the file's directory, a deeper file winning). The
+`.gitignore` files that count are those of the root and its subdirectories, those of the directories above the root up
+to the top of the enclosing git repository, and the repository's `.git/info/exclude`; without a repository, only those
+from the root down (a `.gitignore` counts whether or not the directory is a repository). A root that the rules above it
+ignore (a copy of a project in an ignored directory, checked with `-r`) is still checked, with the `.gitignore` files
+from the root down only. So a generated or cloned copy of the model in an ignored directory (an editor's grammar
+checkout, a build output) is not checked twice. `"respectGitignore": false` turns this off; files named on the command
+line (`dt fmt <files>`) are never skipped.
+
 <!-- topic: lsp -->
 ## Language server
 
@@ -1448,7 +1462,13 @@ runs until the client shuts it down. It offers:
   their names also appear outside references (in qualified names, expressions and terms).
 
 The workspace is the config found from `--root` or `--config` when given, else from the client's (first) workspace
-folder, else from the current directory, exactly as `dt check` would find it there.
+folder, else from the current directory, exactly as `dt check` would find it there (with the same sources, `.gitignore`
+included). When that search finds no config file, the first `.dt` file opened below that directory whose directory or
+a parent (up to it) has a `domaintrail.jsonc` / `domaintrail.json` makes that config the workspace: its directory is
+the root, its `sources` are loaded, and the files no longer in the workspace lose their diagnostics. So opening a
+repository with the model in `examples/shop/` checks that model as `dt -r examples/shop check` does. A session has one
+workspace: a file opened later under another config file gets no diagnostics, and a warning says so once (open that
+directory as its own project to check it). An open file outside the workspace's sources gets no diagnostics either.
 
 A client needs only: command `dt lsp` (with `dt` on the `PATH`, or e.g. `npx dt lsp`), transport stdio, file
 extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the plugin root (load it with
@@ -1481,6 +1501,11 @@ open untrusted repositories in Zed's restricted mode.
 ```json
 { "lsp": { "domaintrail": { "binary": { "path": "/path/to/dt", "arguments": ["lsp"] } } } }
 ```
+
+Open the directory with the `domaintrail.jsonc` as the project, or a directory above it: then the first `.dt` file
+opened picks the nearest config (see [Language server](#language-server)), provided no config is found from the
+project directory itself. Directories that `.gitignore` ignores, such as the grammar checkout Zed keeps in
+`editors/zed/grammars` when the extension is installed from a clone, are not part of the workspace.
 
 **Other editors.** Any LSP client works with command `dt lsp`, transport stdio, file extension `.dt` (see
 [Language server](#language-server)). Editors that highlight with tree-sitter (Neovim, Helix, Emacs) can use the
