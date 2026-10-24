@@ -62,6 +62,6 @@ export function checkShared(index: ModelIndex, sink: DiagnosticSink): void {
 }
 
 function kind(el: AstNode): string {
-    const names: Record<string, string> = { Aggregate: 'aggregate', Entity: 'entity', IdType: 'ID', EventDecl: 'event', ErrorDecl: 'error' };
+    const names: Record<string, string> = { Aggregate: 'aggregate', Entity: 'entity', IdType: 'ID', VerifiedDecl: 'verified type', EventDecl: 'event', ErrorDecl: 'error' };
     return names[el.$type] ?? el.$type;
 }

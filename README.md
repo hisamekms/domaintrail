@@ -75,15 +75,16 @@ The sections, in the guide's order:
   [domain and technical fields](docs/guide.md#domain-fields-and-technical-fields),
   [names (表示名)](docs/guide.md#names-labels-and-descriptions),
   [invariant expressions](docs/guide.md#invariant-expressions), [command requirements](docs/guide.md#command-requirements),
-  [command changes](docs/guide.md#command-changes), [command events](docs/guide.md#command-events) and
-  [pure commands](docs/guide.md#pure-commands)
+  [command changes](docs/guide.md#command-changes), [command events](docs/guide.md#command-events),
+  [pure commands](docs/guide.md#pure-commands) and [verified types](docs/guide.md#verified-types) (the evidence of a
+  check outside the aggregate, as a command's parameter)
 - [Generated TypeScript](docs/guide.md#generated-typescript): [decisions and `decide`](docs/guide.md#decisions-and-decide),
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
   [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [generated checks](docs/guide.md#generated-checks) and
   [generated tests](docs/guide.md#generated-tests) (see [ADR 0020](docs/adr/0020-generated-checks-and-contract-tests.md)),
   [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
   and [output directories](docs/guide.md#output-directories)
-- [Rules](docs/guide.md#rules): M001–M022, L001–L003
+- [Rules](docs/guide.md#rules): M001–M024, L001–L003
 - [Looking up one element](docs/guide.md#looking-up-one-element): `dt show`, as text or JSON
 - [Formatting](docs/guide.md#formatting): `dt fmt`, the one canonical layout of `.dt` files
 - [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
@@ -125,7 +126,7 @@ command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per
 ([0018](docs/adr/0018-command-events-contract.md)), the fields a command changes and decisions
 ([0019](docs/adr/0019-command-changes-and-decisions.md)), generated checks and contract tests
 ([0020](docs/adr/0020-generated-checks-and-contract-tests.md)), event and error fields named after their source
-([0021](docs/adr/0021-payload-field-names.md)) and more.
+([0021](docs/adr/0021-payload-field-names.md)), verified types ([0023](docs/adr/0023-verified-types.md)) and more.
 
 ## Live View
 

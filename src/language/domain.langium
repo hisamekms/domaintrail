@@ -15,10 +15,10 @@ TermEntry:
     name=FeatureName ':' label=STRING;
 
 ContextElement:
-    IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl | FieldSet;
+    IdType | PrimitiveDecl | VerifiedDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl | FieldSet;
 
 // Types that may appear on the right-hand side of a field declaration.
-type TypeDecl = IdType | PrimitiveDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate;
+type TypeDecl = IdType | PrimitiveDecl | VerifiedDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate;
 
 // Domain primitives: a single value wrapping a primitive type, with optional invariants on `value`.
 // An ID is a domain primitive that identifies an aggregate or entity.
@@ -27,6 +27,13 @@ IdType:
 
 PrimitiveDecl:
     'primitive' name=ID label=STRING? ':' base=PrimitiveType PrimitiveBody?;
+
+// Evidence that a check outside the aggregate was made (ADR 0023): a value of the base type that only its factory
+// makes. `for` names the context the check needs (optional with `?`); `errors` are those of the factory. Used as the
+// type of command parameters (and as the base of another verified type) only, checked by M024.
+VerifiedDecl:
+    'verified' name=ID label=STRING? 'of' base=TypeRef ('for' context=TypeRef contextOptional?='?'?)?
+    ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?;
 
 // Either named invariants, or a single anonymous constraint: `{ value > 0 }`.
 fragment PrimitiveBody:
@@ -183,7 +190,7 @@ LambdaParam:
 
 // Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes'
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes' | 'verified' | 'of' | 'for'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 QualifiedName returns string:

@@ -945,6 +945,7 @@ select,
 }
 
 .kind-primitive,
+.kind-verified,
 .kind-id {
     background: var(--teal-tint);
     color: var(--teal-text);
@@ -1850,6 +1851,7 @@ select,
     border-radius: 50%;
 }
 .dot-primitive,
+.dot-verified,
 .dot-id,
 .dot-enum {
     background: var(--teal-text);

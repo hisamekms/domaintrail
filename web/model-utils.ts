@@ -6,7 +6,7 @@ import { ownerElement } from './render';
 export type Select = (id: string) => void;
 
 /** Order of element kinds in lists and the explorer (their names: `kinds` in i18n). */
-export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'fieldSet', 'event', 'error'];
+export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error'];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
@@ -59,7 +59,7 @@ export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[
     { key: 'aggregates', kinds: ['aggregate'] },
     { key: 'entities', kinds: ['entity'] },
     { key: 'values', kinds: ['valueObject', 'union'] },
-    { key: 'primitives', kinds: ['primitive', 'id', 'enum'] },
+    { key: 'primitives', kinds: ['primitive', 'verified', 'id', 'enum'] },
     { key: 'fieldSets', kinds: ['fieldSet'] },
     { key: 'events', kinds: ['event'] },
     { key: 'errors', kinds: ['error'] },

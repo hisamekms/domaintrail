@@ -28,6 +28,7 @@ import {
     isReferenceField,
     isUnionDecl,
     isValueObject,
+    isVerifiedDecl,
     type Command,
     type ContextElement,
     type Expression,
@@ -102,6 +103,12 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                 ...optional('label', i.label),
                 ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
             }));
+        } else if (isVerifiedDecl(el)) {
+            base.verified = {
+                of: typeExpr(el.base),
+                ...(el.context && { for: { type: typeExpr(el.context), optional: el.contextOptional } }),
+                errors: [...new Set(el.errors.map((r) => (r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText)))],
+            };
         } else if (isEnumDecl(el)) {
             base.values = el.values.map((v) => v.name);
             const valueLabels = Object.fromEntries(el.values.filter((v) => v.label).map((v) => [v.name, v.label!]));
@@ -159,6 +166,7 @@ const optional = <K extends string>(key: K, value: string | undefined): Partial<
 function kindOf(el: ContextElement): ElementKind {
     if (isIdType(el)) return 'id';
     if (isPrimitiveDecl(el)) return 'primitive';
+    if (isVerifiedDecl(el)) return 'verified';
     if (isEnumDecl(el)) return 'enum';
     if (isValueObject(el)) return 'valueObject';
     if (isUnionDecl(el)) return 'union';

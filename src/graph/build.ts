@@ -395,6 +395,7 @@ const STUB_STEREOTYPES: Record<ElementModel['kind'], Texts> = {
     union: stereotype('ユニオン', 'union'),
     enum: stereotype('列挙型', 'enum'),
     primitive: stereotype('ドメインプリミティブ', 'primitive'),
+    verified: stereotype('検証済みの型', 'verified'),
     id: stereotype('ID', 'id'),
     event: stereotype('ドメインイベント', 'event'),
     error: stereotype('エラー', 'error'),

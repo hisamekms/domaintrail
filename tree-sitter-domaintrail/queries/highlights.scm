@@ -16,6 +16,7 @@
 (context name: (identifier) @module)
 (id_declaration name: (identifier) @type)
 (primitive_declaration name: (identifier) @type)
+(verified_declaration name: (identifier) @type)
 (enum_declaration name: (identifier) @type)
 (value_declaration name: (identifier) @type)
 (union_declaration name: (identifier) @type)
@@ -66,6 +67,9 @@
   "terms"
   "id"
   "primitive"
+  "verified"
+  "of"
+  "for"
   "enum"
   "value"
   "fields"

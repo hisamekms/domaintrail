@@ -14,6 +14,7 @@ import {
     type Location,
     type StateModel,
     type TermModel,
+    type TypeExpr,
 } from '../model/model.js';
 import { commandsWithOutcome, fieldSetUsers, fieldUses, fieldUseText, identityOf } from '../model/usages.js';
 
@@ -105,9 +106,13 @@ export interface UsedBy {
     referencedBy: string[];
     /** Other fields and parameters of the aggregate's or entity's ID type. */
     idUsedBy: string[];
-    /** Commands that emit the event / return the error. */
+    /** Commands that emit the event / return the error; an error also by the verified types whose factory returns it. */
     emittedBy: string[];
     returnedBy: string[];
+    /** Verified types that verify a value of it (`of`). */
+    verifiedAs: string[];
+    /** Verified types whose check needs it (`for`). */
+    contextOf: string[];
     /** Unions whose discriminator is bound to the enum. */
     discriminatorOf: string[];
 }
@@ -119,6 +124,8 @@ export function usedBy(model: DomainModel, el: ElementModel): UsedBy {
     const idUses = identity ? fieldUses(model, identity).filter((u) => u.target !== el.id) : [];
     const references = (u: (typeof idUses)[number]): boolean => u.field.kind === 'references' && u.field.target === el.id;
     const commands = commandsWithOutcome(model, el.id);
+    const verifiedTypes = Object.values(model.elements).filter((v) => v.verified);
+    const isRef = (t: TypeExpr, id: string): boolean => t.kind === 'ref' && t.ref === id;
     return {
         takenOnBy: el.kind === 'fieldSet' ? fieldSetUsers(model, el.id).map((e) => e.id) : [],
         ownedBy: uses.filter((u) => u.field.kind === 'owns').map(path),
@@ -126,7 +133,12 @@ export function usedBy(model: DomainModel, el: ElementModel): UsedBy {
         referencedBy: idUses.filter(references).map(path),
         idUsedBy: idUses.filter((u) => !references(u)).map(path),
         emittedBy: commands.filter(({ command }) => command.emits.some((e) => e.event === el.id)).map(({ command }) => dotted(command.id)),
-        returnedBy: commands.filter(({ command }) => command.errors.includes(el.id)).map(({ command }) => dotted(command.id)),
+        returnedBy: [
+            ...commands.filter(({ command }) => command.errors.includes(el.id)).map(({ command }) => dotted(command.id)),
+            ...verifiedTypes.filter((v) => v.verified!.errors.includes(el.id)).map((v) => v.id),
+        ],
+        verifiedAs: verifiedTypes.filter((v) => isRef(v.verified!.of, el.id)).map((v) => v.id),
+        contextOf: verifiedTypes.filter((v) => v.verified!.for && isRef(v.verified!.for.type, el.id)).map((v) => v.id),
         discriminatorOf: Object.values(model.elements).filter((u) => u.tagType === el.id).map((u) => u.id),
     };
 }
@@ -213,6 +225,7 @@ function showJsonOf(model: DomainModel, target: ShowTarget | undefined): ShowJso
 const KEYWORDS: Record<ElementKind, string> = {
     id: 'id',
     primitive: 'primitive',
+    verified: 'verified',
     enum: 'enum',
     valueObject: 'value',
     union: 'union',
@@ -223,7 +236,7 @@ const KEYWORDS: Record<ElementKind, string> = {
     fieldSet: 'fields',
 };
 
-const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'id', 'enum', 'fieldSet', 'event', 'error'];
+const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error'];
 
 /** A qualified name as written from `ctx`: without the context when it is `ctx`. */
 const nameFrom = (ctx: string, qname: string): string => (qname.startsWith(`${ctx}.`) ? qname.slice(ctx.length + 1) : qname);
@@ -233,8 +246,24 @@ const at = (loc: Location): string => `  // ${loc.file}:${loc.line}`;
 const docLines = (doc: string | undefined, indent: string): string[] => (doc ? doc.split('\n').map((l) => `${indent}/// ${l}`) : []);
 
 function typeText(f: FieldModel, ctx: string): string {
-    if (f.type.kind === 'primitive') return f.type.name;
-    return f.type.target ? nameFrom(ctx, f.type.ref) : `${f.type.text} (unresolved)`;
+    return typeExprText(f.type, ctx);
+}
+
+function typeExprText(t: TypeExpr, ctx: string): string {
+    if (t.kind === 'primitive') return t.name;
+    return t.target ? nameFrom(ctx, t.ref) : `${t.text} (unresolved)`;
+}
+
+/** ` of EmailAddress for CustomerId? errors EmailTaken` of a verified type. */
+function verifiedText(el: ElementModel): string {
+    const v = el.verified;
+    if (!v) return '';
+    const ctx = el.context;
+    return [
+        ` of ${typeExprText(v.of, ctx)}`,
+        v.for ? ` for ${typeExprText(v.for.type, ctx)}${v.for.optional ? '?' : ''}` : '',
+        v.errors.length ? ` errors ${v.errors.map((e) => nameFrom(ctx, e)).join(', ')}` : '',
+    ].join('');
 }
 
 /** `owns items: OrderItem[0..*] "明細"`, with where an inherited label comes from. */
@@ -262,7 +291,7 @@ function elementLine(el: ElementModel, indent: string): string {
         el.base ? `: ${el.base}`
         : el.values ? ` { ${el.values.join(' ')} }`
         : el.states?.length ? ` (states ${el.states.map((s) => s.name).join(', ')})`
-        : '';
+        : verifiedText(el);
     return `${indent}${el.persistent ? 'persistent ' : ''}${KEYWORDS[el.kind]} ${el.name}${quoted(el.label)}${detail}${at(el.location)}`;
 }
 
@@ -355,6 +384,8 @@ const USED_BY: [keyof UsedBy, string][] = [
     ['idUsedBy', 'ID used by'],
     ['emittedBy', 'emitted by'],
     ['returnedBy', 'returned by'],
+    ['verifiedAs', 'verified as'],
+    ['contextOf', 'context of'],
     ['discriminatorOf', 'discriminator of'],
 ];
 
@@ -370,6 +401,7 @@ function elementText(model: DomainModel, el: ElementModel): string[] {
         el.persistent ? 'persistent ' : '',
         `${KEYWORDS[el.kind]} ${el.id}${quoted(el.label)}`,
         el.base ? `: ${el.base}` : '',
+        verifiedText(el),
         el.kind === 'union' ? ` by ${el.discriminator}${el.tagType ? `: ${nameFrom(ctx, el.tagType)}` : ''}` : '',
         el.fieldSets?.length ? ` with ${el.fieldSets.map((f) => nameFrom(ctx, f)).join(', ')}` : '',
     ].join('');

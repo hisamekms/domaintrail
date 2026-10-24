@@ -26,6 +26,11 @@ async function step<T>(label: string, run: () => Promise<Result<T, { readonly ty
 const customer = await step('register a customer', () => app.registerCustomer('山田 花子', 'hanako@example.com'), (c) => `${c.id} ${c.name} <${c.email}>`);
 if (!customer) throw new Error('the demo needs the customer');
 await step('register with an invalid email address', () => app.registerCustomer('名無し', 'not-an-address'), (c) => c.id);
+await step('register another customer with the same email address', () => app.registerCustomer('山田 太郎', 'hanako@example.com'), (c) => c.id);
+const other = await step('register another customer', () => app.registerCustomer('佐藤 一郎', 'ichiro@example.com'), (c) => `${c.id} ${c.name} <${c.email}>`);
+if (!other) throw new Error('the demo needs the second customer');
+await step("change the second customer's email address to the first one's", () => app.changeEmail(other.id, 'hanako@example.com'), (c) => `${c.id} <${c.email}>`);
+await step("change the first customer's to a new one", () => app.changeEmail(customer.id, 'hanako@example.org'), (c) => `${c.id} <${c.email}>`);
 
 const order = await step('place an order', () => app.placeOrder(customer.id), (o) => `${o.id} (${o.state})`);
 if (!order) throw new Error('the demo needs the order');

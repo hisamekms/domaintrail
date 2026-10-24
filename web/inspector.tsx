@@ -3,7 +3,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
-import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel, type InvariantModel, type Location } from '../src/model/model';
+import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel, type InvariantModel, type Location, type TypeExpr } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { Changes, CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, Requirements } from './behavior';
@@ -299,6 +299,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                     {tx.baseType}: <code>{names.primitive(el.base)}</code>
                 </p>
             )}
+            {el.verified && <VerifiedBody el={el} onSelect={onSelect} />}
             {el.values && (
                 <Section title={tx.values}>
                     <div className="chips">
@@ -330,7 +331,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                     ))}
                 </>
             )}
-            {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'enum' && el.kind !== 'union' && (
+            {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'verified' && el.kind !== 'enum' && el.kind !== 'union' && (
                 <Fields
                     title={el.states?.length ? tx.commonFields : el.kind === 'event' || el.kind === 'error' ? tx.payload : tx.fields}
                     fields={el.fields}
@@ -349,6 +350,37 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                         <div key={s.id} className="sub">
                             <a onClick={() => onSelect(s.id)}>{names.of(s)}</a>
                             {s.fields.length > 0 && <span className="muted small"> {s.fields.map((f) => names.field(f)).join(', ')}</span>}
+                        </div>
+                    ))}
+                </Section>
+            )}
+        </>
+    );
+}
+
+/** What a verified type verifies, the context its check needs and the errors of its factory. */
+function VerifiedBody({ el, onSelect }: { el: ElementModel; onSelect: Select }) {
+    const names = useNames();
+    const tx = useT();
+    const v = el.verified!;
+    const type = (t: TypeExpr) => (t.kind === 'ref' ? <a onClick={() => onSelect(t.ref)}>{names.id(t.ref)}</a> : <code>{names.primitive(t.name)}</code>);
+    return (
+        <>
+            <p className="muted small">{tx.verifiedNote}</p>
+            <p>
+                {tx.verifiedOf}: {type(v.of)}
+            </p>
+            {v.for && (
+                <p>
+                    {tx.verifiedFor}: {type(v.for.type)}
+                    {v.for.optional && <span className="muted small"> {tx.verifiedOptional}</span>}
+                </p>
+            )}
+            {v.errors.length > 0 && (
+                <Section title={tx.verifiedErrors}>
+                    {v.errors.map((e) => (
+                        <div key={e} className="sub">
+                            <a onClick={() => onSelect(e)}>{names.id(e)}</a>
                         </div>
                     ))}
                 </Section>
@@ -443,7 +475,17 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
         (a.commands ?? []).filter((c) => emittedEvents(c).includes(el.id) || c.errors.includes(el.id)).map((c) => ({ agg: a, c })),
     );
     const users = el.kind === 'fieldSet' ? fieldSetUsers(model, el.id) : [];
-    if (!typeUses.length && !idUses.length && !commands.length && !users.length) return <p className="muted">{tx.unreferenced}</p>;
+    const verifiedTypes = Object.values(model.elements).filter((v) => v.verified);
+    const isRef = (t: TypeExpr | undefined) => t?.kind === 'ref' && t.ref === el.id;
+    const factories = verifiedTypes.filter((v) => v.verified!.errors.includes(el.id));
+    const verifiedAs = verifiedTypes.filter((v) => isRef(v.verified!.of));
+    const contextOf = verifiedTypes.filter((v) => isRef(v.verified!.for?.type));
+    const verifiedLists: [string, ElementModel[]][] = [
+        [tx.returnedByVerified, factories],
+        [tx.verifiedAs, verifiedAs],
+        [tx.contextOf, contextOf],
+    ];
+    if (!typeUses.length && !idUses.length && !commands.length && !users.length && !verifiedLists.some(([, l]) => l.length)) return <p className="muted">{tx.unreferenced}</p>;
     return (
         <>
             {users.length > 0 && (
@@ -466,6 +508,18 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
                         </div>
                     ))}
                 </Section>
+            )}
+            {verifiedLists.map(
+                ([title, list]) =>
+                    list.length > 0 && (
+                        <Section key={title} title={title}>
+                            {list.map((v) => (
+                                <div key={v.id} className="sub">
+                                    <a onClick={() => onSelect(v.id)}>{names.id(v.id)}</a>
+                                </div>
+                            ))}
+                        </Section>
+                    ),
             )}
             {typeUses.length > 0 && (
                 <Section title={tx.typeUses(typeUses.length)}>

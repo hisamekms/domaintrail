@@ -44,6 +44,10 @@ rejected by the application, as `NotAllowed`). `InvoicePaid` became `persistent`
 
 - `use-cases.ts` — load → check the state the command accepts → call the command with IDs and the time from the
   providers → on success `outcome(…)`, save, record `eventList(…)`; a domain error is returned as it is.
+- `verifications.ts` — the factory of the verified type `AvailableEmail` (`sales/customer.dt`): no other customer
+  uses the address, a check a pure command cannot make. `register` and `changeEmail` take an `AvailableEmail`, so the
+  use cases cannot call them without it; the check holds at that moment, so a real store would also keep a unique
+  index.
 - `repositories.ts` — `Versioned<A>`: the aggregate with its technical metadata (version, timestamps) in an envelope,
   and optimistic locking on save.
 - `event-store.ts` — stores the events the DSL declares `persistent` in an envelope `{ event, meta }` (event ID,

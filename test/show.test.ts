@@ -219,6 +219,8 @@ describe('dt show --format json', () => {
             idUsedBy: expect.arrayContaining(['Billing.Invoice.issue(order)', 'Sales.OrderPlaced.orderId']),
             emittedBy: [],
             returnedBy: [],
+            verifiedAs: [],
+            contextOf: [],
             discriminatorOf: [],
         });
     });

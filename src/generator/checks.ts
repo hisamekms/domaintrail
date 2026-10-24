@@ -96,6 +96,8 @@ function baseTy(model: DomainModel, f: FieldModel): Ty {
             return { k: 'struct', el };
         case 'union':
             return { k: 'union', el };
+        case 'verified':
+            return baseTy(model, { ...f, type: el.verified!.of }); // a verified value is a value of its base
         default:
             throw new Error(`no value type for field '${f.name}'`);
     }

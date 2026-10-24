@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isEntity, isEventDecl, isIdType, isPrimitiveDecl, isUnionDecl, isValueObject } from '../language/generated/ast.js';
+import { isAggregate, isEntity, isEventDecl, isIdType, isPrimitiveDecl, isUnionDecl, isValueObject, isVerifiedDecl } from '../language/generated/ast.js';
 import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
@@ -8,6 +8,11 @@ export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';
+/**
+ * Start of the property that marks a verified type, followed by its qualified name: `'verified:Sales.AvailableEmail'`.
+ * One property per verified type, so that a value verified twice has both and a value verified once lacks the other.
+ */
+export const VERIFIED_PREFIX = 'verified:';
 /** Discriminant property of generated aggregate state types. */
 export const STATE_TAG = 'state';
 
@@ -40,7 +45,7 @@ export function outputsVary(factory: boolean, transitions: OutcomePatternModel[]
     return new Set(transitions.flatMap((t) => t.from.map((f) => output(f, t.to)))).size > 1;
 }
 export const aggregateParamName = (agg: Named): string => camel(agg.name);
-/** Constructor contract of a domain primitive, e.g. `MakeQuantity`. */
+/** Constructor contract of a domain primitive, e.g. `MakeQuantity`; the factory of a verified type, e.g. `MakeAvailableEmail`. */
 export const makeTypeName = (p: Named): string => `Make${p.name}`;
 /** Error returned when a value violates a domain primitive's invariants, e.g. `InvalidQuantity`. */
 export const invalidTypeName = (p: Named): string => `Invalid${p.name}`;
@@ -60,6 +65,7 @@ export const aggregateEventTypeName = (agg: Named): string => `${agg.name}Event`
 const KIND_LABELS: Record<string, string> = {
     IdType: 'id',
     PrimitiveDecl: 'primitive',
+    VerifiedDecl: 'verified type',
     EnumDecl: 'enum',
     ValueObject: 'value object',
     UnionDecl: 'union',
@@ -93,6 +99,8 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
                 const declared = invs.some((i) => !i.expr);
                 out.push({ name: `make${el.name}${declared ? 'With' : ''}`, origin: `the generated constructor of '${el.name}'`, node: el });
                 if (invs.length) out.push(...checkNames(el.name, declared, el));
+            } else if (isVerifiedDecl(el)) {
+                out.push({ name: makeTypeName(el), origin: `the factory of '${el.name}'`, node: el });
             } else if (isValueObject(el) || isEntity(el) || isUnionDecl(el)) {
                 out.push({ name: `equal${el.name}`, origin: `the equality of '${el.name}'`, node: el });
                 const invs = isUnionDecl(el) ? el.variants.flatMap((v) => invariantsOf(v.members)) : invariantsOf(el.members);

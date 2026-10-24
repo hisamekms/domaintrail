@@ -4,6 +4,8 @@ import { describe, expect, test } from 'bun:test';
 import type { Sales } from '../generated/domain/index.js';
 import { fixedProviders } from './app/providers.js';
 import { createShop } from './app/shop.js';
+import { verifications } from './app/verifications.js';
+import { makeEmailAddress } from './domain/primitives.js';
 
 async function confirmedOrder() {
     const shop = createShop(fixedProviders());
@@ -55,6 +57,36 @@ describe('use cases', () => {
         expect(await shop.app.changeNote(order.id, 'gift wrap')).toMatchObject({ ok: true });
         const r = await shop.orders.save(stale!.aggregate, stale!.meta.version, new Date());
         expect(r).toEqual({ ok: false, error: { type: 'VersionConflict', id: order.id, expected: 4, actual: 5 } });
+    });
+});
+
+describe('verified types', () => {
+    const address = (text: string) => {
+        const r = makeEmailAddress(text);
+        if (!r.ok) throw new Error(r.error.type);
+        return r.value;
+    };
+
+    test('makeAvailableEmail rejects an address another customer uses, and leaves out the customer given', async () => {
+        const shop = createShop(fixedProviders());
+        const hanako = await shop.app.registerCustomer('山田 花子', 'hanako@example.com');
+        if (!hanako.ok) throw new Error(hanako.error.type);
+        const { makeAvailableEmail } = verifications(shop.customers);
+        expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), undefined)).toEqual({ ok: false, error: { type: 'EmailTaken', email: 'hanako@example.com' } });
+        expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), hanako.value.id)).toEqual({ ok: true, value: 'hanako@example.com' });
+        expect<unknown>(await makeAvailableEmail(address('taro@example.com'), undefined)).toEqual({ ok: true, value: 'taro@example.com' });
+    });
+
+    test('registering or changing to a taken address returns EmailTaken and saves nothing', async () => {
+        const shop = createShop(fixedProviders());
+        const hanako = await shop.app.registerCustomer('山田 花子', 'hanako@example.com');
+        const ichiro = await shop.app.registerCustomer('佐藤 一郎', 'ichiro@example.com');
+        if (!hanako.ok || !ichiro.ok) throw new Error('registration failed');
+        expect<unknown>(await shop.app.registerCustomer('山田 太郎', 'hanako@example.com')).toEqual({ ok: false, error: { type: 'EmailTaken', email: 'hanako@example.com' } });
+        expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'hanako@example.com')).toEqual({ ok: false, error: { type: 'EmailTaken', email: 'hanako@example.com' } });
+        expect<unknown>((await shop.customers.load(ichiro.value.id))?.aggregate.email).toBe('ichiro@example.com');
+        expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'ichiro@example.com')).toMatchObject({ ok: true }); // its own address
+        expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'ichiro@example.org')).toMatchObject({ ok: true, value: { email: 'ichiro@example.org' } });
     });
 });
 

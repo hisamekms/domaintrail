@@ -339,6 +339,32 @@ describe('dt lsp', () => {
         expect(edits.filter((e) => e.range.start.line === at(sales, 'when Draft').line)).toHaveLength(2); // the transition and `when`
     });
 
+    test('a verified type: hover with what it verifies, in the outline, renamed with its uses', async () => {
+        const sales = `context Sales {
+  id CustomerId: UUID
+  /// Used by no other customer.
+  verified AvailableEmail "未使用" of String for CustomerId? errors EmailTaken
+  aggregate Customer {
+    id: CustomerId
+    email: String
+    command changeEmail(email: AvailableEmail) changes email
+  }
+  error EmailTaken
+}
+`;
+        const client = await start({ 'sales.dt': sales });
+        expect(await client.until('sales.dt', () => true)).toEqual([]);
+        const hover = await client.request<{ contents: { value: string } } | null>('textDocument/hover', 'sales.dt', at(sales, 'AvailableEmail'));
+        expect(hover?.contents.value).toBe('**verified `AvailableEmail`** 未使用 — `Sales.AvailableEmail`\n\nUsed by no other customer.\n\n```dt\nof String for CustomerId? errors EmailTaken\n```');
+        type Symbol = { name: string; children?: Symbol[] };
+        const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('sales.dt') } });
+        expect(symbols[0].children?.map((x) => x.name)).toEqual(['CustomerId', 'AvailableEmail', 'Customer', 'EmailTaken']);
+        const edit = await client.request<{ changes: Record<string, { range: { start: { line: number } } }[]> }>('textDocument/rename', 'sales.dt', at(sales, 'AvailableEmail'), {
+            newName: 'FreeEmail',
+        });
+        expect(edit.changes[client.uri('sales.dt')].map((e) => e.range.start.line).sort()).toEqual([at(sales, 'AvailableEmail').line, at(sales, 'email: AvailableEmail').line]);
+    });
+
     test('hovers on a command list its changes; the outline and renames are unaffected by them', async () => {
         const sales = SALES.replace('command place() Draft -> Placed', 'command place() Draft -> Placed changes total, lines');
         const client = await start({ 'common.dt': COMMON, 'sales.dt': sales });

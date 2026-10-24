@@ -22,6 +22,9 @@ context A {
     any: Int
     unique: Int
     contains: Int
+    verified: Int
+    of: Int
+    for: Int
     invariant k { count(count) > length and all(all, any => any.value) }
   }
   aggregate G {
@@ -44,6 +47,15 @@ context A {
           (identifier)
           (qualified_name
             (identifier)))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
         (field
           (identifier)
           (primitive_type))

@@ -297,6 +297,7 @@ function kindOf(node: AstNode): string | undefined {
     if (ast.isContext(node)) return node.shared ? 'shared context' : 'context';
     if (ast.isIdType(node)) return 'id';
     if (ast.isPrimitiveDecl(node)) return 'primitive';
+    if (ast.isVerifiedDecl(node)) return 'verified';
     if (ast.isEnumDecl(node)) return 'enum';
     if (ast.isEnumValue(node)) return 'enum value';
     if (ast.isValueObject(node)) return 'value';
@@ -323,7 +324,7 @@ const cstText = (node: AstNode | undefined): string => node?.$cstNode?.text ?? '
 
 /**
  * Hover: kind, name (with type for fields), label, `///` description, the expression of an invariant or requirement,
- * and the `changes` and `emits` entries of a command (the events with their multiplicity and `when`).
+ * what a verified type verifies (`of`, `for`, `errors`), and the `changes` and `emits` entries of a command (the events with their multiplicity and `when`).
  */
 class DomainHoverProvider extends AstNodeHoverProvider {
     constructor(private readonly services: LangiumServices) {
@@ -354,6 +355,10 @@ class DomainHoverProvider extends AstNodeHoverProvider {
         if (ast.isInvariant(node) && node.expr) lines.push(`\`\`\`dt\n{ ${cstText(node.expr)} }\n\`\`\``);
         if (ast.isCommand(node) && node.changes.length) lines.push(`\`\`\`dt\nchanges ${node.changes.join(', ')}\n\`\`\``);
         if (ast.isCommand(node) && node.emits.length) lines.push(`\`\`\`dt\nemits ${node.emits.map(cstText).join(', ')}\n\`\`\``);
+        if (ast.isVerifiedDecl(node)) {
+            const errors = node.errors.length ? ` errors ${node.errors.map((e) => e.$refText).join(', ')}` : '';
+            lines.push(`\`\`\`dt\nof ${cstText(node.base)}${node.context ? ` for ${cstText(node.context)}${node.contextOptional ? '?' : ''}` : ''}${errors}\n\`\`\``);
+        }
         if (ast.isRequirement(node)) lines.push(`\`\`\`dt\n${node.expr ? `{ ${cstText(node.expr)} } ` : ''}else ${node.error?.$refText ?? ''}\n\`\`\``);
         return lines.join('\n\n');
     }
@@ -374,7 +379,7 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isContext(node)) return SymbolKind.Namespace;
         if (ast.isAggregate(node) || ast.isEntity(node)) return SymbolKind.Class;
         if (ast.isValueObject(node) || ast.isFieldSet(node) || ast.isVariant(node) || ast.isErrorDecl(node)) return SymbolKind.Struct;
-        if (ast.isIdType(node) || ast.isPrimitiveDecl(node) || ast.isUnionDecl(node)) return SymbolKind.TypeParameter;
+        if (ast.isIdType(node) || ast.isPrimitiveDecl(node) || ast.isVerifiedDecl(node) || ast.isUnionDecl(node)) return SymbolKind.TypeParameter;
         if (ast.isEnumDecl(node)) return SymbolKind.Enum;
         if (ast.isEnumValue(node) || ast.isState(node)) return SymbolKind.EnumMember;
         if (ast.isEventDecl(node)) return SymbolKind.Event;

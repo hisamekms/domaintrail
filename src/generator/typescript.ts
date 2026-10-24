@@ -11,6 +11,7 @@ import {
     NO_CHANGES_TYPE,
     NO_EVENTS_TYPE,
     STATE_TAG,
+    VERIFIED_PREFIX,
     aggregateEventTypeName,
     aggregateParamName,
     commandTypeName,
@@ -307,6 +308,9 @@ class ContextEmitter {
                 case 'primitive':
                     this.primitive(el);
                     break;
+                case 'verified':
+                    this.verified(el);
+                    break;
                 case 'enum':
                     this.jsdoc([...describedLines(el), seeLine(el.location)]);
                     if (!el.values?.length) {
@@ -420,6 +424,32 @@ class ContextEmitter {
         this.jsdoc([`Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`, seeLine(p.location)]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);
         this.push(this.checks.primitive(p));
+    }
+
+    /**
+     * A verified type (ADR 0023): the base type with a property of its own, so that only a value the factory made (and
+     * asserted) is one, a value of the base is not, and the verifications of a chain combine; and the factory contract,
+     * async since the check reads the world outside the aggregate.
+     */
+    private verified(v: ElementModel): void {
+        const { of, for: context, errors } = v.verified!;
+        const base = this.typeExpr(of);
+        const contextType = context && this.typeExpr(context.type);
+        this.jsdoc([
+            ...describedLines(v),
+            `A value of ${base} for which ${makeTypeName(v)} made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).`,
+            seeLine(v.location),
+        ]);
+        this.line(`export type ${v.name} = ${base} & { readonly '${VERIFIED_PREFIX}${v.id}': true };`);
+        this.out.push('');
+        const given = context ? `, given the ${contextType}${context.optional ? ' (or `undefined`)' : ''} the check needs` : '';
+        this.jsdoc([
+            `Checks a value of ${base}${given}, and returns it as ${v.name} when the check passes. Written by hand (with repositories and services): the only code that may assert the type.`,
+            seeLine(v.location),
+        ]);
+        const params = [`value: ${base}`, ...(context ? [`context: ${contextType}${context.optional ? ' | undefined' : ''}`] : [])];
+        const error = errors.length ? errors.map((e) => this.ref(e)).join(' | ') : 'never';
+        this.line(`export type ${makeTypeName(v)} = (${params.join(', ')}) => Promise<Result<${v.name}, ${error}>>;`);
     }
 
     /** A union: one type alias over object types tagged with the discriminator. */

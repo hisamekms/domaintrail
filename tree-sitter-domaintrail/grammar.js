@@ -23,7 +23,7 @@ const PREC = {
 
 /** Keywords that may also name fields, parameters and lambda parameters (FeatureName). */
 const FEATURE_KEYWORDS = [
-  'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes',
+  'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes', 'verified', 'of', 'for',
   'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains',
 ];
 
@@ -65,6 +65,7 @@ module.exports = grammar({
     _context_element: ($) => choice(
       $.id_declaration,
       $.primitive_declaration,
+      $.verified_declaration,
       $.enum_declaration,
       $.value_declaration,
       $.union_declaration,
@@ -91,6 +92,17 @@ module.exports = grammar({
 
     // Either named invariants, or a single anonymous constraint: `{ value > 0 }`.
     primitive_body: ($) => seq('{', choice(repeat1($.invariant), field('constraint', $._expression)), '}'),
+
+    // Evidence that a check outside the aggregate was made (ADR 0023).
+    verified_declaration: ($) => seq(
+      'verified',
+      field('name', $.identifier),
+      optional(field('label', $.string)),
+      'of',
+      field('base', $._type),
+      optional(seq('for', field('context', $._type), optional('?'))),
+      optional($.errors_clause),
+    ),
 
     enum_declaration: ($) => seq(
       'enum',

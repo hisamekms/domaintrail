@@ -89,6 +89,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `changes a, b` — the fields it may change; without `changes`, no common field (a target state's new fields are set).
 - `emits X` — exactly one `X` on success; `X?` at most one, `X[1..*]` one or more; `X when A -> B` only then.
 - `errors E` — errors it may return besides those of `else`; on an error it emits no event.
+- `verified V of T for C? errors E` — evidence of a check outside the aggregate, as a parameter (`dt guide verified`).
 
 **The commands:**
 
@@ -245,6 +246,8 @@ context Sales { // a bounded context; may be split across files
 // sales/customer.dt
 context Sales {
   id CustomerId: UUID
+  /// 他の顧客に使われていないことを、登録・変更のときに確かめたメールアドレス。
+  verified AvailableEmail "未使用のメールアドレス" of EmailAddress for CustomerId? errors EmailTaken // dt guide verified
 
   aggregate Customer { // no states: commands have no transitions
     id: CustomerId
@@ -258,12 +261,11 @@ context Sales {
     invariant distinctAddresses { unique(addresses, a => a.city, a.street) } // the combination is distinct
     invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
 
-    /// No other customer has the same email address (spans aggregates, so not expressed in the DSL).
+    /// No other customer has the same email address: checked when one is given (AvailableEmail), kept by the store.
     invariant uniqueEmail "メールアドレスは顧客ごとに一意"
 
-    command changeEmail(email: EmailAddress)
+    command changeEmail(email: AvailableEmail) // the check was made before: its error is the factory's
       changes email
-      errors EmailTaken // errors it may return (besides those of `else`)
   }
 
   error EmailTaken {
@@ -272,8 +274,8 @@ context Sales {
 }
 ```
 
-- Context elements: `id`, `primitive`, `enum`, `value`, `union`, `entity`, `aggregate`, `event`, `error`, and `fields`
-  (see [Field sets](#field-sets)).
+- Context elements: `id`, `primitive`, `enum`, `value`, `union`, `entity`, `aggregate`, `event`, `error`, `fields`
+  (see [Field sets](#field-sets)) and `verified` (see [Verified types](#verified-types)).
 - Fields: `name: Type`, `owns name: Type` (entities and values held by the aggregate),
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
@@ -509,8 +511,8 @@ context Billing { // other files open the context without a name
 }
 ```
 
-- Declarations (context, id, primitive, enum and its values, value, union and its variants, entity, aggregate, state,
-  command, invariant, event, error) take an optional string label after the name.
+- Declarations (context, id, primitive, verified, enum and its values, value, union and its variants, entity,
+  aggregate, state, command, invariant, event, error) take an optional string label after the name.
 - A field or parameter is named by, in order: its inline string → the context's `terms` → the name of its type
   (for `references`, the target aggregate) → the English name.
 - `///` lines directly above a declaration or term are its description.
@@ -737,6 +739,9 @@ context Purchasing {
 
 - Not supported: arithmetic in expressions (`limit * 2`, sums over a collection). Use (4) when a rule needs it.
 - Other aggregates cannot be read from an expression: the policy is a value passed in or kept, never looked up.
+- **A rule across aggregates** is written as one of: the values it needs passed as parameters and checked with
+  `requires` (2); the evidence of a check made outside the aggregate, a verified type (`dt guide verified`); a reaction
+  to another aggregate's events, in your application; or a boundary drawn so that the data is in one aggregate.
 
 <!-- topic: changes -->
 ### Command changes
@@ -900,6 +905,113 @@ and events, so commands are tested without mocks.
 A `create command` without a parameter of the aggregate's ID type is a warning (M020): it would have to make the ID
 itself.
 
+A check that needs more than the aggregate and the parameters — no other customer uses the email address — is made
+before the command, and the command takes its evidence as a parameter: a verified type (see
+[Verified types](#verified-types)).
+
+<!-- topic: verified -->
+### Verified types
+
+Commands are pure, so they cannot check what lies outside their aggregate: an email address no other customer uses, an
+address an outside service confirmed, a budget approved, stock reserved. A verified type is the **evidence that such a
+check was made**: a value of a base type that only its factory makes. A command that takes it as a parameter cannot be
+called without the check; skipping it is a compile error.
+
+```dt
+// purchasing/purchase-order.dt
+context Purchasing {
+  id PurchaseOrderId: UUID
+  id BudgetId: UUID
+  value Spend {
+    budget: BudgetId
+    amount: Money
+  }
+  /// 予算の残高で賄えると、発注のときに確かめた支出。
+  verified CoveredSpend "予算内の支出" of Spend errors OverBudget
+  /// 予算内と確かめたうえで、承認者の決裁上限以内と確かめた支出（両方の確認を持つ）。
+  verified ApprovedSpend "承認済みの支出" of CoveredSpend for PersonId errors OverApprovalLimit, NotApprover
+
+  aggregate PurchaseOrder "発注" {
+    id: PurchaseOrderId
+    spend: Spend // stored as the base type
+    state Draft
+    state Placed
+
+    create command open(id: PurchaseOrderId, spend: Spend) -> Draft
+    command place(spend: ApprovedSpend) // both checks were made
+      Draft -> Placed
+      changes spend
+  }
+
+  error OverBudget
+  error OverApprovalLimit
+}
+```
+
+- `verified Name "label" of Base for Context? errors E1, E2`. The base is a value type: a primitive type, a domain
+  primitive, an ID, an enum, a value object, a union, or another verified type — then the value carries both checks.
+  Not an entity or an aggregate (M024).
+- `for` names what the check needs besides the value: the customer to leave out (`for CustomerId?`: absent when a
+  customer registers), a tenant, the approver. `?` makes it optional. It is a value type, not a verified one (M024).
+  Without `for`, the check needs the value only.
+- `errors` are the errors of the factory, not of the commands that take the value: `changeEmail` above returns no
+  `EmailTaken`; the factory did, before the command.
+- A verified type types **command parameters** (and the base of another verified type) only. It is the evidence of a
+  check at one moment, so a field of an aggregate, entity, value object, union, field set, event or error stores the
+  base type instead (M024, with the hint `store the base type 'Spend'`). A command stores a verified parameter in a
+  field of the base type as it is.
+- In invariants and requirements a verified value is a value of its base type (`requires` can compare
+  `spend.amount`), and an event or error field of the base type takes its value from a verified parameter of the same
+  name (M022).
+- **Use it only for facts that need the outside world**: other aggregates, outside services, the state of the world
+  at that moment. A rule over the command's parameters and the aggregate is an invariant or a `requires` (see
+  [Command requirements](#command-requirements)); a rule over a policy, see [Rules that depend on a
+  policy](#rules-that-depend-on-a-policy).
+- **Evidence of the moment, not a guarantee when the aggregate is saved.** Two customers registering the same address
+  at once may both pass the check. Keep enforcing the rule where the data is stored (a unique index), and document it
+  on the aggregate as an invariant without an expression (`uniqueEmail` above, in `dt guide aggregates`).
+- `verified`, `of` and `for` are also usable as field and parameter names.
+
+The generated code (`examples/shop`):
+
+```ts
+/**
+ * 未使用のメールアドレス
+ * 他の顧客に使われていないことを、登録・変更のときに確かめたメールアドレス。
+ * A value of Common.EmailAddress for which MakeAvailableEmail made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * @see sales/customer.dt:5
+ */
+export type AvailableEmail = Common.EmailAddress & { readonly 'verified:Sales.AvailableEmail': true };
+
+export type MakeAvailableEmail = (value: Common.EmailAddress, context: CustomerId | undefined) => Promise<Result<AvailableEmail, EmailTaken>>;
+```
+
+- The type is the base with a property of its own, one per verified type: a value of the base is not one
+  (`Argument of type 'EmailAddress' is not assignable to parameter of type 'AvailableEmail'`), a value with another
+  check is not one either, and a value with two checks has both properties. It is assignable to its base, so it is
+  stored in a field of the base type without a conversion.
+- The factory `Make<Name>` is async (the check reads repositories and services) and returns a `Result`: the value, or
+  one of `errors` (`never` without `errors`, still a `Result`, so every factory is called the same way). Its second
+  parameter is the context of `for`: required with `for X`, `X | undefined` with `for X?`, absent without `for`.
+- **You write the factory**, with your repositories and services. It is the only code that may assert the type
+  (`email as Sales.AvailableEmail`); a cast anywhere else defeats the purpose — the same weakness as the constructors
+  of domain primitives.
+
+```ts
+// examples/shop/src/app/verifications.ts
+export function verifications(customers: CustomerRepository): Verifications {
+    return {
+        // `customer` is the one whose email changes, so that keeping one's own address is not "taken"; none on register.
+        async makeAvailableEmail(email, customer) {
+            const holder = await customers.find((c) => c.email === email && c.id !== customer);
+            return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
+        },
+    };
+}
+```
+
+The generated contract tests do not test the factories (see [Generated tests](#generated-tests)).
+
 <!-- topic: generated -->
 ## Generated TypeScript
 
@@ -908,7 +1020,9 @@ stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types wi
 command and an `<Aggregate>Commands` interface to implement, a decision type per command and a shape constant per
 aggregate for `decide` (see [Decisions and `decide`](#decisions-and-decide)), plus `index.ts` and `_runtime.ts`. A
 domain primitive gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`;
-invariants and requirements get check functions (see [Generated checks](#generated-checks)). A field set is an interface
+a verified type its base with a property of its own and the contract of its factory `Make<Name>`, which you write (see
+[Verified types](#verified-types)); invariants and requirements get check functions (see
+[Generated checks](#generated-checks)). A field set is an interface
 that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
 `…Common`). The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's
 place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:51`); editing the `.dt` sources
@@ -1168,7 +1282,8 @@ The generated files are the **contract**, your code is the **implementation**:
   appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `outcome`,
   `eventList`, and those of the checks) that are the same for every model.
 - Yours: the behaviour — command implementations (returning the error of the first requirement that does not hold;
-  pure functions, see [Pure commands](#pure-commands)) and the constraints the DSL does not express, which you pass to
+  pure functions, see [Pure commands](#pure-commands)), the factories of verified types (the checks outside the
+  aggregate, see [Verified types](#verified-types)) and the constraints the DSL does not express, which you pass to
   the generated checks — in your own files, which import the generated modules (never the other way round) and are
   type-checked against them. Your code may call the generated checks, or implement its own (a hand-written
   `Make<Name>` like the one below); the generated tests use the generated checks as the oracle either way.
@@ -1249,7 +1364,8 @@ With `generate.ts.tests` in the config, `dt generate ts` also writes **contract 
 
 Inputs are generated with [fast-check](https://fast-check.dev) from the types: IDs, ranges, lengths and regular
 expressions of domain primitives, enums, value objects, entities, unions, collections with their multiplicities, and
-aggregates per state. **Inputs are always valid**: only values that hold their invariants are used, and parameters
+aggregates per state. A parameter of a verified type gets values of its base type, taken as verified (the check
+passed); `arbitraries` overrides it like any other type (`{ Sales: { AvailableEmail: … } }`). **Inputs are always valid**: only values that hold their invariants are used, and parameters
 are values of their types; what a command does with invalid input is outside its contract. Values of one type are
 drawn often from a small pool, so that duplicates, `contains` and `!=` are decided both ways. Runs are deterministic
 (fixed seed, configurable), and a failure shows the shrunk counterexample and the seed. Install fast-check as a dev
@@ -1296,6 +1412,11 @@ Options, all optional:
 
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
+
+**Outside the generated tests** is what happens around the commands, which your own tests cover (as
+`examples/shop/src/app.test.ts` does): the factories of verified types (`MakeAvailableEmail`, with your repositories and
+services), the constraints without an expression where you pass no check, and the application — loading, saving,
+publishing events.
 
 <!-- topic: metadata -->
 ### Technical metadata
@@ -1403,6 +1524,7 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
 | M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
 | M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
+| M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
@@ -1415,8 +1537,8 @@ element resolved, close to the DSL — the fields of field sets inline (`// with
 with where it comes from (`(from term)`, `(from type)`; none when written inline), multiplicities, `owns` /
 `references -> X`, invariants with their expressions (or `(not expressed in the DSL)`), states with their own fields
 and invariants, commands with their transitions, `requires … else`, `changes`, the events of each outcome (`when`
-resolved), the full error union, a `// file:line` location per declaration (relative to the root), and who uses it
-(owns, references, its type or ID, emits, returns, `with`).
+resolved), the full error union, a verified type's `of`, `for` and `errors`, a `// file:line` location per declaration
+(relative to the root), and who uses it (owns, references, its type or ID, emits, returns, `with`, verified types).
 
 ```bash
 dt show                         # the contexts and their elements
@@ -1436,8 +1558,10 @@ code is 0 whenever the name was found, whatever the diagnostics. A model with sy
 - `{"show": "element", "element": {...}, "usedBy": {...}}`: the element (`id`, `kind`, `fields` with `label`,
   `labelSource`, `multiplicity`, `fieldSet`, …, `invariants`, `states`, `commands`, `location`); each command has
   `outcomes`: `[{"from", "to", "emits": [{"event", "multiplicity", "lower", "upper"}], "sets", "carries", "drops"}]`.
-  `usedBy` has the lists `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`, `idUsedBy`, `emittedBy`, `returnedBy` and
-  `discriminatorOf`, as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`).
+  A verified type has `verified`: `{"of", "for": {"type", "optional"}, "errors"}`. `usedBy` has the lists
+  `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`, `idUsedBy`, `emittedBy`, `returnedBy` (commands, and verified types
+  whose factory returns the error), `verifiedAs` (verified types of it), `contextOf` (verified types whose `for` it is)
+  and `discriminatorOf`, as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`).
 - `{"show": "command", "aggregate", "command"}` (with `outcomes`), `{"show": "state", "aggregate", "state", "enteredBy",
   "leftBy"}`, `{"show": "context", "context"}` and `{"show": "overview", "contexts"}` (name, label, doc, shared, terms
   and the elements with their location).

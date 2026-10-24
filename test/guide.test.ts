@@ -101,7 +101,7 @@ describe('dt guide topics', () => {
         expect(r.out).toContain('`dt guide requires`');
         const m022 = await runGuide('M022');
         expect(m022.out).toContain('| M022 | (warning) a field of an event or error');
-        expect(m022.out).toContain('Explained in: `dt guide requires`, `dt guide events`.');
+        expect(m022.out).toContain('Explained in: `dt guide requires`, `dt guide events`, `dt guide verified`.');
     });
 });
 

@@ -9,6 +9,7 @@
 
 (id_declaration "id" @context name: (_) @name) @item
 (primitive_declaration "primitive" @context name: (_) @name) @item
+(verified_declaration "verified" @context name: (_) @name) @item
 (enum_declaration "enum" @context name: (_) @name) @item
 (value_declaration "value" @context name: (_) @name) @item
 (union_declaration "union" @context name: (_) @name) @item

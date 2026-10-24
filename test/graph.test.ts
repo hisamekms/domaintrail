@@ -95,7 +95,7 @@ describe('State View graph', () => {
         const model = await exampleModel();
         const g = buildStateGraph(model.elements['Sales.Customer'], model);
         expect(g.edges.map((e) => `${e.source}->${e.target}`)).toEqual(['Sales.Customer@new->Sales.Customer']);
-        expect(g.nodes.find((n) => n.id === 'Sales.Customer')!.internal?.map((t) => t.label.en.name)).toEqual(['rename(name)']);
+        expect(g.nodes.find((n) => n.id === 'Sales.Customer')!.internal?.map((t) => t.label.en.name)).toEqual(['rename(name)', 'changeEmail(email)']);
     });
 
     test('a command from several states is listed in each state it keeps, and drawn for the others', async () => {
