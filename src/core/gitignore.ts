@@ -55,7 +55,7 @@ const rules = (): Ignore => ignore({ ignorecase: false });
 const slashed = (p: string): string => p.split(path.sep).join('/');
 
 /** The directory holding `.git` (a directory, or a file in a worktree or submodule) at or above `dir`. */
-function repositoryTop(dir: string): string | undefined {
+export function repositoryTop(dir: string): string | undefined {
     for (;;) {
         if (statSync(path.join(dir, '.git'), { throwIfNoEntry: false })) return dir;
         const parent = path.dirname(dir);

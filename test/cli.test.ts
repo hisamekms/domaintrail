@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -171,6 +171,38 @@ describe('--format json', () => {
 });
 
 describe('dt generate ts', () => {
+    test('hints at a lint rule against casts to domain types when no lint config mentions one', async () => {
+        const dir = await tempCopyOfExamples();
+        dirs.push(dir);
+        const hint = 'hint: no lint rule against casts to domain types found (no-unsafe-type-assertion); see dt guide lint';
+        // examples/shop has an .oxlintrc.json with the rule
+        expect((await run('-r', dir, 'generate', 'ts')).out).not.toContain(hint);
+
+        await rm(path.join(dir, '.oxlintrc.json'));
+        const missing = await run('-r', dir, 'generate', 'ts');
+        expect(missing.code).toBe(0);
+        expect(missing.out.at(-1)).toBe(hint);
+        expect(JSON.parse((await run('-r', dir, 'generate', 'ts', '--format', 'json')).out.join('\n')).hints).toEqual([hint.slice('hint: '.length)]);
+
+        // an ESLint flat config counts too, also in a directory above the root (up to the top of the git repository)
+        const repo = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(repo);
+        const domain = path.join(repo, 'domain');
+        await rename(dir, domain);
+        await mkdir(path.join(repo, '.git'));
+        await writeFile(path.join(repo, 'eslint.config.mjs'), "export default [{ rules: { '@typescript-eslint/no-unsafe-type-assertion': 'error' } }];\n");
+        const above = await run('-r', domain, 'generate', 'ts');
+        expect(above.code).toBe(0);
+        expect(above.out).not.toContain(hint);
+
+        await rm(path.join(repo, 'eslint.config.mjs'));
+        expect((await run('-r', domain, 'generate', 'ts')).out).toContain(hint);
+        await writeFile(path.join(domain, 'domaintrail.jsonc'), '{ "lintHint": false }');
+        const off = await run('-r', domain, 'generate', 'ts');
+        expect(off.code).toBe(0);
+        expect(off.out).not.toContain(hint);
+    });
+
     test('writes one module per context, a runtime and an index', async () => {
         const dir = await tempCopyOfExamples();
         dirs.push(dir);

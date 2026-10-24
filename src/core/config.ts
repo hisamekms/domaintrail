@@ -21,6 +21,8 @@ export interface DomainTrailConfigFile {
     sources?: string[];
     /** Whether files and directories ignored by `.gitignore` are skipped when finding sources. Default: true. */
     respectGitignore?: boolean;
+    /** Whether `dt generate ts` says so when no lint rule against casts to domain types is found. Default: true. */
+    lintHint?: boolean;
     generate?: {
         ts?: {
             out?: string;
@@ -41,6 +43,7 @@ export interface ResolvedConfig {
     file?: string;
     sources: string[];
     respectGitignore: boolean;
+    lintHint: boolean;
     tsOut: string;
     /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
     tsContexts: Record<string, string>;
@@ -90,6 +93,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
         file,
         sources: config.sources ?? DEFAULT_SOURCES,
         respectGitignore: config.respectGitignore ?? true,
+        lintHint: config.lintHint ?? true,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
         tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).flatMap(([ctx, c]) => (c.out !== undefined ? [[ctx, c.out]] : []))),
         tsPolicies: {
@@ -102,7 +106,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
 }
 
 function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
-    return { sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, tsPolicies: { project: DEFAULT_POLICIES, contexts: {} }, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+    return { sources: DEFAULT_SOURCES, respectGitignore: true, lintHint: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, tsPolicies: { project: DEFAULT_POLICIES, contexts: {} }, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
 }
 
 /** How the policies of each context are generated: the context's own setting, else the project's, else `optional`. */

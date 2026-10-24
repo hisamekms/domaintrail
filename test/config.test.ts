@@ -64,6 +64,7 @@ describe('config file', () => {
         ['{ "source": [] }', "unknown key 'source'"],
         ['{ "sources": "a" }', "'sources' must be an array of glob strings"],
         ['{ "respectGitignore": "no" }', "'respectGitignore' must be true or false"],
+        ['{ "lintHint": "off" }', "'lintHint' must be true or false"],
         ['{ "sources": ["!x/**"] }', "'sources' needs at least one include pattern"],
         ['{ "generate": { "rust": {} } }', "unknown generator 'generate.rust' (supported: ts)"],
         ['{ "view": { "port": "80" } }', "'view.port' must be a port number"],

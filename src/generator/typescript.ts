@@ -498,7 +498,9 @@ class ContextEmitter {
     private primitive(p: ElementModel): void {
         const base = PRIMITIVES[p.base ?? 'String'];
         const summary = p.kind === 'id' && !p.label ? [`Identifier of ${p.name}.`] : [];
-        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), seeLine(p.location)]);
+        const make = `make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}`;
+        const noCast = `Make it with \`${make}\`; never \`as ${p.name}\` (see dt guide lint).`;
+        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), noCast, seeLine(p.location)]);
         this.line(`export type ${p.name} = ${base} & { readonly __domain: '${p.id}' };`);
         this.out.push('');
         if (p.invariants.length === 0) {
@@ -532,6 +534,7 @@ class ContextEmitter {
         this.jsdoc([
             ...describedLines(v),
             `A value of ${base} for which ${makeTypeName(v)} made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).`,
+            `Make it with your \`${makeTypeName(v)}\` factory; never \`as ${v.name}\` outside it (see dt guide lint).`,
             seeLine(v.location),
         ]);
         this.line(`export type ${v.name} = ${base} & { readonly '${VERIFIED_PREFIX}${v.id}': true };`);

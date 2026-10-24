@@ -75,7 +75,7 @@ export interface LanguageServerOptions {
  * `NearestConfig`). There is one workspace per session.
  */
 export class DomainWorkspace {
-    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: '', tsContexts: {}, tsPolicies: { project: 'optional', contexts: {} }, view: { port: 0, host: '' } };
+    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, respectGitignore: true, lintHint: true, tsOut: '', tsContexts: {}, tsPolicies: { project: 'optional', contexts: {} }, view: { port: 0, host: '' } };
     /** Where the config was searched from: the nearest config of a document is only searched up to it. */
     start = process.cwd();
     /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */

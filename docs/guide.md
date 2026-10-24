@@ -105,6 +105,8 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration and
 change the DSL, not the implementation: never emit an event or set a field only to satisfy the types.
 
+**Never cast to a domain type** (`as X`): make it with `make<Name>`, `parseDecimal` or a factory (`dt guide lint`).
+
 <!-- topic: workflow -->
 ## Workflow
 
@@ -982,6 +984,7 @@ The generated code (`examples/shop`):
  * 未使用のメールアドレス
  * 他の顧客に使われていないことを、登録・変更のときに確かめたメールアドレス。
  * A value of Common.EmailAddress for which MakeAvailableEmail made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your `MakeAvailableEmail` factory; never `as AvailableEmail` outside it (see dt guide lint).
  * @see sales/customer.dt:5
  */
 export type AvailableEmail = Common.EmailAddress & { readonly 'verified:Sales.AvailableEmail': true };
@@ -1366,7 +1369,7 @@ The generated files are the **contract**, your code is the **implementation**:
   derived 1:1 from DSL expressions: the checks of invariants and requirements, the equality of value types and the
   constructors of domain primitives (see [Generated checks](#generated-checks)). Invariants and requirements also
   appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `outcome`,
-  `eventList`, and those of the checks) that are the same for every model.
+  `eventList`, `parseDecimal`, and those of the checks) that are the same for every model.
 - Yours: the behaviour — command implementations (returning the error of the first requirement that does not hold;
   pure functions, see [Pure commands](#pure-commands)), the factories of verified types (the checks outside the
   aggregate, see [Verified types](#verified-types)) and the constraints the DSL does not express, which you pass to
@@ -1379,6 +1382,7 @@ The generated files are the **contract**, your code is the **implementation**:
 import { err, ok, type Sales } from '../generated/domain/index.js';
 
 export const makeQuantity: Sales.MakeQuantity = (value) =>
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory: the check is on this line
     Number.isInteger(value) && value >= 1 && value <= 999 ? ok(value as Sales.Quantity) : err({ type: 'InvalidQuantity', value, invariant: 'valid' });
 ```
 
@@ -1389,6 +1393,64 @@ A complete example is [`examples/shop`](https://github.com/hisamekms/domaintrail
 repository: the model, what `dt generate ts` writes from it, and the code written against it — the command
 implementations and a small application layer around them (repositories, an event store, policies across contexts),
 with the contract tests and a demo.
+
+<!-- topic: lint -->
+### Linting your code
+
+A domain type is a brand: `Sales.OrderId` is a `string` the compiler tells apart, `Common.Amount` a `Decimal` that holds
+its invariants, `Sales.AvailableEmail` the evidence of a check. A cast (`'x' as Sales.OrderId`, `amount as
+Common.Amount`) makes one without its constructor, so nothing checks the invariants or makes the check: never cast to
+a domain type, a verified type or `Decimal`. Make them instead:
+
+| Type | Make it with |
+|---|---|
+| ID, domain primitive | `make<Name>` (generated; or your own `Make<Name>`), e.g. `Sales.makeOrderId('order-1')` |
+| verified type | its factory `Make<Name>`, which you write (see [Verified types](#verified-types)) |
+| `Decimal` | `parseDecimal(text)` from the runtime: digits with an optional `-` and fraction, else `undefined` |
+
+A value that cannot fail to be valid (a sum of non-negative amounts is an `Amount`) still goes through its constructor;
+a failure there is a bug, so throw. In tests, make the values the same way and assert the result rather than cast a
+fallback. The generated JSDoc of every branded type says how to make it (`Make it with makeAmount; never as Amount`).
+
+Let the linter enforce it with the type-aware rule that reports narrowing casts (it allows `as const` and widening):
+oxlint's `typescript/no-unsafe-type-assertion` (with `--type-aware`, which needs `oxlint-tsgolint`) or typescript-eslint's
+`@typescript-eslint/no-unsafe-type-assertion`. Leave the generated directories out: they make the domain types, so they
+cast.
+
+```jsonc
+// .oxlintrc.json — run `oxlint --type-aware`
+{
+  "plugins": ["typescript"],
+  "rules": { "typescript/no-unsafe-type-assertion": "error" },
+  "ignorePatterns": ["generated/**"]
+}
+```
+
+```js
+// eslint.config.js — typescript-eslint with type information
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+    { ignores: ['generated/**'] },
+    {
+        files: ['**/*.ts'],
+        extends: [tseslint.configs.base],
+        languageOptions: { parserOptions: { projectService: true } },
+        rules: { '@typescript-eslint/no-unsafe-type-assertion': 'error' },
+    },
+);
+```
+
+The legitimate casts are in factories only — your `Make<Name>`, a verified type's factory — each with a disable
+comment that says why: `// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory: …` (ESLint:
+`// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- …`).
+
+`dt generate ts` prints `hint: no lint rule against casts to domain types found (no-unsafe-type-assertion); see dt guide
+lint` (in `--format json`, in `hints`) when no lint config mentions the rule: it looks for `.oxlintrc.json`,
+`.oxlintrc.jsonc`, `oxlint.config.*` and `eslint.config.*` in the config's directory and the directories above it up to
+the top of the git repository (only the config's directory without one). It is a heuristic — the files are searched as
+text for `no-unsafe-type-assertion`, not evaluated — so a rule shared from a package is not found: set
+`"lintHint": false` in `domaintrail.jsonc` then.
 
 <!-- topic: checks -->
 ### Generated checks
@@ -1776,6 +1838,8 @@ relative to the config file, and its directory becomes the root. Without a confi
   "sources": ["domain/**/*.dt", "!domain/drafts/**"],      // default: ["**/*.dt"]
   // skip what .gitignore ignores when finding sources
   "respectGitignore": true,                                 // default: true
+  // print a hint on generate when no lint rule against casts to domain types is found (dt guide lint)
+  "lintHint": true,                                         // default: true
   "generate": {
     "ts": {
       "out": "src/domain/generated",                        // default: "generated/domain"
