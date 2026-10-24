@@ -9,7 +9,7 @@ repository = "https://github.com/hisamekms/domaintrail"
 [grammars.domaintrail]
 repository = "https://github.com/hisamekms/domaintrail"
 # The commit of this repository with the grammar in tree-sitter-domaintrail; update it after changing the grammar.
-rev = "9bc1b720c40d36f9bc1ff040a0920ee9c81839ee"
+rev = "cbd643af4807d330f3e0adda7f36ee8be5809f8c"
 path = "tree-sitter-domaintrail"
 
 [language_servers.domaintrail]
