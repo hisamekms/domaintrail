@@ -45,7 +45,8 @@ export class InMemoryEventStore {
     }
 
     on<T extends DomainEvent['type']>(type: T, subscriber: Subscriber<Extract<DomainEvent, { type: T }>>): void {
-        this.subscribe((s) => (s.event.type === type ? subscriber(s as Stored<Extract<DomainEvent, { type: T }>>) : undefined));
+        const isOfType = (s: Stored<DomainEvent>): s is Stored<Extract<DomainEvent, { type: T }>> => s.event.type === type;
+        this.subscribe((s) => (isOfType(s) ? subscriber(s) : undefined));
     }
 
     /**

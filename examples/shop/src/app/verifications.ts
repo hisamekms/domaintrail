@@ -14,6 +14,7 @@ export function verifications(customers: CustomerRepository): Verifications {
         // `customer` is the one whose email changes, so that keeping one's own address is not "taken"; none on register.
         async makeAvailableEmail(email, customer) {
             const holder = await customers.find((c) => c.email === email && c.id !== customer);
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
         },
     };

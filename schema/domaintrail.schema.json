@@ -19,6 +19,11 @@
       "type": "boolean",
       "default": true
     },
+    "lintHint": {
+      "description": "Let dt generate ts print a hint when no lint rule against casts to domain types (no-unsafe-type-assertion) is found in an oxlint or ESLint config from this directory up to the top of the git repository. See dt guide lint.",
+      "type": "boolean",
+      "default": true
+    },
     "generate": {
       "description": "Code generation targets.",
       "type": "object",

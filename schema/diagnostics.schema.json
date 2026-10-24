@@ -26,6 +26,11 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "hints": {
+      "description": "generate ts only: advice about the project, as the lines that --format text prints after 'hint: ' (e.g. no lint rule against casts to domain types; see dt guide lint).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "error": {
       "description": "Why the command failed, as the one line that --format text prints on stderr.",
       "type": "string"

@@ -27,7 +27,8 @@ export function useViewSocket(): ViewState {
                 setState((s) => ({ ...s, connection: 'open' }));
             };
             ws.onmessage = (ev) => {
-                const payload = JSON.parse(ev.data as string) as ViewPayload;
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the messages of our own server
+                const payload = JSON.parse(String(ev.data)) as ViewPayload;
                 setState((s) => {
                     const modelChanged = s.current && s.current.modelVersion !== payload.modelVersion;
                     return { current: payload, previous: modelChanged ? s.current : s.previous, connection: 'open' };

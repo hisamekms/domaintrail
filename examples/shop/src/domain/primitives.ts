@@ -2,7 +2,7 @@
 // (`Sales.makeQuantity`, …) are complete and used as they are: they check exactly the DSL's invariants and return the
 // first one violated. A hand-written one would implement the same `Make<Name>` type and be checked by the generated
 // tests (src/contract.test.ts) against the generated checks; this module is the one place to swap it in.
-import { Billing, Common, Sales, type Decimal } from '../../generated/domain/index.js';
+import { Billing, Common, Sales } from '../../generated/domain/index.js';
 
 export const makeQuantity: Sales.MakeQuantity = Sales.makeQuantity;
 export const makeSku: Sales.MakeSku = Sales.makeSku;
@@ -15,9 +15,3 @@ export const makeOrderId: Sales.MakeOrderId = Sales.makeOrderId;
 export const makeOrderItemId: Sales.MakeOrderItemId = Sales.makeOrderItemId;
 export const makeInvoiceId: Billing.MakeInvoiceId = Billing.makeInvoiceId;
 
-/**
- * A decimal number written as digits with an optional fraction ("1200", "12.50"), or `undefined`. The DSL's `Decimal`
- * is carried as a string and has no constructor: which strings count as decimals is the application's choice of format,
- * not a rule of the domain. The sign is accepted so that `makeAmount` reports a negative amount by its invariant.
- */
-export const parseDecimal = (text: string): Decimal | undefined => (/^-?\d+(\.\d+)?$/.test(text) ? (text as Decimal) : undefined);

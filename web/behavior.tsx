@@ -60,6 +60,7 @@ function FieldGrid({ fields, ctx, names, onSelect }: { fields: FieldModel[]; ctx
                     </span>
                     <span className="bcard-ftype">
                         {f.type.kind === 'ref' && f.type.target ? (
+                            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the condition above checks that the type is a 'ref' (lost in the closure)
                             <a onClick={() => onSelect((f.type as { ref: string }).ref)}>{names.type(f.type, ctx)}</a>
                         ) : (
                             names.type(f.type, ctx)

@@ -1,7 +1,6 @@
 import {
     isAggregate,
     isEntity,
-    isFieldSet,
     isIdType,
     isOwnsField,
     isReferenceField,

@@ -362,7 +362,7 @@ describe('dt lsp', () => {
         const edit = await client.request<{ changes: Record<string, { range: { start: { line: number } } }[]> }>('textDocument/rename', 'sales.dt', at(sales, 'AvailableEmail'), {
             newName: 'FreeEmail',
         });
-        expect(edit.changes[client.uri('sales.dt')].map((e) => e.range.start.line).sort()).toEqual([at(sales, 'AvailableEmail').line, at(sales, 'email: AvailableEmail').line]);
+        expect(edit.changes[client.uri('sales.dt')].map((e) => e.range.start.line).sort((a, b) => a - b)).toEqual([at(sales, 'AvailableEmail').line, at(sales, 'email: AvailableEmail').line]);
     });
 
     test('hovers on a command list its changes; the outline and renames are unaffected by them', async () => {

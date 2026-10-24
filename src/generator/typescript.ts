@@ -175,8 +175,18 @@ export const sameList = <T>(a: readonly T[], b: readonly T[], same: (x: T, y: T)
 export const distinct = <T>(xs: readonly T[], same: (x: T, y: T) => boolean): boolean =>
     xs.every((x, i) => xs.every((y, j) => j <= i || !same(x, y)));
 
-/** Decimal values are carried as strings so that no precision is lost. */
+/**
+ * Decimal values are carried as strings so that no precision is lost. Make one with \`parseDecimal\`; never
+ * \`as Decimal\` (see dt guide lint).
+ */
 export type Decimal = string & { readonly __brand: 'Decimal' };
+
+/**
+ * The text as a \`Decimal\`, or \`undefined\` when it is not one: digits with an optional leading \`-\` and an optional
+ * fraction (\`"1200"\`, \`"-3"\`, \`"12.50"\`). No \`+\`, exponent, grouping or spaces; \`".5"\` and \`"5."\` are not decimals.
+ * The text is kept as it is (\`"12.50"\` stays \`"12.50"\`). The one place that makes a \`Decimal\` from a string.
+ */
+export const parseDecimal = (text: string): Decimal | undefined => (/^-?\\d+(\\.\\d+)?$/.test(text) ? (text as Decimal) : undefined);
 
 /** Point in time. */
 export type Timestamp = Date;
@@ -197,7 +207,7 @@ export function generateTypeScript(
 ): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     const files: GeneratedFile[] = [];
-    for (const dir of [...new Set(model.contexts.map(dirOf))]) {
+    for (const dir of new Set(model.contexts.map(dirOf))) {
         const contexts = model.contexts.filter((c) => dirOf(c) === dir);
         files.push({ path: posix.join(dir, '_runtime.ts'), content: RUNTIME });
         for (const ctx of contexts) {
@@ -488,7 +498,9 @@ class ContextEmitter {
     private primitive(p: ElementModel): void {
         const base = PRIMITIVES[p.base ?? 'String'];
         const summary = p.kind === 'id' && !p.label ? [`Identifier of ${p.name}.`] : [];
-        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), seeLine(p.location)]);
+        const make = `make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}`;
+        const noCast = `Make it with \`${make}\`; never \`as ${p.name}\` (see dt guide lint).`;
+        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), noCast, seeLine(p.location)]);
         this.line(`export type ${p.name} = ${base} & { readonly __domain: '${p.id}' };`);
         this.out.push('');
         if (p.invariants.length === 0) {
@@ -522,6 +534,7 @@ class ContextEmitter {
         this.jsdoc([
             ...describedLines(v),
             `A value of ${base} for which ${makeTypeName(v)} made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).`,
+            `Make it with your \`${makeTypeName(v)}\` factory; never \`as ${v.name}\` outside it (see dt guide lint).`,
             seeLine(v.location),
         ]);
         this.line(`export type ${v.name} = ${base} & { readonly '${VERIFIED_PREFIX}${v.id}': true };`);

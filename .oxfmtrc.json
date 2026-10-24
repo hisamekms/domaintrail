@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  // `bun run fmt` / `bun run fmt:check`. The .dt files are formatted by `dt fmt`.
+  "printWidth": 160,
+  "tabWidth": 4,
+  "singleQuote": true,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "sortPackageJson": false,
+  "overrides": [
+    {
+      "files": ["*.json", "*.jsonc", "*.yml", "*.yaml", "*.html"],
+      "options": { "tabWidth": 2 }
+    }
+  ],
+  // also skipped: what .gitignore ignores (generated/, dist/, node_modules/)
+  "ignorePatterns": [
+    // the guide, the ADRs and the READMEs are wrapped by hand, and the guide quotes files verbatim
+    "**/*.md",
+    "src/language/generated/**",
+    "**/generated/**",
+    // build-stamp.json records the hash of grammar.js: formatting it needs `bun run tree-sitter`
+    "tree-sitter-domaintrail/**",
+    "editors/zed/**",
+    "bun.lock"
+  ]
+}

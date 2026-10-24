@@ -1,5 +1,5 @@
-import type { AstNode } from 'langium';
-import { isAggregate, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Parameter } from '../../language/generated/ast.js';
+import { AstUtils, type AstNode } from 'langium';
+import { isAggregate, isContext, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Parameter } from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { LabelResolver } from '../labels.js';
 import { commandsOf, commonFields, fieldsOf, includedFields, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
@@ -130,9 +130,7 @@ function sameLabel(items: Labeled[], where: string, sink: DiagnosticSink): void 
 }
 
 function ctxOf(node: AstNode): string | undefined {
-    let n: AstNode | undefined = node;
-    while (n && n.$type !== 'Context') n = n.$container;
-    return (n as { name?: string } | undefined)?.name;
+    return AstUtils.getContainerOfType(node, isContext)?.name;
 }
 
 function allFields(index: ModelIndex): (FieldLike | Parameter)[] {

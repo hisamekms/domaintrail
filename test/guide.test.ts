@@ -170,7 +170,7 @@ describe('dt guide', () => {
     });
 
         test('its config example is valid JSONC', () => {
-        const [config] = blocks('jsonc');
+        const config = blocks('jsonc').find((b) => b.includes('"sources"')) ?? '';
         expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
     });
 

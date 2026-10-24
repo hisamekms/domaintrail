@@ -1,0 +1,9 @@
+{
+  // `oxlint --type-aware` (with oxlint-tsgolint): no cast to a domain type (see `dt guide lint`)
+  "plugins": ["typescript"],
+  "rules": {
+    "typescript/no-unsafe-type-assertion": "error"
+  },
+  // generated code makes the domain types, so it casts; it is checked by dt, not linted
+  "ignorePatterns": ["generated/**"]
+}

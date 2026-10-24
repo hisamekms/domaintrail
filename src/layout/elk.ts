@@ -26,11 +26,13 @@ const WORKER_SCRIPT = 'elkjs/lib/elk-worker.min.js';
  * elk.bundled.js mis-detects Bun as a web worker (global `self`), so on Bun ELK runs in a real Worker.
  * Node has no Web Worker; there ELK runs in-process through the worker script's own fake Worker.
  */
+/* oxlint-disable typescript/no-unsafe-type-assertion -- ELK types its worker factory loosely; either Worker serves it */
 function createWorker(url?: string): never {
     if (IS_BUN) return new Worker(import.meta.resolve(WORKER_SCRIPT)) as never;
     const { Worker: FakeWorker } = createRequire(import.meta.url)(WORKER_SCRIPT) as { Worker: new (url?: string) => unknown };
     return new FakeWorker(url) as never;
 }
+/* oxlint-enable typescript/no-unsafe-type-assertion */
 
 /** Approximate width of one character of an edge label (13px sans-serif). */
 const LABEL_CHAR_WIDTH = 7.6;

@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
 import { ConfigError, checkTsContexts, loadConfig, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
+import { LINT_HINT, hasCastLintRule } from '../core/lint-hint.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
 import { findDomainFiles, loadWorkspace } from '../core/files.js';
 import { formatDomain } from '../format/format.js';
@@ -38,6 +39,8 @@ interface JsonReport {
     summary?: { files: number; errors: number; warnings: number };
     /** Output directories written by `generate ts`, relative to the working directory. */
     written?: string[];
+    /** `generate ts`: advice about the project (what text mode prints after `hint: `). */
+    hints?: string[];
     /** Why the command failed, unless only because of the diagnostics of `check`. */
     error?: string;
 }
@@ -133,7 +136,9 @@ With generate.ts.tests in the config, also writes the contract tests (fast-check
 context, by default into <out>/tests); see \`dt guide tests\`.
 With --format json, prints one JSON document like \`check\`, with the directories written ("written") or why
 nothing was written ("error").
-Type-check your own code against the output with \`tsc --noEmit\`.
+Type-check your own code against the output with \`tsc --noEmit\`. Without a lint rule against casts to domain types
+(no-unsafe-type-assertion) in an oxlint or ESLint config from the root up, prints a hint ("hints" in JSON); see
+\`dt guide lint\`, or set "lintHint": false.
 
 Examples:
   dt generate ts
@@ -187,8 +192,14 @@ Examples:
             const recorded = await writeManifest(cfg.root, files.map((f) => f.path));
             if (!recorded) io.err(`Warning: generated files not recorded in ${MANIFEST_FILE}, which is not a plain file in a plain directory; they will not be removed automatically.`);
             const written = outDirs.map((d) => path.relative(process.cwd(), d) || '.');
-            if (report) report.written = written;
-            else io.out(`TypeScript written to ${written.join(', ')}`);
+            const hints = cfg.lintHint && !(await hasCastLintRule(cfg.root)) ? [LINT_HINT] : [];
+            if (report) {
+                report.written = written;
+                if (hints.length) report.hints = hints;
+            } else {
+                io.out(`TypeScript written to ${written.join(', ')}`);
+                for (const h of hints) io.out(`hint: ${h}`);
+            }
         });
 
     program
@@ -373,14 +384,14 @@ Examples:
     };
 
     try {
-        await program.parseAsync(argv as string[], { from: 'user' });
+        await program.parseAsync([...argv], { from: 'user' });
     } catch (e) {
         if (e instanceof ConfigError) fail(e.message, 2);
         else if (e instanceof CliError) fail(e.message, e.exitCode);
         // File system and network failures (unreadable directories, permissions…) are reported, not thrown.
-        else if (errorCode(e)) fail((e as Error).message, 1);
+        else if (errorCode(e)) fail(e instanceof Error ? e.message : String(e), 1);
         else {
-            const code = (e as { exitCode?: number }).exitCode;
+            const code = typeof e === 'object' && e !== null && 'exitCode' in e ? e.exitCode : undefined;
             if (typeof code === 'number') return code;
             throw e;
         }
@@ -397,7 +408,7 @@ function parsePort(value: string): number {
 
 /** The Node.js error code (`ENOENT`, `EACCES`, `EADDRINUSE`…) of a system error. */
 function errorCode(e: unknown): string | undefined {
-    const code = (e as { code?: unknown } | undefined)?.code;
+    const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
     return typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : undefined;
 }
 
@@ -464,7 +475,7 @@ interface Manifest {
 
 async function readManifest(root: string): Promise<string[]> {
     try {
-        const m = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8')) as Manifest;
+        const m: { version?: unknown; files?: unknown } = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8'));
         // the file may have been crafted: entries that would leave the root are dropped
         return m.version === 1 && Array.isArray(m.files) ? m.files.filter((f) => typeof f === 'string' && f !== '' && staysInside(f)) : [];
     } catch {

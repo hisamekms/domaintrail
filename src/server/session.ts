@@ -140,11 +140,12 @@ export class ViewSession {
             if (el.kind !== 'aggregate') continue;
             const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
             for (const l of TRANSITION_LABELS) byLabels[l] = await this.layout(buildStateGraph(el, model, l));
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the loop above sets every label
             states[el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
         }
         // Forget layouts of graphs that no longer exist (e.g. removed aggregates).
         const live = new Set([structure.id, overview.id, aggregates.id, contextMap.id, contextMapAll.id, ...Object.values(states).flatMap((byLabels) => Object.values(byLabels).map((g) => g.id))]);
-        for (const id of [...this.layouts.keys()]) if (!live.has(id)) this.layouts.delete(id);
+        for (const id of this.layouts.keys()) if (!live.has(id)) this.layouts.delete(id);
         await this.saveLayouts();
 
         this.current = this.payload({
@@ -231,6 +232,7 @@ export class ViewSession {
         if (this.layoutsLoaded) return;
         this.layoutsLoaded = true;
         try {
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- our own file; its version and engine are checked below, a broken one is ignored
             const file = JSON.parse(await readFile(path.join(this.root, LAYOUT_FILE), 'utf8')) as LayoutFile;
             if (file.version !== 1 || file.engine !== this.engine.name || file.engineVersion !== this.engine.version) return;
             for (const [id, g] of Object.entries(file.graphs)) {

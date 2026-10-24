@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import { isCommand, isContext, isState, type Aggregate, type Command, type Context, type ContextElement, type State } from '../language/generated/ast.js';
+import { isCommand, isContext, isContextElement, isState, type Aggregate, type Command, type Context, type ContextElement, type State } from '../language/generated/ast.js';
 
 /**
  * Stable IDs are derived from fully qualified names so that they survive re-parsing:
@@ -30,7 +30,7 @@ export function elementIdOf(node: AstNode | undefined): string | undefined {
             return contextId((n.$container as Context).name);
         }
         if (n.$container && isContext(n.$container)) {
-            return idOfContextElement(n as ContextElement);
+            if (isContextElement(n)) return idOfContextElement(n);
         }
         if (isContext(n)) return contextId((n as Context).name);
         n = n.$container;

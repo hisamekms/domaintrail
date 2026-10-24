@@ -234,6 +234,7 @@ describe('verified types: generated TypeScript', () => {
  * 未使用のメールアドレス
  * 他の顧客に使われていないことを確かめたメールアドレス。
  * A value of EmailAddress for which MakeAvailableEmail made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your \`MakeAvailableEmail\` factory; never \`as AvailableEmail\` outside it (see dt guide lint).
  * @see sales.dt:9
  */
 export type AvailableEmail = EmailAddress & { readonly 'verified:Sales.AvailableEmail': true };`);

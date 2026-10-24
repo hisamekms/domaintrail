@@ -2,6 +2,7 @@
  * Generic helpers of the generated contract tests (the same for every model). Inputs are generated with fast-check
  * from the types, and only values that hold their invariants are used (ADR 0020); the generated checks are the oracle.
  */
+/* oxlint-disable typescript/no-unsafe-type-assertion -- generic over every model: values are typed by the generated arbitraries and checks, not here */
 import * as fc from 'fast-check';
 
 /** A named test case. A `todo` case names something the suite does not check; its `run` does nothing. */

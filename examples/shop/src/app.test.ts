@@ -1,11 +1,10 @@
 // Tests of the application layer: what the contract tests cannot see, because it happens around the commands —
 // saving with versions, recording and publishing events, the policies, and the checks before a command runs.
 import { describe, expect, test } from 'bun:test';
-import type { Sales } from '../generated/domain/index.js';
 import { fixedProviders } from './app/providers.js';
 import { createShop } from './app/shop.js';
 import { verifications } from './app/verifications.js';
-import { makeEmailAddress } from './domain/primitives.js';
+import { makeEmailAddress, makeOrderId } from './domain/primitives.js';
 
 async function confirmedOrder() {
     const shop = createShop(fixedProviders());
@@ -41,7 +40,7 @@ describe('use cases', () => {
     test('invalid input is rejected by the constructors of the domain primitives before any command', async () => {
         const shop = createShop(fixedProviders());
         expect(await shop.app.registerCustomer('x', 'no-at-sign')).toEqual({ ok: false, error: { type: 'InvalidEmailAddress', value: 'no-at-sign', invariant: 'format' } });
-        const r = await shop.app.addItem('order-1' as Sales.OrderId, { sku: 'abc', quantity: 1, unitPrice: { amount: '1', currency: 'JPY' } });
+        const r = await shop.app.addItem(makeOrderId('order-1'), { sku: 'abc', quantity: 1, unitPrice: { amount: '1', currency: 'JPY' } });
         expect(r).toEqual({ ok: false, error: { type: 'InvalidSku', value: 'abc', invariant: 'valid' } });
     });
 
@@ -105,7 +104,8 @@ describe('policies', () => {
         const { shop, order } = await confirmedOrder();
         expect(await shop.app.cancelOrder(order.id, 'Requested')).toMatchObject({ ok: true });
         const draft = await shop.app.placeOrder(order.customer);
-        expect(await shop.app.cancelOrder(draft.ok ? draft.value.id : ('' as Sales.OrderId), 'Requested')).toMatchObject({ ok: true });
+        if (!draft.ok) throw new Error(draft.error.type);
+        expect(await shop.app.cancelOrder(draft.value.id, 'Requested')).toMatchObject({ ok: true });
         expect(shop.policies.refundRequests).toEqual([{ order: order.id, invoice: { id: expect.any(String), state: 'Open' }, requestedAt: expect.any(Date) }]);
     });
 });

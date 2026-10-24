@@ -214,6 +214,7 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
         nodes.push(
             sized({
                 id: el.id,
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- `shown` holds only STRUCTURE_KINDS, which are node kinds
                 kind: el.kind as GraphNode['kind'],
                 label: named(el.name, el.label),
                 stereotype: STEREOTYPES[el.kind],
@@ -352,7 +353,7 @@ function docLines(doc: string | undefined, width: number): GraphLine[] {
 }
 
 /** Punctuation that may not start a line; it hangs at the end of the line before. */
-const NO_LINE_START = new Set([...'、。，．,.)）」』】!?！？ー']);
+const NO_LINE_START = new Set('、。，．,.)）」』】!?！？ー');
 
 /**
  * Splits a text into lines of at most `width` character units, breaking after a space where there is one

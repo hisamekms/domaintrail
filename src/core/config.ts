@@ -21,6 +21,8 @@ export interface DomainTrailConfigFile {
     sources?: string[];
     /** Whether files and directories ignored by `.gitignore` are skipped when finding sources. Default: true. */
     respectGitignore?: boolean;
+    /** Whether `dt generate ts` says so when no lint rule against casts to domain types is found. Default: true. */
+    lintHint?: boolean;
     generate?: {
         ts?: {
             out?: string;
@@ -41,6 +43,7 @@ export interface ResolvedConfig {
     file?: string;
     sources: string[];
     respectGitignore: boolean;
+    lintHint: boolean;
     tsOut: string;
     /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
     tsContexts: Record<string, string>;
@@ -90,6 +93,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
         file,
         sources: config.sources ?? DEFAULT_SOURCES,
         respectGitignore: config.respectGitignore ?? true,
+        lintHint: config.lintHint ?? true,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
         tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).flatMap(([ctx, c]) => (c.out !== undefined ? [[ctx, c.out]] : []))),
         tsPolicies: {
@@ -102,7 +106,7 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
 }
 
 function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
-    return { sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, tsPolicies: { project: DEFAULT_POLICIES, contexts: {} }, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+    return { sources: DEFAULT_SOURCES, respectGitignore: true, lintHint: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, tsPolicies: { project: DEFAULT_POLICIES, contexts: {} }, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
 }
 
 /** How the policies of each context are generated: the context's own setting, else the project's, else `optional`. */
@@ -133,75 +137,82 @@ export function parseJsonc(text: string, file = 'config'): unknown {
     try {
         return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
     } catch (e) {
-        throw new ConfigError(`${file}: invalid JSON: ${(e as Error).message}`);
+        throw new ConfigError(`${file}: invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
     }
 }
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 function validate(raw: unknown, file: string): DomainTrailConfigFile {
     const fail = (msg: string): never => {
         throw new ConfigError(`${file}: ${msg}`);
     };
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) fail('expected an object');
-    const c = raw as Record<string, unknown>;
+    if (!isObject(raw)) return fail('expected an object');
+    const c = raw;
     for (const key of Object.keys(c)) {
-        if (!['$schema', 'sources', 'respectGitignore', 'generate', 'view'].includes(key)) fail(`unknown key '${key}'`);
+        if (!['$schema', 'sources', 'respectGitignore', 'lintHint', 'generate', 'view'].includes(key)) fail(`unknown key '${key}'`);
     }
-    if (c.sources !== undefined && (!Array.isArray(c.sources) || c.sources.some((s) => typeof s !== 'string'))) {
+    const sources = c.sources;
+    if (sources !== undefined && (!Array.isArray(sources) || sources.some((s) => typeof s !== 'string'))) {
         fail("'sources' must be an array of glob strings");
     }
-    if (Array.isArray(c.sources) && !c.sources.some((s) => !String(s).startsWith('!'))) fail("'sources' needs at least one include pattern");
-    for (const s of (c.sources as string[] | undefined) ?? []) {
-        if (s.replace(/^!/, '').split('/').includes('..') || path.isAbsolute(s.replace(/^!/, ''))) {
-            fail(`'sources' must stay inside the directory of the config file: '${s}'`);
+    if (Array.isArray(sources)) {
+        if (!sources.some((s) => !String(s).startsWith('!'))) fail("'sources' needs at least one include pattern");
+        for (const s of sources.map(String)) {
+            if (s.replace(/^!/, '').split('/').includes('..') || path.isAbsolute(s.replace(/^!/, ''))) {
+                fail(`'sources' must stay inside the directory of the config file: '${s}'`);
+            }
         }
     }
     if (c.respectGitignore !== undefined && typeof c.respectGitignore !== 'boolean') fail("'respectGitignore' must be true or false");
-    const gen = c.generate as Record<string, unknown> | undefined;
+    if (c.lintHint !== undefined && typeof c.lintHint !== 'boolean') fail("'lintHint' must be true or false");
+    const gen = c.generate;
     if (gen !== undefined) {
-        if (typeof gen !== 'object' || gen === null) fail("'generate' must be an object");
-        for (const key of Object.keys(gen!)) if (key !== 'ts') fail(`unknown generator 'generate.${key}' (supported: ts)`);
-        const ts = gen!.ts as Record<string, unknown> | undefined;
-        if (ts !== undefined && (typeof ts !== 'object' || ts === null || Array.isArray(ts))) fail("'generate.ts' must be an object");
-        for (const key of Object.keys(ts ?? {})) if (!['out', 'policies', 'contexts', 'tests'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
-        checkOut(ts?.out, 'generate.ts.out', fail);
-        checkPolicies(ts?.policies, 'generate.ts.policies', fail);
-        const tests = ts?.tests as Record<string, unknown> | undefined;
+        if (!isObject(gen)) return fail("'generate' must be an object");
+        for (const key of Object.keys(gen)) if (key !== 'ts') fail(`unknown generator 'generate.${key}' (supported: ts)`);
+        const ts = gen.ts;
+        if (ts !== undefined && !isObject(ts)) fail("'generate.ts' must be an object");
+        const tsKeys = isObject(ts) ? ts : {};
+        for (const key of Object.keys(tsKeys)) if (!['out', 'policies', 'contexts', 'tests'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
+        checkOut(tsKeys.out, 'generate.ts.out', fail);
+        checkPolicies(tsKeys.policies, 'generate.ts.policies', fail);
+        const tests = tsKeys.tests;
         if (tests !== undefined) {
-            if (typeof tests !== 'object' || tests === null || Array.isArray(tests)) fail("'generate.ts.tests' must be an object");
-            for (const k of Object.keys(tests!)) if (!['out', 'runner'].includes(k)) fail(`unknown key 'generate.ts.tests.${k}'`);
-            checkOut(tests!.out, 'generate.ts.tests.out', fail);
-            if (tests!.runner !== undefined && !(RUNNERS as readonly unknown[]).includes(tests!.runner)) {
+            if (!isObject(tests)) return fail("'generate.ts.tests' must be an object");
+            for (const k of Object.keys(tests)) if (!['out', 'runner'].includes(k)) fail(`unknown key 'generate.ts.tests.${k}'`);
+            checkOut(tests.out, 'generate.ts.tests.out', fail);
+            if (tests.runner !== undefined && !(RUNNERS as readonly unknown[]).includes(tests.runner)) {
                 fail(`'generate.ts.tests.runner' must be one of ${RUNNERS.map((r) => `'${r}'`).join(', ')}`);
             }
         }
-        const contexts = ts?.contexts;
+        const contexts = tsKeys.contexts;
         if (contexts !== undefined) {
-            if (typeof contexts !== 'object' || contexts === null || Array.isArray(contexts)) fail("'generate.ts.contexts' must be an object keyed by context name");
-            for (const [ctx, c] of Object.entries(contexts as Record<string, unknown>)) {
+            if (!isObject(contexts)) return fail("'generate.ts.contexts' must be an object keyed by context name");
+            for (const [ctx, c] of Object.entries(contexts)) {
                 const key = `generate.ts.contexts.${ctx}`;
-                if (typeof c !== 'object' || c === null || Array.isArray(c)) fail(`'${key}' must be an object`);
-                for (const k of Object.keys(c as object)) if (k !== 'out' && k !== 'policies') fail(`unknown key '${key}.${k}'`);
-                const entry = c as Record<string, unknown>;
-                if (entry.out === undefined && entry.policies === undefined) fail(`'${key}' needs 'out' or 'policies'`);
-                checkOut(entry.out, `${key}.out`, fail);
-                checkPolicies(entry.policies, `${key}.policies`, fail);
+                if (!isObject(c)) return fail(`'${key}' must be an object`);
+                for (const k of Object.keys(c)) if (k !== 'out' && k !== 'policies') fail(`unknown key '${key}.${k}'`);
+                if (c.out === undefined && c.policies === undefined) fail(`'${key}' needs 'out' or 'policies'`);
+                checkOut(c.out, `${key}.out`, fail);
+                checkPolicies(c.policies, `${key}.policies`, fail);
             }
         }
     }
-    const view = c.view as Record<string, unknown> | undefined;
+    const view = c.view;
     if (view !== undefined) {
-        if (typeof view !== 'object' || view === null) fail("'view' must be an object");
-        if (view!.port !== undefined && (!Number.isInteger(view!.port) || (view!.port as number) < 0)) fail("'view.port' must be a port number");
-        if (view!.host !== undefined && typeof view!.host !== 'string') fail("'view.host' must be a string");
+        if (!isObject(view)) return fail("'view' must be an object");
+        if (view.port !== undefined && (typeof view.port !== 'number' || !Number.isInteger(view.port) || view.port < 0)) fail("'view.port' must be a port number");
+        if (view.host !== undefined && typeof view.host !== 'string') fail("'view.host' must be a string");
     }
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- every key was checked above
     return c as DomainTrailConfigFile;
 }
 
 /** An output directory: a string inside the directory of the config file. */
 function checkOut(out: unknown, key: string, fail: (msg: string) => never): void {
     if (out === undefined) return;
-    if (typeof out !== 'string') fail(`'${key}' must be a string`);
-    if (!staysInside(out as string)) fail(`'${key}' must stay inside the directory of the config file: '${out}'`);
+    if (typeof out !== 'string') return fail(`'${key}' must be a string`);
+    if (!staysInside(out)) fail(`'${key}' must stay inside the directory of the config file: '${out}'`);
 }
 
 /** `optional` or `required` (ADR 0022). */

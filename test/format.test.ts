@@ -5,7 +5,6 @@ import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
 import { loadWorkspace } from '../src/core/files.js';
 import { FormatError, formatDomain } from '../src/format/format.js';
-import type { DomainModel } from '../src/model/model.js';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -23,7 +22,7 @@ async function modelOf(files: Record<string, string>): Promise<unknown> {
     expect(a.syntaxOk).toBe(true);
     const strip = (v: unknown): unknown =>
         Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'location').map(([k, x]) => [k, strip(x)])) : v;
-    return strip(a.model as DomainModel);
+    return strip(a.model);
 }
 
 const mapValues = (files: Record<string, string>, f: (text: string) => string) => Object.fromEntries(Object.entries(files).map(([k, v]) => [k, f(v)]));
@@ -40,7 +39,7 @@ function scramble(text: string): string {
         n++;
         const newlines = ws.split('\n').length - 1;
         if (newlines) return '\n'.repeat(newlines) + ' '.repeat(n % 7);
-        const nearComment = /^\s*\/[/*]/.test(text.slice(offset + ws.length)) || /\*\/$/.test(text.slice(0, offset));
+        const nearComment = /^\s*\/[/*]/.test(text.slice(offset + ws.length)) || text.slice(0, offset).endsWith('*/');
         return !nearComment && n % 3 === 0 ? `\n${' '.repeat(n % 5)}` : ' '.repeat(1 + (n % 3));
     });
 }
