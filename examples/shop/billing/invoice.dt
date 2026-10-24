@@ -16,15 +16,11 @@ context Billing {
     command pay(paidAt: Timestamp) "支払う"
       Open -> Paid
       emits InvoicePaid
-      errors AlreadyPaid
   }
 
-  event InvoicePaid "支払完了" {
+  /// 入金の記録として残す。
+  persistent event InvoicePaid "支払完了" {
     invoiceId: InvoiceId
-    paidAt: Timestamp
-  }
-
-  error AlreadyPaid "支払済み" {
     paidAt: Timestamp
   }
 }

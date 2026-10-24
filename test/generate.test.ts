@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { analyze } from '../src/core/analyze.js';
@@ -58,7 +58,7 @@ describe('generated TypeScript', () => {
 }, EmptyOrder>;`,
         );
         // no events -> NoEvents; factory -> no aggregate parameter, the new ID passed in
-        expect(sales).toContain('        readonly events: NoEvents;\n    };\n}, DuplicateSku>;');
+        expect(sales).toContain('        readonly events: NoEvents;\n    };\n}, DuplicateSku | CurrencyMismatch>;');
         expect(sales).toContain("import type { NoEvents, Result, Shape, Timestamp } from './_runtime.js';");
         expect(sales).toContain('export type PlaceOrder = (\n    id: OrderId,\n    customer: CustomerId,\n)');
         // an aggregate without states: keyed by the aggregate's name
@@ -67,8 +67,12 @@ describe('generated TypeScript', () => {
     });
 
     test('the generated code and the example implementation compile', async () => {
-        for (const f of ['order-commands.ts', 'primitives.ts']) await writeFile(path.join(dir, 'src', f), await readFile(path.join(EXAMPLES, 'src', f), 'utf8'));
-        const r = tsc('src/order-commands.ts', 'src/primitives.ts', 'generated/domain/index.ts');
+        // the domain layer of the example: it imports only the generated code (the rest is checked in contract-tests)
+        const files = (await readdir(path.join(EXAMPLES, 'src', 'domain'))).map((f) => path.join('src', 'domain', f));
+        expect(files).toEqual(expect.arrayContaining(['src/domain/order-commands.ts', 'src/domain/primitives.ts']));
+        await mkdir(path.join(dir, 'src', 'domain'));
+        for (const f of files) await writeFile(path.join(dir, f), await readFile(path.join(EXAMPLES, f), 'utf8'));
+        const r = tsc(...files, 'generated/domain/index.ts');
         expect(r.output).toBe('');
         expect(r.code).toBe(0);
     });
@@ -97,8 +101,8 @@ export function wrongAggregate(order: Sales.DraftOrder): ConfirmResult {
     return ok({ Confirmed: { aggregate: order, events: { OrderConfirmed: confirmedEvent(order) } } });
 }
 export function undeclaredError(): ConfirmResult {
-    // @ts-expect-error error type not declared by the command
-    return err({ type: 'AlreadyPaid', paidAt: at });
+    // @ts-expect-error error type not declared by the command (it is cancel's)
+    return err({ type: 'NoteRequired' });
 }
 export function undeclaredEvent(order: Sales.DraftOrder): ConfirmResult {
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: at };

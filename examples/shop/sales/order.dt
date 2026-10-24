@@ -18,6 +18,10 @@ context Sales {
 
     invariant quantitiesPositive "数量は正の値" { all(items, item => item.quantity > 0) }
     invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }
+    /// 請求額を1つの金額にまとめられるよう、注文の単価は1つの通貨で揃える。
+    invariant singleCurrency "単価の通貨が揃っている" {
+      all(items, a => all(items, b => a.unitPrice.currency == b.unitPrice.currency))
+    }
 
     create command place(id: OrderId, customer: CustomerId) "注文する"
       -> Draft
@@ -39,6 +43,9 @@ context Sales {
     command addItem(item: OrderItem "追加する明細") "明細を追加する"
       Draft -> Draft
       requires newSku "同じ商品コードの明細がない" { all(items, i => i.sku != item.sku) } else DuplicateSku
+      requires sameCurrency "既存の明細と同じ通貨" {
+        all(items, i => i.unitPrice.currency == item.unitPrice.currency)
+      } else CurrencyMismatch
       changes items
 
     command confirm(at: Timestamp) "注文を確定する"
@@ -101,6 +108,9 @@ context Sales {
   error DuplicateSku "商品コードの重複" {
     sku: Sku
   }
+
+  /// 追加しようとした明細の単価が、すでにある明細と違う通貨で書かれている。
+  error CurrencyMismatch "通貨の不一致"
 
   /// 「その他」で取り消すのに、注文に備考がない。
   error NoteRequired "備考なし"
