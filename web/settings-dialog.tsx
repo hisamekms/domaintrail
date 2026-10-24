@@ -33,7 +33,14 @@ export function SettingsDialog(props: {
 
     return (
         <div className="settings">
-            <button className="icon-button" aria-haspopup="dialog" aria-expanded={open} aria-label={t.settings} data-tooltip={t.settings} onClick={() => setOpen(true)}>
+            <button
+                className="icon-button"
+                aria-haspopup="dialog"
+                aria-expanded={open}
+                aria-label={t.settings}
+                data-tooltip={t.settings}
+                onClick={() => setOpen(true)}
+            >
                 <Settings size={16} aria-hidden />
             </button>
             <dialog
@@ -60,7 +67,12 @@ export function SettingsDialog(props: {
                     </SettingsRow>
                     <SettingsRow id="settings-theme" caption={t.theme} hint={themePreference === 'auto' ? t.themeAuto(t.themes[theme]) : t.themeHint}>
                         {THEMES.map((th) => (
-                            <button key={th} className={themePreference === th ? 'active' : ''} aria-pressed={themePreference === th} onClick={() => onTheme(th)}>
+                            <button
+                                key={th}
+                                className={themePreference === th ? 'active' : ''}
+                                aria-pressed={themePreference === th}
+                                onClick={() => onTheme(th)}
+                            >
                                 {t.themes[th]}
                             </button>
                         ))}

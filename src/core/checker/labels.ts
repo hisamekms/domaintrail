@@ -20,7 +20,14 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
         const contextLabel = labels.contextLabel(ctx);
         for (const f of fragments) {
             if (f.label && f.label !== contextLabel) {
-                sink.warning('L001', `Context '${ctx}' is named '${contextLabel}' elsewhere, but '${f.label}' here.`, f, 'label', undefined, `use one name for the context in every file, or omit it here`);
+                sink.warning(
+                    'L001',
+                    `Context '${ctx}' is named '${contextLabel}' elsewhere, but '${f.label}' here.`,
+                    f,
+                    'label',
+                    undefined,
+                    `use one name for the context in every file, or omit it here`,
+                );
             }
         }
 
@@ -37,13 +44,24 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
                 seen.add(entry.name);
                 if (!used.has(entry.name)) {
                     const hint = didYouMean(entry.name, [...used]) ?? `remove the term, or use the name for a field or parameter`;
-                    sink.warning('L002', `Term '${entry.name}' ("${entry.label}") is not used by any field or parameter in context '${ctx}'.`, entry, 'name', undefined, hint);
+                    sink.warning(
+                        'L002',
+                        `Term '${entry.name}' ("${entry.label}") is not used by any field or parameter in context '${ctx}'.`,
+                        entry,
+                        'name',
+                        undefined,
+                        hint,
+                    );
                 }
             }
         }
 
         // Context-level declarations share one namespace of Japanese names.
-        sameLabel(index.elementsOf(ctx).map((e) => ({ node: e, name: e.name, label: e.label })), `context '${ctx}'`, sink);
+        sameLabel(
+            index.elementsOf(ctx).map((e) => ({ node: e, name: e.name, label: e.label })),
+            `context '${ctx}'`,
+            sink,
+        );
     }
 
     for (const field of allFields(index)) {
@@ -78,12 +96,24 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
 
     for (const el of index.elements) {
         if (isEnumDecl(el)) {
-            sameLabel(el.values.map((v) => ({ node: v, name: v.name, label: v.label })), `enum '${el.name}'`, sink);
+            sameLabel(
+                el.values.map((v) => ({ node: v, name: v.name, label: v.label })),
+                `enum '${el.name}'`,
+                sink,
+            );
         } else if (isUnionDecl(el)) {
-            sameLabel(el.variants.map((v) => ({ node: v, name: v.name, label: v.label })), `union '${el.name}'`, sink);
+            sameLabel(
+                el.variants.map((v) => ({ node: v, name: v.name, label: v.label })),
+                `union '${el.name}'`,
+                sink,
+            );
             for (const v of el.variants) {
                 fieldScope(fieldsOf(v.members), `variant '${el.name}.${v.name}'`);
-                sameLabel(invariantsOf(v.members).map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}.${v.name}'`, sink);
+                sameLabel(
+                    invariantsOf(v.members).map((i) => ({ node: i, name: i.name, label: i.label })),
+                    `the invariants of '${el.name}.${v.name}'`,
+                    sink,
+                );
             }
         } else if (isAggregate(el)) {
             const included = includedFields(el).map((x) => x.field);
@@ -91,16 +121,36 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
             const states = statesOf(el);
             fieldScope(common, `'${el.name}'`, included);
             for (const s of states) fieldScope(fieldsOf(s.members), `state '${el.name}.${s.name}'`, [...included, ...common]);
-            sameLabel(states.map((s) => ({ node: s, name: s.name, label: s.label })), `the states of '${el.name}'`, sink);
-            sameLabel(commandsOf(el).map((c) => ({ node: c, name: c.name, label: c.label })), `the commands of '${el.name}'`, sink);
+            sameLabel(
+                states.map((s) => ({ node: s, name: s.name, label: s.label })),
+                `the states of '${el.name}'`,
+                sink,
+            );
+            sameLabel(
+                commandsOf(el).map((c) => ({ node: c, name: c.name, label: c.label })),
+                `the commands of '${el.name}'`,
+                sink,
+            );
             const invariants = [...invariantsOf(el.members), ...states.flatMap((s) => invariantsOf(s.members))];
-            sameLabel(invariants.map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}'`, sink);
+            sameLabel(
+                invariants.map((i) => ({ node: i, name: i.name, label: i.label })),
+                `the invariants of '${el.name}'`,
+                sink,
+            );
             for (const c of commandsOf(el)) fieldScope(c.params, `command '${el.name}.${c.name}'`);
         } else if ('members' in el) {
             // fields of field sets were checked in the field set
-            fieldScope(fieldsOf(el.members), `'${el.name}'`, includedFields(el).map((x) => x.field));
+            fieldScope(
+                fieldsOf(el.members),
+                `'${el.name}'`,
+                includedFields(el).map((x) => x.field),
+            );
             if (isEntity(el) || isValueObject(el)) {
-                sameLabel(invariantsOf(el.members).map((i) => ({ node: i, name: i.name, label: i.label })), `the invariants of '${el.name}'`, sink);
+                sameLabel(
+                    invariantsOf(el.members).map((i) => ({ node: i, name: i.name, label: i.label })),
+                    `the invariants of '${el.name}'`,
+                    sink,
+                );
             }
         }
     }
@@ -124,7 +174,14 @@ function sameLabel(items: Labeled[], where: string, sink: DiagnosticSink): void 
             byLabel.set(item.label, item);
         } else if (first.name !== item.name && !(first.inherited && item.inherited)) {
             const hint = `give one of them another Japanese name (with a label, or a term)`;
-            sink.warning('L003', `'${item.name}' and '${first.name}' are both named '${item.label}' in ${where}.`, item.node, item.property ?? 'label', undefined, hint);
+            sink.warning(
+                'L003',
+                `'${item.name}' and '${first.name}' are both named '${item.label}' in ${where}.`,
+                item.node,
+                item.property ?? 'label',
+                undefined,
+                hint,
+            );
         }
     }
 }

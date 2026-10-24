@@ -12,7 +12,24 @@ afterAll(async () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true });
 });
 
-const TSC_FLAGS = ['--ignoreConfig', '--noEmit', '--strict', '--noUnusedLocals', '--noUnusedParameters', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--verbatimModuleSyntax', '--types', 'bun', '--lib', 'ES2023,DOM'];
+const TSC_FLAGS = [
+    '--ignoreConfig',
+    '--noEmit',
+    '--strict',
+    '--noUnusedLocals',
+    '--noUnusedParameters',
+    '--target',
+    'ES2023',
+    '--module',
+    'preserve',
+    '--moduleResolution',
+    'bundler',
+    '--verbatimModuleSyntax',
+    '--types',
+    'bun',
+    '--lib',
+    'ES2023,DOM',
+];
 
 /** Type-checks files strictly; `exact` adds `exactOptionalPropertyTypes` (which the generated tests are written for). */
 function tsc(dir: string, files: string[], exact = true): string {
@@ -186,7 +203,9 @@ describe('generated contract tests', () => {
     });
 
     test('the declared checks passed in are tested like the generated ones', async () => {
-        const declared = { Shop: { Code: { reserved: (v: string) => v !== 'AA0' }, AddCart: { allowed: (_c: unknown, line: { code: string }) => !forbidden(line.code) } } };
+        const declared = {
+            Shop: { Code: { reserved: (v: string) => v !== 'AA0' }, AddCart: { allowed: (_c: unknown, line: { code: string }) => !forbidden(line.code) } },
+        };
         const r = await run(contract({ make: { Code: makeCode }, Cart: cart() }, { declared }));
         expect(failing(r)).toEqual([]);
         expect(todos(r)).toEqual([]);
@@ -194,9 +213,16 @@ describe('generated contract tests', () => {
         const lax = cart({
             add: decide(Shop.CartShape, { Open: (c: any, line: any) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }) }),
         });
-        expect(failing(await run(contract({ Cart: lax }, { declared, examples: { Cart: { commands: { add: [[{ state: 'Open', id: 'c', lines: [] }, { code: 'ZZ1', qty: 1 }, 5]] } } } })))).toContain(
-            'Shop > Cart > Cart.add returns the error of the first requirement that does not hold, and none of their errors when all hold',
-        );
+        expect(
+            failing(
+                await run(
+                    contract(
+                        { Cart: lax },
+                        { declared, examples: { Cart: { commands: { add: [[{ state: 'Open', id: 'c', lines: [] }, { code: 'ZZ1', qty: 1 }, 5]] } } } },
+                    ),
+                ),
+            ),
+        ).toContain('Shop > Cart > Cart.add returns the error of the first requirement that does not hold, and none of their errors when all hold');
     });
 
     test('T1 catches a constructor with an off-by-one range, and one that reports the wrong invariant', async () => {
@@ -206,7 +232,9 @@ describe('generated contract tests', () => {
         expect(Object.values(r1).join()).toContain("makeQty(11) accepted a value that violates 'valid'");
         const wrongOrder = (v: string) => (v.length > 3 ? err({ type: 'InvalidCode', value: v, invariant: 'short' }) : makeCode(v));
         const r2 = await run(contract({ make: { Code: wrongOrder } }));
-        expect(Object.values(r2).join()).toMatch(/returned the error \{"type":"InvalidCode","value":".*","invariant":"short"\}; expected \{ type: 'InvalidCode', value: ".*", invariant: 'format' \}/);
+        expect(Object.values(r2).join()).toMatch(
+            /returned the error \{"type":"InvalidCode","value":".*","invariant":"short"\}; expected \{ type: 'InvalidCode', value: ".*", invariant: 'format' \}/,
+        );
     });
 
     test('T2 catches requirements checked in the wrong order, a missing one, and an error returned although all hold', async () => {
@@ -225,7 +253,9 @@ describe('generated contract tests', () => {
     });
 
     test('T3 catches an aggregate that violates the invariants of its target state', async () => {
-        const zero = cart({ close: decide(Shop.CartShape, { Open: (c: any) => (c.lines.length ? ok({ Closed: { set: { total: 0 }, events: {} } }) : err({ type: 'Empty' })) }) });
+        const zero = cart({
+            close: decide(Shop.CartShape, { Open: (c: any) => (c.lines.length ? ok({ Closed: { set: { total: 0 }, events: {} } }) : err({ type: 'Empty' })) }),
+        });
         const r = await run(contract({ Cart: zero }));
         expect(failing(r)).toEqual(['Shop > Cart > Cart.close makes an aggregate that holds the invariants of its state']);
         expect(Object.values(r).join()).toContain("made an aggregate that violates 'positive'");
@@ -235,7 +265,13 @@ describe('generated contract tests', () => {
         const once = cart({
             add: decide(Shop.CartShape, {
                 Open: (c: any, line: any, limit: number) =>
-                    c.lines.some((l: any) => l.code === line.code) ? err({ type: 'Duplicate' }) : c.lines.length >= limit ? err({ type: 'Full' }) : forbidden(line.code) ? err({ type: 'Forbidden' }) : ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 1) } }),
+                    c.lines.some((l: any) => l.code === line.code)
+                        ? err({ type: 'Duplicate' })
+                        : c.lines.length >= limit
+                          ? err({ type: 'Full' })
+                          : forbidden(line.code)
+                            ? err({ type: 'Forbidden' })
+                            : ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 1) } }),
             }),
         });
         const r = await run(contract({ Cart: once }));
@@ -244,8 +280,19 @@ describe('generated contract tests', () => {
     });
 
     test('T5 catches randomness and a changed input', async () => {
-        const random = cart({ start: decide(Shop.CartShape, (id: string) => ok({ Open: { set: { id, lines: Math.random() < 2 ? [{ code: `A${Math.floor(Math.random() * 1e9)}`, qty: 1 }] : [] }, events: { Opened: { type: 'Opened', cart: id } } } })) });
-        expect(failing(await run(contract({ Cart: random })))).toContain('Shop > Cart > Cart.start is pure: the same input gives the same result, and the input is not changed');
+        const random = cart({
+            start: decide(Shop.CartShape, (id: string) =>
+                ok({
+                    Open: {
+                        set: { id, lines: Math.random() < 2 ? [{ code: `A${Math.floor(Math.random() * 1e9)}`, qty: 1 }] : [] },
+                        events: { Opened: { type: 'Opened', cart: id } },
+                    },
+                }),
+            ),
+        });
+        expect(failing(await run(contract({ Cart: random })))).toContain(
+            'Shop > Cart > Cart.start is pure: the same input gives the same result, and the input is not changed',
+        );
         const mutating = cart({
             close: decide(Shop.CartShape, {
                 Open: (c: any) => {
@@ -273,7 +320,14 @@ describe('generated contract tests', () => {
     });
 
     test('examples run first; an example that violates the invariants is reported', async () => {
-        const bad = { state: 'Open', id: 'c', lines: [{ code: 'AB1', qty: 1 }, { code: 'AB1', qty: 2 }] };
+        const bad = {
+            state: 'Open',
+            id: 'c',
+            lines: [
+                { code: 'AB1', qty: 1 },
+                { code: 'AB1', qty: 2 },
+            ],
+        };
         const r = await run(contract({ Cart: cart() }, { examples: { Cart: { commands: { close: [[bad]] } } } }));
         expect(Object.values(r).join()).toContain("Example 1 of Cart.close: the aggregate violates 'distinctCodes'");
         const r2 = await run(contract({ Cart: cart() }, { examples: { Cart: { states: { Open: [bad] } } } }));
@@ -283,7 +337,9 @@ describe('generated contract tests', () => {
     test('an override that rarely holds the invariants names the type to override', async () => {
         const fc = await import('fast-check');
         const r = await run(contract({ Cart: cart() }, { arbitraries: { Shop: { Qty: fc.integer({ min: 100, max: 1_000_000 }) } } }));
-        expect(Object.values(r).join()).toContain('Generating values of Shop.Qty that hold its invariants failed 1000 times in a row. Pass an arbitrary for it: options.arbitraries = { Shop: { Qty: … } }.');
+        expect(Object.values(r).join()).toContain(
+            'Generating values of Shop.Qty that hold its invariants failed 1000 times in a row. Pass an arbitrary for it: options.arbitraries = { Shop: { Qty: … } }.',
+        );
     });
 });
 
@@ -294,7 +350,14 @@ describe('the shop example', () => {
         await symlink(path.join(ROOT, 'node_modules'), path.join(shop, 'node_modules'));
         expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} })).toBe(0);
         const manifest = JSON.parse(await readFile(path.join(shop, '.domaintrail', 'generated.json'), 'utf8'));
-        expect(manifest.files).toEqual(expect.arrayContaining(['generated/domain/tests/_testing.ts', 'generated/domain/tests/_register.ts', 'generated/domain/tests/Sales.ts', 'generated/domain/tests/index.ts']));
+        expect(manifest.files).toEqual(
+            expect.arrayContaining([
+                'generated/domain/tests/_testing.ts',
+                'generated/domain/tests/_register.ts',
+                'generated/domain/tests/Sales.ts',
+                'generated/domain/tests/index.ts',
+            ]),
+        );
         // all of src/ (domain, application, demo, tests), with the example's own tsconfig.json
         const typecheck = Bun.spawnSync([process.execPath, path.join(ROOT, 'node_modules', '.bin', 'tsc'), '-p', shop]);
         expect(typecheck.stdout.toString() + typecheck.stderr.toString()).toBe('');

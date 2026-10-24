@@ -26,31 +26,66 @@ export function checkCommands(index: ModelIndex, sink: DiagnosticSink): void {
                 }
                 for (const e of cmd.emits) {
                     if (e.when) {
-                        sink.error('M006', `'when' selects outcomes by state, but aggregate '${agg.name}' has no states.`, e, 'when', undefined, `remove 'when …' (then '${e.event.$refText}' is emitted on every success), or split the command`);
+                        sink.error(
+                            'M006',
+                            `'when' selects outcomes by state, but aggregate '${agg.name}' has no states.`,
+                            e,
+                            'when',
+                            undefined,
+                            `remove 'when …' (then '${e.event.$refText}' is emitted on every success), or split the command`,
+                        );
                     }
                 }
                 continue;
             }
             if (cmd.factory) {
                 if (cmd.transitions.length !== 1) {
-                    sink.error('M006', `${label} must declare exactly one transition to its initial state(s), e.g. '-> Draft'.`, cmd, cmd.transitions.length ? 'transitions' : 'name', cmd.transitions.length ? 1 : undefined);
+                    sink.error(
+                        'M006',
+                        `${label} must declare exactly one transition to its initial state(s), e.g. '-> Draft'.`,
+                        cmd,
+                        cmd.transitions.length ? 'transitions' : 'name',
+                        cmd.transitions.length ? 1 : undefined,
+                    );
                 }
                 cmd.transitions.forEach((t) => {
-                    if (t.from.length > 0) sink.error('M006', `${label} creates a new '${agg.name}' and cannot have source states; write '-> ${t.to.map((r) => r.$refText).join(' | ')}'.`, t, 'from');
+                    if (t.from.length > 0)
+                        sink.error(
+                            'M006',
+                            `${label} creates a new '${agg.name}' and cannot have source states; write '-> ${t.to.map((r) => r.$refText).join(' | ')}'.`,
+                            t,
+                            'from',
+                        );
                 });
             } else {
                 if (cmd.transitions.length === 0) {
-                    sink.error('M006', `${label} must declare its state transitions, e.g. 'Draft -> Submitted' (or be declared with 'create command').`, cmd, 'name');
+                    sink.error(
+                        'M006',
+                        `${label} must declare its state transitions, e.g. 'Draft -> Submitted' (or be declared with 'create command').`,
+                        cmd,
+                        'name',
+                    );
                 }
                 cmd.transitions.forEach((t) => {
-                    if (t.from.length === 0) sink.error('M006', `${label} has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').`, t);
+                    if (t.from.length === 0)
+                        sink.error(
+                            'M006',
+                            `${label} has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').`,
+                            t,
+                        );
                 });
             }
             const sources = new Set<string>();
             for (const t of cmd.transitions) {
                 t.from.forEach((r, i) => {
                     if (sources.has(r.$refText)) {
-                        sink.error('M006', `State '${r.$refText}' is the source of more than one transition of command '${cmd.name}'; its outcome must be decided by one transition (use 'A -> B | C').`, t, 'from', i);
+                        sink.error(
+                            'M006',
+                            `State '${r.$refText}' is the source of more than one transition of command '${cmd.name}'; its outcome must be decided by one transition (use 'A -> B | C').`,
+                            t,
+                            'from',
+                            i,
+                        );
                     }
                     sources.add(r.$refText);
                 });
@@ -77,29 +112,64 @@ function checkEmitPatterns(cmd: Command, sink: DiagnosticSink): void {
         if (!w) continue;
         const event = e.event.$refText;
         if (w.from.length === 0 && w.to.length === 0) {
-            sink.error('M006', `'when' needs a source or a target state.`, w, undefined, undefined, `write 'when ${[...sources][0] ?? 'Draft'} ->' (from a state) or 'when -> ${[...targets][0] ?? 'Completed'}' (into a state)`);
+            sink.error(
+                'M006',
+                `'when' needs a source or a target state.`,
+                w,
+                undefined,
+                undefined,
+                `write 'when ${[...sources][0] ?? 'Draft'} ->' (from a state) or 'when -> ${[...targets][0] ?? 'Completed'}' (into a state)`,
+            );
             continue;
         }
         if (cmd.factory && w.from.length > 0) {
-            sink.error('M006', `Factory command '${cmd.name}' has no source state to select by.`, w, 'from', undefined, `select by the new aggregate's state: 'when -> ${w.to.map((r) => r.$refText).join(' | ') || [...targets].join(' | ')}'`);
+            sink.error(
+                'M006',
+                `Factory command '${cmd.name}' has no source state to select by.`,
+                w,
+                'from',
+                undefined,
+                `select by the new aggregate's state: 'when -> ${w.to.map((r) => r.$refText).join(' | ') || [...targets].join(' | ')}'`,
+            );
             continue;
         }
         let unknown = false;
         w.from.forEach((r, i) => {
             if (!r.ref || sources.has(r.$refText)) return;
             unknown = true;
-            sink.error('M006', `State '${r.$refText}' is not a source state of command '${cmd.name}', so '${event}' can never be emitted from it.`, w, 'from', i, `use a source state of '${cmd.name}': ${[...sources].join(', ')}`);
+            sink.error(
+                'M006',
+                `State '${r.$refText}' is not a source state of command '${cmd.name}', so '${event}' can never be emitted from it.`,
+                w,
+                'from',
+                i,
+                `use a source state of '${cmd.name}': ${[...sources].join(', ')}`,
+            );
         });
         w.to.forEach((r, i) => {
             if (!r.ref || targets.has(r.$refText)) return;
             unknown = true;
-            sink.error('M006', `State '${r.$refText}' is not a target state of command '${cmd.name}', so '${event}' can never be emitted when it ends there.`, w, 'to', i, `use a target state of '${cmd.name}': ${[...targets].join(', ')}`);
+            sink.error(
+                'M006',
+                `State '${r.$refText}' is not a target state of command '${cmd.name}', so '${event}' can never be emitted when it ends there.`,
+                w,
+                'to',
+                i,
+                `use a target state of '${cmd.name}': ${[...targets].join(', ')}`,
+            );
         });
         if (unknown || [...w.from, ...w.to].some((r) => !r.ref)) continue;
         const pattern = { from: w.from.map((r) => r.$refText), to: w.to.map((r) => r.$refText) };
         if (!outcomes.some((o) => emitApplies({ when: pattern }, o.from, o.to))) {
             const all = outcomes.map((o) => `${o.from ?? ''} -> ${o.to}`.trim()).join(', ');
-            sink.error('M006', `'when' matches no transition of command '${cmd.name}', so '${event}' is never emitted.`, w, undefined, undefined, `its outcomes are ${all}; leave out one side of 'when', or remove '${event}'`);
+            sink.error(
+                'M006',
+                `'when' matches no transition of command '${cmd.name}', so '${event}' is never emitted.`,
+                w,
+                undefined,
+                undefined,
+                `its outcomes are ${all}; leave out one side of 'when', or remove '${event}'`,
+            );
         }
     }
 }
@@ -125,7 +195,6 @@ export function checkFactoryIds(index: ModelIndex, sink: DiagnosticSink): void {
         }
     }
 }
-
 
 /**
  * Whether two fields have the same type: base type, multiplicity, and kind (with the target of a reference). The
@@ -158,23 +227,46 @@ export function checkChanges(index: ModelIndex, sink: DiagnosticSink): void {
             if (!cmd.changes.length) continue;
             if (cmd.factory) {
                 const hint = `remove 'changes ${cmd.changes.join(', ')}'; the decision of '${cmd.name}' gives every field`;
-                sink.error('M021', `Factory command '${cmd.name}' sets every field of the new '${agg.name}'; 'changes' does not apply to it.`, cmd, 'changes', 0, hint);
+                sink.error(
+                    'M021',
+                    `Factory command '${cmd.name}' sets every field of the new '${agg.name}'; 'changes' does not apply to it.`,
+                    cmd,
+                    'changes',
+                    0,
+                    hint,
+                );
                 continue;
             }
             const outcomes = cmd.transitions.flatMap((t) => t.from.flatMap((f) => t.to.map((to) => ({ from: f.ref, to: to.ref }))));
             cmd.changes.forEach((name, i) => {
                 if (name === identity) {
-                    sink.error('M021', `Field '${name}' is the identity of '${agg.name}' and never changes.`, cmd, 'changes', i, `remove '${name}' from 'changes'`);
+                    sink.error(
+                        'M021',
+                        `Field '${name}' is the identity of '${agg.name}' and never changes.`,
+                        cmd,
+                        'changes',
+                        i,
+                        `remove '${name}' from 'changes'`,
+                    );
                     return;
                 }
                 if (common.some((f) => f.name === name)) return;
                 const where = states.filter((s) => fieldIn(s, name)).map((s) => s.name);
                 if (!where.length) {
-                    const fields = [...common.map((f) => f.name), ...states.flatMap((s) => fieldsOf(s.members).map((f) => f.name))].filter((f) => f !== identity);
+                    const fields = [...common.map((f) => f.name), ...states.flatMap((s) => fieldsOf(s.members).map((f) => f.name))].filter(
+                        (f) => f !== identity,
+                    );
                     sink.error('M021', `'${agg.name}' has no field '${name}'.`, cmd, 'changes', i, suggestFrom(name, fields, `a field of '${agg.name}'`));
                     return;
                 }
-                if (outcomes.some(({ from, to }) => { const a = fieldIn(from, name); const b = fieldIn(to, name); return !!a && !!b && sameField(a, b); })) return;
+                if (
+                    outcomes.some(({ from, to }) => {
+                        const a = fieldIn(from, name);
+                        const b = fieldIn(to, name);
+                        return !!a && !!b && sameField(a, b);
+                    })
+                )
+                    return;
                 const entered = outcomes.filter(({ to }) => fieldIn(to, name)).map(({ to }) => to!.name);
                 const hint = entered.length
                     ? `every outcome of '${cmd.name}' that ends in ${quotedList([...new Set(entered)])} sets '${name}' anyway; remove it from 'changes'`

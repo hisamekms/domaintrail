@@ -69,7 +69,9 @@ describe('tree-sitter grammar', () => {
         const grammar = await readFile(path.join(GRAMMAR_DIR, 'grammar.js'), 'utf8');
         const quoted = (s: string) => [...s.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
         expect(quoted(/FEATURE_KEYWORDS = \[([^\]]*)\]/.exec(grammar)![1])).toEqual(quoted(/FeatureName returns string:([^;]*);/.exec(langium)![1]));
-        expect(quoted(/primitive_type: \(_\) => choice\(([^)]*)\)/.exec(grammar)![1])).toEqual(quoted(/PrimitiveType returns string:([^;]*);/.exec(langium)![1]));
+        expect(quoted(/primitive_type: \(_\) => choice\(([^)]*)\)/.exec(grammar)![1])).toEqual(
+            quoted(/PrimitiveType returns string:([^;]*);/.exec(langium)![1]),
+        );
     });
 
     test('its queries and those of the Zed extension are valid for the grammar', async () => {

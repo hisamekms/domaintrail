@@ -4,7 +4,9 @@
 import { Billing, decide, ok } from '../../generated/domain/index.js';
 
 export const invoiceCommands: Billing.InvoiceCommands = {
-    issue: decide<Billing.IssueInvoiceDecision>(Billing.InvoiceShape, (id, order, billedAmount) => ok({ Open: { set: { id, order, billedAmount }, events: {} } })),
+    issue: decide<Billing.IssueInvoiceDecision>(Billing.InvoiceShape, (id, order, billedAmount) =>
+        ok({ Open: { set: { id, order, billedAmount }, events: {} } }),
+    ),
 
     pay: decide<Billing.PayInvoiceDecision>(Billing.InvoiceShape, {
         Open: (invoice, paidAt) => ok({ Paid: { set: { paidAt }, events: { InvoicePaid: { type: 'InvoicePaid', invoiceId: invoice.id, paidAt } } } }),

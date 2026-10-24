@@ -1,4 +1,14 @@
-import { allFieldsOf, emitSuffix, emittedEvents, policiesReactingTo, policiesRunning, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from '../src/model/model';
+import {
+    allFieldsOf,
+    emitSuffix,
+    emittedEvents,
+    policiesReactingTo,
+    policiesRunning,
+    type CommandModel,
+    type DomainModel,
+    type ElementModel,
+    type FieldModel,
+} from '../src/model/model';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 
@@ -95,7 +105,13 @@ function Transition({ agg, c, names, onSelect }: { agg: ElementModel; c: Command
         });
     return c.transitions.map((t, i) => (
         <div key={i} className="bcard-transition">
-            {c.factory ? <span className="initial-state" aria-hidden>●</span> : chips(t.from)}
+            {c.factory ? (
+                <span className="initial-state" aria-hidden>
+                    ●
+                </span>
+            ) : (
+                chips(t.from)
+            )}
             <span className="muted">→</span>
             {chips(t.to)}
         </div>
@@ -116,8 +132,16 @@ export function Requirements({ c, model, names, tx, onSelect }: { c: CommandMode
                     </span>
                     {r.source !== undefined ? <code>{r.source}</code> : <em className="not-in-dsl">{tx.notInDsl}</em>}
                     <span className="bcard-outcome">
-                        <span className="muted" title={tx.requirementElseHint}>else</span>
-                        <KindLink kind={model.elements[r.error]?.kind ?? 'error'} id={r.error} x={model.elements[r.error] ?? { name: r.error }} names={names} onSelect={onSelect} />
+                        <span className="muted" title={tx.requirementElseHint}>
+                            else
+                        </span>
+                        <KindLink
+                            kind={model.elements[r.error]?.kind ?? 'error'}
+                            id={r.error}
+                            x={model.elements[r.error] ?? { name: r.error }}
+                            names={names}
+                            onSelect={onSelect}
+                        />
                     </span>
                     {r.doc && <div className="bcard-doc">{r.doc}</div>}
                 </div>
@@ -157,13 +181,29 @@ function PolicyLinks({ caption, policies, names, onSelect }: { caption: string; 
  * A policy's reaction: the event, and the command it runs, as links; that it runs eventually, by any mechanism; and
  * with `input`, what the command needs (its parameters, after the aggregate's ID unless a factory).
  */
-export function PolicyReaction({ p, model, names, tx, onSelect, input }: { p: ElementModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select; input?: boolean }) {
+export function PolicyReaction({
+    p,
+    model,
+    names,
+    tx,
+    onSelect,
+    input,
+}: {
+    p: ElementModel;
+    model: DomainModel;
+    names: Namer;
+    tx: Messages;
+    onSelect: Select;
+    input?: boolean;
+}) {
     if (!p.policy) return null;
     const { event, aggregate, command } = p.policy;
     const agg = model.elements[aggregate];
     const c = agg?.commands?.find((x) => x.name === command);
     const id = agg?.fields.find((f) => f.name === 'id');
-    const fields = c ? [...(!c.factory && id ? [{ ...id, name: agg!.name.charAt(0).toLowerCase() + agg!.name.slice(1), label: agg!.label }] : []), ...c.params] : [];
+    const fields = c
+        ? [...(!c.factory && id ? [{ ...id, name: agg!.name.charAt(0).toLowerCase() + agg!.name.slice(1), label: agg!.label }] : []), ...c.params]
+        : [];
     return (
         <div className="bcard-reaction">
             <div className="bcard-outcome">
@@ -173,7 +213,13 @@ export function PolicyReaction({ p, model, names, tx, onSelect, input }: { p: El
             <div className="bcard-outcome">
                 <span className="bcard-caption">{tx.runsCommand}</span>
                 {c ? (
-                    <KindLink kind="command" id={c.id} x={{ name: `${agg!.name}.${c.name}`, ...(c.label && { label: c.label }) }} names={names} onSelect={onSelect} />
+                    <KindLink
+                        kind="command"
+                        id={c.id}
+                        x={{ name: `${agg!.name}.${c.name}`, ...(c.label && { label: c.label }) }}
+                        names={names}
+                        onSelect={onSelect}
+                    />
                 ) : (
                     <code>{`${aggregate}.${command}`}</code>
                 )}
@@ -189,7 +235,21 @@ export function PolicyReaction({ p, model, names, tx, onSelect, input }: { p: El
     );
 }
 
-export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: ElementModel; c: CommandModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {
+export function CommandCard({
+    agg,
+    c,
+    model,
+    names,
+    tx,
+    onSelect,
+}: {
+    agg: ElementModel;
+    c: CommandModel;
+    model: DomainModel;
+    names: Namer;
+    tx: Messages;
+    onSelect: Select;
+}) {
     const outcome = (id: string) => model.elements[id] ?? { name: id };
     return (
         <div className="bcard">
@@ -220,10 +280,18 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
                 <div className="bcard-outcomes">
                     {c.emits.length > 0 && (
                         <span className="bcard-outcome">
-                            <span className="muted" title={tx.raisesHint}>⇒</span>
+                            <span className="muted" title={tx.raisesHint}>
+                                ⇒
+                            </span>
                             {c.emits.map((e, i) => (
                                 <span key={i} className="bcard-emit">
-                                    <KindLink kind={model.elements[e.event]?.kind ?? 'event'} id={e.event} x={outcome(e.event)} names={names} onSelect={onSelect} />
+                                    <KindLink
+                                        kind={model.elements[e.event]?.kind ?? 'event'}
+                                        id={e.event}
+                                        x={outcome(e.event)}
+                                        names={names}
+                                        onSelect={onSelect}
+                                    />
                                     {emitSuffix(e) && <code className="bcard-emit-when">{emitSuffix(e)}</code>}
                                 </span>
                             ))}
@@ -231,7 +299,9 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
                     )}
                     {c.errors.length > 0 && (
                         <span className="bcard-outcome">
-                            <span className="muted" title={tx.returnsHint}>✕</span>
+                            <span className="muted" title={tx.returnsHint}>
+                                ✕
+                            </span>
                             {c.errors.map((e) => (
                                 <KindLink key={e} kind={model.elements[e]?.kind ?? 'error'} id={e} x={outcome(e)} names={names} onSelect={onSelect} />
                             ))}
@@ -245,7 +315,21 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
 }
 
 /** An event or error with the commands it comes from and its payload. */
-export function OutcomeCard({ id, commands, model, names, tx, onSelect }: { id: string; commands: CommandModel[]; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {
+export function OutcomeCard({
+    id,
+    commands,
+    model,
+    names,
+    tx,
+    onSelect,
+}: {
+    id: string;
+    commands: CommandModel[];
+    model: DomainModel;
+    names: Namer;
+    tx: Messages;
+    onSelect: Select;
+}) {
     const el = model.elements[id];
     const kind = el?.kind ?? 'error';
     return (

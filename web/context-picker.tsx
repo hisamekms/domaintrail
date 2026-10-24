@@ -26,7 +26,11 @@ export function ContextPicker(props: {
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
 
-    useDismiss(open, root, useCallback(() => setOpen(false), []));
+    useDismiss(
+        open,
+        root,
+        useCallback(() => setOpen(false), []),
+    );
 
     const name = (c: string) => nameIn(mode, c, labels[c]);
     const all = selected.length === contexts.length;
@@ -39,7 +43,8 @@ export function ContextPicker(props: {
                 ? selected.map(name).join(t.listSeparator)
                 : t.moreContexts(name(selected[0]), selected.length - 1)) + (hidden.length ? t.hiddenContexts(hidden.length) : '');
     const toggle = (c: string) => onChange(selected.includes(c) ? selected.filter((x) => x !== c) : contexts.filter((x) => x === c || selected.includes(x)));
-    const toggleHidden = (c: string) => onHiddenChange?.(hidden.includes(c) ? hidden.filter((x) => x !== c) : contexts.filter((x) => x === c || hidden.includes(x)));
+    const toggleHidden = (c: string) =>
+        onHiddenChange?.(hidden.includes(c) ? hidden.filter((x) => x !== c) : contexts.filter((x) => x === c || hidden.includes(x)));
     /** The contexts the eyes apply to: the ones drawn as stubs, so none when all or none are selected. */
     const stubs = selected.length === 0 ? [] : contexts.filter((c) => !selected.includes(c));
     const allHidden = stubs.length > 0 && stubs.every((c) => hidden.includes(c));
@@ -90,7 +95,13 @@ export function ContextPicker(props: {
                                 data-tooltip={stubs.length === 0 ? undefined : hidden.length ? t.showAllStubs : t.hideAllStubs}
                                 onClick={() => onHiddenChange(hidden.length ? [] : stubs)}
                             >
-                                {allHidden ? <EyeOff size={14} aria-hidden /> : someHidden ? <EyeDashed size={14} aria-hidden /> : <Eye size={14} aria-hidden />}
+                                {allHidden ? (
+                                    <EyeOff size={14} aria-hidden />
+                                ) : someHidden ? (
+                                    <EyeDashed size={14} aria-hidden />
+                                ) : (
+                                    <Eye size={14} aria-hidden />
+                                )}
                             </button>
                         )}
                     </div>

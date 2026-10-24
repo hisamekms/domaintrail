@@ -2,7 +2,17 @@ import * as posix from 'node:path/posix';
 import * as testingSource from './testing/_testing.js' with { type: 'text' };
 import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel } from '../model/model.js';
 import { elementsIn } from '../model/model.js';
-import { aggregateInvariants, checkName, checkWithName, declaredChecksName, declaredRequiresName, hasDeclared, requiresName, requiresWithName, unionInvariants } from './checks.js';
+import {
+    aggregateInvariants,
+    checkName,
+    checkWithName,
+    declaredChecksName,
+    declaredRequiresName,
+    hasDeclared,
+    requiresName,
+    requiresWithName,
+    unionInvariants,
+} from './checks.js';
 import { aggregateParamName, commandTypeName, commandsInterfaceName, makeTypeName, policyHandlersName, stateTypeName } from './naming.js';
 import type { PolicyMode } from './typescript.js';
 
@@ -63,7 +73,10 @@ export function generateTests(model: DomainModel, header: string, opts: TestsOpt
     const dir = opts.dir;
     const files: File[] = [{ path: posix.join(dir, '_testing.ts'), content: `${header}\n${TESTING}` }];
     for (const ctx of model.contexts) {
-        files.push({ path: posix.join(dir, `${ctx}.ts`), content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required').emit() });
+        files.push({
+            path: posix.join(dir, `${ctx}.ts`),
+            content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required').emit(),
+        });
     }
     if (opts.runner) files.push({ path: posix.join(dir, '_register.ts'), content: adapter(header, opts.runner) });
     const index = [
@@ -90,7 +103,16 @@ export function hintsOf(invs: InvariantModel[]): Record<string, number | string>
     };
     const flip: Record<string, string> = { '<': '>', '<=': '>=', '>': '<', '>=': '<=' };
     const bound = (subject: 'value' | 'length', op: string, v: number | undefined): void => {
-        const [lo, hi] = subject === 'value' ? [['ge', 'gt'], ['le', 'lt']] : [['minLength', 'minLength'], ['maxLength', 'maxLength']];
+        const [lo, hi] =
+            subject === 'value'
+                ? [
+                      ['ge', 'gt'],
+                      ['le', 'lt'],
+                  ]
+                : [
+                      ['minLength', 'minLength'],
+                      ['maxLength', 'maxLength'],
+                  ];
         const strict = subject === 'length' && v !== undefined ? 1 : 0;
         if (op === '>=') set(lo[0], v, Math.max);
         else if (op === '>') set(lo[1], v === undefined ? v : v + strict, Math.max);
@@ -110,7 +132,10 @@ export function hintsOf(invs: InvariantModel[]): Record<string, number | string>
             bound(s, '>=', num(e.lower));
             bound(s, '<=', num(e.upper));
         } else if (e.k === 'binary' && e.op in flip) {
-            for (const [x, y, op] of [[e.left, e.right, e.op], [e.right, e.left, flip[e.op]]] as const) {
+            for (const [x, y, op] of [
+                [e.left, e.right, e.op],
+                [e.right, e.left, flip[e.op]],
+            ] as const) {
                 if (isValue(x)) bound('value', op, num(y));
                 else if (isLength(x)) bound('length', op, num(y));
             }
@@ -232,10 +257,16 @@ class TestsEmitter {
                     break;
                 }
                 case 'event':
-                    add(el.name, `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${this.record([`type: fc.constant('${el.name}' as const)`], el.fields)})`);
+                    add(
+                        el.name,
+                        `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${this.record([`type: fc.constant('${el.name}' as const)`], el.fields)})`,
+                    );
                     break;
                 case 'enum':
-                    add(el.name, `given.${el.name} ?? ${el.values?.length ? `fc.constantFrom<${this.type(el.name)}>(${el.values.map((v) => `'${v}'`).join(', ')})` : `fc.constant(undefined as never)`}`);
+                    add(
+                        el.name,
+                        `given.${el.name} ?? ${el.values?.length ? `fc.constantFrom<${this.type(el.name)}>(${el.values.map((v) => `'${v}'`).join(', ')})` : `fc.constant(undefined as never)`}`,
+                    );
                     break;
                 case 'valueObject':
                 case 'entity': {
@@ -258,14 +289,20 @@ class TestsEmitter {
                     if (!states.length) {
                         const check = invs.length ? this.violated(el.name, el.name, invs) : '() => []';
                         const raw = `testing.cast<${this.type(el.name)}>(${this.record([], el.fields)})`;
-                        add(el.name, `testing.withExamples(${valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined)}, ${examples('aggregates')}, ${check}, '${ctx}.${el.name}')`);
+                        add(
+                            el.name,
+                            `testing.withExamples(${valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined)}, ${examples('aggregates')}, ${check}, '${ctx}.${el.name}')`,
+                        );
                         break;
                     }
                     for (const s of states) {
                         const type = stateTypeName(el, s);
                         const check = invs.length ? this.violated(type, el.name, invs) : '() => []';
                         const raw = `testing.cast<${this.type(type)}>(${this.record([`state: fc.constant('${s.name}' as const)`], [...el.fields, ...s.fields])})`;
-                        add(type, `testing.withExamples(${valid(type, raw, invs.length ? this.holds(type, el.name, invs) : undefined)}, ${examples(`states?.${s.name}`)}, ${check}, '${ctx}.${type}')`);
+                        add(
+                            type,
+                            `testing.withExamples(${valid(type, raw, invs.length ? this.holds(type, el.name, invs) : undefined)}, ${examples(`states?.${s.name}`)}, ${check}, '${ctx}.${type}')`,
+                        );
                     }
                     add(el.name, `given.${el.name} ?? fc.oneof(${states.map((s) => `a.${stateTypeName(el, s)}`).join(', ')})`);
                     break;
@@ -279,7 +316,14 @@ class TestsEmitter {
     private declaredMembers(): string[] {
         const out: string[] = [];
         for (const el of this.els) {
-            const invs = el.kind === 'aggregate' ? aggregateInvariants(el) : el.kind === 'union' ? unionInvariants(el) : ['id', 'primitive', 'valueObject', 'entity'].includes(el.kind) ? el.invariants : [];
+            const invs =
+                el.kind === 'aggregate'
+                    ? aggregateInvariants(el)
+                    : el.kind === 'union'
+                      ? unionInvariants(el)
+                      : ['id', 'primitive', 'valueObject', 'entity'].includes(el.kind)
+                        ? el.invariants
+                        : [];
             if (hasDeclared(invs)) out.push(`readonly ${el.name}?: Partial<${this.ctx}.${declaredChecksName(el.name)}>;`);
             for (const c of el.commands ?? []) {
                 const t = commandTypeName(el, c);
@@ -296,7 +340,9 @@ class TestsEmitter {
             const values = states.length
                 ? `readonly states?: { ${states.map((s) => `readonly ${s.name}?: readonly ${this.type(stateTypeName(agg, s))}[]`).join('; ')} };`
                 : `readonly aggregates?: readonly ${this.type(agg.name)}[];`;
-            const commands = (agg.commands ?? []).map((c) => `readonly ${c.name}?: readonly Parameters<${this.ctx}.${commandsInterfaceName(agg)}['${c.name}']>[]`);
+            const commands = (agg.commands ?? []).map(
+                (c) => `readonly ${c.name}?: readonly Parameters<${this.ctx}.${commandsInterfaceName(agg)}['${c.name}']>[]`,
+            );
             out.push(`readonly ${agg.name}?: {`, `    ${values}`, ...(commands.length ? [`    readonly commands?: { ${commands.join('; ')} };`] : []), '};');
         }
         return out;
@@ -304,7 +350,11 @@ class TestsEmitter {
 
     private primitiveCase(p: ElementModel): string {
         const declared = p.invariants.filter((i) => !i.expr).map((i) => `'${i.name}'`);
-        const check = !p.invariants.length ? '() => () => []' : declared.length ? `${this.ctx}.${checkWithName(p.name)}` : `() => ${this.ctx}.${checkName(p.name)}`;
+        const check = !p.invariants.length
+            ? '() => () => []'
+            : declared.length
+              ? `${this.ctx}.${checkWithName(p.name)}`
+              : `() => ${this.ctx}.${checkName(p.name)}`;
         return [
             `...(impl.make.${p.name} ? testing.primitiveCases({`,
             `    type: '${this.ctx}.${p.name}',`,
@@ -330,7 +380,13 @@ class TestsEmitter {
         const declaredInvs = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
         const simple = (q: string): string => q.slice(q.indexOf('.') + 1);
         const emits = c.emits.filter(counted).map((e) => {
-            const parts = [`key: '${simple(e.event)}'`, `lower: ${e.lower}`, ...(e.upper !== undefined ? [`upper: ${e.upper}`] : []), `from: [${(e.when?.from ?? []).map((s) => `'${s}'`).join(', ')}]`, `to: [${(e.when?.to ?? []).map((s) => `'${s}'`).join(', ')}]`];
+            const parts = [
+                `key: '${simple(e.event)}'`,
+                `lower: ${e.lower}`,
+                ...(e.upper !== undefined ? [`upper: ${e.upper}`] : []),
+                `from: [${(e.when?.from ?? []).map((s) => `'${s}'`).join(', ')}]`,
+                `to: [${(e.when?.to ?? []).map((s) => `'${s}'`).join(', ')}]`,
+            ];
             return `{ ${parts.join(', ')} }`;
         });
         return [
@@ -342,9 +398,13 @@ class TestsEmitter {
             `    factory: ${c.factory},`,
             `    requires: [${c.requires.map((r) => `{ name: '${r.name}', error: '${simple(r.error)}' }`).join(', ')}],`,
             `    declaredRequires: [${declaredReqs.join(', ')}],`,
-            ...(c.requires.length ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`] : []),
+            ...(c.requires.length
+                ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`]
+                : []),
             ...(declaredReqs.length ? [`    givenRequires: declared.${t},`] : []),
-            ...(invs.length ? [`    invariants: ${declaredInvs.length ? `${this.ctx}.${checkWithName(agg.name)}` : `() => ${this.ctx}.${checkName(agg.name)}`},`] : []),
+            ...(invs.length
+                ? [`    invariants: ${declaredInvs.length ? `${this.ctx}.${checkWithName(agg.name)}` : `() => ${this.ctx}.${checkName(agg.name)}`},`]
+                : []),
             `    declaredInvariants: [${declaredInvs.join(', ')}],`,
             ...(declaredInvs.length ? [`    givenInvariants: declared.${agg.name},`] : []),
             `    stateful: ${states.length > 0},`,
@@ -367,10 +427,13 @@ class TestsEmitter {
         const invs = el.kind === 'union' ? unionInvariants(el) : el.kind === 'aggregate' ? [] : el.invariants;
         const inner = new Set([...outer, el.id]);
         const shape =
-            el.kind === 'enum' ? `[${(el.values ?? []).map((v) => `'${v}'`).join(', ')}].includes(v as string)`
-            : el.kind === 'id' || el.kind === 'primitive' ? `testing.isBase(v, '${el.base ?? 'String'}')`
-            : (el.kind === 'valueObject' || el.kind === 'entity') && !outer.has(el.id) ? `testing.validFields(v, [${el.fields.map((g) => this.inputField(g, inner)).join(', ')}])`
-            : 'testing.isObject(v)';
+            el.kind === 'enum'
+                ? `[${(el.values ?? []).map((v) => `'${v}'`).join(', ')}].includes(v as string)`
+                : el.kind === 'id' || el.kind === 'primitive'
+                  ? `testing.isBase(v, '${el.base ?? 'String'}')`
+                  : (el.kind === 'valueObject' || el.kind === 'entity') && !outer.has(el.id)
+                    ? `testing.validFields(v, [${el.fields.map((g) => this.inputField(g, inner)).join(', ')}])`
+                    : 'testing.isObject(v)';
         if (!invs.length) return `(v) => ${shape}`;
         this.checked.add(ctx);
         const names = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
@@ -412,10 +475,19 @@ class TestsEmitter {
         const primitives = this.els.filter((e) => e.kind === 'id' || e.kind === 'primitive');
         const aggregates = this.els.filter((e) => e.kind === 'aggregate' && e.commands?.length);
         const policies = this.policiesRequired ? this.els.filter((e) => e.kind === 'policy') : [];
-        const indent = (text: string, pad: string): string => text.split('\n').map((l) => `${pad}${l}`).join('\n');
+        const indent = (text: string, pad: string): string =>
+            text
+                .split('\n')
+                .map((l) => `${pad}${l}`)
+                .join('\n');
         const groups = [
-            ...(primitives.length ? [`impl.make && testing.suite('domain primitives', [\n${primitives.map((p) => indent(this.primitiveCase(p), '    ')).join('\n')}\n]),`] : []),
-            ...aggregates.map((agg) => `impl.${agg.name} && testing.suite('${agg.name}', [\n${(agg.commands ?? []).map((c) => indent(this.commandCase(agg, c), '    ')).join('\n')}\n]),`),
+            ...(primitives.length
+                ? [`impl.make && testing.suite('domain primitives', [\n${primitives.map((p) => indent(this.primitiveCase(p), '    ')).join('\n')}\n]),`]
+                : []),
+            ...aggregates.map(
+                (agg) =>
+                    `impl.${agg.name} && testing.suite('${agg.name}', [\n${(agg.commands ?? []).map((c) => indent(this.commandCase(agg, c), '    ')).join('\n')}\n]),`,
+            ),
             ...(policies.length ? [`testing.suite('policies', [\n${policies.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
         ];
         const all = this.model.contexts;
@@ -430,9 +502,14 @@ class TestsEmitter {
                 ...(declaredToo && text.includes('declared.') ? [`    const declared: DeclaredChecks = options.declared?.${ctx} ?? {};`] : []),
                 ...(text.includes('scalar.') ? [`    const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);`] : []),
                 ...(others.length
-                    ? [`    const generation: Generation = { ...(options.seed !== undefined && { seed: options.seed }), ...(options.arbitraries && { arbitraries: options.arbitraries }), ...(options.declared && { declared: options.declared }) };`]
+                    ? [
+                          `    const generation: Generation = { ...(options.seed !== undefined && { seed: options.seed }), ...(options.arbitraries && { arbitraries: options.arbitraries }), ...(options.declared && { declared: options.declared }) };`,
+                      ]
                     : []),
-                ...others.map((c) => `    let ${c}Of: ${c}Tests.Arbitraries | undefined;\n    const ${c}Arbs = (): ${c}Tests.Arbitraries => (${c}Of ??= ${c}Tests.arbitraries(generation));`),
+                ...others.map(
+                    (c) =>
+                        `    let ${c}Of: ${c}Tests.Arbitraries | undefined;\n    const ${c}Arbs = (): ${c}Tests.Arbitraries => (${c}Of ??= ${c}Tests.arbitraries(generation));`,
+                ),
             ];
         };
         const declared = this.declaredMembers();

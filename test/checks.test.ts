@@ -24,7 +24,21 @@ async function generated(files: Record<string, string>): Promise<Record<string, 
 
 /** Type-checks generated files strictly (also against unused parameters). */
 function tsc(dir: string, files: string[]): string {
-    const flags = ['--ignoreConfig', '--noEmit', '--strict', '--noUnusedLocals', '--noUnusedParameters', '--exactOptionalPropertyTypes', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--verbatimModuleSyntax'];
+    const flags = [
+        '--ignoreConfig',
+        '--noEmit',
+        '--strict',
+        '--noUnusedLocals',
+        '--noUnusedParameters',
+        '--exactOptionalPropertyTypes',
+        '--target',
+        'ES2023',
+        '--module',
+        'preserve',
+        '--moduleResolution',
+        'bundler',
+        '--verbatimModuleSyntax',
+    ];
     const r = Bun.spawnSync([process.execPath, path.join(ROOT, 'node_modules', '.bin', 'tsc'), ...flags, ...files], { cwd: dir });
     return r.stdout.toString() + r.stderr.toString();
 }
@@ -114,7 +128,12 @@ describe('generated checks', () => {
         const a = await check(MODEL);
         const files = generateTypeScript(a.model!);
         for (const f of files) await writeFile(path.join(dir, f.path), f.content);
-        expect(tsc(dir, files.map((f) => f.path))).toBe('');
+        expect(
+            tsc(
+                dir,
+                files.map((f) => f.path),
+            ),
+        ).toBe('');
     });
 
     test('ranges and Decimal values (carried as strings) compare as numbers', () => {

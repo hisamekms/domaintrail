@@ -1,5 +1,15 @@
 import type { AstNode } from 'langium';
-import { isCommand, isContext, isContextElement, isState, type Aggregate, type Command, type Context, type ContextElement, type State } from '../language/generated/ast.js';
+import {
+    isCommand,
+    isContext,
+    isContextElement,
+    isState,
+    type Aggregate,
+    type Command,
+    type Context,
+    type ContextElement,
+    type State,
+} from '../language/generated/ast.js';
 
 /**
  * Stable IDs are derived from fully qualified names so that they survive re-parsing:

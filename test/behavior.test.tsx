@@ -90,7 +90,13 @@ describe('behaviour cards', () => {
     });
 
     test('each transition is a row of its own', () => {
-        const c = { ...command('addItem'), transitions: [{ from: ['Draft'], to: ['Draft'] }, { from: ['Confirmed'], to: ['Confirmed'] }] };
+        const c = {
+            ...command('addItem'),
+            transitions: [
+                { from: ['Draft'], to: ['Draft'] },
+                { from: ['Confirmed'], to: ['Confirmed'] },
+            ],
+        };
         const html = renderToStaticMarkup(<CommandCard agg={order} c={c} model={model} names={names()} tx={tx} onSelect={() => {}} />);
         expect([...html.matchAll(/<div class="bcard-transition">(.*?)<\/div>/g)].map((m) => text(m[1]))).toEqual(['下書き→下書き', '確定済み→確定済み']);
         expect(names().transition(order, c)).toBe('下書き (Draft) → 下書き (Draft); 確定済み (Confirmed) → 確定済み (Confirmed)');

@@ -141,14 +141,11 @@ export function includedFields(el: WithFieldSets): { field: FieldLike; fieldSet:
     return fieldSetsOf(el).flatMap((fieldSet) => fieldsOf(fieldSet.members).map((field) => ({ field, fieldSet })));
 }
 
-export const fieldsOf = (members: readonly DataMember[]): FieldLike[] =>
-    members.filter((m): m is FieldLike => !isInvariant(m));
+export const fieldsOf = (members: readonly DataMember[]): FieldLike[] => members.filter((m): m is FieldLike => !isInvariant(m));
 
-export const invariantsOf = (members: readonly (DataMember | State | Command)[]): Invariant[] =>
-    members.filter(isInvariant);
+export const invariantsOf = (members: readonly (DataMember | State | Command)[]): Invariant[] => members.filter(isInvariant);
 
-export const commonFields = (agg: Aggregate): FieldLike[] =>
-    agg.members.filter((m): m is FieldLike => !isInvariant(m) && !isState(m) && !isCommand(m));
+export const commonFields = (agg: Aggregate): FieldLike[] => agg.members.filter((m): m is FieldLike => !isInvariant(m) && !isState(m) && !isCommand(m));
 
 export const statesOf = (agg: Aggregate): State[] => agg.members.filter(isState);
 export const commandsOf = (agg: Aggregate): Command[] => agg.members.filter(isCommand);

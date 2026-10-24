@@ -60,7 +60,10 @@ export function registerPolicies(
             return;
         }
         const r = await app.issueInvoice(input, causedBy(s));
-        if (r.ok) log(`policy BillConfirmedOrder: issued ${r.value.id} for ${s.event.orderId}: ${r.value.billedAmount.amount} ${r.value.billedAmount.currency} (caused by ${s.meta.eventId})`);
+        if (r.ok)
+            log(
+                `policy BillConfirmedOrder: issued ${r.value.id} for ${s.event.orderId}: ${r.value.billedAmount.amount} ${r.value.billedAmount.currency} (caused by ${s.meta.eventId})`,
+            );
         else log(`policy BillConfirmedOrder: could not issue an invoice for ${s.event.orderId}: ${r.error.type}`);
     });
 
@@ -70,7 +73,9 @@ export function registerPolicies(
     events.on('RefundRequested', async (s) => {
         const invoice = (await invoices.find((i) => i.order === s.event.orderId))?.aggregate;
         refundRequests.push({ order: s.event.orderId, ...(invoice && { invoice: { id: invoice.id, state: invoice.state } }), requestedAt: s.meta.recordedAt });
-        log(`policy: refund requested for ${s.event.orderId} (${invoice ? `${invoice.id}, ${invoice.state}` : 'no invoice'}), recorded for manual handling (caused by ${s.meta.eventId})`);
+        log(
+            `policy: refund requested for ${s.event.orderId} (${invoice ? `${invoice.id}, ${invoice.state}` : 'no invoice'}), recorded for manual handling (caused by ${s.meta.eventId})`,
+        );
     });
 
     return { refundRequests };

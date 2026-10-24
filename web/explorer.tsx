@@ -134,7 +134,11 @@ export function Explorer(props: ExplorerProps) {
     // while filtering, each section title counts its matching rows, so that a closed section still tells what it holds
     let modelHits = 0;
     let fileHits = 0;
-    const modelTree = model && orderedContexts(model).map((ctx) => contextNode(model, ctx)).filter(Boolean);
+    const modelTree =
+        model &&
+        orderedContexts(model)
+            .map((ctx) => contextNode(model, ctx))
+            .filter(Boolean);
     const fileTree = buildFileTree(props.files)
         .map((n) => fileNode(n, 0, true))
         .filter(Boolean);
@@ -159,10 +163,22 @@ export function Explorer(props: ExplorerProps) {
                         </button>
                     )}
                 </div>
-                <button className="icon-button" aria-pressed={onlyProblems} onClick={() => setOnlyProblems(!onlyProblems)} data-tooltip={t.onlyProblems} aria-label={t.onlyProblems}>
+                <button
+                    className="icon-button"
+                    aria-pressed={onlyProblems}
+                    onClick={() => setOnlyProblems(!onlyProblems)}
+                    data-tooltip={t.onlyProblems}
+                    aria-label={t.onlyProblems}
+                >
                     <TriangleAlert size={15} aria-hidden />
                 </button>
-                <button className="icon-button" aria-pressed={onlyChanged} onClick={() => setOnlyChanged(!onlyChanged)} data-tooltip={t.onlyChanged} aria-label={t.onlyChanged}>
+                <button
+                    className="icon-button"
+                    aria-pressed={onlyChanged}
+                    onClick={() => setOnlyChanged(!onlyChanged)}
+                    data-tooltip={t.onlyChanged}
+                    aria-label={t.onlyChanged}
+                >
                     <Diff size={15} aria-hidden />
                 </button>
                 <button className="icon-button" onClick={props.onClose} data-tooltip={t.closeExplorer} aria-label={t.closeExplorer}>
@@ -170,14 +186,24 @@ export function Explorer(props: ExplorerProps) {
                 </button>
             </div>
             <div className="explorer-body">
-                <Section title={t.model} hits={filtering ? modelHits : undefined} open={sections.model} onToggle={() => setSections({ ...sections, model: !sections.model })}>
+                <Section
+                    title={t.model}
+                    hits={filtering ? modelHits : undefined}
+                    open={sections.model}
+                    onToggle={() => setSections({ ...sections, model: !sections.model })}
+                >
                     <div className="tree">
                         {!model && <p className="muted small pad">{t.noModel}</p>}
                         {model && filtering && !modelTree?.length && <p className="muted small pad">{t.noMatches}</p>}
                         {modelTree}
                     </div>
                 </Section>
-                <Section title={t.files} hits={filtering ? fileHits : undefined} open={sections.files} onToggle={() => setSections({ ...sections, files: !sections.files })}>
+                <Section
+                    title={t.files}
+                    hits={filtering ? fileHits : undefined}
+                    open={sections.files}
+                    onToggle={() => setSections({ ...sections, files: !sections.files })}
+                >
                     <div className="tree">
                         {filtering && !fileTree.length && <p className="muted small pad">{t.noMatches}</p>}
                         {fileTree}
@@ -207,7 +233,12 @@ export function Explorer(props: ExplorerProps) {
         const open = isOpen(`ctx:${ctx}`, true);
         return (
             <div key={ctx}>
-                {item(ctx, `${nameIn(props.mode, ctx, label)}${shared ? ` · ${t.sharedTag}` : ''}`, { depth: 0, visible: true, open, onToggle: () => toggle(`ctx:${ctx}`, true) }, shared ? 'shared' : 'context')}
+                {item(
+                    ctx,
+                    `${nameIn(props.mode, ctx, label)}${shared ? ` · ${t.sharedTag}` : ''}`,
+                    { depth: 0, visible: true, open, onToggle: () => toggle(`ctx:${ctx}`, true) },
+                    shared ? 'shared' : 'context',
+                )}
                 <Collapse open={open}>
                     {groups.map(({ kind, nodes }) => {
                         const key = `grp:${ctx}:${kind}`;
@@ -263,7 +294,12 @@ export function Explorer(props: ExplorerProps) {
                         ))}
                         {commands.map((c) => (
                             <div key={c.id}>
-                                {item(c.id, `${c.factory ? '＋' : '▶'} ${nameIn(props.mode, c.name, c.label)}`, { depth: 3, visible: visible && open }, 'command')}
+                                {item(
+                                    c.id,
+                                    `${c.factory ? '＋' : '▶'} ${nameIn(props.mode, c.name, c.label)}`,
+                                    { depth: 3, visible: visible && open },
+                                    'command',
+                                )}
                             </div>
                         ))}
                     </Collapse>
@@ -276,7 +312,10 @@ export function Explorer(props: ExplorerProps) {
     function fileNode(node: FileTreeNode, depth: number, visible: boolean): ReactNode {
         if (node.kind === 'file') {
             const c = fileCounts([node.path]);
-            const fileMark: Mark = { severity: c.errors ? 'error' : c.warnings ? 'warning' : undefined, change: changedFiles.has(node.path) ? 'changed' : undefined };
+            const fileMark: Mark = {
+                severity: c.errors ? 'error' : c.warnings ? 'warning' : undefined,
+                change: changedFiles.has(node.path) ? 'changed' : undefined,
+            };
             if (!(textHit(node.path) && flagsHit(fileMark))) return null;
             fileHits++;
             const id = fileSelection(node.path);

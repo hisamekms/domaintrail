@@ -56,13 +56,20 @@ const problems = async (billing: string, extra: Record<string, string> = {}) =>
 describe('policy declarations', () => {
     test('a valid model has no problems; `policy` stays usable as a field and parameter name', async () => {
         expect(await problems(BILLING)).toEqual([]);
-        const a = await model(BILLING.replace('    state Open\n', '    policy: String\n    state Open\n').replace('note: String?)', 'note: String?, policy: String)'));
+        const a = await model(
+            BILLING.replace('    state Open\n', '    policy: String\n    state Open\n').replace('note: String?)', 'note: String?, policy: String)'),
+        );
         expect(a.diagnostics).toEqual([]);
     });
 
     test('M023: the event, the aggregate of its own context and the command exist', async () => {
         expect(await problems(BILLING.replace('Sales.OrderConfirmed -> Invoice.issue', 'Sales.OrderConfirmd -> Invoice.issue'))).toEqual([
-            { code: 'M023', severity: 'error', message: "Policy 'BillConfirmedOrder' reacts to event 'Sales.OrderConfirmd', which does not exist.", hint: "did you mean 'Sales.OrderConfirmed'?" },
+            {
+                code: 'M023',
+                severity: 'error',
+                message: "Policy 'BillConfirmedOrder' reacts to event 'Sales.OrderConfirmd', which does not exist.",
+                hint: "did you mean 'Sales.OrderConfirmed'?",
+            },
         ]);
         expect(await problems(BILLING.replace('-> Invoice.issue', '-> Order.confirm'))).toEqual([
             {
@@ -73,10 +80,20 @@ describe('policy declarations', () => {
             },
         ]);
         expect(await problems(BILLING.replace('-> Invoice.issue', '-> Invoic.issue'))).toEqual([
-            { code: 'M023', severity: 'error', message: "Policy 'BillConfirmedOrder' runs a command of aggregate 'Invoic', which is not an aggregate of context 'Billing'.", hint: "did you mean 'Invoice'?" },
+            {
+                code: 'M023',
+                severity: 'error',
+                message: "Policy 'BillConfirmedOrder' runs a command of aggregate 'Invoic', which is not an aggregate of context 'Billing'.",
+                hint: "did you mean 'Invoice'?",
+            },
         ]);
         expect(await problems(BILLING.replace('-> Invoice.issue', '-> Invoice.isue'))).toEqual([
-            { code: 'M023', severity: 'error', message: "Policy 'BillConfirmedOrder' runs 'Invoice.isue', but 'Invoice' has no command 'isue'.", hint: "did you mean 'issue'?" },
+            {
+                code: 'M023',
+                severity: 'error',
+                message: "Policy 'BillConfirmedOrder' runs 'Invoice.isue', but 'Invoice' has no command 'isue'.",
+                hint: "did you mean 'issue'?",
+            },
         ]);
     });
 
@@ -96,7 +113,10 @@ describe('policy declarations', () => {
     });
 
     test('M011: the generated names of a policy do not collide', async () => {
-        const clash = BILLING.replace('  id InvoiceId: UUID\n', '  id InvoiceId: UUID\n  value IssueInvoiceInput { x: Int }\n  value BillConfirmedOrderPolicy { x: Int }\n');
+        const clash = BILLING.replace(
+            '  id InvoiceId: UUID\n',
+            '  id InvoiceId: UUID\n  value IssueInvoiceInput { x: Int }\n  value BillConfirmedOrderPolicy { x: Int }\n',
+        );
         expect((await problems(clash)).filter((p) => p.code === 'M011').map((p) => p.message)).toEqual([
             "Generated TypeScript name 'BillConfirmedOrderPolicy' for the handler of policy 'BillConfirmedOrder' collides with value object 'BillConfirmedOrderPolicy'.",
             "Generated TypeScript name 'IssueInvoiceInput' for the input of 'Invoice.issue' collides with value object 'IssueInvoiceInput'.",
@@ -122,9 +142,13 @@ describe('policy declarations', () => {
             '  create command Invoice.issue(id: InvoiceId, order: Sales.OrderId, total: Money, note: String?)  // billing.dt:12',
             '  input { id: InvoiceId, order: Sales.OrderId, total: Money, note: String? }  // what the application needs to run it, eventually (any mechanism)',
         ]);
-        expect(showText(m, el('Billing.SendConfirmed'))[3]).toBe('  input { invoice: InvoiceId, sentAt: Timestamp, lines: Amount[1..3] }  // what the application needs to run it, eventually (any mechanism)');
+        expect(showText(m, el('Billing.SendConfirmed'))[3]).toBe(
+            '  input { invoice: InvoiceId, sentAt: Timestamp, lines: Amount[1..3] }  // what the application needs to run it, eventually (any mechanism)',
+        );
         const invoice = m.elements['Billing.Invoice'];
-        expect(showText(m, { kind: 'command', agg: invoice, command: invoice.commands![0] })[1]).toBe('  // triggered by policy BillConfirmedOrder "請求する" when Sales.OrderConfirmed');
+        expect(showText(m, { kind: 'command', agg: invoice, command: invoice.commands![0] })[1]).toBe(
+            '  // triggered by policy BillConfirmedOrder "請求する" when Sales.OrderConfirmed',
+        );
         expect(showText(m, el('Sales.OrderConfirmed'))).toContain('  reacted to by (policy): Billing.BillConfirmedOrder, Billing.SendConfirmed');
         const json = showJson(m, { kind: 'command', agg: invoice, command: invoice.commands![1] }) as { command: { triggeredBy: string[] } };
         expect(json.command.triggeredBy).toEqual(['Billing.SendConfirmed']);
@@ -211,7 +235,8 @@ describe('generated policy cases', async () => {
         }
         return out;
     };
-    const NAME = 'Billing > policies > BillConfirmedOrder (when Sales.OrderConfirmed -> Invoice.issue) resolves every event to an input that the command accepts';
+    const NAME =
+        'Billing > policies > BillConfirmedOrder (when Sales.OrderConfirmed -> Invoice.issue) resolves every event to an input that the command accepts';
 
     test('pass for handlers that resolve every event to a valid input', async () => {
         expect(await failures(handlers())).toEqual({});
@@ -219,10 +244,16 @@ describe('generated policy cases', async () => {
 
     test('fail for a missing argument, an invalid value (a nested invariant), a list out of its bounds and a rejection', async () => {
         const broken = async (BillConfirmedOrder: unknown) => (await failures(handlers({ BillConfirmedOrder })))[NAME];
-        expect(await broken(async (e: { orderId: string }) => ({ order: e.orderId, total: { amount: 3 } }))).toContain("resolved to an input that the command does not accept: 'id' is missing.");
-        expect(await broken(async (e: { orderId: string }) => ({ id: 'i', order: e.orderId, total: { amount: -1 } }))).toContain("'total' is not a valid value of its type: {\"amount\":-1}");
-        expect(await broken(async () => Promise.reject(new Error('no order')))).toContain('rejected with no order; the handler of a policy resolves every event to the input of its command.');
-        const send = (await failures(handlers({ SendConfirmed: async (e: { at: Date }) => ({ invoice: 'i', sentAt: e.at, lines: [] }) })));
+        expect(await broken(async (e: { orderId: string }) => ({ order: e.orderId, total: { amount: 3 } }))).toContain(
+            "resolved to an input that the command does not accept: 'id' is missing.",
+        );
+        expect(await broken(async (e: { orderId: string }) => ({ id: 'i', order: e.orderId, total: { amount: -1 } }))).toContain(
+            '\'total\' is not a valid value of its type: {"amount":-1}',
+        );
+        expect(await broken(async () => Promise.reject(new Error('no order')))).toContain(
+            'rejected with no order; the handler of a policy resolves every event to the input of its command.',
+        );
+        const send = await failures(handlers({ SendConfirmed: async (e: { at: Date }) => ({ invoice: 'i', sentAt: e.at, lines: [] }) }));
         expect(Object.values(send)[0]).toContain("'lines' has 0 elements; declared [1..3]");
     });
 });

@@ -352,7 +352,12 @@ class ExprChecker {
             }
             if (!e.param) {
                 if (elem.k !== 'error' && !equatable(elem, elem)) {
-                    this.sink.error('M009', `unique() requires elements that can be compared with '==', but they have type '${showType(elem)}'.`, e, 'collection');
+                    this.sink.error(
+                        'M009',
+                        `unique() requires elements that can be compared with '==', but they have type '${showType(elem)}'.`,
+                        e,
+                        'collection',
+                    );
                 }
                 return BOOL;
             }
@@ -362,7 +367,13 @@ class ExprChecker {
                 if (t.k === 'error' || equatable(t, t)) return;
                 const what = `Key '${textOf(key)}' of unique()`;
                 if (t.k === 'opt') {
-                    this.sink.error('M009', `${what} is optional ('${showType(t)}'); keys must always be present. Group the keys into a value object and use it as the key.`, e, 'keys', i);
+                    this.sink.error(
+                        'M009',
+                        `${what} is optional ('${showType(t)}'); keys must always be present. Group the keys into a value object and use it as the key.`,
+                        e,
+                        'keys',
+                        i,
+                    );
                 } else {
                     this.sink.error('M009', `${what} has type '${showType(t)}', which cannot be compared with '=='.`, e, 'keys', i);
                 }
@@ -391,7 +402,10 @@ class ExprChecker {
             // `a and b` / `a implies b`: b is evaluated only when a holds, so a's exists() guards apply to b.
             const rightScope = op === 'or' ? scope : { ...scope, present: new Set([...scope.present, ...guards(e.left)]) };
             const r = this.check(e.right, rightScope);
-            for (const [side, t] of [['left', l], ['right', r]] as const) {
+            for (const [side, t] of [
+                ['left', l],
+                ['right', r],
+            ] as const) {
                 if (t.k !== 'error' && !isBool(t)) {
                     this.sink.error('M009', `Operator '${op}' requires Bool operands, but the ${side} operand has type '${showType(t)}'.`, e, side);
                 }
@@ -453,17 +467,42 @@ class ExprChecker {
                 const el = this.index.lookup(`${recv.name}.${m}`);
                 if (el && isEnumDecl(el)) return { k: 'enumType', decl: el };
                 if (el && isUnionDecl(el)) return { k: 'unionType', decl: el };
-                const names = this.index.elementsOf(recv.name).filter((x) => isEnumDecl(x) || isUnionDecl(x)).map((x) => x.name);
+                const names = this.index
+                    .elementsOf(recv.name)
+                    .filter((x) => isEnumDecl(x) || isUnionDecl(x))
+                    .map((x) => x.name);
                 this.sink.error('M001', `Context '${recv.name}' has no enum or union named '${m}'.`, e, 'member', undefined, didYouMean(m, names));
                 return ERROR;
             }
             case 'enumType':
                 if (recv.decl.values.some((v) => v.name === m)) return { k: 'enum', decl: recv.decl as EnumDecl };
-                this.sink.error('M001', `Enum '${recv.decl.name}' has no value '${m}'.`, e, 'member', undefined, suggestFrom(m, recv.decl.values.map((v) => v.name), `a value of '${recv.decl.name}'`));
+                this.sink.error(
+                    'M001',
+                    `Enum '${recv.decl.name}' has no value '${m}'.`,
+                    e,
+                    'member',
+                    undefined,
+                    suggestFrom(
+                        m,
+                        recv.decl.values.map((v) => v.name),
+                        `a value of '${recv.decl.name}'`,
+                    ),
+                );
                 return ERROR;
             case 'unionType':
                 if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
-                this.sink.error('M001', `Union '${recv.decl.name}' has no variant '${m}'.`, e, 'member', undefined, suggestFrom(m, recv.decl.variants.map((v) => v.name), `a variant of '${recv.decl.name}'`));
+                this.sink.error(
+                    'M001',
+                    `Union '${recv.decl.name}' has no variant '${m}'.`,
+                    e,
+                    'member',
+                    undefined,
+                    suggestFrom(
+                        m,
+                        recv.decl.variants.map((v) => v.name),
+                        `a variant of '${recv.decl.name}'`,
+                    ),
+                );
                 return ERROR;
             case 'union': {
                 if (m === discriminatorOf(recv.decl)) return tagOf(recv.decl);
@@ -485,7 +524,11 @@ class ExprChecker {
                 const fields = [...includedFields(recv.decl).map((x) => x.field), ...fieldsOf(recv.decl.members)];
                 const f = fields.find((x) => x.name === m);
                 if (f) return narrow(memberType(f), pathOf(e) ?? '', scope);
-                const hint = suggestFrom(m, fields.map((x) => x.name), `a field of '${recv.decl.name}'`);
+                const hint = suggestFrom(
+                    m,
+                    fields.map((x) => x.name),
+                    `a field of '${recv.decl.name}'`,
+                );
                 this.sink.error('M001', `'${recv.decl.name}' has no field '${m}'.`, e, 'member', undefined, hint);
                 return ERROR;
             }
@@ -493,7 +536,12 @@ class ExprChecker {
                 this.sink.error('M009', `'${pathOf(e.receiver) ?? 'value'}' is optional; guard the access with exists(...) first.`, e);
                 return ERROR;
             case 'id':
-                this.sink.error('M009', `'${recv.decl.name}' is an identifier; the referenced aggregate's state cannot be accessed from an invariant.`, e, 'member');
+                this.sink.error(
+                    'M009',
+                    `'${recv.decl.name}' is an identifier; the referenced aggregate's state cannot be accessed from an invariant.`,
+                    e,
+                    'member',
+                );
                 return ERROR;
             default:
                 this.sink.error('M009', `'${showType(recv)}' has no field '${m}'.`, e, 'member');

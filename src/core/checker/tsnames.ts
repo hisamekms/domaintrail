@@ -1,12 +1,5 @@
 import { isAggregate } from '../../language/generated/ast.js';
-import {
-    EVENT_TAG,
-    RUNTIME_NAMES,
-    TS_RESERVED,
-    aggregateParamName,
-    commandTypeName,
-    generatedNames,
-} from '../../generator/naming.js';
+import { EVENT_TAG, RUNTIME_NAMES, TS_RESERVED, aggregateParamName, commandTypeName, generatedNames } from '../../generator/naming.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { commandsOf, includedFields, type ModelIndex } from '../model-index.js';
 
@@ -42,7 +35,13 @@ export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {
         for (const { field, fieldSet } of includedFields(el)) {
             if (field.name !== EVENT_TAG) continue;
             const at = el.fieldSets.findIndex((r) => r.ref === fieldSet);
-            sink.error('M011', `Field '${EVENT_TAG}' of field set '${fieldSet.name}' is reserved for the discriminant of generated ${kind} types.`, el, 'fieldSets', at);
+            sink.error(
+                'M011',
+                `Field '${EVENT_TAG}' of field set '${fieldSet.name}' is reserved for the discriminant of generated ${kind} types.`,
+                el,
+                'fieldSets',
+                at,
+            );
         }
     }
 
@@ -64,9 +63,23 @@ export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {
                 const qname = `${ev.$container.name}.${ev.name}`;
                 const prev = keys.get(ev.name);
                 if (prev === qname) {
-                    sink.error('M011', `Event '${ev.name}' is listed more than once in 'emits' of '${agg.name}.${cmd.name}'; the events of its result are keyed by name.`, e, 'event', undefined, `list it once, with a multiplicity such as '${ev.name}[1..*]' or '${ev.name}?'`);
+                    sink.error(
+                        'M011',
+                        `Event '${ev.name}' is listed more than once in 'emits' of '${agg.name}.${cmd.name}'; the events of its result are keyed by name.`,
+                        e,
+                        'event',
+                        undefined,
+                        `list it once, with a multiplicity such as '${ev.name}[1..*]' or '${ev.name}?'`,
+                    );
                 } else if (prev) {
-                    sink.error('M011', `Events '${prev}' and '${qname}' of '${agg.name}.${cmd.name}' have the same name, and the events of its result are keyed by name.`, e, 'event', undefined, `rename one of the events`);
+                    sink.error(
+                        'M011',
+                        `Events '${prev}' and '${qname}' of '${agg.name}.${cmd.name}' have the same name, and the events of its result are keyed by name.`,
+                        e,
+                        'event',
+                        undefined,
+                        `rename one of the events`,
+                    );
                 } else {
                     keys.set(ev.name, qname);
                 }

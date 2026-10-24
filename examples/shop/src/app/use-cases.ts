@@ -58,7 +58,11 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
     const request = (): Cause => ({ correlationId: providers.newId('request') });
     const { makeAvailableEmail } = verifications(customers);
 
-    async function load<Id extends string, A extends { readonly id: Id }>(repo: Repository<Id, A>, aggregate: NotFound['aggregate'], id: Id): Promise<Result<Versioned<A>, NotFound>> {
+    async function load<Id extends string, A extends { readonly id: Id }>(
+        repo: Repository<Id, A>,
+        aggregate: NotFound['aggregate'],
+        id: Id,
+    ): Promise<Result<Versioned<A>, NotFound>> {
         const loaded = await repo.load(id);
         return loaded ? ok(loaded) : err({ type: 'NotFound', aggregate, id });
     }
@@ -80,7 +84,11 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
     const notAllowed = (command: string, state: string) => err<NotAllowed>({ type: 'NotAllowed', command, state });
 
     return {
-        async registerCustomer(name: string, email: string, cause = request()): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | Sales.EmailTaken | AppError>> {
+        async registerCustomer(
+            name: string,
+            email: string,
+            cause = request(),
+        ): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | Sales.EmailTaken | AppError>> {
             const address = makeEmailAddress(email);
             if (!address.ok) return address;
             const available = await makeAvailableEmail(address.value, undefined); // a new customer: no one to leave out
@@ -100,7 +108,11 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             return commit(customers, aggregate, loaded.value.meta.version, eventList(emitted), cause);
         },
 
-        async changeEmail(id: Sales.CustomerId, email: string, cause = request()): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | Sales.EmailTaken | AppError>> {
+        async changeEmail(
+            id: Sales.CustomerId,
+            email: string,
+            cause = request(),
+        ): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | Sales.EmailTaken | AppError>> {
             const address = makeEmailAddress(email);
             if (!address.ok) return address;
             const loaded = await load(customers, 'Customer', id);
@@ -127,7 +139,12 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             id: Sales.OrderId,
             input: ItemInput,
             cause = request(),
-        ): Promise<Result<Sales.DraftOrder, Sales.DuplicateSku | Sales.CurrencyMismatch | Sales.InvalidSku | Sales.InvalidQuantity | Common.InvalidAmount | NotADecimal | AppError>> {
+        ): Promise<
+            Result<
+                Sales.DraftOrder,
+                Sales.DuplicateSku | Sales.CurrencyMismatch | Sales.InvalidSku | Sales.InvalidQuantity | Common.InvalidAmount | NotADecimal | AppError
+            >
+        > {
             const sku = makeSku(input.sku);
             if (!sku.ok) return sku;
             const quantity = makeQuantity(input.quantity);
@@ -140,7 +157,12 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!loaded.ok) return loaded;
             const order = loaded.value.aggregate;
             if (order.state !== 'Draft') return notAllowed('addItem', order.state);
-            const item: Sales.OrderItem = { id: makeOrderItemId(providers.newId('item')), sku: sku.value, quantity: quantity.value, unitPrice: { amount: amount.value, currency: input.unitPrice.currency } };
+            const item: Sales.OrderItem = {
+                id: makeOrderItemId(providers.newId('item')),
+                sku: sku.value,
+                quantity: quantity.value,
+                unitPrice: { amount: amount.value, currency: input.unitPrice.currency },
+            };
             const r = orderCommands.addItem(order, item);
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
@@ -159,7 +181,11 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             return commit(orders, aggregate, loaded.value.meta.version, eventList(emitted), cause);
         },
 
-        async cancelOrder(id: Sales.OrderId, reason: Sales.CancelReason, cause = request()): Promise<Result<Sales.CancelledOrder, Sales.NoteRequired | AppError>> {
+        async cancelOrder(
+            id: Sales.OrderId,
+            reason: Sales.CancelReason,
+            cause = request(),
+        ): Promise<Result<Sales.CancelledOrder, Sales.NoteRequired | AppError>> {
             const loaded = await load(orders, 'Order', id);
             if (!loaded.ok) return loaded;
             const order = loaded.value.aggregate;

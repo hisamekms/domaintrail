@@ -73,9 +73,7 @@ describe('label resolution', () => {
 describe('label diagnostics', () => {
     test('L001 an inline label disagrees with the term', async () => {
         const a = await check({ 'a.dt': SALES });
-        expect(only(a, 'L001').map((d) => d.message)).toEqual([
-            "'note' is named '注文メモ' here, but the term 'note' is '備考'.",
-        ]);
+        expect(only(a, 'L001').map((d) => d.message)).toEqual(["'note' is named '注文メモ' here, but the term 'note' is '備考'."]);
         expect(a.ok).toBe(true); // label rules are warnings
     });
 
@@ -89,7 +87,7 @@ describe('label diagnostics', () => {
             'a.dt': 'context S { terms { unused: "未使用" x: "X" } id AId: UUID value V { x: Int } }',
             'b.dt': 'context S { terms { x: "エックス" } }',
         });
-        expect(only(a, 'L002').map((d) => d.message)).toEqual(['Term \'unused\' ("未使用") is not used by any field or parameter in context \'S\'.']);
+        expect(only(a, 'L002').map((d) => d.message)).toEqual(["Term 'unused' (\"未使用\") is not used by any field or parameter in context 'S'."]);
         expect(only(a, 'M002').map((d) => d.message)).toEqual(["Term 'x' is defined more than once in context 'S'."]);
     });
 
@@ -145,7 +143,9 @@ describe('labels in views and generated code', () => {
             ja: { name: 'Order 集約', label: '注文 集約', both: '注文 (Order) 集約' },
             en: { name: 'Order aggregate', label: '注文 aggregate', both: '注文 (Order) aggregate' },
         });
-        const state = buildStructureGraph(m).nodes.find((n) => n.id === 'Sales.Order')!.lines.find((l) => l.key.en.name === 'state');
+        const state = buildStructureGraph(m)
+            .nodes.find((n) => n.id === 'Sales.Order')!
+            .lines.find((l) => l.key.en.name === 'state');
         expect(state?.key).toEqual(perLang({ ja: '状態', en: 'state' }));
     });
 
@@ -163,6 +163,8 @@ describe('labels in views and generated code', () => {
         expect(sales).toContain('    /** 確定日時 — 顧客が注文を確定した日時。キャンセル可否の判定に使う。 */\n    readonly confirmedAt: Timestamp;');
         expect(sales).toContain("    | 'Requested' // 顧客都合");
         expect(sales).toContain(' * @invariant hasItems (明細が1件以上): count(items) > 0');
-        expect(sales).toContain(' * 注文を確定する\n * @param at 日時\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n * @changes none — the command changes no common field\n * @emits OrderConfirmed — exactly once when the command succeeds\n * @see sales/order.dt:51\n */\nexport type ConfirmOrder');
+        expect(sales).toContain(
+            ' * 注文を確定する\n * @param at 日時\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n * @changes none — the command changes no common field\n * @emits OrderConfirmed — exactly once when the command succeeds\n * @see sales/order.dt:51\n */\nexport type ConfirmOrder',
+        );
     });
 });

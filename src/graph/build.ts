@@ -98,7 +98,9 @@ export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent
             both: `${marker}${f.label ? `${f.label} ` : ''}${f.name}`,
         }),
         value: anyLang({ name: byName + f.multiplicity, label: byLabel + f.multiplicity, both: byName + f.multiplicity }),
-        ...(f.fieldSet && { origin: named(typeText({ kind: 'ref', ref: f.fieldSet, text: '' }, ctx, model.sharedContexts), lookupLabel(model, f.fieldSet), (l) => l) }),
+        ...(f.fieldSet && {
+            origin: named(typeText({ kind: 'ref', ref: f.fieldSet, text: '' }, ctx, model.sharedContexts), lookupLabel(model, f.fieldSet), (l) => l),
+        }),
     };
 }
 
@@ -212,16 +214,19 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
             lines.push({ key: perLang({ ja: WORDS.ja.state, en: WORDS.en.state }), value: anyLang({ name: byName, label: byLabel, both: byName }) });
         }
         nodes.push(
-            sized({
-                id: el.id,
-                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- `shown` holds only STRUCTURE_KINDS, which are node kinds
-                kind: el.kind as GraphNode['kind'],
-                label: named(el.name, el.label),
-                stereotype: STEREOTYPES[el.kind],
-                lines,
-                parent: owner ? boundaryId(owner) : el.context,
-                elementId: el.id,
-            }, scale),
+            sized(
+                {
+                    id: el.id,
+                    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- `shown` holds only STRUCTURE_KINDS, which are node kinds
+                    kind: el.kind as GraphNode['kind'],
+                    label: named(el.name, el.label),
+                    stereotype: STEREOTYPES[el.kind],
+                    lines,
+                    parent: owner ? boundaryId(owner) : el.context,
+                    elementId: el.id,
+                },
+                scale,
+            ),
         );
 
         const fields: [FieldModel, VariantModel | undefined][] = [
@@ -242,7 +247,18 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
     if (stubs) {
         for (const el of stubs.elements) {
             nodes.push(
-                sized({ id: el.id, kind: 'stub', label: named(el.name, el.label), stereotype: STUB_STEREOTYPES[el.kind], lines: [], parent: el.context, elementId: el.id }, scale),
+                sized(
+                    {
+                        id: el.id,
+                        kind: 'stub',
+                        label: named(el.name, el.label),
+                        stereotype: STUB_STEREOTYPES[el.kind],
+                        lines: [],
+                        parent: el.context,
+                        elementId: el.id,
+                    },
+                    scale,
+                ),
             );
         }
         edges.push(...stubs.edges);
@@ -281,14 +297,40 @@ function buildAggregatesGraph(model: DomainModel, opts: StructureOptions): Graph
     const nodes: GraphNode[] = [];
     for (const ctx of model.contexts) {
         if (left.has(ctx) || model.sharedContexts.includes(ctx) || (focus && !focus.has(ctx) && !stubContexts.has(ctx))) continue;
-        nodes.push(sizedGroup({ id: ctx, kind: 'context', label: named(ctx, model.contextLabels[ctx]), lines: docLines(model.contextDocs[ctx], CONTEXT_DOC_WIDTH), elementId: ctx }, scale));
+        nodes.push(
+            sizedGroup(
+                {
+                    id: ctx,
+                    kind: 'context',
+                    label: named(ctx, model.contextLabels[ctx]),
+                    lines: docLines(model.contextDocs[ctx], CONTEXT_DOC_WIDTH),
+                    elementId: ctx,
+                },
+                scale,
+            ),
+        );
     }
     const aggregate = stereotype('集約', 'aggregate');
     for (const el of shown) {
-        nodes.push(sized({ id: el.id, kind: 'aggregate', label: named(el.name, el.label), stereotype: aggregate, lines: docLines(el.doc, AGGREGATE_DOC_WIDTH), parent: el.context, elementId: el.id }, scale));
+        nodes.push(
+            sized(
+                {
+                    id: el.id,
+                    kind: 'aggregate',
+                    label: named(el.name, el.label),
+                    stereotype: aggregate,
+                    lines: docLines(el.doc, AGGREGATE_DOC_WIDTH),
+                    parent: el.context,
+                    elementId: el.id,
+                },
+                scale,
+            ),
+        );
     }
     for (const el of stubs) {
-        nodes.push(sized({ id: el.id, kind: 'stub', label: named(el.name, el.label), stereotype: aggregate, lines: [], parent: el.context, elementId: el.id }, scale));
+        nodes.push(
+            sized({ id: el.id, kind: 'stub', label: named(el.name, el.label), stereotype: aggregate, lines: [], parent: el.context, elementId: el.id }, scale),
+        );
     }
     const edges = deps.map((d): GraphEdge => ({ id: `${d.source}=>${d.target}`, kind: d.type ? 'value' : 'references', source: d.source, target: d.target }));
     return { id: focus ? focusGraphId(opts.focus!, 'aggregates', hidden) : STRUCTURE_AGGREGATES_GRAPH_ID, nodes, edges, textScale: scale };
@@ -523,7 +565,14 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
             });
         }
     } else {
-        nodes.push({ id: agg.id, kind: 'state', label: named(agg.name, agg.label), stereotype: stereotype('状態なし', 'no states'), lines: [], elementId: agg.id });
+        nodes.push({
+            id: agg.id,
+            kind: 'state',
+            label: named(agg.name, agg.label),
+            stereotype: stereotype('状態なし', 'no states'),
+            lines: [],
+            elementId: agg.id,
+        });
     }
 
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);

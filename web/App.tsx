@@ -260,41 +260,39 @@ export function App() {
 
     return (
         <I18nProvider lang={lang}>
-        <div className="app">
-            <header>
-                <div className="brand">DomainTrail</div>
-                <div className="status">
-                    {current && <span className={`pill pill-${current.status}`}>{t.status[current.status]}</span>}
-                    <span className="muted">
-                        {current ? `${t.fileCount(current.files.length)} · v${current.version} · ${new Date(current.updatedAt).toLocaleTimeString(lang)}` : ''}
-                    </span>
-                    <span className={`conn conn-${connection}`} title={t.connectionTitle(t.connection[connection])} />
-                </div>
-                <SettingsDialog
-                    mode={mode}
-                    onMode={setMode}
-                    themePreference={themePreference}
-                    theme={theme}
-                    onTheme={setThemePreference}
-                    langPreference={langPreference}
-                    lang={lang}
-                    onLang={setLangPreference}
-                />
-            </header>
-            {current?.stale && (
-                <div className="banner">
-                    {t.stale(<a onClick={() => setBottomOpen(true)}>{t.problems}</a>)}
-                </div>
-            )}
-            <div className="workspace">
-                {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
-                <div className={`side side-left${explorerOpen ? ' open' : ''}`} style={{ width: explorerOpen ? explorerWidth : RAIL_WIDTH }}>
-                    <div className="rail" inert={explorerOpen}>
-                        <button className="icon-button" onClick={() => setExplorerOpen(true)} data-tooltip={t.openExplorer} aria-label={t.openExplorer}>
-                            <PanelLeftOpen size={16} aria-hidden />
-                        </button>
+            <div className="app">
+                <header>
+                    <div className="brand">DomainTrail</div>
+                    <div className="status">
+                        {current && <span className={`pill pill-${current.status}`}>{t.status[current.status]}</span>}
+                        <span className="muted">
+                            {current
+                                ? `${t.fileCount(current.files.length)} · v${current.version} · ${new Date(current.updatedAt).toLocaleTimeString(lang)}`
+                                : ''}
+                        </span>
+                        <span className={`conn conn-${connection}`} title={t.connectionTitle(t.connection[connection])} />
                     </div>
-                    <aside className="pane" style={{ width: explorerWidth }} inert={!explorerOpen}>
+                    <SettingsDialog
+                        mode={mode}
+                        onMode={setMode}
+                        themePreference={themePreference}
+                        theme={theme}
+                        onTheme={setThemePreference}
+                        langPreference={langPreference}
+                        lang={lang}
+                        onLang={setLangPreference}
+                    />
+                </header>
+                {current?.stale && <div className="banner">{t.stale(<a onClick={() => setBottomOpen(true)}>{t.problems}</a>)}</div>}
+                <div className="workspace">
+                    {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
+                    <div className={`side side-left${explorerOpen ? ' open' : ''}`} style={{ width: explorerOpen ? explorerWidth : RAIL_WIDTH }}>
+                        <div className="rail" inert={explorerOpen}>
+                            <button className="icon-button" onClick={() => setExplorerOpen(true)} data-tooltip={t.openExplorer} aria-label={t.openExplorer}>
+                                <PanelLeftOpen size={16} aria-hidden />
+                            </button>
+                        </div>
+                        <aside className="pane" style={{ width: explorerWidth }} inert={!explorerOpen}>
                             <Explorer
                                 model={model}
                                 files={current?.files ?? []}
@@ -309,115 +307,127 @@ export function App() {
                                 onOpen={openBest}
                                 onClose={() => setExplorerOpen(false)}
                             />
-                    </aside>
-                </div>
-                <Resizer
-                    direction="x"
-                    size={explorerWidth}
-                    min={180}
-                    max={480}
-                    open={explorerOpen}
-                    collapsed={RAIL_WIDTH}
-                    onResize={setExplorerWidth}
-                    onOpenChange={setExplorerOpen}
-                />
-                <section className="center">
-                    <div className="view-tabs">
-                        <div className="view-tab-list" role="tablist">
-                        {(['contextMap', 'structure', 'catalog'] as const).map((k) => (
-                            <button key={k} role="tab" aria-selected={view.kind === k} className={view.kind === k ? 'active' : ''} onClick={() => setView({ kind: k })}>
-                                {t.views[k]}
-                            </button>
-                        ))}
+                        </aside>
+                    </div>
+                    <Resizer
+                        direction="x"
+                        size={explorerWidth}
+                        min={180}
+                        max={480}
+                        open={explorerOpen}
+                        collapsed={RAIL_WIDTH}
+                        onResize={setExplorerWidth}
+                        onOpenChange={setExplorerOpen}
+                    />
+                    <section className="center">
+                        <div className="view-tabs">
+                            <div className="view-tab-list" role="tablist">
+                                {(['contextMap', 'structure', 'catalog'] as const).map((k) => (
+                                    <button
+                                        key={k}
+                                        role="tab"
+                                        aria-selected={view.kind === k}
+                                        className={view.kind === k ? 'active' : ''}
+                                        onClick={() => setView({ kind: k })}
+                                    >
+                                        {t.views[k]}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="view-toolbar">
+                                {view.kind === 'contextMap' && (
+                                    <label className="check small">
+                                        <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
+                                        {t.showAllContexts}
+                                    </label>
+                                )}
+                                {view.kind === 'structure' && (
+                                    <ContextPicker
+                                        contexts={current?.focusContexts ?? []}
+                                        labels={model?.contextLabels ?? {}}
+                                        selected={checked}
+                                        hidden={hidden}
+                                        mode={mode}
+                                        onChange={(cs) => setStructureContexts(cs.length === (current?.focusContexts ?? []).length ? null : cs)}
+                                        onHiddenChange={setHiddenContexts}
+                                    />
+                                )}
+                                {view.kind === 'structure' && (
+                                    <div className="segmented small icons" role="group" aria-label={t.structureMode}>
+                                        {STRUCTURE_LEVELS.map((l) => {
+                                            const Icon = LEVEL_ICONS[l];
+                                            return (
+                                                <button
+                                                    key={l}
+                                                    className={structureLevel === l ? 'active' : ''}
+                                                    aria-pressed={structureLevel === l}
+                                                    onClick={() => setStructureLevel(l)}
+                                                    data-tooltip={t.structureLevels[l]}
+                                                    aria-label={t.structureLevels[l]}
+                                                >
+                                                    <Icon size={15} aria-hidden />
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                                {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
+                            </div>
                         </div>
-                        <div className="view-toolbar">
-                            {view.kind === 'contextMap' && (
-                                <label className="check small">
-                                    <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
-                                    {t.showAllContexts}
-                                </label>
-                            )}
-                            {view.kind === 'structure' && (
-                                <ContextPicker
-                                    contexts={current?.focusContexts ?? []}
-                                    labels={model?.contextLabels ?? {}}
-                                    selected={checked}
-                                    hidden={hidden}
-                                    mode={mode}
-                                    onChange={(cs) => setStructureContexts(cs.length === (current?.focusContexts ?? []).length ? null : cs)}
-                                    onHiddenChange={setHiddenContexts}
+                        <div className="view-area">
+                            <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
+                            {graph && isCanvas(view) && (
+                                <Legend
+                                    view={
+                                        view.kind === 'contextMap'
+                                            ? 'contextMap'
+                                            : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`
+                                    }
+                                    open={legendOpen}
+                                    onToggle={() => setLegendOpen(!legendOpen)}
                                 />
                             )}
-                            {view.kind === 'structure' && (
-                                <div className="segmented small icons" role="group" aria-label={t.structureMode}>
-                                    {STRUCTURE_LEVELS.map((l) => {
-                                        const Icon = LEVEL_ICONS[l];
-                                        return (
-                                            <button
-                                                key={l}
-                                                className={structureLevel === l ? 'active' : ''}
-                                                aria-pressed={structureLevel === l}
-                                                onClick={() => setStructureLevel(l)}
-                                                data-tooltip={t.structureLevels[l]}
-                                                aria-label={t.structureLevels[l]}
-                                            >
-                                                <Icon size={15} aria-hidden />
-                                            </button>
-                                        );
-                                    })}
+                            {current && !graph && isCanvas(view) && (
+                                <div className="empty">
+                                    {current.status === 'empty'
+                                        ? t.noDtFiles
+                                        : noneChecked && view.kind === 'structure'
+                                          ? t.pickContexts
+                                          : focusKey && view.kind === 'structure'
+                                            ? t.loading
+                                            : t.noDiagram}
                                 </div>
                             )}
-                            {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
+                            {view.kind === 'catalog' && model && (
+                                <Catalog
+                                    model={model}
+                                    mode={mode}
+                                    diff={current?.diff ?? empty}
+                                    diagnostics={current?.diagnostics ?? []}
+                                    selected={selected}
+                                    onSelect={(id) => select(id)}
+                                />
+                            )}
                         </div>
-                    </div>
-                    <div className="view-area">
-                        <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
-                        {graph && isCanvas(view) && (
-                            <Legend
-                                view={view.kind === 'contextMap' ? 'contextMap' : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`}
-                                open={legendOpen}
-                                onToggle={() => setLegendOpen(!legendOpen)}
-                            />
-                        )}
-                        {current && !graph && isCanvas(view) && (
-                            <div className="empty">
-                                {current.status === 'empty'
-                                    ? t.noDtFiles
-                                    : noneChecked && view.kind === 'structure'
-                                      ? t.pickContexts
-                                      : focusKey && view.kind === 'structure' ? t.loading : t.noDiagram}
-                            </div>
-                        )}
-                        {view.kind === 'catalog' && model && (
-                            <Catalog
-                                model={model}
-                                mode={mode}
-                                diff={current?.diff ?? empty}
-                                diagnostics={current?.diagnostics ?? []}
-                                selected={selected}
-                                onSelect={(id) => select(id)}
-                            />
-                        )}
-                    </div>
-                </section>
-                <Resizer
-                    direction="x"
-                    size={inspectorWidth}
-                    min={300}
-                    max={() => window.innerWidth - (explorerOpen ? explorerWidth : RAIL_WIDTH) - MIN_CANVAS_WIDTH}
-                    invert
-                    open={inspectorOpen}
-                    collapsed={RAIL_WIDTH}
-                    onResize={setInspectorWidth}
-                    onOpenChange={setInspectorOpen}
-                />
-                <div className={`side side-right${inspectorOpen ? ' open' : ''}`} style={{ width: inspectorOpen ? inspectorWidth : RAIL_WIDTH }}>
-                    <div className="rail" inert={inspectorOpen}>
-                        <button className="icon-button" onClick={() => setInspectorOpen(true)} data-tooltip={t.openInspector} aria-label={t.openInspector}>
-                            <PanelRightOpen size={16} aria-hidden />
-                        </button>
-                    </div>
-                    <aside className="pane" style={{ width: inspectorWidth }} inert={!inspectorOpen}>
+                    </section>
+                    <Resizer
+                        direction="x"
+                        size={inspectorWidth}
+                        min={300}
+                        max={() => window.innerWidth - (explorerOpen ? explorerWidth : RAIL_WIDTH) - MIN_CANVAS_WIDTH}
+                        invert
+                        open={inspectorOpen}
+                        collapsed={RAIL_WIDTH}
+                        onResize={setInspectorWidth}
+                        onOpenChange={setInspectorOpen}
+                    />
+                    <div className={`side side-right${inspectorOpen ? ' open' : ''}`} style={{ width: inspectorOpen ? inspectorWidth : RAIL_WIDTH }}>
+                        <div className="rail" inert={inspectorOpen}>
+                            <button className="icon-button" onClick={() => setInspectorOpen(true)} data-tooltip={t.openInspector} aria-label={t.openInspector}>
+                                <PanelRightOpen size={16} aria-hidden />
+                            </button>
+                        </div>
+                        <aside className="pane" style={{ width: inspectorWidth }} inert={!inspectorOpen}>
                             <Inspector
                                 model={model}
                                 mode={mode}
@@ -454,36 +464,36 @@ export function App() {
                                 onBack={goBack}
                                 onClose={() => setInspectorOpen(false)}
                             />
-                    </aside>
+                        </aside>
+                    </div>
                 </div>
-            </div>
-            <Resizer
-                direction="y"
-                size={bottomHeight}
-                min={120}
-                max={600}
-                invert
-                open={bottomOpen}
-                collapsed={BOTTOM_BAR_HEIGHT}
-                onResize={setBottomHeight}
-                onOpenChange={setBottomOpen}
-            />
-            <div className="bottom-wrap" style={{ height: bottomOpen ? bottomHeight : BOTTOM_BAR_HEIGHT }}>
-                <BottomPanel
-                    tab={bottomTab}
-                    mode={mode}
+                <Resizer
+                    direction="y"
+                    size={bottomHeight}
+                    min={120}
+                    max={600}
+                    invert
                     open={bottomOpen}
-                    model={model}
-                    diagnostics={current?.diagnostics ?? []}
-                    diff={current?.diff ?? empty}
-                    onTab={setBottomTab}
-                    onToggle={() => setBottomOpen(!bottomOpen)}
-                    onLocate={locate}
-                    onSelect={(id) => select(id)}
+                    collapsed={BOTTOM_BAR_HEIGHT}
+                    onResize={setBottomHeight}
+                    onOpenChange={setBottomOpen}
                 />
+                <div className="bottom-wrap" style={{ height: bottomOpen ? bottomHeight : BOTTOM_BAR_HEIGHT }}>
+                    <BottomPanel
+                        tab={bottomTab}
+                        mode={mode}
+                        open={bottomOpen}
+                        model={model}
+                        diagnostics={current?.diagnostics ?? []}
+                        diff={current?.diff ?? empty}
+                        onTab={setBottomTab}
+                        onToggle={() => setBottomOpen(!bottomOpen)}
+                        onLocate={locate}
+                        onSelect={(id) => select(id)}
+                    />
+                </div>
+                <Tooltips />
             </div>
-            <Tooltips />
-        </div>
         </I18nProvider>
     );
 }

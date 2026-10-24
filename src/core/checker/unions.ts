@@ -19,7 +19,14 @@ export function checkUnions(index: ModelIndex, sink: DiagnosticSink): void {
             for (const f of fieldsOf(v.members)) {
                 if (f.name === tag) {
                     const hint = `rename the field, or name another discriminator with 'union ${u.name} by <name>'`;
-                    sink.error('M015', `Field '${f.name}' of variant '${u.name}.${v.name}' collides with the discriminator '${tag}'.`, f, 'name', undefined, hint);
+                    sink.error(
+                        'M015',
+                        `Field '${f.name}' of variant '${u.name}.${v.name}' collides with the discriminator '${tag}'.`,
+                        f,
+                        'name',
+                        undefined,
+                        hint,
+                    );
                 }
             }
         }
@@ -35,7 +42,14 @@ export function checkUnions(index: ModelIndex, sink: DiagnosticSink): void {
         const declared = new Set(u.variants.map((v) => v.name));
         const missing = bound.values.filter((v) => !declared.has(v.name)).map((v) => `'${v.name}'`);
         if (missing.length) {
-            sink.error('M015', `Union '${u.name}' is bound to enum '${bound.name}' but has no variant for ${missing.join(', ')}.`, u, 'name', undefined, `add a variant for each missing value (a variant may have no fields)`);
+            sink.error(
+                'M015',
+                `Union '${u.name}' is bound to enum '${bound.name}' but has no variant for ${missing.join(', ')}.`,
+                u,
+                'name',
+                undefined,
+                `add a variant for each missing value (a variant may have no fields)`,
+            );
         }
     }
 }

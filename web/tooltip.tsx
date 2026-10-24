@@ -22,8 +22,7 @@ export function placeTooltip(
     return { left: Math.round(left), top: Math.round(top) };
 }
 
-const tooltipTarget = (node: EventTarget | null): HTMLElement | null =>
-    node instanceof Element ? node.closest<HTMLElement>(`[${TOOLTIP_ATTR}]`) : null;
+const tooltipTarget = (node: EventTarget | null): HTMLElement | null => (node instanceof Element ? node.closest<HTMLElement>(`[${TOOLTIP_ATTR}]`) : null);
 
 /**
  * Tooltips drawn by the app for every element with `data-tooltip` (native `title` tooltips are not shown reliably),

@@ -46,12 +46,23 @@ describe('Live View', () => {
         expect(html).toContain('<div id="root"></div>');
         const state = (await (await fetch(`${server.url}api/state`)).json()) as ViewPayload;
         expect(state.status).toBe('ok');
-        expect(state.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
+        expect(state.files).toEqual([
+            'billing/context.dt',
+            'billing/invoice.dt',
+            'common/context.dt',
+            'sales/context.dt',
+            'sales/customer.dt',
+            'sales/order.dt',
+        ]);
         expect(state.structure?.nodes.length).toBeGreaterThan(0);
         expect(state.aggregates?.nodes.filter((n) => n.kind === 'aggregate').map((n) => n.id)).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
         expect(Object.keys(state.states).sort()).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);
         // laid out for each way of labeling transitions
-        expect(Object.values(state.states['Sales.Order']).map((g) => g.id)).toEqual(['states:Sales.Order:command', 'states:Sales.Order:event', 'states:Sales.Order']);
+        expect(Object.values(state.states['Sales.Order']).map((g) => g.id)).toEqual([
+            'states:Sales.Order:command',
+            'states:Sales.Order:event',
+            'states:Sales.Order',
+        ]);
         expect(state.sources.map((x) => x.path)).toEqual(state.files);
         const order = state.model!.elements['Sales.Order'].location;
         const lines = state.sources.find((x) => x.path === order.file)!.text.split('\n');
@@ -68,7 +79,10 @@ describe('Live View', () => {
         const graph = (await focus.json()) as { id: string; nodeLayout: Record<string, unknown> };
         expect(graph.id).toBe('structure-focus:Billing:overview');
         expect(Object.keys(graph.nodeLayout)).toContain('Billing.Invoice');
-        const aggregates = (await (await fetch(`${server.url}api/focus?contexts=Billing&level=aggregates`)).json()) as { id: string; nodeLayout: Record<string, unknown> };
+        const aggregates = (await (await fetch(`${server.url}api/focus?contexts=Billing&level=aggregates`)).json()) as {
+            id: string;
+            nodeLayout: Record<string, unknown>;
+        };
         expect(aggregates.id).toBe('structure-focus:Billing:aggregates');
         expect(Object.keys(aggregates.nodeLayout).sort()).toEqual(['Billing', 'Billing.Invoice', 'Sales', 'Sales.Order']);
         const hidden = (await (await fetch(`${server.url}api/focus?contexts=Billing&hide=Sales,Billing,Unknown`)).json()) as { id: string };
@@ -94,7 +108,12 @@ describe('Live View', () => {
 
     test('pushes an update after a file is saved, with added and changed elements', async () => {
         const src = await readFile(order(), 'utf8');
-        await writeFile(order(), src.replace('    state Draft "下書き"\n', '    state Draft "下書き"\n    state Shipped { trackingNo: String }\n').replace('  error EmptyOrder "明細なし"', '  error EmptyOrder "明細なし"\n  error NotShippable'));
+        await writeFile(
+            order(),
+            src
+                .replace('    state Draft "下書き"\n', '    state Draft "下書き"\n    state Shipped { trackingNo: String }\n')
+                .replace('  error EmptyOrder "明細なし"', '  error EmptyOrder "明細なし"\n  error NotShippable'),
+        );
         const p = await nextUpdate((u) => u.diff.added.includes('Sales.Order#Shipped'));
         expect(p.status).toBe('ok');
         expect(p.diff.added.sort()).toEqual(['Sales.NotShippable', 'Sales.Order#Shipped']);
@@ -103,7 +122,10 @@ describe('Live View', () => {
     });
 
     test('several files saved in a burst produce one consistent update', async () => {
-        await writeFile(path.join(dir, 'shipping.dt'), 'context Shipping { id ParcelId: UUID aggregate Parcel { id: ParcelId references order: Sales.OrderId -> Sales.Order } }');
+        await writeFile(
+            path.join(dir, 'shipping.dt'),
+            'context Shipping { id ParcelId: UUID aggregate Parcel { id: ParcelId references order: Sales.OrderId -> Sales.Order } }',
+        );
         await writeFile(path.join(dir, 'extra.dt'), 'context Shipping { value Address { line1: String } }');
         const p = await nextUpdate((u) => u.files.includes('extra.dt') && u.files.includes('shipping.dt'));
         expect(p.status).toBe('ok');

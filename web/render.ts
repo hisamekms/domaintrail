@@ -76,7 +76,11 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         const marks = { change: isGroup ? ('none' as const) : change(n.elementId), diag: isGroup ? ('none' as const) : (severity.get(n.elementId) ?? 'none') };
         const base = { id: nodeShapeId(n.id), x: l.x, y: l.y, meta: { elementId: n.elementId, graphNode: n.id } };
         if (isGroup) {
-            groups.push({ ...base, type: 'domain-group', props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), lines: n.lines.map((r) => textOf(r.key, opts)), scale, ...marks } });
+            groups.push({
+                ...base,
+                type: 'domain-group',
+                props: { w: l.width, h: l.height, kind: n.kind, label: textOf(n.label, opts), lines: n.lines.map((r) => textOf(r.key, opts)), scale, ...marks },
+            });
         } else {
             nodes.push({
                 ...base,
@@ -155,7 +159,13 @@ function nodeProps(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Variant)
 }
 
 /** A node's internal transitions, each a shape of its own over the compartment (so it is selected on its own). */
-function internalRows(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Variant, marks: (command: string) => { change: ChangeMark; diag: DiagMark }): TLShapePartial[] {
+function internalRows(
+    graph: LaidOutGraph,
+    n: GraphNode,
+    l: NodeLayout,
+    v: Variant,
+    marks: (command: string) => { change: ChangeMark; diag: DiagMark },
+): TLShapePartial[] {
     if (!n.internal?.length) return [];
     const labels = v.transitionLabels ?? 'both';
     let y = l.y + l.height - compartmentHeight(n, graph.transitionLabels ?? 'both') + INTERNAL_PADDING;
@@ -168,7 +178,15 @@ function internalRows(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Varia
             x: l.x + 4,
             y,
             meta: { elementId: t.elementId, edge: t.id },
-            props: { w: l.width - 8, h, label: textOf(text.main, v), sub: text.sub ? textOf(text.sub, v) : '', faded: text.faded, scale: graph.textScale ?? 1, ...marks(t.elementId) },
+            props: {
+                w: l.width - 8,
+                h,
+                label: textOf(text.main, v),
+                sub: text.sub ? textOf(text.sub, v) : '',
+                faded: text.faded,
+                scale: graph.textScale ?? 1,
+                ...marks(t.elementId),
+            },
         };
         y += h;
         return row;

@@ -53,7 +53,10 @@
                 "anyOf": [{ "required": ["out"] }, { "required": ["policies"] }],
                 "properties": {
                   "out": { "description": "Output directory of this context, inside the directory of this file.", "type": "string" },
-                  "policies": { "description": "Whether the policies of this context must be implemented; overrides generate.ts.policies.", "enum": ["optional", "required"] }
+                  "policies": {
+                    "description": "Whether the policies of this context must be implemented; overrides generate.ts.policies.",
+                    "enum": ["optional", "required"]
+                  }
                 }
               },
               "examples": [{ "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } }]
@@ -63,8 +66,14 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "out": { "description": "Output directory of the test modules, inside the directory of this file. Default: 'tests' in the output directory ('out', or --out).", "type": "string" },
-                "runner": { "description": "Writes _register.ts, which registers a generated suite with this test runner.", "enum": ["bun", "vitest", "jest", "node"] }
+                "out": {
+                  "description": "Output directory of the test modules, inside the directory of this file. Default: 'tests' in the output directory ('out', or --out).",
+                  "type": "string"
+                },
+                "runner": {
+                  "description": "Writes _register.ts, which registers a generated suite with this test runner.",
+                  "enum": ["bun", "vitest", "jest", "node"]
+                }
               },
               "examples": [{ "runner": "vitest" }]
             }

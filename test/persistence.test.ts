@@ -11,8 +11,7 @@ const SALES = `
   value Flags { persistent: Bool }
 `;
 
-const salesTs = (model: Parameters<typeof generateTypeScript>[0]): string =>
-    generateTypeScript(model).find((f) => f.path === 'Sales.ts')!.content;
+const salesTs = (model: Parameters<typeof generateTypeScript>[0]): string => generateTypeScript(model).find((f) => f.path === 'Sales.ts')!.content;
 
 describe('persistent events', () => {
     test('events are persisted only when declared persistent', async () => {

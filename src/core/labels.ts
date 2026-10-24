@@ -48,7 +48,10 @@ export class LabelResolver {
 
     /** `///` description of a context; the first fragment that has one wins. */
     contextDoc(ctx: string): string | undefined {
-        return this.index.fragments.filter((c) => c.name === ctx).map(docComment).find(Boolean);
+        return this.index.fragments
+            .filter((c) => c.name === ctx)
+            .map(docComment)
+            .find(Boolean);
     }
 
     fieldLabel(f: FieldLike | Parameter): ResolvedLabel | undefined {

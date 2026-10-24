@@ -158,7 +158,9 @@ async function start(files: Record<string, string>, args: string[] = []): Promis
 async function checkOutput(root: string, file: string): Promise<string[]> {
     const lines: string[] = [];
     await runCli(['-r', root, 'check', '--format', 'json'], { out: (l) => lines.push(l), err: (l) => lines.push(l) });
-    const { diagnostics } = JSON.parse(lines.join('\n')) as { diagnostics: { file: string; line: number; column: number; severity: string; code: string; message: string; hint?: string }[] };
+    const { diagnostics } = JSON.parse(lines.join('\n')) as {
+        diagnostics: { file: string; line: number; column: number; severity: string; code: string; message: string; hint?: string }[];
+    };
     return diagnostics
         .filter((d) => d.file === file)
         .map((d) => `${d.line}:${d.column} ${d.severity} ${d.code} ${d.message}${d.hint ? `\nhint: ${d.hint}` : ''}`);
@@ -186,7 +188,10 @@ describe('dt lsp', () => {
         const client = await start({ 'common.dt': COMMON, 'broken.dt': 'context Broken { id X UUID }\n' });
         await client.until('broken.dt', () => true);
         const format = (file: string) =>
-            client.connection.sendRequest<{ newText: string }[]>('textDocument/formatting', { textDocument: { uri: client.uri(file) }, options: { tabSize: 2, insertSpaces: true } });
+            client.connection.sendRequest<{ newText: string }[]>('textDocument/formatting', {
+                textDocument: { uri: client.uri(file) },
+                options: { tabSize: 2, insertSpaces: true },
+            });
         expect((await format('common.dt')).map((e) => e.newText)).toEqual([formatDomain(COMMON)]);
         expect(formatDomain(COMMON)).not.toBe(COMMON);
         expect(await format('broken.dt')).toEqual([]);
@@ -251,14 +256,15 @@ describe('dt lsp', () => {
         const shared = await client.request<{ targetUri: string }[]>('textDocument/definition', 'sales.dt', at(SALES, 'Money'));
         expect(shared.map((d) => d.targetUri)).toEqual([client.uri('common.dt')]);
 
-        const refs = await client.request<{ uri: string; range: { start: { line: number } } }[]>(
-            'textDocument/references',
-            'sales.dt',
-            at(SALES, 'OrderId'),
-            { context: { includeDeclaration: false } },
-        );
+        const refs = await client.request<{ uri: string; range: { start: { line: number } } }[]>('textDocument/references', 'sales.dt', at(SALES, 'OrderId'), {
+            context: { includeDeclaration: false },
+        });
         expect(refs.map((r) => `${path.basename(URI.parse(r.uri).fsPath)}:${r.range.start.line}`).sort()).toEqual(
-            [`billing.dt:${at(BILLING, 'Sales.OrderId').line}`, `sales.dt:${at(SALES, 'id: OrderId').line}`, `sales.dt:${at(SALES, 'orderId: OrderId').line}`].sort(),
+            [
+                `billing.dt:${at(BILLING, 'Sales.OrderId').line}`,
+                `sales.dt:${at(SALES, 'id: OrderId').line}`,
+                `sales.dt:${at(SALES, 'orderId: OrderId').line}`,
+            ].sort(),
         );
     });
 
@@ -282,7 +288,15 @@ describe('dt lsp', () => {
         const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('sales.dt') } });
         const names = (s: Symbol[]): unknown[] => s.map((x) => (x.children ? [x.name, names(x.children)] : x.name));
         expect(names(symbols)).toEqual([
-            ['Sales', ['OrderId', ['Order', ['id', 'total', 'lines', 'Draft', 'Placed', 'positive', 'place']], ['OrderLine', ['quantity']], ['OrderPlaced', ['orderId']]]],
+            [
+                'Sales',
+                [
+                    'OrderId',
+                    ['Order', ['id', 'total', 'lines', 'Draft', 'Placed', 'positive', 'place']],
+                    ['OrderLine', ['quantity']],
+                    ['OrderPlaced', ['orderId']],
+                ],
+            ],
         ]);
     });
 
@@ -296,12 +310,9 @@ describe('dt lsp', () => {
         );
         expect(BILLING.split('\n')[at(BILLING, 'Sales.Order').line].slice(range.start.character, range.end.character)).toBe('Order');
 
-        const edit = await client.request<{ changes: Record<string, { range: { start: { line: number; character: number }; end: { character: number } }; newText: string }[]> }>(
-            'textDocument/rename',
-            'billing.dt',
-            at(BILLING, '-> Sales.Order', 4),
-            { newName: 'PurchaseOrder' },
-        );
+        const edit = await client.request<{
+            changes: Record<string, { range: { start: { line: number; character: number }; end: { character: number } }; newText: string }[]>;
+        }>('textDocument/rename', 'billing.dt', at(BILLING, '-> Sales.Order', 4), { newName: 'PurchaseOrder' });
         const apply = (text: string, edits: (typeof edit.changes)[string] = []) => {
             const lines = text.split('\n');
             for (const e of [...edits].sort((a, b) => b.range.start.line - a.range.start.line || b.range.start.character - a.range.start.character)) {
@@ -323,12 +334,9 @@ describe('dt lsp', () => {
         expect(await client.until('sales.dt', () => true)).toEqual([]);
         const hover = await client.request<{ contents: { value: string } } | null>('textDocument/hover', 'sales.dt', at(sales, 'place'));
         expect(hover?.contents.value).toBe('**command `place`** — `Sales.Order:place`\n\n```dt\nemits OrderPlaced[1..*] when Draft -> Placed\n```');
-        const edit = await client.request<{ changes: Record<string, { range: { start: { line: number; character: number }; end: { character: number } }; newText: string }[]> }>(
-            'textDocument/rename',
-            'sales.dt',
-            at(sales, 'state Placed', 'state '.length),
-            { newName: 'Ordered' },
-        );
+        const edit = await client.request<{
+            changes: Record<string, { range: { start: { line: number; character: number }; end: { character: number } }; newText: string }[]>;
+        }>('textDocument/rename', 'sales.dt', at(sales, 'state Placed', 'state '.length), { newName: 'Ordered' });
         const edits = edit.changes[client.uri('sales.dt')];
         expect(edits.map((e) => [e.range.start.line, sales.split('\n')[e.range.start.line].slice(e.range.start.character, e.range.end.character)])).toEqual(
             expect.arrayContaining([
@@ -355,14 +363,24 @@ describe('dt lsp', () => {
         const client = await start({ 'sales.dt': sales });
         expect(await client.until('sales.dt', () => true)).toEqual([]);
         const hover = await client.request<{ contents: { value: string } } | null>('textDocument/hover', 'sales.dt', at(sales, 'AvailableEmail'));
-        expect(hover?.contents.value).toBe('**verified `AvailableEmail`** 未使用 — `Sales.AvailableEmail`\n\nUsed by no other customer.\n\n```dt\nof String for CustomerId? errors EmailTaken\n```');
+        expect(hover?.contents.value).toBe(
+            '**verified `AvailableEmail`** 未使用 — `Sales.AvailableEmail`\n\nUsed by no other customer.\n\n```dt\nof String for CustomerId? errors EmailTaken\n```',
+        );
         type Symbol = { name: string; children?: Symbol[] };
         const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('sales.dt') } });
         expect(symbols[0].children?.map((x) => x.name)).toEqual(['CustomerId', 'AvailableEmail', 'Customer', 'EmailTaken']);
-        const edit = await client.request<{ changes: Record<string, { range: { start: { line: number } } }[]> }>('textDocument/rename', 'sales.dt', at(sales, 'AvailableEmail'), {
-            newName: 'FreeEmail',
-        });
-        expect(edit.changes[client.uri('sales.dt')].map((e) => e.range.start.line).sort((a, b) => a - b)).toEqual([at(sales, 'AvailableEmail').line, at(sales, 'email: AvailableEmail').line]);
+        const edit = await client.request<{ changes: Record<string, { range: { start: { line: number } } }[]> }>(
+            'textDocument/rename',
+            'sales.dt',
+            at(sales, 'AvailableEmail'),
+            {
+                newName: 'FreeEmail',
+            },
+        );
+        expect(edit.changes[client.uri('sales.dt')].map((e) => e.range.start.line).sort((a, b) => a - b)).toEqual([
+            at(sales, 'AvailableEmail').line,
+            at(sales, 'email: AvailableEmail').line,
+        ]);
     });
 
     test('hovers on a command list its changes; the outline and renames are unaffected by them', async () => {
@@ -376,7 +394,12 @@ describe('dt lsp', () => {
         expect(symbols[0].children![1].children!.map((s) => s.name)).toEqual(['id', 'total', 'lines', 'Draft', 'Placed', 'positive', 'place']);
         // the names in `changes` are fields, which are not renamed (as in expressions)
         expect(await client.request('textDocument/prepareRename', 'sales.dt', at(sales, 'changes total', 'changes '.length))).toBeNull();
-        const edit = await client.request<{ changes: Record<string, unknown[]> }>('textDocument/rename', 'sales.dt', at(sales, 'state Placed', 'state '.length), { newName: 'Ordered' });
+        const edit = await client.request<{ changes: Record<string, unknown[]> }>(
+            'textDocument/rename',
+            'sales.dt',
+            at(sales, 'state Placed', 'state '.length),
+            { newName: 'Ordered' },
+        );
         expect(edit.changes[client.uri('sales.dt')]).toHaveLength(2);
     });
 
@@ -392,8 +415,12 @@ describe('dt lsp', () => {
         expect(await hover('billing.dt', at(billing, 'BillPlaced'))).toBe(
             '**policy `BillPlaced`** 請求する — `Billing.BillPlaced`\n\nBill what is placed.\n\n```dt\nwhen Sales.OrderPlaced -> Invoice.issue\n```\n\nAfter the event, the command is run — eventually, by any mechanism.',
         );
-        expect(await hover('billing.dt', at(billing, 'command issue', 'command '.length))).toBe('**create command `issue`** — `Billing.Invoice:issue`\n\nRun by policy `Billing.BillPlaced` (when Sales.OrderPlaced)');
-        expect(await hover('sales.dt', at(SALES, 'event OrderPlaced', 'event '.length))).toBe('**event `OrderPlaced`** — `Sales.OrderPlaced`\n\nReacted to by policy `Billing.BillPlaced` (-> Invoice.issue)');
+        expect(await hover('billing.dt', at(billing, 'command issue', 'command '.length))).toBe(
+            '**create command `issue`** — `Billing.Invoice:issue`\n\nRun by policy `Billing.BillPlaced` (when Sales.OrderPlaced)',
+        );
+        expect(await hover('sales.dt', at(SALES, 'event OrderPlaced', 'event '.length))).toBe(
+            '**event `OrderPlaced`** — `Sales.OrderPlaced`\n\nReacted to by policy `Billing.BillPlaced` (-> Invoice.issue)',
+        );
 
         type Symbol = { name: string; children?: Symbol[] };
         const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('billing.dt') } });
@@ -411,13 +438,21 @@ describe('dt lsp', () => {
         // the command, from the policy and from its declaration
         const byPolicy = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'Invoice.issue', 'Invoice.'.length), { newName: 'bill' });
         expect(renamed(billing, 'billing.dt', byPolicy)).toBe(billing.replace('Invoice.issue', 'Invoice.bill').replace('command issue', 'command bill'));
-        const byCommand = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'command issue', 'command '.length), { newName: 'bill' });
+        const byCommand = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'command issue', 'command '.length), {
+            newName: 'bill',
+        });
         expect(renamed(billing, 'billing.dt', byCommand)).toBe(billing.replace('Invoice.issue', 'Invoice.bill').replace('command issue', 'command bill'));
         // the event (qualified in the policy) and the aggregate
-        const event = await client.request<Edits>('textDocument/rename', 'sales.dt', at(SALES, 'event OrderPlaced', 'event '.length), { newName: 'OrderSubmitted' });
+        const event = await client.request<Edits>('textDocument/rename', 'sales.dt', at(SALES, 'event OrderPlaced', 'event '.length), {
+            newName: 'OrderSubmitted',
+        });
         expect(renamed(billing, 'billing.dt', event)).toBe(billing.replace('Sales.OrderPlaced', 'Sales.OrderSubmitted'));
-        const aggregate = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'aggregate Invoice', 'aggregate '.length), { newName: 'Bill' });
-        expect(renamed(billing, 'billing.dt', aggregate)).toBe(billing.replace('-> Invoice.issue', '-> Bill.issue').replace('aggregate Invoice', 'aggregate Bill'));
+        const aggregate = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'aggregate Invoice', 'aggregate '.length), {
+            newName: 'Bill',
+        });
+        expect(renamed(billing, 'billing.dt', aggregate)).toBe(
+            billing.replace('-> Invoice.issue', '-> Bill.issue').replace('aggregate Invoice', 'aggregate Bill'),
+        );
     });
 
     test('uses the config of --root and its sources', async () => {

@@ -106,7 +106,13 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
                 end: { line: d.range.end.line + 1, column: d.range.end.character + 1 },
                 severity: d.severity === 2 ? 'warning' : 'error',
                 code: link ? 'M023' : isLink ? (LINK_RULES[property] ?? 'M001') : 'SYNTAX',
-                message: link ? link.message : isLink ? linkMessage(property, data?.refText ?? '') : typeof d.message === 'string' ? d.message : d.message.value,
+                message: link
+                    ? link.message
+                    : isLink
+                      ? linkMessage(property, data?.refText ?? '')
+                      : typeof d.message === 'string'
+                        ? d.message
+                        : d.message.value,
                 ...(hint ? { hint } : {}),
                 elementId: node && elementIdOf(node),
             });
@@ -171,7 +177,8 @@ const LINK_TARGETS: Record<string, (el: ContextElement) => boolean> = {
     fieldSets: isFieldSet,
     target: isAggregate,
     tagType: isEnumDecl,
-    decl: (el) => isIdType(el) || isPrimitiveDecl(el) || isVerifiedDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
+    decl: (el) =>
+        isIdType(el) || isPrimitiveDecl(el) || isVerifiedDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
 };
 
 const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'];
@@ -183,7 +190,14 @@ const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'
 function linkHint(index: ModelIndex, node: AstNode, property: string, refText: string): string | undefined {
     if (property === 'from' || property === 'to') {
         const agg = AstUtils.getContainerOfType(node, isAggregate);
-        return agg && suggestFrom(refText, statesOf(agg).map((s) => s.name), `a state of '${agg.name}'`);
+        return (
+            agg &&
+            suggestFrom(
+                refText,
+                statesOf(agg).map((s) => s.name),
+                `a state of '${agg.name}'`,
+            )
+        );
     }
     const accepts = LINK_TARGETS[property];
     if (!accepts) return undefined;
@@ -211,7 +225,10 @@ function linkHint(index: ModelIndex, node: AstNode, property: string, refText: s
 function policyLink(index: ModelIndex, policy: Policy, property: string, refText: string): { message: string; hint?: string } | null {
     const ctx = policy.$container.name;
     if (property === 'event') {
-        return { message: `Policy '${policy.name}' reacts to event '${refText}', which does not exist${refText.includes('.') ? '' : ` in context '${ctx}' (use Context.Name for other contexts)`}.`, hint: linkHint(index, policy, 'event', refText) };
+        return {
+            message: `Policy '${policy.name}' reacts to event '${refText}', which does not exist${refText.includes('.') ? '' : ` in context '${ctx}' (use Context.Name for other contexts)`}.`,
+            hint: linkHint(index, policy, 'event', refText),
+        };
     }
     if (property === 'aggregate') {
         const elsewhere = index.aggregates.filter((a) => a.name === refText && a.$container.name !== ctx);
@@ -223,12 +240,18 @@ function policyLink(index: ModelIndex, policy: Policy, property: string, refText
             };
         }
         const local = index.aggregates.filter((a) => a.$container.name === ctx).map((a) => a.name);
-        return { message: `Policy '${policy.name}' runs a command of aggregate '${refText}', which is not an aggregate of context '${ctx}'.`, hint: suggestFrom(refText, local, `an aggregate of '${ctx}'`) };
+        return {
+            message: `Policy '${policy.name}' runs a command of aggregate '${refText}', which is not an aggregate of context '${ctx}'.`,
+            hint: suggestFrom(refText, local, `an aggregate of '${ctx}'`),
+        };
     }
     const agg = policy.aggregate.ref;
     if (!agg) return null; // the aggregate is reported, and the command cannot be looked up
     const commands = agg && isAggregate(agg) ? commandsOf(agg).map((c) => c.name) : [];
-    return { message: `Policy '${policy.name}' runs '${policy.aggregate.$refText}.${refText}', but '${policy.aggregate.$refText}' has no command '${refText}'.`, hint: suggestFrom(refText, commands, `a command of '${policy.aggregate.$refText}'`) };
+    return {
+        message: `Policy '${policy.name}' runs '${policy.aggregate.$refText}.${refText}', but '${policy.aggregate.$refText}' has no command '${refText}'.`,
+        hint: suggestFrom(refText, commands, `a command of '${policy.aggregate.$refText}'`),
+    };
 }
 
 function nodeAt(doc: LangiumDocument, line: number, character: number): AstNode | undefined {

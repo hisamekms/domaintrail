@@ -65,7 +65,14 @@ function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticS
             const what = f.type?.primitive ?? (decl ? `${decl.$type} '${decl.name}'` : undefined);
             if (decl && isAggregate(decl)) {
                 const hint = `write 'references ${f.name}: ${idTypeOf(decl)} -> ${decl.name}' instead`;
-                sink.error('M004', `'${owner.name}' cannot own aggregate '${decl.name}'; aggregates are referenced by ID ('references').`, f, 'type', undefined, hint);
+                sink.error(
+                    'M004',
+                    `'${owner.name}' cannot own aggregate '${decl.name}'; aggregates are referenced by ID ('references').`,
+                    f,
+                    'type',
+                    undefined,
+                    hint,
+                );
             } else if (what) {
                 const hint = `drop 'owns' to make '${f.name}' a plain field, or give it an entity, value object or union type`;
                 sink.error('M004', `'owns' requires an Entity, Value Object or Union, but '${f.name}' has type ${what}.`, f, 'type', undefined, hint);
@@ -74,11 +81,25 @@ function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticS
         }
         if (isValueType(owner) && isEntity(decl)) {
             const hint = `own '${decl.name}' from its aggregate or another entity, or make '${decl.name}' a value object`;
-            sink.error('M004', `${isUnionDecl(owner) ? 'Union' : 'Value Object'} '${owner.name}' cannot own entity '${decl.name}'.`, f, 'type', undefined, hint);
+            sink.error(
+                'M004',
+                `${isUnionDecl(owner) ? 'Union' : 'Value Object'} '${owner.name}' cannot own entity '${decl.name}'.`,
+                f,
+                'type',
+                undefined,
+                hint,
+            );
         }
         if (decl.$container.name !== owner.$container.name && isEntity(decl)) {
             const hint = `declare an entity in '${owner.$container.name}' for it, or reference the aggregate that owns '${decl.name}' by ID`;
-            sink.error('M004', `Entity '${decl.$container.name}.${decl.name}' belongs to another context and cannot be owned by '${owner.name}'.`, f, 'type', undefined, hint);
+            sink.error(
+                'M004',
+                `Entity '${decl.$container.name}.${decl.name}' belongs to another context and cannot be owned by '${owner.name}'.`,
+                f,
+                'type',
+                undefined,
+                hint,
+            );
         }
         return;
     }
@@ -86,7 +107,14 @@ function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticS
     if (decl && isEntity(decl)) {
         sink.error('M004', `Entity '${decl.name}' cannot be embedded as a plain field; declare it with 'owns' inside its aggregate.`, f, 'type');
     } else if (decl && isAggregate(decl)) {
-        sink.error('M004', `Aggregate '${decl.name}' cannot be embedded in '${owner.name}'; use 'references ${f.name}: <Id> -> ${decl.name}'.`, f, 'type', undefined, `write 'references ${f.name}: ${idTypeOf(decl)} -> ${decl.name}'`);
+        sink.error(
+            'M004',
+            `Aggregate '${decl.name}' cannot be embedded in '${owner.name}'; use 'references ${f.name}: <Id> -> ${decl.name}'.`,
+            f,
+            'type',
+            undefined,
+            `write 'references ${f.name}: ${idTypeOf(decl)} -> ${decl.name}'`,
+        );
     }
 }
 
@@ -103,7 +131,14 @@ function checkReference(f: FieldLike & { $type: 'ReferenceField' }, sink: Diagno
     const targetId = identityField(target)?.type?.decl?.ref;
     if (targetId && targetId !== decl) {
         const hint = `change the type to '${idTypeOf(target)}', or point '->' at the aggregate that '${decl.name}' identifies`;
-        sink.error('M005', `Reference '${f.name}' has type '${decl.name}', but aggregate '${target.name}' is identified by '${targetId.name}'.`, f, 'type', undefined, hint);
+        sink.error(
+            'M005',
+            `Reference '${f.name}' has type '${decl.name}', but aggregate '${target.name}' is identified by '${targetId.name}'.`,
+            f,
+            'type',
+            undefined,
+            hint,
+        );
     }
 }
 
@@ -117,7 +152,14 @@ function checkPayloads(index: ModelIndex, sink: DiagnosticSink): void {
     for (const f of fields) {
         const decl = f.type?.decl?.ref;
         if (decl && isAggregate(decl)) {
-            sink.error('M004', `Aggregate '${decl.name}' cannot be used as a value; use its ID type instead.`, f, 'type', undefined, `change the type to '${idTypeOf(decl)}'`);
+            sink.error(
+                'M004',
+                `Aggregate '${decl.name}' cannot be used as a value; use its ID type instead.`,
+                f,
+                'type',
+                undefined,
+                `change the type to '${idTypeOf(decl)}'`,
+            );
         }
     }
 }
@@ -129,7 +171,10 @@ function checkIdentity(index: ModelIndex, sink: DiagnosticSink): void {
         const kind = isAggregate(el) ? 'Aggregate' : 'Entity';
         if (!idField) {
             const idType = index.lookupVisible(el.$container.name, `${el.name}Id`);
-            const hint = idType && isIdType(idType) ? `add the field 'id: ${el.name}Id'` : `declare 'id ${el.name}Id: UUID' in the context and add the field 'id: ${el.name}Id'`;
+            const hint =
+                idType && isIdType(idType)
+                    ? `add the field 'id: ${el.name}Id'`
+                    : `declare 'id ${el.name}Id: UUID' in the context and add the field 'id: ${el.name}Id'`;
             sink.error('M013', `${kind} '${el.name}' must declare an identity field 'id' with an ID type.`, el, 'name', undefined, hint);
             continue;
         }
@@ -143,7 +188,14 @@ function checkIdentity(index: ModelIndex, sink: DiagnosticSink): void {
         const prev = usedBy.get(decl);
         if (prev) {
             const hint = `declare 'id ${el.name}Id: ${decl.base ?? 'UUID'}' and use it as the type of 'id' here`;
-            sink.error('M013', `ID type '${decl.name}' already identifies '${prev.name}'; each Aggregate/Entity needs its own ID type.`, idField, 'type', undefined, hint);
+            sink.error(
+                'M013',
+                `ID type '${decl.name}' already identifies '${prev.name}'; each Aggregate/Entity needs its own ID type.`,
+                idField,
+                'type',
+                undefined,
+                hint,
+            );
         } else {
             usedBy.set(decl, el);
         }

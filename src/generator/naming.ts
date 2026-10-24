@@ -1,10 +1,41 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isEntity, isEventDecl, isIdType, isPolicy, isPrimitiveDecl, isUnionDecl, isValueObject, isVerifiedDecl } from '../language/generated/ast.js';
+import {
+    isAggregate,
+    isEntity,
+    isEventDecl,
+    isIdType,
+    isPolicy,
+    isPrimitiveDecl,
+    isUnionDecl,
+    isValueObject,
+    isVerifiedDecl,
+} from '../language/generated/ast.js';
 import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
-export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'decide', 'Decide', 'Shape', 'NoChanges', 'outcome', 'eventList', 'NoEvents', 'Outcome', 'EventOf', 'sameOptional', 'sameList', 'distinct', 'parseDecimal'] as const;
+export const RUNTIME_NAMES = [
+    'Result',
+    'Ok',
+    'Err',
+    'Decimal',
+    'Timestamp',
+    'ok',
+    'err',
+    'decide',
+    'Decide',
+    'Shape',
+    'NoChanges',
+    'outcome',
+    'eventList',
+    'NoEvents',
+    'Outcome',
+    'EventOf',
+    'sameOptional',
+    'sameList',
+    'distinct',
+    'parseDecimal',
+] as const;
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';
@@ -24,8 +55,7 @@ interface Named {
 }
 
 export const commonTypeName = (agg: Named): string => `${agg.name}Common`;
-export const stateTypeName = (agg: Named, state: Named | string): string =>
-    `${typeof state === 'string' ? state : state.name}${agg.name}`;
+export const stateTypeName = (agg: Named, state: Named | string): string => `${typeof state === 'string' ? state : state.name}${agg.name}`;
 export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd.name)}${agg.name}`;
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
 /** What a command decides, e.g. `ConfirmOrderDecision`: implemented by the user, turned into the command by `decide`. */
@@ -41,7 +71,10 @@ export function outputsVary(factory: boolean, transitions: OutcomePatternModel[]
     if (factory) return false;
     // per source state: each target with the entries of `emits` that apply to it
     const output = (from: string, to: string[]): string =>
-        [...new Set(to)].sort().map((t) => `${t}:${emits.flatMap((e, i) => (emitApplies(e, from, t) ? [i] : [])).join(',')}`).join('|');
+        [...new Set(to)]
+            .sort()
+            .map((t) => `${t}:${emits.flatMap((e, i) => (emitApplies(e, from, t) ? [i] : [])).join(',')}`)
+            .join('|');
     return new Set(transitions.flatMap((t) => t.from.map((f) => output(f, t.to)))).size > 1;
 }
 export const aggregateParamName = (agg: Named): string => camel(agg.name);
@@ -122,7 +155,14 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
             } else if (isValueObject(el) || isEntity(el) || isUnionDecl(el)) {
                 out.push({ name: `equal${el.name}`, origin: `the equality of '${el.name}'`, node: el });
                 const invs = isUnionDecl(el) ? el.variants.flatMap((v) => invariantsOf(v.members)) : invariantsOf(el.members);
-                if (invs.length) out.push(...checkNames(el.name, invs.some((i) => !i.expr), el));
+                if (invs.length)
+                    out.push(
+                        ...checkNames(
+                            el.name,
+                            invs.some((i) => !i.expr),
+                            el,
+                        ),
+                    );
             }
             continue;
         }
@@ -175,7 +215,12 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
 /** The names of the generated check of a type: `check<T>`, or `check<T>With` and `<T>DeclaredChecks` with a slot. */
 function checkNames(type: string, declared: boolean, node: AstNode): GeneratedName[] {
     const origin = `the check of the invariants of '${type}'`;
-    return declared ? [{ name: `check${type}With`, origin, node }, { name: `${type}DeclaredChecks`, origin, node }] : [{ name: `check${type}`, origin, node }];
+    return declared
+        ? [
+              { name: `check${type}With`, origin, node },
+              { name: `${type}DeclaredChecks`, origin, node },
+          ]
+        : [{ name: `check${type}`, origin, node }];
 }
 
 /** Drops repeated names (reported by M002) so that they do not also count as generated-name collisions. */
@@ -186,9 +231,60 @@ function firstByName<T extends { name: string }>(items: T[]): T[] {
 
 /** Words that cannot be used as TypeScript parameter or type names. */
 export const TS_RESERVED = new Set([
-    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger', 'default', 'delete', 'do', 'else', 'enum',
-    'export', 'extends', 'false', 'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'new', 'null',
-    'return', 'super', 'switch', 'this', 'throw', 'true', 'try', 'typeof', 'var', 'void', 'while', 'with', 'yield',
-    'let', 'static', 'implements', 'interface', 'package', 'private', 'protected', 'public', 'await',
-    'any', 'boolean', 'number', 'string', 'symbol', 'never', 'unknown', 'object', 'undefined', 'bigint',
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'false',
+    'finally',
+    'for',
+    'function',
+    'if',
+    'import',
+    'in',
+    'instanceof',
+    'new',
+    'null',
+    'return',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'true',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'while',
+    'with',
+    'yield',
+    'let',
+    'static',
+    'implements',
+    'interface',
+    'package',
+    'private',
+    'protected',
+    'public',
+    'await',
+    'any',
+    'boolean',
+    'number',
+    'string',
+    'symbol',
+    'never',
+    'unknown',
+    'object',
+    'undefined',
+    'bigint',
 ]);

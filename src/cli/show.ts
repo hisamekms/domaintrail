@@ -89,7 +89,9 @@ export function outcomesOf(agg: ElementModel, c: CommandModel): Outcome[] {
         return {
             ...(from !== undefined && { from }),
             ...(to !== undefined && { to }),
-            emits: c.emits.filter((e) => emitApplies(e, from, to)).map(({ event, multiplicity, lower, upper }: EmitModel) => ({ event, multiplicity, lower, ...(upper !== undefined && { upper }) })),
+            emits: c.emits
+                .filter((e) => emitApplies(e, from, to))
+                .map(({ event, multiplicity, lower, upper }: EmitModel) => ({ event, multiplicity, lower, ...(upper !== undefined && { upper }) })),
             sets: fields.set.map((f) => f.name),
             carries: fields.carried.map((f) => f.name),
             drops: fields.dropped.map((f) => f.name),
@@ -144,7 +146,9 @@ export function usedBy(model: DomainModel, el: ElementModel): UsedBy {
         ],
         verifiedAs: verifiedTypes.filter((v) => isRef(v.verified!.of, el.id)).map((v) => v.id),
         contextOf: verifiedTypes.filter((v) => v.verified!.for && isRef(v.verified!.for.type, el.id)).map((v) => v.id),
-        discriminatorOf: Object.values(model.elements).filter((u) => u.tagType === el.id).map((u) => u.id),
+        discriminatorOf: Object.values(model.elements)
+            .filter((u) => u.tagType === el.id)
+            .map((u) => u.id),
         reactedToBy: el.kind === 'event' ? policiesReactingTo(model, el.id).map((p) => p.id) : [],
     };
 }
@@ -201,7 +205,9 @@ const commandJson = (model: DomainModel, agg: ElementModel, c: CommandModel): Co
 });
 
 function moves(agg: ElementModel, state: string): { enteredBy: Move[]; leftBy: Move[] } {
-    const all = (agg.commands ?? []).flatMap((c) => outcomesOf(agg, c).map((o) => ({ command: c.name, ...(o.from && { from: o.from }), ...(o.to && { to: o.to }) })));
+    const all = (agg.commands ?? []).flatMap((c) =>
+        outcomesOf(agg, c).map((o) => ({ command: c.name, ...(o.from && { from: o.from }), ...(o.to && { to: o.to }) })),
+    );
     return { enteredBy: all.filter((m) => m.to === state), leftBy: all.filter((m) => m.from === state) };
 }
 
@@ -248,7 +254,20 @@ const KEYWORDS: Record<ElementKind, string> = {
     policy: 'policy',
 };
 
-const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error', 'policy'];
+const KIND_ORDER: ElementKind[] = [
+    'aggregate',
+    'entity',
+    'valueObject',
+    'union',
+    'primitive',
+    'verified',
+    'id',
+    'enum',
+    'fieldSet',
+    'event',
+    'error',
+    'policy',
+];
 
 /** A qualified name as written from `ctx`: without the context when it is `ctx`. */
 const nameFrom = (ctx: string, qname: string): string => (qname.startsWith(`${ctx}.`) ? qname.slice(ctx.length + 1) : qname);
@@ -299,12 +318,15 @@ function invariantLines(invs: InvariantModel[], indent: string): string[] {
 
 /** One line per element: `aggregate Order "注文"  // sales/order.dt:12`, with its base, values or states. */
 function elementLine(el: ElementModel, indent: string): string {
-    const detail =
-        el.base ? `: ${el.base}`
-        : el.values ? ` { ${el.values.join(' ')} }`
-        : el.states?.length ? ` (states ${el.states.map((s) => s.name).join(', ')})`
-        : el.policy ? ` ${reactionText(el)}`
-        : verifiedText(el);
+    const detail = el.base
+        ? `: ${el.base}`
+        : el.values
+          ? ` { ${el.values.join(' ')} }`
+          : el.states?.length
+            ? ` (states ${el.states.map((s) => s.name).join(', ')})`
+            : el.policy
+              ? ` ${reactionText(el)}`
+              : verifiedText(el);
     return `${indent}${el.persistent ? 'persistent ' : ''}${KEYWORDS[el.kind]} ${el.name}${quoted(el.label)}${detail}${at(el.location)}`;
 }
 
@@ -351,20 +373,31 @@ function commandLines(model: DomainModel, agg: ElementModel, c: CommandModel, in
     const ctx = agg.context;
     const i2 = `${indent}  `;
     const lines = [...docLines(c.doc, indent), `${indent}${c.factory ? 'create ' : ''}command ${signature(c, ctx)}${quoted(c.label)}${at(c.location)}`];
-    for (const p of policiesRunning(model, agg.id, c.name)) lines.push(`${i2}// triggered by policy ${nameFrom(ctx, p.id)}${quoted(p.label)} ${p.policy ? `when ${nameFrom(ctx, p.policy.event)}` : ''}`.trimEnd());
+    for (const p of policiesRunning(model, agg.id, c.name))
+        lines.push(`${i2}// triggered by policy ${nameFrom(ctx, p.id)}${quoted(p.label)} ${p.policy ? `when ${nameFrom(ctx, p.policy.event)}` : ''}`.trimEnd());
     for (const t of c.transitions) lines.push(`${i2}${[t.from.join(' | '), '->', t.to.join(' | ')].filter(Boolean).join(' ')}`);
     for (const r of c.requires) {
-        lines.push(...docLines(r.doc, i2), `${i2}requires ${r.name}${quoted(r.label)} ${r.source ? `{ ${r.source} }` : '(not expressed in the DSL)'} else ${nameFrom(ctx, r.error)}`);
+        lines.push(
+            ...docLines(r.doc, i2),
+            `${i2}requires ${r.name}${quoted(r.label)} ${r.source ? `{ ${r.source} }` : '(not expressed in the DSL)'} else ${nameFrom(ctx, r.error)}`,
+        );
     }
     if (c.changes.length) lines.push(`${i2}changes ${c.changes.join(', ')}`);
-    if (c.emits.length) lines.push(`${i2}emits ${c.emits.map((e) => `${nameFrom(ctx, e.event)}${e.multiplicity}${e.when ? ` when ${outcomePatternText(e.when)}` : ''}`).join(', ')}`);
+    if (c.emits.length)
+        lines.push(
+            `${i2}emits ${c.emits.map((e) => `${nameFrom(ctx, e.event)}${e.multiplicity}${e.when ? ` when ${outcomePatternText(e.when)}` : ''}`).join(', ')}`,
+        );
     const outcomes = outcomesOf(agg, c);
     if (detail || c.emits.some((e) => e.when)) {
         lines.push(`${i2}outcomes`);
         for (const o of outcomes) {
             lines.push(`${i2}  ${outcomeName(o)}: ${emitsText(o, ctx)}`);
             if (detail) {
-                const parts = [`sets ${o.sets.join(', ') || '-'}`, `carries ${o.carries.join(', ') || '-'}`, ...(o.drops.length ? [`drops ${o.drops.join(', ')}`] : [])];
+                const parts = [
+                    `sets ${o.sets.join(', ') || '-'}`,
+                    `carries ${o.carries.join(', ') || '-'}`,
+                    ...(o.drops.length ? [`drops ${o.drops.join(', ')}`] : []),
+                ];
                 lines.push(`${i2}    ${parts.join('; ')}`);
             }
         }
@@ -424,12 +457,19 @@ function policyText(model: DomainModel, el: ElementModel): string[] {
     const lines = [...docLines(el.doc, ''), `policy ${el.id}${quoted(el.label)} ${reactionText(el)}${at(el.location)}`];
     const event = model.elements[p.event];
     const fields = event?.fields.map((f) => fieldText(f, event.context)).join(', ');
-    lines.push(event ? `  event ${nameFrom(ctx, event.id)}${quoted(event.label)}${fields ? ` { ${fields} }` : ''}${at(event.location)}` : `  event ${p.event} (unresolved)`);
+    lines.push(
+        event
+            ? `  event ${nameFrom(ctx, event.id)}${quoted(event.label)}${fields ? ` { ${fields} }` : ''}${at(event.location)}`
+            : `  event ${p.event} (unresolved)`,
+    );
     const agg = model.elements[p.aggregate];
     const c = agg?.commands?.find((x) => x.name === p.command);
     if (!agg || !c) return [...lines, `  command ${nameFrom(ctx, p.aggregate)}.${p.command} (unresolved)`];
     const id = agg.fields.find((f) => f.name === 'id');
-    const input = [...(c.factory || !id ? [] : [`${aggregateParamName(agg)}: ${typeText(id, ctx)}`]), ...c.params.map((f) => `${f.name}: ${typeText(f, ctx)}${f.multiplicity}`)];
+    const input = [
+        ...(c.factory || !id ? [] : [`${aggregateParamName(agg)}: ${typeText(id, ctx)}`]),
+        ...c.params.map((f) => `${f.name}: ${typeText(f, ctx)}${f.multiplicity}`),
+    ];
     lines.push(`  ${c.factory ? 'create ' : ''}command ${nameFrom(ctx, agg.id)}.${signature(c, ctx)}${quoted(c.label)}${at(c.location)}`);
     lines.push(`  input { ${input.join(', ')} }  // what the application needs to run it, eventually (any mechanism)`);
     return lines;

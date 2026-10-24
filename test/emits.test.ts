@@ -9,7 +9,21 @@ const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
 
 function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
     const r = Bun.spawnSync(
-        [process.execPath, TSC, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM', ...files],
+        [
+            process.execPath,
+            TSC,
+            '--noEmit',
+            '--strict',
+            '--target',
+            'ES2023',
+            '--module',
+            'preserve',
+            '--moduleResolution',
+            'bundler',
+            '--lib',
+            'ES2023,DOM',
+            ...files,
+        ],
         { cwd },
     );
     return { code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() };
@@ -103,8 +117,14 @@ describe('emits in the DSL', () => {
         );
         expect(only(a, 'M006').map((d) => [d.message, d.hint])).toEqual([
             ["State 'Completed' is not a source state of command 'a', so 'Done' can never be emitted from it.", "use a source state of 'a': Draft"],
-            ["State 'Completed' is not a target state of command 'b', so 'Done' can never be emitted when it ends there.", "use a target state of 'b': InProgress"],
-            ["'when' matches no transition of command 'c', so 'Done' is never emitted.", "its outcomes are Draft -> Draft, InProgress -> Completed; leave out one side of 'when', or remove 'Done'"],
+            [
+                "State 'Completed' is not a target state of command 'b', so 'Done' can never be emitted when it ends there.",
+                "use a target state of 'b': InProgress",
+            ],
+            [
+                "'when' matches no transition of command 'c', so 'Done' is never emitted.",
+                "its outcomes are Draft -> Draft, InProgress -> Completed; leave out one side of 'when', or remove 'Done'",
+            ],
             ["'when' needs a source or a target state.", "write 'when Draft ->' (from a state) or 'when -> Draft' (into a state)"],
             ["Factory command 'e' has no source state to select by.", "select by the new aggregate's state: 'when -> Draft'"],
             ["Cannot resolve state 'Missing' in this aggregate.", "use a state of 'Work': Draft, InProgress, Completed"],
@@ -132,8 +152,14 @@ describe('emits in the DSL', () => {
 }`,
         });
         expect(only(a, 'M011').map((d) => [d.message, d.hint])).toEqual([
-            ["Event 'Done' is listed more than once in 'emits' of 'Work.a'; the events of its result are keyed by name.", "list it once, with a multiplicity such as 'Done[1..*]' or 'Done?'"],
-            ["Events 'Sales.Done' and 'Billing.Done' of 'Work.b' have the same name, and the events of its result are keyed by name.", 'rename one of the events'],
+            [
+                "Event 'Done' is listed more than once in 'emits' of 'Work.a'; the events of its result are keyed by name.",
+                "list it once, with a multiplicity such as 'Done[1..*]' or 'Done?'",
+            ],
+            [
+                "Events 'Sales.Done' and 'Billing.Done' of 'Work.b' have the same name, and the events of its result are keyed by name.",
+                'rename one of the events',
+            ],
         ]);
     });
 
@@ -147,8 +173,16 @@ describe('emits in the DSL', () => {
     create command maybe(id: OrderId?)
   }`);
         expect(only(a, 'M020').map((d) => [d.severity, d.message, d.hint])).toEqual([
-            ['warning', "Factory command 'place' of 'Order' has no parameter of type 'OrderId', so it would have to make the new Order's ID itself; commands are pure.", "pass the ID in: 'create command place(id: OrderId, …)', and let the caller generate it"],
-            ['warning', "Factory command 'maybe' of 'Order' has no parameter of type 'OrderId', so it would have to make the new Order's ID itself; commands are pure.", "pass the ID in: 'create command maybe(id: OrderId, …)', and let the caller generate it"],
+            [
+                'warning',
+                "Factory command 'place' of 'Order' has no parameter of type 'OrderId', so it would have to make the new Order's ID itself; commands are pure.",
+                "pass the ID in: 'create command place(id: OrderId, …)', and let the caller generate it",
+            ],
+            [
+                'warning',
+                "Factory command 'maybe' of 'Order' has no parameter of type 'OrderId', so it would have to make the new Order's ID itself; commands are pure.",
+                "pass the ID in: 'create command maybe(id: OrderId, …)', and let the caller generate it",
+            ],
         ]);
     });
 });
@@ -205,12 +239,16 @@ export type ProgressWork = (
         expect(code).toContain('readonly events: { readonly ItemAdded: readonly [ItemAdded, ...ItemAdded[]]; readonly NoteChanged?: NoteChanged };');
         expect(code).toContain('readonly events: { /** between 2 and 5 */ readonly ItemAdded: readonly ItemAdded[] };');
         expect(code).toContain(' * @emits ItemAdded[0..*] — zero or more when the command succeeds\n');
-        expect(code).toContain(' * @emits ItemAdded[1..*] — one or more when the command succeeds\n * @emits NoteChanged? — at most once when the command succeeds\n');
+        expect(code).toContain(
+            ' * @emits ItemAdded[1..*] — one or more when the command succeeds\n * @emits NoteChanged? — at most once when the command succeeds\n',
+        );
         expect(code).toContain(' * @emits ItemAdded[2..5] — between 2 and 5 when the command succeeds (not checked by the types)\n');
     });
 
     test('events that depend on the source state make the contract generic, documented per source state', () => {
-        expect(code).toContain(' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:24\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(');
+        expect(code).toContain(
+            ' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:24\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(',
+        );
         expect(code).toContain(
             `) => {
     /** @emits WorkCancelled — exactly once when the command succeeds */
@@ -305,8 +343,14 @@ const events: readonly Tasks.WorkEvent[] = r.ok ? eventList(outcome(r.value).eve
                 `ok({ Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { StepRecorded: step(work) } } })`,
                 "Property 'WorkCompleted' is missing in type",
             ],
-            wrongOutcome: [`ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`, "'WorkCompleted' does not exist in type"],
-            undeclared: [`ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), NoteChanged: { type: 'NoteChanged', workId: work.id } } } })`, "'NoteChanged' does not exist in type"],
+            wrongOutcome: [
+                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`,
+                "'WorkCompleted' does not exist in type",
+            ],
+            undeclared: [
+                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), NoteChanged: { type: 'NoteChanged', workId: work.id } } } })`,
+                "'NoteChanged' does not exist in type",
+            ],
             twoOutcomes: [
                 `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work) } }, Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`,
                 "Types of property 'Completed' are incompatible",
@@ -334,16 +378,24 @@ const events: readonly Tasks.WorkEvent[] = r.ok ? eventList(outcome(r.value).eve
             const at = lines.findIndex((l) => l.startsWith(`src/wrong.ts(${i + 4},`));
             expect(at).toBeGreaterThanOrEqual(0);
             // the message is the error line or one of the lines that elaborate it
-            const block = lines.slice(at, lines.findIndex((l, j) => j > at && l.startsWith('src/'))).join('\n');
+            const block = lines
+                .slice(
+                    at,
+                    lines.findIndex((l, j) => j > at && l.startsWith('src/')),
+                )
+                .join('\n');
             expect(block).toContain(message);
         });
         expect(errorAt(8)).toContain("Type 'StepRecorded' is not assignable to type 'never'");
-        expect(r.output).toContain("Source has 0 element(s) but target requires 1.");
+        expect(r.output).toContain('Source has 0 element(s) but target requires 1.');
     });
 
     test('outcome and eventList: the key as `to`; events flattened, absent ones skipped, sorted by type', async () => {
         const { outcome, eventList, ok } = await import(path.join(dir, 'generated', '_runtime.ts'));
-        const value = { Completed: { aggregate: { id: 1 }, events: { WorkCompleted: { type: 'WorkCompleted' }, StepRecorded: { type: 'StepRecorded' } } }, InProgress: undefined };
+        const value = {
+            Completed: { aggregate: { id: 1 }, events: { WorkCompleted: { type: 'WorkCompleted' }, StepRecorded: { type: 'StepRecorded' } } },
+            InProgress: undefined,
+        };
         expect(outcome(value)).toEqual({ to: 'Completed', aggregate: { id: 1 }, events: value.Completed.events });
         const a = { type: 'ItemAdded', n: 1 };
         const b = { type: 'ItemAdded', n: 2 };

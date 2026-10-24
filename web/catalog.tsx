@@ -99,7 +99,13 @@ export function Catalog(props: CatalogProps) {
                             key={s.key}
                             className={`catalog-kind kind-${s.kinds[0]}${kinds.length && !kinds.includes(s.key) ? ' off' : ''}`}
                             aria-pressed={kinds.includes(s.key)}
-                            onClick={() => setKinds(kinds.includes(s.key) ? kinds.filter((k) => k !== s.key) : all.map((x) => x.key).filter((k) => k === s.key || kinds.includes(k)))}
+                            onClick={() =>
+                                setKinds(
+                                    kinds.includes(s.key)
+                                        ? kinds.filter((k) => k !== s.key)
+                                        : all.map((x) => x.key).filter((k) => k === s.key || kinds.includes(k)),
+                                )
+                            }
                         >
                             {t.catalogSections[s.key]}
                         </button>
@@ -108,7 +114,15 @@ export function Catalog(props: CatalogProps) {
             </div>
             {sections.length === 0 && <p className="muted">{t.catalogNoMatches}</p>}
             {sections.map((s) => (
-                <Section key={s.key} section={s} hits={filtering ? `${s.shown}/${s.count}` : undefined} {...props} names={names} shared={shared} severity={severity} />
+                <Section
+                    key={s.key}
+                    section={s}
+                    hits={filtering ? `${s.shown}/${s.count}` : undefined}
+                    {...props}
+                    names={names}
+                    shared={shared}
+                    severity={severity}
+                />
             ))}
         </div>
     );
@@ -164,7 +178,13 @@ function Card(props: {
     const { el, model, names } = props;
     const t = useT();
     const change = props.diff.added.includes(el.id) ? 'added' : props.diff.changed.includes(el.id) ? 'changed' : 'none';
-    const classes = ['card', `card-kind-${el.kind}`, `dn-change-${change}`, props.selected === el.id ? 'card-selected' : '', props.severity ? `card-${props.severity}` : ''];
+    const classes = [
+        'card',
+        `card-kind-${el.kind}`,
+        `dn-change-${change}`,
+        props.selected === el.id ? 'card-selected' : '',
+        props.severity ? `card-${props.severity}` : '',
+    ];
 
     return (
         <button className={classes.filter(Boolean).join(' ')} data-card={el.id} onClick={() => props.onSelect(el.id)} title={el.doc}>
@@ -323,9 +343,12 @@ function CardUses({ el, model, names, shared }: { el: ElementModel; model: Domai
     if (el.kind === 'event' || el.kind === 'error') {
         const commands = commandsWithOutcome(model, el.id).map(({ agg, command }) => `${names.of(agg)}.${names.of(command)}`);
         // an error may also be returned by the factory of a verified type
-        const factories = Object.values(model.elements).filter((v) => v.verified?.errors.includes(el.id)).map((v) => names.of(v));
+        const factories = Object.values(model.elements)
+            .filter((v) => v.verified?.errors.includes(el.id))
+            .map((v) => names.of(v));
         const reactions = el.kind === 'event' ? policiesReactingTo(model, el.id) : [];
-        const from = commands.length || factories.length ? `← ${[...commands, ...factories].join(', ')}` : el.kind === 'event' ? t.raisedByNone : t.returnedByNone;
+        const from =
+            commands.length || factories.length ? `← ${[...commands, ...factories].join(', ')}` : el.kind === 'event' ? t.raisedByNone : t.returnedByNone;
         return (
             <>
                 {from}

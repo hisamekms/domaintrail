@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ["v*.*.*"]
+    tags: ['v*.*.*']
 
 permissions:
   contents: read
@@ -34,9 +34,7 @@ jobs:
       - run: bun run typecheck
       - run: node dist/dt.js -r examples/shop generate ts
       - run: bun run lint
-      # TODO: remove continue-on-error with the repository-wide formatting commit (`bun run fmt`)
       - run: bun run fmt:check
-        continue-on-error: true
       - run: bun test
 
       - name: Smoke test on Node

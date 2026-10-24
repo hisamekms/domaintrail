@@ -24,7 +24,10 @@ const defaultIO: CliIO = {
 
 /** An expected failure: printed as one line on stderr, exiting with `exitCode`. */
 class CliError extends Error {
-    constructor(message: string, readonly exitCode = 1) {
+    constructor(
+        message: string,
+        readonly exitCode = 1,
+    ) {
         super(message);
     }
 }
@@ -88,7 +91,9 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
         .option('-c, --config <file>', 'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent)')
         .exitOverride()
         .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) })
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Examples:
   dt check                      validate every .dt file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
@@ -98,12 +103,15 @@ Examples:
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
 
 New to dt, or an AI agent? Run \`dt guide\` first: the workflow, the DSL at a glance and the commands, then the list
-of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when you need one.`);
+of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when you need one.`,
+        );
 
     program
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), followed by an
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
@@ -113,7 +121,8 @@ Examples:
   dt check
   dt check --format json
   dt -r domain check
-  dt -c config/domaintrail.jsonc check`)
+  dt -c config/domaintrail.jsonc check`,
+        )
         .addOption(formatOption())
         .action(async (opts: { format: Format }) => {
             if (opts.format === 'json') report = {};
@@ -127,7 +136,9 @@ Examples:
         .argument('<target>', 'generation target (ts)')
         .option('-o, --out <dir>', 'output directory relative to the root (default: generate.ts.out, else generated/domain)')
         .addOption(formatOption())
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Runs check first and writes nothing if the model has errors (exit 1). Files generated before are replaced, and those
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
@@ -142,7 +153,8 @@ Type-check your own code against the output with \`tsc --noEmit\`. Without a lin
 
 Examples:
   dt generate ts
-  dt generate ts --out src/domain/generated`)
+  dt generate ts --out src/domain/generated`,
+        )
         .action(async (target: string, opts: { out?: string; format: Format }) => {
             if (opts.format === 'json') report = {};
             if (target !== 'ts') {
@@ -176,8 +188,13 @@ Examples:
                 }
             }
             const dirs = Object.fromEntries(a.model.contexts.map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
-            const tests = testsOut ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) } : undefined;
-            const files = generateTypeScript(a.model, dirs, tests, policyModes(cfg, a.model.contexts)).map((f) => ({ ...f, file: path.resolve(cfg.root, f.path) }));
+            const tests = testsOut
+                ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) }
+                : undefined;
+            const files = generateTypeScript(a.model, dirs, tests, policyModes(cfg, a.model.contexts)).map((f) => ({
+                ...f,
+                file: path.resolve(cfg.root, f.path),
+            }));
             const foreign = await foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);
@@ -189,8 +206,14 @@ Examples:
             await removeStale(cfg.root, previous, new Set(files.map((f) => f.file)));
             for (const dir of outDirs) await cleanGenerated(dir);
             for (const f of files) await writeNew(f.file, f.content);
-            const recorded = await writeManifest(cfg.root, files.map((f) => f.path));
-            if (!recorded) io.err(`Warning: generated files not recorded in ${MANIFEST_FILE}, which is not a plain file in a plain directory; they will not be removed automatically.`);
+            const recorded = await writeManifest(
+                cfg.root,
+                files.map((f) => f.path),
+            );
+            if (!recorded)
+                io.err(
+                    `Warning: generated files not recorded in ${MANIFEST_FILE}, which is not a plain file in a plain directory; they will not be removed automatically.`,
+                );
             const written = outDirs.map((d) => path.relative(process.cwd(), d) || '.');
             const hints = cfg.lintHint && !(await hasCastLintRule(cfg.root)) ? [LINT_HINT] : [];
             if (report) {
@@ -207,7 +230,9 @@ Examples:
         .description('Format .dt files in place: one canonical layout, keeping every comment.')
         .argument('[files...]', 'files to format, relative to the current directory (default: the sources of the workspace)')
         .option('--check', 'write nothing; list the files that are not formatted and exit 1 if there are any')
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Rewrites each file in the layout described in \`dt guide fmt\`: 2-space indentation, one member per line,
 a command's clauses on lines of their own unless it is short, and \`[0..1]\` written as \`?\`. Only whitespace and
 these spellings change, never the model; comments stay where they are. Run it after editing .dt files.
@@ -220,7 +245,8 @@ Examples:
   dt fmt
   dt fmt --check
   dt fmt sales/order.dt
-  dt -r domain fmt`)
+  dt -r domain fmt`,
+        )
         .action(async (files: string[], opts: { check?: boolean }) => {
             let entries: { path: string; file: string }[];
             if (files.length) entries = files.map((f) => ({ path: f, file: path.resolve(f) }));
@@ -255,20 +281,30 @@ Examples:
         .description('Start the Live View server and watch .dt files (runs until Ctrl+C).')
         .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)', parsePort)
         .option('--host <host>', 'host to bind (default: view.host, else 127.0.0.1)')
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 A server that keeps running and never exits by itself: stop it with Ctrl+C. It re-checks on every save and
 pushes updates to the browser. Use \`dt check\` for a one-shot result (e.g. from scripts or AI agents).
 
 Examples:
   dt view
   dt view --port 8080
-  dt -r examples/shop view`)
+  dt -r examples/shop view`,
+        )
         .action(async (opts: { port?: number; host?: string }) => {
             const cfg = await config();
             const { startViewServer } = await import('../server/server.js');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
-            const server = await startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, log: io.out }).catch((e: unknown) => {
+            const server = await startViewServer({
+                root: cfg.root,
+                sources: cfg.sources,
+                respectGitignore: cfg.respectGitignore,
+                port,
+                host,
+                log: io.out,
+            }).catch((e: unknown) => {
                 if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
                 throw e;
             });
@@ -281,7 +317,9 @@ Examples:
         .command('lsp')
         .description('Start the language server over stdio, for editors and AI agents (runs until the client exits).')
         .option('--stdio', 'talk over stdin/stdout (the default and only transport; accepted for clients that pass it)')
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Speaks the Language Server Protocol on stdin/stdout for .dt files: the diagnostics of \`dt check\` (same rules, codes
 and messages, over the whole workspace and the unsaved text of open files), go to definition, find references, hover,
 outline, rename of declarations, completion and formatting (as \`dt fmt\`). The workspace is the config found from
@@ -290,7 +328,8 @@ there, the nearest config of the first .dt file opened below it. Started by an L
 
 Examples:
   dt lsp
-  dt -r domain lsp`)
+  dt -r domain lsp`,
+        )
         .action(async () => {
             const root = program.getOptionValueSource('root') === 'default' ? undefined : path.resolve(program.opts().root);
             if (root !== undefined || program.opts().config) await config(); // fail early on a bad --root or --config
@@ -304,7 +343,9 @@ Examples:
         .description('Print the resolved model of one element, state, command or context (all contexts without a name).')
         .argument('[name]', 'Sales.Order, Order, Sales, Sales.Order.confirm (a command), Sales.Order.Confirmed (a state)')
         .addOption(formatOption())
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Prints one element close to the DSL, resolved: the fields of field sets inline, every label with where it comes from,
 states, commands with their requirements, changes, events per outcome and full error union, \`file:line\` locations
 and who uses it. A name may leave out leading parts (\`Order\`, \`Order.confirm\`) when it names one thing only;
@@ -317,7 +358,8 @@ Examples:
   dt show
   dt show Sales.Order
   dt show Order.confirm --format json
-  dt -r domain show Sales`)
+  dt -r domain show Sales`,
+        )
         .action(async (name: string | undefined, opts: { format: Format }) => {
             const json = opts.format === 'json';
             const cfg = await config();
@@ -330,8 +372,9 @@ Examples:
             if (found && !('found' in found)) {
                 const candidates = 'ambiguous' in found ? found.ambiguous : found.suggestions;
                 const message =
-                    'ambiguous' in found ? `'${name}' is ambiguous: ${candidates.join(', ')}. Use the full name.`
-                    : `Unknown name '${name}'${found.hint ? `; ${found.hint}` : '.'}`;
+                    'ambiguous' in found
+                        ? `'${name}' is ambiguous: ${candidates.join(', ')}. Use the full name.`
+                        : `Unknown name '${name}'${found.hint ? `; ${found.hint}` : '.'}`;
                 if (json) io.out(JSON.stringify({ error: message, ...(candidates.length && { candidates }) }, null, 2));
                 else io.err(message);
                 exitCode = 1;
@@ -351,7 +394,9 @@ Examples:
         .description('Print the guide (Markdown): a quick reference and the topics, one topic, or all of it.')
         .argument('[topic]', 'a topic (workflow, dsl, requires, decide, …) or a rule code (M010)')
         .option('--all', 'print the whole guide')
-        .addHelpText('after', `
+        .addHelpText(
+            'after',
+            `
 Without a topic, prints the quick reference (the workflow, the DSL at a glance, the commands) and the list of
 topics. With a topic, prints that section of the guide (a ## section with its ### sections); with a rule code, the
 rule and the topics that explain it. An unknown topic is an error with suggestions (exit 1). With --all, prints the
@@ -361,7 +406,8 @@ Examples:
   dt guide
   dt guide requires
   dt guide M010
-  dt guide --all > domaintrail-guide.md`)
+  dt guide --all > domaintrail-guide.md`,
+        )
         .action((topic: string | undefined, opts: { all?: boolean }) => {
             if (opts.all) {
                 if (topic) throw new CliError('Give a topic or --all, not both.');

@@ -27,7 +27,14 @@ const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     state: 'Confirmed',
     id,
     customer: makeCustomerId('customer-1'),
-    items: [{ id: makeOrderItemId('item-1'), sku: ok(makeSku('ABC-0001')), quantity: ok(makeQuantity(3)), unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' } }],
+    items: [
+        {
+            id: makeOrderItemId('item-1'),
+            sku: ok(makeSku('ABC-0001')),
+            quantity: ok(makeQuantity(3)),
+            unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' },
+        },
+    ],
     confirmedAt: new Date('2026-10-24T09:00:00Z'),
 });
 let invoices = 0;

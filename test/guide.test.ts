@@ -106,7 +106,6 @@ describe('dt guide topics', () => {
 });
 
 describe('dt guide', () => {
-
     test('its DSL examples are one workspace that checks without any diagnostic', async () => {
         const files = workspace();
         expect(Object.keys(files).length).toBeGreaterThan(3);
@@ -122,7 +121,10 @@ describe('dt guide', () => {
     test('its DSL examples use every keyword of the grammar', async () => {
         const grammar = await readFile(path.join(ROOT, 'src', 'language', 'domain.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
-        const examples = blocks('dt').join('\n').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        const examples = blocks('dt')
+            .join('\n')
+            .replace(/\/\/.*$/gm, '')
+            .replace(/\/\*[\s\S]*?\*\//g, '');
         const missing = [...keywords].filter((k) => !new RegExp(`\\b${k}\\b`).test(examples));
         expect(missing).toEqual([]);
     });
@@ -169,7 +171,7 @@ describe('dt guide', () => {
         }
     });
 
-        test('its config example is valid JSONC', () => {
+    test('its config example is valid JSONC', () => {
         const config = blocks('jsonc').find((b) => b.includes('"sources"')) ?? '';
         expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
     });
@@ -189,7 +191,12 @@ describe('dt guide', () => {
     test('the README links to it and its DSL example checks', async () => {
         expect(readme).toContain('(docs/guide.md)');
         for (const anchor of readme.matchAll(/docs\/guide\.md#([a-z-]+)/g)) {
-            const headings = [...guide.matchAll(/^#+ (.+)$/gm)].map((m) => m[1].toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/ /g, '-'));
+            const headings = [...guide.matchAll(/^#+ (.+)$/gm)].map((m) =>
+                m[1]
+                    .toLowerCase()
+                    .replace(/[^a-z0-9 -]/g, '')
+                    .replace(/ /g, '-'),
+            );
             expect(headings).toContain(anchor[1]);
         }
         const examples = blocks('dt', readme);

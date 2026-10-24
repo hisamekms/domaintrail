@@ -106,7 +106,15 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
 }
 
 function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
-    return { sources: DEFAULT_SOURCES, respectGitignore: true, lintHint: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, tsPolicies: { project: DEFAULT_POLICIES, contexts: {} }, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+    return {
+        sources: DEFAULT_SOURCES,
+        respectGitignore: true,
+        lintHint: true,
+        tsOut: DEFAULT_TS_OUT,
+        tsContexts: {},
+        tsPolicies: { project: DEFAULT_POLICIES, contexts: {} },
+        view: { port: DEFAULT_PORT, host: DEFAULT_HOST },
+    };
 }
 
 /** How the policies of each context are generated: the context's own setting, else the project's, else `optional`. */
@@ -201,7 +209,8 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
     const view = c.view;
     if (view !== undefined) {
         if (!isObject(view)) return fail("'view' must be an object");
-        if (view.port !== undefined && (typeof view.port !== 'number' || !Number.isInteger(view.port) || view.port < 0)) fail("'view.port' must be a port number");
+        if (view.port !== undefined && (typeof view.port !== 'number' || !Number.isInteger(view.port) || view.port < 0))
+            fail("'view.port' must be a port number");
         if (view.host !== undefined && typeof view.host !== 'string') fail("'view.host' must be a string");
     }
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- every key was checked above
@@ -217,7 +226,8 @@ function checkOut(out: unknown, key: string, fail: (msg: string) => never): void
 
 /** `optional` or `required` (ADR 0022). */
 function checkPolicies(mode: unknown, key: string, fail: (msg: string) => never): void {
-    if (mode !== undefined && !(POLICY_MODES as readonly unknown[]).includes(mode)) fail(`'${key}' must be one of ${POLICY_MODES.map((m) => `'${m}'`).join(', ')}`);
+    if (mode !== undefined && !(POLICY_MODES as readonly unknown[]).includes(mode))
+        fail(`'${key}' must be one of ${POLICY_MODES.map((m) => `'${m}'`).join(', ')}`);
 }
 
 /**

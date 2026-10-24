@@ -48,7 +48,11 @@ describe('requires', () => {
                 name: 'authorizedApprover',
                 label: '承認者である',
                 source: 'contains(policy.approvers, person)',
-                expr: { k: 'contains', collection: { k: 'member', receiver: { k: 'name', name: 'policy' }, member: 'approvers' }, element: { k: 'name', name: 'person' } },
+                expr: {
+                    k: 'contains',
+                    collection: { k: 'member', receiver: { k: 'name', name: 'policy' }, member: 'approvers' },
+                    element: { k: 'name', name: 'person' },
+                },
                 error: 'Review.NotApprover',
             },
             { name: 'noOpenBlocker', label: '未解決の阻害がない', doc: '阻害がすべて解決済み', error: 'Review.Blocked' },
@@ -135,9 +139,18 @@ describe('scope of requires', () => {
     command accept(person: PersonId) Reviewing | Escalated -> Accepted
       requires x { exists(note) and reviewer == person and acceptedBy == person } else Blocked`);
         expect(errors(a)).toEqual([
-            ['M010', "Field 'note' is in state 'Reviewing' only; the requirements of command 'accept' see the fields that every source state has (with the same type)."],
-            ['M010', "Field 'reviewer' is in state 'Reviewing', 'Escalated' only; the requirements of command 'accept' see the fields that every source state has (with the same type)."],
-            ['M010', "Field 'acceptedBy' is in state 'Accepted' only; the requirements of command 'accept' see the fields that every source state has (with the same type)."],
+            [
+                'M010',
+                "Field 'note' is in state 'Reviewing' only; the requirements of command 'accept' see the fields that every source state has (with the same type).",
+            ],
+            [
+                'M010',
+                "Field 'reviewer' is in state 'Reviewing', 'Escalated' only; the requirements of command 'accept' see the fields that every source state has (with the same type).",
+            ],
+            [
+                'M010',
+                "Field 'acceptedBy' is in state 'Accepted' only; the requirements of command 'accept' see the fields that every source state has (with the same type).",
+            ],
         ]);
     });
 
@@ -207,8 +220,12 @@ describe('requires in the generated TypeScript', () => {
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
         ].join('\n');
         const changes = ' * @changes none — the command changes no common field';
-        expect(code).toContain(`/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n * @see review.dt:13\n */\nexport type AcceptReview = `);
-        expect(code).toContain(`/**\n * Review.accept, decided per source state; implement it with \`decide(ReviewShape, …)\` from the runtime.\n * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.\n${lines}\n${changes}\n`);
+        expect(code).toContain(
+            `/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n * @see review.dt:13\n */\nexport type AcceptReview = `,
+        );
+        expect(code).toContain(
+            `/**\n * Review.accept, decided per source state; implement it with \`decide(ReviewShape, …)\` from the runtime.\n * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.\n${lines}\n${changes}\n`,
+        );
         expect(code).toContain('    }, Blocked | Conflict | NotApprover>;');
         expect(code).not.toContain('Blocked | Conflict | NotApprover | Blocked');
     });
@@ -229,12 +246,16 @@ describe('requires in the Live View', () => {
     });
 
     test('when is highlighted as a keyword', () => {
-        const tokens = highlight('emits Done when Draft ->')[0].filter((t) => t.kind === 'keyword').map((t) => t.text);
+        const tokens = highlight('emits Done when Draft ->')[0]
+            .filter((t) => t.kind === 'keyword')
+            .map((t) => t.text);
         expect(tokens).toEqual(['emits', 'when']);
     });
 
     test('requires and else are highlighted as keywords', () => {
-        const tokens = highlight('requires x { true } else Blocked')[0].filter((t) => t.kind === 'keyword').map((t) => t.text);
+        const tokens = highlight('requires x { true } else Blocked')[0]
+            .filter((t) => t.kind === 'keyword')
+            .map((t) => t.text);
         expect(tokens).toEqual(['requires', 'true', 'else']);
     });
 });

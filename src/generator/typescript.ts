@@ -1,5 +1,18 @@
 import * as posix from 'node:path/posix';
-import type { CommandModel, Described, DomainModel, EmitModel, ElementModel, FieldModel, InvariantModel, Location, OutcomePatternModel, PrimitiveName, RequirementModel, TypeExpr } from '../model/model.js';
+import type {
+    CommandModel,
+    Described,
+    DomainModel,
+    EmitModel,
+    ElementModel,
+    FieldModel,
+    InvariantModel,
+    Location,
+    OutcomePatternModel,
+    PrimitiveName,
+    RequirementModel,
+    TypeExpr,
+} from '../model/model.js';
 import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
 import { CheckWriter } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
@@ -211,12 +224,18 @@ export function generateTypeScript(
         const contexts = model.contexts.filter((c) => dirOf(c) === dir);
         files.push({ path: posix.join(dir, '_runtime.ts'), content: RUNTIME });
         for (const ctx of contexts) {
-            files.push({ path: posix.join(dir, `${ctx}.ts`), content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other), policies[ctx] ?? 'optional').emit() });
+            files.push({
+                path: posix.join(dir, `${ctx}.ts`),
+                content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other), policies[ctx] ?? 'optional').emit(),
+            });
         }
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
         files.push({ path: posix.join(dir, 'index.ts'), content: index });
     }
-    if (tests) files.push(...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)));
+    if (tests)
+        files.push(
+            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)),
+        );
     return files;
 }
 
@@ -517,7 +536,10 @@ class ContextEmitter {
         this.line(`    readonly invariant: ${p.invariants.map((i) => `'${i.name}'`).join(' | ')};`);
         this.line('}');
         this.out.push('');
-        this.jsdoc([`Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`, seeLine(p.location)]);
+        this.jsdoc([
+            `Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`,
+            seeLine(p.location),
+        ]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);
         this.push(this.checks.primitive(p));
     }
@@ -581,7 +603,11 @@ class ContextEmitter {
             this.jsdoc([...describedLines(agg), ...invariantLines(agg.invariants), seeLine(agg.location)]);
             this.iface(agg.name, this.fieldSets(agg), [], ownFields(agg));
         } else {
-            this.jsdoc([`Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`, ...invariantLines(agg.invariants), seeLine(agg.location)]);
+            this.jsdoc([
+                `Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`,
+                ...invariantLines(agg.invariants),
+                seeLine(agg.location),
+            ]);
             this.iface(commonTypeName(agg), this.fieldSets(agg), [], ownFields(agg));
             for (const s of states) {
                 this.out.push('');
@@ -628,7 +654,10 @@ class ContextEmitter {
     private shape(agg: ElementModel): void {
         const states = agg.states ?? [];
         const list = (fields: FieldModel[]): string => `[${fields.map((f) => `'${f.name}'`).join(', ')}]`;
-        this.jsdoc([`The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`, seeLine(agg.location)]);
+        this.jsdoc([
+            `The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`,
+            seeLine(agg.location),
+        ]);
         if (states.length === 0) {
             this.line(`export const ${shapeName(agg)}: Shape = { fields: ${list(agg.fields)} };`);
             return;
@@ -641,7 +670,12 @@ class ContextEmitter {
 
     private command(agg: ElementModel, c: CommandModel): void {
         const stateful = (agg.states ?? []).length > 0;
-        const stateUnion = (names: string[]): string => (stateful ? unique(names).map((n) => stateTypeName(agg, n)).join(' | ') : agg.name);
+        const stateUnion = (names: string[]): string =>
+            stateful
+                ? unique(names)
+                      .map((n) => stateTypeName(agg, n))
+                      .join(' | ')
+                : agg.name;
         const transitions = stateful ? c.transitions : [];
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
         // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
@@ -660,7 +694,9 @@ class ContextEmitter {
                 emits: c.emits.filter((e) => emitApplies(e, from, to)),
             }));
         const requires = requirementLines(c.requires, (e) => this.ref(e));
-        const changes = c.factory ? [] : [`@changes ${c.changes.length ? c.changes.join(', ') : `none — the command changes no ${stateful ? 'common ' : ''}field`}`];
+        const changes = c.factory
+            ? []
+            : [`@changes ${c.changes.length ? c.changes.join(', ') : `none — the command changes no ${stateful ? 'common ' : ''}field`}`];
         const sources = transitions.flatMap((t) => t.from.map((from) => ({ from, to: t.to })));
 
         const transition = c.factory
@@ -713,7 +749,13 @@ class ContextEmitter {
         this.line(`export type ${decisionTypeName(agg, c)} = {`);
         for (const { from, to } of sources) {
             this.memberDoc(this.emitsLines(this.emitsFrom(c, from, to)));
-            this.result(`    readonly ${from}: (${[`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ')}) => `, outcomes(from, to, true), errors, '    ', ';');
+            this.result(
+                `    readonly ${from}: (${[`${self}: ${stateTypeName(agg, from)}`, ...params].join(', ')}) => `,
+                outcomes(from, to, true),
+                errors,
+                '    ',
+                ';',
+            );
         }
         this.line('};');
     }

@@ -361,7 +361,12 @@ export class CheckWriter {
         const collects = text.includes('violated.push');
         const inner = collects ? [`const violated: ${list(result)}[] = [];`, ...body, 'return violated;'] : body;
         if (!declared) {
-            return [...head, `export function ${checkName(typeName)}(${params([subject], text)}): readonly ${list(result)}[] {`, ...inner.map((l) => `    ${l}`), '}'];
+            return [
+                ...head,
+                `export function ${checkName(typeName)}(${params([subject], text)}): readonly ${list(result)}[] {`,
+                ...inner.map((l) => `    ${l}`),
+                '}',
+            ];
         }
         return [
             ...head,
@@ -378,7 +383,10 @@ export class CheckWriter {
         const seen = new Set<string>();
         const members = slots.filter((s) => !seen.has(s.name) && seen.add(s.name)).map((s) => `readonly ${s.name}: (${s.args}) => boolean`);
         return [
-            ...this.env.jsdoc([`The invariants of ${typeName} that the DSL does not express: implement them in your code and pass them to \`${checkWithName(typeName)}\`.`], loc),
+            ...this.env.jsdoc(
+                [`The invariants of ${typeName} that the DSL does not express: implement them in your code and pass them to \`${checkWithName(typeName)}\`.`],
+                loc,
+            ),
             `export type ${declaredChecksName(typeName)} = { ${members.join('; ')} };`,
             '',
         ];
@@ -398,7 +406,14 @@ export class CheckWriter {
         const declared = hasDeclared(p.invariants);
         const result = `${invalidTypeName(p)}['invariant']`;
         const out: string[] = [];
-        if (declared) out.push(...this.declaredType(type, p.location, p.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: `value: ${base}` }))));
+        if (declared)
+            out.push(
+                ...this.declaredType(
+                    type,
+                    p.location,
+                    p.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: `value: ${base}` })),
+                ),
+            );
         out.push(
             ...this.checkFunction(
                 [`The invariants of ${p.name} that a value violates, in declaration order; empty when it is a ${p.name}.`],
@@ -421,12 +436,18 @@ export class CheckWriter {
             ].map((l, i) => (i === 0 ? l : `${indent}${l}`));
         if (!declared) {
             out.push(
-                ...this.env.jsdoc([`Creates a ${p.name}, checking its invariants with \`${checkName(type)}\`: the first one violated is reported.`], p.location),
+                ...this.env.jsdoc(
+                    [`Creates a ${p.name}, checking its invariants with \`${checkName(type)}\`: the first one violated is reported.`],
+                    p.location,
+                ),
                 `export const ${makeName(p)}: ${makeTypeName(p)} = ${make(checkName(type), '').join('\n')};`,
             );
         } else {
             out.push(
-                ...this.env.jsdoc([`Creates a ${p.name} constructor from the invariants the DSL does not express; the first invariant violated is reported.`], p.location),
+                ...this.env.jsdoc(
+                    [`Creates a ${p.name} constructor from the invariants the DSL does not express; the first invariant violated is reported.`],
+                    p.location,
+                ),
                 `export const ${makeWithName(p)} = (checks: ${declaredChecksName(type)}): ${makeTypeName(p)} => {`,
                 `    const check = ${checkWithName(type)}(checks);`,
                 `    return ${make('check', '    ').join('\n')};`,
@@ -465,7 +486,13 @@ export class CheckWriter {
         const text = body.join('\n');
         return [
             ...this.env.jsdoc([doc], el.location),
-            `export function ${equalName(el)}(${params([{ name: 'a', type }, { name: 'b', type }], text)}): boolean {`,
+            `export function ${equalName(el)}(${params(
+                [
+                    { name: 'a', type },
+                    { name: 'b', type },
+                ],
+                text,
+            )}): boolean {`,
             ...body.map((l) => `    ${l}`),
             '}',
         ];
@@ -478,7 +505,13 @@ export class CheckWriter {
         const scope = fieldScope(this.env.model, subject, el.fields);
         const declared = hasDeclared(el.invariants);
         return [
-            ...(declared ? this.declaredType(el.name, el.location, el.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: `${subject}: ${el.name}` }))) : []),
+            ...(declared
+                ? this.declaredType(
+                      el.name,
+                      el.location,
+                      el.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: `${subject}: ${el.name}` })),
+                  )
+                : []),
             ...this.checkFunction(
                 [`The invariants of ${el.name} that a value violates, in declaration order; empty when it holds them all.`],
                 el.location,
@@ -503,7 +536,8 @@ export class CheckWriter {
         for (const v of u.variants ?? []) {
             const guard = `${subject}.${tag} === '${v.name}'`;
             body.push(...items(this.compiler, v.invariants, fieldScope(this.env.model, subject, v.fields), subject, guard));
-            for (const i of v.invariants.filter((x) => !x.expr)) slots.push({ name: i.name, args: `${subject}: Extract<${u.name}, { readonly ${tag}: '${v.name}' }>` });
+            for (const i of v.invariants.filter((x) => !x.expr))
+                slots.push({ name: i.name, args: `${subject}: Extract<${u.name}, { readonly ${tag}: '${v.name}' }>` });
         }
         return [
             ...(declared ? this.declaredType(u.name, u.location, slots) : []),
@@ -566,7 +600,8 @@ export class CheckWriter {
                 '',
             );
         }
-        const call = (s: { name: string }): string => (declared ? `${checkWithName(stateTypeName(agg, s))}(checks)(${subject})` : `${checkName(stateTypeName(agg, s))}(${subject})`);
+        const call = (s: { name: string }): string =>
+            declared ? `${checkWithName(stateTypeName(agg, s))}(checks)(${subject})` : `${checkName(stateTypeName(agg, s))}(${subject})`;
         out.push(
             ...this.checkFunction(
                 [`The invariants of ${agg.name} in the state it is in that an aggregate violates (see the check of each state).`],
@@ -599,16 +634,32 @@ export class CheckWriter {
         const text = body.join('\n');
         const doc = [`The first requirement of ${agg.name}.${c.name} that does not hold, in declaration order; \`undefined\` when all hold.`];
         if (!declared) {
-            return [...this.env.jsdoc(doc, c.location), `export function ${requiresName(typeName)}(${params(args, text)}): ${result} {`, ...body.map((l) => `    ${l}`), '}'];
+            return [
+                ...this.env.jsdoc(doc, c.location),
+                `export function ${requiresName(typeName)}(${params(args, text)}): ${result} {`,
+                ...body.map((l) => `    ${l}`),
+                '}',
+            ];
         }
         const sig = args.map((a) => `${a.name}: ${a.type}`).join(', ');
         return [
-            ...this.env.jsdoc([`The requirements of ${agg.name}.${c.name} that the DSL does not express: implement them in your code and pass them to \`${requiresWithName(typeName)}\`.`], c.location),
-            `export type ${declaredRequiresName(typeName)} = { ${c.requires.filter((r) => !r.expr).map((r) => `readonly ${r.name}: (${sig}) => boolean`).join('; ')} };`,
+            ...this.env.jsdoc(
+                [
+                    `The requirements of ${agg.name}.${c.name} that the DSL does not express: implement them in your code and pass them to \`${requiresWithName(typeName)}\`.`,
+                ],
+                c.location,
+            ),
+            `export type ${declaredRequiresName(typeName)} = { ${c.requires
+                .filter((r) => !r.expr)
+                .map((r) => `readonly ${r.name}: (${sig}) => boolean`)
+                .join('; ')} };`,
             '',
             ...this.env.jsdoc(doc, c.location),
             `export function ${requiresWithName(typeName)}(checks: ${declaredRequiresName(typeName)}): (${sig}) => ${result} {`,
-            `    return (${params(args.map((a) => ({ name: a.name, type: '' })), text).replace(/: (?=,|$)/g, '')}) => {`,
+            `    return (${params(
+                args.map((a) => ({ name: a.name, type: '' })),
+                text,
+            ).replace(/: (?=,|$)/g, '')}) => {`,
             ...body.map((l) => `        ${l}`),
             '    };',
             '}',

@@ -103,7 +103,9 @@ export const name = (a: Sales.Actor): string => (a.kind === 'EXTERNAL_PARTY' ? a
 `,
             );
             const tsc = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-            const r = Bun.spawnSync([tsc, '--noEmit', '--strict', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', 'use.ts'], { cwd: dir });
+            const r = Bun.spawnSync([tsc, '--noEmit', '--strict', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', 'use.ts'], {
+                cwd: dir,
+            });
             expect(r.stdout.toString() + r.stderr.toString()).toBe('');
             expect(r.exitCode).toBe(0);
         } finally {
