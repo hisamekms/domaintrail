@@ -56,7 +56,7 @@ export function registerPolicies(
         try {
             input = await billing.BillConfirmedOrder(s.event);
         } catch (e) {
-            log(`policy BillConfirmedOrder: no invoice for ${s.event.orderId}: ${(e as Error).message}`);
+            log(`policy BillConfirmedOrder: no invoice for ${s.event.orderId}: ${e instanceof Error ? e.message : String(e)}`);
             return;
         }
         const r = await app.issueInvoice(input, causedBy(s));

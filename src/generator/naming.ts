@@ -4,7 +4,7 @@ import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelInde
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
-export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'decide', 'Decide', 'Shape', 'NoChanges', 'outcome', 'eventList', 'NoEvents', 'Outcome', 'EventOf', 'sameOptional', 'sameList', 'distinct'] as const;
+export const RUNTIME_NAMES = ['Result', 'Ok', 'Err', 'Decimal', 'Timestamp', 'ok', 'err', 'decide', 'Decide', 'Shape', 'NoChanges', 'outcome', 'eventList', 'NoEvents', 'Outcome', 'EventOf', 'sameOptional', 'sameList', 'distinct', 'parseDecimal'] as const;
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';

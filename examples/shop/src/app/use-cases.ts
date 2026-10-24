@@ -2,11 +2,11 @@
 // `make…` constructors, and the factories of verified types for the checks beyond the aggregate), loads the aggregate, rejects a state the command does not accept, calls the command with the
 // IDs and the time from the providers, and on success saves the aggregate and records its events. A domain error is
 // returned as it is, typed by the command's contract; nothing is saved and no event is recorded.
-import { eventList, err, ok, outcome, type Billing, type Common, type Result, type Sales } from '../../generated/domain/index.js';
+import { eventList, err, ok, outcome, parseDecimal, type Billing, type Common, type Result, type Sales } from '../../generated/domain/index.js';
 import { customerCommands } from '../domain/customer-commands.js';
 import { invoiceCommands } from '../domain/invoice-commands.js';
 import { orderCommands } from '../domain/order-commands.js';
-import { makeAmount, makeCustomerId, makeEmailAddress, makeOrderId, makeOrderItemId, makeQuantity, makeSku, parseDecimal } from '../domain/primitives.js';
+import { makeAmount, makeCustomerId, makeEmailAddress, makeOrderId, makeOrderItemId, makeQuantity, makeSku } from '../domain/primitives.js';
 import type { Cause, DomainEvent, InMemoryEventStore } from './event-store.js';
 import type { Providers } from './providers.js';
 import type { CustomerRepository, InvoiceRepository, OrderRepository, Repository, VersionConflict, Versioned } from './repositories.js';

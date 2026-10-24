@@ -35,8 +35,9 @@ rejected by the application, as `NotAllowed`). `InvoicePaid` became `persistent`
 - `order-commands.ts`, `customer-commands.ts`, `invoice-commands.ts` — one command each as a decision with `decide`:
   the compiler checks every outcome's fields and events against the contract. Commands are pure: IDs and times are
   parameters. The requirements use the generated `check…Requires`, so their expressions stay the DSL's.
-- `primitives.ts` — the `make…` constructors, all generated here (every invariant has an expression), plus
-  `parseDecimal`: which strings are decimals is a format choice, not a rule of the domain.
+- `primitives.ts` — the `make…` constructors, all generated here (every invariant has an expression). A `Decimal`
+  comes from the runtime's `parseDecimal`; nothing here casts to a domain type (`as Amount`), which the lint rule in
+  `.oxlintrc.json` reports (`dt guide lint`).
 - `order-total.ts` — the amount to bill: a calculation, which the DSL does not describe, relying on what a
   Confirmed order guarantees (`hasItems`, `singleCurrency`).
 

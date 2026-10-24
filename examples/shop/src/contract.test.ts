@@ -1,13 +1,13 @@
 // The contract tests generated from the model, registered with bun:test: every context, every aggregate's commands,
 // every domain primitive's constructor and Billing's policies (required in domaintrail.jsonc). Run `dt generate ts`
 // first (the config's `generate.ts.tests` writes them), then `bun test` in this directory.
-import type { Sales as SalesTypes } from '../generated/domain/index.js';
+import { parseDecimal, type Sales as SalesTypes } from '../generated/domain/index.js';
 import { Billing, Common, Sales, register } from '../generated/domain/tests/index.js';
 import { billingPolicies } from './app/policies.js';
 import { customerCommands } from './domain/customer-commands.js';
 import { invoiceCommands } from './domain/invoice-commands.js';
 import { orderCommands } from './domain/order-commands.js';
-import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderId, makeOrderItemId, makeQuantity, makeSku, parseDecimal } from './domain/primitives.js';
+import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderId, makeOrderItemId, makeQuantity, makeSku } from './domain/primitives.js';
 
 register(
     Sales.contract({

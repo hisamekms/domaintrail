@@ -127,6 +127,11 @@ describe('generated checks', () => {
         expect(Common.checkAmount('-0.01')).toEqual(['nonNegative']);
     });
 
+    test('parseDecimal accepts digits with an optional - and fraction, and keeps the text', () => {
+        for (const text of ['0', '1200', '-3', '12.50', '0.001']) expect(g.parseDecimal(text)).toBe(text);
+        for (const text of ['', '+1', '.5', '5.', '1e3', '1,000', ' 1', '1 ', '--1', 'abc', '1.2.3']) expect(g.parseDecimal(text)).toBeUndefined();
+    });
+
     test('domain primitives compare with the numbers count() and length() compute (Decimals as numbers)', () => {
         expect(Sales.checkApproval({ needed: 2, confirmedBy: ['a', 'b'] })).toEqual([]);
         expect(Sales.checkApproval({ needed: 2, confirmedBy: ['a'] })).toEqual(['enough']);

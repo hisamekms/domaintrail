@@ -175,8 +175,18 @@ export const sameList = <T>(a: readonly T[], b: readonly T[], same: (x: T, y: T)
 export const distinct = <T>(xs: readonly T[], same: (x: T, y: T) => boolean): boolean =>
     xs.every((x, i) => xs.every((y, j) => j <= i || !same(x, y)));
 
-/** Decimal values are carried as strings so that no precision is lost. */
+/**
+ * Decimal values are carried as strings so that no precision is lost. Make one with \`parseDecimal\`; never
+ * \`as Decimal\` (see dt guide lint).
+ */
 export type Decimal = string & { readonly __brand: 'Decimal' };
+
+/**
+ * The text as a \`Decimal\`, or \`undefined\` when it is not one: digits with an optional leading \`-\` and an optional
+ * fraction (\`"1200"\`, \`"-3"\`, \`"12.50"\`). No \`+\`, exponent, grouping or spaces; \`".5"\` and \`"5."\` are not decimals.
+ * The text is kept as it is (\`"12.50"\` stays \`"12.50"\`). The one place that makes a \`Decimal\` from a string.
+ */
+export const parseDecimal = (text: string): Decimal | undefined => (/^-?\\d+(\\.\\d+)?$/.test(text) ? (text as Decimal) : undefined);
 
 /** Point in time. */
 export type Timestamp = Date;
