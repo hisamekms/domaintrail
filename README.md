@@ -66,6 +66,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **[examples/shop](examples/shop/README.md)**: a complete example — the model, the generated code and the code an AI
   agent wrote against it, with the contract tests and a demo.
 - **[The Live View](docs/live-view.md)**: every pane and view of `dt view`.
+- **[Changelog](CHANGELOG.md)** ([日本語](CHANGELOG.ja.md)): what changed in each version, and how to upgrade.
 - **[Design decisions](docs/adr)**: the ADRs behind the language.
 
 ## Features

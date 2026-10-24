@@ -6,13 +6,17 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm trusted publishing
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -28,6 +32,10 @@ jobs:
 
       - name: Check that the tag matches package.json
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+
+      # fails when CHANGELOG.md or CHANGELOG.ja.md has no section for the version, before anything is published
+      - name: Check the release notes in the changelogs
+        run: bun scripts/release-notes.ts "$GITHUB_REF_NAME" > /dev/null
 
       - run: bun install --frozen-lockfile
       - run: bun run build
@@ -56,5 +64,31 @@ jobs:
             echo 'npm stage approve <stage-id>'
             echo '```'
             echo
+            echo "Then review the draft GitHub Release of ${GITHUB_REF_NAME} and publish it."
+            echo
             echo "See docs/releasing.md."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # A job of its own, so that the token that can write releases never meets the dependencies installed above: it runs
+  # only scripts/release-notes.ts, which imports nothing but node: modules.
+  # A draft: the maintainer reviews the notes (English and Japanese) and publishes it on GitHub.
+  draft-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.3
+
+      - run: bun scripts/release-notes.ts "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Create the draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
