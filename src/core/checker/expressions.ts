@@ -52,7 +52,7 @@ import {
     type FieldLike,
     type ModelIndex,
 } from '../model-index.js';
-import { BOOL, ERROR, INT, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, showType, type Ty } from '../types.js';
+import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, showType, type Ty } from '../types.js';
 
 interface Scope {
     ctx: string;
@@ -288,7 +288,7 @@ class ExprChecker {
             if (t.k !== 'error' && t.k !== 'list') {
                 this.sink.error('M009', `count() requires a collection, but got '${showType(t)}'.`, e, 'collection');
             }
-            return INT;
+            return COMPUTED_INT;
         }
         if (isExistsExpr(e)) {
             // Evaluate the operand without narrowing so that `exists(x)` checks the declared optionality.
@@ -303,7 +303,7 @@ class ExprChecker {
             if (t.k !== 'error' && !isTextual(t)) {
                 this.sink.error('M009', `length() requires a String value, but got '${showType(t)}'.`, e, 'operand');
             }
-            return INT;
+            return COMPUTED_INT;
         }
         if (isMatchesExpr(e)) {
             const t = this.check(e.operand, scope);
@@ -538,8 +538,10 @@ function guards(e: Expression): string[] {
 }
 
 /**
- * Domain primitives (IDs and `primitive`s) compare with the same domain primitive, or with a literal of a
- * compatible base type (`quantity > 0`). Different domain primitives, or a plain field of the base type, do not.
+ * Domain primitives (IDs and `primitive`s) compare with the same domain primitive, with a literal of a compatible
+ * base type (`quantity > 0`), and, over `Int` or `Decimal`, with a number `count(…)` or `length(…)` computes
+ * (`count(confirmedBy) >= policy.required`). Different domain primitives, or a plain field or parameter of the base
+ * type, do not.
  */
 function comparable(l: Ty, r: Ty, check: (a: Ty, b: Ty) => boolean): boolean {
     const ld = isDomainPrimitive(l);
@@ -547,7 +549,8 @@ function comparable(l: Ty, r: Ty, check: (a: Ty, b: Ty) => boolean): boolean {
     if (ld && rd) return sameType(l, r) && check(baseOf(l), baseOf(r));
     if (ld || rd) {
         const [dp, other] = ld ? [l, r] : [r, l];
-        return other.k === 'prim' && !!other.literal && check(baseOf(dp), other);
+        const conceptless = other.k === 'prim' && (!!other.literal || (!!other.computed && isNumeric(baseOf(dp))));
+        return conceptless && check(baseOf(dp), other);
     }
     return check(l, r);
 }

@@ -85,6 +85,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `create command c(…) -> S` — makes a new aggregate; it takes the new ID as a parameter (commands are pure).
 - `A | B -> C | D` — the command runs in `A` or `B` and ends in `C` or `D`; one transition per source state.
 - `requires name { expr } else E` — the command is accepted only if; otherwise it returns `E` (the first one failing).
+- A rule over a changeable policy: an invariant over a policy kept on the aggregate, or `requires` (`dt guide policies`).
 - `changes a, b` — the fields it may change; without `changes`, no common field (a target state's new fields are set).
 - `emits X` — exactly one `X` on success; `X?` at most one, `X[1..*]` one or more; `X when A -> B` only then.
 - `errors E` — errors it may return besides those of `else`; on an error it emits no event.
@@ -314,8 +315,9 @@ context Sales {
 - Inside the constraint only `value` (of the base type) is visible; `length(value)`, `matches(value, "regex")` and
   ranges `value in 1..999` (negative literals allowed) are available there.
 - Regular expressions are written as in JavaScript: backslashes are not string escapes (`"\d"` means `\d`).
-- Elsewhere a domain primitive compares with literals and with the same domain primitive, not with another domain
-  primitive or a plain field of its base type (M009).
+- Elsewhere a domain primitive compares with literals, with the same domain primitive and, over `Int` or `Decimal`,
+  with the numbers `count(…)` and `length(…)` compute (`count(approvedBy) >= policy.requiredApprovals`); not with
+  another domain primitive or a plain field or parameter of its base type (M009).
 - Only IDs can be identity fields and reference types. Domain primitives cannot be owned.
 - The generated code includes the constructor: `makeQuantity` checks the invariants and returns the first one
   violated (`makeSkuWith(checks)` when an invariant has no expression); see [Generated checks](#generated-checks).
@@ -531,8 +533,9 @@ context Billing { // other files open the context without a name
 - `contains(c, x)`: `x` is an element of `c`. A subset is written with `all`: `all(required, s => contains(confirmed, s))`.
 - Equality — `==`, `!=`, `unique` and `contains` compare alike: primitives and domain primitives by value, enum
   values by name, value objects by all their fields, entities by `id`, union values by discriminator and fields.
-  Both sides must be of the same type (domain primitives also compare with literals); collections and optional values
-  cannot be compared (guard an optional with `exists(...)` first).
+  Both sides must be of the same type (domain primitives also compare with literals, and over `Int` or `Decimal` with
+  `count(…)` and `length(…)`, also in `<`, `<=`, `>`, `>=` and ranges); collections and optional values cannot be
+  compared (guard an optional with `exists(...)` first).
 - An invariant must be a Bool expression. `dt check` checks only its type; whether a value holds it is checked by the
   generated check functions (`checkConfirmedOrder`, see [Generated checks](#generated-checks)), with exactly these
   semantics.
@@ -621,6 +624,119 @@ context Review {
 - Not supported: requirements for some source states only (split the command instead), and a generic
   `<Command>Rejected` error.
 - `requires` and `else` are also usable as field and parameter names.
+
+<!-- topic: policies -->
+### Rules that depend on a policy
+
+A policy is a rule the business may change: how many approvals a purchase needs, who may approve, how a credit score
+is computed. There is no policy element; one question decides how to write a rule that depends on one:
+
+**Must the rule keep holding after the policy changes?** An invariant holds at all times, so an invariant over a
+policy kept outside the aggregate would make existing aggregates invalid as soon as the policy changes. If the rule
+must hold for this aggregate from now on, fix the policy on the aggregate and write an invariant (1). If the policy
+decides only whether a command runs, under the policy current at that moment, write a requirement (2). The choice
+states whether a policy change affects existing data.
+
+**1. Policy fixed on the aggregate**: keep the policy as a value object in the aggregate, taken when the aggregate is
+created, and write invariants over it. A later change of the policy applies to new aggregates only.
+
+```dt
+// purchasing/purchase-request.dt
+context Purchasing {
+  id RequestId: UUID
+  primitive Count: Int { value in 0..100 }
+  value ApprovalPolicy {
+    requiredApprovals: Count
+  }
+
+  aggregate PurchaseRequest "購買申請" {
+    id: RequestId
+    policy: ApprovalPolicy // the policy when the request was submitted
+    approvedBy: PersonId[0..*]
+    state Pending
+    state Approved {
+      invariant enoughApprovals { count(approvedBy) >= policy.requiredApprovals }
+    }
+
+    create command submit(id: RequestId, policy: ApprovalPolicy) -> Pending
+    command approve(person: PersonId)
+      Pending -> Pending | Approved
+      changes approvedBy
+  }
+}
+```
+
+`requiredApprovals` may be an `Int` or, as here, a domain primitive over `Int` or `Decimal`: a domain primitive
+compares with the numbers `count(…)` and `length(…)` compute.
+
+**2. The current policy decides only whether a command runs**: pass the policy as a parameter of the command and
+state the condition with `requires`. Existing aggregates stay valid whatever the policy becomes.
+
+```dt
+// purchasing/supplier.dt
+context Purchasing {
+  id SupplierId: UUID
+  id PersonId: UUID
+  value ApproverList {
+    approvers: PersonId[1..*]
+  }
+
+  aggregate Supplier "取引先" {
+    id: SupplierId
+    state Candidate
+    state Listed
+
+    command list(person: PersonId, current: ApproverList)
+      Candidate -> Listed
+      requires authorized { contains(current.approvers, person) } else NotApprover
+  }
+
+  error NotApprover
+}
+```
+
+**3. The policy picks a kind of rule**: an enum (or a union, when the kinds carry data) in the aggregate, and one
+invariant or requirement per kind with `implies`.
+
+```dt
+// purchasing/contract.dt
+context Purchasing {
+  id ContractId: UUID
+  enum SignOff { Single Dual }
+
+  aggregate Contract "契約" {
+    id: ContractId
+    signOff: SignOff
+    signedBy: PersonId[0..*]
+    invariant dualSignOff { signOff == SignOff.Dual implies count(signedBy) >= 2 }
+  }
+}
+```
+
+**4. The policy is code** (scores, rule engines, pluggable strategies): declare the invariant or requirement without
+an expression, with a label or `///` description. Your code passes its check to the generated `…With(checks)`
+(`dt guide checks`), which can apply the policy.
+
+```dt
+// purchasing/credit-line.dt
+context Purchasing {
+  id CreditLineId: UUID
+
+  aggregate CreditLine "与信枠" {
+    id: CreditLineId
+    state Open
+
+    command extend(amount: Decimal)
+      Open -> Open
+      requires creditworthy "与信スコアが基準以上" else NotCreditworthy // scored by your code
+  }
+
+  error NotCreditworthy
+}
+```
+
+- Not supported: arithmetic in expressions (`limit * 2`, sums over a collection). Use (4) when a rule needs it.
+- Other aggregates cannot be read from an expression: the policy is a value passed in or kept, never looked up.
 
 <!-- topic: changes -->
 ### Command changes
@@ -1273,7 +1389,7 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
-| M009 | operators and operands have compatible types |
+| M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `count(…)` / `length(…)` |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycles |
