@@ -30,9 +30,7 @@ jobs:
       - run: node dist/dt.js -r examples/shop generate ts
       - run: bun run lint
 
-      # TODO: remove continue-on-error with the repository-wide formatting commit (`bun run fmt`)
       - run: bun run fmt:check
-        continue-on-error: true
 
       # also generates, type-checks and runs examples/shop's contract tests, application tests and demo, and checks
       # that the tree-sitter build stamp is fresh
