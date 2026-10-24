@@ -3,7 +3,7 @@ name = "DomainTrail"
 description = "DomainTrail DSL (.dt files): highlighting, outline and the `dt lsp` language server."
 version = "0.5.0"
 schema_version = 1
-authors = ["hisamekms"]
+authors = ["hisamekms <2336551+hisamekms@users.noreply.github.com>"]
 repository = "https://github.com/hisamekms/domaintrail"
 
 [grammars.domaintrail]
