@@ -5,7 +5,7 @@
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
-export type ElementKind = 'id' | 'primitive' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet';
+export type ElementKind = 'id' | 'primitive' | 'verified' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet';
 
 export type TypeExpr =
     | { kind: 'primitive'; name: PrimitiveName }
@@ -162,6 +162,8 @@ export interface ElementModel extends Described {
     location: Location;
     /** Base primitive of an ID or domain primitive. */
     base?: PrimitiveName;
+    /** Verified types only (ADR 0023). */
+    verified?: VerifiedModel;
     /** Values of an enum. */
     values?: string[];
     /** Japanese names of enum values, by value. */
@@ -182,6 +184,18 @@ export interface ElementModel extends Described {
     /** Aggregates only. */
     states?: StateModel[];
     commands?: CommandModel[];
+}
+
+/**
+ * `verified X of T for C? errors E`: evidence that a check outside the aggregate was made — a value of `of` that only
+ * its factory makes, from the value and the context of `for`, failing with one of `errors`.
+ */
+export interface VerifiedModel {
+    of: TypeExpr;
+    /** The context the check needs, and whether it may be absent (`for C?`). */
+    for?: { type: TypeExpr; optional: boolean };
+    /** Qualified names of the errors of the factory. */
+    errors: string[];
 }
 
 export interface TermModel {

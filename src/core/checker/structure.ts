@@ -7,6 +7,7 @@ import {
     isReferenceField,
     isUnionDecl,
     isValueObject,
+    isVerifiedDecl,
     type Aggregate,
     type Entity,
     type FieldSet,
@@ -55,6 +56,7 @@ export function checkStructure(index: ModelIndex, sink: DiagnosticSink): void {
 
 function checkFieldKind(owner: Owner | FieldSet, f: FieldLike, sink: DiagnosticSink): void {
     const decl = f.type?.decl?.ref;
+    if (isVerifiedDecl(decl)) return; // no field holds a verified type (M024)
     if (isReferenceField(f)) {
         checkReference(f, sink);
         return;

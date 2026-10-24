@@ -220,6 +220,29 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
                     <Invariants invariants={el.invariants} names={names} />
                 </>
             );
+        case 'verified': {
+            const v = el.verified!;
+            return (
+                <>
+                    <div className="card-base">
+                        {t.verifiedOf}: {names.type(v.of, el.context)}
+                    </div>
+                    {v.for && (
+                        <div className="card-base">
+                            {t.verifiedFor}: {names.type(v.for.type, el.context)}
+                            {v.for.optional ? '?' : ''}
+                        </div>
+                    )}
+                    {v.errors.length > 0 && (
+                        <div className="chips">
+                            {v.errors.map((e) => (
+                                <code key={e}>{names.short(e)}</code>
+                            ))}
+                        </div>
+                    )}
+                </>
+            );
+        }
         case 'union':
             return (
                 <>
@@ -280,9 +303,15 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
 function CardUses({ el, model, names, shared }: { el: ElementModel; model: DomainModel; names: Namer; shared: boolean }) {
     const t = useT();
     if (el.kind === 'event' || el.kind === 'error') {
-        const commands = commandsWithOutcome(model, el.id);
-        if (!commands.length) return <>{el.kind === 'event' ? t.raisedByNone : t.returnedByNone}</>;
-        return <>← {commands.map(({ agg, command }) => `${names.of(agg)}.${names.of(command)}`).join(', ')}</>;
+        const commands = commandsWithOutcome(model, el.id).map(({ agg, command }) => `${names.of(agg)}.${names.of(command)}`);
+        // an error may also be returned by the factory of a verified type
+        const factories = Object.values(model.elements).filter((v) => v.verified?.errors.includes(el.id)).map((v) => names.of(v));
+        if (!commands.length && !factories.length) return <>{el.kind === 'event' ? t.raisedByNone : t.returnedByNone}</>;
+        return <>← {[...commands, ...factories].join(', ')}</>;
+    }
+    if (el.kind === 'verified') {
+        const uses = usagesOf(model, el.id, names.of);
+        return <>{uses.length ? `← ${uses.map((u) => u.text).join(', ')}` : t.usedIn(0)}</>;
     }
     if (el.kind === 'fieldSet') {
         const users = fieldSetUsers(model, el.id);

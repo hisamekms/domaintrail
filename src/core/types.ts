@@ -5,6 +5,7 @@ import {
     isPrimitiveDecl,
     isUnionDecl,
     isValueObject,
+    isVerifiedDecl,
     isReferenceField,
     type Entity,
     type EnumDecl,
@@ -72,11 +73,20 @@ export function cardinality(m: Multiplicity | undefined): Cardinality {
     return lower >= 1 ? 'nonEmpty' : 'many';
 }
 
-export function baseType(ref: TypeRef | undefined): Ty {
+/**
+ * The type of a value written with `ref`. A verified type is its base type here: in expressions and payloads a
+ * verified value behaves as the value it verifies. A cycle of verified types (M024) is an error.
+ */
+export function baseType(ref: TypeRef | undefined, seen = new Set<unknown>()): Ty {
     if (!ref) return ERROR;
     if (ref.primitive) return { k: 'prim', name: ref.primitive };
     const decl = ref.decl?.ref;
     if (!decl) return ERROR;
+    if (isVerifiedDecl(decl)) {
+        if (seen.has(decl)) return ERROR;
+        seen.add(decl);
+        return baseType(decl.base, seen);
+    }
     if (isIdType(decl)) return { k: 'id', decl };
     if (isPrimitiveDecl(decl)) return { k: 'dp', decl };
     if (isEnumDecl(decl)) return { k: 'enum', decl };

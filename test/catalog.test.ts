@@ -30,8 +30,8 @@ describe('catalog', () => {
         const primitives = catalogSections(model).find((s) => s.key === 'primitives')!;
         expect(primitives.groups[0].context).toBe('Common');
         const sales = primitives.groups.find((g) => g.context === 'Sales')!;
-        // by kind (primitive, id, enum), then by name
-        expect(sales.items.map((e) => e.name)).toEqual(['Quantity', 'Sku', 'CustomerId', 'OrderId', 'OrderItemId', 'CancelReason']);
+        // by kind (primitive, verified, id, enum), then by name
+        expect(sales.items.map((e) => e.name)).toEqual(['Quantity', 'Sku', 'AvailableEmail', 'CustomerId', 'OrderId', 'OrderItemId', 'CancelReason']);
         const aggregates = catalogSections(model).find((s) => s.key === 'aggregates')!;
         expect(aggregates.groups.some((g) => g.context === 'Common')).toBe(false);
     });

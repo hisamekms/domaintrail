@@ -216,6 +216,12 @@ class TestsEmitter {
                     add(el.name, valid(el.name, raw, el.invariants.length ? this.holds(el.name, el.name, el.invariants) : undefined));
                     break;
                 }
+                case 'verified': {
+                    // the check is the factory's, outside the contract tests: any value of the base passed it
+                    const base = this.baseArb({ name: el.name, kind: 'param', type: el.verified!.of, cardinality: 'one', multiplicity: '' });
+                    add(el.name, `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${base})`);
+                    break;
+                }
                 case 'enum':
                     add(el.name, `given.${el.name} ?? ${el.values?.length ? `fc.constantFrom<${this.type(el.name)}>(${el.values.map((v) => `'${v}'`).join(', ')})` : `fc.constant(undefined as never)`}`);
                     break;

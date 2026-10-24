@@ -75,6 +75,52 @@ context A {
           (identifier))))))
 
 ================================================================================
+Verified types, with and without a context and errors
+================================================================================
+
+context A {
+  verified AvailableEmail "未使用のメールアドレス" of EmailAddress for CustomerId? errors EmailTaken, Invalid
+  verified Approved of Common.Budget for TenantId
+  verified Reserved of Quantity
+  verified Checked of String errors Failed
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (verified_declaration
+      (identifier)
+      (string)
+      (qualified_name
+        (identifier))
+      (qualified_name
+        (identifier))
+      (errors_clause
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier))))
+    (verified_declaration
+      (identifier)
+      (qualified_name
+        (identifier)
+        (identifier))
+      (qualified_name
+        (identifier)))
+    (verified_declaration
+      (identifier)
+      (qualified_name
+        (identifier)))
+    (verified_declaration
+      (identifier)
+      (primitive_type)
+      (errors_clause
+        (qualified_name
+          (identifier))))))
+
+================================================================================
 Enums, values and unions
 ================================================================================
 

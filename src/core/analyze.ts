@@ -12,6 +12,7 @@ import {
     isPrimitiveDecl,
     isUnionDecl,
     isValueObject,
+    isVerifiedDecl,
     type ContextElement,
     type Model,
 } from '../language/generated/ast.js';
@@ -30,6 +31,7 @@ import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
 import { checkUnions } from './checker/unions.js';
+import { checkVerified } from './checker/verified.js';
 import { DiagnosticSink, compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from './diagnostics.js';
 import { ModelIndex, statesOf } from './model-index.js';
 import { didYouMean, suggestFrom, type Candidate } from './suggest.js';
@@ -112,6 +114,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkStructure(index, sink);
         checkUnions(index, sink);
         checkFieldSets(index, sink);
+        checkVerified(index, sink);
         checkCommands(index, sink);
         checkFactoryIds(index, sink);
         checkChanges(index, sink);
@@ -161,7 +164,7 @@ const LINK_TARGETS: Record<string, (el: ContextElement) => boolean> = {
     fieldSets: isFieldSet,
     target: isAggregate,
     tagType: isEnumDecl,
-    decl: (el) => isIdType(el) || isPrimitiveDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
+    decl: (el) => isIdType(el) || isPrimitiveDecl(el) || isVerifiedDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
 };
 
 const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'];

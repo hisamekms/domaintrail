@@ -12,6 +12,7 @@ import {
     isState,
     isUnionDecl,
     isValueObject,
+    isVerifiedDecl,
     type Aggregate,
     type Command,
     type Context,
@@ -33,6 +34,7 @@ import {
     type State,
     type UnionDecl,
     type ValueObject,
+    type VerifiedDecl,
 } from '../language/generated/ast.js';
 
 export type FieldLike = Field | OwnsField | ReferenceField;
@@ -107,6 +109,9 @@ export class ModelIndex {
     }
     get primitives(): PrimitiveDecl[] {
         return this.elements.filter(isPrimitiveDecl);
+    }
+    get verifieds(): VerifiedDecl[] {
+        return this.elements.filter(isVerifiedDecl);
     }
     get enums(): EnumDecl[] {
         return this.elements.filter(isEnumDecl);

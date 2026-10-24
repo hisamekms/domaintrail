@@ -18,7 +18,10 @@ export interface Dependency {
     kind: DependencyKind;
     /** Element that holds the use (aggregate, entity, value object, union, event, error). */
     source: string;
-    /** Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `with`, `command ⇒ Event`. */
+    /**
+     * Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `with`, `command ⇒ Event`, and
+     * `of`, `for`, `⇒ Error` of a verified type.
+     */
     path: string;
     /** The element used (qualified name). */
     target: string;
@@ -43,6 +46,11 @@ export function contextDependencies(model: DomainModel): Dependency[] {
         for (const s of el.states ?? []) for (const f of s.fields) field(f, `${s.name}.${f.name}`);
         for (const v of el.variants ?? []) for (const f of v.fields) field(f, `${v.name}.${f.name}`);
         if (el.tagType) add(el.tagType, 'by');
+        if (el.verified) {
+            if (el.verified.of.kind === 'ref') add(el.verified.of.ref, 'of');
+            if (el.verified.for?.type.kind === 'ref') add(el.verified.for.type.ref, 'for');
+            for (const e of el.verified.errors) add(e, `⇒ ${shortName(e)}`);
+        }
         for (const c of el.commands ?? []) {
             for (const p of c.params) field(p, `${c.name}(${p.name})`);
             for (const e of [...emittedEvents(c), ...c.errors]) add(e, `${c.name} ⇒ ${shortName(e)}`);

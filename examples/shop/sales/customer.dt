@@ -1,17 +1,28 @@
 context Sales {
   id CustomerId "顧客ID": UUID
 
+  /// 他の顧客に使われていないことを、登録・変更のときに確かめたメールアドレス。
+  verified AvailableEmail "未使用のメールアドレス" of EmailAddress for CustomerId? errors EmailTaken
+
   aggregate Customer "顧客" {
     id: CustomerId
     name: String
     email: EmailAddress
 
-    create command register(id: CustomerId, name: String, email: EmailAddress) "顧客を登録する" emits CustomerRegistered
+    create command register(id: CustomerId, name: String, email: AvailableEmail) "顧客を登録する"
+      emits CustomerRegistered
 
     command rename(name: String) "氏名を変更する" changes name
+
+    command changeEmail(email: AvailableEmail) "メールアドレスを変更する" changes email
   }
 
   event CustomerRegistered "顧客登録" {
     customerId: CustomerId
+  }
+
+  /// ほかの顧客がすでに使っているメールアドレス。
+  error EmailTaken "使用済みのメールアドレス" {
+    email: EmailAddress
   }
 }

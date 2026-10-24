@@ -1,5 +1,5 @@
 // The use cases: the application around the pure commands. Each one turns raw input into domain values (with the
-// `make…` constructors), loads the aggregate, rejects a state the command does not accept, calls the command with the
+// `make…` constructors, and the factories of verified types for the checks beyond the aggregate), loads the aggregate, rejects a state the command does not accept, calls the command with the
 // IDs and the time from the providers, and on success saves the aggregate and records its events. A domain error is
 // returned as it is, typed by the command's contract; nothing is saved and no event is recorded.
 import { eventList, err, ok, outcome, type Billing, type Common, type Result, type Sales } from '../../generated/domain/index.js';
@@ -11,6 +11,7 @@ import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderI
 import type { Cause, DomainEvent, InMemoryEventStore } from './event-store.js';
 import type { Providers } from './providers.js';
 import type { CustomerRepository, InvoiceRepository, OrderRepository, Repository, VersionConflict, Versioned } from './repositories.js';
+import { verifications } from './verifications.js';
 
 export interface Deps {
     readonly customers: CustomerRepository;
@@ -56,6 +57,7 @@ export type UseCases = ReturnType<typeof useCases>;
 
 export function useCases({ customers, orders, invoices, events, providers }: Deps) {
     const request = (): Cause => ({ correlationId: providers.newId('request') });
+    const { makeAvailableEmail } = verifications(customers);
 
     async function load<Id extends string, A extends { readonly id: Id }>(repo: Repository<Id, A>, aggregate: NotFound['aggregate'], id: Id): Promise<Result<Versioned<A>, NotFound>> {
         const loaded = await repo.load(id);
@@ -79,10 +81,12 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
     const notAllowed = (command: string, state: string) => err<NotAllowed>({ type: 'NotAllowed', command, state });
 
     return {
-        async registerCustomer(name: string, email: string, cause = request()): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | AppError>> {
+        async registerCustomer(name: string, email: string, cause = request()): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | Sales.EmailTaken | AppError>> {
             const address = makeEmailAddress(email);
             if (!address.ok) return address;
-            const r = customerCommands.register(makeCustomerId(providers.newId('customer')), name, address.value);
+            const available = await makeAvailableEmail(address.value, undefined); // a new customer: no one to leave out
+            if (!available.ok) return available;
+            const r = customerCommands.register(makeCustomerId(providers.newId('customer')), name, available.value);
             if (!r.ok) return r; // `never` today; kept so that an error added to the DSL is returned, not lost
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(customers, aggregate, undefined, eventList(emitted), cause);
@@ -92,6 +96,19 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             const loaded = await load(customers, 'Customer', id);
             if (!loaded.ok) return loaded;
             const r = customerCommands.rename(loaded.value.aggregate, name);
+            if (!r.ok) return r;
+            const { aggregate, events: emitted } = outcome(r.value);
+            return commit(customers, aggregate, loaded.value.meta.version, eventList(emitted), cause);
+        },
+
+        async changeEmail(id: Sales.CustomerId, email: string, cause = request()): Promise<Result<Sales.Customer, Common.InvalidEmailAddress | Sales.EmailTaken | AppError>> {
+            const address = makeEmailAddress(email);
+            if (!address.ok) return address;
+            const loaded = await load(customers, 'Customer', id);
+            if (!loaded.ok) return loaded;
+            const available = await makeAvailableEmail(address.value, id); // the customer may keep its own address
+            if (!available.ok) return available;
+            const r = customerCommands.changeEmail(loaded.value.aggregate, available.value);
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(customers, aggregate, loaded.value.meta.version, eventList(emitted), cause);
