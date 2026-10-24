@@ -1,0 +1,135 @@
+================================================================================
+Keywords as field, parameter and lambda names
+================================================================================
+
+context A {
+  value V {
+    id: Code
+    value: Int
+    by: String
+    persistent: Bool
+    fields: Int
+    with: Int
+    requires: Int
+    else: Int
+    when: Int
+    changes: Int
+    count: Int
+    exists: Int
+    length: Int
+    matches: Int
+    all: Int
+    any: Int
+    unique: Int
+    contains: Int
+    invariant k { count(count) > length and all(all, any => any.value) }
+  }
+  aggregate G {
+    command when(changes: Int, else: Int)
+      requires r else E
+    changes: Int
+    requires: Int
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (value_declaration
+      (identifier)
+      (member_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (call_expression
+                (function_name)
+                (identifier))
+              (identifier))
+            (call_expression
+              (function_name)
+              (identifier)
+              (lambda
+                (identifier)
+                (member_expression
+                  (identifier)
+                  (identifier))))))))
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (primitive_type))
+            (parameter
+              (identifier)
+              (primitive_type)))
+          (requirement
+            (identifier)
+            (qualified_name
+              (identifier))))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))))))
