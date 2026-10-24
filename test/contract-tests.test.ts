@@ -305,7 +305,7 @@ describe('the shop example', () => {
         expect(r.exitCode).toBe(0);
         const demo = Bun.spawnSync([process.execPath, 'src/demo.ts'], { cwd: shop });
         expect(demo.stderr.toString()).toBe('');
-        expect(demo.stdout.toString()).toContain('policy: issued invoice-1 for order-1: 3380 JPY');
+        expect(demo.stdout.toString()).toContain('policy BillConfirmedOrder: issued invoice-1 for order-1: 3380 JPY');
         expect(demo.exitCode).toBe(0);
     }, 30_000);
 });

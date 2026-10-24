@@ -98,6 +98,7 @@ describe('dt show', () => {
             'context Billing "請求"',
             '  /// 注文への請求と支払いを扱う。',
             '  terms paidAt "支払日時", invoiceId "請求書ID"',
+            '  policy BillConfirmedOrder "確定した注文に請求する" when Sales.OrderConfirmed -> Invoice.issue  // billing/context.dt:9',
             '  id InvoiceId "請求書ID": UUID  // billing/invoice.dt:2',
             '  aggregate Invoice "請求書" (states Open, Paid)  // billing/invoice.dt:4',
             '  persistent event InvoicePaid "支払完了"  // billing/invoice.dt:22',
@@ -107,7 +108,7 @@ describe('dt show', () => {
     test('without a name: the contexts and their elements', async () => {
         const r = await shop();
         expect(r.code).toBe(0);
-        expect(r.out.slice(0, 5)).toEqual(['context Billing "請求"', '  aggregate Invoice', '  id InvoiceId', '  event InvoicePaid', 'shared context Common "共通"']);
+        expect(r.out.slice(0, 6)).toEqual(['context Billing "請求"', '  aggregate Invoice', '  id InvoiceId', '  event InvoicePaid', '  policy BillConfirmedOrder', 'shared context Common "共通"']);
         expect(r.out).toContain('shared context Common "共通"');
     });
 
@@ -222,6 +223,7 @@ describe('dt show --format json', () => {
             verifiedAs: [],
             contextOf: [],
             discriminatorOf: [],
+            reactedToBy: [],
         });
     });
 
@@ -235,7 +237,8 @@ describe('dt show --format json', () => {
         expect(state.leftBy).toContainEqual({ command: 'confirm', from: 'Draft', to: 'Confirmed' });
         const context = await json('Billing');
         expect(context.context).toMatchObject({ name: 'Billing', label: '請求', shared: false });
-        expect(context.context.elements[0]).toEqual({ id: 'Billing.InvoiceId', kind: 'id', name: 'InvoiceId', label: '請求書ID', location: { file: 'billing/invoice.dt', line: 2, endLine: 2 } });
+        expect(context.context.elements[0]).toMatchObject({ id: 'Billing.BillConfirmedOrder', kind: 'policy' });
+        expect(context.context.elements[1]).toEqual({ id: 'Billing.InvoiceId', kind: 'id', name: 'InvoiceId', label: '請求書ID', location: { file: 'billing/invoice.dt', line: 2, endLine: 2 } });
         const overview = await json();
         expect(overview.show).toBe('overview');
         expect(overview.contexts.map((c: { name: string }) => c.name)).toEqual(['Billing', 'Common', 'Sales']);

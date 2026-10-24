@@ -380,6 +380,46 @@ describe('dt lsp', () => {
         expect(edit.changes[client.uri('sales.dt')]).toHaveLength(2);
     });
 
+    test('policies: hover, outline, and renaming the event or the command updates them', async () => {
+        const billing = BILLING.replace('    state Open\n', '    state Open\n    create command issue(id: InvoiceId) -> Open\n').replace(
+            '  id InvoiceId: UUID\n',
+            '  id InvoiceId: UUID\n  /// Bill what is placed.\n  policy BillPlaced "請求する" when Sales.OrderPlaced -> Invoice.issue\n',
+        );
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'billing.dt': billing });
+        expect(await client.until('billing.dt', () => true)).toEqual([]);
+        const hover = (file: string, pos: { line: number; character: number }) =>
+            client.request<{ contents: { value: string } } | null>('textDocument/hover', file, pos).then((h) => h?.contents.value);
+        expect(await hover('billing.dt', at(billing, 'BillPlaced'))).toBe(
+            '**policy `BillPlaced`** 請求する — `Billing.BillPlaced`\n\nBill what is placed.\n\n```dt\nwhen Sales.OrderPlaced -> Invoice.issue\n```\n\nAfter the event, the command is run — eventually, by any mechanism.',
+        );
+        expect(await hover('billing.dt', at(billing, 'command issue', 'command '.length))).toBe('**create command `issue`** — `Billing.Invoice:issue`\n\nRun by policy `Billing.BillPlaced` (when Sales.OrderPlaced)');
+        expect(await hover('sales.dt', at(SALES, 'event OrderPlaced', 'event '.length))).toBe('**event `OrderPlaced`** — `Sales.OrderPlaced`\n\nReacted to by policy `Billing.BillPlaced` (-> Invoice.issue)');
+
+        type Symbol = { name: string; children?: Symbol[] };
+        const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('billing.dt') } });
+        expect(symbols[0].children!.map((s) => s.name)).toEqual(['InvoiceId', 'BillPlaced', 'Invoice']);
+
+        type Edits = { changes: Record<string, { range: { start: { line: number; character: number }; end: { character: number } }; newText: string }[]> };
+        const renamed = (text: string, file: string, edit: Edits) => {
+            const lines = text.split('\n');
+            for (const e of [...(edit.changes[client.uri(file)] ?? [])].sort((a, b) => b.range.start.character - a.range.start.character)) {
+                const l = lines[e.range.start.line];
+                lines[e.range.start.line] = l.slice(0, e.range.start.character) + e.newText + l.slice(e.range.end.character);
+            }
+            return lines.join('\n');
+        };
+        // the command, from the policy and from its declaration
+        const byPolicy = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'Invoice.issue', 'Invoice.'.length), { newName: 'bill' });
+        expect(renamed(billing, 'billing.dt', byPolicy)).toBe(billing.replace('Invoice.issue', 'Invoice.bill').replace('command issue', 'command bill'));
+        const byCommand = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'command issue', 'command '.length), { newName: 'bill' });
+        expect(renamed(billing, 'billing.dt', byCommand)).toBe(billing.replace('Invoice.issue', 'Invoice.bill').replace('command issue', 'command bill'));
+        // the event (qualified in the policy) and the aggregate
+        const event = await client.request<Edits>('textDocument/rename', 'sales.dt', at(SALES, 'event OrderPlaced', 'event '.length), { newName: 'OrderSubmitted' });
+        expect(renamed(billing, 'billing.dt', event)).toBe(billing.replace('Sales.OrderPlaced', 'Sales.OrderSubmitted'));
+        const aggregate = await client.request<Edits>('textDocument/rename', 'billing.dt', at(billing, 'aggregate Invoice', 'aggregate '.length), { newName: 'Bill' });
+        expect(renamed(billing, 'billing.dt', aggregate)).toBe(billing.replace('-> Invoice.issue', '-> Bill.issue').replace('aggregate Invoice', 'aggregate Bill'));
+    });
+
     test('uses the config of --root and its sources', async () => {
         const dir = await workspace({});
         const root = path.join(dir, 'domain');

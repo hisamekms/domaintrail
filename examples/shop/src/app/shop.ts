@@ -1,7 +1,8 @@
 // Wires the application: repositories, the event store with its bus, the use cases and the policies.
 import type { Billing, Sales } from '../../generated/domain/index.js';
+import { makeInvoiceId } from '../domain/primitives.js';
 import { InMemoryEventStore, type Subscriber } from './event-store.js';
-import { registerPolicies } from './policies.js';
+import { billingPolicies, registerPolicies } from './policies.js';
 import type { Providers } from './providers.js';
 import { InMemoryRepository } from './repositories.js';
 import { useCases, type Deps } from './use-cases.js';
@@ -17,6 +18,7 @@ export function createShop(providers: Providers, { log = () => {}, onEvent }: { 
     };
     if (onEvent) deps.events.subscribe(onEvent);
     const app = useCases(deps);
-    const policies = registerPolicies(deps.events, deps.invoices, app, log);
+    const billing = billingPolicies({ loadOrder: async (id) => (await deps.orders.load(id))?.aggregate, newInvoiceId: () => makeInvoiceId(providers.newId('invoice')) });
+    const policies = registerPolicies(deps.events, deps.invoices, app, billing, log);
     return { ...deps, app, policies };
 }

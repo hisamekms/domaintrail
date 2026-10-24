@@ -90,6 +90,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `emits X` — exactly one `X` on success; `X?` at most one, `X[1..*]` one or more; `X when A -> B` only then.
 - `errors E` — errors it may return besides those of `else`; on an error it emits no event.
 - `verified V of T for C? errors E` — evidence of a check outside the aggregate, as a parameter (`dt guide verified`).
+- `policy P when E -> A.c` — when event `E` happens, command `A.c` eventually runs (`dt guide reactions`).
 
 **The commands:**
 
@@ -275,7 +276,8 @@ context Sales {
 ```
 
 - Context elements: `id`, `primitive`, `enum`, `value`, `union`, `entity`, `aggregate`, `event`, `error`, `fields`
-  (see [Field sets](#field-sets)) and `verified` (see [Verified types](#verified-types)).
+  (see [Field sets](#field-sets)), `verified` (see [Verified types](#verified-types)) and `policy` (see
+  [Reactions to events](#reactions-to-events-policies)).
 - Fields: `name: Type`, `owns name: Type` (entities and values held by the aggregate),
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
@@ -741,7 +743,8 @@ context Purchasing {
 - Other aggregates cannot be read from an expression: the policy is a value passed in or kept, never looked up.
 - **A rule across aggregates** is written as one of: the values it needs passed as parameters and checked with
   `requires` (2); the evidence of a check made outside the aggregate, a verified type (`dt guide verified`); a reaction
-  to another aggregate's events, in your application; or a boundary drawn so that the data is in one aggregate.
+  to another aggregate's events, a policy (`dt guide reactions`); or a boundary drawn so that the data is in one
+  aggregate.
 
 <!-- topic: changes -->
 ### Command changes
@@ -1012,6 +1015,88 @@ export function verifications(customers: CustomerRepository): Verifications {
 
 The generated contract tests do not test the factories (see [Generated tests](#generated-tests)).
 
+<!-- topic: reactions -->
+### Reactions to events (policies)
+
+A policy states a business rule of the form **"when event X happens, command Y is eventually run"** — Event
+Storming's policy (the lilac sticky between an event and a command). It is declared in the context that reacts:
+
+```dt
+// billing/policies.dt
+context Billing {
+  /// 確定した注文は、その合計で請求する。
+  policy BillConfirmedOrder "確定した注文に請求する" when Sales.OrderConfirmed -> Invoice.issue
+}
+```
+
+- `policy Name "label" when Event -> Aggregate.command`. The aggregate is one of the policy's own context, named
+  without its context; the event may be of any context (`Sales.OrderConfirmed`). A shared context has no policies.
+- **Only the reaction.** How the command's arguments come from the event, conditions, compensation and ordering are not
+  part of the DSL; your code computes the arguments (below).
+- **"Eventually", by any mechanism.** The rule holds whether the command runs in the same use case, through an event
+  bus, from a queue or by a nightly batch. Nothing in the generated code chooses or forces a mechanism.
+- Declaring a reaction is optional. Declare the ones across contexts at least: they are the dependencies of the
+  context map (a policy counts as an **event** dependency of the reacting context on the event's context), and
+  `dt show`, the Live View and the language server show them on the command ("triggered by") and on the event.
+- M023: the event exists, the aggregate is one of the policy's context (a policy naming an aggregate of another
+  context is declared in the wrong context: the hint names the one), the command is one of the aggregate; two
+  policies of a context that state the same reaction are a warning. Names are unique in the context (M002).
+- `policy` is also usable as a field and parameter name.
+
+For each policy, `dt generate ts` writes the type of its **handler**, from the event to what the application needs to
+run the command, the command's **input**: its parameters by name, after the ID of the aggregate to run it on (named
+like the aggregate) unless it is a `create command`. An input is written once per command, also when several policies
+run it.
+
+```ts
+/**
+ * What the application needs to run Invoice.issue (a factory): its parameters, by name.
+ * Given by the handlers of the policies that run it.
+ * @see billing/invoice.dt:14
+ */
+export interface IssueInvoiceInput {
+    /** 請求書ID */
+    readonly id: InvoiceId;
+    /** 注文ID */
+    readonly order: Sales.OrderId;
+    /** 請求金額 */
+    readonly billedAmount: Common.Money;
+}
+
+/**
+ * Policy BillConfirmedOrder: when Sales.OrderConfirmed happens, Invoice.issue is run — eventually.
+ * …
+ */
+export type BillConfirmedOrderPolicy = (event: Sales.OrderConfirmed) => Promise<IssueInvoiceInput>;
+```
+
+The handler computes the input: data from elsewhere (the order to bill) and new IDs come in through closures your code
+builds, and a handler that cannot compute the input rejects. Your application then runs the command with it, by
+whatever mechanism.
+
+**Whether handlers are required** is a choice of the configuration (see [Configuration](#configuration)):
+`generate.ts.policies`, overridden per context by `generate.ts.contexts.<Context>.policies`:
+
+- `optional` (default): only the types above; nobody has to use them.
+- `required`: also `<Context>PolicyHandlers`, one handler per policy of the context, and the generated contract tests
+  of that context require them (`contract({ …, policies })`; a missing handler is a compile error). They feed each
+  handler generated events and check that it resolves to an input the command accepts (see
+  [Generated tests](#generated-tests)).
+
+```ts
+// examples/shop/src/app/policies.ts
+export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billing.BillingPolicyHandlers {
+    return {
+        // a confirmed order is billed for its total
+        BillConfirmedOrder: async (event) => {
+            const order = await loadOrder(event.orderId);
+            if (order?.state !== 'Confirmed') throw new Error(`order ${event.orderId} is ${order ? order.state : 'not found'}, not Confirmed`);
+            return { id: newInvoiceId(), order: order.id, billedAmount: orderTotal(order) };
+        },
+    };
+}
+```
+
 <!-- topic: generated -->
 ## Generated TypeScript
 
@@ -1022,8 +1107,8 @@ aggregate for `decide` (see [Decisions and `decide`](#decisions-and-decide)), pl
 domain primitive gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`;
 a verified type its base with a property of its own and the contract of its factory `Make<Name>`, which you write (see
 [Verified types](#verified-types)); invariants and requirements get check functions (see
-[Generated checks](#generated-checks)). A field set is an interface
-that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
+[Generated checks](#generated-checks)); a policy the type of its handler and the input of its command (see
+[Reactions to events](#reactions-to-events-policies)). A field set is an interface that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
 `…Common`). The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's
 place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:51`); editing the `.dt` sources
 moves these lines, and generating again rewrites them.
@@ -1361,6 +1446,7 @@ With `generate.ts.tests` in the config, `dt generate ts` also writes **contract 
 | T3 | after a successful command, the aggregate holds the invariants of its state (the aggregate's and the state's) |
 | T4 | events whose bounds the types do not express (`X[2..5]`) are emitted that many times |
 | T5 | purity: the same input twice gives deep-equal results, and the input is not changed |
+| T6 | with `required` policies: for every event, the handler of a policy resolves to an input the command accepts — every argument present unless optional, of its type (the fields of value objects and entities in turn), holding the invariants of its type, a list within its multiplicity |
 
 Inputs are generated with [fast-check](https://fast-check.dev) from the types: IDs, ranges, lengths and regular
 expressions of domain primitives, enums, value objects, entities, unions, collections with their multiplicities, and
@@ -1374,16 +1460,20 @@ dependency of your project; generated product code does not use it.
 Per context, `tests/<Context>.ts` exports `contract(impl, options?)`, returning a suite of named test cases
 (`{ name, children }` of `{ name, run, todo? }`) for any runner, and `arbitraries(options?)`. `impl` lists what to
 test, each optional: the constructors (`make: { Quantity: makeQuantity }`) and the commands per aggregate
-(`Order: orderCommands`). With `generate.ts.tests.runner` (`bun`, `vitest`, `jest`, `node`), `tests/_register.ts`
+(`Order: orderCommands`); for a context whose policies are `required`, also `policies` (its `<Context>PolicyHandlers`),
+which is not optional. The handlers run as your code wires them, with whatever data they read: give them what the
+generated events need (below, a confirmed order for any ID). With `generate.ts.tests.runner` (`bun`, `vitest`, `jest`, `node`), `tests/_register.ts`
 registers a suite with that runner, and the test file is a few lines:
 
 ```ts
 // examples/shop/src/contract.test.ts
+import type { Sales as SalesTypes } from '../generated/domain/index.js';
 import { Billing, Common, Sales, register } from '../generated/domain/tests/index.js';
+import { billingPolicies } from './app/policies.js';
 import { customerCommands } from './domain/customer-commands.js';
 import { invoiceCommands } from './domain/invoice-commands.js';
 import { orderCommands } from './domain/order-commands.js';
-import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderId, makeOrderItemId, makeQuantity, makeSku } from './domain/primitives.js';
+import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderId, makeOrderItemId, makeQuantity, makeSku, parseDecimal } from './domain/primitives.js';
 
 register(
     Sales.contract({
@@ -1392,7 +1482,24 @@ register(
         Customer: customerCommands,
     }),
 );
-register(Billing.contract({ make: { InvoiceId: makeInvoiceId }, Invoice: invoiceCommands }));
+const ok = <T>(r: { ok: true; value: T } | { ok: false }): T => {
+    if (!r.ok) throw new Error('invalid example');
+    return r.value;
+};
+
+// The policy cases feed Billing's handlers generated `OrderConfirmed` events, so the order a handler reads comes from
+// here: a confirmed order with that ID. The tests run the handlers with whatever they are wired to.
+const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
+    state: 'Confirmed',
+    id,
+    customer: makeCustomerId('customer-1'),
+    items: [{ id: makeOrderItemId('item-1'), sku: ok(makeSku('ABC-0001')), quantity: ok(makeQuantity(3)), unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' } }],
+    confirmedAt: new Date('2026-10-24T09:00:00Z'),
+});
+let invoices = 0;
+const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => makeInvoiceId(`invoice-${++invoices}`) });
+
+register(Billing.contract({ make: { InvoiceId: makeInvoiceId }, Invoice: invoiceCommands, policies }));
 register(Common.contract({ make: { EmailAddress: makeEmailAddress, Amount: makeAmount } }));
 ```
 
@@ -1524,6 +1631,7 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
 | M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
 | M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
+| M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
@@ -1558,11 +1666,13 @@ code is 0 whenever the name was found, whatever the diagnostics. A model with sy
 - `{"show": "element", "element": {...}, "usedBy": {...}}`: the element (`id`, `kind`, `fields` with `label`,
   `labelSource`, `multiplicity`, `fieldSet`, …, `invariants`, `states`, `commands`, `location`); each command has
   `outcomes`: `[{"from", "to", "emits": [{"event", "multiplicity", "lower", "upper"}], "sets", "carries", "drops"}]`.
-  A verified type has `verified`: `{"of", "for": {"type", "optional"}, "errors"}`. `usedBy` has the lists
-  `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`, `idUsedBy`, `emittedBy`, `returnedBy` (commands, and verified types
-  whose factory returns the error), `verifiedAs` (verified types of it), `contextOf` (verified types whose `for` it is)
-  and `discriminatorOf`, as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`).
-- `{"show": "command", "aggregate", "command"}` (with `outcomes`), `{"show": "state", "aggregate", "state", "enteredBy",
+  A verified type has `verified`: `{"of", "for": {"type", "optional"}, "errors"}`; a policy has `policy`:
+  `{"event", "aggregate", "command"}`. `usedBy` has the lists `takenOnBy`, `ownedBy`, `typeOf`, `referencedBy`,
+  `idUsedBy`, `emittedBy`, `returnedBy` (commands, and verified types whose factory returns the error), `verifiedAs`
+  (verified types of it), `contextOf` (verified types whose `for` it is), `discriminatorOf` and `reactedToBy` (the
+  policies that react to the event), as dotted paths (`Billing.Invoice.order`, `Sales.Order.addItem(item)`). Each
+  command has `triggeredBy`: the policies that run it.
+- `{"show": "command", "aggregate", "command"}` (with `outcomes` and `triggeredBy`), `{"show": "state", "aggregate", "state", "enteredBy",
   "leftBy"}`, `{"show": "context", "context"}` and `{"show": "overview", "contexts"}` (name, label, doc, shared, terms
   and the elements with their location).
 - `"modelErrors": n` when the model has errors; `{"error": "...", "candidates": [...]}` when the name is unknown
@@ -1668,8 +1778,10 @@ relative to the config file, and its directory becomes the root. Without a confi
   "generate": {
     "ts": {
       "out": "src/domain/generated",                        // default: "generated/domain"
-      // contexts written elsewhere than "out" (optional)
-      "contexts": { "Common": { "out": "packages/shared/src/generated" } },
+      // policies: "optional" (a handler type each) or "required" (also <Context>PolicyHandlers, which the contract tests take)
+      "policies": "optional",                               // default: "optional"
+      // per context: a directory of its own instead of "out", and/or its own "policies" (both optional)
+      "contexts": { "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } },
       // contract tests, written only with this key (optional); needs fast-check in your project
       "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
     }
@@ -1683,7 +1795,9 @@ only; contexts listed in `generate.ts.contexts` keep their own directories. Sour
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in
 `generate.ts.contexts` that is not a context of the model is a config error, reported by `generate ts` once the model
-has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`).
+has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`). The policies of a context
+are `generate.ts.contexts.<Context>.policies` if given, else `generate.ts.policies`, else `optional` (see
+[Reactions to events](#reactions-to-events-policies)).
 
 **Sources and `.gitignore`.** The sources are the files below the root that match `sources`, outside `node_modules`,
 `.git` and `.domaintrail`, and not ignored by git: every command that finds them (`check`, `generate`, `view`, `fmt`,
@@ -1707,13 +1821,15 @@ runs until the client shuts it down. It offers:
   computed over the whole workspace (the config's `sources`) with the unsaved text of open files, after every change.
   A hint follows the message on a second line (`hint: did you mean 'Confirmed'?`) and is also in the diagnostic's
   `data.hint`.
-- **Go to definition** and **find references** for types, states, events, errors and field sets, across files and
-  contexts (`Sales.Order` included).
-- **Hover**: kind, name, Japanese name, `///` description, the expression of an invariant or requirement, and the
-  `emits` entries of a command.
-- **Outline** (document symbols), **completion** of names, and **rename** of context elements and states, which updates
-  every reference (a qualified `Sales.Order` keeps its context). Contexts, fields and parameters are not renamed, since
-  their names also appear outside references (in qualified names, expressions and terms).
+- **Go to definition** and **find references** for types, states, events, errors, field sets and the commands of
+  policies, across files and contexts (`Sales.Order` included).
+- **Hover**: kind, name, Japanese name, `///` description, the expression of an invariant or requirement, the
+  `emits` entries of a command and the policies that run it, the reaction of a policy, and the policies that react to
+  an event.
+- **Outline** (document symbols), **completion** of names, and **rename** of context elements, states and commands
+  (a command is referenced by policies), which updates every reference (a qualified `Sales.Order` keeps its context).
+  Contexts, fields and parameters are not renamed, since their names also appear outside references (in qualified
+  names, expressions and terms).
 
 The workspace is the config found from `--root` or `--config` when given, else from the client's (first) workspace
 folder, else from the current directory, exactly as `dt check` would find it there (with the same sources, `.gitignore`

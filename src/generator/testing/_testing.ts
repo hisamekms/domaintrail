@@ -434,3 +434,100 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
     if (s.invariants) out.push(...declaredTodos(s.name.slice(0, s.name.indexOf('.')), s.declaredInvariants, s.givenInvariants, 'invariant'));
     return out;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Policies (ADR 0022)
+
+/** Whether `v` is a value of a base type: Decimals are strings of digits, Timestamps valid Dates. */
+export function isBase(v: unknown, b: Base): boolean {
+    switch (b) {
+        case 'Int':
+            return Number.isInteger(v);
+        case 'Decimal':
+            return typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v);
+        case 'Bool':
+            return typeof v === 'boolean';
+        case 'Timestamp':
+            return v instanceof Date && !Number.isNaN(v.getTime());
+        case 'String':
+        case 'UUID':
+            return typeof v === 'string';
+    }
+}
+
+export const isObject = (v: unknown): boolean => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** A property of the input of a policy's command: the target aggregate's ID or a parameter. */
+export interface InputFieldSpec {
+    readonly name: string;
+    readonly optional: boolean;
+    /** A collection, with the bounds of its multiplicity. */
+    readonly many: boolean;
+    readonly lower?: number;
+    readonly upper?: number;
+    /** Whether one value (an element of a collection) is of the type, holding its invariants. */
+    readonly valid: (v: unknown) => boolean;
+}
+
+export interface PolicySpec {
+    /** The policy, and its reaction as written: `when Sales.OrderConfirmed -> Invoice.issue`. */
+    readonly name: string;
+    readonly reaction: string;
+    /** The handler under test, as your code wired it. */
+    readonly handler: (event: never) => Promise<unknown>;
+    /** The events it reacts to; made when the case runs. */
+    readonly event: () => fc.Arbitrary<unknown>;
+    readonly input: readonly InputFieldSpec[];
+}
+
+/** Runs the async `predicate` for generated inputs; throws with the (shrunk) counterexample. */
+export async function asyncProperty<A>(arb: fc.Arbitrary<A>, options: RunOptions, predicate: (a: A) => Promise<void>): Promise<void> {
+    await fc.assert(fc.asyncProperty(arb, predicate), { seed: options.seed ?? DEFAULT_SEED, numRuns: options.runs ?? DEFAULT_RUNS, includeErrorInReport: true });
+}
+
+/** The first field of `fields` that `v` (an object) does not hold validly, and why; `undefined` when all are valid. */
+export function invalidField(v: Record<string, unknown>, fields: readonly InputFieldSpec[]): string | undefined {
+    for (const f of fields) {
+        const x = v[f.name];
+        if (x === undefined) {
+            if (f.optional) continue;
+            return `'${f.name}' is missing`;
+        }
+        if (!f.many) {
+            if (!f.valid(x)) return `'${f.name}' is not a valid value of its type: ${show(x)}`;
+            continue;
+        }
+        if (!Array.isArray(x)) return `'${f.name}' is not a list: ${show(x)}`;
+        if (x.length < (f.lower ?? 0) || (f.upper !== undefined && x.length > f.upper)) return `'${f.name}' has ${x.length} elements; declared [${f.lower ?? 0}..${f.upper ?? '*'}]`;
+        const bad = x.find((e) => !f.valid(e));
+        if (bad !== undefined) return `'${f.name}' holds an invalid value: ${show(bad)}`;
+    }
+    return undefined;
+}
+
+/** Whether `v` is an object whose fields are valid (a value object or entity). */
+export const validFields = (v: unknown, fields: readonly InputFieldSpec[]): boolean => isObject(v) && invalidField(v as Record<string, unknown>, fields) === undefined;
+
+/**
+ * A required policy: for every event, the handler resolves to an input that the command accepts, as far as it is
+ * checkable at run time: every property present unless optional, of its type (the fields of value objects and entities
+ * in turn), holding the invariants of its type, and a collection within its multiplicity. The handler runs as your
+ * code wired it, with whatever data it reads.
+ */
+export function policyCases(s: PolicySpec, options: RunOptions): TestCase[] {
+    const handler = s.handler as (event: unknown) => Promise<unknown>;
+    const run = (): Promise<void> =>
+        asyncProperty(s.event(), options, async (event) => {
+            const call = `${s.name}(${show(event)})`;
+            let input: unknown;
+            try {
+                input = await handler(structuredClone(event));
+            } catch (e) {
+                fail(`${call} rejected with ${e instanceof Error ? e.message : show(e)}; the handler of a policy resolves every event to the input of its command.`);
+            }
+            if (!isObject(input)) fail(`${call} resolved to ${show(input)}; expected the input of the command, an object.`);
+            const why = invalidField(input as Record<string, unknown>, s.input);
+            if (why) fail(`${call} resolved to an input that the command does not accept: ${why}. Input: ${show(input)}`);
+        });
+    return [{ name: `${s.name} (${s.reaction}) resolves every event to an input that the command accepts`, run }];
+}

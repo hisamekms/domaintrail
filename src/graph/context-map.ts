@@ -30,15 +30,19 @@ const COUNTED: { kind: ElementKind; ja: string; en: string }[] = [
     { kind: 'event', ja: 'ドメインイベント', en: 'events' },
 ];
 
-/** `ID 12 · 型 3` / `ID 12 · type 3`, leaving out zero counts. */
-export function dependencyCounts(ids: number, types: number): Texts {
+/** `ID 12 · 型 3 · イベント 1` / `ID 12 · type 3 · event 1`, leaving out zero counts. */
+export function dependencyCounts(ids: number, types: number, events = 0): Texts {
     const part = (word: string, n: number): string[] => (n ? [`${word} ${n}`] : []);
-    return perLang({ ja: [...part('ID', ids), ...part('型', types)].join(' · '), en: [...part('ID', ids), ...part('type', types)].join(' · ') });
+    return perLang({
+        ja: [...part('ID', ids), ...part('型', types), ...part('イベント', events)].join(' · '),
+        en: [...part('ID', ids), ...part('type', types), ...part('event', events)].join(' · '),
+    });
 }
 
 /**
  * Context Map: one node per bounded context and one edge per pair of contexts with a dependency, from the
- * dependent to its dependency. Edges that borrow types (not only IDs) are drawn solid. Without `all`, shared
+ * dependent to its dependency. Edges that borrow types (not only IDs) are drawn solid; so are those of policies that react
+ * to events of the other context (counted as events). Without `all`, shared
  * contexts and contexts that only declare IDs are left out, since nearly everything depends on them.
  */
 export function buildContextMapGraph(model: DomainModel, opts: { all?: boolean } = {}): Graph {
@@ -68,10 +72,10 @@ export function buildContextMapGraph(model: DomainModel, opts: { all?: boolean }
         .map((g) => ({
             // `<from>|<to>`: selecting the edge selects the dependent context
             id: `${g.from}|${g.to}`,
-            kind: g.types > 0 ? 'dependsOn' : 'references',
+            kind: g.types > 0 || g.events > 0 ? 'dependsOn' : 'references',
             source: contextNodeId(g.from),
             target: contextNodeId(g.to),
-            label: dependencyCounts(g.ids, g.types),
+            label: dependencyCounts(g.ids, g.types, g.events),
         }));
     return { id: opts.all ? CONTEXT_MAP_ALL_GRAPH_ID : CONTEXT_MAP_GRAPH_ID, nodes, edges };
 }

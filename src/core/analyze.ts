@@ -9,12 +9,14 @@ import {
     isEventDecl,
     isFieldSet,
     isIdType,
+    isPolicy,
     isPrimitiveDecl,
     isUnionDecl,
     isValueObject,
     isVerifiedDecl,
     type ContextElement,
     type Model,
+    type Policy,
 } from '../language/generated/ast.js';
 import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
@@ -27,13 +29,14 @@ import { checkInvariants } from './checker/expressions.js';
 import { checkLabels } from './checker/labels.js';
 import { checkNames } from './checker/names.js';
 import { checkPayloadNames } from './checker/payloads.js';
+import { checkPolicies } from './checker/policies.js';
 import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
 import { checkUnions } from './checker/unions.js';
 import { checkVerified } from './checker/verified.js';
 import { DiagnosticSink, compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from './diagnostics.js';
-import { ModelIndex, statesOf } from './model-index.js';
+import { ModelIndex, commandsOf, statesOf } from './model-index.js';
 import { didYouMean, suggestFrom, type Candidate } from './suggest.js';
 
 export interface SourceFile {
@@ -93,14 +96,17 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
             const data = d.data as { property?: string; refText?: string } | undefined;
             const property = data?.property ?? '';
             const node = isLink ? nodeAt(doc, d.range.start.line, d.range.start.character) : undefined;
-            const hint = node && linkHint(index, node, property, data?.refText ?? '');
+            const policy = node && AstUtils.getContainerOfType(node, isPolicy);
+            const link = policy ? policyLink(index, policy, property, data?.refText ?? '') : undefined;
+            if (link === null) continue;
+            const hint = link ? link.hint : node && linkHint(index, node, property, data?.refText ?? '');
             diagnostics.push({
                 file: resolveFile(doc.uri.toString()),
                 start: { line: d.range.start.line + 1, column: d.range.start.character + 1 },
                 end: { line: d.range.end.line + 1, column: d.range.end.character + 1 },
                 severity: d.severity === 2 ? 'warning' : 'error',
-                code: isLink ? (LINK_RULES[property] ?? 'M001') : 'SYNTAX',
-                message: isLink ? linkMessage(property, data?.refText ?? '') : typeof d.message === 'string' ? d.message : d.message.value,
+                code: link ? 'M023' : isLink ? (LINK_RULES[property] ?? 'M001') : 'SYNTAX',
+                message: link ? link.message : isLink ? linkMessage(property, data?.refText ?? '') : typeof d.message === 'string' ? d.message : d.message.value,
                 ...(hint ? { hint } : {}),
                 elementId: node && elementIdOf(node),
             });
@@ -120,6 +126,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkChanges(index, sink);
         checkEventIds(index, sink);
         checkPayloadNames(index, sink);
+        checkPolicies(index, sink);
         checkInvariants(index, sink);
         checkTsNames(index, sink);
         checkLabels(index, sink);
@@ -194,6 +201,34 @@ function linkHint(index: ModelIndex, node: AstNode, property: string, refText: s
         }
     }
     return didYouMean(refText, candidates);
+}
+
+/**
+ * M023: the unresolved names of a policy, with what to write instead (`null`: not reported, for the command of an
+ * aggregate that is itself unresolved). Its aggregate is one of its own context, so an
+ * aggregate of another context means the policy is declared in the wrong context; its command is one of that aggregate.
+ */
+function policyLink(index: ModelIndex, policy: Policy, property: string, refText: string): { message: string; hint?: string } | null {
+    const ctx = policy.$container.name;
+    if (property === 'event') {
+        return { message: `Policy '${policy.name}' reacts to event '${refText}', which does not exist${refText.includes('.') ? '' : ` in context '${ctx}' (use Context.Name for other contexts)`}.`, hint: linkHint(index, policy, 'event', refText) };
+    }
+    if (property === 'aggregate') {
+        const elsewhere = index.aggregates.filter((a) => a.name === refText && a.$container.name !== ctx);
+        if (elsewhere.length) {
+            const owner = elsewhere[0].$container.name;
+            return {
+                message: `Policy '${policy.name}' runs a command of '${owner}.${refText}', but a policy runs a command of its own context '${ctx}'.`,
+                hint: `declare the policy in context '${owner}' (the context that reacts), or run a command of an aggregate of '${ctx}'`,
+            };
+        }
+        const local = index.aggregates.filter((a) => a.$container.name === ctx).map((a) => a.name);
+        return { message: `Policy '${policy.name}' runs a command of aggregate '${refText}', which is not an aggregate of context '${ctx}'.`, hint: suggestFrom(refText, local, `an aggregate of '${ctx}'`) };
+    }
+    const agg = policy.aggregate.ref;
+    if (!agg) return null; // the aggregate is reported, and the command cannot be looked up
+    const commands = agg && isAggregate(agg) ? commandsOf(agg).map((c) => c.name) : [];
+    return { message: `Policy '${policy.name}' runs '${policy.aggregate.$refText}.${refText}', but '${policy.aggregate.$refText}' has no command '${refText}'.`, hint: suggestFrom(refText, commands, `a command of '${policy.aggregate.$refText}'`) };
 }
 
 function nodeAt(doc: LangiumDocument, line: number, character: number): AstNode | undefined {

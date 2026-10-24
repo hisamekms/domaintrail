@@ -459,6 +459,12 @@ code.block {
     background: var(--purple-tint);
     color: var(--purple-text);
 }
+/* a policy: when an event happens, a command runs (Event Storming's lilac sticky between the two) */
+.kind-policy {
+    background: var(--bg);
+    color: var(--purple-text);
+    border: 1px dashed var(--purple);
+}
 .change {
     margin-left: 6px;
     padding: 1px 6px;
@@ -1383,6 +1389,14 @@ select,
 .band-error {
     background: var(--error);
 }
+.band-policy {
+    background: var(--purple);
+}
+.bcard-reaction {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
 .bcard-name {
     font-size: 12px;
     font-weight: 400;
@@ -1869,6 +1883,11 @@ select,
 }
 .dot-command {
     background: var(--purple);
+}
+.dot-policy {
+    background: transparent;
+    border: 1.5px dashed var(--purple);
+    transform: rotate(45deg);
 }
 .tree-change {
     width: 7px;

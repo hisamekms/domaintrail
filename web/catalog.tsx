@@ -15,6 +15,8 @@ import {
     isCatalogFiltered,
     namer,
     orderedContexts,
+    policiesReactingTo,
+    policyTarget,
     type CatalogSection,
     type CatalogSectionKey,
     type Namer,
@@ -282,6 +284,21 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
             );
         case 'event':
             return el.fields.length ? <Fields fields={el.fields} ctx={el.context} names={names} /> : <span className="muted">{t.noFields}</span>;
+        case 'policy': {
+            const target = policyTarget(model, el);
+            return (
+                <ul className="card-fields">
+                    <li>
+                        <span>when</span>
+                        <code>{el.policy ? names.id(el.policy.event) : ''}</code>
+                    </li>
+                    <li>
+                        <span>→</span>
+                        <code>{target ? `${names.of(target.agg)}.${names.of(target.command)}` : `${el.policy?.aggregate}.${el.policy?.command}`}</code>
+                    </li>
+                </ul>
+            );
+        }
         case 'error':
             return (
                 <>
@@ -302,12 +319,19 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
 /** Where the element is used; for events and errors, the commands that emit or return it. */
 function CardUses({ el, model, names, shared }: { el: ElementModel; model: DomainModel; names: Namer; shared: boolean }) {
     const t = useT();
+    if (el.kind === 'policy') return <>{t.eventually}</>;
     if (el.kind === 'event' || el.kind === 'error') {
         const commands = commandsWithOutcome(model, el.id).map(({ agg, command }) => `${names.of(agg)}.${names.of(command)}`);
         // an error may also be returned by the factory of a verified type
         const factories = Object.values(model.elements).filter((v) => v.verified?.errors.includes(el.id)).map((v) => names.of(v));
-        if (!commands.length && !factories.length) return <>{el.kind === 'event' ? t.raisedByNone : t.returnedByNone}</>;
-        return <>← {[...commands, ...factories].join(', ')}</>;
+        const reactions = el.kind === 'event' ? policiesReactingTo(model, el.id) : [];
+        const from = commands.length || factories.length ? `← ${[...commands, ...factories].join(', ')}` : el.kind === 'event' ? t.raisedByNone : t.returnedByNone;
+        return (
+            <>
+                {from}
+                {reactions.length > 0 && <> · ⇒ {reactions.map((p) => names.of(p)).join(', ')}</>}
+            </>
+        );
     }
     if (el.kind === 'verified') {
         const uses = usagesOf(model, el.id, names.of);

@@ -6,8 +6,9 @@ import { identityOf } from './usages.js';
  * How one bounded context depends on another:
  *   id    an identifier of the other context (`references`, or a field typed with its ID)
  *   type  any other type of the other context (value object, union, enum, domain primitive, event, field set)
+ *   event an event of the other context that a policy reacts to (`policy … when Other.Event -> …`)
  */
-export type DependencyKind = 'id' | 'type';
+export type DependencyKind = 'id' | 'type' | 'event';
 
 /** One use of an element of another context. */
 export interface Dependency {
@@ -16,11 +17,11 @@ export interface Dependency {
     /** Context that declares it. */
     to: string;
     kind: DependencyKind;
-    /** Element that holds the use (aggregate, entity, value object, union, event, error). */
+    /** Element that holds the use (aggregate, entity, value object, union, event, error, policy). */
     source: string;
     /**
-     * Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `with`, `command ⇒ Event`, and
-     * `of`, `for`, `⇒ Error` of a verified type.
+     * Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `with`, `command ⇒ Event`,
+     * `of`, `for`, `⇒ Error` of a verified type, and `when Event` of a policy.
      */
     path: string;
     /** The element used (qualified name). */
@@ -51,6 +52,7 @@ export function contextDependencies(model: DomainModel): Dependency[] {
             if (el.verified.for?.type.kind === 'ref') add(el.verified.for.type.ref, 'for');
             for (const e of el.verified.errors) add(e, `⇒ ${shortName(e)}`);
         }
+        if (el.policy) add(el.policy.event, `when ${shortName(el.policy.event)}`, 'event');
         for (const c of el.commands ?? []) {
             for (const p of c.params) field(p, `${c.name}(${p.name})`);
             for (const e of [...emittedEvents(c), ...c.errors]) add(e, `${c.name} ⇒ ${shortName(e)}`);
@@ -66,6 +68,8 @@ export interface ContextDependency {
     uses: Dependency[];
     ids: number;
     types: number;
+    /** Events that policies react to. */
+    events: number;
 }
 
 /** Dependencies grouped by pair of contexts. */
@@ -73,9 +77,10 @@ export function groupByContext(deps: readonly Dependency[]): ContextDependency[]
     const byPair = new Map<string, ContextDependency>();
     for (const d of deps) {
         const key = `${d.from}->${d.to}`;
-        const g = byPair.get(key) ?? { from: d.from, to: d.to, uses: [], ids: 0, types: 0 };
+        const g = byPair.get(key) ?? { from: d.from, to: d.to, uses: [], ids: 0, types: 0, events: 0 };
         g.uses.push(d);
         if (d.kind === 'id') g.ids++;
+        else if (d.kind === 'event') g.events++;
         else g.types++;
         byPair.set(key, g);
     }

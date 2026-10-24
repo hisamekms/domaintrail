@@ -127,3 +127,4 @@ would add meaning to a verified type, not replace it.
   makes the caller make the check, and a declared requirement belongs to the aggregate's data, not the outside world.
 - **A branded field type stored in the aggregate**: the evidence would outlive the moment it describes; a stored
   `AvailableEmail` claims something nobody re-checked.
+- See also ADR 0022: a reaction to another aggregate's events, the other way to write a rule across aggregates.

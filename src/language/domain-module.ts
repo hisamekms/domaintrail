@@ -14,7 +14,7 @@ import {
     type ReferenceInfo,
     type Scope,
 } from 'langium';
-import { Context, State, isContext, type Model } from './generated/ast.js';
+import { Command, Context, State, isContext, isPolicy, type Model } from './generated/ast.js';
 import { DomainGeneratedModule, DomainGeneratedSharedModule } from './generated/module.js';
 
 /** Export prefix for elements of shared contexts, which are visible by simple name everywhere. */
@@ -52,6 +52,13 @@ export class DomainScopeProvider extends DefaultScopeProvider {
         const referenceType = this.reflection.getReferenceType(context);
         if (referenceType === State.$type) {
             return super.getScope(context);
+        }
+        if (referenceType === Command.$type) {
+            // `Aggregate.command` of a policy: the commands of the aggregate named before the dot
+            const policy = context.container;
+            const agg = isPolicy(policy) ? policy.aggregate?.ref : undefined;
+            const commands = agg ? agg.members.filter((m): m is Command => m.$type === Command.$type) : [];
+            return this.createScopeForNodes(commands);
         }
         const all = this.indexManager.allElements(referenceType).toArray();
         const qualified = this.createScope(all.filter((d) => !d.name.startsWith(SHARED_PREFIX)));

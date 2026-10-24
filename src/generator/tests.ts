@@ -3,7 +3,8 @@ import * as testingSource from './testing/_testing.js' with { type: 'text' };
 import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel } from '../model/model.js';
 import { elementsIn } from '../model/model.js';
 import { aggregateInvariants, checkName, checkWithName, declaredChecksName, declaredRequiresName, hasDeclared, requiresName, requiresWithName, unionInvariants } from './checks.js';
-import { commandTypeName, commandsInterfaceName, makeTypeName, stateTypeName } from './naming.js';
+import { aggregateParamName, commandTypeName, commandsInterfaceName, makeTypeName, policyHandlersName, stateTypeName } from './naming.js';
+import type { PolicyMode } from './typescript.js';
 
 /** The test runners `dt` writes an adapter for (`generate.ts.tests.runner`). */
 export const RUNNERS = ['bun', 'vitest', 'jest', 'node'] as const;
@@ -13,6 +14,8 @@ export interface TestsOptions {
     /** Directory of the test modules (`/`-separated, relative to the output root). */
     dir: string;
     runner?: Runner;
+    /** The mode of each context's policies (absent: `optional`); `required` adds `policies` to `contract(impl)`. */
+    policies?: Readonly<Record<string, PolicyMode>>;
 }
 
 interface File {
@@ -59,7 +62,7 @@ export function generateTests(model: DomainModel, header: string, opts: TestsOpt
     const dir = opts.dir;
     const files: File[] = [{ path: posix.join(dir, '_testing.ts'), content: `${header}\n${TESTING}` }];
     for (const ctx of model.contexts) {
-        files.push({ path: posix.join(dir, `${ctx}.ts`), content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c)).emit() });
+        files.push({ path: posix.join(dir, `${ctx}.ts`), content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required').emit() });
     }
     if (opts.runner) files.push({ path: posix.join(dir, '_register.ts'), content: adapter(header, opts.runner) });
     const index = [
@@ -139,12 +142,16 @@ class TestsEmitter {
     private readonly els: ElementModel[];
     /** Other contexts whose arbitraries are used. */
     private readonly others = new Set<string>();
+    /** Contexts whose types the policy cases check. */
+    private readonly checked = new Set<string>();
 
     constructor(
         private readonly model: DomainModel,
         private readonly ctx: string,
         private readonly header: string,
         private readonly moduleOf: (ctx: string) => string,
+        /** Whether the context's policies are required: `contract` then tests their handlers. */
+        private readonly policiesRequired: boolean,
     ) {
         this.els = elementsIn(model, ctx);
     }
@@ -222,6 +229,9 @@ class TestsEmitter {
                     add(el.name, `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${base})`);
                     break;
                 }
+                case 'event':
+                    add(el.name, `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${this.record([`type: fc.constant('${el.name}' as const)`], el.fields)})`);
+                    break;
                 case 'enum':
                     add(el.name, `given.${el.name} ?? ${el.values?.length ? `fc.constantFrom<${this.type(el.name)}>(${el.values.map((v) => `'${v}'`).join(', ')})` : `fc.constant(undefined as never)`}`);
                     break;
@@ -341,15 +351,70 @@ class TestsEmitter {
         ].join('\n');
     }
 
+    /**
+     * Whether a value is one of type `f`, as an arrow function for the generated policy cases: its base type or enum
+     * value; for a value object or entity, an object whose fields are valid in turn; and the invariants of its type
+     * (the check of another context's type is that context's). A union, an aggregate and a type met again inside itself
+     * are checked as objects with their invariants only.
+     */
+    private validOf(f: FieldModel, outer: ReadonlySet<string> = new Set()): string {
+        if (f.type.kind === 'primitive') return `(v) => testing.isBase(v, '${f.type.name}')`;
+        const el = this.model.elements[f.type.ref];
+        if (!el) return '() => true';
+        const ctx = el.context;
+        const invs = el.kind === 'union' ? unionInvariants(el) : el.kind === 'aggregate' ? [] : el.invariants;
+        const inner = new Set([...outer, el.id]);
+        const shape =
+            el.kind === 'enum' ? `[${(el.values ?? []).map((v) => `'${v}'`).join(', ')}].includes(v as string)`
+            : el.kind === 'id' || el.kind === 'primitive' ? `testing.isBase(v, '${el.base ?? 'String'}')`
+            : (el.kind === 'valueObject' || el.kind === 'entity') && !outer.has(el.id) ? `testing.validFields(v, [${el.fields.map((g) => this.inputField(g, inner)).join(', ')}])`
+            : 'testing.isObject(v)';
+        if (!invs.length) return `(v) => ${shape}`;
+        this.checked.add(ctx);
+        const names = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
+        const check = names.length
+            ? `${ctx}.${checkWithName(el.name)}(testing.declared<${ctx}.${declaredChecksName(el.name)}>([${names.join(', ')}], options.declared?.${ctx}?.${el.name}))`
+            : `${ctx}.${checkName(el.name)}`;
+        return `(v) => ${shape} && ${check}(v as ${ctx}.${el.name}).length === 0`;
+    }
+
+    /** A field of the input of a policy's command (or of a value in it), for `testing.policyCases`. */
+    private inputField(f: FieldModel, outer: ReadonlySet<string> = new Set()): string {
+        const { lower, upper } = bounds(f);
+        const many = f.cardinality === 'many' || f.cardinality === 'nonEmpty';
+        return `{ name: '${f.name}', optional: ${f.cardinality === 'optional'}, many: ${many}${many ? `, lower: ${lower}${upper !== undefined ? `, upper: ${upper}` : ''}` : ''}, valid: ${this.validOf(f, outer)} }`;
+    }
+
+    /** The case of a required policy: every event resolves to an input that the command accepts. */
+    private policyCase(p: ElementModel): string {
+        const { event, aggregate, command } = p.policy!;
+        const agg = this.model.elements[aggregate];
+        const c = agg?.commands?.find((x) => x.name === command);
+        const id = agg?.fields.find((f) => f.name === 'id');
+        const fields = [...(c && !c.factory && id ? [{ ...id, name: aggregateParamName(agg!) }] : []), ...(c?.params ?? [])];
+        const simple = (q: string): string => (q.startsWith(`${this.ctx}.`) ? q.slice(this.ctx.length + 1) : q);
+        return [
+            `...testing.policyCases({`,
+            `    name: '${p.name}',`,
+            `    reaction: 'when ${simple(event)} -> ${simple(aggregate)}.${command}',`,
+            `    handler: impl.policies.${p.name},`,
+            `    event: () => ${this.arb(event)},`,
+            `    input: [${fields.map((f) => this.inputField(f)).join(', ')}],`,
+            `}, options),`,
+        ].join('\n');
+    }
+
     emit(): string {
         const ctx = this.ctx;
         const { members, defs } = this.arbitraries();
         const primitives = this.els.filter((e) => e.kind === 'id' || e.kind === 'primitive');
         const aggregates = this.els.filter((e) => e.kind === 'aggregate' && e.commands?.length);
+        const policies = this.policiesRequired ? this.els.filter((e) => e.kind === 'policy') : [];
         const indent = (text: string, pad: string): string => text.split('\n').map((l) => `${pad}${l}`).join('\n');
         const groups = [
             ...(primitives.length ? [`impl.make && testing.suite('domain primitives', [\n${primitives.map((p) => indent(this.primitiveCase(p), '    ')).join('\n')}\n]),`] : []),
             ...aggregates.map((agg) => `impl.${agg.name} && testing.suite('${agg.name}', [\n${(agg.commands ?? []).map((c) => indent(this.commandCase(agg, c), '    ')).join('\n')}\n]),`),
+            ...(policies.length ? [`testing.suite('policies', [\n${policies.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
         ];
         const all = this.model.contexts;
         const defsText = defs.join('\n');
@@ -395,10 +460,13 @@ class TestsEmitter {
             `    readonly examples?: Examples;`,
             `}`,
             '',
-            `/** What \`contract\` tests: the constructors of domain primitives and the commands of aggregates, each optional. */`,
+            policies.length
+                ? `/** What \`contract\` tests: the constructors of domain primitives and the commands of aggregates, each optional, and the handlers of the policies, required (\`generate.ts.policies\`). */`
+                : `/** What \`contract\` tests: the constructors of domain primitives and the commands of aggregates, each optional. */`,
             `export interface Implementation {`,
             ...(primitives.length ? [`    readonly make?: { ${primitives.map((p) => `readonly ${p.name}?: ${ctx}.${makeTypeName(p)}`).join('; ')} };`] : []),
             ...aggregates.map((agg) => `    readonly ${agg.name}?: ${ctx}.${commandsInterfaceName(agg)};`),
+            ...(policies.length ? [`    readonly policies: ${ctx}.${policyHandlersName(ctx)};`] : []),
             `}`,
             '',
             `/** The arbitraries of ${ctx}, with the overrides, declared checks and examples of the options. */`,
@@ -414,10 +482,12 @@ class TestsEmitter {
             ` * The contract tests of ${ctx} (ADR 0020), as a suite of named cases for any runner: for every \`make<Name>\` passed,`,
             ` * that it accepts exactly the values that hold the invariants; for every aggregate's commands passed, the error of the`,
             ` * first requirement that does not hold, the invariants of the aggregate made, event counts the types do not express,`,
-            ` * and purity. Inputs are generated from the types (deterministic: a fixed seed unless one is passed).`,
+            ` * and purity.${policies.length ? ' For every policy, that its handler resolves each event to an input the command accepts (with the' : ''}`,
+            ...(policies.length ? [` * handlers as your code wired them).`] : []),
+            ` * Inputs are generated from the types (deterministic: a fixed seed unless one is passed).`,
             ` */`,
             `export function contract(impl: Implementation, options: Options = {}): testing.Suite {`,
-            ...(aggregates.length ? [`    const a = arbitraries(options);`] : []),
+            ...(aggregates.length || /\ba\./.test(groupsText) ? [`    const a = arbitraries(options);`] : []),
             ...locals(groupsText, true),
             `    return testing.suite('${ctx}', [`,
             ...groups.map((g) => indent(g, '        ')),
@@ -428,12 +498,15 @@ class TestsEmitter {
         const text = body.join('\n');
         // modules used only for types are imported as types
         const used = (prefix: string): boolean => text.includes(prefix);
+        // other contexts whose checks the policy cases call
+        const checked = all.filter((c) => c !== ctx && this.checked.has(c));
         const imports = [
             this.header,
             `import * as fc from 'fast-check';`,
             ...(usesDecimal ? [`import type { Decimal } from '${this.moduleOf(ctx).replace(/[^/]+\.js$/, '_runtime.js')}';`] : []),
             `import * as testing from './_testing.js';`,
             `import ${used(`${ctx}.check`) ? '' : 'type '}* as ${ctx} from '${this.moduleOf(ctx)}';`,
+            ...checked.map((c) => `import ${used(`${c}.check`) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`),
             ...all.filter((c) => c !== ctx).map((c) => `import ${used(`${c}Tests.arbitraries(`) ? '' : 'type '}* as ${c}Tests from './${c}.js';`),
             '',
         ];

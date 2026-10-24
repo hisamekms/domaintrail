@@ -1,9 +1,12 @@
 import { closest, didYouMean, type Candidate } from '../core/suggest.js';
+import { aggregateParamName } from '../generator/naming.js';
 import {
     elementsIn,
     emitApplies,
     outcomeFields,
     outcomePatternText,
+    policiesReactingTo,
+    policiesRunning,
     type CommandModel,
     type DomainModel,
     type ElementKind,
@@ -115,6 +118,8 @@ export interface UsedBy {
     contextOf: string[];
     /** Unions whose discriminator is bound to the enum. */
     discriminatorOf: string[];
+    /** Policies that react to the event. */
+    reactedToBy: string[];
 }
 
 export function usedBy(model: DomainModel, el: ElementModel): UsedBy {
@@ -140,6 +145,7 @@ export function usedBy(model: DomainModel, el: ElementModel): UsedBy {
         verifiedAs: verifiedTypes.filter((v) => isRef(v.verified!.of, el.id)).map((v) => v.id),
         contextOf: verifiedTypes.filter((v) => v.verified!.for && isRef(v.verified!.for.type, el.id)).map((v) => v.id),
         discriminatorOf: Object.values(model.elements).filter((u) => u.tagType === el.id).map((u) => u.id),
+        reactedToBy: el.kind === 'event' ? policiesReactingTo(model, el.id).map((p) => p.id) : [],
     };
 }
 
@@ -166,7 +172,8 @@ export type ShowJson =
     | { show: 'state'; aggregate: string; state: StateModel; enteredBy: Move[]; leftBy: Move[] }
     | { show: 'command'; aggregate: string; command: CommandJson };
 
-export type CommandJson = CommandModel & { outcomes: Outcome[] };
+/** A command with its outcomes, and the policies that run it (`triggeredBy`, their IDs). */
+export type CommandJson = CommandModel & { outcomes: Outcome[]; triggeredBy: string[] };
 export type ElementJson = Omit<ElementModel, 'commands'> & { commands?: CommandJson[] };
 
 /** A command's outcome that enters or leaves a state. */
@@ -187,7 +194,11 @@ function contextSummary(model: DomainModel, name: string): ContextSummary {
     };
 }
 
-const commandJson = (agg: ElementModel, c: CommandModel): CommandJson => ({ ...c, outcomes: outcomesOf(agg, c) });
+const commandJson = (model: DomainModel, agg: ElementModel, c: CommandModel): CommandJson => ({
+    ...c,
+    outcomes: outcomesOf(agg, c),
+    triggeredBy: policiesRunning(model, agg.id, c.name).map((p) => p.id),
+});
 
 function moves(agg: ElementModel, state: string): { enteredBy: Move[]; leftBy: Move[] } {
     const all = (agg.commands ?? []).flatMap((c) => outcomesOf(agg, c).map((o) => ({ command: c.name, ...(o.from && { from: o.from }), ...(o.to && { to: o.to }) })));
@@ -209,13 +220,13 @@ function showJsonOf(model: DomainModel, target: ShowTarget | undefined): ShowJso
             return { show: 'context', context: contextSummary(model, target.name) };
         case 'element': {
             const { commands, ...rest } = target.el;
-            const element: ElementJson = commands ? { ...rest, commands: commands.map((c) => commandJson(target.el, c)) } : rest;
+            const element: ElementJson = commands ? { ...rest, commands: commands.map((c) => commandJson(model, target.el, c)) } : rest;
             return { show: 'element', element, usedBy: usedBy(model, target.el) };
         }
         case 'state':
             return { show: 'state', aggregate: target.agg.id, state: target.state, ...moves(target.agg, target.state.name) };
         case 'command':
-            return { show: 'command', aggregate: target.agg.id, command: commandJson(target.agg, target.command) };
+            return { show: 'command', aggregate: target.agg.id, command: commandJson(model, target.agg, target.command) };
     }
 }
 
@@ -234,9 +245,10 @@ const KEYWORDS: Record<ElementKind, string> = {
     event: 'event',
     error: 'error',
     fieldSet: 'fields',
+    policy: 'policy',
 };
 
-const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error'];
+const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error', 'policy'];
 
 /** A qualified name as written from `ctx`: without the context when it is `ctx`. */
 const nameFrom = (ctx: string, qname: string): string => (qname.startsWith(`${ctx}.`) ? qname.slice(ctx.length + 1) : qname);
@@ -291,6 +303,7 @@ function elementLine(el: ElementModel, indent: string): string {
         el.base ? `: ${el.base}`
         : el.values ? ` { ${el.values.join(' ')} }`
         : el.states?.length ? ` (states ${el.states.map((s) => s.name).join(', ')})`
+        : el.policy ? ` ${reactionText(el)}`
         : verifiedText(el);
     return `${indent}${el.persistent ? 'persistent ' : ''}${KEYWORDS[el.kind]} ${el.name}${quoted(el.label)}${detail}${at(el.location)}`;
 }
@@ -317,6 +330,10 @@ function contextText(model: DomainModel, ctx: string): string[] {
     ];
 }
 
+/** `when Sales.OrderConfirmed -> Invoice.issue`, the event as written from the policy's context. */
+const reactionText = (p: ElementModel): string =>
+    p.policy ? `when ${nameFrom(p.context, p.policy.event)} -> ${nameFrom(p.context, p.policy.aggregate)}.${p.policy.command}` : '';
+
 /** `place(id: OrderId, customer: CustomerId)` with the parameters' labels. */
 const signature = (c: CommandModel, ctx: string): string => `${c.name}(${c.params.map((p) => fieldText(p, ctx)).join(', ')})`;
 
@@ -334,6 +351,7 @@ function commandLines(model: DomainModel, agg: ElementModel, c: CommandModel, in
     const ctx = agg.context;
     const i2 = `${indent}  `;
     const lines = [...docLines(c.doc, indent), `${indent}${c.factory ? 'create ' : ''}command ${signature(c, ctx)}${quoted(c.label)}${at(c.location)}`];
+    for (const p of policiesRunning(model, agg.id, c.name)) lines.push(`${i2}// triggered by policy ${nameFrom(ctx, p.id)}${quoted(p.label)} ${p.policy ? `when ${nameFrom(ctx, p.policy.event)}` : ''}`.trimEnd());
     for (const t of c.transitions) lines.push(`${i2}${[t.from.join(' | '), '->', t.to.join(' | ')].filter(Boolean).join(' ')}`);
     for (const r of c.requires) {
         lines.push(...docLines(r.doc, i2), `${i2}requires ${r.name}${quoted(r.label)} ${r.source ? `{ ${r.source} }` : '(not expressed in the DSL)'} else ${nameFrom(ctx, r.error)}`);
@@ -387,6 +405,7 @@ const USED_BY: [keyof UsedBy, string][] = [
     ['verifiedAs', 'verified as'],
     ['contextOf', 'context of'],
     ['discriminatorOf', 'discriminator of'],
+    ['reactedToBy', 'reacted to by (policy)'],
 ];
 
 function usedByLines(model: DomainModel, el: ElementModel): string[] {
@@ -395,7 +414,29 @@ function usedByLines(model: DomainModel, el: ElementModel): string[] {
     return lines.length ? ['used by', ...lines] : ['used by: nothing'];
 }
 
+/**
+ * A policy: its reaction, the event with its payload, and the command it runs, with what the application gives it (the
+ * generated `…Input`: the parameters, and for a command that is not a factory the aggregate's ID).
+ */
+function policyText(model: DomainModel, el: ElementModel): string[] {
+    const p = el.policy!;
+    const ctx = el.context;
+    const lines = [...docLines(el.doc, ''), `policy ${el.id}${quoted(el.label)} ${reactionText(el)}${at(el.location)}`];
+    const event = model.elements[p.event];
+    const fields = event?.fields.map((f) => fieldText(f, event.context)).join(', ');
+    lines.push(event ? `  event ${nameFrom(ctx, event.id)}${quoted(event.label)}${fields ? ` { ${fields} }` : ''}${at(event.location)}` : `  event ${p.event} (unresolved)`);
+    const agg = model.elements[p.aggregate];
+    const c = agg?.commands?.find((x) => x.name === p.command);
+    if (!agg || !c) return [...lines, `  command ${nameFrom(ctx, p.aggregate)}.${p.command} (unresolved)`];
+    const id = agg.fields.find((f) => f.name === 'id');
+    const input = [...(c.factory || !id ? [] : [`${aggregateParamName(agg)}: ${typeText(id, ctx)}`]), ...c.params.map((f) => `${f.name}: ${typeText(f, ctx)}${f.multiplicity}`)];
+    lines.push(`  ${c.factory ? 'create ' : ''}command ${nameFrom(ctx, agg.id)}.${signature(c, ctx)}${quoted(c.label)}${at(c.location)}`);
+    lines.push(`  input { ${input.join(', ')} }  // what the application needs to run it, eventually (any mechanism)`);
+    return lines;
+}
+
 function elementText(model: DomainModel, el: ElementModel): string[] {
+    if (el.policy) return policyText(model, el);
     const ctx = el.context;
     const head = [
         el.persistent ? 'persistent ' : '',

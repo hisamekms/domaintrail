@@ -239,6 +239,14 @@ class Layout {
         } else if (ast.isEventDecl(node) || ast.isErrorDecl(node)) this.block(node, node.members, indent);
         else if (ast.isInvariant(node)) this.expressionBody(node, indent);
         else if (ast.isCommand(node)) this.command(node, indent);
+        else if (ast.isPolicy(node)) this.policy(node, indent);
+    }
+
+    /** A policy stays on one line if it fits and has no comments; else `when …` goes on a line of its own, one level deeper. */
+    private policy(node: ast.Policy, indent: number): void {
+        if (this.fits(indent, this.first(node), this.last(node))) return;
+        const when = this.keywords(node, 'when')[0];
+        if (when !== undefined) this.set(when, 'line', indent + INDENT);
     }
 
     private enumeration(node: ast.EnumDecl, indent: number): void {

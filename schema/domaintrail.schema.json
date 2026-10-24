@@ -34,18 +34,24 @@
               "type": "string",
               "default": "generated/domain"
             },
+            "policies": {
+              "description": "Whether the policies of a context must be implemented (ADR 0022): 'optional', a handler type per policy that nothing requires; 'required', also <Context>PolicyHandlers, which the contract tests of the context require. A context's own 'policies' (in 'contexts') overrides this.",
+              "enum": ["optional", "required"],
+              "default": "optional"
+            },
             "contexts": {
-              "description": "Contexts written to a directory of their own instead of 'out', keyed by context name (an unknown name is an error). Each directory gets its own _runtime.ts and an index.ts of its contexts; imports between contexts use relative paths.",
+              "description": "Settings per context, keyed by context name (an unknown name is an error): a directory of its own instead of 'out' (which gets its own _runtime.ts and an index.ts of its contexts; imports between contexts use relative paths), and how its policies are generated.",
               "type": "object",
               "additionalProperties": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["out"],
+                "anyOf": [{ "required": ["out"] }, { "required": ["policies"] }],
                 "properties": {
-                  "out": { "description": "Output directory of this context, inside the directory of this file.", "type": "string" }
+                  "out": { "description": "Output directory of this context, inside the directory of this file.", "type": "string" },
+                  "policies": { "description": "Whether the policies of this context must be implemented; overrides generate.ts.policies.", "enum": ["optional", "required"] }
                 }
               },
-              "examples": [{ "Common": { "out": "packages/shared/src/generated" } }]
+              "examples": [{ "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } }]
             },
             "tests": {
               "description": "Contract tests generated from the model (ADR 0020), written only when this key is present: fast-check arbitraries of the types and a runner-agnostic suite per context. Your project needs fast-check as a (dev) dependency.",

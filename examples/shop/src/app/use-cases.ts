@@ -6,8 +6,7 @@ import { eventList, err, ok, outcome, type Billing, type Common, type Result, ty
 import { customerCommands } from '../domain/customer-commands.js';
 import { invoiceCommands } from '../domain/invoice-commands.js';
 import { orderCommands } from '../domain/order-commands.js';
-import { orderTotal } from '../domain/order-total.js';
-import { makeAmount, makeCustomerId, makeEmailAddress, makeInvoiceId, makeOrderId, makeOrderItemId, makeQuantity, makeSku, parseDecimal } from '../domain/primitives.js';
+import { makeAmount, makeCustomerId, makeEmailAddress, makeOrderId, makeOrderItemId, makeQuantity, makeSku, parseDecimal } from '../domain/primitives.js';
 import type { Cause, DomainEvent, InMemoryEventStore } from './event-store.js';
 import type { Providers } from './providers.js';
 import type { CustomerRepository, InvoiceRepository, OrderRepository, Repository, VersionConflict, Versioned } from './repositories.js';
@@ -182,13 +181,12 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             return commit(orders, aggregate, loaded.value.meta.version, eventList(emitted), cause);
         },
 
-        /** Billing: bills a confirmed order for its total. Called by the policy on `OrderConfirmed`. */
-        async issueInvoice(order: Sales.OrderId, cause = request()): Promise<Result<Billing.OpenInvoice, AppError>> {
-            const loaded = await load(orders, 'Order', order);
-            if (!loaded.ok) return loaded;
-            const confirmed = loaded.value.aggregate;
-            if (confirmed.state !== 'Confirmed') return notAllowed('issue', confirmed.state);
-            const r = invoiceCommands.issue(makeInvoiceId(providers.newId('invoice')), order, orderTotal(confirmed));
+        /**
+         * Billing: issues an invoice. Run by the policy `BillConfirmedOrder` on `OrderConfirmed`, with the input its
+         * handler computed (the generated `IssueInvoiceInput`: the new ID, the order and the amount).
+         */
+        async issueInvoice({ id, order, billedAmount }: Billing.IssueInvoiceInput, cause = request()): Promise<Result<Billing.OpenInvoice, AppError>> {
+            const r = invoiceCommands.issue(id, order, billedAmount);
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(invoices, aggregate, undefined, eventList(emitted), cause);

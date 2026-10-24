@@ -4,4 +4,7 @@ context Billing "請求" {
     paidAt: "支払日時"
     invoiceId: "請求書ID"
   }
+
+  /// 確定した注文は、その合計で請求する。
+  policy BillConfirmedOrder "確定した注文に請求する" when Sales.OrderConfirmed -> Invoice.issue
 }

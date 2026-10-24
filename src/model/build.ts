@@ -24,6 +24,7 @@ import {
     isFieldSet,
     isIdType,
     isOwnsField,
+    isPolicy,
     isPrimitiveDecl,
     isReferenceField,
     isUnionDecl,
@@ -134,6 +135,9 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
             base.invariants = invariantsOf(el.members).map(invariant);
             base.states = statesOf(el).map((s) => state(id, s, loc, field));
             base.commands = commandsOf(el).map((c) => command(id, c, loc, field));
+        } else if (isPolicy(el)) {
+            const qname = (r: { ref?: ContextElement; $refText: string }): string => (r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText);
+            base.policy = { event: qname(el.event), aggregate: qname(el.aggregate), command: el.command.$refText };
         } else {
             Object.assign(base, withFieldSets(el));
             if (isEventDecl(el) && el.persistent) base.persistent = true;
@@ -175,6 +179,7 @@ function kindOf(el: ContextElement): ElementKind {
     if (isEventDecl(el)) return 'event';
     if (isErrorDecl(el)) return 'error';
     if (isFieldSet(el)) return 'fieldSet';
+    if (isPolicy(el)) return 'policy';
     throw new Error(`unknown element ${(el as AstNode).$type}`);
 }
 

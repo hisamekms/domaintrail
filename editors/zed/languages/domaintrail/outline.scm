@@ -18,6 +18,7 @@
 (aggregate_declaration "aggregate" @context name: (_) @name) @item
 (event_declaration "persistent"? @context "event" @context name: (_) @name) @item
 (error_declaration "error" @context name: (_) @name) @item
+(policy_declaration "policy" @context name: (_) @name) @item
 (terms "terms" @name) @item
 
 (state "state" @context name: (_) @name) @item

@@ -5,7 +5,7 @@
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
-export type ElementKind = 'id' | 'primitive' | 'verified' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet';
+export type ElementKind = 'id' | 'primitive' | 'verified' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet' | 'policy';
 
 export type TypeExpr =
     | { kind: 'primitive'; name: PrimitiveName }
@@ -154,6 +154,19 @@ export interface CommandModel extends Described {
     location: Location;
 }
 
+/**
+ * `policy Name when Event -> Aggregate.command`: when the event happens, the command is eventually run, by whatever
+ * mechanism (the same use case, an event bus, a batch). The aggregate belongs to the policy's context.
+ */
+export interface PolicyModel {
+    /** Qualified event name (as written when unresolved). */
+    event: string;
+    /** Qualified name of the target aggregate (as written when unresolved). */
+    aggregate: string;
+    /** Name of the target command in the aggregate. */
+    command: string;
+}
+
 export interface ElementModel extends Described {
     id: string;
     context: string;
@@ -184,6 +197,8 @@ export interface ElementModel extends Described {
     /** Aggregates only. */
     states?: StateModel[];
     commands?: CommandModel[];
+    /** Policies only: the event it reacts to and the command it runs. */
+    policy?: PolicyModel;
 }
 
 /**
@@ -222,6 +237,17 @@ export const elementsIn = (model: DomainModel, ctx: string): ElementModel[] =>
     Object.values(model.elements).filter((e) => e.context === ctx);
 
 export const elementList = (model: DomainModel): ElementModel[] => Object.values(model.elements);
+
+/** The policies of the model, in declaration order. */
+export const policyList = (model: DomainModel): (ElementModel & { policy: PolicyModel })[] =>
+    elementList(model).filter((e): e is ElementModel & { policy: PolicyModel } => e.kind === 'policy' && !!e.policy);
+
+/** The policies that run command `command` of aggregate `aggregate` (qualified). */
+export const policiesRunning = (model: DomainModel, aggregate: string, command: string): ElementModel[] =>
+    policyList(model).filter((p) => p.policy.aggregate === aggregate && p.policy.command === command);
+
+/** The policies that react to event `event` (qualified). */
+export const policiesReactingTo = (model: DomainModel, event: string): ElementModel[] => policyList(model).filter((p) => p.policy.event === event);
 
 /** The element's own fields, without those it takes from field sets. */
 export const ownFields = (el: ElementModel): FieldModel[] => el.fields.filter((f) => !f.fieldSet);

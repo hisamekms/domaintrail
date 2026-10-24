@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium';
-import { isAggregate, isEntity, isEventDecl, isIdType, isPrimitiveDecl, isUnionDecl, isValueObject, isVerifiedDecl } from '../language/generated/ast.js';
+import { isAggregate, isEntity, isEventDecl, isIdType, isPolicy, isPrimitiveDecl, isUnionDecl, isValueObject, isVerifiedDecl } from '../language/generated/ast.js';
 import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
@@ -45,6 +45,12 @@ export function outputsVary(factory: boolean, transitions: OutcomePatternModel[]
     return new Set(transitions.flatMap((t) => t.from.map((f) => output(f, t.to)))).size > 1;
 }
 export const aggregateParamName = (agg: Named): string => camel(agg.name);
+/** The handler of a policy, e.g. `BillConfirmedOrderPolicy`: from the event to the input of its command. */
+export const policyTypeName = (policy: Named): string => `${policy.name}Policy`;
+/** What the application needs to run a command that a policy runs, e.g. `IssueInvoiceInput`. */
+export const inputTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Input`;
+/** The handlers of every policy of a context, e.g. `BillingPolicyHandlers`; implemented when policies are required. */
+export const policyHandlersName = (ctx: string): string => `${ctx}PolicyHandlers`;
 /** Constructor contract of a domain primitive, e.g. `MakeQuantity`; the factory of a verified type, e.g. `MakeAvailableEmail`. */
 export const makeTypeName = (p: Named): string => `Make${p.name}`;
 /** Error returned when a value violates a domain primitive's invariants, e.g. `InvalidQuantity`. */
@@ -86,10 +92,22 @@ export interface GeneratedName {
 export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] {
     const out: GeneratedName[] = [];
     const seen = new Set<string>();
+    /** Commands run by a policy, whose input is generated once. */
+    const inputs = new Set<unknown>();
     for (const el of index.elementsOf(ctx)) {
         // Duplicate declarations are reported by M002 and generated once.
         if (seen.has(el.name)) continue;
         seen.add(el.name);
+        if (isPolicy(el)) {
+            out.push({ name: policyTypeName(el), origin: `the handler of policy '${el.name}'`, node: el });
+            const agg = el.aggregate.ref;
+            const cmd = el.command.ref;
+            if (agg && cmd && !inputs.has(cmd)) {
+                inputs.add(cmd);
+                out.push({ name: inputTypeName(agg, cmd), origin: `the input of '${agg.name}.${cmd.name}'`, node: el });
+            }
+            continue;
+        }
         if (!isAggregate(el)) {
             out.push({ name: el.name, origin: `${KIND_LABELS[el.$type]} '${el.name}'`, node: el });
             if (isIdType(el) || isPrimitiveDecl(el)) {
@@ -149,6 +167,8 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
     if (event) out.push({ name: DOMAIN_EVENT_TYPE, origin: 'the union of the events', node: event });
     const aggregate = index.elementsOf(ctx).find(isAggregate);
     if (aggregate) out.push({ name: AGGREGATE_TYPE, origin: 'the union of the aggregates', node: aggregate });
+    const policy = index.elementsOf(ctx).find(isPolicy);
+    if (policy) out.push({ name: policyHandlersName(ctx), origin: 'the handlers of the policies', node: policy });
     return out;
 }
 

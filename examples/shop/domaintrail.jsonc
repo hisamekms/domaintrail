@@ -5,7 +5,13 @@
   "generate": {
     // src/ imports the generated contracts from here; the contract tests go to generated/domain/tests,
     // with an adapter for bun:test (src/contract.test.ts)
-    "ts": { "out": "generated/domain", "tests": { "runner": "bun" } }
+    "ts": {
+      "out": "generated/domain",
+      // Billing's policies must be implemented (Billing.BillingPolicyHandlers), and the contract tests run them;
+      // the other contexts keep the default, "optional"
+      "contexts": { "Billing": { "policies": "required" } },
+      "tests": { "runner": "bun" }
+    }
   },
   "view": { "port": 4321 }
 }
