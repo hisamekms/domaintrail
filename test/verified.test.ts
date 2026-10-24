@@ -69,7 +69,10 @@ describe('verified types: the checker', () => {
                 errors: ['Sales.EmailTaken'],
             },
         });
-        expect(m.elements['Sales.Reachable'].verified).toEqual({ of: { kind: 'ref', ref: 'Sales.AvailableEmail', text: 'AvailableEmail', target: 'verified' }, errors: [] });
+        expect(m.elements['Sales.Reachable'].verified).toEqual({
+            of: { kind: 'ref', ref: 'Sales.AvailableEmail', text: 'AvailableEmail', target: 'verified' },
+            errors: [],
+        });
         expect(m.elements['Sales.Deliverable'].verified?.for).toMatchObject({ optional: false });
         // the errors of the factory are not the command's
         expect(m.elements['Sales.Customer'].commands!.find((c) => c.name === 'changeEmail')!.errors).toEqual(['Sales.Unchanged']);
@@ -104,7 +107,12 @@ describe('verified types: the checker', () => {
         );
         const m024 = only(a, 'M024');
         expect(m024.map((d) => [d.message, d.hint])).toEqual(
-            ['other', 'checked', 'email', 'mail', 'to'].map(() => [expect.stringMatching(/^Verified type '\w+' is the evidence of a check at one moment and types command parameters only; field '\w+' cannot hold it\.$/), "store the base type 'EmailAddress'"]),
+            ['other', 'checked', 'email', 'mail', 'to'].map(() => [
+                expect.stringMatching(
+                    /^Verified type '\w+' is the evidence of a check at one moment and types command parameters only; field '\w+' cannot hold it\.$/,
+                ),
+                "store the base type 'EmailAddress'",
+            ]),
         );
         expect(codes(a).filter((c) => c !== 'M024' && c !== 'M006')).toEqual([]); // no M004 on top
     });
@@ -120,7 +128,10 @@ describe('verified types: the checker', () => {
   verified Loop2 of Loop1`);
         expect(only(a, 'M024').map((d) => [d.message, d.hint])).toEqual([
             ["Verified type 'OfEntity' must verify a value type, not entity 'Thing'.", "verify a value of 'Thing' instead"],
-            ["Verified type 'OfAggregate' must verify a value type, not aggregate 'Customer'.", "verify a value of 'Customer' instead (its ID type, to verify which Customer is meant)"],
+            [
+                "Verified type 'OfAggregate' must verify a value type, not aggregate 'Customer'.",
+                "verify a value of 'Customer' instead (its ID type, to verify which Customer is meant)",
+            ],
             ["The context of verified type 'OfAggregate' must be a value type, not aggregate 'Customer'.", "name the ID type of 'Customer'"],
             ["The context of verified type 'ForVerified' must be a value type, not verified type 'AvailableEmail'.", "name the base type 'EmailAddress'"],
             ['Verified types verify each other in a cycle: Loop1 -> Loop2 -> Loop1.', 'make one of them verify the type that is stored'],
@@ -139,7 +150,9 @@ describe('verified types: the checker', () => {
 
     test('a verified type is not allowed in a shared context (M014), and generated names do not collide (M011)', async () => {
         const a = await check({ 'c.dt': 'shared context C {\n  verified V of String\n}\n' });
-        expect(only(a, 'M014').map((d) => d.message)).toEqual(["Shared context 'C' can only contain domain primitives, enums, value objects, unions, field sets and terms; found verified type 'V'."]);
+        expect(only(a, 'M014').map((d) => d.message)).toEqual([
+            "Shared context 'C' can only contain domain primitives, enums, value objects, unions, field sets and terms; found verified type 'V'.",
+        ]);
         const b = await check({ 'x.dt': 'context X {\n  verified V of String\n  value MakeV\n}\n' });
         expect(only(b, 'M011').map((d) => d.message)).toEqual(["Generated TypeScript name 'MakeV' for value object 'MakeV' collides with the factory of 'V'."]);
     });
@@ -162,7 +175,11 @@ describe('verified types: the checker', () => {
 `,
         });
         expect(a.diagnostics).toEqual([]);
-        expect(highlight('verified V of String for X?')[0].filter((t) => t.kind === 'keyword').map((t) => t.text)).toEqual(['verified', 'of', 'for']);
+        expect(
+            highlight('verified V of String for X?')[0]
+                .filter((t) => t.kind === 'keyword')
+                .map((t) => t.text),
+        ).toEqual(['verified', 'of', 'for']);
     });
 });
 
@@ -195,7 +212,11 @@ describe('verified types: dt show and dependencies', () => {
             'y.dt': 'context Y {\n  error Bad\n}\n',
         });
         expect(a.diagnostics).toEqual([]);
-        expect(contextDependencies(a.model!).map((d) => `${d.from}->${d.to} ${d.path} ${d.kind}`)).toEqual(['X->Common of type', 'X->Ids for id', 'X->Y ⇒ Bad type']);
+        expect(contextDependencies(a.model!).map((d) => `${d.from}->${d.to} ${d.path} ${d.kind}`)).toEqual([
+            'X->Common of type',
+            'X->Ids for id',
+            'X->Y ⇒ Bad type',
+        ]);
     });
 });
 
@@ -207,7 +228,21 @@ describe('verified types: generated TypeScript', () => {
         const src = path.join(dir, 'src', file);
         return writeFile(src, text).then(() => {
             const r = Bun.spawnSync(
-                [process.execPath, TSC, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM', `src/${file}`],
+                [
+                    process.execPath,
+                    TSC,
+                    '--noEmit',
+                    '--strict',
+                    '--target',
+                    'ES2023',
+                    '--module',
+                    'preserve',
+                    '--moduleResolution',
+                    'bundler',
+                    '--lib',
+                    'ES2023,DOM',
+                    `src/${file}`,
+                ],
                 { cwd: dir },
             );
             return r.stdout.toString() + r.stderr.toString();
@@ -238,7 +273,9 @@ describe('verified types: generated TypeScript', () => {
  * @see sales.dt:9
  */
 export type AvailableEmail = EmailAddress & { readonly 'verified:Sales.AvailableEmail': true };`);
-        expect(ts).toContain('export type MakeAvailableEmail = (value: EmailAddress, context: CustomerId | undefined) => Promise<Result<AvailableEmail, EmailTaken>>;');
+        expect(ts).toContain(
+            'export type MakeAvailableEmail = (value: EmailAddress, context: CustomerId | undefined) => Promise<Result<AvailableEmail, EmailTaken>>;',
+        );
         expect(ts).toContain('export type MakeDeliverable = (value: EmailAddress, context: TenantId) => Promise<Result<Deliverable, never>>;');
         expect(ts).toContain("export type Reachable = AvailableEmail & { readonly 'verified:Sales.Reachable': true };");
         expect(ts).toContain('export type MakeReachable = (value: AvailableEmail) => Promise<Result<Reachable, never>>;');
@@ -272,7 +309,10 @@ export const make: Sales.MakeAvailableEmail = async (value, customer) => (custom
 `,
         );
         expect(out).toBe('');
-        const both = await tsc('both.ts', `import type { Sales } from '../generated/index.js';\nexport const x: Sales.AvailableEmail & Sales.Deliverable = {} as never;\nexport const y: Sales.AvailableEmail & Sales.Deliverable = '' as unknown as Sales.AvailableEmail;\n`);
+        const both = await tsc(
+            'both.ts',
+            `import type { Sales } from '../generated/index.js';\nexport const x: Sales.AvailableEmail & Sales.Deliverable = {} as never;\nexport const y: Sales.AvailableEmail & Sales.Deliverable = '' as unknown as Sales.AvailableEmail;\n`,
+        );
         expect(both).toContain("Property ''verified:Sales.Deliverable'' is missing");
     });
 

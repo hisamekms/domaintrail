@@ -5,7 +5,15 @@ import { useT } from './i18n';
  * Key for the edges of the canvas views; every edge points from the dependent to its dependency. Closed, it leaves a
  * flat tab on the bottom edge of the canvas that opens it.
  */
-export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states'; open: boolean; onToggle: () => void }) {
+export function Legend({
+    view,
+    open,
+    onToggle,
+}: {
+    view: 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states';
+    open: boolean;
+    onToggle: () => void;
+}) {
     const t = useT();
     const words = t.legendRows;
     const rows =
@@ -26,12 +34,12 @@ export function Legend({ view, open, onToggle }: { view: 'contextMap' | 'structu
                       { kind: 'value', text: words.aggregateValue },
                   ]
                 : view === 'structure'
-                ? [
-                      { kind: 'owns', text: words.owns },
-                      { kind: 'references', text: words.references },
-                      { kind: 'value', text: words.value },
-                  ]
-                : [{ kind: 'transition', text: words.transition }];
+                  ? [
+                        { kind: 'owns', text: words.owns },
+                        { kind: 'references', text: words.references },
+                        { kind: 'value', text: words.value },
+                    ]
+                  : [{ kind: 'transition', text: words.transition }];
     return (
         <>
             <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>

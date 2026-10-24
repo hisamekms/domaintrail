@@ -17,7 +17,21 @@ function tsc(...files: string[]): { code: number; output: string } {
 
 function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
     const r = Bun.spawnSync(
-        [process.execPath, TSC, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM', ...files],
+        [
+            process.execPath,
+            TSC,
+            '--noEmit',
+            '--strict',
+            '--target',
+            'ES2023',
+            '--module',
+            'preserve',
+            '--moduleResolution',
+            'bundler',
+            '--lib',
+            'ES2023,DOM',
+            ...files,
+        ],
         { cwd },
     );
     return { code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() };
@@ -39,7 +53,9 @@ afterAll(async () => {
 describe('generated TypeScript', () => {
     test('state-specific fields and the state union are reflected', async () => {
         const sales = await readFile(path.join(dir, 'generated', 'domain', 'Sales.ts'), 'utf8');
-        expect(sales).toMatch(/export interface ConfirmedOrder extends OrderCommon \{\n    readonly state: 'Confirmed';\n(    \/\*\*.*\*\/\n)?    readonly confirmedAt: Timestamp;\n\}/);
+        expect(sales).toMatch(
+            /export interface ConfirmedOrder extends OrderCommon \{\n    readonly state: 'Confirmed';\n(    \/\*\*.*\*\/\n)?    readonly confirmedAt: Timestamp;\n\}/,
+        );
         expect(sales).toContain('export type Order = DraftOrder | ConfirmedOrder | CancelledOrder;');
         expect(sales).not.toMatch(/interface DraftOrder[^}]*confirmedAt/);
     });
@@ -206,7 +222,9 @@ describe('commands with several transitions', () => {
     });
 
     test('the same targets for every transition: a plain function of the union of the sources', () => {
-        expect(code).toContain('/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:21\n */');
+        expect(code).toContain(
+            '/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:21\n */',
+        );
         expect(code).toContain(
             `export type CancelWork = (
     work: DraftWork | InProgressWork,
@@ -221,7 +239,9 @@ describe('commands with several transitions', () => {
     });
 
     test('targets that differ by transition: a contract generic over the input state, and a decision per source state', () => {
-        expect(code).toContain('/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @changes title\n * @emits WorkChanged — exactly once when the command succeeds\n * @see tasks.dt:15\n */');
+        expect(code).toContain(
+            '/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @changes title\n * @emits WorkChanged — exactly once when the command succeeds\n * @see tasks.dt:15\n */',
+        );
         expect(code).toContain(
             `export type ChangeWork = <S extends DraftWork | InProgressWork>(
     work: S,
@@ -289,8 +309,12 @@ export type ChangeWorkDecision = {
     >;`,
         );
         // several sources of one transition: a handler each, with the same outcome; the source's own fields dropped
-        expect(code).toContain('    readonly Completed: (work: CompletedWork) => Result<{\n        readonly Cancelled: {\n            readonly set: NoChanges;');
-        expect(code).toContain('    readonly Cancelled: (work: CancelledWork) => Result<{\n        readonly Cancelled: {\n            readonly set: NoChanges;');
+        expect(code).toContain(
+            '    readonly Completed: (work: CompletedWork) => Result<{\n        readonly Cancelled: {\n            readonly set: NoChanges;',
+        );
+        expect(code).toContain(
+            '    readonly Cancelled: (work: CancelledWork) => Result<{\n        readonly Cancelled: {\n            readonly set: NoChanges;',
+        );
         expect(code).toContain(' * Completed -> Cancelled — set: nothing; carried over: id, title; dropped: completedAt\n');
         // the commands interface is unchanged
         expect(code).toContain('    readonly change: ChangeWork;');
@@ -306,7 +330,9 @@ export type ChangeWorkDecision = {
             ['StepWorkDecision', '{'],
         ]);
         expect(code).not.toContain('ByState');
-        expect(code).toContain("export const WorkShape: Shape = {\n    fields: ['id', 'title'],\n    states: { Draft: [], InProgress: [], Completed: ['completedAt'], Cancelled: [] },\n};");
+        expect(code).toContain(
+            "export const WorkShape: Shape = {\n    fields: ['id', 'title'],\n    states: { Draft: [], InProgress: [], Completed: ['completedAt'], Cancelled: [] },\n};",
+        );
     });
 
     test('callers get the output of the transition of their input state; anything else is a compile error', async () => {
@@ -500,7 +526,9 @@ describe('invariants without an expression', () => {
         const a = await check({ 'factory.dt': FACTORY });
         expect(a.diagnostics).toEqual([]);
         const code = generateTypeScript(a.model!).find((f) => f.path === 'Factory.ts')!.content;
-        expect(code).toContain('/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {');
+        expect(code).toContain(
+            '/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {',
+        );
         expect(code).toContain(' * @invariant registered (登録済みのコード): not expressed in the DSL\n');
         expect(code).toContain("    readonly invariant: 'format' | 'registered';");
     });

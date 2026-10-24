@@ -43,7 +43,14 @@ describe('config file', () => {
     test('paths are relative to the config file; defaults apply', async () => {
         const dir = await project({ 'domaintrail.json': '{ "generate": { "ts": { "out": "src/gen" } } }', 'sub/x.txt': '' });
         const c = await loadConfig({ start: path.join(dir, 'sub') });
-        expect(c).toMatchObject({ root: dir, file: path.join(dir, 'domaintrail.json'), sources: ['**/*.dt'], tsOut: 'src/gen', tsContexts: {}, view: { port: 4321, host: '127.0.0.1' } });
+        expect(c).toMatchObject({
+            root: dir,
+            file: path.join(dir, 'domaintrail.json'),
+            sources: ['**/*.dt'],
+            tsOut: 'src/gen',
+            tsContexts: {},
+            view: { port: 4321, host: '127.0.0.1' },
+        });
     });
 
     test('generate.ts.contexts maps context names to output directories', async () => {
@@ -52,12 +59,16 @@ describe('config file', () => {
     });
 
     test('policies: the mode of a context, else that of the project, else optional', async () => {
-        const dir = await project({ 'domaintrail.json': '{ "generate": { "ts": { "policies": "required", "contexts": { "A": { "policies": "optional" }, "B": { "out": "b" } } } } }' });
+        const dir = await project({
+            'domaintrail.json': '{ "generate": { "ts": { "policies": "required", "contexts": { "A": { "policies": "optional" }, "B": { "out": "b" } } } } }',
+        });
         const c = await loadConfig({ start: dir });
         expect(c).toMatchObject({ tsContexts: { B: 'b' }, tsPolicies: { project: 'required', contexts: { A: 'optional' } } });
         expect(policyModes(c, ['A', 'B', 'C'])).toEqual({ A: 'optional', B: 'required', C: 'required' });
         expect(policyModes(await loadConfig({ start: await project({}) }), ['A'])).toEqual({ A: 'optional' });
-        expect(() => checkTsContexts({ ...c, tsPolicies: { project: 'optional', contexts: { X: 'required' } } }, ['A', 'B'])).toThrow("'generate.ts.contexts' names 'X'");
+        expect(() => checkTsContexts({ ...c, tsPolicies: { project: 'optional', contexts: { X: 'required' } } }, ['A', 'B'])).toThrow(
+            "'generate.ts.contexts' names 'X'",
+        );
     });
 
     test.each([
@@ -77,7 +88,10 @@ describe('config file', () => {
         ['{ "generate": { "ts": { "contexts": { "C": {} } } } }', "'generate.ts.contexts.C' needs 'out' or 'policies'"],
         ['{ "generate": { "ts": { "policies": "always" } } }', "'generate.ts.policies' must be one of 'optional', 'required'"],
         ['{ "generate": { "ts": { "contexts": { "C": { "policies": true } } } } }', "'generate.ts.contexts.C.policies' must be one of 'optional', 'required'"],
-        ['{ "generate": { "ts": { "contexts": { "C": { "out": "../x" } } } } }', "'generate.ts.contexts.C.out' must stay inside the directory of the config file"],
+        [
+            '{ "generate": { "ts": { "contexts": { "C": { "out": "../x" } } } } }',
+            "'generate.ts.contexts.C.out' must stay inside the directory of the config file",
+        ],
         ['{ "generate": { "ts": { "tests": true } } }', "'generate.ts.tests' must be an object"],
         ['{ "generate": { "ts": { "tests": { "runner": "mocha" } } } }', "'generate.ts.tests.runner' must be one of 'bun', 'vitest', 'jest', 'node'"],
         ['{ "generate": { "ts": { "tests": { "out": "../t" } } } }', "'generate.ts.tests.out' must stay inside the directory of the config file"],
@@ -280,7 +294,9 @@ describe('output directories per context', () => {
         const dir = await project({ 'domaintrail.json': config({ contexts: { Nope: { out: 'x' } } }), ...SPLIT_MODEL });
         const r = await run('-r', dir, 'generate', 'ts');
         expect(r.code).toBe(2);
-        expect(r.err.at(-1)).toBe(`${path.join(dir, 'domaintrail.json')}: 'generate.ts.contexts' names 'Nope', which is not a context of the model (contexts: C, S).`);
+        expect(r.err.at(-1)).toBe(
+            `${path.join(dir, 'domaintrail.json')}: 'generate.ts.contexts' names 'Nope', which is not a context of the model (contexts: C, S).`,
+        );
         expect(await ls(dir)).toEqual(['c.dt', 'domaintrail.json', 's.dt']);
     });
 
@@ -288,7 +304,10 @@ describe('output directories per context', () => {
         const dir = await project({ 'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen' } } }), ...SPLIT_MODEL });
         expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
         const manifest = JSON.parse(await Bun.file(path.join(dir, '.domaintrail', 'generated.json')).text());
-        expect(manifest).toEqual({ version: 1, files: ['gen/S.ts', 'gen/_runtime.ts', 'gen/index.ts', 'shared/gen/C.ts', 'shared/gen/_runtime.ts', 'shared/gen/index.ts'] });
+        expect(manifest).toEqual({
+            version: 1,
+            files: ['gen/S.ts', 'gen/_runtime.ts', 'gen/index.ts', 'shared/gen/C.ts', 'shared/gen/_runtime.ts', 'shared/gen/index.ts'],
+        });
 
         // C moves back to out: its old directory is emptied and removed
         await writeFile(path.join(dir, 'domaintrail.json'), config({ out: 'gen' }));
@@ -371,7 +390,7 @@ describe('generated output safety', () => {
             expect(r.err.at(-1)).toBe(`--out must stay inside ${dir} (the directory of the config file, else the root): '${out}'`);
         }
         expect((await readdir(parent)).sort()).toEqual(['a']);
-        expect((await readdir(path.join(parent, 'a')))).toEqual(['b']);
+        expect(await readdir(path.join(parent, 'a'))).toEqual(['b']);
         expect(await readdir(dir)).toEqual(['s.dt']);
     });
 
@@ -382,7 +401,10 @@ describe('generated output safety', () => {
         const outside = await project({ 'victim/gen/S.ts': marked, 'victim/abs.ts': marked, 'linked/S.ts': marked });
         const dir = await project({ 's.dt': MODEL });
         await symlink(path.join(outside, 'linked'), path.join(dir, 'link'));
-        const rel = path.relative(dir, path.join(outside, 'victim', 'gen', 'S.ts')).split(path.sep).join('/');
+        const rel = path
+            .relative(dir, path.join(outside, 'victim', 'gen', 'S.ts'))
+            .split(path.sep)
+            .join('/');
         const files = [rel, path.join(outside, 'victim', 'abs.ts'), 'link/S.ts', `generated/domain/../../${rel}`];
         await mkdir(path.join(dir, '.domaintrail'));
         await writeFile(path.join(dir, '.domaintrail', 'generated.json'), JSON.stringify({ version: 1, files }));

@@ -39,7 +39,12 @@ describe('domain primitive declarations', () => {
         const a = await withOrder('');
         expect(codes(a)).toEqual([]);
         const m = a.model!;
-        expect(m.elements['Sales.Quantity']).toMatchObject({ kind: 'primitive', base: 'Int', label: '数量', invariants: [{ name: 'valid', source: 'value > 0' }] });
+        expect(m.elements['Sales.Quantity']).toMatchObject({
+            kind: 'primitive',
+            base: 'Int',
+            label: '数量',
+            invariants: [{ name: 'valid', source: 'value > 0' }],
+        });
         expect(m.elements['Sales.Email'].invariants.map((i) => [i.name, i.label])).toEqual([
             ['format', '形式'],
             ['maxLength', undefined],
@@ -88,7 +93,9 @@ describe('domain primitive declarations', () => {
 
 describe('domain primitives in other invariants', () => {
     test('compare with literals and with the same domain primitive', async () => {
-        const a = await withOrder('invariant ok { quantity > 0 and quantity <= maxQuantity and quantity in 1..10 and exists(email) implies length(email) > 3 }');
+        const a = await withOrder(
+            'invariant ok { quantity > 0 and quantity <= maxQuantity and quantity in 1..10 and exists(email) implies length(email) > 3 }',
+        );
         expect(codes(a)).toEqual([]);
     });
 
@@ -130,7 +137,21 @@ describe('generated TypeScript for domain primitives', () => {
     const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
     const tsc = (...files: string[]) => {
         const r = Bun.spawnSync(
-            [process.execPath, TSC, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM', ...files],
+            [
+                process.execPath,
+                TSC,
+                '--noEmit',
+                '--strict',
+                '--target',
+                'ES2023',
+                '--module',
+                'preserve',
+                '--moduleResolution',
+                'bundler',
+                '--lib',
+                'ES2023,DOM',
+                ...files,
+            ],
             { cwd: dir },
         );
         return r.stdout.toString() + r.stderr.toString();
@@ -152,7 +173,9 @@ describe('generated TypeScript for domain primitives', () => {
         const sales = await readFile(path.join(dir, 'generated', 'domain', 'Sales.ts'), 'utf8');
         expect(sales).toContain("export type Quantity = number & { readonly __domain: 'Sales.Quantity' };");
         const common = await readFile(path.join(dir, 'generated', 'domain', 'Common.ts'), 'utf8');
-        expect(common).toContain("    readonly type: 'InvalidEmailAddress';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'format' | 'maxLength';");
+        expect(common).toContain(
+            "    readonly type: 'InvalidEmailAddress';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'format' | 'maxLength';",
+        );
         expect(common).toContain('export type MakeEmailAddress = (value: string) => Result<EmailAddress, InvalidEmailAddress>;');
         expect(sales).toContain('export type MakeOrderId = (value: string) => OrderId;');
         expect(common).toContain(' * @invariant format (形式): matches(value, "^[^@\\s]+@[^@\\s]+$")');

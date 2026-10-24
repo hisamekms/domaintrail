@@ -10,8 +10,8 @@
       // Billing's policies must be implemented (Billing.BillingPolicyHandlers), and the contract tests run them;
       // the other contexts keep the default, "optional"
       "contexts": { "Billing": { "policies": "required" } },
-      "tests": { "runner": "bun" }
-    }
+      "tests": { "runner": "bun" },
+    },
   },
-  "view": { "port": 4321 }
+  "view": { "port": 4321 },
 }

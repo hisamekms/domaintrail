@@ -39,12 +39,15 @@ describe('use cases', () => {
 
     test('invalid input is rejected by the constructors of the domain primitives before any command', async () => {
         const shop = createShop(fixedProviders());
-        expect(await shop.app.registerCustomer('x', 'no-at-sign')).toEqual({ ok: false, error: { type: 'InvalidEmailAddress', value: 'no-at-sign', invariant: 'format' } });
+        expect(await shop.app.registerCustomer('x', 'no-at-sign')).toEqual({
+            ok: false,
+            error: { type: 'InvalidEmailAddress', value: 'no-at-sign', invariant: 'format' },
+        });
         const r = await shop.app.addItem(makeOrderId('order-1'), { sku: 'abc', quantity: 1, unitPrice: { amount: '1', currency: 'JPY' } });
         expect(r).toEqual({ ok: false, error: { type: 'InvalidSku', value: 'abc', invariant: 'valid' } });
     });
 
-    test('a command the aggregate\'s state does not accept is not called', async () => {
+    test("a command the aggregate's state does not accept is not called", async () => {
         const { shop, order } = await confirmedOrder();
         const r = await shop.app.addItem(order.id, { sku: 'XYZ-0001', quantity: 1, unitPrice: { amount: '1', currency: 'USD' } });
         expect(r).toEqual({ ok: false, error: { type: 'NotAllowed', command: 'addItem', state: 'Confirmed' } });
@@ -71,7 +74,10 @@ describe('verified types', () => {
         const hanako = await shop.app.registerCustomer('山田 花子', 'hanako@example.com');
         if (!hanako.ok) throw new Error(hanako.error.type);
         const { makeAvailableEmail } = verifications(shop.customers);
-        expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), undefined)).toEqual({ ok: false, error: { type: 'EmailTaken', email: 'hanako@example.com' } });
+        expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), undefined)).toEqual({
+            ok: false,
+            error: { type: 'EmailTaken', email: 'hanako@example.com' },
+        });
         expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), hanako.value.id)).toEqual({ ok: true, value: 'hanako@example.com' });
         expect<unknown>(await makeAvailableEmail(address('taro@example.com'), undefined)).toEqual({ ok: true, value: 'taro@example.com' });
     });
@@ -81,8 +87,14 @@ describe('verified types', () => {
         const hanako = await shop.app.registerCustomer('山田 花子', 'hanako@example.com');
         const ichiro = await shop.app.registerCustomer('佐藤 一郎', 'ichiro@example.com');
         if (!hanako.ok || !ichiro.ok) throw new Error('registration failed');
-        expect<unknown>(await shop.app.registerCustomer('山田 太郎', 'hanako@example.com')).toEqual({ ok: false, error: { type: 'EmailTaken', email: 'hanako@example.com' } });
-        expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'hanako@example.com')).toEqual({ ok: false, error: { type: 'EmailTaken', email: 'hanako@example.com' } });
+        expect<unknown>(await shop.app.registerCustomer('山田 太郎', 'hanako@example.com')).toEqual({
+            ok: false,
+            error: { type: 'EmailTaken', email: 'hanako@example.com' },
+        });
+        expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'hanako@example.com')).toEqual({
+            ok: false,
+            error: { type: 'EmailTaken', email: 'hanako@example.com' },
+        });
         expect<unknown>((await shop.customers.load(ichiro.value.id))?.aggregate.email).toBe('ichiro@example.com');
         expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'ichiro@example.com')).toMatchObject({ ok: true }); // its own address
         expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'ichiro@example.org')).toMatchObject({ ok: true, value: { email: 'ichiro@example.org' } });

@@ -17,7 +17,12 @@ export function checkPolicies(index: ModelIndex, sink: DiagnosticSink): void {
         const policy = p as Policy;
         const event = policy.event.ref;
         if (event && isEventDecl(event) && index.isShared(event.$container.name)) {
-            sink.error('M023', `Policy '${policy.name}' reacts to '${event.$container.name}.${event.name}' of shared context '${event.$container.name}', which cannot hold events.`, policy, 'event');
+            sink.error(
+                'M023',
+                `Policy '${policy.name}' reacts to '${event.$container.name}.${event.name}' of shared context '${event.$container.name}', which cannot hold events.`,
+                policy,
+                'event',
+            );
         }
         const agg = policy.aggregate.ref;
         const command = policy.command.ref;

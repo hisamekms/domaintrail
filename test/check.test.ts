@@ -152,14 +152,22 @@ describe('commands (M006, M007)', () => {
         const work = a.model!.elements['Sales.Work'];
         expect(Object.fromEntries(work.commands!.map((c) => [c.name, c.transitions]))).toEqual({
             open: [{ from: [], to: ['Draft'] }],
-            change: [{ from: ['Draft'], to: ['Draft'] }, { from: ['InProgress'], to: ['InProgress'] }],
+            change: [
+                { from: ['Draft'], to: ['Draft'] },
+                { from: ['InProgress'], to: ['InProgress'] },
+            ],
             start: [{ from: ['Draft'], to: ['InProgress'] }],
             finish: [{ from: ['InProgress'], to: ['Completed'] }],
             cancel: [{ from: ['Draft', 'InProgress'], to: ['Cancelled'] }],
             review: [{ from: ['InProgress'], to: ['InProgress', 'Completed'] }],
-            edit: [{ from: ['Draft'], to: ['Draft'] }, { from: ['InProgress'], to: ['InProgress'] }],
+            edit: [
+                { from: ['Draft'], to: ['Draft'] },
+                { from: ['InProgress'], to: ['InProgress'] },
+            ],
         });
-        expect(work.commands!.find((c) => c.name === 'change')!.emits).toEqual([{ event: 'Sales.WorkChanged', cardinality: 'one', multiplicity: '', lower: 1, upper: 1 }]);
+        expect(work.commands!.find((c) => c.name === 'change')!.emits).toEqual([
+            { event: 'Sales.WorkChanged', cardinality: 'one', multiplicity: '', lower: 1, upper: 1 },
+        ]);
         expect(work.fields.map((f) => f.name)).toContain('note');
     });
 
@@ -176,18 +184,23 @@ describe('commands (M006, M007)', () => {
     });
 
     test('M006 command shape rules', async () => {
-        const a = await checkSales(`${ORDER}
+        const a = await checkSales(
+            `${ORDER}
   id CId: UUID
   aggregate C {
     id: CId
     command a() X -> X
-  }`.replace('command finish(at: Timestamp) Draft -> Done', `command finish(at: Timestamp) Draft -> Done
+  }`.replace(
+                'command finish(at: Timestamp) Draft -> Done',
+                `command finish(at: Timestamp) Draft -> Done
     command none()
     command noSource() -> Done
     command mixed() Draft -> Done, -> Draft
     create command make() Draft -> Draft
     create command make2()
-    create command make3() -> Draft, -> Done`));
+    create command make3() -> Draft, -> Done`,
+            ),
+        );
         expect(only(a, 'M006').map((d) => d.message)).toEqual([
             "Command 'none' must declare its state transitions, e.g. 'Draft -> Submitted' (or be declared with 'create command').",
             "Command 'noSource' has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').",
@@ -204,7 +217,11 @@ describe('commands (M006, M007)', () => {
     test('M006 a state is the source of one transition only; a target listed twice is a warning', async () => {
         const a = await checkSales(ORDER.replace('Draft -> Done', 'Draft -> Draft\n    Done | Draft -> Done | Done'));
         expect(only(a, 'M006').map((d) => [d.severity, d.message, d.start.line])).toEqual([
-            ['error', "State 'Draft' is the source of more than one transition of command 'finish'; its outcome must be decided by one transition (use 'A -> B | C').", 11],
+            [
+                'error',
+                "State 'Draft' is the source of more than one transition of command 'finish'; its outcome must be decided by one transition (use 'A -> B | C').",
+                11,
+            ],
             ['warning', "State 'Done' is listed more than once.", 11],
         ]);
     });
@@ -222,9 +239,7 @@ describe('commands (M006, M007)', () => {
 describe('generated TypeScript names (M011)', () => {
     test('collision between a generated command type and a declared type', async () => {
         const a = await checkSales(`${ORDER} value FinishOrder`);
-        expect(only(a, 'M011')[0].message).toBe(
-            "Generated TypeScript name 'FinishOrder' for value object 'FinishOrder' collides with command 'Order.finish'.",
-        );
+        expect(only(a, 'M011')[0].message).toBe("Generated TypeScript name 'FinishOrder' for value object 'FinishOrder' collides with command 'Order.finish'.");
     });
 
     test('collision with the decision of a command, and with the shape of an aggregate', async () => {
@@ -248,9 +263,7 @@ describe('generated TypeScript names (M011)', () => {
 describe('identity (M013)', () => {
     test('aggregates and entities need their own ID type', async () => {
         const a = await checkSales(`${ORDER} entity Other { id: LineId } value V { id: String }`);
-        expect(only(a, 'M013').map((d) => d.message)).toEqual([
-            "ID type 'LineId' already identifies 'Line'; each Aggregate/Entity needs its own ID type.",
-        ]);
+        expect(only(a, 'M013').map((d) => d.message)).toEqual(["ID type 'LineId' already identifies 'Line'; each Aggregate/Entity needs its own ID type."]);
         const b = await checkSales('aggregate NoId { name: String }');
         expect(codes(b)).toEqual(['M013']);
     });

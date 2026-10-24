@@ -29,7 +29,14 @@ export function checkVerified(index: ModelIndex, sink: DiagnosticSink): void {
         if (isEntity(base) || isAggregate(base)) {
             const what = isEntity(base) ? 'entity' : 'aggregate';
             const id = isAggregate(base) ? ` (its ID type, to verify which ${base.name} is meant)` : '';
-            sink.error('M024', `Verified type '${v.name}' must verify a value type, not ${what} '${base.name}'.`, v, 'base', undefined, `verify a value of '${base.name}' instead${id}`);
+            sink.error(
+                'M024',
+                `Verified type '${v.name}' must verify a value type, not ${what} '${base.name}'.`,
+                v,
+                'base',
+                undefined,
+                `verify a value of '${base.name}' instead${id}`,
+            );
         }
         const context = v.context?.decl?.ref;
         if (isEntity(context) || isAggregate(context) || isVerifiedDecl(context)) {
@@ -41,7 +48,14 @@ export function checkVerified(index: ModelIndex, sink: DiagnosticSink): void {
         for (let next = base; isVerifiedDecl(next); next = next.base?.decl?.ref) {
             if (next === v) {
                 const cycle = [...chain, v].map((x) => x.name).join(' -> ');
-                sink.error('M024', `Verified types verify each other in a cycle: ${cycle}.`, v, 'base', undefined, `make one of them verify the type that is stored`);
+                sink.error(
+                    'M024',
+                    `Verified types verify each other in a cycle: ${cycle}.`,
+                    v,
+                    'base',
+                    undefined,
+                    `make one of them verify the type that is stored`,
+                );
                 break;
             }
             if (chain.includes(next)) break; // a cycle further along, reported at its own members

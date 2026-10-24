@@ -21,7 +21,15 @@ async function modelOf(files: Record<string, string>): Promise<unknown> {
     const a = await check(files);
     expect(a.syntaxOk).toBe(true);
     const strip = (v: unknown): unknown =>
-        Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'location').map(([k, x]) => [k, strip(x)])) : v;
+        Array.isArray(v)
+            ? v.map(strip)
+            : v && typeof v === 'object'
+              ? Object.fromEntries(
+                    Object.entries(v)
+                        .filter(([k]) => k !== 'location')
+                        .map(([k, x]) => [k, strip(x)]),
+                )
+              : v;
     return strip(a.model);
 }
 
@@ -34,14 +42,17 @@ const mapValues = (files: Record<string, string>, f: (text: string) => string) =
  */
 function scramble(text: string): string {
     let n = 0;
-    return text.replace(/("(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/\/[^\n]*)|([ \t]*\n[\s]*|[ \t]+)/g, (all, kept: string | undefined, ws: string | undefined, offset: number) => {
-        if (kept || !ws) return all;
-        n++;
-        const newlines = ws.split('\n').length - 1;
-        if (newlines) return '\n'.repeat(newlines) + ' '.repeat(n % 7);
-        const nearComment = /^\s*\/[/*]/.test(text.slice(offset + ws.length)) || text.slice(0, offset).endsWith('*/');
-        return !nearComment && n % 3 === 0 ? `\n${' '.repeat(n % 5)}` : ' '.repeat(1 + (n % 3));
-    });
+    return text.replace(
+        /("(?:\\.|[^"\\])*"|\/\*[\s\S]*?\*\/|\/\/[^\n]*)|([ \t]*\n[\s]*|[ \t]+)/g,
+        (all, kept: string | undefined, ws: string | undefined, offset: number) => {
+            if (kept || !ws) return all;
+            n++;
+            const newlines = ws.split('\n').length - 1;
+            if (newlines) return '\n'.repeat(newlines) + ' '.repeat(n % 7);
+            const nearComment = /^\s*\/[/*]/.test(text.slice(offset + ws.length)) || text.slice(0, offset).endsWith('*/');
+            return !nearComment && n % 3 === 0 ? `\n${' '.repeat(n % 5)}` : ' '.repeat(1 + (n % 3));
+        },
+    );
 }
 
 describe('formatDomain', () => {

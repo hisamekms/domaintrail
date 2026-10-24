@@ -65,7 +65,14 @@ export function StatesCanvas(props: {
             shown.current = null;
             return;
         }
-        renderGraph(editor, graph, { diff: props.diff, diagnostics: props.diagnostics, previous, mode: props.mode, lang: props.lang, transitionLabels: labels });
+        renderGraph(editor, graph, {
+            diff: props.diff,
+            diagnostics: props.diagnostics,
+            previous,
+            mode: props.mode,
+            lang: props.lang,
+            transitionLabels: labels,
+        });
         if (shown.current !== aggregateId) {
             const saved = cameras.get(aggregateId);
             if (saved) editor.setCamera(saved);
@@ -108,7 +115,13 @@ export function StatesCanvas(props: {
                     <div className="canvas-toolbar">
                         <div className="segmented small" role="group" aria-label={t.transitionLabels}>
                             {TRANSITION_LABELS.map((l) => (
-                                <button key={l} className={labels === l ? 'active' : ''} aria-pressed={labels === l} onClick={() => setLabels(l)} data-tooltip={t.transitionLabelModes[l].hint}>
+                                <button
+                                    key={l}
+                                    className={labels === l ? 'active' : ''}
+                                    aria-pressed={labels === l}
+                                    onClick={() => setLabels(l)}
+                                    data-tooltip={t.transitionLabelModes[l].hint}
+                                >
                                     {t.transitionLabelModes[l].label}
                                 </button>
                             ))}

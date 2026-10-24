@@ -3,12 +3,34 @@ import { createContext, useContext, type ReactNode } from 'react';
 import type { DisplayMode } from '../src/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
 import type { ModelDiff } from '../src/graph/diff';
-import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel, type InvariantModel, type Location, type TypeExpr } from '../src/model/model';
+import {
+    emitSuffix,
+    emittedEvents,
+    type CommandModel,
+    type DomainModel,
+    type ElementModel,
+    type FieldModel,
+    type InvariantModel,
+    type Location,
+    type TypeExpr,
+} from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { Changes, CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
-import { KIND_ORDER, fieldSetUsers, inCatalog, namer, policiesReactingTo, policiesRunning, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
+import {
+    KIND_ORDER,
+    fieldSetUsers,
+    inCatalog,
+    namer,
+    policiesReactingTo,
+    policiesRunning,
+    resolve,
+    selectedFile,
+    type Namer,
+    type Resolved,
+    type Select,
+} from './model-utils';
 import { ownerElement } from './render';
 import { SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
@@ -71,7 +93,6 @@ function revealTargets(r: Resolved): RevealTarget[] {
     }
     return out;
 }
-
 
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
@@ -148,43 +169,43 @@ export function Inspector(props: InspectorProps) {
     const title = names.of({ name: head.name, label: head.label });
     return (
         <NamerContext.Provider value={names}>
-        <div className="inspector">
-            <div className="inspector-head">
-                {history}
-                <div className="inspector-row">
-                    <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
-                    {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
-                    {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} tx={tx} />}
-                    {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
+            <div className="inspector">
+                <div className="inspector-head">
+                    {history}
+                    <div className="inspector-row">
+                        <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
+                        {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
+                        {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} tx={tx} />}
+                        {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
+                    </div>
+                    <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
+                    {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
+                    {head.doc && <p className="doc">{head.doc}</p>}
+                    {revealTargets(r).length > 0 && (
+                        <div className="reveal">
+                            <span className="muted small">{tx.showIn}</span>
+                            {revealTargets(r).map((t) => (
+                                <button key={t} onClick={() => props.onReveal(t, selected)}>
+                                    {tx.reveal[t]}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <DiagnosticList items={diags} />
                 </div>
-                <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
-                {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
-                {head.doc && <p className="doc">{head.doc}</p>}
-                {revealTargets(r).length > 0 && (
-                    <div className="reveal">
-                        <span className="muted small">{tx.showIn}</span>
-                        {revealTargets(r).map((t) => (
-                            <button key={t} onClick={() => props.onReveal(t, selected)}>
-                                {tx.reveal[t]}
+                {tabs.length > 1 && (
+                    <div className="subtabs" role="tablist">
+                        {tabs.map((t) => (
+                            <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'active' : ''} onClick={() => props.onTab(t)}>
+                                {tx.tabs[t]}
                             </button>
                         ))}
                     </div>
                 )}
-                <DiagnosticList items={diags} />
-            </div>
-            {tabs.length > 1 && (
-                <div className="subtabs" role="tablist">
-                    {tabs.map((t) => (
-                        <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'active' : ''} onClick={() => props.onTab(t)}>
-                            {tx.tabs[t]}
-                        </button>
-                    ))}
+                <div className={`inspector-body${tab === 'source' || tab === 'states' ? ' inspector-body-full' : ''}`}>
+                    <Body {...props} r={r} tab={tab} />
                 </div>
-            )}
-            <div className={`inspector-body${tab === 'source' || tab === 'states' ? ' inspector-body-full' : ''}`}>
-                <Body {...props} r={r} tab={tab} />
             </div>
-        </div>
         </NamerContext.Provider>
     );
 }
@@ -236,9 +257,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             <>
                 <Fields title={tx.stateFields} fields={state.fields} ctx={agg.context} onSelect={onSelect} empty={tx.noStateFields} />
                 <Invariants items={state.invariants} title={tx.stateInvariants} labelOnly />
-                <p className="muted small">
-                    {tx.commonFieldsAt(<a onClick={() => onSelect(agg.id)}>{names.of(agg)}</a>)}
-                </p>
+                <p className="muted small">{tx.commonFieldsAt(<a onClick={() => onSelect(agg.id)}>{names.of(agg)}</a>)}</p>
             </>
         );
     }
@@ -256,12 +275,24 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                             <Requirements c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
                         </Section>
                     )}
-                    {!c.factory && <Section title={tx.changedFields}>{c.changes.length ? <Changes agg={agg} c={c} names={names} /> : <span className="muted">{tx.none}</span>}</Section>}
+                    {!c.factory && (
+                        <Section title={tx.changedFields}>
+                            {c.changes.length ? <Changes agg={agg} c={c} names={names} /> : <span className="muted">{tx.none}</span>}
+                        </Section>
+                    )}
                     <Section title={tx.mayRaise}>
-                        {c.emits.length ? c.emits.map((e, i) => <OutcomeRow key={i} model={model} id={e.event} suffix={emitSuffix(e)} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
+                        {c.emits.length ? (
+                            c.emits.map((e, i) => <OutcomeRow key={i} model={model} id={e.event} suffix={emitSuffix(e)} onSelect={onSelect} />)
+                        ) : (
+                            <span className="muted">{tx.none}</span>
+                        )}
                     </Section>
                     <Section title={tx.mayReturn}>
-                        {c.errors.length ? c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
+                        {c.errors.length ? (
+                            c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />)
+                        ) : (
+                            <span className="muted">{tx.none}</span>
+                        )}
                     </Section>
                     <PolicyList title={tx.triggeredBy} policies={policiesRunning(model, agg.id, c.name)} onSelect={onSelect} />
                 </>
@@ -272,7 +303,8 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                 <Fields title={tx.params} fields={c.params} ctx={agg.context} onSelect={onSelect} empty={tx.noParams} />
                 <Section title={tx.contract}>
                     <code className="block">
-                        {c.factory ? 'create ' : ''}command {c.name}({c.params.map((p) => `${p.name}: ${namer('name', model).type(p.type, agg.context)}${p.multiplicity}`).join(', ')})
+                        {c.factory ? 'create ' : ''}command {c.name}(
+                        {c.params.map((p) => `${p.name}: ${namer('name', model).type(p.type, agg.context)}${p.multiplicity}`).join(', ')})
                     </code>
                 </Section>
             </>
@@ -283,7 +315,13 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     if (tab === 'behavior') {
         return (
             <>
-                <CommandList title={tx.counted(tx.commands, el.commands?.length ?? 0)} agg={el} model={model} commands={el.commands ?? []} onSelect={onSelect} />
+                <CommandList
+                    title={tx.counted(tx.commands, el.commands?.length ?? 0)}
+                    agg={el}
+                    model={model}
+                    commands={el.commands ?? []}
+                    onSelect={onSelect}
+                />
                 <AggregateOutcomes agg={el} model={model} kind="errors" onSelect={onSelect} />
             </>
         );
@@ -400,7 +438,17 @@ function VerifiedBody({ el, onSelect }: { el: ElementModel; onSelect: Select }) 
 }
 
 /** Dependencies of a context on others (or of others on it), one collapsible group per context with every use. */
-function Dependencies({ title, groups, other, onSelect }: { title: string; groups: ContextDependency[]; other: (g: ContextDependency) => string; onSelect: Select }) {
+function Dependencies({
+    title,
+    groups,
+    other,
+    onSelect,
+}: {
+    title: string;
+    groups: ContextDependency[];
+    other: (g: ContextDependency) => string;
+    onSelect: Select;
+}) {
     const names = useNames();
     const tx = useT();
     const lang = useLang();
@@ -418,7 +466,9 @@ function Dependencies({ title, groups, other, onSelect }: { title: string; group
                             <a onClick={() => onSelect(u.source)}>{names.id(u.source)}</a>
                             <span className="muted">.{u.path} → </span>
                             <a onClick={() => onSelect(u.target)}>{names.id(u.target)}</a>
-                            <span className={`dep-kind dep-${u.kind}`}>{u.kind === 'id' ? 'ID' : u.kind === 'event' ? tx.eventDependency : tx.typeDependency}</span>
+                            <span className={`dep-kind dep-${u.kind}`}>
+                                {u.kind === 'id' ? 'ID' : u.kind === 'event' ? tx.eventDependency : tx.typeDependency}
+                            </span>
                         </div>
                     ))}
                 </details>
@@ -496,7 +546,8 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
         [tx.contextOf, contextOf],
     ];
     const policies = el.kind === 'event' ? policiesReactingTo(model, el.id) : [];
-    if (!typeUses.length && !idUses.length && !commands.length && !users.length && !policies.length && !verifiedLists.some(([, l]) => l.length)) return <p className="muted">{tx.unreferenced}</p>;
+    if (!typeUses.length && !idUses.length && !commands.length && !users.length && !policies.length && !verifiedLists.some(([, l]) => l.length))
+        return <p className="muted">{tx.unreferenced}</p>;
     return (
         <>
             <PolicyList title={tx.reactedToBy} policies={policies} onSelect={onSelect} />
@@ -564,14 +615,31 @@ function PolicyList({ title, policies, onSelect }: { title: string; policies: El
             {policies.map((p) => (
                 <div key={p.id} className="sub">
                     <a onClick={() => onSelect(p.id)}>{names.of(p)}</a>
-                    {p.policy && <span className="muted small mono"> when {names.id(p.policy.event)} → {names.id(`${p.policy.aggregate}:${p.policy.command}`)}</span>}
+                    {p.policy && (
+                        <span className="muted small mono">
+                            {' '}
+                            when {names.id(p.policy.event)} → {names.id(`${p.policy.aggregate}:${p.policy.command}`)}
+                        </span>
+                    )}
                 </div>
             ))}
         </Section>
     );
 }
 
-function CommandList({ title, agg, model, commands, onSelect }: { title: string; agg: ElementModel; model: DomainModel; commands: CommandModel[]; onSelect: Select }) {
+function CommandList({
+    title,
+    agg,
+    model,
+    commands,
+    onSelect,
+}: {
+    title: string;
+    agg: ElementModel;
+    model: DomainModel;
+    commands: CommandModel[];
+    onSelect: Select;
+}) {
     const names = useNames();
     const tx = useT();
     return (
@@ -681,7 +749,8 @@ function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields
                                 {f.multiplicity}
                                 {f.target && (
                                     <>
-                                        {' '}→{' '}
+                                        {' '}
+                                        →{' '}
                                         <a className="ref" onClick={() => onSelect(f.target!)}>
                                             {names.id(f.target)}
                                         </a>

@@ -14,4 +14,3 @@ export const makeCustomerId: Sales.MakeCustomerId = Sales.makeCustomerId;
 export const makeOrderId: Sales.MakeOrderId = Sales.makeOrderId;
 export const makeOrderItemId: Sales.MakeOrderItemId = Sales.makeOrderItemId;
 export const makeInvoiceId: Billing.MakeInvoiceId = Billing.makeInvoiceId;
-

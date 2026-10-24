@@ -34,7 +34,10 @@ export function locationOf(model: DomainModel | null, id: string): Location | un
 
 /** The original text of the lines `line`..`endLine` (1-based, inclusive). */
 export function linesOf(text: string, range: { line: number; endLine?: number }): string {
-    return text.split(/\r?\n/).slice(range.line - 1, range.endLine ?? range.line).join('\n');
+    return text
+        .split(/\r?\n/)
+        .slice(range.line - 1, range.endLine ?? range.line)
+        .join('\n');
 }
 
 /** Copies the source of the highlighted range, keeping the click from selecting the line underneath. */

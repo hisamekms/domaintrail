@@ -15,7 +15,21 @@ const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
 
 function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
     const r = Bun.spawnSync(
-        [process.execPath, TSC, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', '--lib', 'ES2023,DOM', ...files],
+        [
+            process.execPath,
+            TSC,
+            '--noEmit',
+            '--strict',
+            '--target',
+            'ES2023',
+            '--module',
+            'preserve',
+            '--moduleResolution',
+            'bundler',
+            '--lib',
+            'ES2023,DOM',
+            ...files,
+        ],
         { cwd },
     );
     return { code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() };
@@ -115,7 +129,10 @@ describe('changes in the DSL', () => {
     command g() Draft | Review -> Review changes draftNo, reviewer`);
         // not reported: f (Review -> Review carries `reviewer` over), g (Review -> Review carries both; Draft -> Review sets `reviewer` anyway)
         expect(only(a, 'M021').map((d) => [d.message, d.hint])).toEqual([
-            ["Factory command 'make' sets every field of the new 'Work'; 'changes' does not apply to it.", "remove 'changes title'; the decision of 'make' gives every field"],
+            [
+                "Factory command 'make' sets every field of the new 'Work'; 'changes' does not apply to it.",
+                "remove 'changes title'; the decision of 'make' gives every field",
+            ],
             ["'Work' has no field 'titel'.", "did you mean 'title'?"],
             ["Field 'id' is the identity of 'Work' and never changes.", "remove 'id' from 'changes'"],
             [
@@ -134,13 +151,20 @@ describe('changes in the DSL', () => {
     });
 
     test('M021: an aggregate without states changes its own fields; M002: a field is listed once', async () => {
-        const a = await work('command x() Draft -> Draft, Review -> Review changes title, note, title', 'aggregate Plain { id: WorkId size: Int command grow() changes sise }');
+        const a = await work(
+            'command x() Draft -> Draft, Review -> Review changes title, note, title',
+            'aggregate Plain { id: WorkId size: Int command grow() changes sise }',
+        );
         expect(only(a, 'M002').map((d) => d.message)).toEqual(["Field 'title' is listed more than once in 'changes' of command 'x'."]);
         expect(only(a, 'M021').map((d) => [d.message, d.hint])).toEqual([["'Plain' has no field 'sise'.", "did you mean 'size'?"]]);
     });
 
     test('changes is highlighted as a keyword; a change to it changes its command (and its aggregate)', async () => {
-        expect(highlight('changes note emits X')[0].filter((t) => t.kind === 'keyword').map((t) => t.text)).toEqual(['changes', 'emits']);
+        expect(
+            highlight('changes note emits X')[0]
+                .filter((t) => t.kind === 'keyword')
+                .map((t) => t.text),
+        ).toEqual(['changes', 'emits']);
         const before = await work('command x() Draft -> Draft changes title');
         const after = await work('command x() Draft -> Draft changes title, note');
         expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Tasks.Work', 'Tasks.Work:x'], removed: [] });
@@ -150,8 +174,19 @@ describe('changes in the DSL', () => {
         const a = await work(COMMANDS);
         const agg = a.model!.elements['Tasks.Work'];
         const card = (name: string) =>
-            renderToStaticMarkup(<CommandCard agg={agg} c={agg.commands!.find((c) => c.name === name)!} model={a.model!} names={namer('name', a.model!)} tx={MESSAGES.ja} onSelect={() => {}} />);
-        expect(card('rename')).toContain(`<div class="bcard-caption">${MESSAGES.ja.changedFields}</div><div class="bcard-changes"><code class="bcard-change">title</code><code class="bcard-change">updatedAt</code></div>`);
+            renderToStaticMarkup(
+                <CommandCard
+                    agg={agg}
+                    c={agg.commands!.find((c) => c.name === name)!}
+                    model={a.model!}
+                    names={namer('name', a.model!)}
+                    tx={MESSAGES.ja}
+                    onSelect={() => {}}
+                />,
+            );
+        expect(card('rename')).toContain(
+            `<div class="bcard-caption">${MESSAGES.ja.changedFields}</div><div class="bcard-changes"><code class="bcard-change">title</code><code class="bcard-change">updatedAt</code></div>`,
+        );
         expect(card('submit')).not.toContain('bcard-changes');
     });
 });
@@ -206,7 +241,9 @@ describe('changes in the generated TypeScript', () => {
         );
         expect(code).toContain('export type OpenWorkDecision = (\n    id: WorkId,\n    title: string,\n) => Result<{');
         expect(setOf('RecolorTagDecision', '')).toBe('{ readonly color: string }');
-        expect(code).toContain('export type RecolorTagDecision = (\n    tag: Tag,\n    color: string,\n) => Result<{\n    readonly Tag: {\n        readonly set: { readonly color: string };');
+        expect(code).toContain(
+            'export type RecolorTagDecision = (\n    tag: Tag,\n    color: string,\n) => Result<{\n    readonly Tag: {\n        readonly set: { readonly color: string };',
+        );
     });
 
     test('the JSDoc says what each command changes, and per outcome what is set, carried over and dropped', () => {
@@ -219,12 +256,18 @@ describe('changes in the generated TypeScript', () => {
  */
 export type RenameWorkDecision = {`,
         );
-        expect(code).toContain(' * @changes none — the command changes no common field\n * Review -> Done — set: doneAt (new in Done); carried over: updatedAt, id, title, note, tags, reviewer; dropped: draftNo\n');
-        expect(code).toContain(' * Done -> Archived — set: reviewer (new in Archived); carried over: updatedAt, id, title, note, tags; dropped: reviewer, doneAt\n');
+        expect(code).toContain(
+            ' * @changes none — the command changes no common field\n * Review -> Done — set: doneAt (new in Done); carried over: updatedAt, id, title, note, tags, reviewer; dropped: draftNo\n',
+        );
+        expect(code).toContain(
+            ' * Done -> Archived — set: reviewer (new in Archived); carried over: updatedAt, id, title, note, tags; dropped: reviewer, doneAt\n',
+        );
         expect(code).toContain(' * new -> Draft — set: every field\n');
         expect(code).toContain(' * @changes color\n * Tag — set: color; carried over: id, name\n');
         // the contract says it too
-        expect(code).toContain(' * Work.submit (Draft -> Review)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWork = ');
+        expect(code).toContain(
+            ' * Work.submit (Draft -> Review)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWork = ',
+        );
         expect(code).toContain("export const TagShape: Shape = { fields: ['id', 'name', 'color'] };");
         expect(code).toContain(
             "export const WorkShape: Shape = {\n    fields: ['updatedAt', 'id', 'title', 'note', 'tags'],\n    states: { Draft: ['draftNo'], Review: ['draftNo', 'reviewer'], Done: ['reviewer', 'doneAt'], Archived: ['reviewer'] },\n};",
@@ -268,17 +311,35 @@ export const tag: Tasks.TagCommands = {
     test('a wrong set is a compile error whose message names the field', async () => {
         const cases: [string, string][] = [
             // a field not in changes
-            [`decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, tags: [] }, events: {} } }) })`, "'tags' does not exist in type '{ readonly reviewer: string; }'"],
+            [
+                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, tags: [] }, events: {} } }) })`,
+                "'tags' does not exist in type '{ readonly reviewer: string; }'",
+            ],
             // the new field of the target state left out
-            [`decide<Tasks.FinishWorkDecision>(Tasks.WorkShape, { Review: () => ok({ Done: { set: {}, events: {} } }) })`, "Property 'doneAt' is missing in type '{}'"],
+            [
+                `decide<Tasks.FinishWorkDecision>(Tasks.WorkShape, { Review: () => ok({ Done: { set: {}, events: {} } }) })`,
+                "Property 'doneAt' is missing in type '{}'",
+            ],
             // a field in changes left out (rule 5)
-            [`decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, { Draft: (w, title, at) => ok({ Draft: { set: { title }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }), Review: (w, title, at) => ok({ Review: { set: { title, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }) })`, "Property 'updatedAt' is missing in type '{ title: string; }'"],
+            [
+                `decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, { Draft: (w, title, at) => ok({ Draft: { set: { title }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }), Review: (w, title, at) => ok({ Review: { set: { title, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }) })`,
+                "Property 'updatedAt' is missing in type '{ title: string; }'",
+            ],
             // nothing to set
-            [`decide<Tasks.TouchWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: { title: 'x' }, events: {} } }) })`, "'title' does not exist in type 'NoChanges'"],
+            [
+                `decide<Tasks.TouchWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: { title: 'x' }, events: {} } }) })`,
+                "'title' does not exist in type 'NoChanges'",
+            ],
             // a carried-over field not in changes
-            [`decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, draftNo: 2 }, events: {} } }) })`, "'draftNo' does not exist in type '{ readonly reviewer: string; }'"],
+            [
+                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, draftNo: 2 }, events: {} } }) })`,
+                "'draftNo' does not exist in type '{ readonly reviewer: string; }'",
+            ],
             // without states
-            [`decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, color) => ok({ Tag: { set: { color, name: 'x' }, events: {} } }))`, "'name' does not exist in type '{ readonly color: string; }'"],
+            [
+                `decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, color) => ok({ Tag: { set: { color, name: 'x' }, events: {} } }))`,
+                "'name' does not exist in type '{ readonly color: string; }'",
+            ],
         ];
         await writeFile(
             path.join(dir, 'src', 'wrong.ts'),
@@ -303,7 +364,10 @@ export const tag: Tasks.TagCommands = {
             Review: (...args: unknown[]) => (calls.push(args), ok({ Done: { set: { doneAt: 5 }, events: { X: 1 } } })),
         });
         // common fields carried over (`note` absent stays absent), `reviewer` carried over, `draftNo` dropped
-        expect(finish(review, 5)).toEqual({ ok: true, value: { Done: { aggregate: { state: 'Done', id: 'w1', title: 'T', tags: ['a'], reviewer: 'r', doneAt: 5 }, events: { X: 1 } } } });
+        expect(finish(review, 5)).toEqual({
+            ok: true,
+            value: { Done: { aggregate: { state: 'Done', id: 'w1', title: 'T', tags: ['a'], reviewer: 'r', doneAt: 5 }, events: { X: 1 } } },
+        });
         expect(calls).toEqual([[review, 5]]);
         // the handler of the input's state; set replaces, `undefined` clears
         const rename = decide(WorkShape, {
@@ -315,9 +379,13 @@ export const tag: Tasks.TagCommands = {
         expect(rename(review)).toEqual({ ok: false, error: { type: 'NotReady' } });
         // several outcomes: only the one decided, keyed by its state
         const two = decide(WorkShape, { Draft: () => ok({ Review: { set: { reviewer: 'r' }, events: {} }, Draft: undefined }) });
-        expect(two(draft).value).toEqual({ Review: { aggregate: { state: 'Review', id: 'w1', title: 'T', note: 'n', tags: [], draftNo: 1, reviewer: 'r' }, events: {} } });
+        expect(two(draft).value).toEqual({
+            Review: { aggregate: { state: 'Review', id: 'w1', title: 'T', note: 'n', tags: [], draftNo: 1, reviewer: 'r' }, events: {} },
+        });
         // a factory: the aggregate is the state and set
-        const open = decide(WorkShape, (id: string) => ok({ Draft: { set: { updatedAt: undefined, id, title: 'T', note: undefined, tags: [], draftNo: 1 }, events: {} } }));
+        const open = decide(WorkShape, (id: string) =>
+            ok({ Draft: { set: { updatedAt: undefined, id, title: 'T', note: undefined, tags: [], draftNo: 1 }, events: {} } }),
+        );
         expect(open('w2').value.Draft.aggregate).toEqual({ state: 'Draft', id: 'w2', title: 'T', tags: [], draftNo: 1 });
         // without states: no state tag; a field not in set is taken from the input
         const recolor = decide(TagShape, (t: object, color: string) => ok({ Tag: { set: { color }, events: {} } }));

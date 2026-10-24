@@ -6,14 +6,57 @@ export interface Token {
 }
 
 const KEYWORDS = new Set([
-    'shared', 'context', 'terms', 'id', 'primitive', 'verified', 'of', 'for', 'enum', 'value', 'union', 'by', 'entity', 'aggregate', 'state', 'owns', 'references',
-    'create', 'command', 'requires', 'else', 'changes', 'emits', 'when', 'errors', 'persistent', 'event', 'error', 'invariant', 'fields', 'with', 'policy',
-    'and', 'or', 'not', 'implies', 'in', 'count', 'exists', 'all', 'any', 'length', 'matches', 'unique', 'contains', 'true', 'false',
+    'shared',
+    'context',
+    'terms',
+    'id',
+    'primitive',
+    'verified',
+    'of',
+    'for',
+    'enum',
+    'value',
+    'union',
+    'by',
+    'entity',
+    'aggregate',
+    'state',
+    'owns',
+    'references',
+    'create',
+    'command',
+    'requires',
+    'else',
+    'changes',
+    'emits',
+    'when',
+    'errors',
+    'persistent',
+    'event',
+    'error',
+    'invariant',
+    'fields',
+    'with',
+    'policy',
+    'and',
+    'or',
+    'not',
+    'implies',
+    'in',
+    'count',
+    'exists',
+    'all',
+    'any',
+    'length',
+    'matches',
+    'unique',
+    'contains',
+    'true',
+    'false',
 ]);
 const PRIMITIVES = new Set(['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID']);
 
-const TOKEN =
-    /(\/\*[\s\S]*?\*\/)|(\/\/\/[^\n]*)|(\/\/[^\n]*)|("(?:\\.|[^"\\\n])*"?)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)|(\s+|[^\sA-Za-z_\d"/]+|\/)/g;
+const TOKEN = /(\/\*[\s\S]*?\*\/)|(\/\/\/[^\n]*)|(\/\/[^\n]*)|("(?:\\.|[^"\\\n])*"?)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)|(\s+|[^\sA-Za-z_\d"/]+|\/)/g;
 
 /** Splits DSL source into lines of coloured tokens (comments may span lines). */
 export function highlight(source: string): Token[][] {
@@ -36,8 +79,7 @@ export function highlight(source: string): Token[][] {
             const end = m.index + text.length;
             const isFieldName = /^\s*:/.test(source.slice(end, end + 16));
             push(KEYWORDS.has(word) && !isFieldName ? 'keyword' : PRIMITIVES.has(word) ? 'primitive' : /^[A-Z]/.test(word) ? 'type' : 'name', text);
-        }
-        else push('plain', text);
+        } else push('plain', text);
     }
     return lines;
 }

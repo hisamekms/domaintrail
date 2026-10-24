@@ -108,7 +108,11 @@ export function formatDomain(text: string): string {
     if (parsed.lexerErrors.length || parsed.parserErrors.length) {
         throw new FormatError(parsed.lexerErrors[0]?.message ?? parsed.parserErrors[0].message);
     }
-    const comments: Comment[] = services.parser.Lexer.tokenize(text).hidden.map((t) => ({ text: t.image, offset: t.startOffset, end: t.startOffset + t.image.length }));
+    const comments: Comment[] = services.parser.Lexer.tokenize(text).hidden.map((t) => ({
+        text: t.image,
+        offset: t.startOffset,
+        end: t.startOffset + t.image.length,
+    }));
     const tokens = parsed.value.$cstNode ? leavesOf(parsed.value.$cstNode).map(tokenOf) : [];
     const layout = new Layout(text, tokens, comments);
     layout.model(parsed.value);
@@ -124,7 +128,15 @@ function verify(input: string, output: string, tokens: Token[], comments: Commen
     const actual = parsed.value.$cstNode ? leavesOf(parsed.value.$cstNode).map((l) => l.text) : [];
     const outComments = services!.parser.Lexer.tokenize(output).hidden.map((t) => t.image);
     const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
-    if (parsed.lexerErrors.length || parsed.parserErrors.length || !same(expected, actual) || !same(comments.map((c) => c.text), outComments)) {
+    if (
+        parsed.lexerErrors.length ||
+        parsed.parserErrors.length ||
+        !same(expected, actual) ||
+        !same(
+            comments.map((c) => c.text),
+            outComments,
+        )
+    ) {
         throw new Error(`internal error: formatting would change the file's tokens (${input.length} characters)`);
     }
 }
@@ -310,7 +322,10 @@ class Layout {
 
     print(): string {
         type Item = { offset: number; end: number; token?: number; comment?: Comment };
-        const items: Item[] = [...this.tokens.map((t, i) => ({ offset: t.offset, end: t.end, token: i })), ...this.comments.map((c) => ({ offset: c.offset, end: c.end, comment: c }))];
+        const items: Item[] = [
+            ...this.tokens.map((t, i) => ({ offset: t.offset, end: t.end, token: i })),
+            ...this.comments.map((c) => ({ offset: c.offset, end: c.end, comment: c })),
+        ];
         items.sort((a, b) => a.offset - b.offset);
         const nextToken = (k: number): number | undefined => {
             for (let j = k + 1; j < items.length; j++) {

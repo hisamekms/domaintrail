@@ -223,7 +223,8 @@ describe('layout', () => {
 describe('diff', () => {
     test('identifies added, changed and removed elements, states and commands', async () => {
         const before = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId state X state Y command go() X -> Y } value V }' })).model!;
-        const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() X -> Z } value W }' })).model!;
+        const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() X -> Z } value W }' }))
+            .model!;
         const d = diffModels(before, after);
         expect(d.added.sort()).toEqual(['S.A#Z', 'S.W']);
         expect(d.changed.sort()).toEqual(['S.A', 'S.A:go']);

@@ -7,7 +7,16 @@ import type { InvariantModel } from '../src/model/model.js';
 import { CardHead, Invariants as CardInvariants } from '../web/catalog.js';
 import { MESSAGES } from '../web/i18n.js';
 import { Invariants as InspectorInvariants } from '../web/inspector.js';
-import { catalogSections, commandsWithOutcome, filterCatalog, inCatalog, isCatalogFiltered, matchesQuery, namer, type CatalogFilter } from '../web/model-utils.js';
+import {
+    catalogSections,
+    commandsWithOutcome,
+    filterCatalog,
+    inCatalog,
+    isCatalogFiltered,
+    matchesQuery,
+    namer,
+    type CatalogFilter,
+} from '../web/model-utils.js';
 import { EXAMPLES } from './helpers.js';
 
 async function shopModel() {

@@ -6,7 +6,20 @@ import { ownerElement } from './render';
 export type Select = (id: string) => void;
 
 /** Order of element kinds in lists and the explorer (their names: `kinds` in i18n). */
-export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error', 'policy'];
+export const KIND_ORDER: ElementKind[] = [
+    'aggregate',
+    'entity',
+    'valueObject',
+    'union',
+    'primitive',
+    'verified',
+    'id',
+    'enum',
+    'fieldSet',
+    'event',
+    'error',
+    'policy',
+];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
@@ -114,12 +127,13 @@ export function matchesQuery(el: ElementModel, query: string): boolean {
  */
 export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter): (CatalogSection & { shown: number })[] {
     return sections.map((s) => {
-        const groups = filter.sections.length && !filter.sections.includes(s.key)
-            ? []
-            : s.groups
-                  .filter((g) => filter.contexts === null || filter.contexts.includes(g.context))
-                  .map((g) => ({ ...g, items: g.items.filter((e) => matchesQuery(e, filter.query)) }))
-                  .filter((g) => g.items.length > 0);
+        const groups =
+            filter.sections.length && !filter.sections.includes(s.key)
+                ? []
+                : s.groups
+                      .filter((g) => filter.contexts === null || filter.contexts.includes(g.context))
+                      .map((g) => ({ ...g, items: g.items.filter((e) => matchesQuery(e, filter.query)) }))
+                      .filter((g) => g.items.length > 0);
         return { ...s, groups, shown: groups.reduce((n, g) => n + g.items.length, 0) };
     });
 }

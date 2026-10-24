@@ -39,7 +39,9 @@ describe('dt show', () => {
         expect(r.out).toContain('  invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }');
         expect(r.out).toContain('  state Cancelled "取消済み"  // sales/order.dt:37');
         expect(r.out).toContain('    reason: CancelReason "取消理由" (from term)');
-        expect(r.out).toContain('  create command place(id: OrderId "注文ID" (from type), customer: CustomerId "顧客ID" (from type)) "注文する"  // sales/order.dt:26');
+        expect(r.out).toContain(
+            '  create command place(id: OrderId "注文ID" (from type), customer: CustomerId "顧客ID" (from type)) "注文する"  // sales/order.dt:26',
+        );
         expect(r.out).toContain('    emits OrderCancelled, RefundRequested when Confirmed ->');
         expect(r.out).toContain('      Confirmed -> Cancelled: emits OrderCancelled, RefundRequested');
         expect(r.out).toContain('    emits NoteChanged?');
@@ -108,7 +110,14 @@ describe('dt show', () => {
     test('without a name: the contexts and their elements', async () => {
         const r = await shop();
         expect(r.code).toBe(0);
-        expect(r.out.slice(0, 6)).toEqual(['context Billing "請求"', '  aggregate Invoice', '  id InvoiceId', '  event InvoicePaid', '  policy BillConfirmedOrder', 'shared context Common "共通"']);
+        expect(r.out.slice(0, 6)).toEqual([
+            'context Billing "請求"',
+            '  aggregate Invoice',
+            '  id InvoiceId',
+            '  event InvoicePaid',
+            '  policy BillConfirmedOrder',
+            'shared context Common "共通"',
+        ]);
         expect(r.out).toContain('shared context Common "共通"');
     });
 
@@ -199,7 +208,14 @@ describe('dt show --format json', () => {
         expect(doc.element.fields.find((f: { name: string }) => f.name === 'note')).toMatchObject({ label: '備考', labelSource: 'term', multiplicity: '?' });
         const cancel = doc.element.commands.find((c: { name: string }) => c.name === 'cancel');
         expect(cancel.outcomes).toEqual([
-            { from: 'Draft', to: 'Cancelled', emits: [{ event: 'Sales.OrderCancelled', multiplicity: '', lower: 1, upper: 1 }], sets: ['reason'], carries: ['id', 'items', 'customer', 'note'], drops: [] },
+            {
+                from: 'Draft',
+                to: 'Cancelled',
+                emits: [{ event: 'Sales.OrderCancelled', multiplicity: '', lower: 1, upper: 1 }],
+                sets: ['reason'],
+                carries: ['id', 'items', 'customer', 'note'],
+                drops: [],
+            },
             {
                 from: 'Confirmed',
                 to: 'Cancelled',
@@ -238,7 +254,13 @@ describe('dt show --format json', () => {
         const context = await json('Billing');
         expect(context.context).toMatchObject({ name: 'Billing', label: '請求', shared: false });
         expect(context.context.elements[0]).toMatchObject({ id: 'Billing.BillConfirmedOrder', kind: 'policy' });
-        expect(context.context.elements[1]).toEqual({ id: 'Billing.InvoiceId', kind: 'id', name: 'InvoiceId', label: '請求書ID', location: { file: 'billing/invoice.dt', line: 2, endLine: 2 } });
+        expect(context.context.elements[1]).toEqual({
+            id: 'Billing.InvoiceId',
+            kind: 'id',
+            name: 'InvoiceId',
+            label: '請求書ID',
+            location: { file: 'billing/invoice.dt', line: 2, endLine: 2 },
+        });
         const overview = await json();
         expect(overview.show).toBe('overview');
         expect(overview.contexts.map((c: { name: string }) => c.name)).toEqual(['Billing', 'Common', 'Sales']);

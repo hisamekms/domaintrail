@@ -27,7 +27,10 @@ function texts(value: unknown, path = ''): [string, string][] {
 const englishIn = (text: string): string[] => (text.replace(/<[^>]*>/g, '').match(/[A-Za-z]+/g) ?? []).filter((w) => !LATIN_IN_JA.has(w));
 
 /** Paths of the message tree (`a.b`), so that the languages can be compared. */
-const paths = (value: unknown): string[] => texts(value).map(([p]) => p).sort();
+const paths = (value: unknown): string[] =>
+    texts(value)
+        .map(([p]) => p)
+        .sort();
 
 /**
  * Latin words allowed in Japanese messages: abbreviations, the DSL's keywords and file names, which are written as
@@ -48,9 +51,7 @@ describe('i18n', () => {
     });
 
     test('Japanese messages leave no English words untranslated', () => {
-        const english = texts(MESSAGES.ja).flatMap(([path, text]) =>
-            englishIn(text).map((w) => `${path}: ${w}`),
-        );
+        const english = texts(MESSAGES.ja).flatMap(([path, text]) => englishIn(text).map((w) => `${path}: ${w}`));
         expect(english).toEqual([]);
     });
 

@@ -103,7 +103,10 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
     component(shape: DomainNodeShape) {
         const p = shape.props;
         return (
-            <HTMLContainer className={`dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`} style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}>
+            <HTMLContainer
+                className={`dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`}
+                style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}
+            >
                 {p.kind === 'initial' ? (
                     <div className="dn-initial">{p.label}</div>
                 ) : (
@@ -210,7 +213,10 @@ export class DomainGroupUtil extends BaseBoxShapeUtil<DomainGroupShape> {
     component(shape: DomainGroupShape) {
         const p = shape.props;
         return (
-            <HTMLContainer className={`dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`} style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}>
+            <HTMLContainer
+                className={`dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`}
+                style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}
+            >
                 <div className="dg-label">{p.label}</div>
                 {p.lines.length > 0 && (
                     <div className="dg-desc">
@@ -259,7 +265,13 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
     override canBind = () => false;
 
     getGeometry(shape: DomainEdgeShape) {
-        const pts = shape.props.points.length >= 2 ? shape.props.points : [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+        const pts =
+            shape.props.points.length >= 2
+                ? shape.props.points
+                : [
+                      { x: 0, y: 0 },
+                      { x: 1, y: 1 },
+                  ];
         return new Polyline2d({ points: pts.map((p) => new Vec(p.x, p.y)) });
     }
 
@@ -289,12 +301,28 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
 }
 
 /** An edge's label, centred in its box; a second, smaller line (a transition's events) goes under the first. */
-function EdgeLabel({ label, sub, faded, lx, ly, lw, lh, scale }: Pick<DomainEdgeShape['props'], 'label' | 'sub' | 'faded' | 'lx' | 'ly' | 'lw' | 'lh' | 'scale'>) {
+function EdgeLabel({
+    label,
+    sub,
+    faded,
+    lx,
+    ly,
+    lw,
+    lh,
+    scale,
+}: Pick<DomainEdgeShape['props'], 'label' | 'sub' | 'faded' | 'lx' | 'ly' | 'lw' | 'lh' | 'scale'>) {
     const x = lx + lw / 2;
     const top = ly + (lh - (TRANSITION_LINE_HEIGHT + (sub ? TRANSITION_SUB_LINE_HEIGHT : 0)) * scale) / 2;
     return (
         <>
-            <text x={x} y={top + (TRANSITION_LINE_HEIGHT / 2) * scale} className={`de-label${faded ? ' de-faded' : ''}`} style={{ fontSize: 13 * scale }} textAnchor="middle" dominantBaseline="central">
+            <text
+                x={x}
+                y={top + (TRANSITION_LINE_HEIGHT / 2) * scale}
+                className={`de-label${faded ? ' de-faded' : ''}`}
+                style={{ fontSize: 13 * scale }}
+                textAnchor="middle"
+                dominantBaseline="central"
+            >
                 {label}
             </text>
             {sub && (

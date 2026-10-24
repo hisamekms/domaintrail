@@ -1,5 +1,15 @@
 import type { AstNode } from 'langium';
-import { isEntity, isIdType, isValueObject, type Aggregate, type Command, type ErrorDecl, type EventDecl, type IdType, type State } from '../../language/generated/ast.js';
+import {
+    isEntity,
+    isIdType,
+    isValueObject,
+    type Aggregate,
+    type Command,
+    type ErrorDecl,
+    type EventDecl,
+    type IdType,
+    type State,
+} from '../../language/generated/ast.js';
 import { emitApplies } from '../../model/model.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import { commandsOf, commonFields, fieldsOf, identityField, includedFields, type FieldLike, type ModelIndex } from '../model-index.js';
@@ -93,7 +103,15 @@ export function checkPayloadNames(index: ModelIndex, sink: DiagnosticSink): void
                 checkPayload(report, 'event', ev, [...params, ...aggregateSources(agg, targets)], { node, property: 'event' });
             }
 
-            const before = cmd.factory ? params : [...params, ...aggregateSources(agg, outcomes.map((o) => o.from))];
+            const before = cmd.factory
+                ? params
+                : [
+                      ...params,
+                      ...aggregateSources(
+                          agg,
+                          outcomes.map((o) => o.from),
+                      ),
+                  ];
             const errors = new Map<ErrorDecl, Location>();
             for (const r of cmd.requirements) {
                 const err = r.error?.ref;

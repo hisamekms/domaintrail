@@ -142,12 +142,18 @@ describe('unique and contains', () => {
 
     test.each([
         ['unique(total)', "unique() requires a collection, but got 'Decimal'."],
-        ['unique(lines, l => l.note)', "Key 'l.note' of unique() is optional ('String?'); keys must always be present. Group the keys into a value object and use it as the key."],
+        [
+            'unique(lines, l => l.note)',
+            "Key 'l.note' of unique() is optional ('String?'); keys must always be present. Group the keys into a value object and use it as the key.",
+        ],
         ['unique(lines, l => l.sku, l.tags)', "Key 'l.tags' of unique() has type 'String[0..*]', which cannot be compared with '=='."],
         ['unique(lines, l => l.missing)', "'Line' has no field 'missing'."],
         ['contains(total, 1)', "contains() requires a collection, but got 'Decimal'."],
         ['contains(skus, total)', "contains() cannot compare elements of type 'Sku' with 'Decimal'."],
-        ['contains(reasons, reason)', "contains() cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be guarded with exists(...) first."],
+        [
+            'contains(reasons, reason)',
+            "contains() cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be guarded with exists(...) first.",
+        ],
         ['contains(lines, prices)', "contains() cannot compare elements of type 'Line' with 'Money[0..*]'."],
     ])('M009 %s', async (expr, message) => {
         const a = await lists(`invariant i { ${expr} }`);
@@ -173,10 +179,13 @@ describe('unique and contains', () => {
 
 describe('invariants without an expression', () => {
     test('are declared with a label or a description', async () => {
-        const a = await model(`
+        const a = await model(
+            `
     invariant labelled "明細の在庫が引当済み"
     /// The lines were checked against stock.
-    invariant described`, 'invariant both "確定時に通知済み" { total > 0 }');
+    invariant described`,
+            'invariant both "確定時に通知済み" { total > 0 }',
+        );
         expect(a.diagnostics).toEqual([]);
         const order = a.model!.elements['Sales.Order'];
         expect(order.invariants).toEqual([
@@ -184,7 +193,12 @@ describe('invariants without an expression', () => {
             { name: 'described', doc: 'The lines were checked against stock.' },
         ]);
         expect(order.states![1].invariants).toEqual([
-            { name: 'both', label: '確定時に通知済み', source: 'total > 0', expr: { k: 'binary', op: '>', left: { k: 'name', name: 'total' }, right: { k: 'int', value: 0 } } },
+            {
+                name: 'both',
+                label: '確定時に通知済み',
+                source: 'total > 0',
+                expr: { k: 'binary', op: '>', left: { k: 'name', name: 'total' }, right: { k: 'int', value: 0 } },
+            },
         ]);
     });
 

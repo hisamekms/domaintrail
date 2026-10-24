@@ -5,7 +5,19 @@
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
-export type ElementKind = 'id' | 'primitive' | 'verified' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet' | 'policy';
+export type ElementKind =
+    | 'id'
+    | 'primitive'
+    | 'verified'
+    | 'enum'
+    | 'valueObject'
+    | 'union'
+    | 'entity'
+    | 'aggregate'
+    | 'event'
+    | 'error'
+    | 'fieldSet'
+    | 'policy';
 
 export type TypeExpr =
     | { kind: 'primitive'; name: PrimitiveName }
@@ -233,8 +245,7 @@ export interface DomainModel {
     elements: Record<string, ElementModel>;
 }
 
-export const elementsIn = (model: DomainModel, ctx: string): ElementModel[] =>
-    Object.values(model.elements).filter((e) => e.context === ctx);
+export const elementsIn = (model: DomainModel, ctx: string): ElementModel[] => Object.values(model.elements).filter((e) => e.context === ctx);
 
 export const elementList = (model: DomainModel): ElementModel[] => Object.values(model.elements);
 
@@ -274,7 +285,9 @@ export const emittedEvents = (c: CommandModel): string[] => [...new Set(c.emits.
  * aggregate without states) and ends in `to`.
  */
 export const emitApplies = (e: { when?: OutcomePatternModel }, from: string | undefined, to: string | undefined): boolean =>
-    !e.when || ((e.when.from.length === 0 || (from !== undefined && e.when.from.includes(from))) && (e.when.to.length === 0 || (to !== undefined && e.when.to.includes(to))));
+    !e.when ||
+    ((e.when.from.length === 0 || (from !== undefined && e.when.from.includes(from))) &&
+        (e.when.to.length === 0 || (to !== undefined && e.when.to.includes(to))));
 
 /** Whether two fields have the same type: base type, multiplicity, and kind (with the target of a reference). */
 export const sameFieldType = (a: FieldModel, b: FieldModel): boolean =>
@@ -292,7 +305,12 @@ export const sameFieldType = (a: FieldModel, b: FieldModel): boolean =>
  *     fields that source and target both have with the same name and type (not in `changes`);
  *   - `dropped`: the source's own fields that are not carried over.
  */
-export function outcomeFields(agg: ElementModel, c: CommandModel, from: string | undefined, to: string | undefined): { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } {
+export function outcomeFields(
+    agg: ElementModel,
+    c: CommandModel,
+    from: string | undefined,
+    to: string | undefined,
+): { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } {
     const own = (state: string | undefined): FieldModel[] => agg.states?.find((s) => s.name === state)?.fields ?? [];
     const target = own(to);
     if (c.factory) return { set: [...agg.fields, ...target], carried: [], dropped: [] };

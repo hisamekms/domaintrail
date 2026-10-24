@@ -144,7 +144,14 @@ export class ViewSession {
             states[el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
         }
         // Forget layouts of graphs that no longer exist (e.g. removed aggregates).
-        const live = new Set([structure.id, overview.id, aggregates.id, contextMap.id, contextMapAll.id, ...Object.values(states).flatMap((byLabels) => Object.values(byLabels).map((g) => g.id))]);
+        const live = new Set([
+            structure.id,
+            overview.id,
+            aggregates.id,
+            contextMap.id,
+            contextMapAll.id,
+            ...Object.values(states).flatMap((byLabels) => Object.values(byLabels).map((g) => g.id)),
+        ]);
         for (const id of this.layouts.keys()) if (!live.has(id)) this.layouts.delete(id);
         await this.saveLayouts();
 
@@ -167,7 +174,22 @@ export class ViewSession {
     }
 
     private payload(
-        p: Pick<ViewPayload, 'files' | 'sources' | 'status' | 'stale' | 'model' | 'structure' | 'overview' | 'aggregates' | 'states' | 'focusContexts' | 'contextMap' | 'contextMapAll' | 'diagnostics'>,
+        p: Pick<
+            ViewPayload,
+            | 'files'
+            | 'sources'
+            | 'status'
+            | 'stale'
+            | 'model'
+            | 'structure'
+            | 'overview'
+            | 'aggregates'
+            | 'states'
+            | 'focusContexts'
+            | 'contextMap'
+            | 'contextMapAll'
+            | 'diagnostics'
+        >,
     ): ViewPayload {
         return {
             type: 'update',

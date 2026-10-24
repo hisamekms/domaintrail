@@ -1,5 +1,14 @@
 import { AstUtils, type AstNode } from 'langium';
-import { isContext, isEnumDecl, isFieldSet, isPrimitiveDecl, isTypeRef, isUnionDecl, isValueObject, type ContextElement } from '../../language/generated/ast.js';
+import {
+    isContext,
+    isEnumDecl,
+    isFieldSet,
+    isPrimitiveDecl,
+    isTypeRef,
+    isUnionDecl,
+    isValueObject,
+    type ContextElement,
+} from '../../language/generated/ast.js';
 import type { DiagnosticSink } from '../diagnostics.js';
 import type { ModelIndex } from '../model-index.js';
 
@@ -28,19 +37,40 @@ export function checkShared(index: ModelIndex, sink: DiagnosticSink): void {
         const ctx = el.$container.name;
         if (!shared.has(ctx)) continue;
         if (!isPrimitiveDecl(el) && !isEnumDecl(el) && !isValueObject(el) && !isUnionDecl(el) && !isFieldSet(el)) {
-            sink.error('M014', `Shared context '${ctx}' can only contain ${ALLOWED}; found ${kind(el)} '${el.name}'.`, el, 'name', undefined, `move '${el.name}' to a context that is not shared`);
+            sink.error(
+                'M014',
+                `Shared context '${ctx}' can only contain ${ALLOWED}; found ${kind(el)} '${el.name}'.`,
+                el,
+                'name',
+                undefined,
+                `move '${el.name}' to a context that is not shared`,
+            );
         }
         for (const ref of AstUtils.streamAllContents(el).filter(isTypeRef)) {
             const target = ref.decl?.ref;
             const targetCtx = target && AstUtils.getContainerOfType(target, isContext)?.name;
             if (targetCtx && !shared.has(targetCtx)) {
                 const hint = `move '${target.name}' into a shared context, or move '${el.name}' out of '${ctx}'`;
-                sink.error('M014', `Shared context '${ctx}' cannot depend on '${targetCtx}.${target.name}' of a non-shared context.`, ref, undefined, undefined, hint);
+                sink.error(
+                    'M014',
+                    `Shared context '${ctx}' cannot depend on '${targetCtx}.${target.name}' of a non-shared context.`,
+                    ref,
+                    undefined,
+                    undefined,
+                    hint,
+                );
             }
         }
         const prev = definedIn.get(el.name);
         if (prev && prev.$container.name !== ctx) {
-            sink.error('M014', `'${el.name}' is defined in shared contexts '${prev.$container.name}' and '${ctx}'; references by simple name would be ambiguous.`, el, 'name', undefined, `rename one of them, or keep only one`);
+            sink.error(
+                'M014',
+                `'${el.name}' is defined in shared contexts '${prev.$container.name}' and '${ctx}'; references by simple name would be ambiguous.`,
+                el,
+                'name',
+                undefined,
+                `rename one of them, or keep only one`,
+            );
         } else if (!prev) {
             definedIn.set(el.name, el);
         }
@@ -62,6 +92,14 @@ export function checkShared(index: ModelIndex, sink: DiagnosticSink): void {
 }
 
 function kind(el: AstNode): string {
-    const names: Record<string, string> = { Aggregate: 'aggregate', Entity: 'entity', IdType: 'ID', VerifiedDecl: 'verified type', EventDecl: 'event', ErrorDecl: 'error', Policy: 'policy' };
+    const names: Record<string, string> = {
+        Aggregate: 'aggregate',
+        Entity: 'entity',
+        IdType: 'ID',
+        VerifiedDecl: 'verified type',
+        EventDecl: 'event',
+        ErrorDecl: 'error',
+        Policy: 'policy',
+    };
     return names[el.$type] ?? el.$type;
 }

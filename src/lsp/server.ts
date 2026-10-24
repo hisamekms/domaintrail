@@ -1,7 +1,18 @@
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { format } from 'node:util';
-import { AstUtils, CstUtils, DefaultWorkspaceManager, DocumentState, URI, inject, type AstNode, type FileSystemNode, type LangiumDocument, type LangiumSharedCoreServices } from 'langium';
+import {
+    AstUtils,
+    CstUtils,
+    DefaultWorkspaceManager,
+    DocumentState,
+    URI,
+    inject,
+    type AstNode,
+    type FileSystemNode,
+    type LangiumDocument,
+    type LangiumSharedCoreServices,
+} from 'langium';
 import {
     AstNodeHoverProvider,
     DefaultDocumentSymbolProvider,
@@ -75,7 +86,16 @@ export interface LanguageServerOptions {
  * `NearestConfig`). There is one workspace per session.
  */
 export class DomainWorkspace {
-    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, respectGitignore: true, lintHint: true, tsOut: '', tsContexts: {}, tsPolicies: { project: 'optional', contexts: {} }, view: { port: 0, host: '' } };
+    config: ResolvedConfig = {
+        root: process.cwd(),
+        sources: DEFAULT_SOURCES,
+        respectGitignore: true,
+        lintHint: true,
+        tsOut: '',
+        tsContexts: {},
+        tsPolicies: { project: 'optional', contexts: {} },
+        view: { port: 0, host: '' },
+    };
     /** Where the config was searched from: the nearest config of a document is only searched up to it. */
     start = process.cwd();
     /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */
@@ -215,7 +235,10 @@ class NearestConfig {
         const { LangiumDocuments, DocumentBuilder, TextDocuments, WorkspaceLock } = this.shared.workspace;
         const wanted = await this.workspace.files();
         const keep = new Set([...wanted.map((u) => u.toString()), ...TextDocuments.all().map((d) => d.uri)]);
-        const deleted = LangiumDocuments.all.filter((d) => !keep.has(d.uri.toString())).map((d) => d.uri).toArray();
+        const deleted = LangiumDocuments.all
+            .filter((d) => !keep.has(d.uri.toString()))
+            .map((d) => d.uri)
+            .toArray();
         const added = wanted.filter((u) => !LangiumDocuments.hasDocument(u));
         await WorkspaceLock.write((token) => DocumentBuilder.update(added, deleted, token));
         this.diagnostics.schedule();
@@ -338,7 +361,10 @@ class DomainHoverProvider extends AstNodeHoverProvider {
         const kind = kindOf(node);
         const name = 'name' in node && typeof node.name === 'string' ? node.name : undefined;
         if (!kind || !name) return undefined;
-        const documents = this.services.shared.workspace.LangiumDocuments.all.map((d) => d.parseResult.value).filter(ast.isModel).toArray();
+        const documents = this.services.shared.workspace.LangiumDocuments.all
+            .map((d) => d.parseResult.value)
+            .filter(ast.isModel)
+            .toArray();
         const labels = new LabelResolver(new ModelIndex(documents));
         let title = `${kind} \`${name}\``;
         let label = 'label' in node && typeof node.label === 'string' ? node.label : undefined;
@@ -352,7 +378,9 @@ class DomainHoverProvider extends AstNodeHoverProvider {
             label = labels.fieldLabel(node)?.label;
             doc = labels.fieldDoc(node);
         }
-        const owner = ast.isContext(node) ? undefined : elementIdOf(ast.isState(node) || ast.isCommand(node) || ast.isContext(node.$container) ? node : node.$container);
+        const owner = ast.isContext(node)
+            ? undefined
+            : elementIdOf(ast.isState(node) || ast.isCommand(node) || ast.isContext(node.$container) ? node : node.$container);
         const lines = [`**${title}**${label ? ` ${label}` : ''}${owner ? ` — \`${owner}\`` : ''}`];
         if (doc) lines.push(doc);
         if (ast.isInvariant(node) && node.expr) lines.push(`\`\`\`dt\n{ ${cstText(node.expr)} }\n\`\`\``);
@@ -360,7 +388,9 @@ class DomainHoverProvider extends AstNodeHoverProvider {
         if (ast.isCommand(node) && node.emits.length) lines.push(`\`\`\`dt\nemits ${node.emits.map(cstText).join(', ')}\n\`\`\``);
         if (ast.isVerifiedDecl(node)) {
             const errors = node.errors.length ? ` errors ${node.errors.map((e) => e.$refText).join(', ')}` : '';
-            lines.push(`\`\`\`dt\nof ${cstText(node.base)}${node.context ? ` for ${cstText(node.context)}${node.contextOptional ? '?' : ''}` : ''}${errors}\n\`\`\``);
+            lines.push(
+                `\`\`\`dt\nof ${cstText(node.base)}${node.context ? ` for ${cstText(node.context)}${node.contextOptional ? '?' : ''}` : ''}${errors}\n\`\`\``,
+            );
         }
         if (ast.isRequirement(node)) lines.push(`\`\`\`dt\n${node.expr ? `{ ${cstText(node.expr)} } ` : ''}else ${node.error?.$refText ?? ''}\n\`\`\``);
         if (ast.isPolicy(node)) {
@@ -370,14 +400,20 @@ class DomainHoverProvider extends AstNodeHoverProvider {
         const policies = ast.isCommand(node) || ast.isEventDecl(node) ? this.policiesOf(node) : [];
         if (policies.length) {
             const what = ast.isCommand(node) ? 'Run by' : 'Reacted to by';
-            lines.push(`${what} ${policies.map((p) => `policy \`${p.$container.name}.${p.name}\`${ast.isCommand(node) ? ` (when ${p.event.$refText})` : ` (-> ${p.aggregate.$refText}.${p.command.$refText})`}`).join(', ')}`);
+            lines.push(
+                `${what} ${policies.map((p) => `policy \`${p.$container.name}.${p.name}\`${ast.isCommand(node) ? ` (when ${p.event.$refText})` : ` (-> ${p.aggregate.$refText}.${p.command.$refText})`}`).join(', ')}`,
+            );
         }
         return lines.join('\n\n');
     }
 
     /** The policies that run a command or react to an event, in any file. */
     private policiesOf(node: ast.Command | ast.EventDecl): ast.Policy[] {
-        const all = this.services.shared.workspace.LangiumDocuments.all.map((d) => d.parseResult.value).filter(ast.isModel).flatMap((m) => m.contexts.flatMap((c) => c.elements.filter(ast.isPolicy))).toArray();
+        const all = this.services.shared.workspace.LangiumDocuments.all
+            .map((d) => d.parseResult.value)
+            .filter(ast.isModel)
+            .flatMap((m) => m.contexts.flatMap((c) => c.elements.filter(ast.isPolicy)))
+            .toArray();
         return all.filter((p) => (ast.isCommand(node) ? p.command.ref === node : p.event.ref === node));
     }
 }
@@ -448,7 +484,9 @@ class DomainRenameProvider extends DefaultRenameProvider {
         const leaf = this.leafAt(document, params.position);
         if (!leaf || !this.target(document, params.position)) return undefined;
         // on a qualified reference, the name after the context
-        const ref = AstUtils.streamReferences(leaf.astNode).map((r) => r.reference.$refNode).find((n) => !!n && n.offset <= leaf.offset && leaf.end <= n.end);
+        const ref = AstUtils.streamReferences(leaf.astNode)
+            .map((r) => r.reference.$refNode)
+            .find((n) => !!n && n.offset <= leaf.offset && leaf.end <= n.end);
         return lastSegment(document, (ref ?? leaf).range);
     }
 

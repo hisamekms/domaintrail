@@ -54,8 +54,7 @@ const FILES = {
 }`,
 };
 
-const ts = (files: Awaited<ReturnType<typeof check>>, ctx: string): string =>
-    generateTypeScript(files.model!).find((f) => f.path === `${ctx}.ts`)!.content;
+const ts = (files: Awaited<ReturnType<typeof check>>, ctx: string): string => generateTypeScript(files.model!).find((f) => f.path === `${ctx}.ts`)!.content;
 
 describe('field sets', () => {
     test('a valid model checks clean; elements get the fields of their field sets first', async () => {
@@ -149,9 +148,7 @@ describe('field sets', () => {
   aggregate A { id: AId owns e: E }
   entity E { id: EId }
   fields F { e: E }`);
-        expect(only(a, 'M004').map((d) => d.message)).toEqual([
-            "Entity 'E' cannot be embedded as a plain field; declare it with 'owns' inside its aggregate.",
-        ]);
+        expect(only(a, 'M004').map((d) => d.message)).toEqual(["Entity 'E' cannot be embedded as a plain field; declare it with 'owns' inside its aggregate."]);
     });
 
     test('invariants see the fields of field sets; state-specific fields stay in their states', async () => {
@@ -232,9 +229,7 @@ describe('M017: events carry the ID of their aggregate', () => {
 }`,
             'billing.dt': 'context Billing { event Shared { a: Sales.AId } }',
         });
-        expect(only(a, 'M017').map((d) => d.message)).toEqual([
-            "Event 'Ev' emitted by 'B.c' has no field of type 'BId' to tell which 'B' it is about.",
-        ]);
+        expect(only(a, 'M017').map((d) => d.message)).toEqual(["Event 'Ev' emitted by 'B.c' has no field of type 'BId' to tell which 'B' it is about."]);
         const b = await check({
             'billing.dt': 'context Billing { id IId: UUID aggregate I { id: IId command c() emits Sales.Ev } }',
             'sales.dt': 'context Sales { event Ev }',
@@ -262,17 +257,23 @@ describe('field sets: generated TypeScript', () => {
         );
         const sales = ts(a, 'Sales');
         expect(sales).toContain("import type * as Common from './Common.js';");
-        expect(sales).toMatch(/export interface OrderCommon extends Common\.Tenanted \{\n    readonly id: OrderId;\n    readonly items: readonly OrderItem\[\];\n\}/);
+        expect(sales).toMatch(
+            /export interface OrderCommon extends Common\.Tenanted \{\n    readonly id: OrderId;\n    readonly items: readonly OrderItem\[\];\n\}/,
+        );
         expect(sales).toContain('export interface ConfirmedOrder extends OrderCommon {');
         expect(sales).toMatch(/export interface OrderItem extends Common\.Tenanted \{\n    readonly id: OrderItemId;\n\}/);
-        expect(sales).toMatch(/export interface OrderPlaced extends Common\.Tenanted, Performed \{\n    readonly type: 'OrderPlaced';\n    readonly orderId: OrderId;\n\}/);
+        expect(sales).toMatch(
+            /export interface OrderPlaced extends Common\.Tenanted, Performed \{\n    readonly type: 'OrderPlaced';\n    readonly orderId: OrderId;\n\}/,
+        );
         expect(sales).toContain('export interface OrderConfirmed {');
         expect(ts(a, 'Billing')).toMatch(/export interface Invoice extends Sales\.Performed \{\n    readonly id: InvoiceId;\n\}/);
     });
 
     test('unions of the events, the aggregates and the events of each aggregate', () => {
         const sales = ts(a, 'Sales');
-        expect(sales).toContain('/**\n * Events that the commands of Order may emit.\n * @see sales.dt:8\n */\nexport type OrderEvent = OrderPlaced | OrderConfirmed | Billing.Billed;');
+        expect(sales).toContain(
+            '/**\n * Events that the commands of Order may emit.\n * @see sales.dt:8\n */\nexport type OrderEvent = OrderPlaced | OrderConfirmed | Billing.Billed;',
+        );
         expect(sales).toContain('/** Events of Sales. */\nexport type DomainEvent = OrderPlaced | OrderConfirmed;');
         expect(sales).toContain('/** Aggregates of Sales. */\nexport type Aggregate = Order;');
         const common = ts(a, 'Common');
@@ -295,7 +296,10 @@ export const missing: Sales.OrderPlaced = { type: 'OrderPlaced', performedBy: st
 `,
         );
         const tsc = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-        const r = Bun.spawnSync([process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'use.ts'], { cwd: dir });
+        const r = Bun.spawnSync(
+            [process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'use.ts'],
+            { cwd: dir },
+        );
         expect(r.stdout.toString() + r.stderr.toString()).toBe('');
         expect(r.exitCode).toBe(0);
     });
@@ -314,7 +318,14 @@ describe('field sets: Live View', () => {
         const model = (await check(FILES)).model!;
         const order = model.elements['Sales.Order'];
         const html = renderToStaticMarkup(
-            <OutcomeCard id="Sales.OrderPlaced" commands={order.commands!.slice(0, 1)} model={model} names={namer('label', model)} tx={MESSAGES.ja} onSelect={() => {}} />,
+            <OutcomeCard
+                id="Sales.OrderPlaced"
+                commands={order.commands!.slice(0, 1)}
+                model={model}
+                names={namer('label', model)}
+                tx={MESSAGES.ja}
+                onSelect={() => {}}
+            />,
         );
         expect(html.match(/class="field-origin"[^>]*>[^<]*</g)?.map((m) => m.replace(/.*>/, '').replace('<', ''))).toEqual(['テナント所属', '実施記録']);
     });

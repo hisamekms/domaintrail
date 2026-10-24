@@ -18,7 +18,10 @@ export function createShop(providers: Providers, { log = () => {}, onEvent }: { 
     };
     if (onEvent) deps.events.subscribe(onEvent);
     const app = useCases(deps);
-    const billing = billingPolicies({ loadOrder: async (id) => (await deps.orders.load(id))?.aggregate, newInvoiceId: () => makeInvoiceId(providers.newId('invoice')) });
+    const billing = billingPolicies({
+        loadOrder: async (id) => (await deps.orders.load(id))?.aggregate,
+        newInvoiceId: () => makeInvoiceId(providers.newId('invoice')),
+    });
     const policies = registerPolicies(deps.events, deps.invoices, app, billing, log);
     return { ...deps, app, policies };
 }

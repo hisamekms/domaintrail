@@ -22,7 +22,12 @@ export class GitIgnore {
         root = path.resolve(root);
         const top = repositoryTop(root);
         this.base = top ?? root;
-        this.rules.set(this.base, rules().add(top ? infoExclude(top) : []).add(readGitignore(this.base, '')));
+        this.rules.set(
+            this.base,
+            rules()
+                .add(top ? infoExclude(top) : [])
+                .add(readGitignore(this.base, '')),
+        );
         if (this.base !== root && this.rulesFor(path.dirname(root)).ignores(`${slashed(path.relative(this.base, root))}/`)) {
             this.base = root;
             this.rules.clear();
@@ -43,7 +48,9 @@ export class GitIgnore {
         if (known) return known;
         const rel = slashed(path.relative(this.base, dir));
         if (!rel || rel.startsWith('../') || path.isAbsolute(rel)) return this.rules.get(this.base)!;
-        const inside = rules().add(this.rulesFor(path.dirname(dir))).add(readGitignore(dir, rel));
+        const inside = rules()
+            .add(this.rulesFor(path.dirname(dir)))
+            .add(readGitignore(dir, rel));
         this.rules.set(dir, inside);
         return inside;
     }

@@ -18,15 +18,21 @@ ${decls}`;
 
 describe('M022: event and error fields named after their source', () => {
     test('a parameter of another name and the same type: message and hint', async () => {
-        expect(await m022(order('    create command place(id: OrderId, at: Timestamp) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }'))).toEqual([
+        expect(
+            await m022(order('    create command place(id: OrderId, at: Timestamp) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }')),
+        ).toEqual([
             "Field 'placedAt' of event 'Placed' has no source of the same name in command 'place'; parameter 'at' has its type. | name them alike: rename the parameter 'at' to 'placedAt' (or the event field to 'at'), so that the value's source is clear",
         ]);
     });
 
     test('a source of the same name and type is fine; the ID type is exempt; the location is the emits entry', async () => {
-        const a = await checkSales(order('    create command place(id: OrderId, placedAt: Timestamp) emits Placed', 'event Placed { order: OrderId placedAt: Timestamp }'));
+        const a = await checkSales(
+            order('    create command place(id: OrderId, placedAt: Timestamp) emits Placed', 'event Placed { order: OrderId placedAt: Timestamp }'),
+        );
         expect(only(a, 'M022')).toEqual([]);
-        const b = await checkSales(order('    create command place(id: OrderId, at: Timestamp)\n      emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }'));
+        const b = await checkSales(
+            order('    create command place(id: OrderId, at: Timestamp)\n      emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }'),
+        );
         expect(only(b, 'M022').map((d) => [d.start.line, d.start.column, d.end.column])).toEqual([[7, 13, 19]]);
     });
 
@@ -39,18 +45,33 @@ describe('M022: event and error fields named after their source', () => {
     });
 
     test('the same name with another type is reported when some source has the type', async () => {
-        const body = order('    create command place(id: OrderId, placedAt: String, at: Timestamp) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }');
+        const body = order(
+            '    create command place(id: OrderId, placedAt: String, at: Timestamp) emits Placed',
+            'event Placed { orderId: OrderId placedAt: Timestamp }',
+        );
         expect(await m022(body)).toEqual([
             "Field 'placedAt' of event 'Placed' has no source of the same name and type in command 'place'; parameter 'at' has its type. | name them alike: rename the parameter 'at' to 'placedAt' (or the event field to 'at'), so that the value's source is clear",
         ]);
     });
 
     test('optionality does not matter; collections match collections of the same element type', async () => {
-        expect(await m022(order('    create command place(id: OrderId, placedAt: Timestamp?) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }'))).toEqual([]);
-        expect(await m022(order('    create command place(id: OrderId, at: Timestamp?) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }'))).toHaveLength(1);
+        expect(
+            await m022(
+                order('    create command place(id: OrderId, placedAt: Timestamp?) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }'),
+            ),
+        ).toEqual([]);
+        expect(
+            await m022(order('    create command place(id: OrderId, at: Timestamp?) emits Placed', 'event Placed { orderId: OrderId placedAt: Timestamp }')),
+        ).toHaveLength(1);
         // a single value is not a source of a list, and a list not of a single value
-        expect(await m022(order('    create command place(id: OrderId, at: Timestamp) emits Placed', 'event Placed { orderId: OrderId times: Timestamp[1..*] }'))).toEqual([]);
-        expect(await m022(order('    create command place(id: OrderId, at: Timestamp[0..*]) emits Placed', 'event Placed { orderId: OrderId times: Timestamp[1..*] }'))).toEqual([
+        expect(
+            await m022(order('    create command place(id: OrderId, at: Timestamp) emits Placed', 'event Placed { orderId: OrderId times: Timestamp[1..*] }')),
+        ).toEqual([]);
+        expect(
+            await m022(
+                order('    create command place(id: OrderId, at: Timestamp[0..*]) emits Placed', 'event Placed { orderId: OrderId times: Timestamp[1..*] }'),
+            ),
+        ).toEqual([
             "Field 'times' of event 'Placed' has no source of the same name in command 'place'; parameter 'at' has its type. | name them alike: rename the parameter 'at' to 'times' (or the event field to 'at'), so that the value's source is clear",
         ]);
     });

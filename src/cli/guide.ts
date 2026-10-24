@@ -34,7 +34,12 @@ export function parseGuide(markdown: string): Guide {
         if (!heading) throw new Error(`guide: the topic line '${name}' is not followed by a ## or ### heading`);
         starts.push({ name, line: i, level: heading[1].length, title: heading[2] });
     }
-    const body = (from: number, to: number) => lines.slice(from, to).filter((l) => !TOPIC.test(l)).join('\n').trim();
+    const body = (from: number, to: number) =>
+        lines
+            .slice(from, to)
+            .filter((l) => !TOPIC.test(l))
+            .join('\n')
+            .trim();
     const topics = starts.map((s, k) => {
         const end = starts.slice(k + 1).find((t) => t.level <= s.level)?.line ?? lines.length;
         return { name: s.name, title: s.title, level: s.level, text: body(s.line, end), parent: starts[k + 1]?.level > s.level };

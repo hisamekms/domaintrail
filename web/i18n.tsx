@@ -446,7 +446,8 @@ const en: Messages = {
     verifiedFor: 'Context of the check',
     verifiedErrors: 'Errors of the factory',
     verifiedOptional: 'optional',
-    verifiedNote: 'Evidence of a check outside the aggregate, made at that moment; not a guarantee when the aggregate is saved, so the store enforces the same rule (a unique index, say).',
+    verifiedNote:
+        'Evidence of a check outside the aggregate, made at that moment; not a guarantee when the aggregate is saved, so the store enforces the same rule (a unique index, say).',
     typeUses: (n) => `Used as a type (${n})`,
     fieldSetUsers: (n) => `Elements that use it (${n})`,
     fromFieldSet: (name) => `A field of the field set ${name}`,

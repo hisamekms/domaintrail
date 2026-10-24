@@ -75,7 +75,13 @@ describe('Context Map', () => {
             ['map:Billing', 'boundedContext', 'Billing', '«bounded context»'],
             ['map:Sales', 'boundedContext', 'Sales', '«bounded context»'],
         ]);
-        expect(g.nodes[1].lines.map((l) => `${l.key.en.name} ${l.value?.en.name}`)).toEqual(['aggregates 1', 'value objects 1', 'enums 1', 'IDs 1', 'events 1']);
+        expect(g.nodes[1].lines.map((l) => `${l.key.en.name} ${l.value?.en.name}`)).toEqual([
+            'aggregates 1',
+            'value objects 1',
+            'enums 1',
+            'IDs 1',
+            'events 1',
+        ]);
         expect(g.edges).toEqual([
             {
                 id: 'Billing|Sales',

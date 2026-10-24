@@ -119,7 +119,10 @@ describe('--format json', () => {
         });
         const text = await run('-r', dir, 'check');
         expect(text.code).toBe(1);
-        expect(text.out).toEqual([`a.dt:2:11 - warning L002: Term 'nte' ("備考") is not used by any field or parameter in context 'Sales'.`, "  hint: did you mean 'note'?"]);
+        expect(text.out).toEqual([
+            `a.dt:2:11 - warning L002: Term 'nte' ("備考") is not used by any field or parameter in context 'Sales'.`,
+            "  hint: did you mean 'note'?",
+        ]);
     });
 
     test('a valid workspace: no diagnostics, exit 0', async () => {
@@ -152,7 +155,11 @@ describe('--format json', () => {
         dirs.push(dir);
         const ok = await run('-r', dir, 'generate', 'ts', '--out', 'gen', '--format', 'json');
         expect(ok.code).toBe(0);
-        expect(json(ok)).toEqual({ diagnostics: [], summary: { files: 6, errors: 0, warnings: 0 }, written: [path.relative(process.cwd(), path.join(dir, 'gen')), path.relative(process.cwd(), path.join(dir, 'gen', 'tests'))] });
+        expect(json(ok)).toEqual({
+            diagnostics: [],
+            summary: { files: 6, errors: 0, warnings: 0 },
+            written: [path.relative(process.cwd(), path.join(dir, 'gen')), path.relative(process.cwd(), path.join(dir, 'gen', 'tests'))],
+        });
 
         const invalid = await run('-r', await invalidWorkspace(), 'generate', 'ts', '--format', 'json');
         expect(invalid.code).toBe(1);

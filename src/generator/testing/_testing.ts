@@ -20,7 +20,10 @@ export interface Suite {
 
 export const isSuite = (x: Suite | TestCase): x is Suite => 'children' in x;
 
-export const suite = (name: string, children: readonly (Suite | TestCase | undefined)[]): Suite => ({ name, children: children.filter((c): c is Suite | TestCase => c !== undefined) });
+export const suite = (name: string, children: readonly (Suite | TestCase | undefined)[]): Suite => ({
+    name,
+    children: children.filter((c): c is Suite | TestCase => c !== undefined),
+});
 
 export const todo = (name: string): TestCase => ({ name, run: () => {}, todo: true });
 
@@ -92,7 +95,12 @@ export function collide<T>(arb: fc.Arbitrary<T>, seed: number): fc.Arbitrary<T> 
 }
 
 /** Mixes the given examples into `arb`, after checking that they hold their invariants (inputs are always valid). */
-export function withExamples<T>(arb: fc.Arbitrary<T>, examples: readonly T[] | undefined, violated: (v: T) => readonly string[], type: string): fc.Arbitrary<T> {
+export function withExamples<T>(
+    arb: fc.Arbitrary<T>,
+    examples: readonly T[] | undefined,
+    violated: (v: T) => readonly string[],
+    type: string,
+): fc.Arbitrary<T> {
     if (!examples?.length) return arb;
     examples.forEach((e, i) => {
         const v = violated(e);
@@ -174,7 +182,14 @@ export function base(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
 /** Values of each base type for plain fields and parameters, with a pool each so that values often repeat. */
 export function scalars(seed: number): Readonly<Record<Base, fc.Arbitrary<unknown>>> {
     const of = (b: Base) => () => collide(base(b), seed);
-    return lazy<Record<Base, fc.Arbitrary<unknown>>>({ String: of('String'), Int: of('Int'), Decimal: of('Decimal'), Bool: of('Bool'), Timestamp: of('Timestamp'), UUID: of('UUID') });
+    return lazy<Record<Base, fc.Arbitrary<unknown>>>({
+        String: of('String'),
+        Int: of('Int'),
+        Decimal: of('Decimal'),
+        Bool: of('Bool'),
+        Timestamp: of('Timestamp'),
+        UUID: of('UUID'),
+    });
 }
 
 /** Values of a base type regardless of the hints: valid and invalid ones, for the checks of `make<Name>`. */
@@ -205,7 +220,8 @@ export function boundaries(b: Base, h: Hints, seed: number): unknown[] {
     if (b === 'String' || b === 'UUID') {
         const [sample] = h.pattern !== undefined ? fc.sample(fc.stringMatching(new RegExp(h.pattern)), { seed, numRuns: 1 }) : ['a'];
         out.push('', sample, `${sample}x`, `x${sample}`, sample.slice(0, -1));
-        for (const n of [h.minLength, h.maxLength]) if (n !== undefined) for (const m of [n - 1, n, n + 1]) if (m >= 0) out.push(sample.padEnd(m, 'a').slice(0, m));
+        for (const n of [h.minLength, h.maxLength])
+            if (n !== undefined) for (const m of [n - 1, n, n + 1]) if (m >= 0) out.push(sample.padEnd(m, 'a').slice(0, m));
         return [...new Set(out)];
     }
     return out;
@@ -269,32 +285,45 @@ export function primitiveCases(s: PrimitiveSpec, options: RunOptions): TestCase[
     const name = `make${simple}`;
     const run = (): void => {
         const values = boundaries(s.base, s.hints, options.seed ?? DEFAULT_SEED);
-        property(fc.oneof(fc.constantFrom(...(values.length ? values : [undefined])).filter((v) => v !== undefined), anyOf(s.base, s.hints)), values, options, (value) => {
-            const r = make(value);
-            if (!s.invariants.length) {
-                if (!deepEqual(r, value)) fail(`${name}(${show(value)}) returned ${show(r)}; ${simple} has no invariants, so it is the value itself.`);
-                return;
-            }
-            const reached: string[] = [];
-            const violated = (s.check as (c: unknown) => (v: unknown) => readonly string[])(declared(s.declared, s.given, reached))(value);
-            const first = violated[0];
-            // without a check of a declared invariant, the implementation may also report it
-            const unknown = unchecked(s.declared, s.given).filter((n) => first === undefined || s.invariants.indexOf(n) < s.invariants.indexOf(first));
-            const res = r as { ok: boolean; value?: unknown; error?: { type?: unknown; value?: unknown; invariant?: unknown } };
-            if (res.ok) {
-                if (first !== undefined) fail(`${name}(${show(value)}) accepted a value that violates '${first}'.`);
-                if (!deepEqual(res.value, value)) fail(`${name}(${show(value)}) returned ${show(res.value)} instead of the value.`);
-                return;
-            }
-            const e = res.error ?? {};
-            const allowed = [...unknown, ...(first !== undefined ? [first] : [])];
-            if (!allowed.length) fail(`${name}(${show(value)}) rejected a value that holds every invariant of ${simple} (error ${show(e)}).`);
-            if (e.type !== `Invalid${simple}` || !deepEqual(e.value, value) || !allowed.includes(e.invariant as string)) {
-                fail(`${name}(${show(value)}) returned the error ${show(e)}; expected { type: 'Invalid${simple}', value: ${show(value)}, invariant: ${allowed.map((a) => `'${a}'`).join(' or ')} }.`);
-            }
-        });
+        property(
+            fc.oneof(
+                fc.constantFrom(...(values.length ? values : [undefined])).filter((v) => v !== undefined),
+                anyOf(s.base, s.hints),
+            ),
+            values,
+            options,
+            (value) => {
+                const r = make(value);
+                if (!s.invariants.length) {
+                    if (!deepEqual(r, value)) fail(`${name}(${show(value)}) returned ${show(r)}; ${simple} has no invariants, so it is the value itself.`);
+                    return;
+                }
+                const reached: string[] = [];
+                const violated = (s.check as (c: unknown) => (v: unknown) => readonly string[])(declared(s.declared, s.given, reached))(value);
+                const first = violated[0];
+                // without a check of a declared invariant, the implementation may also report it
+                const unknown = unchecked(s.declared, s.given).filter((n) => first === undefined || s.invariants.indexOf(n) < s.invariants.indexOf(first));
+                const res = r as { ok: boolean; value?: unknown; error?: { type?: unknown; value?: unknown; invariant?: unknown } };
+                if (res.ok) {
+                    if (first !== undefined) fail(`${name}(${show(value)}) accepted a value that violates '${first}'.`);
+                    if (!deepEqual(res.value, value)) fail(`${name}(${show(value)}) returned ${show(res.value)} instead of the value.`);
+                    return;
+                }
+                const e = res.error ?? {};
+                const allowed = [...unknown, ...(first !== undefined ? [first] : [])];
+                if (!allowed.length) fail(`${name}(${show(value)}) rejected a value that holds every invariant of ${simple} (error ${show(e)}).`);
+                if (e.type !== `Invalid${simple}` || !deepEqual(e.value, value) || !allowed.includes(e.invariant as string)) {
+                    fail(
+                        `${name}(${show(value)}) returned the error ${show(e)}; expected { type: 'Invalid${simple}', value: ${show(value)}, invariant: ${allowed.map((a) => `'${a}'`).join(' or ')} }.`,
+                    );
+                }
+            },
+        );
     };
-    return [{ name: `${name} accepts exactly the values that hold the invariants of ${simple}, reporting the first one violated`, run }, ...declaredTodos(s.type, s.declared, s.given, 'invariant')];
+    return [
+        { name: `${name} accepts exactly the values that hold the invariants of ${simple}, reporting the first one violated`, run },
+        ...declaredTodos(s.type, s.declared, s.given, 'invariant'),
+    ];
 }
 
 const declaredTodos = (owner: string, names: readonly string[], given: Partial<Record<string, unknown>> | undefined, what: string): TestCase[] =>
@@ -337,7 +366,9 @@ export interface CommandSpec {
     readonly counted: readonly EmitSpec[];
 }
 
-type Res = { ok: true; value: Record<string, { aggregate: { state?: string }; events: Record<string, unknown> } | undefined> } | { ok: false; error: { type?: string } };
+type Res =
+    | { ok: true; value: Record<string, { aggregate: { state?: string }; events: Record<string, unknown> } | undefined> }
+    | { ok: false; error: { type?: string } };
 
 /** The one outcome of a success value, as `[key, outcome]`. */
 function theOutcome(name: string, value: Res & { ok: true }): [string, { aggregate: { state?: string }; events: Record<string, unknown> }] {
@@ -358,7 +389,8 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
         if (s.factory || !s.invariants) return;
         s.examples.forEach((args, i) => {
             const v = checkOf<(a: unknown) => readonly string[]>(s.invariants, s.declaredInvariants, s.givenInvariants)(args[0]);
-            if (v.length) fail(`Example ${i + 1} of ${s.name}: the aggregate violates ${v.map((n) => `'${n}'`).join(', ')}; examples must hold their invariants.`);
+            if (v.length)
+                fail(`Example ${i + 1} of ${s.name}: the aggregate violates ${v.map((n) => `'${n}'`).join(', ')}; examples must hold their invariants.`);
         });
     };
     const prop = (predicate: (args: readonly unknown[]) => void) => (): void => {
@@ -380,7 +412,10 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
                 if (first !== undefined) {
                     const allowed = [...unknown, errorOf(first)];
                     if (r.ok) fail(`${describe(args)} succeeded, but requirement '${first}' does not hold: expected the error ${errorOf(first)}.`);
-                    if (!allowed.includes(r.error.type as string)) fail(`${describe(args)} returned ${show(r.error)}, but requirement '${first}' is the first that does not hold: expected ${allowed.join(' or ')}.`);
+                    if (!allowed.includes(r.error.type as string))
+                        fail(
+                            `${describe(args)} returned ${show(r.error)}, but requirement '${first}' is the first that does not hold: expected ${allowed.join(' or ')}.`,
+                        );
                 } else if (!r.ok && elseErrors.includes(r.error.type as string) && !unknown.includes(r.error.type as string)) {
                     fail(`${describe(args)} returned ${show(r.error)}, although every requirement holds.`);
                 }
@@ -396,7 +431,8 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
                 const r = call(args);
                 if (!r.ok) return;
                 const [to, o] = theOutcome(s.name, r);
-                if (s.stateful && o.aggregate.state !== to) fail(`${describe(args)} returned the outcome '${to}' with an aggregate in state ${show(o.aggregate.state)}.`);
+                if (s.stateful && o.aggregate.state !== to)
+                    fail(`${describe(args)} returned the outcome '${to}' with an aggregate in state ${show(o.aggregate.state)}.`);
                 const v = checkOf<(a: unknown) => readonly string[]>(s.invariants, s.declaredInvariants, s.givenInvariants)(o.aggregate);
                 if (v.length) fail(`${describe(args)} made an aggregate that violates ${v.map((n) => `'${n}'`).join(', ')}: ${show(o.aggregate)}`);
             }),
@@ -415,7 +451,8 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
                     if ((e.from.length && (from === undefined || !e.from.includes(from))) || (e.to.length && !e.to.includes(to))) continue;
                     const v = o.events[e.key];
                     const n = Array.isArray(v) ? v.length : v === undefined ? 0 : 1;
-                    if (n < e.lower || (e.upper !== undefined && n > e.upper)) fail(`${describe(args)} emitted ${e.key} ${n} times; declared ${e.key}[${e.lower}..${e.upper ?? '*'}].`);
+                    if (n < e.lower || (e.upper !== undefined && n > e.upper))
+                        fail(`${describe(args)} emitted ${e.key} ${n} times; declared ${e.key}[${e.lower}..${e.upper ?? '*'}].`);
                 }
             }),
         });
@@ -483,7 +520,11 @@ export interface PolicySpec {
 
 /** Runs the async `predicate` for generated inputs; throws with the (shrunk) counterexample. */
 export async function asyncProperty<A>(arb: fc.Arbitrary<A>, options: RunOptions, predicate: (a: A) => Promise<void>): Promise<void> {
-    await fc.assert(fc.asyncProperty(arb, predicate), { seed: options.seed ?? DEFAULT_SEED, numRuns: options.runs ?? DEFAULT_RUNS, includeErrorInReport: true });
+    await fc.assert(fc.asyncProperty(arb, predicate), {
+        seed: options.seed ?? DEFAULT_SEED,
+        numRuns: options.runs ?? DEFAULT_RUNS,
+        includeErrorInReport: true,
+    });
 }
 
 /** The first field of `fields` that `v` (an object) does not hold validly, and why; `undefined` when all are valid. */
@@ -499,7 +540,8 @@ export function invalidField(v: Record<string, unknown>, fields: readonly InputF
             continue;
         }
         if (!Array.isArray(x)) return `'${f.name}' is not a list: ${show(x)}`;
-        if (x.length < (f.lower ?? 0) || (f.upper !== undefined && x.length > f.upper)) return `'${f.name}' has ${x.length} elements; declared [${f.lower ?? 0}..${f.upper ?? '*'}]`;
+        if (x.length < (f.lower ?? 0) || (f.upper !== undefined && x.length > f.upper))
+            return `'${f.name}' has ${x.length} elements; declared [${f.lower ?? 0}..${f.upper ?? '*'}]`;
         const bad = x.find((e) => !f.valid(e));
         if (bad !== undefined) return `'${f.name}' holds an invalid value: ${show(bad)}`;
     }
@@ -507,7 +549,8 @@ export function invalidField(v: Record<string, unknown>, fields: readonly InputF
 }
 
 /** Whether `v` is an object whose fields are valid (a value object or entity). */
-export const validFields = (v: unknown, fields: readonly InputFieldSpec[]): boolean => isObject(v) && invalidField(v as Record<string, unknown>, fields) === undefined;
+export const validFields = (v: unknown, fields: readonly InputFieldSpec[]): boolean =>
+    isObject(v) && invalidField(v as Record<string, unknown>, fields) === undefined;
 
 /**
  * A required policy: for every event, the handler resolves to an input that the command accepts, as far as it is
@@ -524,7 +567,9 @@ export function policyCases(s: PolicySpec, options: RunOptions): TestCase[] {
             try {
                 input = await handler(structuredClone(event));
             } catch (e) {
-                fail(`${call} rejected with ${e instanceof Error ? e.message : show(e)}; the handler of a policy resolves every event to the input of its command.`);
+                fail(
+                    `${call} rejected with ${e instanceof Error ? e.message : show(e)}; the handler of a policy resolves every event to the input of its command.`,
+                );
             }
             if (!isObject(input)) fail(`${call} resolved to ${show(input)}; expected the input of the command, an object.`);
             const why = invalidField(input as Record<string, unknown>, s.input);

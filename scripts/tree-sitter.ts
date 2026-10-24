@@ -13,7 +13,15 @@ export const STAMPED = ['grammar.js', 'src/parser.c', 'tree-sitter-domaintrail.w
 
 export async function hashes(): Promise<Record<string, string>> {
     const entries = await Promise.all(
-        STAMPED.map(async (f) => [f, createHash('sha256').update(await readFile(path.join(GRAMMAR_DIR, f))).digest('hex')] as const),
+        STAMPED.map(
+            async (f) =>
+                [
+                    f,
+                    createHash('sha256')
+                        .update(await readFile(path.join(GRAMMAR_DIR, f)))
+                        .digest('hex'),
+                ] as const,
+        ),
     );
     return Object.fromEntries(entries);
 }

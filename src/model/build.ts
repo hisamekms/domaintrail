@@ -59,7 +59,22 @@ import {
     type WithFieldSets,
 } from '../core/model-index.js';
 import { commandId, elementId, stateId } from './ids.js';
-import type { CommandModel, Described, ExprModel, DomainModel, ElementKind, ElementModel, FieldModel, InvariantModel, Location, RequirementModel, StateModel, TermModel, TypeExpr, VariantModel } from './model.js';
+import type {
+    CommandModel,
+    Described,
+    ExprModel,
+    DomainModel,
+    ElementKind,
+    ElementModel,
+    FieldModel,
+    InvariantModel,
+    Location,
+    RequirementModel,
+    StateModel,
+    TermModel,
+    TypeExpr,
+    VariantModel,
+} from './model.js';
 
 export type FileResolver = (uri: string) => string;
 
@@ -226,7 +241,13 @@ function invariant(inv: Invariant): InvariantModel {
 }
 
 function requirement(r: Requirement, qname: (r: { ref?: ContextElement; $refText: string }) => string): RequirementModel {
-    return { name: r.name, ...optional('source', r.expr && sourceText(r.expr)), ...(r.expr && { expr: exprModel(r.expr) }), error: qname(r.error), ...described(r) };
+    return {
+        name: r.name,
+        ...optional('source', r.expr && sourceText(r.expr)),
+        ...(r.expr && { expr: exprModel(r.expr) }),
+        error: qname(r.error),
+        ...described(r),
+    };
 }
 
 /** The tree of an expression (syntax only; the model has no errors when it is read for generated checks). */
@@ -246,7 +267,8 @@ function exprModel(e: Expression): ExprModel {
     if (isMatchesExpr(e)) return { k: 'matches', operand: exprModel(e.operand), pattern: regexSource(e) };
     if (isUniqueExpr(e)) return { k: 'unique', collection: exprModel(e.collection), ...(e.param && { param: e.param.name }), keys: e.keys.map(exprModel) };
     if (isContainsExpr(e)) return { k: 'contains', collection: exprModel(e.collection), element: exprModel(e.element) };
-    if (isQuantifierExpr(e)) return { k: 'quantifier', quantifier: e.quantifier, collection: exprModel(e.collection), param: e.param.name, body: exprModel(e.body) };
+    if (isQuantifierExpr(e))
+        return { k: 'quantifier', quantifier: e.quantifier, collection: exprModel(e.collection), param: e.param.name, body: exprModel(e.body) };
     return { k: 'bool', value: false }; // unreachable for a parsed expression
 }
 
@@ -264,8 +286,7 @@ function state(aggId: string, s: State, loc: (n: AstNode) => Location, field: (f
 }
 
 function command(aggId: string, c: Command, loc: (n: AstNode) => Location, field: (f: Parameter) => FieldModel): CommandModel {
-    const qname = (r: { ref?: ContextElement; $refText: string }): string =>
-        r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText;
+    const qname = (r: { ref?: ContextElement; $refText: string }): string => (r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText);
     return {
         id: commandId(aggId, c.name),
         name: c.name,
