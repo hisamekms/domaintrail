@@ -9,9 +9,9 @@ export const CHANGELOGS = { en: 'CHANGELOG.md', ja: 'CHANGELOG.ja.md' } as const
 const REPOSITORY = 'https://github.com/hisamekms/domaintrail';
 
 export interface Section {
-    /** `0.5.0`, or `Unreleased`. */
+    /** `0.5.0`. */
     version: string;
-    /** `2026-10-24`; none for `Unreleased`. */
+    /** `2026-10-24`. */
     date?: string;
     /** The text under the `## [version]` heading, trimmed. */
     body: string;
@@ -34,13 +34,13 @@ const CJK = /[　-ヿ一-鿿＀-￯]/;
 
 /**
  * The changelogs' text for a release body, outside code blocks (the odd parts of a split on fences):
- * - relative links (`docs/x.md`) point to the files at the version's tag (`main` for Unreleased), since a release
+ * - relative links (`docs/x.md`) point to the files at the version's tag, since a release
  *   body has no base path;
  * - the lines wrapped by hand are joined, since GitHub shows every line break of a release body; without a space
  *   next to a Japanese character.
  */
 const forRelease = (body: string, version: string): string => {
-    const ref = version === 'Unreleased' ? 'main' : `v${version}`;
+    const ref = `v${version}`;
     const unwrap = (text: string): string => {
         const lines: string[] = [];
         for (const line of text.split('\n')) {

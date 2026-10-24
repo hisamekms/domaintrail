@@ -28,9 +28,8 @@ const newer = (a: string, b: string): boolean => {
 };
 
 describe('changelogs', () => {
-    test('start with Unreleased, then the versions from the newest, each with a date', () => {
-        expect(en[0].version).toBe('Unreleased');
-        const versions = en.slice(1);
+    test('list the released versions from the newest, each with a date (no Unreleased section)', () => {
+        const versions = en;
         expect(versions.length).toBeGreaterThanOrEqual(5);
         for (const s of versions) {
             expect(s.version).toMatch(/^\d+\.\d+\.\d+$/);
@@ -86,9 +85,10 @@ describe('release notes', () => {
         const notes = releaseNotes('0.4.0', changelogs);
         expect(notes).toContain('Change the model first, then generate, then the code. The full rules are in');
         expect(notes).toContain('   create command place(id: OrderId, customer: CustomerId) -> Draft // after\n');
-        const unreleased = releaseNotes('Unreleased', changelogs);
-        expect(unreleased).toContain('](https://github.com/hisamekms/domaintrail/blob/main/docs/getting-started.md)');
-        expect(unreleased).not.toContain('](docs/');
+        const linked = (text: string) => `## [9.9.9] - 2026-12-31\n\n### Added\n\n- ${text} [Getting started](docs/getting-started.md).\n`;
+        const withLinks = releaseNotes('9.9.9', { en: linked('See'), ja: linked('参照:') });
+        expect(withLinks).toContain('](https://github.com/hisamekms/domaintrail/blob/v9.9.9/docs/getting-started.md)');
+        expect(withLinks).not.toContain('](docs/');
     });
 
     test('fail when either changelog has no section for the version', () => {

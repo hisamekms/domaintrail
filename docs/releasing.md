@@ -9,7 +9,7 @@ changelogs; a maintainer reviews it and publishes it.
 
 `CHANGELOG.md` (English, the source of truth) and `CHANGELOG.ja.md` (Japanese, the same versions and the same `###`
 sections) are shipped in the package: users and their AI agents read them in `node_modules/domaintrail/` after
-upgrading. With every user-facing change, add its entry to both, under `## [Unreleased]`, in `### Added`, `### Changed`,
+upgrading. They have no `Unreleased` section: entries are written when releasing, in `### Added`, `### Changed`,
 `### Removed` or `### Fixed`. A change that breaks models or code also gets steps in `### Upgrading`: what to change in
 the `.dt` files and in the code, old → new, with short before / after snippets, so that an agent can follow them.
 Internal refactoring and repository tooling get one line at most. `test/changelog.test.ts` checks that the two files
@@ -17,10 +17,10 @@ match.
 
 ## Each release
 
-1. Move the entries of `## [Unreleased]` to a new `## [X.Y.Z] - YYYY-MM-DD` section in both changelogs, add its link
-   at the bottom (`[X.Y.Z]: https://github.com/hisamekms/domaintrail/compare/vW.V.U...vX.Y.Z`) and point
-   `[Unreleased]` at the new tag. **Review both languages before tagging**: the notes of the GitHub Release are made
-   from them. Check the notes with:
+1. Write a new `## [X.Y.Z] - YYYY-MM-DD` section in both changelogs from the user-facing changes since the previous tag
+   (`git log --first-parent --oneline vW.V.U..main` lists the merges), and add its link at the bottom
+   (`[X.Y.Z]: https://github.com/hisamekms/domaintrail/compare/vW.V.U...vX.Y.Z`). **Review both languages before
+   tagging**: the notes of the GitHub Release are made from them. Check the notes with:
 
    ```bash
    bun scripts/release-notes.ts X.Y.Z   # fails if either changelog has no section for X.Y.Z

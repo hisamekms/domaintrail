@@ -10,25 +10,6 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
-## [Unreleased]
-
-### Added
-
-- 英語と[日本語](docs/getting-started.ja.md)の [Getting started](docs/getting-started.md): AI エージェントとの進め方
-  （`CLAUDE.md` / `AGENTS.md` に書くブロック）、最初のモデルを一歩ずつ、生成、`decide` による実装、契約テスト、lint、
-  エディタ。
-- [Live View](docs/live-view.md): `dt view` のペインとビューの説明を README から移しました。
-- この変更履歴（英語と日本語）を npm パッケージに含め（`CHANGELOG.md`、`CHANGELOG.ja.md`）、バージョンごとにその内容で
-  GitHub Release を作ります。
-
-### Changed
-
-- README を Getting started 中心に再構成し、開発者向けの内容を `CONTRIBUTING.md` に移しました。
-
-### Fixed
-
-- Zed の拡張機能レジストリの要件に合わせ、Zed 拡張にライセンスファイルと作者のアドレスを追加しました。
-
 ## [0.5.0] - 2026-10-24
 
 ### Added
@@ -300,7 +281,6 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
-[Unreleased]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hisamekms/domaintrail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hisamekms/domaintrail/compare/v0.2.0...v0.3.0

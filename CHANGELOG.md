@@ -9,25 +9,6 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
-## [Unreleased]
-
-### Added
-
-- [Getting started](docs/getting-started.md) in English and [Japanese](docs/getting-started.ja.md): working with an AI
-  agent (the block for `CLAUDE.md` / `AGENTS.md`), a first model step by step, generating, implementing with `decide`,
-  contract tests, linting, and the editors.
-- [The Live View](docs/live-view.md): every pane and view of `dt view`, moved out of the README.
-- This changelog, in English and Japanese, in the npm package (`CHANGELOG.md`, `CHANGELOG.ja.md`), and a GitHub Release
-  with its notes for each version.
-
-### Changed
-
-- The README is organized around Getting started; the developer content moved to `CONTRIBUTING.md`.
-
-### Fixed
-
-- The Zed extension has its license file and an author address, as Zed's extension registry requires.
-
 ## [0.5.0] - 2026-10-24
 
 ### Added
@@ -301,7 +282,6 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
-[Unreleased]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hisamekms/domaintrail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hisamekms/domaintrail/compare/v0.2.0...v0.3.0
