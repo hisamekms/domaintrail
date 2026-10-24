@@ -89,6 +89,10 @@ Commit messages are one sentence in the imperative that says what changes and wh
 
 ## Release
 
-Run `npm version <patch|minor|major>` and `git push --follow-tags`. The Release workflow tests, builds and stages the
-package on npm; it is published only after you approve it on npmjs.com (Staged Packages) or with `npm stage approve`.
-See [docs/releasing.md](docs/releasing.md).
+Write the changelog entries of every user-facing change under `## [Unreleased]` in both `CHANGELOG.md` and
+`CHANGELOG.ja.md` (with `### Upgrading` steps for breaking changes). To release, move them to the new version's
+section, review both languages, then run `npm version <patch|minor|major>` and `git push --follow-tags`. The Release
+workflow stops if either changelog lacks the version, tests, builds and stages the package on npm; it is published only
+after you approve it on npmjs.com (Staged Packages) or with `npm stage approve`. The workflow also creates the GitHub
+Release as a draft with the notes from the changelogs: review it and publish it by hand. See
+[docs/releasing.md](docs/releasing.md).

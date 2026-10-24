@@ -6,11 +6,13 @@ on:
 
 permissions:
   contents: read
-  id-token: write # npm trusted publishing
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # the draft GitHub Release
+      id-token: write # npm trusted publishing
     steps:
       - uses: actions/checkout@v5
 
@@ -29,6 +31,10 @@ jobs:
       - name: Check that the tag matches package.json
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
 
+      # fails when CHANGELOG.md or CHANGELOG.ja.md has no section for the version, before anything is published
+      - name: Write the release notes from the changelogs
+        run: bun scripts/release-notes.ts "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bun run typecheck
@@ -43,6 +49,12 @@ jobs:
       # staged: approve on npmjs.com (Staged Packages) or with `npm stage approve <id>`
       - run: npm stage publish --access public
 
+      # a draft: the maintainer reviews the notes (English and Japanese) and publishes it on GitHub
+      - name: Create the draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
+
       - name: Remind to approve the staged version
         run: |
           {
@@ -55,6 +67,8 @@ jobs:
             echo 'npm stage list domaintrail'
             echo 'npm stage approve <stage-id>'
             echo '```'
+            echo
+            echo "Then review the draft GitHub Release of ${GITHUB_REF_NAME} and publish it."
             echo
             echo "See docs/releasing.md."
           } >> "$GITHUB_STEP_SUMMARY"
