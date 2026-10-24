@@ -1,0 +1,17 @@
+id = "domaintrail"
+name = "DomainTrail"
+description = "DomainTrail DSL (.dt files): highlighting, outline and the `dt lsp` language server."
+version = "0.4.0"
+schema_version = 1
+authors = ["hisamekms"]
+repository = "https://github.com/hisamekms/domaintrail"
+
+[grammars.domaintrail]
+repository = "https://github.com/hisamekms/domaintrail"
+# The commit of this repository with the grammar in tree-sitter-domaintrail; update it after changing the grammar.
+rev = "9bc1b720c40d36f9bc1ff040a0920ee9c81839ee"
+path = "tree-sitter-domaintrail"
+
+[language_servers.domaintrail]
+name = "DomainTrail"
+languages = ["DomainTrail"]

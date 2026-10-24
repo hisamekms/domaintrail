@@ -1463,3 +1463,21 @@ extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the 
   }
 }
 ```
+
+<!-- topic: editors -->
+## Editors
+
+**Zed.** The extension in `editors/zed` of the repository highlights `.dt` files with the tree-sitter grammar in
+`tree-sitter-domaintrail`, gives brackets, indentation and an outline (contexts, their declarations, the states and
+commands of aggregates), and starts `dt lsp` (diagnostics, navigation, hover, rename, formatting; see [Language
+server](#language-server)). Install it with *zed: install dev extension* and the `editors/zed` directory of a clone
+(it needs Rust, installed with rustup). The language server is the first of: `lsp.domaintrail.binary` in Zed's
+settings, the project's `node_modules/.bin/dt`, `dt` on the `PATH`, `npx -y domaintrail lsp`:
+
+```json
+{ "lsp": { "domaintrail": { "binary": { "path": "/path/to/dt", "arguments": ["lsp"] } } } }
+```
+
+**Other editors.** Any LSP client works with command `dt lsp`, transport stdio, file extension `.dt` (see
+[Language server](#language-server)). Editors that highlight with tree-sitter (Neovim, Helix, Emacs) can use the
+grammar in `tree-sitter-domaintrail`.

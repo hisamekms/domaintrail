@@ -1,13 +1,14 @@
 //! Zed extension for DomainTrail: starts `dt lsp` for `.dt` files.
 //!
 //! The command is, in this order: `lsp.domaintrail.binary.path` in Zed's settings, `node_modules/.bin/dt` of the
-//! worktree, `dt` on the PATH, else `npx -y domaintrail`. The arguments are `lsp` unless the settings give
+//! worktree (when domaintrail is installed there), `dt` on the PATH, else `npx -y domaintrail`. The arguments are `lsp` unless the settings give
 //! `binary.arguments`; `binary.env` is added to the worktree's shell environment.
 
 use zed_extension_api::{self as zed, LanguageServerId, Result, settings::LspSettings};
 
 const SERVER: &str = "domaintrail";
 const LOCAL_BIN: &str = "node_modules/.bin/dt";
+const LOCAL_PACKAGE: &str = "node_modules/domaintrail/package.json";
 
 struct DomainTrailExtension;
 
@@ -34,7 +35,7 @@ impl zed::Extension for DomainTrailExtension {
 
         let (command, args) = if let Some(path) = path {
             (path, args)
-        } else if worktree.read_text_file(LOCAL_BIN).is_ok() {
+        } else if is_installed(worktree) {
             (format!("{}/{LOCAL_BIN}", worktree.root_path()), args)
         } else if let Some(dt) = worktree.which("dt") {
             (dt, args)
@@ -48,6 +49,14 @@ impl zed::Extension for DomainTrailExtension {
         };
         Ok(zed::Command { command, args, env })
     }
+}
+
+/// Whether the worktree has domaintrail installed: its `.bin/dt` and the package it belongs to.
+fn is_installed(worktree: &zed::Worktree) -> bool {
+    worktree.read_text_file(LOCAL_BIN).is_ok()
+        && worktree
+            .read_text_file(LOCAL_PACKAGE)
+            .is_ok_and(|text| text.contains(r#""name": "domaintrail""#))
 }
 
 zed::register_extension!(DomainTrailExtension);

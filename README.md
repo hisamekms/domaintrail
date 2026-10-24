@@ -87,6 +87,8 @@ The sections, in the guide's order:
 - [Configuration](docs/guide.md#configuration): `domaintrail.jsonc` (`sources`, `generate.ts.out` /
   `generate.ts.contexts` / `generate.ts.tests`, `view.port` / `view.host`; JSON Schema in `schema/domaintrail.schema.json`)
 - [Language server](docs/guide.md#language-server): `dt lsp`, and how to use it from an editor or Claude Code
+- [Editors](docs/guide.md#editors): the Zed extension in `editors/zed` (tree-sitter highlighting, outline, `dt lsp`),
+  other editors through `dt lsp` and the tree-sitter grammar in `tree-sitter-domaintrail`
 
 A taste of the DSL:
 
