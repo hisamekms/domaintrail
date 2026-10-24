@@ -1,0 +1,192 @@
+================================================================================
+Logical operators and precedence
+================================================================================
+
+context A {
+  aggregate X {
+    invariant a { not p and q or r implies s }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (not_expression
+                  (identifier))
+                (identifier))
+              (identifier))
+            (identifier)))))))
+
+================================================================================
+Comparisons, ranges and literals
+================================================================================
+
+context A {
+  aggregate X {
+    invariant a { total >= 0 and rate < 1.5 and delta > -2 and min <= -0.5 }
+    invariant b { count(items) in 1..10 and name != "" and flag == true and done == false }
+    invariant c { (a or b) and kind == Kind.Big }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (binary_expression
+                  (identifier)
+                  (number
+                    (integer)))
+                (binary_expression
+                  (identifier)
+                  (number
+                    (decimal))))
+              (binary_expression
+                (identifier)
+                (number
+                  (integer))))
+            (binary_expression
+              (identifier)
+              (number
+                (decimal)))))
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (range_expression
+                  (call_expression
+                    (function_name)
+                    (identifier))
+                  (number
+                    (integer))
+                  (number
+                    (integer)))
+                (binary_expression
+                  (identifier)
+                  (string)))
+              (binary_expression
+                (identifier)
+                (boolean)))
+            (binary_expression
+              (identifier)
+              (boolean))))
+        (invariant
+          (identifier)
+          (binary_expression
+            (parenthesized_expression
+              (binary_expression
+                (identifier)
+                (identifier)))
+            (binary_expression
+              (identifier)
+              (member_expression
+                (identifier)
+                (identifier)))))))))
+
+================================================================================
+Functions and lambdas
+================================================================================
+
+context A {
+  aggregate X {
+    invariant a { all(items, i => i.quantity > 0) and any(items, i => i.gift) }
+    invariant b { unique(items) and unique(items, i => i.sku, i.size) }
+    invariant c { contains(tags, "new") and length(name) <= 20 and matches(code, "^[A-Z]+$") }
+    invariant d { exists(customer.address.zip) }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (invariant
+          (identifier)
+          (binary_expression
+            (call_expression
+              (function_name)
+              (identifier)
+              (lambda
+                (identifier)
+                (binary_expression
+                  (member_expression
+                    (identifier)
+                    (identifier))
+                  (number
+                    (integer)))))
+            (call_expression
+              (function_name)
+              (identifier)
+              (lambda
+                (identifier)
+                (member_expression
+                  (identifier)
+                  (identifier))))))
+        (invariant
+          (identifier)
+          (binary_expression
+            (call_expression
+              (function_name)
+              (identifier))
+            (call_expression
+              (function_name)
+              (identifier)
+              (lambda
+                (identifier)
+                (member_expression
+                  (identifier)
+                  (identifier)))
+              (member_expression
+                (identifier)
+                (identifier)))))
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (call_expression
+                (function_name)
+                (identifier)
+                (string))
+              (binary_expression
+                (call_expression
+                  (function_name)
+                  (identifier))
+                (number
+                  (integer))))
+            (call_expression
+              (function_name)
+              (identifier)
+              (string))))
+        (invariant
+          (identifier)
+          (call_expression
+            (function_name)
+            (member_expression
+              (member_expression
+                (identifier)
+                (identifier))
+              (identifier))))))))

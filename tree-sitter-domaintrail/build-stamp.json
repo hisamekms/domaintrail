@@ -1,0 +1,5 @@
+{
+  "grammar.js": "ec2637e770074e3c77f54ed04344d8aadbfc053b9b2abe477157b8a0501f9f1b",
+  "src/parser.c": "4db65893c5b5237faf0dbd3f80b44edd5d927bac35571e62e0eff1e1c31a6536",
+  "tree-sitter-domaintrail.wasm": "89e971d0936923356d10afb5fe9824713a4e93fd98e904a0efe87f2e0d3a2f8d"
+}

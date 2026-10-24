@@ -1,0 +1,28 @@
+{
+  "name": "tree-sitter-domaintrail",
+  "version": "0.4.0",
+  "description": "Tree-sitter grammar of the DomainTrail DSL (.dt files)",
+  "private": true,
+  "license": "MIT",
+  "author": "hisamekms",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hisamekms/domaintrail.git",
+    "directory": "tree-sitter-domaintrail"
+  },
+  "files": [
+    "grammar.js",
+    "tree-sitter.json",
+    "queries",
+    "src",
+    "tree-sitter-domaintrail.wasm"
+  ],
+  "scripts": {
+    "generate": "tree-sitter generate --abi 14",
+    "build-wasm": "tree-sitter build --wasm",
+    "test": "tree-sitter test"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.26.13"
+  }
+}

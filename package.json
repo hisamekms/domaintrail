@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
     "dt": "bun ./bin/dt.ts",
+    "tree-sitter": "bun ./scripts/tree-sitter.ts",
     "prepack": "bun run build"
   },
   "dependencies": {
@@ -62,6 +63,7 @@
     "react-dom": "19.3.1",
     "tldraw": "5.5.2",
     "typescript": "7.0.2",
-    "vscode-jsonrpc": "9.0.3"
+    "vscode-jsonrpc": "9.0.3",
+    "web-tree-sitter": "0.26.13"
   }
 }

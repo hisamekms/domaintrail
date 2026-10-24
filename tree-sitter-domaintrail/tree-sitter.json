@@ -1,0 +1,22 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "domaintrail",
+      "camelcase": "DomainTrail",
+      "title": "DomainTrail",
+      "scope": "source.domaintrail",
+      "file-types": ["dt"],
+      "highlights": "queries/highlights.scm",
+      "injection-regex": "^(dt|domaintrail)$"
+    }
+  ],
+  "metadata": {
+    "version": "0.4.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar of the DomainTrail DSL (.dt files)",
+    "authors": [{ "name": "hisamekms" }],
+    "links": { "repository": "https://github.com/hisamekms/domaintrail" }
+  },
+  "bindings": { "c": false, "go": false, "node": false, "python": false, "rust": false, "swift": false }
+}

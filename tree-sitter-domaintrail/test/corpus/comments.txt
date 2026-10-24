@@ -1,0 +1,44 @@
+================================================================================
+Line, block and doc comments
+================================================================================
+
+// a line comment
+/* a block
+   comment */
+/// a doc comment
+context A { // after a brace
+  /// 説明
+  id X: UUID /* inline */
+  aggregate G {
+    command c()
+      emits E when D -> // only from D
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line_comment)
+  (block_comment)
+  (doc_comment)
+  (context
+    (identifier)
+    (line_comment)
+    (doc_comment)
+    (id_declaration
+      (identifier)
+      (primitive_type))
+    (block_comment)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (command
+          (identifier)
+          (parameters)
+          (emits_clause
+            (emit
+              (qualified_name
+                (identifier))
+              (outcome_pattern
+                (identifier)))))
+        (line_comment)))))

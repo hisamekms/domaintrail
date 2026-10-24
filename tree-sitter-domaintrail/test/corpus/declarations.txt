@@ -1,0 +1,285 @@
+================================================================================
+Contexts, shared contexts and terms
+================================================================================
+
+shared context Common "共通" {
+  terms {
+    amount: "金額"
+    id: "ID"
+  }
+}
+
+context Sales {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (string)
+    (terms
+      (term_entry
+        (identifier)
+        (string))
+      (term_entry
+        (identifier)
+        (string))))
+  (context
+    (identifier)))
+
+================================================================================
+Ids and primitives, with a constraint or invariants
+================================================================================
+
+context A {
+  id OrderId "注文ID": UUID
+  primitive Quantity: Int { value in 1..999 }
+  primitive Email "メール": String {
+    invariant format "形式" { matches(value, "^[^@]+@[^@]+$") }
+    invariant short
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (id_declaration
+      (identifier)
+      (string)
+      (primitive_type))
+    (primitive_declaration
+      (identifier)
+      (primitive_type)
+      (primitive_body
+        (range_expression
+          (identifier)
+          (number
+            (integer))
+          (number
+            (integer)))))
+    (primitive_declaration
+      (identifier)
+      (string)
+      (primitive_type)
+      (primitive_body
+        (invariant
+          (identifier)
+          (string)
+          (call_expression
+            (function_name)
+            (identifier)
+            (string)))
+        (invariant
+          (identifier))))))
+
+================================================================================
+Enums, values and unions
+================================================================================
+
+context A {
+  enum Currency { JPY "円", USD, EUR }
+  enum Empty {}
+  value Money "金額" {
+    amount: Decimal
+    currency: Currency
+  }
+  value Marker
+  union Payment by method: PaymentMethod {
+    Card "カード" { last4: String }
+    Cash
+  }
+  union Shape { Circle { radius: Decimal } }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (enum_declaration
+      (identifier)
+      (enum_value
+        (identifier)
+        (string))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier)))
+    (enum_declaration
+      (identifier))
+    (value_declaration
+      (identifier)
+      (string)
+      (member_block
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))))
+    (value_declaration
+      (identifier))
+    (union_declaration
+      (identifier)
+      (identifier)
+      (qualified_name
+        (identifier))
+      (variant
+        (identifier)
+        (string)
+        (member_block
+          (field
+            (identifier)
+            (primitive_type))))
+      (variant
+        (identifier)))
+    (union_declaration
+      (identifier)
+      (variant
+        (identifier)
+        (member_block
+          (field
+            (identifier)
+            (primitive_type)))))))
+
+================================================================================
+Field sets, entities and aggregates with fields
+================================================================================
+
+context A {
+  fields Audited "監査" {
+    createdAt: Timestamp
+  }
+  entity Line with Audited, Common.Tenant {
+    id: LineId
+    tags: String[0..*]
+    owns price: Money "価格"
+    references product: ProductId[1..3] -> Catalog.Product "商品"
+    note: String?
+  }
+  aggregate Cart {
+    id: CartId
+    state Open
+    state Closed "閉" {
+      closedAt: Timestamp
+      invariant closed { exists(closedAt) }
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (field_set_declaration
+      (identifier)
+      (string)
+      (member_block
+        (field
+          (identifier)
+          (primitive_type))))
+    (entity_declaration
+      (identifier)
+      (with_clause
+        (qualified_name
+          (identifier))
+        (qualified_name
+          (identifier)
+          (identifier)))
+      (member_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))
+        (field
+          (identifier)
+          (primitive_type)
+          (multiplicity
+            (integer)))
+        (owns_field
+          (identifier)
+          (qualified_name
+            (identifier))
+          (string))
+        (reference_field
+          (identifier)
+          (qualified_name
+            (identifier))
+          (multiplicity
+            (integer)
+            (integer))
+          (qualified_name
+            (identifier)
+            (identifier))
+          (string))
+        (field
+          (identifier)
+          (primitive_type)
+          (multiplicity))))
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))
+        (state
+          (identifier))
+        (state
+          (identifier)
+          (string)
+          (member_block
+            (field
+              (identifier)
+              (primitive_type))
+            (invariant
+              (identifier)
+              (call_expression
+                (function_name)
+                (identifier)))))))))
+
+================================================================================
+Events and errors
+================================================================================
+
+context A {
+  persistent event Placed "受付" with Audited {
+    orderId: OrderId
+  }
+  event Ping
+  error Empty "空"
+  error Duplicate { sku: Sku }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (event_declaration
+      (identifier)
+      (string)
+      (with_clause
+        (qualified_name
+          (identifier)))
+      (field_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))))
+    (event_declaration
+      (identifier))
+    (error_declaration
+      (identifier)
+      (string))
+    (error_declaration
+      (identifier)
+      (field_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))))))

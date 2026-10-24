@@ -1,0 +1,168 @@
+================================================================================
+Factory command with parameters and emits
+================================================================================
+
+context A {
+  aggregate Order {
+    create command place(id: OrderId, items: Item[1..*] "明細") "注文する"
+      -> Draft
+      emits Placed
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (qualified_name
+                (identifier)))
+            (parameter
+              (identifier)
+              (qualified_name
+                (identifier))
+              (multiplicity
+                (integer))
+              (string)))
+          (string)
+          (transition
+            (identifier))
+          (emits_clause
+            (emit
+              (qualified_name
+                (identifier)))))))))
+
+================================================================================
+Transitions, requirements, changes, emits and errors
+================================================================================
+
+context A {
+  aggregate Order {
+    command cancel(reason: Reason) "取り消す"
+      Draft | Confirmed -> Cancelled
+      requires noteForOther "備考" {
+        reason == Reason.Other implies exists(note)
+      } else NoteRequired
+      requires documented "説明のみ" else Common.Forbidden
+      changes note, reason
+      emits Cancelled, Refund? when Confirmed ->, Audit[0..*] when -> Cancelled | Closed
+      errors Sales.Locked, Other
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (qualified_name
+                (identifier))))
+          (string)
+          (transition
+            (identifier)
+            (identifier)
+            (identifier))
+          (requirement
+            (identifier)
+            (string)
+            (binary_expression
+              (binary_expression
+                (identifier)
+                (member_expression
+                  (identifier)
+                  (identifier)))
+              (call_expression
+                (function_name)
+                (identifier)))
+            (qualified_name
+              (identifier)))
+          (requirement
+            (identifier)
+            (string)
+            (qualified_name
+              (identifier)
+              (identifier)))
+          (changes_clause
+            (identifier)
+            (identifier))
+          (emits_clause
+            (emit
+              (qualified_name
+                (identifier)))
+            (emit
+              (qualified_name
+                (identifier))
+              (multiplicity)
+              (outcome_pattern
+                (identifier)))
+            (emit
+              (qualified_name
+                (identifier))
+              (multiplicity
+                (integer))
+              (outcome_pattern
+                (identifier)
+                (identifier))))
+          (errors_clause
+            (qualified_name
+              (identifier)
+              (identifier))
+            (qualified_name
+              (identifier))))))))
+
+================================================================================
+Several transitions, with and without commas
+================================================================================
+
+context A {
+  aggregate Order {
+    command touch()
+      Draft -> Draft
+      Confirmed -> Confirmed, Closed -> Closed
+    note: String
+    command noop()
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (command
+          (identifier)
+          (parameters)
+          (transition
+            (identifier)
+            (identifier))
+          (transition
+            (identifier)
+            (identifier))
+          (transition
+            (identifier)
+            (identifier)))
+        (field
+          (identifier)
+          (primitive_type))
+        (command
+          (identifier)
+          (parameters))))))
