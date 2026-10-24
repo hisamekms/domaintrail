@@ -25,6 +25,7 @@ import { checkFieldSets } from './checker/field-sets.js';
 import { checkInvariants } from './checker/expressions.js';
 import { checkLabels } from './checker/labels.js';
 import { checkNames } from './checker/names.js';
+import { checkPayloadNames } from './checker/payloads.js';
 import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
@@ -115,6 +116,7 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         checkFactoryIds(index, sink);
         checkChanges(index, sink);
         checkEventIds(index, sink);
+        checkPayloadNames(index, sink);
         checkInvariants(index, sink);
         checkTsNames(index, sink);
         checkLabels(index, sink);

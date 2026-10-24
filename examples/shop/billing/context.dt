@@ -3,6 +3,5 @@ context Billing "請求" {
   terms {
     paidAt: "支払日時"
     invoiceId: "請求書ID"
-    at: "日時"
   }
 }

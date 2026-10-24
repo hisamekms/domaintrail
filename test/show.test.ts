@@ -97,7 +97,7 @@ describe('dt show', () => {
         expect(r.out).toEqual([
             'context Billing "請求"',
             '  /// 注文への請求と支払いを扱う。',
-            '  terms paidAt "支払日時", invoiceId "請求書ID", at "日時"',
+            '  terms paidAt "支払日時", invoiceId "請求書ID"',
             '  id InvoiceId "請求書ID": UUID  // billing/invoice.dt:2',
             '  aggregate Invoice "請求書" (states Open, Paid)  // billing/invoice.dt:4',
             '  event InvoicePaid "支払完了"  // billing/invoice.dt:22',

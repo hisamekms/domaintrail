@@ -80,7 +80,7 @@ The sections, in the guide's order:
   [generated tests](docs/guide.md#generated-tests) (see [ADR 0020](docs/adr/0020-generated-checks-and-contract-tests.md)),
   [technical metadata](docs/guide.md#technical-metadata) (see [ADR 0013](docs/adr/0013-field-sets-and-technical-metadata.md))
   and [output directories](docs/guide.md#output-directories)
-- [Rules](docs/guide.md#rules): M001–M021, L001–L003
+- [Rules](docs/guide.md#rules): M001–M022, L001–L003
 - [Looking up one element](docs/guide.md#looking-up-one-element): `dt show`, as text or JSON
 - [Formatting](docs/guide.md#formatting): `dt fmt`, the one canonical layout of `.dt` files
 - [Output and exit codes](docs/guide.md#output-and-exit-codes): text, or JSON with `--format json`
@@ -119,7 +119,8 @@ command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per
 ([0017](docs/adr/0017-command-requirements.md)), command events as an exact contract
 ([0018](docs/adr/0018-command-events-contract.md)), the fields a command changes and decisions
 ([0019](docs/adr/0019-command-changes-and-decisions.md)), generated checks and contract tests
-([0020](docs/adr/0020-generated-checks-and-contract-tests.md)) and more.
+([0020](docs/adr/0020-generated-checks-and-contract-tests.md)), event and error fields named after their source
+([0021](docs/adr/0021-payload-field-names.md)) and more.
 
 ## Live View
 
