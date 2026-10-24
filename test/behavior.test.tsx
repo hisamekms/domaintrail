@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/core/files.js';
 import type { DomainModel, ElementModel } from '../src/model/model.js';
-import { CommandCard, OutcomeCard, outcomesOf, Requirements } from '../web/behavior.js';
+import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from '../web/behavior.js';
 import { MESSAGES } from '../web/i18n.js';
 import { tabsFor } from '../web/inspector.js';
 import { namer, resolve } from '../web/model-utils.js';
@@ -44,6 +44,26 @@ function clickOn(card: (onSelect: (id: string) => void) => ReactNode, label: str
 }
 
 describe('behaviour cards', () => {
+    test('a policy: its event and command, and the cards of the command it runs and of the event it reacts to', () => {
+        const policy = model.elements['Billing.BillConfirmedOrder'];
+        const invoice = model.elements['Billing.Invoice'];
+        expect(tabsFor({ kind: 'element', el: policy })).toEqual(['structure', 'source']);
+        const reaction = (onSelect: (id: string) => void) => <PolicyReaction p={policy} model={model} names={names()} tx={tx} onSelect={onSelect} input />;
+        expect(text(reaction(() => {}))).toContain(tx.eventually);
+        expect(text(reaction(() => {}))).toContain('billedAmount');
+        expect(clickOn(reaction, '注文確定 OrderConfirmed')).toEqual(['Sales.OrderConfirmed']);
+        expect(clickOn(reaction, '請求書を発行する Invoice.issue')).toEqual(['Billing.Invoice:issue']);
+        const issue = (onSelect: (id: string) => void) => (
+            <CommandCard agg={invoice} c={invoice.commands!.find((c) => c.name === 'issue')!} model={model} names={names()} tx={tx} onSelect={onSelect} />
+        );
+        expect(text(issue(() => {}))).toContain(tx.triggeredBy);
+        expect(clickOn(issue, '確定した注文に請求する BillConfirmedOrder')).toEqual(['Billing.BillConfirmedOrder']);
+        const confirmed = (onSelect: (id: string) => void) => (
+            <OutcomeCard id="Sales.OrderConfirmed" commands={[command('confirm')]} model={model} names={names()} tx={tx} onSelect={onSelect} />
+        );
+        expect(clickOn(confirmed, '確定した注文に請求する BillConfirmedOrder')).toEqual(['Billing.BillConfirmedOrder']);
+    });
+
     test('a command card shows its transition, parameters and outcomes', () => {
         const html = renderToStaticMarkup(<CommandCard agg={order} c={command('confirm')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
         expect(html.match(/class="state-chip"/g)).toHaveLength(2);

@@ -15,7 +15,7 @@ TermEntry:
     name=FeatureName ':' label=STRING;
 
 ContextElement:
-    IdType | PrimitiveDecl | VerifiedDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl | FieldSet;
+    IdType | PrimitiveDecl | VerifiedDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate | EventDecl | ErrorDecl | FieldSet | Policy;
 
 // Types that may appear on the right-hand side of a field declaration.
 type TypeDecl = IdType | PrimitiveDecl | VerifiedDecl | EnumDecl | ValueObject | UnionDecl | Entity | Aggregate;
@@ -128,6 +128,12 @@ Parameter:
 EventDecl:
     (persistent?='persistent')? 'event' name=ID label=STRING? WithFieldSets? ('{' members+=Field* '}')?;
 
+// `policy Name "label" when Event -> Aggregate.command`: when the event happens, the command is eventually run (by
+// any mechanism). Declared in the reacting context: the aggregate is one of its own, the event may be of any context
+// (checked by M023), so the aggregate is named without its context. The command is looked up in the aggregate.
+Policy:
+    'policy' name=ID label=STRING? 'when' event=[EventDecl:QualifiedName] '->' aggregate=[Aggregate:ID] '.' command=[Command:FeatureName];
+
 ErrorDecl:
     'error' name=ID label=STRING? WithFieldSets? ('{' members+=Field* '}')?;
 
@@ -190,7 +196,7 @@ LambdaParam:
 
 // Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
 FeatureName returns string:
-    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes' | 'verified' | 'of' | 'for'
+    ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes' | 'verified' | 'of' | 'for' | 'policy'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 QualifiedName returns string:

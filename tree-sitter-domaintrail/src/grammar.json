@@ -174,6 +174,10 @@
         {
           "type": "SYMBOL",
           "name": "field_set_declaration"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "policy_declaration"
         }
       ]
     },
@@ -1879,6 +1883,75 @@
         }
       ]
     },
+    "policy_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "policy"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "label",
+              "content": {
+                "type": "SYMBOL",
+                "name": "string"
+              }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": "when"
+        },
+        {
+          "type": "FIELD",
+          "name": "event",
+          "content": {
+            "type": "SYMBOL",
+            "name": "qualified_name"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "->"
+        },
+        {
+          "type": "FIELD",
+          "name": "aggregate",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "."
+        },
+        {
+          "type": "FIELD",
+          "name": "command",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_feature_name"
+          }
+        }
+      ]
+    },
     "event_declaration": {
       "type": "SEQ",
       "members": [
@@ -2827,6 +2900,10 @@
               {
                 "type": "STRING",
                 "value": "for"
+              },
+              {
+                "type": "STRING",
+                "value": "policy"
               },
               {
                 "type": "STRING",

@@ -18,12 +18,22 @@ import {
     commandsInterfaceName,
     commonTypeName,
     decisionTypeName,
+    inputTypeName,
     invalidTypeName,
     makeTypeName,
     outputsVary,
+    policyHandlersName,
+    policyTypeName,
     shapeName,
     stateTypeName,
 } from './naming.js';
+
+/**
+ * How the policies of a context are generated (`generate.ts.policies`, ADR 0022): `optional`, a handler type per policy
+ * that nothing requires; `required`, also `<Context>PolicyHandlers`, which the contract tests require.
+ */
+export const POLICY_MODES = ['optional', 'required'] as const;
+export type PolicyMode = (typeof POLICY_MODES)[number];
 
 export interface GeneratedFile {
     /** Path relative to the output directory (`/`-separated; below the context's directory when contexts are split). */
@@ -176,21 +186,27 @@ export type Timestamp = Date;
  * Generates one module per bounded context, plus a runtime and an index in every directory written to.
  * `dirs` places contexts in directories (`/`-separated, relative to the output directory; default: the output
  * directory itself); each index re-exports only the contexts in its directory. With `tests`, also the contract tests
- * (ADR 0020) into `tests.dir`. Requires a model without errors.
+ * (ADR 0020) into `tests.dir`. `policies` gives the mode of each context's policies (absent: `optional`). Requires a
+ * model without errors.
  */
-export function generateTypeScript(model: DomainModel, dirs: Readonly<Record<string, string>> = {}, tests?: TestsOptions): GeneratedFile[] {
+export function generateTypeScript(
+    model: DomainModel,
+    dirs: Readonly<Record<string, string>> = {},
+    tests?: TestsOptions,
+    policies: Readonly<Record<string, PolicyMode>> = {},
+): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     const files: GeneratedFile[] = [];
     for (const dir of [...new Set(model.contexts.map(dirOf))]) {
         const contexts = model.contexts.filter((c) => dirOf(c) === dir);
         files.push({ path: posix.join(dir, '_runtime.ts'), content: RUNTIME });
         for (const ctx of contexts) {
-            files.push({ path: posix.join(dir, `${ctx}.ts`), content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other)).emit() });
+            files.push({ path: posix.join(dir, `${ctx}.ts`), content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other), policies[ctx] ?? 'optional').emit() });
         }
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
         files.push({ path: posix.join(dir, 'index.ts'), content: index });
     }
-    if (tests) files.push(...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir) }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)));
+    if (tests) files.push(...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)));
     return files;
 }
 
@@ -269,12 +285,15 @@ class ContextEmitter {
     private readonly valueImports = new Set<string>();
     private readonly out: string[] = [];
     private readonly checks: CheckWriter;
+    /** The `…Input` types written, once each. */
+    private readonly inputs = new Set<string>();
 
     constructor(
         private readonly model: DomainModel,
         private readonly ctx: string,
         /** Import specifier of another context's module. */
         private readonly moduleOf: (ctx: string) => string,
+        private readonly policies: PolicyMode,
     ) {
         this.checks = new CheckWriter({
             model,
@@ -349,11 +368,15 @@ class ContextEmitter {
                 case 'aggregate':
                     this.aggregate(el);
                     break;
+                case 'policy':
+                    this.policy(el);
+                    break;
             }
             this.out.push('');
         }
         this.persistentEvents();
         this.unions();
+        this.policyHandlers();
         const body = this.out.join('\n');
         const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(body);
         const runtime = ['Decimal', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
@@ -390,6 +413,67 @@ class ContextEmitter {
             this.line(`export type ${AGGREGATE_TYPE} = ${aggregates.map((e) => e.name).join(' | ')};`);
             this.out.push('');
         }
+    }
+
+    /**
+     * A policy: the type of its handler, from the event to what the application needs to run the command (`…Input`,
+     * written before the first policy that runs the command). The rule is "eventually": nothing here says how.
+     */
+    private policy(p: ElementModel): void {
+        const { event, aggregate, command } = p.policy!;
+        const agg = this.model.elements[aggregate];
+        const c = agg?.commands?.find((x) => x.name === command);
+        if (!agg || !c) return; // the model has no errors when generated
+        const input = inputTypeName(agg, c);
+        if (!this.inputs.has(input)) {
+            this.inputs.add(input);
+            this.input(agg, c);
+            this.out.push('');
+        }
+        const target = `${agg.name}.${c.name}`;
+        this.jsdoc([
+            `Policy ${p.name}: when ${this.ref(event)} happens, ${target} is run — eventually.`,
+            ...describedLines(p),
+            'The handler computes what the command needs from the event; your application runs the command. Any mechanism satisfies the rule: the same use case, an event bus, a batch. Data from elsewhere comes in through the closures your code builds; a rejected promise means the input cannot be computed now.',
+            this.policies === 'required'
+                ? `Required (\`generate.ts.policies\`): implement it in \`${policyHandlersName(this.ctx)}\`, which the contract tests take.`
+                : `Optional (\`generate.ts.policies\`): nothing requires an implementation.`,
+            seeLine(p.location),
+        ]);
+        this.line(`export type ${policyTypeName(p)} = (event: ${this.ref(event)}) => Promise<${input}>;`);
+    }
+
+    /** What the application needs to run a command: its arguments by name, after the aggregate's ID unless a factory. */
+    private input(agg: ElementModel, c: CommandModel): void {
+        const id = agg.fields.find((f) => f.name === 'id');
+        const self = !c.factory && id ? [`/** The ${agg.name} to run the command on. */`, `readonly ${aggregateParamName(agg)}: ${this.fieldType(id)};`] : [];
+        this.jsdoc([
+            `What the application needs to run ${agg.name}.${c.name}${c.factory ? ' (a factory)' : ''}: ${c.factory ? 'its parameters' : `the ID of the ${agg.name}, then its parameters`}, by name.`,
+            'Given by the handlers of the policies that run it.',
+            seeLine(c.location),
+        ]);
+        const lines = [...self, ...c.params.flatMap((f) => this.property(f))];
+        if (!lines.length) {
+            this.line(`export interface ${inputTypeName(agg, c)} {}`);
+            return;
+        }
+        this.line(`export interface ${inputTypeName(agg, c)} {`);
+        for (const l of lines) this.line(`    ${l}`);
+        this.line('}');
+    }
+
+    /** With `required` policies: every policy of the context with its handler, implemented by your code. */
+    private policyHandlers(): void {
+        const policies = elementsIn(this.model, this.ctx).filter((el) => el.kind === 'policy');
+        if (this.policies !== 'required' || !policies.length) return;
+        this.jsdoc([`The handlers of the policies of ${this.ctx}, one per policy: required (\`generate.ts.policies\`), and taken by the contract tests.`]);
+        this.line(`export interface ${policyHandlersName(this.ctx)} {`);
+        for (const p of policies) {
+            if (p.label) this.line(`    /** ${oneLine(p.label)} */`);
+            this.line(`    readonly ${p.name}: ${policyTypeName(p)};`);
+        }
+        this.line('}');
+        this.out.push('');
     }
 
     /** The field sets an element extends, as written from this context. */

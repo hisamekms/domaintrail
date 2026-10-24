@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
-import { ConfigError, findConfigFile, loadConfig, parseJsonc } from '../src/core/config.js';
+import { ConfigError, checkTsContexts, findConfigFile, loadConfig, parseJsonc, policyModes } from '../src/core/config.js';
 import { findDomainFiles } from '../src/core/files.js';
 
 const dirs: string[] = [];
@@ -51,6 +51,15 @@ describe('config file', () => {
         expect(await loadConfig({ start: dir })).toMatchObject({ tsOut: 'generated/domain', tsContexts: { C: 'shared/gen' } });
     });
 
+    test('policies: the mode of a context, else that of the project, else optional', async () => {
+        const dir = await project({ 'domaintrail.json': '{ "generate": { "ts": { "policies": "required", "contexts": { "A": { "policies": "optional" }, "B": { "out": "b" } } } } }' });
+        const c = await loadConfig({ start: dir });
+        expect(c).toMatchObject({ tsContexts: { B: 'b' }, tsPolicies: { project: 'required', contexts: { A: 'optional' } } });
+        expect(policyModes(c, ['A', 'B', 'C'])).toEqual({ A: 'optional', B: 'required', C: 'required' });
+        expect(policyModes(await loadConfig({ start: await project({}) }), ['A'])).toEqual({ A: 'optional' });
+        expect(() => checkTsContexts({ ...c, tsPolicies: { project: 'optional', contexts: { X: 'required' } } }, ['A', 'B'])).toThrow("'generate.ts.contexts' names 'X'");
+    });
+
     test.each([
         ['{ "source": [] }', "unknown key 'source'"],
         ['{ "sources": "a" }', "'sources' must be an array of glob strings"],
@@ -64,7 +73,9 @@ describe('config file', () => {
         ['{ "generate": { "ts": { "outDir": "x" } } }', "unknown key 'generate.ts.outDir'"],
         ['{ "generate": { "ts": { "contexts": [] } } }', "'generate.ts.contexts' must be an object keyed by context name"],
         ['{ "generate": { "ts": { "contexts": { "C": "x" } } } }', "'generate.ts.contexts.C' must be an object"],
-        ['{ "generate": { "ts": { "contexts": { "C": {} } } } }', "'generate.ts.contexts.C.out' is required"],
+        ['{ "generate": { "ts": { "contexts": { "C": {} } } } }', "'generate.ts.contexts.C' needs 'out' or 'policies'"],
+        ['{ "generate": { "ts": { "policies": "always" } } }', "'generate.ts.policies' must be one of 'optional', 'required'"],
+        ['{ "generate": { "ts": { "contexts": { "C": { "policies": true } } } } }', "'generate.ts.contexts.C.policies' must be one of 'optional', 'required'"],
         ['{ "generate": { "ts": { "contexts": { "C": { "out": "../x" } } } } }', "'generate.ts.contexts.C.out' must stay inside the directory of the config file"],
         ['{ "generate": { "ts": { "tests": true } } }', "'generate.ts.tests' must be an object"],
         ['{ "generate": { "ts": { "tests": { "runner": "mocha" } } } }', "'generate.ts.tests.runner' must be one of 'bun', 'vitest', 'jest', 'node'"],

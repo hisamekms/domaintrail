@@ -75,7 +75,7 @@ export interface LanguageServerOptions {
  * `NearestConfig`). There is one workspace per session.
  */
 export class DomainWorkspace {
-    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: '', tsContexts: {}, view: { port: 0, host: '' } };
+    config: ResolvedConfig = { root: process.cwd(), sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: '', tsContexts: {}, tsPolicies: { project: 'optional', contexts: {} }, view: { port: 0, host: '' } };
     /** Where the config was searched from: the nearest config of a document is only searched up to it. */
     start = process.cwd();
     /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */
@@ -310,6 +310,7 @@ function kindOf(node: AstNode): string | undefined {
     if (ast.isCommand(node)) return node.factory ? 'create command' : 'command';
     if (ast.isEventDecl(node)) return node.persistent ? 'persistent event' : 'event';
     if (ast.isErrorDecl(node)) return 'error';
+    if (ast.isPolicy(node)) return 'policy';
     if (ast.isField(node)) return 'field';
     if (ast.isOwnsField(node)) return 'owns';
     if (ast.isReferenceField(node)) return 'references';
@@ -324,7 +325,9 @@ const cstText = (node: AstNode | undefined): string => node?.$cstNode?.text ?? '
 
 /**
  * Hover: kind, name (with type for fields), label, `///` description, the expression of an invariant or requirement,
- * what a verified type verifies (`of`, `for`, `errors`), and the `changes` and `emits` entries of a command (the events with their multiplicity and `when`).
+ * what a verified type verifies (`of`, `for`, `errors`), the `changes` and `emits` entries of a command (the events with
+ * their multiplicity and `when`) and the policies that run it, the reaction of a policy, and the policies that react to
+ * an event.
  */
 class DomainHoverProvider extends AstNodeHoverProvider {
     constructor(private readonly services: LangiumServices) {
@@ -360,7 +363,22 @@ class DomainHoverProvider extends AstNodeHoverProvider {
             lines.push(`\`\`\`dt\nof ${cstText(node.base)}${node.context ? ` for ${cstText(node.context)}${node.contextOptional ? '?' : ''}` : ''}${errors}\n\`\`\``);
         }
         if (ast.isRequirement(node)) lines.push(`\`\`\`dt\n${node.expr ? `{ ${cstText(node.expr)} } ` : ''}else ${node.error?.$refText ?? ''}\n\`\`\``);
+        if (ast.isPolicy(node)) {
+            lines.push(`\`\`\`dt\nwhen ${node.event.$refText} -> ${node.aggregate.$refText}.${node.command.$refText}\n\`\`\``);
+            lines.push('After the event, the command is run — eventually, by any mechanism.');
+        }
+        const policies = ast.isCommand(node) || ast.isEventDecl(node) ? this.policiesOf(node) : [];
+        if (policies.length) {
+            const what = ast.isCommand(node) ? 'Run by' : 'Reacted to by';
+            lines.push(`${what} ${policies.map((p) => `policy \`${p.$container.name}.${p.name}\`${ast.isCommand(node) ? ` (when ${p.event.$refText})` : ` (-> ${p.aggregate.$refText}.${p.command.$refText})`}`).join(', ')}`);
+        }
         return lines.join('\n\n');
+    }
+
+    /** The policies that run a command or react to an event, in any file. */
+    private policiesOf(node: ast.Command | ast.EventDecl): ast.Policy[] {
+        const all = this.services.shared.workspace.LangiumDocuments.all.flatMap((d) => (d.parseResult.value as ast.Model).contexts.flatMap((c) => c.elements.filter(ast.isPolicy))).toArray();
+        return all.filter((p) => (ast.isCommand(node) ? p.command.ref === node : p.event.ref === node));
     }
 }
 
@@ -383,6 +401,7 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isEnumDecl(node)) return SymbolKind.Enum;
         if (ast.isEnumValue(node) || ast.isState(node)) return SymbolKind.EnumMember;
         if (ast.isEventDecl(node)) return SymbolKind.Event;
+        if (ast.isPolicy(node)) return SymbolKind.Interface;
         if (ast.isCommand(node)) return SymbolKind.Method;
         if (ast.isParameter(node)) return SymbolKind.Variable;
         if (ast.isInvariant(node) || ast.isRequirement(node)) return SymbolKind.Boolean;
@@ -402,9 +421,10 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
 const IDENTIFIER = /^[_a-zA-Z][\w_]*$/;
 
 /**
- * Renames context elements and states: the declaration and every reference, in any file. A qualified reference
- * (`Sales.Order`) keeps its context. Other names (contexts, fields, parameters) are also used in places that are not
- * references (qualified names, expressions, terms), so they are not renamed.
+ * Renames context elements, states and commands: the declaration and every reference, in any file (a command is
+ * referenced by policies, `-> Invoice.issue`). A qualified reference (`Sales.Order`) keeps its context. Other names
+ * (contexts, fields, parameters) are also used in places that are not references (qualified names, expressions,
+ * terms), so they are not renamed.
  */
 class DomainRenameProvider extends DefaultRenameProvider {
     constructor(private readonly services: LangiumServices) {
@@ -440,7 +460,7 @@ class DomainRenameProvider extends DefaultRenameProvider {
     private target(document: LangiumDocument, position: Position): AstNode | undefined {
         const leaf = this.leafAt(document, position);
         const [target] = leaf ? this.references.findDeclarations(leaf) : [];
-        return target && (ast.isState(target) || ast.isContext(target.$container)) ? target : undefined;
+        return target && (ast.isState(target) || ast.isCommand(target) || ast.isContext(target.$container)) ? target : undefined;
     }
 }
 

@@ -152,3 +152,4 @@ although nothing changed — the DSL is changed (`emits X?`), not the implementa
   documented, not checked; generated tests are to check them.
 - ADR 0001's "a command without `emits` returns `readonly never[]`" no longer holds: such a command's `events` is
   `NoEvents`.
+- ADR 0022 declares reactions to events: `policy … when Event -> Aggregate.command` (the event leads to the command).

@@ -533,6 +533,10 @@
           "named": true
         },
         {
+          "type": "policy_declaration",
+          "named": true
+        },
+        {
           "type": "primitive_declaration",
           "named": true
         },
@@ -1489,6 +1493,62 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "policy_declaration",
+    "named": true,
+    "fields": {
+      "aggregate": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "command": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "event": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "qualified_name",
+            "named": true
+          }
+        ]
+      },
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -2475,6 +2535,10 @@
   },
   {
     "type": "persistent",
+    "named": false
+  },
+  {
+    "type": "policy",
     "named": false
   },
   {

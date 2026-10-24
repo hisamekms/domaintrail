@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
+import { POLICY_MODES, type PolicyMode } from '../generator/typescript.js';
 
 /** Config file names, in order of preference within one directory. */
 export const CONFIG_FILES = ['domaintrail.jsonc', 'domaintrail.json'] as const;
@@ -11,6 +12,7 @@ export const DEFAULT_SOURCES = ['**/*.dt'];
 export const DEFAULT_TS_OUT = 'generated/domain';
 export const DEFAULT_PORT = 4321;
 export const DEFAULT_HOST = '127.0.0.1';
+export const DEFAULT_POLICIES: PolicyMode = 'optional';
 
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile {
@@ -19,7 +21,16 @@ export interface DomainTrailConfigFile {
     sources?: string[];
     /** Whether files and directories ignored by `.gitignore` are skipped when finding sources. Default: true. */
     respectGitignore?: boolean;
-    generate?: { ts?: { out?: string; contexts?: Record<string, { out: string }>; tests?: { out?: string; runner?: Runner } } };
+    generate?: {
+        ts?: {
+            out?: string;
+            /** Whether the policies of a context must be implemented (ADR 0022). Default: `optional`. */
+            policies?: PolicyMode;
+            /** Per context: its own output directory, and how its policies are generated (overrides `policies`). */
+            contexts?: Record<string, { out?: string; policies?: PolicyMode }>;
+            tests?: { out?: string; runner?: Runner };
+        };
+    };
     view?: { port?: number; host?: string };
 }
 
@@ -33,6 +44,12 @@ export interface ResolvedConfig {
     tsOut: string;
     /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
     tsContexts: Record<string, string>;
+    /**
+     * Whether policies are `optional` (a handler type per policy) or `required` (also `<Context>PolicyHandlers`, which
+     * the contract tests require): the project's setting (`generate.ts.policies`, default `optional`) and the contexts
+     * that override it (`generate.ts.contexts.<Ctx>.policies`). See `policyModes`.
+     */
+    tsPolicies: { project: PolicyMode; contexts: Record<string, PolicyMode> };
     /**
      * The contract tests (`generate.ts.tests`), generated only when configured: their directory (absent: `tests` in the
      * output directory of `generate.ts.out` / `--out`) and the runner to write an adapter for.
@@ -74,14 +91,23 @@ export async function loadConfig(opts: { start: string; configPath?: string }): 
         sources: config.sources ?? DEFAULT_SOURCES,
         respectGitignore: config.respectGitignore ?? true,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
-        tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).map(([ctx, c]) => [ctx, c.out])),
+        tsContexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).flatMap(([ctx, c]) => (c.out !== undefined ? [[ctx, c.out]] : []))),
+        tsPolicies: {
+            project: config.generate?.ts?.policies ?? DEFAULT_POLICIES,
+            contexts: Object.fromEntries(Object.entries(config.generate?.ts?.contexts ?? {}).flatMap(([ctx, c]) => (c.policies ? [[ctx, c.policies]] : []))),
+        },
         ...(config.generate?.ts?.tests && { tsTests: config.generate.ts.tests }),
         view: { port: config.view?.port ?? DEFAULT_PORT, host: config.view?.host ?? DEFAULT_HOST },
     };
 }
 
 function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
-    return { sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+    return { sources: DEFAULT_SOURCES, respectGitignore: true, tsOut: DEFAULT_TS_OUT, tsContexts: {}, tsPolicies: { project: DEFAULT_POLICIES, contexts: {} }, view: { port: DEFAULT_PORT, host: DEFAULT_HOST } };
+}
+
+/** How the policies of each context are generated: the context's own setting, else the project's, else `optional`. */
+export function policyModes(config: ResolvedConfig, contexts: readonly string[]): Record<string, PolicyMode> {
+    return Object.fromEntries(contexts.map((c) => [c, config.tsPolicies.contexts[c] ?? config.tsPolicies.project]));
 }
 
 /** JSON with comments and trailing commas (JSONC). */
@@ -136,8 +162,9 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
         for (const key of Object.keys(gen!)) if (key !== 'ts') fail(`unknown generator 'generate.${key}' (supported: ts)`);
         const ts = gen!.ts as Record<string, unknown> | undefined;
         if (ts !== undefined && (typeof ts !== 'object' || ts === null || Array.isArray(ts))) fail("'generate.ts' must be an object");
-        for (const key of Object.keys(ts ?? {})) if (!['out', 'contexts', 'tests'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
+        for (const key of Object.keys(ts ?? {})) if (!['out', 'policies', 'contexts', 'tests'].includes(key)) fail(`unknown key 'generate.ts.${key}'`);
         checkOut(ts?.out, 'generate.ts.out', fail);
+        checkPolicies(ts?.policies, 'generate.ts.policies', fail);
         const tests = ts?.tests as Record<string, unknown> | undefined;
         if (tests !== undefined) {
             if (typeof tests !== 'object' || tests === null || Array.isArray(tests)) fail("'generate.ts.tests' must be an object");
@@ -153,9 +180,11 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
             for (const [ctx, c] of Object.entries(contexts as Record<string, unknown>)) {
                 const key = `generate.ts.contexts.${ctx}`;
                 if (typeof c !== 'object' || c === null || Array.isArray(c)) fail(`'${key}' must be an object`);
-                for (const k of Object.keys(c as object)) if (k !== 'out') fail(`unknown key '${key}.${k}'`);
-                if ((c as Record<string, unknown>).out === undefined) fail(`'${key}.out' is required`);
-                checkOut((c as Record<string, unknown>).out, `${key}.out`, fail);
+                for (const k of Object.keys(c as object)) if (k !== 'out' && k !== 'policies') fail(`unknown key '${key}.${k}'`);
+                const entry = c as Record<string, unknown>;
+                if (entry.out === undefined && entry.policies === undefined) fail(`'${key}' needs 'out' or 'policies'`);
+                checkOut(entry.out, `${key}.out`, fail);
+                checkPolicies(entry.policies, `${key}.policies`, fail);
             }
         }
     }
@@ -175,6 +204,11 @@ function checkOut(out: unknown, key: string, fail: (msg: string) => never): void
     if (!staysInside(out as string)) fail(`'${key}' must stay inside the directory of the config file: '${out}'`);
 }
 
+/** `optional` or `required` (ADR 0022). */
+function checkPolicies(mode: unknown, key: string, fail: (msg: string) => never): void {
+    if (mode !== undefined && !(POLICY_MODES as readonly unknown[]).includes(mode)) fail(`'${key}' must be one of ${POLICY_MODES.map((m) => `'${m}'`).join(', ')}`);
+}
+
 /**
  * Whether a path relative to the root stays inside it: not absolute and without a `..` segment. Used for output
  * directories from the config and `--out`, and for the entries of `.domaintrail/generated.json`.
@@ -188,7 +222,7 @@ export function staysInside(rel: string): boolean {
  * Only known once the model is analyzed, so `dt generate` calls it after checking.
  */
 export function checkTsContexts(config: ResolvedConfig, contexts: readonly string[]): void {
-    const unknown = Object.keys(config.tsContexts).filter((c) => !contexts.includes(c));
+    const unknown = [...new Set([...Object.keys(config.tsContexts), ...Object.keys(config.tsPolicies.contexts)])].filter((c) => !contexts.includes(c));
     if (unknown.length === 0) return;
     const where = config.file ?? 'config';
     throw new ConfigError(

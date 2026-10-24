@@ -1,4 +1,4 @@
-import { allFieldsOf, emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from '../src/model/model';
+import { allFieldsOf, emitSuffix, emittedEvents, policiesReactingTo, policiesRunning, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from '../src/model/model';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 
@@ -139,6 +139,55 @@ export function Changes({ agg, c, names }: { agg: ElementModel; c: CommandModel;
     );
 }
 
+/** The policies of a list as links, after a caption (`実行するポリシー`, `反応するポリシー`); nothing when there are none. */
+function PolicyLinks({ caption, policies, names, onSelect }: { caption: string; policies: ElementModel[]; names: Namer; onSelect: Select }) {
+    if (!policies.length) return null;
+    return (
+        <div className="bcard-outcome">
+            <span className="bcard-caption">{caption}</span>
+            {policies.map((p) => (
+                <KindLink key={p.id} kind="policy" id={p.id} x={p} names={names} onSelect={onSelect} />
+            ))}
+        </div>
+    );
+}
+
+/**
+ * A policy's reaction: the event, and the command it runs, as links; that it runs eventually, by any mechanism; and
+ * with `input`, what the command needs (its parameters, after the aggregate's ID unless a factory).
+ */
+export function PolicyReaction({ p, model, names, tx, onSelect, input }: { p: ElementModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select; input?: boolean }) {
+    if (!p.policy) return null;
+    const { event, aggregate, command } = p.policy;
+    const agg = model.elements[aggregate];
+    const c = agg?.commands?.find((x) => x.name === command);
+    const id = agg?.fields.find((f) => f.name === 'id');
+    const fields = c ? [...(!c.factory && id ? [{ ...id, name: agg!.name.charAt(0).toLowerCase() + agg!.name.slice(1), label: agg!.label }] : []), ...c.params] : [];
+    return (
+        <div className="bcard-reaction">
+            <div className="bcard-outcome">
+                <span className="bcard-caption">{tx.whenEvent}</span>
+                <KindLink kind="event" id={event} x={model.elements[event] ?? { name: event }} names={names} onSelect={onSelect} />
+            </div>
+            <div className="bcard-outcome">
+                <span className="bcard-caption">{tx.runsCommand}</span>
+                {c ? (
+                    <KindLink kind="command" id={c.id} x={{ name: `${agg!.name}.${c.name}`, ...(c.label && { label: c.label }) }} names={names} onSelect={onSelect} />
+                ) : (
+                    <code>{`${aggregate}.${command}`}</code>
+                )}
+            </div>
+            <div className="muted small">{tx.eventually}</div>
+            {input && fields.length > 0 && (
+                <div className="bcard-part">
+                    <div className="bcard-caption">{tx.policyInput}</div>
+                    <FieldGrid fields={fields} ctx={p.context} names={names} onSelect={onSelect} />
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: ElementModel; c: CommandModel; model: DomainModel; names: Namer; tx: Messages; onSelect: Select }) {
     const outcome = (id: string) => model.elements[id] ?? { name: id };
     return (
@@ -189,6 +238,7 @@ export function CommandCard({ agg, c, model, names, tx, onSelect }: { agg: Eleme
                     )}
                 </div>
             )}
+            <PolicyLinks caption={tx.triggeredBy} policies={policiesRunning(model, agg.id, c.name)} names={names} onSelect={onSelect} />
         </div>
     );
 }
@@ -210,6 +260,7 @@ export function OutcomeCard({ id, commands, model, names, tx, onSelect }: { id: 
                     <KindLink key={c.id} kind="command" id={c.id} x={c} names={names} onSelect={onSelect} />
                 ))}
             </div>
+            {kind === 'event' && <PolicyLinks caption={tx.reactedToBy} policies={policiesReactingTo(model, id)} names={names} onSelect={onSelect} />}
             {el && el.fields.length > 0 && (
                 <div className="bcard-part">
                     <div className="bcard-caption">{tx.payload}</div>

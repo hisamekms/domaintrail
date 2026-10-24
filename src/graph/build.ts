@@ -400,6 +400,7 @@ const STUB_STEREOTYPES: Record<ElementModel['kind'], Texts> = {
     event: stereotype('ドメインイベント', 'event'),
     error: stereotype('エラー', 'error'),
     fieldSet: stereotype('項目セット', 'field set'),
+    policy: stereotype('ポリシー', 'policy'),
 };
 
 /**
@@ -423,11 +424,11 @@ function focusStubs(
         if ((!focus.has(d.from) && !focus.has(d.to)) || hidden.has(d.from) || hidden.has(d.to)) continue;
         const source = model.elements[d.source];
         const target = representative(model, d.target);
-        if (!source || !target || source.kind === 'event' || source.kind === 'error') continue;
+        if (!source || !target || source.kind === 'event' || source.kind === 'error' || source.kind === 'policy') continue;
         for (const el of [source, target]) if (!shownIds.has(el.id)) stubs.set(el.id, el);
         const key = `${source.id}=>${target.id}`;
         const pair = pairs.get(key) ?? { source: source.id, target: target.id, type: false, paths: [] };
-        pair.type ||= d.kind === 'type';
+        pair.type ||= d.kind !== 'id';
         if (!pair.paths.includes(d.path)) pair.paths.push(d.path);
         pairs.set(key, pair);
     }

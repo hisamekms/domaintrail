@@ -25,6 +25,8 @@
 (event_declaration name: (identifier) @type)
 (error_declaration name: (identifier) @type)
 (field_set_declaration name: (identifier) @type)
+(policy_declaration name: (identifier) @type)
+(policy_declaration aggregate: (identifier) @type)
 
 (enum_value name: (identifier) @constant)
 (variant name: (identifier) @constant)
@@ -35,6 +37,7 @@
 (outcome_pattern to: (identifier) @constant)
 
 (command name: (identifier) @function)
+(policy_declaration command: (identifier) @function)
 (invariant name: (identifier) @label)
 (requirement name: (identifier) @label)
 
@@ -93,6 +96,7 @@
   "persistent"
   "event"
   "error"
+  "policy"
 ] @keyword
 
 [

@@ -6,9 +6,9 @@ import type { ModelDiff } from '../src/graph/diff';
 import { emitSuffix, emittedEvents, type CommandModel, type DomainModel, type ElementModel, type FieldModel, type InvariantModel, type Location, type TypeExpr } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
-import { Changes, CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, Requirements } from './behavior';
+import { Changes, CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
-import { KIND_ORDER, fieldSetUsers, inCatalog, namer, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
+import { KIND_ORDER, fieldSetUsers, inCatalog, namer, policiesReactingTo, policiesRunning, resolve, selectedFile, type Namer, type Resolved, type Select } from './model-utils';
 import { ownerElement } from './render';
 import { SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
@@ -55,7 +55,8 @@ export function tabsFor(r: Resolved): InspectorTab[] {
         case 'command':
             return ['structure', 'states', 'behavior', 'source'];
         case 'element':
-            return r.el.kind === 'aggregate' ? ['structure', 'states', 'behavior', 'events', 'references', 'source'] : ['structure', 'references', 'source'];
+            if (r.el.kind === 'aggregate') return ['structure', 'states', 'behavior', 'events', 'references', 'source'];
+            return r.el.kind === 'policy' ? ['structure', 'source'] : ['structure', 'references', 'source'];
     }
 }
 
@@ -262,6 +263,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                     <Section title={tx.mayReturn}>
                         {c.errors.length ? c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />) : <span className="muted">{tx.none}</span>}
                     </Section>
+                    <PolicyList title={tx.triggeredBy} policies={policiesRunning(model, agg.id, c.name)} onSelect={onSelect} />
                 </>
             );
         }
@@ -288,6 +290,14 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     }
     if (tab === 'events') return <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />;
     if (tab === 'references') return <References model={model} el={el} onSelect={onSelect} />;
+
+    if (el.kind === 'policy') {
+        return (
+            <Section title={tx.reaction}>
+                <PolicyReaction p={el} model={model} names={names} tx={tx} onSelect={onSelect} input />
+            </Section>
+        );
+    }
 
     // structure
     return (
@@ -401,14 +411,14 @@ function Dependencies({ title, groups, other, onSelect }: { title: string; group
                 <details key={other(g)} className="deps">
                     <summary>
                         <a onClick={() => onSelect(other(g))}>{names.id(other(g))}</a>
-                        <span className="muted small"> {dependencyCounts(g.ids, g.types)[lang][names.mode]}</span>
+                        <span className="muted small"> {dependencyCounts(g.ids, g.types, g.events)[lang][names.mode]}</span>
                     </summary>
                     {g.uses.map((u, i) => (
                         <div key={i} className="sub small">
                             <a onClick={() => onSelect(u.source)}>{names.id(u.source)}</a>
                             <span className="muted">.{u.path} → </span>
                             <a onClick={() => onSelect(u.target)}>{names.id(u.target)}</a>
-                            <span className={`dep-kind dep-${u.kind}`}>{u.kind === 'id' ? 'ID' : tx.typeDependency}</span>
+                            <span className={`dep-kind dep-${u.kind}`}>{u.kind === 'id' ? 'ID' : u.kind === 'event' ? tx.eventDependency : tx.typeDependency}</span>
                         </div>
                     ))}
                 </details>
@@ -485,9 +495,11 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
         [tx.verifiedAs, verifiedAs],
         [tx.contextOf, contextOf],
     ];
-    if (!typeUses.length && !idUses.length && !commands.length && !users.length && !verifiedLists.some(([, l]) => l.length)) return <p className="muted">{tx.unreferenced}</p>;
+    const policies = el.kind === 'event' ? policiesReactingTo(model, el.id) : [];
+    if (!typeUses.length && !idUses.length && !commands.length && !users.length && !policies.length && !verifiedLists.some(([, l]) => l.length)) return <p className="muted">{tx.unreferenced}</p>;
     return (
         <>
+            <PolicyList title={tx.reactedToBy} policies={policies} onSelect={onSelect} />
             {users.length > 0 && (
                 <Section title={tx.fieldSetUsers(users.length)}>
                     {users.map((u) => (
@@ -540,6 +552,22 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
                 </Section>
             )}
         </>
+    );
+}
+
+/** Policies as links, each with its reaction; nothing when there are none. */
+function PolicyList({ title, policies, onSelect }: { title: string; policies: ElementModel[]; onSelect: Select }) {
+    const names = useNames();
+    if (!policies.length) return null;
+    return (
+        <Section title={title}>
+            {policies.map((p) => (
+                <div key={p.id} className="sub">
+                    <a onClick={() => onSelect(p.id)}>{names.of(p)}</a>
+                    {p.policy && <span className="muted small mono"> when {names.id(p.policy.event)} → {names.id(`${p.policy.aggregate}:${p.policy.command}`)}</span>}
+                </div>
+            ))}
+        </Section>
     );
 }
 

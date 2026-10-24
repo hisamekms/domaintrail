@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } f
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { analyze, type Analysis } from '../core/analyze.js';
-import { ConfigError, checkTsContexts, loadConfig, staysInside, type ResolvedConfig } from '../core/config.js';
+import { ConfigError, checkTsContexts, loadConfig, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
 import { findDomainFiles, loadWorkspace } from '../core/files.js';
 import { formatDomain } from '../format/format.js';
@@ -172,7 +172,7 @@ Examples:
             }
             const dirs = Object.fromEntries(a.model.contexts.map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
             const tests = testsOut ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) } : undefined;
-            const files = generateTypeScript(a.model, dirs, tests).map((f) => ({ ...f, file: path.resolve(cfg.root, f.path) }));
+            const files = generateTypeScript(a.model, dirs, tests, policyModes(cfg, a.model.contexts)).map((f) => ({ ...f, file: path.resolve(cfg.root, f.path) }));
             const foreign = await foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);

@@ -23,7 +23,7 @@ const PREC = {
 
 /** Keywords that may also name fields, parameters and lambda parameters (FeatureName). */
 const FEATURE_KEYWORDS = [
-  'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes', 'verified', 'of', 'for',
+  'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes', 'verified', 'of', 'for', 'policy',
   'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains',
 ];
 
@@ -74,6 +74,7 @@ module.exports = grammar({
       $.event_declaration,
       $.error_declaration,
       $.field_set_declaration,
+      $.policy_declaration,
     ),
 
     // ---- Types ----
@@ -264,6 +265,21 @@ module.exports = grammar({
     ),
 
     errors_clause: ($) => seq('errors', commaSep1(field('error', $.qualified_name))),
+
+    // ---- Policies ----
+
+    // `policy Name "label" when Event -> Aggregate.command`
+    policy_declaration: ($) => seq(
+      'policy',
+      field('name', $.identifier),
+      optional(field('label', $.string)),
+      'when',
+      field('event', $.qualified_name),
+      '->',
+      field('aggregate', $.identifier),
+      '.',
+      field('command', $._feature_name),
+    ),
 
     // ---- Events and errors ----
 

@@ -150,3 +150,5 @@ check where the invariant is documented. Their names join M011.
 - Generated modules import other contexts as values when their equality is used.
 - Not covered: whether `decide` was used (ADR 0019 makes changed fields a type error), properties across commands
   (sequences), and whether a declared constraint's check is right — it is the user's code.
+- ADR 0022 adds a case per policy when a context's policies are `required`: its handler resolves every generated
+  event to an input the command accepts.

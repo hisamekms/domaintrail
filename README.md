@@ -76,8 +76,9 @@ The sections, in the guide's order:
   [names (表示名)](docs/guide.md#names-labels-and-descriptions),
   [invariant expressions](docs/guide.md#invariant-expressions), [command requirements](docs/guide.md#command-requirements),
   [command changes](docs/guide.md#command-changes), [command events](docs/guide.md#command-events),
-  [pure commands](docs/guide.md#pure-commands) and [verified types](docs/guide.md#verified-types) (the evidence of a
-  check outside the aggregate, as a command's parameter)
+  [pure commands](docs/guide.md#pure-commands), [verified types](docs/guide.md#verified-types) (the evidence of a
+  check outside the aggregate, as a command's parameter) and [reactions to events](docs/guide.md#reactions-to-events-policies)
+  (policies: when an event happens, a command eventually runs; see [ADR 0022](docs/adr/0022-policy-declarations.md))
 - [Generated TypeScript](docs/guide.md#generated-typescript): [decisions and `decide`](docs/guide.md#decisions-and-decide),
   [what is generated and what you write](docs/guide.md#generated-code-and-your-code) (see
   [ADR 0011](docs/adr/0011-generated-code-boundary.md)), [generated checks](docs/guide.md#generated-checks) and
@@ -126,7 +127,8 @@ command transitions ([0014](docs/adr/0014-command-transitions.md)), handlers per
 ([0018](docs/adr/0018-command-events-contract.md)), the fields a command changes and decisions
 ([0019](docs/adr/0019-command-changes-and-decisions.md)), generated checks and contract tests
 ([0020](docs/adr/0020-generated-checks-and-contract-tests.md)), event and error fields named after their source
-([0021](docs/adr/0021-payload-field-names.md)), verified types ([0023](docs/adr/0023-verified-types.md)) and more.
+([0021](docs/adr/0021-payload-field-names.md)), policy declarations ([0022](docs/adr/0022-policy-declarations.md)),
+verified types ([0023](docs/adr/0023-verified-types.md)) and more.
 
 ## Live View
 

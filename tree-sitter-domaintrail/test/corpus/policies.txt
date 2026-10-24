@@ -1,0 +1,71 @@
+================================================================================
+Policies
+================================================================================
+
+context Billing {
+  /// 確定した注文は、その合計で請求する。
+  policy BillConfirmedOrder "確定した注文に請求する" when Sales.OrderConfirmed -> Invoice.issue
+  policy Renew
+    when Renewed -> Loan.when
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (doc_comment)
+    (policy_declaration
+      (identifier)
+      (string)
+      (qualified_name
+        (identifier)
+        (identifier))
+      (identifier)
+      (identifier))
+    (policy_declaration
+      (identifier)
+      (qualified_name
+        (identifier))
+      (identifier)
+      (identifier))))
+
+================================================================================
+Policy as a field, parameter and expression name
+================================================================================
+
+context Lending {
+  aggregate Loan {
+    policy: Int
+    command when(policy: Int)
+      requires r { policy.x > 0 } else E
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (field
+          (identifier)
+          (primitive_type))
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (primitive_type)))
+          (requirement
+            (identifier)
+            (binary_expression
+              (member_expression
+                (identifier)
+                (identifier))
+              (number
+                (integer)))
+            (qualified_name
+              (identifier))))))))

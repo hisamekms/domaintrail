@@ -6,7 +6,7 @@ import { ownerElement } from './render';
 export type Select = (id: string) => void;
 
 /** Order of element kinds in lists and the explorer (their names: `kinds` in i18n). */
-export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error'];
+export const KIND_ORDER: ElementKind[] = ['aggregate', 'entity', 'valueObject', 'union', 'primitive', 'verified', 'id', 'enum', 'fieldSet', 'event', 'error', 'policy'];
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
@@ -52,7 +52,7 @@ export const selectedFile = (id: string | undefined): string | undefined => (id?
 /** Kinds that are drawn in the Structure View. */
 export const inStructure = (kind: string): boolean => kind === 'aggregate' || kind === 'entity' || kind === 'valueObject' || kind === 'union';
 
-export type CatalogSectionKey = 'aggregates' | 'entities' | 'values' | 'primitives' | 'fieldSets' | 'events' | 'errors';
+export type CatalogSectionKey = 'aggregates' | 'entities' | 'values' | 'primitives' | 'fieldSets' | 'events' | 'errors' | 'policies';
 
 /** Sections of the catalog, in order, and the kinds of element each holds (in the order of its cards). */
 export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[] = [
@@ -63,6 +63,7 @@ export const CATALOG_SECTIONS: { key: CatalogSectionKey; kinds: ElementKind[] }[
     { key: 'fieldSets', kinds: ['fieldSet'] },
     { key: 'events', kinds: ['event'] },
     { key: 'errors', kinds: ['error'] },
+    { key: 'policies', kinds: ['policy'] },
 ];
 
 /** Kinds shown in the catalog. */
@@ -124,6 +125,14 @@ export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter)
 }
 
 export { commandsWithOutcome, fieldSetUsers } from '../src/model/usages';
+export { policiesReactingTo, policiesRunning } from '../src/model/model';
+
+/** The command a policy runs (`Agg:command`), with its aggregate, when both resolve. */
+export function policyTarget(model: DomainModel, p: ElementModel): { agg: ElementModel; command: CommandModel } | undefined {
+    const agg = p.policy && model.elements[p.policy.aggregate];
+    const command = agg?.commands?.find((c) => c.name === p.policy!.command);
+    return agg && command ? { agg, command } : undefined;
+}
 
 /** Contexts with shared ones first. */
 export function orderedContexts(model: DomainModel): string[] {

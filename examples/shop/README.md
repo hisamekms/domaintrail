@@ -52,9 +52,16 @@ rejected by the application, as `NotAllowed`). `InvoicePaid` became `persistent`
   and optimistic locking on save.
 - `event-store.ts` — stores the events the DSL declares `persistent` in an envelope `{ event, meta }` (event ID,
   recording time, correlation and causation) and publishes every event to subscribers.
-- `policies.ts` — reactions across contexts: a confirmed order is invoiced for its total; a refund request is
-  recorded for a person, since the model has no refund command yet.
+- `policies.ts` — reactions across contexts. Billing declares one in the DSL, `policy BillConfirmedOrder when
+  Sales.OrderConfirmed -> Invoice.issue` (`billing/context.dt`), and its handler implements the generated
+  `Billing.BillConfirmedOrderPolicy`: from the event to `IssueInvoiceInput`, the new ID, the order and its total. The
+  in-process bus runs `Invoice.issue` with it right after the event; the rule only says "eventually", so a queue or a
+  batch would do as well. Billing's policies are `required` (`generate.ts.contexts.Billing.policies` in
+  `domaintrail.jsonc`): `Billing.BillingPolicyHandlers` must list every one, and the contract tests run them (the
+  example is clearer with the handler tested than with a type nobody has to use). A refund request is only recorded
+  for a person: there is no refund command, so no policy can name one.
 - `providers.ts`, `shop.ts` — IDs and the clock, injected; the wiring.
 
-`src/contract.test.ts` registers the generated contract tests of every context, aggregate and domain primitive;
+`src/contract.test.ts` registers the generated contract tests of every context, aggregate and domain primitive, and of
+Billing's policy (with the order it reads given for any ID);
 `src/app.test.ts` tests what happens around the commands; `src/demo.ts` is the walk through the shop.
