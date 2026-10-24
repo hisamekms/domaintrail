@@ -411,7 +411,8 @@ context Expenses "経費" {
     approver: StaffId? "承認者"
     invariant notSelfApproved "申請者は承認できない" { exists(approver) implies approver != applicant }
 
-    create command submit(id: ExpenseId, applicant: StaffId "申請者") "申請する" emits ExpenseSubmitted
+    create command submit(id: ExpenseId, applicant: StaffId "申請者", performedBy: StaffId "実施者") "申請する" // by proxy, too
+      emits ExpenseSubmitted
     command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する"
       changes approver
       emits ExpenseApproved
@@ -604,6 +605,8 @@ context Review {
   field is M010. Other aggregates cannot be referenced; pass what is needed as parameters.
 - A parameter may not be named like a field its command's requirements see (M019), so that a name in `requires` has
   one meaning. Commands without `requires` are not affected.
+- Name the fields of errors after their source, as for events ([naming payload fields](#command-events), M022): the
+  parameters and the aggregate before the command.
 - `else Error` is required. The error joins the command's errors: it need not be listed in `errors` (listing it
   again is allowed), and several requirements may share one. An unknown error is M007.
 - Requirement names are unique within the command (M002). Without an expression, a requirement needs a label or a
@@ -757,6 +760,17 @@ context Work {
   wrong in business terms — emitting `Renamed` although the title did not change — the contract is what is wrong:
   write `emits Renamed?`. Never emit an event only to satisfy the types, and never leave out one the contract requires.
 - `when` is also usable as a field and parameter name.
+
+**Naming payload fields.** Name the fields of events (and errors) after their source, so that the implementation does
+not have to guess where a value comes from: a parameter (`step` above), a field of a parameter (`sku` from
+`item: OrderItem`), or a field of the aggregate after the command (`completedAt` of `Completed`). A value computed in
+the implementation (a total, the days overdue) needs no source. A field that has no source of the same name and type,
+while some source has its type, is a warning (M022): `progress(step: StepId, at: Timestamp)` emitting
+`StepRecorded { recordedAt: Timestamp }` would be one — name the parameter `recordedAt`. Exempt are fields of the
+aggregate's ID type (M017) and of type Int, Decimal or Bool (counts, sums and flags are mostly computed). Types match
+by base type, optionality aside; a collection only a collection of the same element type. An error's sources are the
+parameters and the aggregate **before** the command (its source states; none for a `create command`). A declarative
+mapping (`emits X { a = b }`) is deferred (see ADR 0021).
 
 <!-- topic: pure -->
 ### Pure commands
@@ -1258,6 +1272,7 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
 | M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
+| M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |

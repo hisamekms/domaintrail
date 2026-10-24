@@ -99,6 +99,9 @@ describe('dt guide topics', () => {
         expect(r.code).toBe(0);
         expect(r.out).toContain('| M010 | state-specific fields');
         expect(r.out).toContain('`dt guide requires`');
+        const m022 = await runGuide('M022');
+        expect(m022.out).toContain('| M022 | (warning) a field of an event or error');
+        expect(m022.out).toContain('Explained in: `dt guide requires`, `dt guide events`.');
     });
 });
 
