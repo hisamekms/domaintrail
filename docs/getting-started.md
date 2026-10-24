@@ -56,6 +56,8 @@ structure and contracts; `generated/domain` is generated from it.
 - To look up one element, run `npx dt show <name>` (e.g. `npx dt show Booking.Reservation.confirm`) instead of reading
   the `.dt` files. Use `--format json` with `check`, `generate ts` and `show` when you parse the output.
 - People watch the model in the Live View (`npx dt view`). Do not wait for it: it runs until stopped.
+- After upgrading domaintrail, read the Upgrading steps in `node_modules/domaintrail/CHANGELOG.md` of every version
+  since the previous one, and follow them.
 ```
 
 `dt guide` prints a quick reference of about one screen — the loop, the DSL at a glance, the commands — and the list
@@ -647,4 +649,6 @@ tree-sitter (Neovim, Helix, Emacs) can use the grammar in
 - `dt guide` and [guide.md](guide.md): the reference for the language and the CLI, one topic at a time.
 - [examples/shop](../examples/shop/README.md): a complete example with an implementation.
 - [The Live View](live-view.md): every pane and view of `dt view`.
+- [CHANGELOG.md](../CHANGELOG.md): what changed in each version, with the steps to upgrade a model and its code
+  (also in the package: the last line of the block for the agent tells it to read it after an upgrade).
 - [docs/adr](adr): the design decisions behind the language.

@@ -107,6 +107,8 @@ change the DSL, not the implementation: never emit an event or set a field only 
 
 **Never cast to a domain type** (`as X`): make it with `make<Name>`, `parseDecimal` or a factory (`dt guide lint`).
 
+**After upgrading domaintrail**, follow the Upgrading steps in `node_modules/domaintrail/CHANGELOG.md`.
+
 <!-- topic: workflow -->
 ## Workflow
 

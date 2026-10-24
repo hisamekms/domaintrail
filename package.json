@@ -27,7 +27,9 @@
   },
   "files": [
     "dist",
-    "schema"
+    "schema",
+    "CHANGELOG.md",
+    "CHANGELOG.ja.md"
   ],
   "engines": {
     "node": ">=22.12.0"
