@@ -1,9 +1,13 @@
 //! Zed extension for DomainTrail: starts `dt lsp` for `.dt` files.
 //!
 //! The command is, in this order: `lsp.domaintrail.binary.path` in Zed's settings, `dt` on the PATH, else domaintrail
-//! at a pinned version, installed with npm into the extension's own directory and run with Zed's Node. Nothing from the
-//! worktree is run (an untrusted repository could ship its own `node_modules/.bin/dt`). The arguments are `lsp` unless
-//! the settings give `binary.arguments`; `binary.env` is added to the worktree's shell environment.
+//! at a pinned version, installed with npm into the extension's own directory and run with Zed's Node. No file of the
+//! worktree is run by default (an untrusted repository could ship its own `node_modules/.bin/dt`). The arguments are
+//! `lsp` unless the settings give `binary.arguments`; `binary.env` is added to the worktree's shell environment.
+//!
+//! The settings are Zed's merged settings, and a project's `.zed/settings.json` takes part in them: the extension API
+//! cannot tell user settings from project settings, so a project can name its own command, as it can for Zed's built-in
+//! language servers. Guarding against untrusted projects is Zed's (its restricted mode for untrusted worktrees).
 
 use std::{env, fs};
 
