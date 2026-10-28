@@ -1,6 +1,6 @@
 {
   "name": "domaintrail",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Domain Modeling DSL — type-checkable domain models shared by humans and AI",
   "license": "MIT",
   "author": "hisamekms",
