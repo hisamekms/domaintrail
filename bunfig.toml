@@ -1,3 +1,7 @@
 [test]
 # the repository's tests; examples/shop runs its own tests (contract and application) itself (test/contract-tests.test.ts)
 root = "./test"
+
+[install]
+# install only versions published at least 3 days ago, matching the cooldown of Dependabot (.github/dependabot.yml)
+minimumReleaseAge = 259200
