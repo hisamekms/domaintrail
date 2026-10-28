@@ -26,9 +26,14 @@ match.
    bun scripts/release-notes.ts X.Y.Z   # fails if either changelog has no section for X.Y.Z
    ```
 
-2. Commit, then bump the version, which commits and tags, and push:
+   Open a pull request with them (`docs: write the changelog of X.Y.Z`) and squash merge it: `main` takes changes only
+   through pull requests.
+
+2. On an up-to-date `main`, bump the version, which commits (`chore(release): X.Y.Z`, `.npmrc`) and tags, and push.
+   Only an admin can push this commit, bypassing the ruleset of `main`:
 
    ```bash
+   git switch main && git pull --ff-only
    npm version patch   # or minor / major; commits and creates the vX.Y.Z tag
    git push --follow-tags
    ```
