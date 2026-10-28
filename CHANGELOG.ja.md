@@ -10,6 +10,20 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.6.0] - 2026-10-28
+
+### 追加
+
+- **Live View を git のリビジョンと比較**（`docs/live-view.md`）: ヘッダーの 比較対象 メニュー、または変更ペインの見出しから、
+  追加・変更・削除を何と比べて表示するかを選べます — 前回の保存（既定）か、git のリビジョン（ブランチ、タグ、最近のコミット、
+  または入力した任意のリビジョン）です。`dt view --base <ref>` で最初から指定して起動できます。図はノードのフィールドに、
+  インスペクターは 構造・状態遷移・振る舞い タブの行に印を付けます（追加、変更、削除は取り消し線、変更されたものは変更前の値も
+  表示）。
+- **Getting started** を英語と日本語で追加しました（`docs/getting-started.md`、`docs/getting-started.ja.md`）。README は
+  それを中心に再構成しました。
+- 変更履歴をパッケージに含めました（`node_modules/domaintrail/CHANGELOG.md`、`CHANGELOG.ja.md`）。`dt guide` は、更新後に
+  そのアップグレード手順に従うようエージェントに伝えます。
+
 ## [0.5.0] - 2026-10-24
 
 ### 追加
@@ -281,6 +295,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.6.0]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hisamekms/domaintrail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hisamekms/domaintrail/compare/v0.2.0...v0.3.0
