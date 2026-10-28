@@ -9,6 +9,20 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.6.0] - 2026-10-28
+
+### Added
+
+- **Comparing the Live View with a git revision** (`docs/live-view.md`): the 比較対象 menu in the header, or the heading
+  of the changes pane, picks what additions, changes and removals are shown against — the previous save (the default)
+  or a git revision: a branch, a tag, one of the latest commits or any revision typed in. `dt view --base <ref>` starts
+  with one. The diagrams mark the fields of their nodes, and the inspector marks the rows of its 構造, 状態遷移 and 振る舞い
+  tabs (added, changed, removed struck through, with the former value of a changed one).
+- **Getting started** in English and Japanese (`docs/getting-started.md`, `docs/getting-started.ja.md`), with the
+  README reorganized around it.
+- The changelogs are in the package (`node_modules/domaintrail/CHANGELOG.md`, `CHANGELOG.ja.md`), and `dt guide` tells
+  agents to follow their Upgrading steps after an upgrade.
+
 ## [0.5.0] - 2026-10-24
 
 ### Added
@@ -282,6 +296,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.6.0]: https://github.com/hisamekms/domaintrail/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/hisamekms/domaintrail/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hisamekms/domaintrail/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hisamekms/domaintrail/compare/v0.2.0...v0.3.0
