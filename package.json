@@ -64,7 +64,7 @@
     "@types/ws": "8.18.2",
     "fast-check": "4.10.2",
     "langium-cli": "4.4.0",
-    "lucide-react": "1.59.0",
+    "lucide-react": "1.61.0",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "oxlint-tsgolint": "7.0.2005",
