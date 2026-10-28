@@ -73,7 +73,11 @@ export interface GraphLine {
     value?: Texts;
     /** The field set a field comes from, shown faded after the value. */
     origin?: Texts;
+    /** The row compared with the baseline (see `markLineChanges`); a removed row is the baseline's, kept as a ghost. */
+    change?: LineChange;
 }
+
+export type LineChange = 'added' | 'changed' | 'removed';
 
 export interface GraphEdge {
     id: string;

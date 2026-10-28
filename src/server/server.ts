@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
-import { createServer, type IncomingHttpHeaders, type ServerResponse } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,8 @@ import { SourceScope } from '../core/files.js';
 import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
+import { gitDirs, listRefs, resolveCommit, UnknownRevisionError } from './git.js';
+import type { BaselineSpec } from './protocol.js';
 import { ViewSession } from './session.js';
 
 export interface ViewServerOptions {
@@ -24,6 +26,8 @@ export interface ViewServerOptions {
     /** Debounce for bursts of file events (e.g. an AI saving several files). */
     debounceMs?: number;
     engine?: LayoutEngine;
+    /** A git revision to compare the model with from the start (default: the previously shown model). */
+    base?: string;
     /** Built Live View page (default: see `defaultWebDir`). */
     webDir?: string;
     log?: (line: string) => void;
@@ -114,6 +118,35 @@ function structureLevel(params: URLSearchParams): StructureLevel {
     return params.get('overview') === '1' ? 'overview' : 'detail';
 }
 
+/** Largest request body accepted (a baseline is a few bytes). */
+const MAX_BODY = 4096;
+
+function readBody(req: IncomingMessage): Promise<string> {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.setEncoding('utf8');
+        req.on('data', (chunk: string) => {
+            body += chunk;
+            if (body.length > MAX_BODY) reject(new Error('Request body too large'));
+        });
+        req.on('end', () => resolve(body));
+        req.on('error', reject);
+    });
+}
+
+/** `{"kind":"previous"}` or `{"kind":"git","ref":"main"}`; undefined when it is neither. */
+function parseBaseline(body: string): BaselineSpec | undefined {
+    try {
+        const v: unknown = JSON.parse(body);
+        if (typeof v !== 'object' || v === null || !('kind' in v)) return undefined;
+        if (v.kind === 'previous') return { kind: 'previous' };
+        if (v.kind === 'git' && 'ref' in v && typeof v.ref === 'string' && v.ref.trim()) return { kind: 'git', ref: v.ref.trim() };
+    } catch {
+        // not JSON
+    }
+    return undefined;
+}
+
 function send(res: ServerResponse, status: number, type: string, body: string | Buffer): void {
     res.writeHead(status, { 'content-type': type, 'x-content-type-options': 'nosniff' });
     res.end(body);
@@ -124,7 +157,9 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const engine = options.engine ?? new ElkLayoutEngine();
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
-    const session = new ViewSession(options.root, engine, sources, respectGitignore);
+    // an unknown revision stops the server from starting, rather than showing nothing as changed
+    if (options.base) await resolveCommit(options.root, options.base);
+    const session = new ViewSession(options.root, engine, sources, respectGitignore, options.base);
     await session.refresh();
 
     const assets = await loadAssets(options.webDir ?? defaultWebDir());
@@ -147,6 +182,27 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
                 return graph ? send(res, 200, 'application/json', JSON.stringify(graph)) : send(res, 404, 'text/plain', 'No such contexts');
             } catch {
                 return send(res, 500, 'text/plain', 'Layout failed');
+            }
+        }
+        // the revisions the page offers as baselines
+        if (url.pathname === '/api/git/refs') {
+            if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
+            return send(res, 200, 'application/json', JSON.stringify(await listRefs(options.root)));
+        }
+        // POST `{"kind":"git","ref":"main"}` or `{"kind":"previous"}`: what the model is compared with, for every page
+        if (url.pathname === '/api/baseline') {
+            if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
+            if (req.method !== 'POST') return send(res, 405, 'text/plain', 'Method not allowed');
+            const spec = parseBaseline(await readBody(req).catch(() => ''));
+            if (!spec) return send(res, 400, 'text/plain', 'Expected {"kind":"previous"} or {"kind":"git","ref":"<revision>"}');
+            try {
+                const payload = await session.setBaseline(spec);
+                publish(JSON.stringify(payload));
+                log(`baseline: ${spec.kind === 'git' ? spec.ref : 'previous'}`);
+                return send(res, 200, 'application/json', JSON.stringify(payload.baseline));
+            } catch (e) {
+                if (e instanceof UnknownRevisionError) return send(res, 400, 'text/plain', e.message);
+                return send(res, 500, 'text/plain', 'Comparison failed');
             }
         }
         const asset = req.method === 'GET' || req.method === 'HEAD' ? assets.get(url.pathname) : undefined;
@@ -198,6 +254,29 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     }
     const ready = new Promise<void>((resolve) => watcher.once('ready', () => resolve()));
 
+    // a git baseline moves with its branch (a commit, a checkout): watch the refs, not the objects
+    let gitWatcher: FSWatcher | undefined;
+    const dirs = await gitDirs(options.root);
+    if (dirs) {
+        gitWatcher = watch(
+            dirs.flatMap((d) => ['HEAD', 'refs', 'packed-refs'].map((f) => path.join(d, f))),
+            { ignoreInitial: true },
+        );
+        let gitTimer: ReturnType<typeof setTimeout> | undefined;
+        gitWatcher.on('all', () => {
+            if (session.state.baseline.kind !== 'git') return;
+            clearTimeout(gitTimer);
+            gitTimer = setTimeout(async () => {
+                const before = session.state.baseline;
+                const payload = await session.refresh();
+                const after = payload.baseline;
+                if (after.kind === 'git' && before.kind === 'git' && after.commit?.hash === before.commit?.hash) return;
+                publish(JSON.stringify(payload));
+                if (after.kind === 'git') log(`baseline ${after.ref} is now ${after.commit?.hash.slice(0, 7) ?? '(unknown)'}`);
+            }, 200);
+        });
+    }
+
     return {
         url: `http://${host.includes(':') ? `[${host}]` : host}:${port}/`,
         session,
@@ -205,6 +284,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         async stop() {
             clearTimeout(timer);
             await watcher.close();
+            await gitWatcher?.close();
             for (const ws of wss.clients) ws.terminate();
             wss.close();
             http.closeAllConnections();

@@ -120,12 +120,15 @@ function bodyUnits(lines: GraphLine[]): number {
     );
 }
 
+/** Width a node needs for its body rows. */
+export const bodyWidth = (lines: GraphLine[]): number => Math.ceil(bodyUnits(lines) * CHAR_WIDTH + 28);
+
 export function sized(n: Omit<GraphNode, 'width' | 'height'>, scale = 1): GraphNode {
     // the body rows keep their size in larger text
     const head = Math.max(maxUnits(n.label) + 2, n.stereotype ? maxUnits(n.stereotype) : 0) * scale;
     return {
         ...n,
-        width: Math.max(170 * scale, Math.ceil(Math.max(head, bodyUnits(n.lines)) * CHAR_WIDTH + 28)),
+        width: Math.max(170 * scale, Math.ceil(head * CHAR_WIDTH + 28), bodyWidth(n.lines)),
         height: Math.ceil(HEADER_HEIGHT * scale) + n.lines.length * LINE_HEIGHT + (n.lines.length ? 10 : 0),
     };
 }

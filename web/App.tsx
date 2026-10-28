@@ -3,6 +3,8 @@ import { Box, LayoutGrid, LayoutList, PanelLeftOpen, PanelRightOpen, type Lucide
 import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../src/core/diagnostics';
 import { STRUCTURE_LEVELS, type DisplayMode, type LaidOutGraph, type StructureLevel } from '../src/graph/ir';
+import type { BaseView } from '../src/server/protocol';
+import { BaselineButton, BaselineMenu, baselineName } from './baseline-picker';
 import { BottomPanel, type BottomTab } from './bottom';
 import { Catalog } from './catalog';
 import { fitReadable, highlightElement, usePointerCursor } from './canvas';
@@ -47,8 +49,10 @@ const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, ov
 const LEVEL_GRAPHS = { detail: 'structure', overview: 'overview', aggregates: 'aggregates' } as const;
 
 export function App() {
-    const { current, previous, connection } = useViewSocket();
+    const { current, connection } = useViewSocket();
     const model = current?.model ?? null;
+    /** What the model is compared with: its graphs give the ghosts of removed elements, its model the inspector's diffs. */
+    const base = current?.base ?? null;
     const [editor, setEditor] = useState<Editor | null>(null);
     const [view, setView] = useState<View>({ kind: 'structure' });
     const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.nameDisplay', savedDisplayMode());
@@ -77,6 +81,10 @@ export function App() {
     const [bottomTab, setBottomTab] = usePersistentState<BottomTab>('domaintrail.layout.bottomTab', 'problems');
     const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
+    /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
+    const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
+    const toggleBaselineMenu = (anchor: HTMLElement) => setBaselineAnchor((a) => (a === anchor ? null : anchor));
+    const closeBaselineMenu = useCallback(() => setBaselineAnchor(null), []);
 
     // Selection with a back history
     const [history, setHistory] = useState<History>([]);
@@ -121,7 +129,7 @@ export function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [focusKey, current?.modelVersion, view.kind]);
 
-    const graphFor = (p: typeof current, v: View): LaidOutGraph | null | undefined => {
+    const graphFor = (p: BaseView | null, v: View): LaidOutGraph | null | undefined => {
         if (!p || !isCanvas(v)) return null;
         if (v.kind === 'contextMap') return mapAll ? p.contextMapAll : p.contextMap;
         if (v.kind === 'structure') {
@@ -147,8 +155,8 @@ export function App() {
             withWriteAccess(editor, () => editor.deleteShapes([...editor.getCurrentPageShapeIds()]));
             return;
         }
-        // ghosts of removed elements need the previous version of the same graph; focused graphs are not kept
-        const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(previous, view) ?? undefined);
+        // ghosts of removed elements need the baseline's version of the same graph; focused graphs are not kept
+        const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(base, view) ?? undefined);
         renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
         if (switched) {
             const saved = cameras.current.get(key);
@@ -158,7 +166,7 @@ export function App() {
         }
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, previous, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang]);
+    }, [editor, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang]);
 
     useEffect(() => {
         applyTheme(theme, editor);
@@ -188,7 +196,8 @@ export function App() {
     const exists = (id: string): boolean => {
         const file = selectedFile(id);
         if (file) return (current?.sources ?? []).some((s) => s.path === file);
-        return !model || !!resolve(model, id);
+        // a removed item can still be shown from the baseline
+        return !model || !!resolve(model, id) || (!!base?.model && !!resolve(base.model, id));
     };
     const backTo = history[backIndex(history, exists)];
     const goBack = () => {
@@ -272,6 +281,7 @@ export function App() {
                         </span>
                         <span className={`conn conn-${connection}`} title={t.connectionTitle(t.connection[connection])} />
                     </div>
+                    {current && <BaselineButton baseline={current.baseline} open={!!baselineAnchor} onToggle={toggleBaselineMenu} />}
                     <SettingsDialog
                         mode={mode}
                         onMode={setMode}
@@ -283,6 +293,9 @@ export function App() {
                         onLang={setLangPreference}
                     />
                 </header>
+                {current?.baseline.kind === 'git' && current.baseline.error && (
+                    <div className="banner">{t.baselineError(current.baseline.ref, current.baseline.error)}</div>
+                )}
                 {current?.stale && <div className="banner">{t.stale(<a onClick={() => setBottomOpen(true)}>{t.problems}</a>)}</div>}
                 <div className="workspace">
                     {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
@@ -434,13 +447,14 @@ export function App() {
                                 selected={selected}
                                 diagnostics={current?.diagnostics ?? []}
                                 diff={current?.diff ?? empty}
+                                base={base?.model ?? null}
                                 sources={current?.sources ?? []}
                                 sourceFocus={sourceFocus}
                                 statesView={(aggregateId) => (
                                     <StatesCanvas
                                         aggregateId={aggregateId}
                                         graphs={current?.states[aggregateId]}
-                                        previous={previous?.states[aggregateId]}
+                                        previous={base?.states[aggregateId]}
                                         diff={current?.diff ?? empty}
                                         diagnostics={current?.diagnostics ?? []}
                                         mode={mode}
@@ -486,12 +500,16 @@ export function App() {
                         model={model}
                         diagnostics={current?.diagnostics ?? []}
                         diff={current?.diff ?? empty}
+                        baseline={current ? baselineName(current.baseline, t.baselinePrevious) : undefined}
+                        gitBaseline={current?.baseline.kind === 'git'}
+                        onBaseline={toggleBaselineMenu}
                         onTab={setBottomTab}
                         onToggle={() => setBottomOpen(!bottomOpen)}
                         onLocate={locate}
                         onSelect={(id) => select(id)}
                     />
                 </div>
+                {current && baselineAnchor && <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />}
                 <Tooltips />
             </div>
         </I18nProvider>

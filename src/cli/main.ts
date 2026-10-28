@@ -281,6 +281,7 @@ Examples:
         .description('Start the Live View server and watch .dt files (runs until Ctrl+C).')
         .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)', parsePort)
         .option('--host <host>', 'host to bind (default: view.host, else 127.0.0.1)')
+        .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
         .addHelpText(
             'after',
             `
@@ -290,11 +291,13 @@ pushes updates to the browser. Use \`dt check\` for a one-shot result (e.g. from
 Examples:
   dt view
   dt view --port 8080
+  dt view --base main           mark what changed since main (the base can be switched in the page)
   dt -r examples/shop view`,
         )
-        .action(async (opts: { port?: number; host?: string }) => {
+        .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
             const { startViewServer } = await import('../server/server.js');
+            const { UnknownRevisionError } = await import('../server/git.js');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
             const server = await startViewServer({
@@ -303,8 +306,10 @@ Examples:
                 respectGitignore: cfg.respectGitignore,
                 port,
                 host,
+                base: opts.base,
                 log: io.out,
             }).catch((e: unknown) => {
+                if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
                 if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
                 throw e;
             });

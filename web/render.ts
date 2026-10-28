@@ -15,6 +15,7 @@ import {
     type Texts,
     type TransitionLabels,
 } from '../src/graph/ir';
+import { MESSAGES } from './i18n';
 import type { ChangeMark, DiagMark, EdgeTone } from './shapes';
 
 export interface RenderOptions {
@@ -39,7 +40,12 @@ const ghostShapeId = (id: string): TLShapeId => createShapeId(`ghost:${id}`);
 const internalShapeId = (id: string): TLShapeId => createShapeId(`i:${id}`);
 
 const rowsIn = (n: GraphNode, v: Variant) =>
-    n.lines.map((l) => ({ k: textOf(l.key, v), v: l.value ? textOf(l.value, v) : '', ...(l.origin && { o: textOf(l.origin, v) }) }));
+    n.lines.map((l) => ({
+        k: textOf(l.key, v),
+        v: l.value ? textOf(l.value, v) : '',
+        ...(l.origin && { o: textOf(l.origin, v) }),
+        ...(l.change && { c: l.change }),
+    }));
 
 /** Element that owns a state / command ID (`Sales.Order#Draft` -> `Sales.Order`). */
 export const ownerElement = (id: string): string => id.split(/[#:]/)[0];
@@ -85,7 +91,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
             nodes.push({
                 ...base,
                 type: 'domain-node',
-                props: { ...nodeProps(graph, n, l, opts), ...marks },
+                props: { ...nodeProps(graph, n, l, opts), ...marks, badge: badgeText(marks.change, opts.lang) },
             });
             internal.push(...internalRows(graph, n, l, opts, (id) => ({ change: change(id), diag: severity.get(id) ?? 'none' })));
         }
@@ -103,7 +109,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
                 x: l.x,
                 y: l.y,
                 meta: { elementId: n.elementId, ghost: true },
-                props: { ...nodeProps(opts.previous, n, l, opts), change: 'removed', diag: 'none' },
+                props: { ...nodeProps(opts.previous, n, l, opts), change: 'removed', badge: badgeText('removed', opts.lang), diag: 'none' },
             });
             for (const row of internalRows(opts.previous, n, l, opts, () => ({ change: 'removed', diag: 'none' }))) {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- internal rows carry their edge in meta
@@ -143,6 +149,9 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         if (edges.length) editor.bringToFront(edges.map((e) => e.id));
     });
 }
+
+/** The change badge's text, in the Live View's language (the shape draws it, and its outline goes around it). */
+const badgeText = (change: ChangeMark, lang: Lang): string => (change === 'none' ? '' : MESSAGES[lang][change]);
 
 function nodeProps(graph: LaidOutGraph, n: GraphNode, l: NodeLayout, v: Variant) {
     return {

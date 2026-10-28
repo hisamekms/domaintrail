@@ -143,6 +143,24 @@ const ja = {
     changes: '変更',
     noProblems: '問題はありません。',
     noChanges: '直前の正常モデルからの変更はありません。',
+    noChangesSince: (ref: string) => `${ref} からの変更はありません。`,
+    changesSince: (ref: string) => `${ref} からの変更`,
+    changeBaseline: '比較対象を切り替える',
+
+    // baseline (what the changes are relative to)
+    baseline: '比較対象',
+    baselineHint: '追加・変更・削除をどの時点のモデルと比べて示すか',
+    baselinePrevious: '前回の保存',
+    baselinePreviousHint: '直前に表示した正常なモデルと比べる',
+    baselineRef: 'ブランチ・タグ・コミット（例: main, HEAD~3）',
+    compare: '比較',
+    branches: 'ブランチ',
+    tags: 'タグ',
+    recentCommits: '最近のコミット',
+    loadingRefs: '読み込み中…',
+    noGitRefs: 'git の履歴が見つかりません',
+    baselineError: (ref: string, message: string) => `${ref} と比較できません: ${message}`,
+    removedFromBaseline: '比較対象のモデルにあり、現在のモデルからは削除されています。',
 
     // catalog
     catalogSections: {
@@ -370,6 +388,23 @@ const en: Messages = {
     changes: 'Changes',
     noProblems: 'No problems.',
     noChanges: 'No changes since the last valid model.',
+    noChangesSince: (ref) => `No changes since ${ref}.`,
+    changesSince: (ref) => `Changes since ${ref}`,
+    changeBaseline: 'Change what the model is compared with',
+
+    baseline: 'Compare with',
+    baselineHint: 'The model that additions, changes and removals are shown against',
+    baselinePrevious: 'Previous save',
+    baselinePreviousHint: 'Compare with the last valid model shown before',
+    baselineRef: 'Branch, tag or commit (e.g. main, HEAD~3)',
+    compare: 'Compare',
+    branches: 'Branches',
+    tags: 'Tags',
+    recentCommits: 'Recent commits',
+    loadingRefs: 'Loading…',
+    noGitRefs: 'No git history found',
+    baselineError: (ref, message) => `Cannot compare with ${ref}: ${message}`,
+    removedFromBaseline: 'In the model compared with, and removed from the current model.',
 
     catalogSections: {
         aggregates: 'Aggregates',

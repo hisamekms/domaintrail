@@ -79,7 +79,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **`dt generate ts`**: types per context, command contracts and decisions for `decide`, checks of the invariants and
   requirements, constructors of domain primitives, and contract tests with fast-check (bun, vitest, jest, node).
 - **`dt view`**: the Live View — context map, structure, state transitions, behaviour, source and the changes since the
-  last save, in Japanese or English.
+  last save or a git revision, in Japanese or English.
 - **`dt show`**: one element resolved, for people and agents, as text or JSON.
 - **`dt lsp`**: a language server — diagnostics, definitions, references, hover, rename, formatting; a
   [Zed extension](editors/zed) and a [tree-sitter grammar](tree-sitter-domaintrail).

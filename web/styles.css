@@ -709,10 +709,18 @@ a.field-origin {
 .dn-change-removed .dn-label {
     text-decoration: line-through;
 }
+/* on the top edge, where the selection outline goes around them (see `DomainNodeUtil.getIndicatorPath`) */
 .dn-badge {
     position: absolute;
     top: -10px;
     left: 8px;
+    box-sizing: border-box;
+    height: 17px;
+    line-height: 17px;
+    text-align: center;
+    white-space: nowrap;
+    /* enlarged when zoomed out (see EdgeMarks) */
+    transform-origin: left bottom;
     padding: 0 6px;
     border-radius: 4px;
     font-family: var(--sans);
@@ -2180,6 +2188,18 @@ select,
     color: var(--muted);
     font-size: 12px;
 }
+/* what the changes are relative to, opening the menu choosing it */
+.changes-baseline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.changes-wrap > .changes-baseline {
+    margin: 10px 14px 0;
+}
 .changes {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -2409,4 +2429,182 @@ details.deps > .sub {
     pointer-events: none;
     overflow: visible;
     z-index: 1000; /* without popover support */
+}
+
+/* Rows compared with the baseline (inspector lists, behaviour cards): added, changed, and removed ones kept as ghosts */
+.row-added {
+    background: color-mix(in srgb, var(--added) 13%, transparent);
+    box-shadow: inset 3px 0 0 var(--added);
+}
+.row-changed {
+    background: color-mix(in srgb, var(--changed) 13%, transparent);
+    box-shadow: inset 3px 0 0 var(--changed);
+}
+.row-removed {
+    background: color-mix(in srgb, var(--removed) 10%, transparent);
+    box-shadow: inset 3px 0 0 var(--removed);
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--removed);
+}
+.row-removed a {
+    color: inherit;
+}
+/* inline rows (chips, links in a line) get no bar */
+code.row-added,
+code.row-changed,
+code.row-removed,
+span.row-added,
+span.row-changed,
+span.row-removed {
+    box-shadow: none;
+    border-radius: 3px;
+}
+.bcard.row-added {
+    box-shadow: inset 4px 0 0 var(--added);
+}
+.bcard.row-changed {
+    box-shadow: inset 4px 0 0 var(--changed);
+}
+.bcard.row-removed {
+    box-shadow: inset 4px 0 0 var(--removed);
+}
+/* the baseline's value of something changed, struck through before the current one */
+del.was {
+    margin-right: 0.6ch;
+    color: var(--removed);
+    text-decoration-color: var(--removed);
+    opacity: 0.85;
+}
+del.was.block {
+    display: block;
+    margin: 0 0 4px;
+    font-family: var(--mono);
+    white-space: pre-wrap;
+}
+.was-line {
+    font-size: 14px;
+}
+.inspector-removed h2 {
+    text-decoration: line-through;
+    text-decoration-color: var(--removed);
+}
+
+/* Structure / State View: a node's body rows compared with the baseline */
+.dn-row-added {
+    color: var(--added);
+    font-weight: 600;
+}
+.dn-row-changed {
+    color: var(--changed);
+    font-weight: 600;
+}
+.dn-row-removed {
+    color: var(--removed);
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+/* What the changes are relative to, in the header */
+.baseline-picker {
+    position: relative;
+    min-width: 0;
+}
+.baseline-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 320px;
+    white-space: nowrap;
+    font-size: 14px;
+}
+.baseline-button.baseline-git {
+    border-color: var(--accent);
+}
+.baseline-button.baseline-broken {
+    border-color: var(--error);
+}
+.baseline-summary {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.baseline-menu {
+    /* placed next to the button that opened it (see menuPlacement) */
+    position: fixed;
+    z-index: 30;
+    width: min(420px, calc(100vw - 16px));
+    animation: baseline-menu-in 120ms ease-out;
+    overflow: auto;
+    padding: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+}
+.baseline-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    padding: 4px 8px;
+    border: none;
+    background: none;
+    text-align: left;
+}
+.baseline-option:hover {
+    background: var(--bg);
+}
+.baseline-option[aria-selected='true'] {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.baseline-commit {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+}
+.baseline-subject {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.baseline-ref {
+    display: flex;
+    gap: 6px;
+}
+.baseline-ref input {
+    flex: 1;
+    min-width: 0;
+}
+.baseline-group-title {
+    margin: 4px 0 2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.baseline-error {
+    color: var(--error);
+    font-size: 13px;
+}
+
+/* the menu slides a little out of the button that opened it */
+@keyframes baseline-menu-in {
+    from {
+        opacity: 0;
+        transform: translateY(var(--menu-from, -4px));
+    }
+}
+.baseline-menu-above {
+    --menu-from: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .baseline-menu {
+        animation: none;
+    }
 }

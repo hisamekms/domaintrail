@@ -16,7 +16,7 @@ import {
 } from '../src/model/model';
 import { dependencyCounts } from '../src/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
-import { Changes, CommandCard, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
+import { Changes, CommandCard, OldType, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
 import {
     KIND_ORDER,
@@ -32,6 +32,7 @@ import {
     type Select,
 } from './model-utils';
 import { ownerElement } from './render';
+import { diffRows, rowClass, type RowChange } from './row-diff';
 import { SourceView, type SourceFocus } from './source';
 import { usagesOf } from './usages';
 
@@ -44,12 +45,23 @@ export type RevealTarget = 'contextMap' | 'structure' | 'catalog';
 const NamerContext = createContext<Namer>(namer('both', null));
 const useNames = (): Namer => useContext(NamerContext);
 
+/**
+ * The baseline model and the selected item as it is there (none when it was added): the lists of the tabs mark their
+ * added, changed and removed rows against it. Null without a baseline.
+ */
+const BaseContext = createContext<{ model: DomainModel; r: Resolved | undefined } | null>(null);
+const useBase = () => useContext(BaseContext);
+
 export interface InspectorProps {
     model: DomainModel | null;
     mode: DisplayMode;
     selected: string | undefined;
     diagnostics: Diagnostic[];
     diff: ModelDiff;
+    /** The model compared with (see `ViewPayload.base`). */
+    base: DomainModel | null;
+    /** The selected item is shown from `model`, the baseline, as it was removed. */
+    removedItem?: boolean;
     sources: { path: string; text: string }[];
     /** Where the source tab (or a selected file) scrolls to. */
     sourceFocus: SourceFocus | undefined;
@@ -148,6 +160,8 @@ export function Inspector(props: InspectorProps) {
             </div>
         );
     const r = selected ? resolve(model, selected) : undefined;
+    // a removed item is shown as it was in the baseline
+    if (selected && !r && props.base && resolve(props.base, selected)) return <Inspector {...props} model={props.base} base={null} removedItem />;
     if (!selected || !r) {
         return (
             <div className="inspector">
@@ -163,49 +177,70 @@ export function Inspector(props: InspectorProps) {
     const tabs = tabsFor(r);
     const tab = tabs.includes(props.tab) ? props.tab : tabs[0];
     const diags = props.diagnostics.filter((d) => d.elementId === selected || (r.kind === 'element' && d.elementId && ownerElement(d.elementId) === selected));
-    const change = props.diff.added.includes(selected) ? 'added' : props.diff.changed.includes(selected) ? 'changed' : undefined;
+    const change: RowChange | undefined = props.removedItem
+        ? 'removed'
+        : props.diff.added.includes(selected)
+          ? 'added'
+          : props.diff.changed.includes(selected)
+            ? 'changed'
+            : undefined;
     const head = headOf(r);
+    const baseR = props.base && change !== 'added' ? resolve(props.base, selected) : undefined;
+    const baseHead = baseR && headOf(baseR);
 
     const title = names.of({ name: head.name, label: head.label });
     return (
         <NamerContext.Provider value={names}>
-            <div className="inspector">
-                <div className="inspector-head">
-                    {history}
-                    <div className="inspector-row">
-                        <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
-                        {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
-                        {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} tx={tx} />}
-                        {change && <span className={`change change-${change}`}>{change === 'added' ? tx.added : tx.changed}</span>}
+            <BaseContext.Provider value={props.base ? { model: props.base, r: baseR } : null}>
+                <div className={`inspector${props.removedItem ? ' inspector-removed' : ''}`}>
+                    <div className="inspector-head">
+                        {history}
+                        <div className="inspector-row">
+                            <span className={`kind kind-${head.kind}`}>{tx.kinds[head.kind]}</span>
+                            {r.kind === 'context' && r.shared && <span className="shared-badge">{tx.shared}</span>}
+                            {r.kind === 'element' && r.el.kind === 'event' && <PersistenceBadge persistent={!!r.el.persistent} tx={tx} />}
+                            {change && <span className={`change change-${change}`}>{tx[change]}</span>}
+                        </div>
+                        {baseHead && baseHead.label !== head.label && (
+                            <div className="was-line">
+                                <del className="was">{props.mode === 'both' ? (baseHead.label ?? baseHead.name) : names.of(baseHead)}</del>
+                            </div>
+                        )}
+                        <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
+                        {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
+                        {props.removedItem && <p className="muted small">{tx.removedFromBaseline}</p>}
+                        {baseHead?.doc && baseHead.doc !== head.doc && (
+                            <p className="doc">
+                                <del className="was">{baseHead.doc}</del>
+                            </p>
+                        )}
+                        {head.doc && <p className="doc">{head.doc}</p>}
+                        {revealTargets(r).length > 0 && (
+                            <div className="reveal">
+                                <span className="muted small">{tx.showIn}</span>
+                                {revealTargets(r).map((t) => (
+                                    <button key={t} onClick={() => props.onReveal(t, selected)}>
+                                        {tx.reveal[t]}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <DiagnosticList items={diags} />
                     </div>
-                    <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
-                    {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
-                    {head.doc && <p className="doc">{head.doc}</p>}
-                    {revealTargets(r).length > 0 && (
-                        <div className="reveal">
-                            <span className="muted small">{tx.showIn}</span>
-                            {revealTargets(r).map((t) => (
-                                <button key={t} onClick={() => props.onReveal(t, selected)}>
-                                    {tx.reveal[t]}
+                    {tabs.length > 1 && (
+                        <div className="subtabs" role="tablist">
+                            {tabs.map((t) => (
+                                <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'active' : ''} onClick={() => props.onTab(t)}>
+                                    {tx.tabs[t]}
                                 </button>
                             ))}
                         </div>
                     )}
-                    <DiagnosticList items={diags} />
-                </div>
-                {tabs.length > 1 && (
-                    <div className="subtabs" role="tablist">
-                        {tabs.map((t) => (
-                            <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'active' : ''} onClick={() => props.onTab(t)}>
-                                {tx.tabs[t]}
-                            </button>
-                        ))}
+                    <div className={`inspector-body${tab === 'source' || tab === 'states' ? ' inspector-body-full' : ''}`}>
+                        <Body {...props} r={r} tab={tab} />
                     </div>
-                )}
-                <div className={`inspector-body${tab === 'source' || tab === 'states' ? ' inspector-body-full' : ''}`}>
-                    <Body {...props} r={r} tab={tab} />
                 </div>
-            </div>
+            </BaseContext.Provider>
         </NamerContext.Provider>
     );
 }
@@ -227,6 +262,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     const { r, tab, model, onSelect } = props;
     const names = useNames();
     const tx = useT();
+    const base = useBase();
     if (!model) return null;
     if (tab === 'source') {
         const loc = headOf(r).location;
@@ -243,20 +279,35 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
 
     if (r.kind === 'state') {
         const { agg, state } = r;
+        const was = base?.r?.kind === 'state' ? base.r : undefined;
         if (tab === 'behavior') {
-            const incoming = (agg.commands ?? []).filter((c) => c.transitions.some((t) => t.to.includes(state.name)));
-            const outgoing = (agg.commands ?? []).filter((c) => c.transitions.some((t) => t.from.includes(state.name)));
+            const into = (a: ElementModel, name: string) => (a.commands ?? []).filter((c) => c.transitions.some((t) => t.to.includes(name)));
+            const outOf = (a: ElementModel, name: string) => (a.commands ?? []).filter((c) => c.transitions.some((t) => t.from.includes(name)));
             return (
                 <>
-                    <CommandList title={tx.commandsInto} agg={agg} model={model} commands={incoming} onSelect={onSelect} />
-                    <CommandList title={tx.commandsOutOf} agg={agg} model={model} commands={outgoing} onSelect={onSelect} />
+                    <CommandList
+                        title={tx.commandsInto}
+                        agg={agg}
+                        model={model}
+                        commands={into(agg, state.name)}
+                        base={was && into(was.agg, was.state.name)}
+                        onSelect={onSelect}
+                    />
+                    <CommandList
+                        title={tx.commandsOutOf}
+                        agg={agg}
+                        model={model}
+                        commands={outOf(agg, state.name)}
+                        base={was && outOf(was.agg, was.state.name)}
+                        onSelect={onSelect}
+                    />
                 </>
             );
         }
         return (
             <>
-                <Fields title={tx.stateFields} fields={state.fields} ctx={agg.context} onSelect={onSelect} empty={tx.noStateFields} />
-                <Invariants items={state.invariants} title={tx.stateInvariants} labelOnly />
+                <Fields title={tx.stateFields} fields={state.fields} base={was?.state.fields} ctx={agg.context} onSelect={onSelect} empty={tx.noStateFields} />
+                <Invariants items={state.invariants} base={was?.state.invariants} title={tx.stateInvariants} labelOnly />
                 <p className="muted small">{tx.commonFieldsAt(<a onClick={() => onSelect(agg.id)}>{names.of(agg)}</a>)}</p>
             </>
         );
@@ -264,54 +315,73 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
 
     if (r.kind === 'command') {
         const { agg, command: c } = r;
+        const was = base?.r?.kind === 'command' ? base.r : undefined;
         if (tab === 'behavior') {
+            const transition = names.transition(agg, c) || tx.noStates;
+            const oldTransition = was && (names.transition(was.agg, was.command) || tx.noStates);
+            const emits = diffRows(c.emits, was?.command.emits, (e) => e.event);
+            const errors = diffRows(c.errors, was?.command.errors, (e) => e);
             return (
                 <>
                     <Section title={tx.transition}>
-                        <code className="block">{names.transition(agg, c) || tx.noStates}</code>
+                        {oldTransition !== undefined && oldTransition !== transition && <del className="was block">{oldTransition}</del>}
+                        <code className="block">{transition}</code>
                     </Section>
-                    {c.requires.length > 0 && (
+                    {(c.requires.length > 0 || (was?.command.requires.length ?? 0) > 0) && (
                         <Section title={tx.requirements}>
-                            <Requirements c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
+                            <Requirements c={c} base={was?.command} model={model} names={names} tx={tx} onSelect={onSelect} />
                         </Section>
                     )}
                     {!c.factory && (
                         <Section title={tx.changedFields}>
-                            {c.changes.length ? <Changes agg={agg} c={c} names={names} /> : <span className="muted">{tx.none}</span>}
+                            {c.changes.length || was?.command.changes.length ? (
+                                <Changes agg={agg} c={c} base={was?.command} names={names} />
+                            ) : (
+                                <span className="muted">{tx.none}</span>
+                            )}
                         </Section>
                     )}
                     <Section title={tx.mayRaise}>
-                        {c.emits.length ? (
-                            c.emits.map((e, i) => <OutcomeRow key={i} model={model} id={e.event} suffix={emitSuffix(e)} onSelect={onSelect} />)
+                        {emits.length ? (
+                            emits.map(({ item: e, change }, i) => (
+                                <OutcomeRow key={i} model={model} id={e.event} suffix={emitSuffix(e)} change={change} onSelect={onSelect} />
+                            ))
                         ) : (
                             <span className="muted">{tx.none}</span>
                         )}
                     </Section>
                     <Section title={tx.mayReturn}>
-                        {c.errors.length ? (
-                            c.errors.map((e) => <OutcomeRow key={e} model={model} id={e} onSelect={onSelect} />)
+                        {errors.length ? (
+                            errors.map(({ item: e, change }) => <OutcomeRow key={e} model={model} id={e} change={change} onSelect={onSelect} />)
                         ) : (
                             <span className="muted">{tx.none}</span>
                         )}
                     </Section>
-                    <PolicyList title={tx.triggeredBy} policies={policiesRunning(model, agg.id, c.name)} onSelect={onSelect} />
+                    <PolicyList
+                        title={tx.triggeredBy}
+                        policies={policiesRunning(model, agg.id, c.name)}
+                        base={was && base ? policiesRunning(base.model, was.agg.id, was.command.name) : undefined}
+                        onSelect={onSelect}
+                    />
                 </>
             );
         }
+        const contract = (m: DomainModel, a: ElementModel, x: CommandModel) =>
+            `${x.factory ? 'create ' : ''}command ${x.name}(${x.params.map((p) => `${p.name}: ${namer('name', m).type(p.type, a.context)}${p.multiplicity}`).join(', ')})`;
+        const oldContract = was && base && contract(base.model, was.agg, was.command);
         return (
             <>
-                <Fields title={tx.params} fields={c.params} ctx={agg.context} onSelect={onSelect} empty={tx.noParams} />
+                <Fields title={tx.params} fields={c.params} base={was?.command.params} ctx={agg.context} onSelect={onSelect} empty={tx.noParams} />
                 <Section title={tx.contract}>
-                    <code className="block">
-                        {c.factory ? 'create ' : ''}command {c.name}(
-                        {c.params.map((p) => `${p.name}: ${namer('name', model).type(p.type, agg.context)}${p.multiplicity}`).join(', ')})
-                    </code>
+                    {oldContract !== undefined && oldContract !== contract(model, agg, c) && <del className="was block">{oldContract}</del>}
+                    <code className="block">{contract(model, agg, c)}</code>
                 </Section>
             </>
         );
     }
 
     const el = r.el;
+    const was = base?.r?.kind === 'element' ? base.r.el : undefined;
     if (tab === 'behavior') {
         return (
             <>
@@ -320,13 +390,14 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                     agg={el}
                     model={model}
                     commands={el.commands ?? []}
+                    base={was && (was.commands ?? [])}
                     onSelect={onSelect}
                 />
-                <AggregateOutcomes agg={el} model={model} kind="errors" onSelect={onSelect} />
+                <AggregateOutcomes agg={el} was={was} model={model} kind="errors" onSelect={onSelect} />
             </>
         );
     }
-    if (tab === 'events') return <AggregateOutcomes agg={el} model={model} kind="emits" onSelect={onSelect} />;
+    if (tab === 'events') return <AggregateOutcomes agg={el} was={was} model={model} kind="emits" onSelect={onSelect} />;
     if (tab === 'references') return <References model={model} el={el} onSelect={onSelect} />;
 
     if (el.kind === 'policy') {
@@ -344,15 +415,16 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                 <p>
                     {el.kind === 'id' ? tx.identifier : tx.kinds.primitive}
                     {tx.separator}
-                    {tx.baseType}: <code>{names.primitive(el.base)}</code>
+                    {tx.baseType}: {was?.base && was.base !== el.base && <del className="was">{names.primitive(was.base)}</del>}
+                    <code>{names.primitive(el.base)}</code>
                 </p>
             )}
             {el.verified && <VerifiedBody el={el} onSelect={onSelect} />}
             {el.values && (
                 <Section title={tx.values}>
                     <div className="chips">
-                        {el.values.map((v) => (
-                            <code key={v}>
+                        {diffRows(el.values, was?.values, (v) => v).map(({ item: v, change }) => (
+                            <code key={v} className={rowClass(change)}>
                                 {names.mode === 'both' ? v : names.of({ name: v, label: el.valueLabels?.[v] })}
                                 {names.mode === 'both' && el.valueLabels?.[v] && <span className="muted"> {el.valueLabels[v]}</span>}
                             </code>
@@ -371,31 +443,48 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                             </>
                         )}
                     </p>
-                    {(el.variants ?? []).map((v) => (
-                        <div key={v.name} title={v.doc}>
-                            <Fields title={`${names.of(v)}`} fields={v.fields} ctx={el.context} onSelect={onSelect} empty={tx.noFields} />
-                            <Invariants items={v.invariants} title={tx.variantInvariants(names.of(v))} />
-                        </div>
-                    ))}
+                    {diffRows(el.variants ?? [], was?.variants, (v) => v.name).map(({ item: v, change }) => {
+                        // the rows of an added or removed variant are not marked one by one
+                        const old = change === 'changed' || !change ? was?.variants?.find((x) => x.name === v.name) : undefined;
+                        return (
+                            <div key={v.name} title={v.doc} className={rowClass(change)}>
+                                <Fields
+                                    title={`${names.of(v)}`}
+                                    fields={v.fields}
+                                    base={old?.fields}
+                                    ctx={el.context}
+                                    onSelect={onSelect}
+                                    empty={tx.noFields}
+                                />
+                                <Invariants items={v.invariants} base={old?.invariants} title={tx.variantInvariants(names.of(v))} />
+                            </div>
+                        );
+                    })}
                 </>
             )}
             {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'verified' && el.kind !== 'enum' && el.kind !== 'union' && (
                 <Fields
                     title={el.states?.length ? tx.commonFields : el.kind === 'event' || el.kind === 'error' ? tx.payload : tx.fields}
                     fields={el.fields}
+                    base={was?.fields}
                     ctx={el.context}
                     onSelect={onSelect}
                     empty={tx.noFields}
                 />
             )}
             {(el.kind === 'aggregate' || el.kind === 'entity' || el.kind === 'valueObject') && (
-                <Invariants items={el.invariants} title={el.states?.length ? tx.allStateInvariants : tx.invariants} labelOnly={el.kind === 'aggregate'} />
+                <Invariants
+                    items={el.invariants}
+                    base={was?.invariants}
+                    title={el.states?.length ? tx.allStateInvariants : tx.invariants}
+                    labelOnly={el.kind === 'aggregate'}
+                />
             )}
-            {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} title={tx.valueInvariants} />}
-            {el.states && el.states.length > 0 && (
-                <Section title={tx.counted(tx.states, el.states.length)}>
-                    {el.states.map((s) => (
-                        <div key={s.id} className="sub">
+            {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} base={was?.invariants} title={tx.valueInvariants} />}
+            {((el.states?.length ?? 0) > 0 || (was?.states?.length ?? 0) > 0) && (
+                <Section title={tx.counted(tx.states, el.states?.length ?? 0)}>
+                    {diffRows(el.states ?? [], was?.states, (s) => s.name).map(({ item: s, change }) => (
+                        <div key={s.id} className={rowClass(change, 'sub')}>
                             <a onClick={() => onSelect(s.id)}>{names.of(s)}</a>
                             {s.fields.length > 0 && <span className="muted small"> {s.fields.map((f) => names.field(f)).join(', ')}</span>}
                         </div>
@@ -480,7 +569,10 @@ function Dependencies({
 function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ctx: string; onSelect: Select; onFocus: (ctx: string) => void }) {
     const names = useNames();
     const tx = useT();
+    const base = useBase();
     const els = Object.values(model.elements).filter((e) => e.context === ctx);
+    // the context's elements in the baseline, when it was there
+    const baseEls = base?.r ? Object.values(base.model.elements).filter((e) => e.context === ctx) : undefined;
     const terms = model.terms[ctx] ?? [];
     const groups = groupByContext(contextDependencies(model));
     return (
@@ -494,11 +586,16 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
             <Dependencies title={tx.dependents} groups={groups.filter((g) => g.to === ctx)} other={(g) => g.from} onSelect={onSelect} />
             {KIND_ORDER.map((kind) => {
                 const items = els.filter((e) => e.kind === kind);
-                if (!items.length) return null;
+                const rows = diffRows(
+                    items,
+                    baseEls?.filter((e) => e.kind === kind),
+                    (e) => e.id,
+                );
+                if (!rows.length) return null;
                 return (
                     <Section key={kind} title={tx.counted(tx.kinds[kind], items.length)}>
-                        {items.map((e) => (
-                            <div key={e.id} className="sub">
+                        {rows.map(({ item: e, change }) => (
+                            <div key={e.id} className={rowClass(change, 'sub')}>
                                 <a onClick={() => onSelect(e.id)}>{names.of(e)}</a>
                             </div>
                         ))}
@@ -607,13 +704,13 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
 }
 
 /** Policies as links, each with its reaction; nothing when there are none. */
-function PolicyList({ title, policies, onSelect }: { title: string; policies: ElementModel[]; onSelect: Select }) {
+function PolicyList({ title, policies, base, onSelect }: { title: string; policies: ElementModel[]; base?: ElementModel[]; onSelect: Select }) {
     const names = useNames();
-    if (!policies.length) return null;
+    if (!policies.length && !base?.length) return null;
     return (
         <Section title={title}>
-            {policies.map((p) => (
-                <div key={p.id} className="sub">
+            {diffRows(policies, base, (p) => p.id).map(({ item: p, change }) => (
+                <div key={p.id} className={rowClass(change, 'sub')}>
                     <a onClick={() => onSelect(p.id)}>{names.of(p)}</a>
                     {p.policy && (
                         <span className="muted small mono">
@@ -627,26 +724,40 @@ function PolicyList({ title, policies, onSelect }: { title: string; policies: El
     );
 }
 
+/** Command cards; with `base` (the baseline's commands), added, changed and removed ones are marked. */
 function CommandList({
     title,
     agg,
     model,
     commands,
+    base,
     onSelect,
 }: {
     title: string;
     agg: ElementModel;
     model: DomainModel;
     commands: CommandModel[];
+    base?: CommandModel[];
     onSelect: Select;
 }) {
     const names = useNames();
     const tx = useT();
+    const baseline = useBase();
+    const rows = diffRows(commands, base, (c) => c.name);
     return (
         <Section title={title}>
-            {commands.length === 0 && <span className="muted">{tx.none}</span>}
-            {commands.map((c) => (
-                <CommandCard key={c.id} agg={agg} c={c} model={model} names={names} tx={tx} onSelect={onSelect} />
+            {rows.length === 0 && <span className="muted">{tx.none}</span>}
+            {rows.map(({ item: c, change }) => (
+                <CommandCard
+                    key={`${c.id}:${change ?? ''}`}
+                    agg={agg}
+                    c={c}
+                    model={model}
+                    names={names}
+                    tx={tx}
+                    onSelect={onSelect}
+                    base={base && baseline ? { model: baseline.model, item: base.find((x) => x.name === c.name), change } : undefined}
+                />
             ))}
         </Section>
     );
@@ -657,11 +768,11 @@ const payloadText = (names: Namer, ev: ElementModel): string =>
     ev.fields.map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`).join(', ');
 
 /** An event or error of a command; `suffix` is an event's multiplicity and `when` as written (`[1..*] when -> Draft`). */
-function OutcomeRow({ model, id, suffix, onSelect }: { model: DomainModel; id: string; suffix?: string; onSelect: Select }) {
+function OutcomeRow({ model, id, suffix, change, onSelect }: { model: DomainModel; id: string; suffix?: string; change?: RowChange; onSelect: Select }) {
     const names = useNames();
     const ev = model.elements[id];
     return (
-        <div className="event-row">
+        <div className={rowClass(change, 'event-row')}>
             <a onClick={() => onSelect(id)}>{names.id(id)}</a>
             {suffix && <code className="emit-when"> {suffix}</code>}
             {ev && ev.fields.length > 0 && <div className="muted small mono">{payloadText(names, ev)}</div>}
@@ -670,17 +781,42 @@ function OutcomeRow({ model, id, suffix, onSelect }: { model: DomainModel; id: s
 }
 
 /** Events the aggregate's commands may emit (`emits`) or errors they may return (`errors`), with the commands and the payload. */
-function AggregateOutcomes({ agg, model, kind, onSelect }: { agg: ElementModel; model: DomainModel; kind: 'emits' | 'errors'; onSelect: Select }) {
+function AggregateOutcomes({
+    agg,
+    was,
+    model,
+    kind,
+    onSelect,
+}: {
+    agg: ElementModel;
+    /** The aggregate in the baseline: added, changed and removed events or errors are marked against its own. */
+    was?: ElementModel;
+    model: DomainModel;
+    kind: 'emits' | 'errors';
+    onSelect: Select;
+}) {
     const names = useNames();
     const tx = useT();
+    const baseline = useBase();
     const outcomes = outcomesOf(agg.commands ?? [], kind);
+    const before = was && outcomesOf(was.commands ?? [], kind);
+    const rows = diffRows([...outcomes.keys()], before && [...before.keys()], (id) => id);
     // the errors are a part of the behaviour tab, but the events have a tab of their own, which says so when there are none
-    if (outcomes.size === 0 && kind === 'errors') return null;
+    if (rows.length === 0 && kind === 'errors') return null;
     return (
         <Section title={kind === 'emits' ? tx.raises(outcomes.size) : tx.returns(outcomes.size)}>
-            {outcomes.size === 0 && <span className="muted">{tx.none}</span>}
-            {[...outcomes].map(([id, commands]) => (
-                <OutcomeCard key={id} id={id} commands={commands} model={model} names={names} tx={tx} onSelect={onSelect} />
+            {rows.length === 0 && <span className="muted">{tx.none}</span>}
+            {rows.map(({ item: id, change }) => (
+                <OutcomeCard
+                    key={id}
+                    id={id}
+                    commands={outcomes.get(id) ?? before?.get(id) ?? []}
+                    model={model}
+                    names={names}
+                    tx={tx}
+                    onSelect={onSelect}
+                    base={before && baseline ? { model: baseline.model, item: baseline.model.elements[id], change } : undefined}
+                />
             ))}
         </Section>
     );
@@ -712,10 +848,26 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  * Fields / parameters. 両方: label, name and type; ラベル / 名前: one name column, and the type by its label or
  * its name.
  */
-function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields: FieldModel[]; ctx: string; onSelect: Select; empty?: string }) {
+function Fields({
+    title,
+    fields,
+    base,
+    ctx,
+    onSelect,
+    empty,
+}: {
+    title: string;
+    fields: FieldModel[];
+    /** The baseline's fields: added, changed and removed ones are marked, a changed type shows the old one struck through. */
+    base?: FieldModel[];
+    ctx: string;
+    onSelect: Select;
+    empty?: string;
+}) {
     const names = useNames();
     const tx = useT();
-    if (fields.length === 0) {
+    const rows = diffRows(fields, base, (f) => f.name);
+    if (rows.length === 0) {
         return empty ? (
             <Section title={title}>
                 <span className="muted">{empty}</span>
@@ -727,10 +879,11 @@ function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields
         <Section title={title}>
             <table className="fields">
                 <tbody>
-                    {fields.map((f) => (
-                        <tr key={f.name} title={f.doc}>
+                    {rows.map(({ item: f, change, before }) => (
+                        <tr key={`${f.name}:${change ?? ''}`} title={f.doc} className={rowClass(change)}>
                             {names.mode === 'both' && (
                                 <td className="flabel">
+                                    {before && before.label !== f.label && before.label && <del className="was">{before.label}</del>}
                                     {f.label}
                                     {f.labelSource && f.labelSource !== 'inline' && <span className="label-src">{tx.labelSources[f.labelSource]}</span>}
                                 </td>
@@ -740,6 +893,7 @@ function Fields({ title, fields, ctx, onSelect, empty }: { title: string; fields
                                 {names.mode === 'both' ? f.name : names.field(f)}
                             </td>
                             <td>
+                                {before && <OldType before={before} f={f} ctx={ctx} names={names} />}
                                 {f.type.kind === 'ref' && f.type.target ? (
                                     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the condition above checks that the type is a 'ref' (lost in the closure)
                                     <a onClick={() => onSelect((f.type as { ref: string }).ref)}>{names.type(f.type, ctx)}</a>
@@ -781,18 +935,31 @@ function FieldOrigin({ id, onSelect }: { id: string; onSelect: Select }) {
  * Invariants. With `labelOnly`, an invariant that has a Japanese name is shown by its name alone;
  * the expression is shown only for unnamed ones.
  */
-export function Invariants({ items, title, labelOnly }: { items: InvariantModel[]; title: string; labelOnly?: boolean }) {
+export function Invariants({
+    items,
+    base,
+    title,
+    labelOnly,
+}: {
+    items: InvariantModel[];
+    /** The baseline's invariants: added, changed and removed ones are marked, a changed expression shows the old one struck through. */
+    base?: InvariantModel[];
+    title: string;
+    labelOnly?: boolean;
+}) {
     const names = useNames();
     const tx = useT();
-    if (items.length === 0) return null;
+    const rows = diffRows(items, base, (i) => i.name);
+    if (rows.length === 0) return null;
     return (
         <Section title={title}>
-            {items.map((i) => {
+            {rows.map(({ item: i, change, before }) => {
                 const nameOnly = labelOnly && !!i.label;
                 return (
-                    <div key={i.name} className="sub">
+                    <div key={`${i.name}:${change ?? ''}`} className={rowClass(change, 'sub')}>
                         <strong>{names.of(i)}</strong>
                         {!nameOnly && i.doc && <p className="doc">{i.doc}</p>}
+                        {!nameOnly && before?.source !== undefined && before.source !== i.source && <del className="was block">{before.source}</del>}
                         {!nameOnly && (i.source !== undefined ? <code className="block">{i.source}</code> : <p className="not-in-dsl">{tx.notInDsl}</p>)}
                     </div>
                 );
