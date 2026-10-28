@@ -50,12 +50,34 @@ explorer.
 
 ## Problems and changes (bottom)
 
-Diagnostics (click to locate) and additions / changes / removals since the previous model.
+Diagnostics (click to locate) and additions / changes / removals since the baseline (below), under a heading naming
+it (「main (d22ce69) からの変更」) that opens the menu choosing it; a removed item opens in the inspector as it was
+there.
+
+## Comparing with a git revision
+
+The 比較対象 menu in the header picks what additions, changes and removals are shown against: 前回の保存 (the last valid
+model shown before, the default) or a git revision of the workspace — a branch, a tag, one of the latest commits, or
+any revision typed in (`main`, `HEAD~3`, a commit). `dt view --base main` starts with one. The model compared is the
+working tree, saved but not necessarily committed, against the `.dt` files of that commit (picked by `sources`). The
+choice is the server's, so every open page follows it; a branch is followed as it moves (a commit, a checkout).
+
+With either baseline:
+
+- The diagrams mark added and changed elements, draw removed ones as ghosts where they were in the baseline's
+  layout, and mark the rows of a node: added and changed fields in colour, removed ones struck through.
+- The inspector marks the rows of its 構造, 状態遷移 and 振る舞い tabs — fields, invariants, states, values, commands
+  with their transitions, parameters, requirements, changed fields, events, errors and policies — added, changed or
+  removed (struck through), and strikes through the former value of a changed one (a field's type, an expression, a
+  transition, a description).
+
+A revision whose sources do not parse is reported in a banner, and nothing is marked then.
 
 ## Behaviour and settings
 
 - Selecting never switches the main view by itself; the item is highlighted when the current view shows it.
-- Added / changed elements are highlighted; removed ones appear as ghosts. On a syntax error the last diagram stays.
+- Added / changed elements are highlighted; removed ones appear as ghosts (see
+  [Comparing with a git revision](#comparing-with-a-git-revision)). On a syntax error the last diagram stays.
 - The language of the Live View (Japanese or English) follows the browser, or is forced in the settings menu (the gear
   at the right of the header). It covers the screen and the diagrams' own words (集約 / aggregate…); the model's names
   and labels are shown as written, and diagnostics are in English.

@@ -1,7 +1,19 @@
 import { Fragment } from 'react';
-import { useT } from './i18n';
 import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../src/graph/ir';
-import { BaseBoxShapeUtil, HTMLContainer, Polyline2d, SVGContainer, ShapeUtil, T, Vec, type RecordProps, type TLShape } from 'tldraw';
+import {
+    BaseBoxShapeUtil,
+    HTMLContainer,
+    Polyline2d,
+    SVGContainer,
+    ShapeUtil,
+    T,
+    Vec,
+    useEditor,
+    useValue,
+    type Editor,
+    type RecordProps,
+    type TLShape,
+} from 'tldraw';
 
 export type ChangeMark = 'none' | 'added' | 'changed' | 'removed';
 export type DiagMark = 'none' | 'warning' | 'error';
@@ -16,11 +28,13 @@ declare module '@tldraw/tlschema' {
             stereotype: string;
             /** Text size factor (1 = normal; the Structure overview uses larger text). */
             scale: number;
-            /** Body rows; `v` is empty for rows without a value column. */
-            rows: { k: string; v: string; o?: string }[];
+            /** Body rows; `v` is empty for rows without a value column; `c`: the row's change from the baseline. */
+            rows: { k: string; v: string; o?: string; c?: string }[];
             /** Height of the internal transitions' compartment at the bottom (0 = none); its rows are shapes of their own. */
             compartment: number;
             change: ChangeMark;
+            /** The change badge's text (in the Live View's language), empty without one. */
+            badge: string;
             diag: DiagMark;
         };
         'domain-internal': {
@@ -85,20 +99,23 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
         label: T.string,
         stereotype: T.string,
         /** `o`: the field set a field comes from, shown faded after its type. */
-        rows: T.arrayOf(T.object({ k: T.string, v: T.string, o: T.string.optional() })),
+        rows: T.arrayOf(T.object({ k: T.string, v: T.string, o: T.string.optional(), c: T.string.optional() })),
         compartment: T.number,
         change: changeMark,
+        badge: T.string,
         diag: diagMark,
     };
 
     getDefaultProps(): DomainNodeShape['props'] {
-        return { w: 160, h: 60, kind: 'entity', label: '', stereotype: '', scale: 1, rows: [], compartment: 0, change: 'none', diag: 'none' };
+        return { w: 160, h: 60, kind: 'entity', label: '', stereotype: '', scale: 1, rows: [], compartment: 0, change: 'none', badge: '', diag: 'none' };
     }
 
     override canResize = () => false;
     override hideRotateHandle = () => true;
     override hideResizeHandles = () => true;
     override canEdit = () => false;
+    // the selection is shown by the outline alone (see getIndicatorPath): the bounds box would cross the badges
+    override hideSelectionBoundsFg = () => true;
 
     component(shape: DomainNodeShape) {
         const p = shape.props;
@@ -120,14 +137,14 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
                                 {p.rows.map((r, i) =>
                                     r.v ? (
                                         <Fragment key={i}>
-                                            <span className="dn-key">{r.k}</span>
-                                            <span className="dn-value">
+                                            <span className={`dn-key${r.c ? ` dn-row-${r.c}` : ''}`}>{r.k}</span>
+                                            <span className={`dn-value${r.c ? ` dn-row-${r.c}` : ''}`}>
                                                 {r.v}
                                                 {r.o && <span className="dn-origin">{r.o}</span>}
                                             </span>
                                         </Fragment>
                                     ) : (
-                                        <span key={i} className="dn-key dn-full">
+                                        <span key={i} className={`dn-key dn-full${r.c ? ` dn-row-${r.c}` : ''}`}>
                                             {r.k}
                                         </span>
                                     ),
@@ -135,16 +152,18 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
                             </div>
                         )}
                         {p.compartment > 0 && <div className="dn-compartment" style={{ height: p.compartment }} />}
-                        {p.change !== 'none' && <ChangeBadge change={p.change} />}
-                        {p.diag !== 'none' && <div className="dn-diag">{p.diag === 'error' ? '✕' : '!'}</div>}
+                        {(p.badge || p.diag !== 'none') && <EdgeMarks badge={p.badge} diag={p.diag} />}
                     </>
                 )}
             </HTMLContainer>
         );
     }
 
+    /** The outline, going around the change badge and the diagnostic mark on the edge instead of crossing them. */
     getIndicatorPath(shape: DomainNodeShape) {
-        return roundRect(shape.props.w, shape.props.h, 8);
+        const p = shape.props;
+        if (p.kind === 'initial' || (!p.badge && p.diag === 'none')) return roundRect(p.w, p.h, 8);
+        return outlineAround(p.w, p.h, 8, p.badge ? badgeWidth(p.badge) : 0, p.diag !== 'none', markScale(this.editor));
     }
 }
 
@@ -374,9 +393,79 @@ function roundRect(w: number, h: number, r: number): Path2D {
     return p;
 }
 
-function ChangeBadge({ change }: { change: Exclude<ChangeMark, 'none'> }) {
-    const t = useT();
-    return <div className="dn-badge">{t[change]}</div>;
+/** Where the change badge and the diagnostic mark sit on a node's edge (see .dn-badge and .dn-diag), and the gap the outline leaves around them. */
+const BADGE = { left: 8, bottom: 7, height: 17, padding: 6, cjk: 12, latin: 7.2 };
+const DIAG_RADIUS = 9;
+const OUTLINE_GAP = 2;
+/** The marks grow when zoomed out, to stay about their size on the screen, up to this factor. */
+const MAX_MARK_SCALE = 3;
+
+/** How much the change badge and the diagnostic mark are enlarged at the editor's zoom (1 from 100% up). */
+const markScale = (editor: Editor): number => Math.min(MAX_MARK_SCALE, Math.max(1, 1 / editor.getZoomLevel()));
+
+/**
+ * The change badge and the diagnostic mark on a node's edge, enlarged when zoomed out (a component of its own, so that
+ * only nodes with marks follow the zoom). The badge grows from its bottom-left corner, the mark from its centre.
+ */
+function EdgeMarks({ badge, diag }: { badge: string; diag: DiagMark }) {
+    const editor = useEditor();
+    const k = useValue('mark scale', () => markScale(editor), [editor]);
+    const grow = k === 1 ? undefined : `scale(${k})`;
+    return (
+        <>
+            {badge && (
+                // sized as the outline expects it
+                <div className="dn-badge" style={{ width: badgeWidth(badge), transform: grow }}>
+                    {badge}
+                </div>
+            )}
+            {diag !== 'none' && (
+                <div className="dn-diag" style={{ transform: grow }}>
+                    {diag === 'error' ? '✕' : '!'}
+                </div>
+            )}
+        </>
+    );
+}
+
+/** The badge's width, from its text (12px: full-width characters 12px, others about 7px) and padding. */
+const badgeWidth = (text: string): number =>
+    2 * BADGE.padding + text.split('').reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? BADGE.cjk : BADGE.latin), 0);
+
+/**
+ * A rounded rectangle whose top edge steps out around the badge (`badge` wide, when there is one) and whose top-right
+ * corner steps out around the diagnostic mark (`diag`), both enlarged `k` times.
+ */
+function outlineAround(w: number, h: number, r: number, badge: number, diag: boolean, k: number): Path2D {
+    const g = OUTLINE_GAP;
+    const p = new Path2D();
+    p.moveTo(r, 0);
+    if (badge) {
+        const [x0, x1, y] = [BADGE.left - g, BADGE.left + badge * k + g, BADGE.bottom - BADGE.height * k - g];
+        p.lineTo(x0, 0);
+        p.lineTo(x0, y);
+        p.lineTo(x1, y);
+        p.lineTo(x1, 0);
+    }
+    if (diag) {
+        const d = DIAG_RADIUS * k + g;
+        p.lineTo(w - d, 0);
+        p.lineTo(w - d, -d);
+        p.lineTo(w + d, -d);
+        p.lineTo(w + d, d);
+        p.lineTo(w, d);
+    } else {
+        p.lineTo(w - r, 0);
+        p.arcTo(w, 0, w, r, r);
+    }
+    p.lineTo(w, h - r);
+    p.arcTo(w, h, w - r, h, r);
+    p.lineTo(r, h);
+    p.arcTo(0, h, 0, h - r, r);
+    p.lineTo(0, r);
+    p.arcTo(0, 0, r, 0, r);
+    p.closePath();
+    return p;
 }
 
 export const shapeUtils = [DomainNodeUtil, DomainGroupUtil, DomainInternalUtil, DomainEdgeUtil];

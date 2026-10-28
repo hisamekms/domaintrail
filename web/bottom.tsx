@@ -1,4 +1,4 @@
-import { PanelBottomClose, PanelBottomOpen } from 'lucide-react';
+import { GitCompare, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
 import type { Diagnostic } from '../src/core/diagnostics';
 import { useT } from './i18n';
 import type { ModelDiff } from '../src/graph/diff';
@@ -8,7 +8,7 @@ import { namer, type Select } from './model-utils';
 
 export type BottomTab = 'problems' | 'changes';
 
-/** Bottom pane: problems (diagnostics) and changes since the previous model. Collapsed to its tab bar. */
+/** Bottom pane: problems (diagnostics) and changes since the baseline. Collapsed to its tab bar. */
 export function BottomPanel(props: {
     tab: BottomTab;
     mode: DisplayMode;
@@ -16,6 +16,11 @@ export function BottomPanel(props: {
     model: DomainModel | null;
     diagnostics: Diagnostic[];
     diff: ModelDiff;
+    /** The baseline's name, and whether it is a git revision (else the previous save). */
+    baseline?: string;
+    gitBaseline?: boolean;
+    /** Opens (or closes) the menu choosing the baseline, next to the heading. */
+    onBaseline: (anchor: HTMLElement) => void;
     onTab: (tab: BottomTab) => void;
     onToggle: () => void;
     onLocate: (d: Diagnostic) => void;
@@ -88,10 +93,39 @@ function Problems({ items, onLocate }: { items: Diagnostic[]; onLocate: (d: Diag
     );
 }
 
-function Changes({ diff, model, mode, onSelect }: { diff: ModelDiff; model: DomainModel | null; mode: DisplayMode; onSelect: Select }) {
+function Changes({
+    diff,
+    model,
+    mode,
+    baseline,
+    gitBaseline,
+    onBaseline,
+    onSelect,
+}: {
+    diff: ModelDiff;
+    model: DomainModel | null;
+    mode: DisplayMode;
+    baseline?: string;
+    gitBaseline?: boolean;
+    onBaseline: (anchor: HTMLElement) => void;
+    onSelect: Select;
+}) {
     const t = useT();
+    // what the changes are relative to; a click opens the menu that changes it
+    const heading = baseline && (
+        <button className="changes-baseline" aria-haspopup="listbox" onClick={(e) => onBaseline(e.currentTarget)} data-tooltip={t.changeBaseline}>
+            <GitCompare size={14} aria-hidden />
+            {t.changesSince(baseline)}
+            <span aria-hidden>▾</span>
+        </button>
+    );
     if (!diff.added.length && !diff.changed.length && !diff.removed.length) {
-        return <p className="muted pad">{t.noChanges}</p>;
+        return (
+            <div className="pad">
+                {heading}
+                <p className="muted">{gitBaseline && baseline ? t.noChangesSince(baseline) : t.noChanges}</p>
+            </div>
+        );
     }
     const name = namer(mode, model).id;
     const groups: [keyof ModelDiff, string][] = [
@@ -100,19 +134,23 @@ function Changes({ diff, model, mode, onSelect }: { diff: ModelDiff; model: Doma
         ['removed', t.removed],
     ];
     return (
-        <div className="changes">
-            {groups.map(([key, label]) => (
-                <div key={key} className="changes-col">
-                    <h3>
-                        {label} <span className="muted">{diff[key].length}</span>
-                    </h3>
-                    {diff[key].map((id) => (
-                        <div key={id} className={`sub diffrow diffrow-${key}`}>
-                            {key === 'removed' ? <span>{id}</span> : <a onClick={() => onSelect(id)}>{name(id)}</a>}
-                        </div>
-                    ))}
-                </div>
-            ))}
+        <div className="changes-wrap">
+            {heading}
+            <div className="changes">
+                {groups.map(([key, label]) => (
+                    <div key={key} className="changes-col">
+                        <h3>
+                            {label} <span className="muted">{diff[key].length}</span>
+                        </h3>
+                        {diff[key].map((id) => (
+                            <div key={id} className={`sub diffrow diffrow-${key}`}>
+                                {/* a removed item opens in the inspector as it was in the baseline */}
+                                <a onClick={() => onSelect(id)}>{key === 'removed' ? id : name(id)}</a>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

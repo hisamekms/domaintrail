@@ -34,9 +34,10 @@ const paths = (value: unknown): string[] =>
 
 /**
  * Latin words allowed in Japanese messages: abbreviations, the DSL's keywords and file names, which are written as
- * they are in Japanese too. `X` is the sample argument.
+ * they are in Japanese too, and git's (`git`, and the refs `main` and `HEAD` given as examples). `X` is the sample
+ * argument.
  */
-const LATIN_IN_JA = new Set(['BC', 'DSL', 'ID', 'OS', 'dt', 'persistent', 'value', 'terms', 'X']);
+const LATIN_IN_JA = new Set(['BC', 'DSL', 'ID', 'OS', 'dt', 'persistent', 'value', 'terms', 'X', 'git', 'main', 'HEAD']);
 
 describe('i18n', () => {
     test('every language has the same messages', () => {

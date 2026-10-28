@@ -2,8 +2,28 @@ import type { Diagnostic } from '../core/diagnostics.js';
 import type { ModelDiff } from '../graph/diff.js';
 import type { LaidOutGraph, TransitionLabels } from '../graph/ir.js';
 import type { DomainModel } from '../model/model.js';
+import type { GitCommit } from './git.js';
 
 export type ViewStatus = 'ok' | 'invalid' | 'syntax-error' | 'empty';
+
+/** What the model is compared with: the previously shown model, or a git revision of the workspace. */
+export type BaselineSpec = { kind: 'previous' } | { kind: 'git'; ref: string };
+
+/** The baseline in use; for a git revision, the commit it resolves to, or why it cannot be compared with. */
+export type Baseline =
+    | { kind: 'previous' }
+    | {
+          kind: 'git';
+          ref: string;
+          commit?: GitCommit;
+          /** The revision is unknown, or its sources do not parse (then nothing is marked as changed). */
+          error?: string;
+          /** Number of .dt files in the revision. */
+          files: number;
+      };
+
+/** The baseline's model and its graphs as laid out for it (ghosts of removed elements are drawn where they were). */
+export type BaseView = Pick<ViewPayload, 'model' | 'structure' | 'overview' | 'aggregates' | 'contextMap' | 'contextMapAll' | 'states'>;
 
 /** Message pushed from the view server to the browser over WebSocket (and served at /api/state). */
 export interface ViewPayload {
@@ -37,7 +57,10 @@ export interface ViewPayload {
     sources: { path: string; text: string }[];
     /** Incremented whenever the shown model changes (not on diagnostics-only updates). */
     modelVersion: number;
-    /** Differences between the model shown and the previously shown model. */
+    /** Differences between the model shown and the baseline. */
     diff: ModelDiff;
+    baseline: Baseline;
+    /** The baseline's model and graphs; null when there is none (the first model shown, a revision that does not parse). */
+    base: BaseView | null;
     layoutEngine: string;
 }

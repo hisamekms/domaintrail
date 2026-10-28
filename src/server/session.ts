@@ -5,12 +5,13 @@ import { DEFAULT_SOURCES } from '../core/config.js';
 import { loadWorkspace } from '../core/files.js';
 import { buildStateGraph, buildStructureGraph } from '../graph/build.js';
 import { buildContextMapGraph } from '../graph/context-map.js';
-import { EMPTY_DIFF, diffModels, fingerprints, type ModelDiff } from '../graph/diff.js';
+import { EMPTY_DIFF, diffModels, fingerprints, markLineChanges, type ModelDiff } from '../graph/diff.js';
 import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type StructureLevel, type TransitionLabels } from '../graph/ir.js';
 import type { LayoutEngine } from '../layout/engine.js';
 import { supportingContexts } from '../model/dependencies.js';
 import type { DomainModel } from '../model/model.js';
-import type { ViewPayload } from './protocol.js';
+import { resolveCommit, sourcesAt, type GitCommit } from './git.js';
+import type { BaseView, Baseline, BaselineSpec, ViewPayload } from './protocol.js';
 
 export const LAYOUT_FILE = path.join('.domaintrail', 'layout.json');
 
@@ -35,14 +36,44 @@ export function focusableContexts(model: DomainModel): string[] {
     return model.contexts.filter((c) => !supporting.has(c) && Object.values(model.elements).some((e) => e.context === c && drawn.has(e.kind)));
 }
 
+const pickBaseView = ({ model, structure, overview, aggregates, contextMap, contextMapAll, states }: ViewPayload): BaseView => ({
+    model,
+    structure,
+    overview,
+    aggregates,
+    contextMap,
+    contextMapAll,
+    states,
+});
+
+/** A git baseline as loaded: the commit, and its model with its graphs (none when its sources do not parse). */
+interface GitBase {
+    ref: string;
+    commit?: GitCommit;
+    model?: DomainModel;
+    view: BaseView | null;
+    files: number;
+    error?: string;
+}
+
 export class ViewSession {
     private version = 0;
     private current: ViewPayload;
     private shownModel: DomainModel | undefined;
+    /** The model shown before `shownModel` and its graphs: the baseline of the `previous` comparison. */
+    private previousView: BaseView | null = null;
     private shownFingerprint = '';
     private modelVersion = 0;
+    /** Differences between the model of `previousView` and `shownModel`. */
+    private previousDiff: ModelDiff = EMPTY_DIFF;
     private lastDiff: ModelDiff = EMPTY_DIFF;
+    private baselineSpec: BaselineSpec;
+    private gitBase: GitBase | undefined;
+    /** Commit and model the last diff was computed for, to tell when the comparison changes. */
+    private comparedKey = '';
     private layouts = new Map<string, LaidOutGraph>();
+    /** Layouts of the git baseline's graphs, kept apart: they have the IDs of the current ones. Not persisted. */
+    private baseLayouts = new Map<string, LaidOutGraph>();
     /** Layouts of focused Structure Views (see `focusGraph`), least recently used first. */
     private readonly focusLayouts = new Map<string, LaidOutGraph>();
     private layoutsLoaded = false;
@@ -54,7 +85,10 @@ export class ViewSession {
         private readonly engine: LayoutEngine,
         private readonly sources: readonly string[] = DEFAULT_SOURCES,
         private readonly respectGitignore = true,
+        /** A git revision to compare with from the start (default: the previously shown model). */
+        baseRef?: string,
     ) {
+        this.baselineSpec = baseRef ? { kind: 'git', ref: baseRef } : { kind: 'previous' };
         this.current = this.payload({
             files: [],
             sources: [],
@@ -78,9 +112,89 @@ export class ViewSession {
 
     /** Re-reads every .dt file and recomputes the view. Calls are serialized. */
     refresh(): Promise<ViewPayload> {
-        const run = this.queue.then(() => this.doRefresh());
+        return this.serialized(() => this.doRefresh());
+    }
+
+    /**
+     * Compares with `spec` from now on and recomputes the view. A git ref is checked first: an unknown one is rejected
+     * with `UnknownRevisionError`, and the baseline is left as it was.
+     */
+    setBaseline(spec: BaselineSpec): Promise<ViewPayload> {
+        return this.serialized(async () => {
+            if (spec.kind === 'git') await resolveCommit(this.root, spec.ref);
+            this.baselineSpec = spec;
+            this.gitBase = undefined;
+            return this.doRefresh();
+        });
+    }
+
+    private serialized<T>(fn: () => Promise<T>): Promise<T> {
+        const run = this.queue.then(fn);
         this.queue = run.catch(() => undefined);
         return run;
+    }
+
+    /**
+     * Loads the git baseline when the ref now names another commit (or none). The commit is resolved on every refresh:
+     * a branch moves when it is committed to.
+     */
+    private async syncGitBase(ref: string): Promise<GitBase> {
+        let commit: GitCommit;
+        try {
+            commit = await resolveCommit(this.root, ref);
+        } catch (e) {
+            return (this.gitBase = { ref, view: null, files: 0, error: e instanceof Error ? e.message : String(e) });
+        }
+        if (this.gitBase?.ref === ref && this.gitBase.commit?.hash === commit.hash) return this.gitBase;
+        const sources = await sourcesAt(this.root, commit.hash, this.sources);
+        const analysis = await analyze(sources);
+        const base: GitBase = { ref, commit, view: null, files: sources.length };
+        if (!analysis.model) {
+            base.error = `The sources at '${ref}' do not parse`;
+            return (this.gitBase = base);
+        }
+        const model = analysis.model;
+        this.baseLayouts.clear();
+        const layout = (g: Graph) => this.layout(g, this.baseLayouts);
+        base.model = model;
+        base.view = {
+            model,
+            structure: await layout(buildStructureGraph(model)),
+            overview: await layout(buildStructureGraph(model, { level: 'overview' })),
+            aggregates: await layout(buildStructureGraph(model, { level: 'aggregates' })),
+            contextMap: await layout(buildContextMapGraph(model)),
+            contextMapAll: await layout(buildContextMapGraph(model, { all: true })),
+            states: await this.stateGraphs(model, () => undefined, layout),
+        };
+        return (this.gitBase = base);
+    }
+
+    /** The model the current one is compared with, if there is one. */
+    private baselineModel(): DomainModel | undefined {
+        return (this.baselineSpec.kind === 'git' ? this.gitBase?.model : this.previousView?.model) ?? undefined;
+    }
+
+    private baseline(): Baseline {
+        if (this.baselineSpec.kind === 'previous') return { kind: 'previous' };
+        const b = this.gitBase;
+        return { kind: 'git', ref: this.baselineSpec.ref, files: b?.files ?? 0, ...(b?.commit && { commit: b.commit }), ...(b?.error && { error: b.error }) };
+    }
+
+    /** Every aggregate's State View for each way of labeling transitions, with rows marked against `base`. */
+    private async stateGraphs(
+        model: DomainModel,
+        base: (aggregateId: string, labels: TransitionLabels) => Graph | undefined,
+        layout: (g: Graph) => Promise<LaidOutGraph>,
+    ): Promise<ViewPayload['states']> {
+        const states: ViewPayload['states'] = {};
+        for (const el of Object.values(model.elements)) {
+            if (el.kind !== 'aggregate') continue;
+            const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
+            for (const l of TRANSITION_LABELS) byLabels[l] = await layout(markLineChanges(buildStateGraph(el, model, l), base(el.id, l)));
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the loop above sets every label
+            states[el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
+        }
+        return states;
     }
 
     private async doRefresh(): Promise<ViewPayload> {
@@ -123,26 +237,38 @@ export class ViewSession {
         const model = analysis.model;
         const fp = JSON.stringify([...fingerprints(model)]);
         if (fp !== this.shownFingerprint) {
-            this.lastDiff = diffModels(this.shownModel, model);
+            this.previousDiff = diffModels(this.shownModel, model);
+            this.previousView = this.current.model ? pickBaseView(this.current) : null;
             this.shownModel = model;
             this.shownFingerprint = fp;
+        }
+        const spec = this.baselineSpec;
+        const gitBase = spec.kind === 'git' ? await this.syncGitBase(spec.ref) : undefined;
+        const baseModel = this.baselineModel();
+        this.lastDiff = gitBase ? (gitBase.model ? diffModels(gitBase.model, model) : EMPTY_DIFF) : this.previousDiff;
+        // the page redraws (and re-fetches focused views) when the model or what it is compared with changes
+        const comparedKey = `${fp}|${spec.kind}|${gitBase?.commit?.hash ?? ''}`;
+        if (comparedKey !== this.comparedKey) {
+            this.comparedKey = comparedKey;
             this.modelVersion++;
         }
 
-        const structure = await this.layout(buildStructureGraph(model));
+        const layout = (g: Graph) => this.layout(g);
+        const structure = await layout(markLineChanges(buildStructureGraph(model), baseModel && buildStructureGraph(baseModel)));
         const focusContexts = focusableContexts(model);
-        const contextMap = await this.layout(buildContextMapGraph(model));
-        const contextMapAll = await this.layout(buildContextMapGraph(model, { all: true }));
-        const overview = await this.layout(buildStructureGraph(model, { level: 'overview' }));
-        const aggregates = await this.layout(buildStructureGraph(model, { level: 'aggregates' }));
-        const states: ViewPayload['states'] = {};
-        for (const el of Object.values(model.elements)) {
-            if (el.kind !== 'aggregate') continue;
-            const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
-            for (const l of TRANSITION_LABELS) byLabels[l] = await this.layout(buildStateGraph(el, model, l));
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the loop above sets every label
-            states[el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
-        }
+        const contextMap = await layout(buildContextMapGraph(model));
+        const contextMapAll = await layout(buildContextMapGraph(model, { all: true }));
+        const overview = await layout(buildStructureGraph(model, { level: 'overview' }));
+        const aggregates = await layout(buildStructureGraph(model, { level: 'aggregates' }));
+        const baseAggregate = (id: string) => (baseModel?.elements[id]?.kind === 'aggregate' ? baseModel.elements[id] : undefined);
+        const states = await this.stateGraphs(
+            model,
+            (id, l) => {
+                const agg = baseAggregate(id);
+                return agg && baseModel && buildStateGraph(agg, baseModel, l);
+            },
+            layout,
+        );
         // Forget layouts of graphs that no longer exist (e.g. removed aggregates).
         const live = new Set([
             structure.id,
@@ -211,6 +337,8 @@ export class ViewSession {
             diagnostics: p.diagnostics,
             modelVersion: this.modelVersion,
             diff: this.lastDiff,
+            baseline: this.baseline(),
+            base: this.baselineSpec.kind === 'git' ? (this.gitBase?.view ?? null) : this.previousView,
             layoutEngine: this.engine.name,
         };
     }
@@ -226,7 +354,9 @@ export class ViewSession {
         const focusable = new Set(focusableContexts(model));
         const focus = [...new Set(contexts.filter((c) => focusable.has(c)))].sort();
         if (focus.length === 0) return null;
-        const graph = buildStructureGraph(model, { focus, level, hidden: [...new Set(hidden.filter((c) => focusable.has(c)))] });
+        const opts = { focus, level, hidden: [...new Set(hidden.filter((c) => focusable.has(c)))] };
+        const baseModel = this.baselineModel();
+        const graph = markLineChanges(buildStructureGraph(model, opts), baseModel && buildStructureGraph(baseModel, opts));
         const signature = graphSignature(graph);
         const cached = this.focusLayouts.get(graph.id);
         if (cached && cached.signature === signature) return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };
@@ -239,14 +369,14 @@ export class ViewSession {
     }
 
     /** Reuses the cached layout when the graph's shape is unchanged; otherwise lays it out again. */
-    private async layout(graph: Graph): Promise<LaidOutGraph> {
-        const cached = this.layouts.get(graph.id);
+    private async layout(graph: Graph, cache = this.layouts): Promise<LaidOutGraph> {
+        const cached = cache.get(graph.id);
         const signature = graphSignature(graph);
         if (cached && cached.signature === signature) {
             return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };
         }
         const laid = await this.engine.layout(graph);
-        this.layouts.set(graph.id, laid);
+        cache.set(graph.id, laid);
         return laid;
     }
 
