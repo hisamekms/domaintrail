@@ -85,7 +85,19 @@ follows the package's.
 
 ## Commits
 
-Commit messages are one sentence in the imperative that says what changes and why, without prefixes.
+Changes reach `main` through pull requests, squash merged, so the title of a pull request becomes its commit on `main`
+and its description the commit's body. Titles follow [Conventional Commits](https://www.conventionalcommits.org):
+`type(scope): description`, where the type is one of `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`,
+`chore` and `revert`, the scope is optional, and `!` before the colon marks a breaking change. The description is one
+sentence in the imperative, starting in lowercase, that says what changes and why. The PR title workflow checks it.
+
+```text
+feat(view): compare the model with a git revision
+fix!: reject a policy whose command is not on the aggregate
+build: use Bun 1.4.4 locally and in CI
+```
+
+`npm version` commits as `chore(release): <version>` (`.npmrc`).
 
 ## Release
 
