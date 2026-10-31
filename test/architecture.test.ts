@@ -159,6 +159,11 @@ describe('layers', () => {
         expect(show(wrong.map(({ imp }) => imp))).toEqual([]);
     });
 
+    test('no domain/ file imports node:*', () => {
+        const wrong = all.filter(({ imp }) => segments(imp.file).includes('domain') && imp.specifier.startsWith('node:'));
+        expect(show(wrong.map(({ imp }) => imp))).toEqual([]);
+    });
+
     test('no application/ file imports node:*, chokidar, ws or elkjs', () => {
         const application = all.filter(({ imp }) => segments(imp.file).includes('application'));
         expect(application.length).toBeGreaterThan(0);
@@ -196,6 +201,12 @@ describe('layers', () => {
                 !(packageName(i.specifier) === '@domaintrail/modeling' || (packageName(i.specifier) === '@domaintrail/visualization' && i.typeOnly)),
         );
         expect(show(wrong)).toEqual([]);
+    });
+
+    test('collaboration runs on Node: only its infrastructure imports node:*, and nothing but the generated bun tests imports bun', () => {
+        const runtime = IMPORTS.collaboration.filter((i) => !i.file.startsWith('packages/collaboration/src/generated/tests/'));
+        expect(show(runtime.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
+        expect(show(runtime.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
     });
 
     test('only agent, composition, presentation and web depend on collaboration', () => {
