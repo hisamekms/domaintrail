@@ -352,3 +352,53 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
 - **Tests** use a fake agent (`test/fixtures/agent/fake-claude.mjs`, a plan per invocation) through composition's
   `agentCommand` option (tests only, not a CLI option), or as a `claude` script first on the PATH for the CLI on Bun
   and on Node (`dist/dt.js`).
+
+## Appendix: revisions, comparison and restore (S7)
+
+*Decided by the supervisor* for S7, and built so:
+
+- **Restore keeps refusing external changes**: when the workspace differs from the session's last revision the restore
+  is refused (`ExternalChangesSinceSnapshot`, 409, the paths), and nothing is written. The page offers the facilitator a
+  confirmed two-step, `POST /api/session/revisions/:id/restore {"recordExternalChanges": true}`: the workspace as it is
+  is recorded first as a `Manual` revision (taken by the facilitator), then the restore goes on, so an edit by hand is
+  never lost and shows in the history. Both steps run in one call, behind one watcher hold.
+- **A run in progress** (Running, or a live claim) makes the restore refuse (`RunInProgress`, 409, the run). The page
+  explains it and offers to cancel the run; once cancelled the lease has ended and the restore can be asked again
+  (files the agent changed before it stopped are external changes: the two-step records them).
+- **The operation log.** Every attempted restore is a row of `restore_operations` (migration 3, `Stores.operations`,
+  `OperationLog`): the participant who asked, the identity acting as that participant (provider and subject: the
+  facilitator's participant is `local:facilitator` whoever holds the role), the revision to restore, the Manual,
+  pre-restore and restored revisions it recorded, the result (`Restored`, `Refused`, `Failed`), the reason (an error
+  type) and, for a failure, the error's message. No token, cookie or e-mail. A table rather than the `.dt` model: the
+  log keeps attempts the model never records (refused before anything was written, failed midway), it is an audit
+  record of the server rather than a decision of the domain, and the `Restored` revision already carries what the
+  domain needs (`restoredFrom`, `preRestore`). `restoreRevision` takes `by` and `identity`; `restoreOperations` reads
+  the log (not served over HTTP in M1).
+- **The restore's sequence**, behind `WatcherHold.aroundWrite`: hold → no active run → `RestorableRevision` (symbolic
+  link, path outside the root, external changes; or the Manual revision first) → the blobs → `PreRestore` revision →
+  write (the S3 writer, with its refusals) → read back and validate → the content hash must be the restored
+  revision's → `Restored` revision → resume. A refusal of the writer leaves the workspace as it was (checked by reading
+  it again) and is a plain refusal. Any failure after the write started (the write throws, refuses after a partial
+  write, the read-back fails, the content differs, recording fails) is `ManualRecoveryNeeded` (500) with the
+  pre-restore revision and the cause; nothing is recorded as restored, the server logs it, and the page tells the
+  facilitator to check the files and restore that revision (the two-step, as the workspace now differs from the last
+  revision).
+- **One publish.** On resume after a write the view is refreshed and published once, whether or not the watcher has
+  seen the write; the watcher's late events whose sources (paths and hashes) are those left by the write are absorbed
+  for 5 s (`WatcherGate.echo`; `dt view` has no gate). Every page gets the restored model in one `update`, then the
+  revision events.
+- **Comparison.** `GET /api/session/revisions/:before/compare/:after`, any participant: every source of either revision
+  by path with its DSL and status (`added`, `removed`, `changed`, `unchanged`), counts per DSL, both revisions (their
+  validation summaries side by side), and for each file not unchanged a unified line diff (`domain/compare.ts`, Myers'
+  O(ND) diff, three lines of context) from the blobs. Bounded before the work is done (a security review's finding):
+  a side over 1 MiB is `tooLarge` without its blob being read; at most 10,000 lines and 1,000 edits a file (else
+  `tooLarge`); a line is shown up to 1,000 characters; each emitted line counts against the comparison's 512 KiB budget
+  (and 2,000 lines a file), the diff stops there (`truncated`) and the files after it get none (`diffsOmitted`).
+- **Confirm** stays a mark: the facilitator's, on any recorded revision; it blocks nothing.
+- **The page** (`web/session/revisions.tsx`, `timeline.ts`): the timeline newest first, numbered in the order taken,
+  with the origin (session start; before/result of run *n*; manual, by whom; before restoring #*k*; restored from #*k*
+  with its pre-restore), time, validation per DSL, the confirmed mark; two revisions chosen → the comparison in a
+  modal dialog, `.dt` and `.dtes` together; for the facilitator *Mark as confirmed*, *Record the current state* and
+  *Restore…* (hidden on revisions with the latest's content) with the confirmation, the two-step and the cancel-the-run
+  path. Participants see everything read-only.
+- **Saves during a run** make no revision: only the run's start (RunBase) and end (RunResult) do (checked by a test).
