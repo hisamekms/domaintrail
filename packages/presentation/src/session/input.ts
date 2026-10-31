@@ -110,8 +110,9 @@ function modelTarget(v: unknown, field: string): Result<Collaboration.ModelTarge
             if (!timeline.ok) return timeline;
             const eventName = made(v.eventName, f('eventName'), Collaboration.makeStormingEventName);
             if (!eventName.ok) return eventName;
-            if (typeof v.occurrence !== 'string' || !/^[1-9]\d{0,5}(\.[1-9]\d{0,5}){0,31}$/.test(v.occurrence))
-                return invalid(f('occurrence'), "Expected a step path like '3' or '2.1'.");
+            // the step path of the Live View's occurrences: 0-based indexes, the step and, in a group, the event (decodeOccurrencePath)
+            if (typeof v.occurrence !== 'string' || !/^(0|[1-9]\d{0,5})(\.(0|[1-9]\d{0,5}))?$/.test(v.occurrence))
+                return invalid(f('occurrence'), "Expected a step path like '0', '3' or '2.1'.");
             const occurrence = Collaboration.makeOccurrencePath(v.occurrence);
             if (!occurrence.ok) return invalid(f('occurrence'), 'Not a step path.');
             return ok({ kind: 'DtesOccurrence', storming: storming.value, timeline: timeline.value, eventName: eventName.value, occurrence: occurrence.value });

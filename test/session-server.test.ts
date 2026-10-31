@@ -328,6 +328,18 @@ describe('a session in dev mode', () => {
             const res = await api(server, bob, 'requests', body);
             expect([field, res.status, await res.json()]).toEqual([field, 400, { error: expect.objectContaining({ type: 'InvalidInput', field }) }]);
         }
+        // an occurrence's step path is the Live View's, 0-based: the first step is '0'
+        const first = await api(server, bob, 'requests', {
+            target: {
+                target: { kind: 'DtesOccurrence', storming: 'Ordering', timeline: 'Normal', eventName: 'OrderOpened', occurrence: '0' },
+                sourceRevision: revision,
+            },
+            body: 'x',
+        });
+        expect(first.status).toBe(201);
+        const sentId = ((await first.json()) as { request: { id: string } }).request.id;
+        const targets = (await (await api(server, bob, 'targets')).json()) as { statuses: Record<string, string> };
+        expect(targets.statuses[sentId]).toBe('current');
         const unknownRevision = await api(server, bob, 'requests', {
             target: { target: { kind: 'Workspace' }, sourceRevision: crypto.randomUUID() },
             body: 'x',
