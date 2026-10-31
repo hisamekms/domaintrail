@@ -20,6 +20,8 @@ import { publicParticipant } from './presence.js';
 export const MAX_SESSION_BODY = 64 * 1024;
 /** Largest join form. */
 const MAX_FORM = 2048;
+/** Cloudflare Access's logout path, on the session's public host: where a page goes after leaving an `access` session. */
+export const ACCESS_LOGOUT = '/cdn-cgi/access/logout';
 /** How long the `dev` cookie lives in the browser (the sign-in is revoked when the session closes). */
 const COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 
@@ -196,8 +198,12 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             method: 'POST',
             path: /^\/api\/session\/leave$/,
             role: 'participant',
-            handle: async ({ req, res }) => {
-                if (identities.mode !== 'dev') return sendError(res, 404, 'NotFound', 'Sign out of Cloudflare Access instead.');
+            handle: async ({ req, res, auth }) => {
+                if (identities.mode !== 'dev') {
+                    // the sign-in is Cloudflare's: this identity's pages close, and the page goes on to Access's logout
+                    deps.disconnect(who(auth).participant.identity, 'signed out');
+                    return sendJson(res, 200, { left: true, logout: ACCESS_LOGOUT });
+                }
                 const left = await identities.signOut(req.headers);
                 if (left) deps.disconnect(left, 'signed out');
                 sendJson(res, 200, { left: left !== undefined }, { 'set-cookie': devCookie(undefined, deps.secureCookie) });

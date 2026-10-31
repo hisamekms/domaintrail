@@ -15,7 +15,7 @@ import type { Clock } from '@domaintrail/collaboration/application/ports';
 import { createCollaboration, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
 import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
-import { createAccessIdentityProvider, type AccessTokenVerifier } from '@domaintrail/collaboration/infrastructure/identity';
+import { createCloudflareAccess, type AccessAdapterOptions, type AccessTokenVerifier } from '@domaintrail/collaboration/infrastructure/identity';
 import { readServerAddress, removeSessionFiles, writeAgentCredential, writeServerAddress } from '@domaintrail/collaboration/infrastructure/session-files';
 import { createUnitOfWork, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
 import { randomIds, randomSecrets, systemClock } from '@domaintrail/collaboration/infrastructure/system';
@@ -49,12 +49,18 @@ const MAX_AGENT_STREAMS = 8;
 /** The WebSocket close codes of a session: the session closed; the page's identity was signed out or changed role. */
 export const WS_SESSION_CLOSED = 4000;
 export const WS_REVOKED = 4001;
+/** The WebSocket close code of a page whose Access token expired: it reconnects with the token Access gives it now. */
+export const WS_EXPIRED = 4002;
+/** Longest delay `setTimeout` keeps (about 24.8 days). */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 export interface SessionServerOptions extends ViewServerOptions {
     /** The `session` section of the configuration, resolved. */
     session: ResolvedSessionConfig;
-    /** `access` mode: checks the tokens' signature (the JWKS check is S8's; tests pass a mock). */
+    /** `access` mode: a stand-in for the JWKS check of the tokens' signature (tests); default: the team's JWKS. */
     accessVerifier?: AccessTokenVerifier;
+    /** `access` mode: where the JWKS and the Identity API are and their timings (tests point them at a local mock). */
+    accessAdapter?: AccessAdapterOptions;
     clock?: Clock;
     /** How long a claim or a heartbeat holds the agent's lease (default `AGENT_LEASE_MS`). */
     leaseMs?: number;
@@ -104,8 +110,13 @@ const close = (server: Server): Promise<void> =>
 
 const linkOf = (url: string, code: string): string => `${url}session/facilitator?code=${code}`;
 
-/** The identity provider of the configured mode (none for `dev`). */
-function identityProvider(options: SessionServerOptions, clock: Clock): IdentityProvider | undefined {
+/**
+ * The identity provider of the configured mode (none for `dev`). `access` needs the team domain and the audience; a
+ * `publicUrl` must be https with its host in `allowedHosts` and its origin in `allowedOrigins` (it allows nothing by
+ * itself, and the tunnel's requests would all be refused otherwise). The team's keys are fetched ahead of the first
+ * token; a failure is told, not fatal (they are fetched again on the first token).
+ */
+function identityProvider(options: SessionServerOptions, clock: Clock, log: (line: string) => void): IdentityProvider | undefined {
     const config = options.session;
     if (config.identity === 'dev') {
         if (!isLoopbackBind(config.host)) {
@@ -113,11 +124,28 @@ function identityProvider(options: SessionServerOptions, clock: Clock): Identity
         }
         return undefined;
     }
-    if (!config.access) throw new SessionError('The access identity mode needs session.access (teamDomain, audience).');
-    if (!options.accessVerifier) {
-        throw new SessionError('The access identity mode cannot verify Cloudflare Access tokens yet: the JWKS verification is not built in this version.');
+    const access = config.access;
+    if (!access?.teamDomain.trim() || !access.audience.trim()) throw new SessionError('The access identity mode needs session.access (teamDomain, audience).');
+    if (access.publicUrl !== undefined) {
+        const url = URL.canParse(access.publicUrl) ? new URL(access.publicUrl) : undefined;
+        if (url?.protocol !== 'https:')
+            throw new SessionError(`session.access.publicUrl must be an https URL (Cloudflare Access serves https): ${access.publicUrl}`);
+        if (!access.allowedHosts.some((h) => h.toLowerCase() === url.hostname))
+            throw new SessionError(`session.access.allowedHosts must include the host of publicUrl (${url.hostname}), or the tunnel's requests are refused.`);
+        if (!access.allowedOrigins.includes(url.origin))
+            throw new SessionError(`session.access.allowedOrigins must include the origin of publicUrl (${url.origin}), or the pages' requests are refused.`);
     }
-    return createAccessIdentityProvider(config.access, options.accessVerifier, clock);
+    if (!isLoopbackBind(config.host))
+        log(`Bound to ${config.host}: reachable without the tunnel (an Access token is still required). Bind to 127.0.0.1 behind cloudflared.`);
+    const cloudflare = createCloudflareAccess(access, clock, {
+        ...options.accessAdapter,
+        log: options.accessAdapter?.log ?? log,
+        ...(options.accessVerifier && { verifier: options.accessVerifier }),
+    });
+    void cloudflare.ready.then((fetched) => {
+        if (!fetched) log('Cloudflare Access keys are not fetched yet: no participant can sign in until they are.');
+    });
+    return cloudflare.provider;
 }
 
 /**
@@ -129,7 +157,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     const log = options.log ?? (() => {});
     const config = options.session;
     const clock = options.clock ?? systemClock;
-    const provider = identityProvider(options, clock);
+    const provider = identityProvider(options, clock, log);
     const leaseMs = options.leaseMs ?? AGENT_LEASE_MS;
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
@@ -169,6 +197,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             session,
             mode: config.identity,
             provider,
+            acceptAccessCookie: config.access?.acceptCookie ?? false,
             access,
             collaboration,
             maxParticipants: config.maxParticipants,
@@ -181,9 +210,18 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         // the pages: the view, then the session's state and the others' presence
         const presence = createPresenceRelay({ publishWhere: (matches, message) => hub.publishWhere(matches, message) });
         let cursor = (): number => 0;
+        // a page of an identity that expires (an Access token) is closed then; it reconnects with a fresh token
+        const expiries = new Map<string, ReturnType<typeof setTimeout>>();
         const hub = createWebSocketHub<SessionConnection>(() => view.state, {
             maxPayload: MAX_WS_PAYLOAD,
             onConnect(connection) {
+                const expiresAt = connection.data.participant.identity.expiresAt;
+                if (expiresAt) {
+                    const ms = Math.min(Math.max(expiresAt.getTime() - clock.now().getTime(), 0), MAX_TIMER_MS);
+                    const timer = setTimeout(() => hub.closeWhere((c) => c.id === connection.id, WS_EXPIRED, 'token expired'), ms);
+                    timer.unref();
+                    expiries.set(connection.id, timer);
+                }
                 const seq = cursor();
                 void collaboration.sessionState({ session }).then(
                     (state) => {
@@ -194,7 +232,11 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 );
             },
             onMessage: (connection, message) => presence.received(connection, message),
-            onClose: (connection) => presence.left(connection),
+            onClose: (connection) => {
+                clearTimeout(expiries.get(connection.id));
+                expiries.delete(connection.id);
+                presence.left(connection);
+            },
         });
         const disconnect = (identity: IdentityKey, reason: string): void =>
             hub.closeWhere((c) => sameIdentity(c.data.participant.identity, identity), WS_REVOKED, reason);
@@ -305,6 +347,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             stop() {
                 stopped ??= (async () => {
                     clearInterval(expiring);
+                    for (const timer of expiries.values()) clearTimeout(timer);
+                    expiries.clear();
                     presence.dispose();
                     agent.close();
                     await watch?.stop();

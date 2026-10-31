@@ -82,6 +82,16 @@ const sessionConfig = (overrides: Partial<ResolvedSessionConfig> = {}): Resolved
     ...overrides,
 });
 
+const accessConfig = (overrides: Partial<NonNullable<ResolvedSessionConfig['access']>> = {}): NonNullable<ResolvedSessionConfig['access']> => ({
+    teamDomain: 'team.cloudflareaccess.com',
+    audience: 'aud-tag',
+    allowedHosts: [],
+    allowedOrigins: [],
+    acceptCookie: false,
+    avatarHosts: [],
+    ...overrides,
+});
+
 const start = (root: string, extra: Partial<SessionServerOptions> = {}): Promise<SessionServer> =>
     startSessionServer({ root, debounceMs: 30, session: sessionConfig(), ...extra });
 
@@ -659,7 +669,13 @@ describe('closing and resuming', () => {
     test('a closed session identifies no one, while the process is still up: Access tokens and the facilitator get 401', async () => {
         const root = await workspace();
         const now = Math.floor(Date.now() / 1000);
-        const claims = (sub: string): AccessClaims => ({ iss: 'https://team.cloudflareaccess.com', aud: 'aud-tag', sub, exp: now + 600, name: sub });
+        const claims = (sub: string): AccessClaims => ({
+            iss: 'https://team.cloudflareaccess.com',
+            aud: 'aud-tag',
+            sub,
+            exp: now + 600,
+            email: `${sub}@example.com`,
+        });
         const verifier = createMockAccessVerifier(
             new Map([
                 ['ada', claims('ada')],
@@ -667,11 +683,9 @@ describe('closing and resuming', () => {
             ]),
         );
         const server = await start(root, {
-            session: sessionConfig({
-                identity: 'access',
-                access: { teamDomain: 'team.cloudflareaccess.com', audience: 'aud-tag', allowedHosts: [], allowedOrigins: [] },
-            }),
+            session: sessionConfig({ identity: 'access', access: accessConfig() }),
             accessVerifier: verifier,
+            accessAdapter: { identityUrl: false },
         });
         try {
             const ada = { 'Cf-Access-Jwt-Assertion': 'ada' };
@@ -721,22 +735,15 @@ describe('identity modes', () => {
                 ['good', claims({})],
                 ['other-audience', claims({ aud: 'another' })],
                 ['other-issuer', claims({ iss: 'https://evil.cloudflareaccess.com' })],
-                ['expired', claims({ exp: now - 1 })],
+                ['expired', claims({ exp: now - 60 })],
             ]),
         );
-        const access = {
-            teamDomain: 'team.cloudflareaccess.com',
-            audience: 'aud-tag',
-            allowedHosts: ['session.example.com'],
-            allowedOrigins: ['https://session.example.com'],
-        };
-        expect(
-            await start(root, { session: sessionConfig({ identity: 'access', access }) }).then(
-                () => undefined,
-                (e: unknown) => e,
-            ),
-        ).toBeInstanceOf(SessionError);
-        const server = await start(root, { session: sessionConfig({ identity: 'access', access }), accessVerifier: verifier });
+        const access = accessConfig({ allowedHosts: ['session.example.com'], allowedOrigins: ['https://session.example.com'], acceptCookie: true });
+        const server = await start(root, {
+            session: sessionConfig({ identity: 'access', access }),
+            accessVerifier: verifier,
+            accessAdapter: { identityUrl: false },
+        });
         try {
             const page = await fetch(server.url);
             expect(page.status).toBe(401);

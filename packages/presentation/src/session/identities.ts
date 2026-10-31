@@ -1,7 +1,7 @@
 // Who sends a request to a session (ADR 0026, S4): the identity of the configured mode, and the participant and role
 // it stands for. `dev`: the session cookie (`dt_session`, opaque, HttpOnly, SameSite=Strict) of a sign-in made with a
 // picked name; `access`: the Cloudflare Access token (`Cf-Access-Jwt-Assertion` header, else the `CF_Authorization`
-// cookie), verified by the `IdentityProvider`. The facilitator is the identity that used a facilitator link.
+// cookie when configured), verified by the `IdentityProvider` on every request. The facilitator is the identity that used a facilitator link.
 import type { IncomingHttpHeaders } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { secretHash, type LinkInvalid, type SessionAccess } from '@domaintrail/collaboration/application/access';
@@ -61,6 +61,8 @@ export interface SessionIdentitiesDeps {
     readonly mode: IdentityMode;
     /** The verifier of the `access` mode. */
     readonly provider?: IdentityProvider;
+    /** `access`: whether the `CF_Authorization` cookie stands in for an absent `Cf-Access-Jwt-Assertion` header. */
+    readonly acceptAccessCookie?: boolean;
     readonly access: SessionAccess;
     readonly collaboration: CollaborationUseCases;
     readonly maxParticipants: number;
@@ -78,11 +80,11 @@ export function cookies(headers: IncomingHttpHeaders): Map<string, string> {
     return jar;
 }
 
-/** The Access token of a request: the header Access adds, else its cookie. */
-export function accessToken(headers: IncomingHttpHeaders): string | undefined {
+/** The Access token of a request: the header Access adds, else (only when `acceptCookie`) its cookie. */
+export function accessToken(headers: IncomingHttpHeaders, acceptCookie: boolean): string | undefined {
     const header = headers[ACCESS_HEADER];
     if (typeof header === 'string' && header) return header;
-    return cookies(headers).get(ACCESS_COOKIE) || undefined;
+    return acceptCookie ? cookies(headers).get(ACCESS_COOKIE) || undefined : undefined;
 }
 
 /** The `dev` cookie's secret of a request, when it has the shape of one. */
@@ -146,7 +148,7 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
                 signIns.set(hash, signIn);
                 return identified(signIn.identity);
             }
-            const token = accessToken(headers);
+            const token = accessToken(headers, deps.acceptAccessCookie ?? false);
             const identity = token ? await deps.provider?.verify(token) : undefined;
             if (!identity) return undefined;
             const who = await identified(identity);
