@@ -397,6 +397,48 @@ Examples:
             });
             io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
         });
+    session
+        .command('subscribe')
+        .description("Run the agent on the session's queued runs, one at a time (runs until Ctrl+C or the session closes).")
+        .addOption(new Option('--agent <agent>', 'the agent that edits the workspace').choices(['claude']).makeOptionMandatory())
+        .option('--once', 'handle one run (waiting for one if none is queued), then exit')
+        .addHelpText(
+            'after',
+            `
+Connects to the session server running on the workspace (\`dt session start\`) through its agent API, with the
+credential in .domaintrail/session/agent.json, and takes the runs the facilitator queues: for each, Claude Code
+(\`claude\` on the PATH, in print mode, with the tools of session.agent.allowedTools only) edits the .dt and .dtes
+files, then \`dt fmt\` and \`dt check\` run and the server records the result as a revision. A run that changes any
+other file fails. The next queued run starts as soon as one ends. Ctrl+C stops the agent and fails its run as
+interrupted.
+
+Examples:
+  dt session subscribe --agent claude
+  dt session subscribe --agent claude --once
+  dt -r examples/shop session subscribe --agent claude`,
+        )
+        .action(async (opts: { agent: 'claude'; once?: boolean }) => {
+            const cfg = await config();
+            const configPath = program.opts<{ config?: string }>().config;
+            const subscriber = await deps
+                .startSubscriber({
+                    root: cfg.root,
+                    sources: cfg.sources,
+                    respectGitignore: cfg.respectGitignore,
+                    configPath: configPath === undefined ? undefined : path.resolve(configPath),
+                    agent: opts.agent,
+                    once: opts.once ?? false,
+                    log: io.out,
+                })
+                .catch((e: unknown) => {
+                    if (e instanceof SessionError) throw new CliError(e.message);
+                    throw e;
+                });
+            io.out(`Subscribed to session ${subscriber.session} with ${opts.agent}${opts.once ? ' (one run)' : ''}; waiting for runs.`);
+            const end = await subscriber.done;
+            if (end === 'lost') throw new CliError('The session server is gone or refused the agent credential.');
+            io.out(end === 'closed' ? 'Session closed.' : end === 'once' ? 'Done.' : 'Stopped.');
+        });
 
     program
         .command('lsp')

@@ -27,6 +27,11 @@ export interface CliDeps {
     startSessionServer(options: SessionServerOptions): Promise<StartedSession>;
     /** Another facilitator link for the session server running on the workspace; rejects with `SessionError` when none runs. */
     issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /**
+     * Subscribes to the session server running on the workspace (`dt session subscribe`) and runs its agent runs, one
+     * at a time. Rejects with `SessionError` when no server runs or its credential is refused.
+     */
+    startSubscriber(options: SubscribeOptions): Promise<StartedSubscriber>;
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
 }
@@ -63,6 +68,27 @@ export interface StartedSession {
     /** Resolves when the facilitator closes the session. */
     closed: Promise<void>;
     stop(): Promise<void>;
+}
+
+/** What `dt session subscribe` asks of the subscriber. */
+export interface SubscribeOptions {
+    root: string;
+    sources: readonly string[];
+    respectGitignore: boolean;
+    /** The config file given with `-c` (for `dt fmt` and `dt check` after the agent). */
+    configPath?: string;
+    agent: 'claude';
+    /** Handle one run (waiting for one if none is queued), then end. */
+    once: boolean;
+    log: (line: string) => void;
+}
+
+/** A running subscriber, as the CLI reports it. */
+export interface StartedSubscriber {
+    session: string;
+    /** Resolves when it ends: `once` after its run, `closed` with the session, `stopped`, or `lost` (the server is gone). */
+    done: Promise<'once' | 'closed' | 'stopped' | 'lost'>;
+    stop(): Promise<unknown>;
 }
 
 /** A session cannot be started, or no session server runs (`dt session …`): printed as one line. */

@@ -33,6 +33,7 @@ import { createSessionHttp, meOf, stateBody } from '@domaintrail/presentation/se
 import { createWebSocketHub } from '@domaintrail/presentation/websocket/hub';
 import type { ViewService } from '@domaintrail/visualization/application/view-service';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
+import { processAlive } from './process.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 
@@ -396,14 +397,4 @@ export async function issueFacilitatorLink(root: string): Promise<{ link: string
 async function openSessionId(db: Awaited<ReturnType<typeof openSessionDatabase>>): Promise<Collaboration.SessionId | undefined> {
     const uow = createUnitOfWork(db);
     return uow.transaction((stores) => stores.sessions.listOpen()[0]?.id);
-}
-
-function processAlive(pid: number): boolean {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch (e) {
-        // EPERM: it exists, owned by someone else
-        return e instanceof Error && 'code' in e && e.code === 'EPERM';
-    }
 }
