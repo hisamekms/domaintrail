@@ -1,16 +1,2 @@
 # Repository-wide formatting with oxfmt
 16afc437875b793c2743417c3ac5dbc5739a520c
-
-# M0 refactoring (ADR 0025): moves of files into their areas, with the imports rewritten
-# T2: the workspace file I/O to src/workspace/infrastructure
-28e69b89b0ccb8591d9bab07382edec7b72f4e62
-# T5: the Live View page into web/app, web/view and web/shared
-7264c91608b29f0fa9b33325c97cc4667816705c
-# T3: src/graph, src/layout, the storming projection and view, the session, protocol and git access to src/visualization
-8cf11dcc0188c55d47dd65b0418a8f6bd0e56e73
-# T4: src/server/server.ts to src/composition/view.ts
-66fe3ccac38562e9af16baee6113c266dc92e6cb
-# T6: the modeling sources to src/modeling, cli and lsp to src/presentation
-6b52dc016b7f7a3767f0b426e4b6c7728442fcff
-# T7: src/<area> to packages/<area>/src and the langium config to packages/modeling
-6997923a94fdbf80d5f2e2ea9c20311ee105ba55
