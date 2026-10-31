@@ -244,8 +244,8 @@ body,
 }
 /* the settings, in a modal dialog opened from the gear at the right end of the header */
 .settings-dialog {
-    width: min(720px, calc(100vw - 32px));
-    min-height: min(420px, calc(100vh - 32px));
+    width: min(45rem, calc(100vw - 32px));
+    min-height: min(26.25rem, calc(100vh - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
     background: var(--panel);
@@ -253,7 +253,7 @@ body,
     border: 1px solid var(--border-strong);
     border-radius: 10px;
     box-shadow: 0 12px 40px var(--shadow);
-    font-size: 15px;
+    font-size: 0.9375rem;
 }
 .settings-dialog[open] {
     display: flex;
@@ -271,7 +271,7 @@ body,
 }
 .settings-dialog-header h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: 1.125rem;
 }
 .settings-dialog-body {
     overflow: auto;
@@ -293,7 +293,7 @@ body,
 }
 .settings-hint {
     margin-top: 4px;
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--muted);
 }
 /* roomier choices than the toolbar's, as the dialog is there to change them */
@@ -307,7 +307,7 @@ body,
 .pill {
     padding: 2px 8px;
     border-radius: 999px;
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 600;
     color: #fff;
 }
@@ -338,7 +338,7 @@ body,
     padding: 6px 14px;
     background: var(--banner-bg);
     border-bottom: 1px solid var(--banner-border);
-    font-size: 16px;
+    font-size: 1rem;
 }
 
 .empty {
@@ -351,13 +351,13 @@ body,
 }
 .count {
     display: inline-block;
-    min-width: 18px;
+    min-width: 1.125rem;
     padding: 0 5px;
     margin-left: 3px;
     border-radius: 9px;
     background: var(--accent);
     color: #fff;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .count-error {
     background: var(--error);
@@ -367,12 +367,12 @@ body,
 }
 .pane h2 {
     margin: 6px 0 2px;
-    font-size: 19px;
+    font-size: 1.1875rem;
     word-break: break-all;
 }
 .pane h3 {
     margin: 16px 0 6px;
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--muted);
     text-transform: none;
 }
@@ -391,14 +391,14 @@ body,
     color: var(--muted);
 }
 .small {
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .sub {
     margin: 3px 0;
 }
 code {
     font-family: var(--mono);
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 code.block {
     display: block;
@@ -422,7 +422,7 @@ code.block {
     border-collapse: collapse;
     width: 100%;
     font-family: var(--mono);
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 .fields td {
     padding: 2px 6px 2px 0;
@@ -435,13 +435,13 @@ code.block {
     display: inline-block;
     padding: 1px 6px;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 600;
     background: var(--neutral-tint);
 }
 .kind.tiny {
-    font-size: 12px;
-    min-width: 70px;
+    font-size: 0.75rem;
+    min-width: 4.375rem;
     text-align: center;
 }
 .kind-aggregate {
@@ -532,7 +532,7 @@ code.block {
     margin-left: 6px;
     padding: 1px 6px;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: #fff;
 }
 .change-added {
@@ -1098,7 +1098,7 @@ select,
 }
 .canonical-name {
     margin-top: 0 !important;
-    font-size: 14px !important;
+    font-size: 0.875rem !important;
     font-weight: 500;
     color: var(--muted);
 }
@@ -1110,7 +1110,7 @@ select,
     margin-left: 4px;
     padding: 0 4px;
     border-radius: 3px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--muted);
     background: var(--bg);
 }
@@ -1129,10 +1129,10 @@ select,
     align-items: baseline;
     gap: 10px;
     margin: 0 0 16px;
-    font-size: 22px;
+    font-size: 1.375rem;
 }
 .catalog-section > h1 .catalog-count {
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 400;
 }
 
@@ -1146,7 +1146,7 @@ select,
     margin: 0 0 12px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
-    font-size: 19px;
+    font-size: 1.1875rem;
 }
 .catalog-shared h2 {
     border-bottom-color: var(--teal-light);
@@ -1154,7 +1154,7 @@ select,
 .shared-badge {
     padding: 2px 8px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--teal-text);
     background: var(--teal-tint);
@@ -1163,7 +1163,7 @@ select,
     margin-left: 6px;
     padding: 1px 7px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
     color: var(--muted);
     border: 1px solid var(--border);
@@ -1171,7 +1171,7 @@ select,
 .inspector-row .persistence-badge {
     margin-left: 0;
     padding: 2px 8px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .persistence-badge.persistent {
     color: var(--teal-text);
@@ -1180,7 +1180,7 @@ select,
 }
 .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(16.25rem, 1fr));
     gap: 12px;
 }
 .card {
@@ -1191,7 +1191,7 @@ select,
     padding: 12px 14px;
     text-align: left;
     font: inherit;
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--text);
     background: var(--panel);
     border: 1.5px solid var(--border);
@@ -1233,16 +1233,16 @@ select,
 }
 .card-name {
     font-weight: 700;
-    font-size: 16px;
+    font-size: 1rem;
 }
 .card-subname {
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
 }
 .card-base {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--muted);
 }
 .card-invariants {
@@ -1256,20 +1256,20 @@ select,
     margin: 3px 0;
 }
 .card-invariants code {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
     word-break: break-all;
 }
 /* An invariant declared without an expression, in place of its expression. */
 .not-in-dsl {
     margin: 4px 0;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-style: italic;
     color: var(--muted);
 }
 .card-foot {
     margin-top: auto;
-    font-size: 12px;
+    font-size: 0.75rem;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1281,7 +1281,7 @@ select,
     display: grid;
     place-items: center;
     color: #fff;
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 700;
 }
 .card-diag-error {
@@ -1311,8 +1311,8 @@ select,
 }
 .catalog-filter-row .catalog-filter {
     flex: 0 1 360px;
-    min-width: 120px;
-    height: 28px;
+    min-width: 7.5rem;
+    height: 1.75rem;
     margin-right: 0;
     background: var(--panel);
 }
@@ -1337,10 +1337,10 @@ select,
     max-width: calc(100% - 128px);
 }
 .catalog-filter-row .context-picker > button {
-    height: 28px;
+    height: 1.75rem;
     padding: 0 10px;
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--text);
     background: var(--panel);
     border: 1px solid var(--border);
@@ -1350,7 +1350,7 @@ select,
 .catalog-filter-row .context-picker-menu {
     right: auto;
     left: 0;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 /* kinds to show: none pressed means all, so the others fade only once one is */
 .catalog-kinds {
@@ -1366,7 +1366,7 @@ select,
 .catalog-kind {
     padding: 2px 10px;
     font: inherit;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 600;
     border: 1.5px solid transparent;
     border-radius: 999px;
@@ -1382,7 +1382,7 @@ select,
     opacity: 1;
 }
 .catalog-count {
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--muted);
 }
 .catalog-section {
@@ -1393,7 +1393,7 @@ select,
     margin: 0;
     padding: 0;
     list-style: none;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .card-fields li,
 .card-commands li {
@@ -1403,18 +1403,18 @@ select,
     margin: 2px 0;
 }
 .card-fields code {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
     text-align: right;
     word-break: break-all;
 }
 .card-commands .muted {
-    font-size: 12px;
+    font-size: 0.75rem;
     text-align: right;
 }
 .card-doc {
     margin: 0;
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: var(--muted);
 }
 
@@ -1432,8 +1432,8 @@ select,
     margin: 0;
     padding: 6px 0;
     font-family: var(--mono);
-    font-size: 14px;
-    line-height: 21px;
+    font-size: 0.875rem;
+    line-height: 1.3125rem;
 }
 .src-line {
     display: flex;
@@ -1563,20 +1563,20 @@ select,
     gap: 4px;
 }
 .bcard-name {
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 400;
     color: var(--muted);
 }
 .factory-badge {
     padding: 1px 7px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
     color: var(--purple-text);
     background: var(--purple-tint);
 }
 .bcard-doc {
-    font-size: 13px;
+    font-size: 0.8125rem;
     line-height: 1.5;
     white-space: pre-wrap;
     color: var(--text-soft);
@@ -1590,7 +1590,7 @@ select,
 
 .bcard-emit-when,
 .emit-when {
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--muted);
 }
 
@@ -1600,7 +1600,7 @@ select,
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 6px;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .bcard-outcomes {
     gap: 4px 14px;
@@ -1612,7 +1612,7 @@ select,
     background: var(--purple-tint);
 }
 .initial-state {
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--text-soft);
 }
 .pane a.kind-link {
@@ -1622,7 +1622,7 @@ select,
     color: var(--text);
 }
 .bcard-caption {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
 }
 /* A command's requirements: name, expression (or that it is not in the DSL) and the error of `else`. */
@@ -1631,7 +1631,7 @@ select,
     flex-direction: column;
     gap: 4px;
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .bcard-require {
     display: flex;
@@ -1641,7 +1641,7 @@ select,
 }
 .bcard-require code {
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: 0.75rem;
     overflow-wrap: anywhere;
 }
 .bcard-require .not-in-dsl {
@@ -1659,14 +1659,14 @@ select,
 }
 .bcard-change {
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .bcard-fields {
     display: grid;
     grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
     gap: 2px 12px;
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .bcard-field {
     display: contents;
@@ -1693,7 +1693,7 @@ select,
     min-width: 0;
     overflow: hidden;
     background: var(--panel);
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 /* The left pane: its head (the brand and the workspace's name), the activity bar and the lists, and its foot (the
    health and the settings). Collapsed, it is the 44px activity bar (BAR_WIDTH in app/shell.tsx): the brand's mark at
@@ -1740,7 +1740,7 @@ select,
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .left-main {
     flex: 1;
@@ -1784,15 +1784,15 @@ select,
     position: absolute;
     top: 0;
     right: -1px;
-    min-width: 16px;
-    height: 16px;
+    min-width: 1rem;
+    height: 1rem;
     padding: 0 4px;
     border-radius: 8px;
     background: var(--accent);
     color: #fff;
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 700;
-    line-height: 16px;
+    line-height: 1rem;
     text-align: center;
     font-variant-numeric: tabular-nums;
     box-shadow: 0 0 0 2px var(--panel);
@@ -1840,14 +1840,14 @@ select,
     align-items: center;
     gap: 6px;
     max-width: 100%;
-    min-height: 24px;
+    min-height: 1.5rem;
     padding: 2px 6px;
     border: none;
     border-radius: 5px;
     background: none;
     color: var(--text-soft);
     font: inherit;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .health-button:hover {
     background: var(--hover);
@@ -1893,7 +1893,7 @@ select,
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .health-popover dl {
     display: grid;
@@ -2009,7 +2009,7 @@ select,
     top: calc(100% + 4px);
     right: 0;
     z-index: 30;
-    min-width: 180px;
+    min-width: 11.25rem;
     padding: 4px;
     display: flex;
     flex-direction: column;
@@ -2027,7 +2027,7 @@ select,
     background: none;
     color: inherit;
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     text-align: left;
     white-space: nowrap;
 }
@@ -2082,8 +2082,8 @@ select,
     position: absolute;
     left: -3px;
     top: -3px;
-    width: 18px;
-    height: 18px;
+    width: 1.125rem;
+    height: 1.125rem;
     border-radius: 50%;
     background: var(--panel);
     box-shadow: 0 0 0 2px var(--panel);
@@ -2097,22 +2097,22 @@ svg.chat-launcher-mark {
     place-items: center;
     background: var(--amber-tint);
     color: var(--amber-text);
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 700;
 }
 .chat-launcher-count {
     position: absolute;
     right: -4px;
     top: -4px;
-    min-width: 18px;
-    height: 18px;
+    min-width: 1.125rem;
+    height: 1.125rem;
     padding: 0 5px;
     border-radius: 9px;
     background: var(--error);
     color: #fff;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 700;
-    line-height: 18px;
+    line-height: 1.125rem;
     font-variant-numeric: tabular-nums;
     box-shadow: 0 0 0 2px var(--panel);
 }
@@ -2183,7 +2183,7 @@ svg.chat-launcher-mark {
     padding: 8px 12px;
     white-space: nowrap;
     font: inherit;
-    font-size: 14px;
+    font-size: 0.875rem;
     border: none;
     border-bottom: 2px solid transparent;
     background: none;
@@ -2207,7 +2207,7 @@ svg.chat-launcher-mark {
     white-space: nowrap;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .view-toolbar button,
 .view-toolbar select {
@@ -2219,7 +2219,7 @@ svg.chat-launcher-mark {
     cursor: pointer;
 }
 .view-toolbar select.view-select {
-    max-width: 220px;
+    max-width: 13.75rem;
     text-overflow: ellipsis;
 }
 .view-area {
@@ -2259,7 +2259,7 @@ svg.chat-launcher-mark {
     display: flex;
     align-items: center;
     gap: 4px;
-    height: 24px;
+    height: 1.5rem;
     padding: 0 2px 0 6px;
     margin-right: 2px;
     border: 1px solid var(--border);
@@ -2278,7 +2278,7 @@ svg.chat-launcher-mark {
     background: none;
     color: var(--text);
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .explorer-filter .icon-button {
     width: 18px;
@@ -2295,7 +2295,7 @@ svg.chat-launcher-mark {
 }
 .pane-title {
     padding: 10px 12px 4px;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 700;
     color: var(--muted);
     letter-spacing: 0.04em;
@@ -2319,7 +2319,7 @@ svg.chat-launcher-mark {
     border-bottom: 1px solid var(--border);
     background: var(--neutral-tint);
     font-family: inherit;
-    font-size: 11px;
+    font-size: 0.6875rem;
     text-align: left;
 }
 .explorer-section + .explorer-section .explorer-section-title {
@@ -2348,7 +2348,7 @@ svg.chat-launcher-mark {
     user-select: none;
 }
 .tree-group {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
 }
 .tree-item:hover,
@@ -2468,7 +2468,7 @@ svg.chat-launcher-mark {
     color: var(--teal-text);
 }
 .tree-diag {
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 700;
 }
 .tree-diag-error {
@@ -2492,11 +2492,11 @@ svg.chat-launcher-mark {
 }
 .inspector-head h2 {
     margin: 6px 0 0;
-    font-size: 19px;
+    font-size: 1.1875rem;
     word-break: break-all;
 }
 .inspector-head .canonical-name {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--muted);
 }
 .inspector-row {
@@ -2532,7 +2532,7 @@ svg.chat-launcher-mark {
     gap: 4px;
     padding: 0 8px;
     font: inherit;
-    font-size: 12px;
+    font-size: 0.75rem;
     color: inherit;
 }
 .back-button svg {
@@ -2552,7 +2552,7 @@ svg.chat-launcher-mark {
 }
 .reveal button {
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     padding: 2px 10px;
     border: 1px solid var(--violet-border);
     border-radius: 999px;
@@ -2576,7 +2576,7 @@ svg.chat-launcher-mark {
     white-space: nowrap;
     padding: 7px 6px;
     font: inherit;
-    font-size: 14px;
+    font-size: 0.875rem;
     border: none;
     border-bottom: 2px solid transparent;
     background: none;
@@ -2610,7 +2610,7 @@ svg.chat-launcher-mark {
 }
 .canvas-toolbar > button {
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     padding: 3px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -2626,8 +2626,8 @@ svg.chat-launcher-mark {
 .source-view .src-code-block {
     min-width: 100%;
     width: max-content;
-    font-size: 12.5px;
-    line-height: 19px;
+    font-size: 0.78125rem;
+    line-height: 1.1875rem;
 }
 .source-view .src-gutter {
     width: 52px;
@@ -2686,7 +2686,7 @@ svg.chat-launcher-mark {
 }
 .list-title {
     margin-right: 2px;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 700;
     color: var(--muted);
     letter-spacing: 0.04em;
@@ -2702,7 +2702,7 @@ svg.chat-launcher-mark {
 .list-picker .baseline-button {
     width: 100%;
     max-width: none;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .list-picker .baseline-summary {
     flex: 1;
@@ -2711,7 +2711,7 @@ svg.chat-launcher-mark {
 .list-body {
     flex: 1;
     overflow: auto;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .problems {
     list-style: none;
@@ -2754,10 +2754,10 @@ svg.chat-launcher-mark {
 }
 .problem-hint {
     color: var(--muted);
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .problem-where {
-    font-size: 12px;
+    font-size: 0.75rem;
     overflow-wrap: anywhere;
 }
 .changes-group {
@@ -2780,7 +2780,7 @@ svg.chat-launcher-mark {
 
 .legend {
     padding: 8px 12px;
-    font-size: 12px;
+    font-size: 0.75rem;
     background: var(--legend-bg);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -2810,7 +2810,7 @@ svg.chat-launcher-mark {
     display: flex;
     align-items: center;
     gap: 8px;
-    line-height: 20px;
+    line-height: 1.25rem;
 }
 .legend svg {
     overflow: visible;
@@ -2822,7 +2822,7 @@ svg.chat-launcher-mark {
 
 .segmented.small button {
     padding: 2px 10px;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .view-toolbar .segmented button {
     border: none;
@@ -2847,7 +2847,7 @@ details.deps > .sub {
 }
 .dep-kind {
     margin-left: 6px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     padding: 0 4px;
     border-radius: 4px;
 }
@@ -2863,7 +2863,7 @@ details.deps > .sub {
 .context-picker {
     position: relative;
     /* when narrow the summary shrinks to an ellipsis, down to this width */
-    min-width: 96px;
+    min-width: 6rem;
 }
 .context-picker-button {
     display: flex;
@@ -2882,7 +2882,7 @@ details.deps > .sub {
     top: calc(100% + 4px);
     right: 0;
     z-index: 20;
-    min-width: 240px;
+    min-width: 15rem;
     max-height: 60vh;
     overflow: auto;
     padding: 8px;
@@ -2952,13 +2952,13 @@ details.deps > .sub {
     position: fixed;
     inset: auto;
     margin: 0;
-    max-width: 320px;
+    max-width: 20rem;
     padding: 4px 8px;
     border: none;
     border-radius: 4px;
     background: var(--text);
     color: var(--panel);
-    font: 12px/1.4 var(--sans);
+    font: 0.75rem/1.4 var(--sans);
     box-shadow: 0 2px 8px var(--shadow);
     pointer-events: none;
     overflow: visible;
@@ -3017,7 +3017,7 @@ del.was.block {
     white-space: pre-wrap;
 }
 .was-line {
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 .inspector-removed h2 {
     text-decoration: line-through;
@@ -3048,9 +3048,9 @@ del.was.block {
     display: flex;
     align-items: center;
     gap: 6px;
-    max-width: 320px;
+    max-width: 20rem;
     white-space: nowrap;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 .baseline-button.baseline-git {
     border-color: var(--accent);
@@ -3067,7 +3067,7 @@ del.was.block {
     /* placed next to the button that opened it (see menuPlacement) */
     position: fixed;
     z-index: 30;
-    width: min(420px, calc(100vw - 16px));
+    width: min(26.25rem, calc(100vw - 16px));
     animation: baseline-menu-in 120ms ease-out;
     overflow: auto;
     padding: 8px;
@@ -3078,7 +3078,7 @@ del.was.block {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 .baseline-option {
     display: flex;
@@ -3118,13 +3118,13 @@ del.was.block {
 }
 .baseline-group-title {
     margin: 4px 0 2px;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 600;
     color: var(--muted);
 }
 .baseline-error {
     color: var(--error);
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 /* the menu slides a little out of the button that opened it */
@@ -3166,7 +3166,7 @@ del.was.block {
 }
 .session-panel button:not(.icon-button) {
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     padding: 3px 8px;
     border: 1px solid var(--border-strong);
     border-radius: 5px;
@@ -3224,16 +3224,16 @@ del.was.block {
     flex: none;
     display: inline-grid;
     place-items: center;
-    width: 24px;
-    height: 24px;
+    width: 1.5rem;
+    height: 1.5rem;
     border-radius: 50%;
     color: #fff;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 700;
     object-fit: cover;
 }
 .session-role {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--muted);
 }
 .session-role.role-facilitator {
@@ -3248,7 +3248,7 @@ del.was.block {
     width: 100%;
     margin-top: 4px;
     font: inherit;
-    font-size: 13px;
+    font-size: 0.8125rem;
     color: inherit;
     background: var(--bg);
     border: 1px solid var(--border-strong);
@@ -3264,7 +3264,7 @@ del.was.block {
 .session-status {
     padding: 0 6px;
     border-radius: 9px;
-    font-size: 12px;
+    font-size: 0.75rem;
     background: var(--border);
 }
 .session-status.status-current,
@@ -3297,7 +3297,7 @@ del.was.block {
 .session-run-requests {
     margin: 4px 0;
     padding-left: 18px;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .session-table {
     margin-top: 4px;
@@ -3348,7 +3348,7 @@ del.was.block {
     padding: 1px 6px;
     border-radius: 4px;
     color: #fff;
-    font-size: 12px;
+    font-size: 0.75rem;
     white-space: nowrap;
 }
 
@@ -3369,7 +3369,7 @@ del.was.block {
     margin-top: 4px;
 }
 .session-panel button.small {
-    font-size: 12px;
+    font-size: 0.75rem;
     padding: 1px 6px;
 }
 .session-restore p {
@@ -3379,7 +3379,7 @@ del.was.block {
     margin-top: 0;
 }
 .session-dialog {
-    width: min(1100px, calc(100vw - 32px));
+    width: min(68.75rem, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
     background: var(--panel);
@@ -3387,7 +3387,7 @@ del.was.block {
     border: 1px solid var(--border-strong);
     border-radius: 10px;
     box-shadow: 0 12px 40px var(--shadow);
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 .session-dialog[open] {
     display: flex;
@@ -3446,7 +3446,7 @@ del.was.block {
     padding: 6px 0;
     overflow-x: auto;
     font-family: var(--mono, ui-monospace, monospace);
-    font-size: 12px;
+    font-size: 0.75rem;
     line-height: 1.45;
 }
 .diff-line {
@@ -3472,7 +3472,7 @@ del.was.block {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 .session-chat button {
     font: inherit;
@@ -3499,9 +3499,9 @@ del.was.block {
     box-shadow: 0 0 0 2px var(--panel);
 }
 .chat-avatar .session-avatar {
-    width: 22px;
-    height: 22px;
-    font-size: 10px;
+    width: 1.375rem;
+    height: 1.375rem;
+    font-size: 0.625rem;
 }
 .chat-avatar.facilitator {
     box-shadow:
@@ -3517,7 +3517,7 @@ del.was.block {
     flex: none;
     margin-left: 2px;
     color: var(--muted);
-    font-size: 12px;
+    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
 }
 .chat-status {
@@ -3527,7 +3527,7 @@ del.was.block {
     gap: 4px;
     padding: 1px 8px;
     border-radius: 10px;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
@@ -3552,7 +3552,7 @@ del.was.block {
 }
 .session-chat button.chat-small {
     flex: none;
-    font-size: 12px;
+    font-size: 0.75rem;
     padding: 1px 6px;
     border: 1px solid var(--border-strong);
     border-radius: 5px;
@@ -3583,7 +3583,7 @@ del.was.block {
     align-items: baseline;
     gap: 6px;
     color: var(--muted);
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-system::before,
 .chat-system::after {
@@ -3601,13 +3601,13 @@ del.was.block {
     border-radius: 4px;
     background: var(--neutral-tint);
     color: var(--muted);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
     white-space: nowrap;
 }
 .chat-time {
     color: var(--muted);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-variant-numeric: tabular-nums;
 }
 .chat-system .chat-time {
@@ -3637,7 +3637,7 @@ del.was.block {
 }
 .chat-role {
     color: var(--accent);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
 }
 .chat-mine {
@@ -3646,7 +3646,7 @@ del.was.block {
     border-radius: 4px;
     background: var(--violet-tint);
     color: var(--accent);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
 }
 .chat-bubble {
@@ -3680,7 +3680,7 @@ del.was.block {
 .chat-label {
     display: block;
     color: var(--muted);
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 .chat-target {
     display: inline-block;
@@ -3693,7 +3693,7 @@ del.was.block {
     border-radius: 4px;
     background: var(--neutral-tint);
     color: var(--text-soft);
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 600;
 }
 .pane a.chat-target {
@@ -3721,11 +3721,11 @@ del.was.block {
     overflow: hidden;
 }
 .chat-more {
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-question {
     margin: 4px 0 0;
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 600;
     white-space: pre-wrap;
     word-break: break-word;
@@ -3763,7 +3763,7 @@ del.was.block {
     bottom: calc(100% + 2px);
     z-index: 30;
     /* scrolls within itself, never taller than a good part of the window */
-    max-height: min(260px, 45vh);
+    max-height: min(16.25rem, 45vh);
     overflow-y: auto;
     overscroll-behavior: contain;
     margin: 0;
@@ -3795,7 +3795,7 @@ del.was.block {
     align-self: center;
     padding: 0 5px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     background: var(--violet-tint);
     color: var(--violet-text);
 }
@@ -3808,11 +3808,11 @@ del.was.block {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 .chat-mention-none {
     padding: 4px 6px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 /* a mention in a sent body: a link to its target while it is in the sources */
 .chat-mention {
@@ -3843,7 +3843,7 @@ del.was.block {
     min-width: 0;
 }
 .chat-chips-label {
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-chip {
     display: inline-flex;
@@ -3855,19 +3855,19 @@ del.was.block {
     border: 1px solid var(--violet-border);
     border-radius: 10px;
     background: var(--violet-wash);
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-chip-number {
     flex: none;
     display: inline-grid;
     place-items: center;
-    min-width: 15px;
-    height: 15px;
+    min-width: 0.9375rem;
+    height: 0.9375rem;
     padding: 0 3px;
     border-radius: 8px;
     background: var(--accent);
     color: #fff;
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 700;
 }
 .chat-chip-name {
@@ -3950,7 +3950,7 @@ del.was.block {
 .chat-composer-bar .chat-chips {
     flex: 1;
     margin-top: 0;
-    min-height: 26px;
+    min-height: 1.625rem;
 }
 .chat-composer-actions {
     flex: none;
@@ -3965,8 +3965,8 @@ del.was.block {
     border-radius: 4px;
     color: var(--muted);
     font-family: var(--sans);
-    font-size: 11px;
-    line-height: 16px;
+    font-size: 0.6875rem;
+    line-height: 1rem;
 }
 .session-chat button.chat-send {
     flex: none;
@@ -4014,9 +4014,9 @@ del.was.block {
     top: calc(100% + 4px);
     left: 0;
     z-index: 40;
-    width: 280px;
+    width: 17.5rem;
     max-width: calc(100vw - 24px);
-    max-height: 420px;
+    max-height: 26.25rem;
     overflow: auto;
     padding: 6px;
     background: var(--panel);
@@ -4055,7 +4055,7 @@ del.was.block {
     font-weight: 600;
 }
 .chat-person-where {
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 .chat-person.where-same-view .chat-person-where {
     color: var(--added);
@@ -4080,7 +4080,7 @@ del.was.block {
     border-top: 1px solid var(--border);
     background: none;
     color: var(--muted);
-    font-size: 12px;
+    font-size: 0.75rem;
     text-align: left;
 }
 
@@ -4093,7 +4093,7 @@ del.was.block {
 }
 .chat-avatar-space {
     flex: none;
-    width: 24px;
+    width: 1.5rem;
 }
 .chat-with-icon {
     display: flex;
@@ -4131,7 +4131,7 @@ del.was.block {
 .reply-facts {
     margin: 0 0 2px;
     color: var(--green-text);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
 }
 .reply-summary {
@@ -4151,7 +4151,7 @@ del.was.block {
     align-items: flex-start;
     gap: 6px;
     margin-top: 2px;
-    font-size: 12px;
+    font-size: 0.75rem;
     line-height: 1.4;
 }
 .reply-mark {
@@ -4211,7 +4211,7 @@ del.was.block {
     border-radius: 4px;
     background: var(--neutral-tint);
     color: var(--text-soft);
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 .reply-alternative {
     border: 1px dashed var(--grey-border);
@@ -4231,7 +4231,7 @@ del.was.block {
     align-items: flex-start;
     gap: 6px;
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 0.8125rem;
     line-height: 1.4;
     cursor: default;
 }
@@ -4242,7 +4242,7 @@ del.was.block {
 .reply-option-detail {
     display: block;
     color: var(--muted);
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .reply-other .reply-option-label {
     color: var(--muted);
@@ -4291,7 +4291,7 @@ del.was.block {
 .session-chat .chat-views button {
     flex: 1;
     padding: 3px 10px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-view {
     flex: 1;
@@ -4379,7 +4379,7 @@ del.was.block {
     border-radius: 8px;
     background: color-mix(in srgb, var(--added) 14%, transparent);
     color: var(--added);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
 }
 .chat-unit-line .chat-time {
@@ -4396,7 +4396,7 @@ del.was.block {
     display: block;
 }
 .chat-unit-who {
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-unit-body {
     padding: 0 10px 10px;
@@ -4481,7 +4481,7 @@ del.was.block {
     border-radius: 9px;
     background: var(--panel);
     color: var(--text-soft);
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
 }
@@ -4522,7 +4522,7 @@ del.was.block {
 .chat-class {
     padding: 0 5px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 600;
 }
 .chat-class.class-request {
@@ -4546,7 +4546,7 @@ del.was.block {
     min-width: 0;
     padding: 3px 6px;
     font: inherit;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .session-chat button.primary {
     background: var(--accent);
@@ -4571,7 +4571,7 @@ del.was.block {
     margin: 4px 0;
     padding: 5px 8px;
     border-radius: 8px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-selection-bar {
     background: var(--violet-tint);
@@ -4598,7 +4598,7 @@ del.was.block {
     border-radius: 12px;
     background: var(--accent);
     color: #fff;
-    font-size: 12px;
+    font-size: 0.75rem;
     box-shadow: 0 2px 8px var(--shadow);
     cursor: pointer;
 }
@@ -4606,7 +4606,7 @@ del.was.block {
     color: var(--error);
 }
 .session-menu-note {
-    width: 280px;
+    width: 17.5rem;
     white-space: normal;
 }
 .session-menu-note p {
@@ -4637,7 +4637,7 @@ del.was.block {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .run-card-number {
     font-weight: 700;
@@ -4681,7 +4681,7 @@ del.was.block {
     padding-top: 6px;
     border-top: 1px dashed var(--border);
     color: var(--muted);
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 .run-note {
     display: flex;
@@ -4716,7 +4716,7 @@ del.was.block {
     gap: 4px;
     padding: 1px 4px;
     border-radius: 4px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .session-chat button.run-quote-main {
     min-width: 0;
@@ -4766,8 +4766,8 @@ del.was.block {
 }
 .run-agent > .session-avatar {
     flex: none;
-    width: 20px;
-    height: 20px;
+    width: 1.25rem;
+    height: 1.25rem;
 }
 .run-agent-body {
     flex: 1;
@@ -4791,7 +4791,7 @@ del.was.block {
     min-width: 0;
     padding: 2px 6px;
     font: inherit;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .run-answer-actions {
     display: flex;
@@ -4812,7 +4812,7 @@ del.was.block {
 }
 .run-card.compact {
     border-left-width: 2px;
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 .chat-unit-body .run-card {
     margin-top: 0;
@@ -4838,7 +4838,7 @@ del.was.block {
     align-items: center;
     gap: 6px;
     padding: 2px;
-    font-size: 12px;
+    font-size: 0.75rem;
     background: var(--legend-bg);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -4866,8 +4866,8 @@ del.was.block {
     align-items: center;
     justify-content: center;
     gap: 4px;
-    min-width: 26px;
-    height: 26px;
+    min-width: 1.625rem;
+    height: 1.625rem;
     padding: 0 6px;
     border: none;
     border-radius: 6px;
@@ -4885,7 +4885,7 @@ del.was.block {
     cursor: default;
 }
 .canvas-controls-bar .canvas-zoom-level {
-    min-width: 44px;
+    min-width: 2.75rem;
     font-variant-numeric: tabular-nums;
 }
 .canvas-controls-bar .canvas-legend-button.active {
@@ -4928,7 +4928,7 @@ del.was.block {
 }
 .pane-menu-heading {
     padding: 4px 10px 2px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     font-weight: 600;
     color: var(--muted);
 }
@@ -4936,7 +4936,7 @@ del.was.block {
     margin-top: 4px;
     padding: 6px 10px 4px;
     border-top: 1px solid var(--border);
-    font-size: 11px;
+    font-size: 0.6875rem;
     color: var(--muted);
 }
 
@@ -4944,12 +4944,12 @@ del.was.block {
 .edge-hint {
     position: fixed;
     z-index: 1000;
-    max-width: 320px;
+    max-width: 20rem;
     padding: 4px 8px;
     border-radius: 4px;
     background: var(--text);
     color: var(--panel);
-    font: 12px/1.4 var(--sans);
+    font: 0.75rem/1.4 var(--sans);
     box-shadow: 0 2px 8px var(--shadow);
     pointer-events: none;
 }

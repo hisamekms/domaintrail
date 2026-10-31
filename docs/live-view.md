@@ -19,7 +19,7 @@ clicking the list shown collapses the pane to the activity bar (it never disappe
 - **The health**: a dot, green when all is well, larger and amber or red with a word when it is not (警告: connecting,
   no sources, an older diagram shown, warnings; エラー: the model does not validate, or the server is gone). A click
   shows the status, the number of files, the version, the time of the last update and the connection.
-- **The settings** (the gear): 名前の表示, the theme and the language.
+- **The settings** (the gear): 名前の表示, the theme, the language and 文字の大きさ.
 
 Collapsed, the pane keeps the brand's mark at the top of the activity bar, and the health and the gear at its bottom.
 
@@ -129,6 +129,12 @@ neither baseline: their views are not marked.
   and labels are shown as written, and diagnostics are in English.
 - The theme follows the OS (自動), or is forced with ライト / ダーク in the settings menu; both choices are remembered
   per browser.
+- 文字の大きさ (小 / 標準 / 大 / 特大, remembered per browser) sizes the text of the panes, the toolbars, the menus,
+  the dialogs, the tooltips and the canvas's controls and legend: 90%, 100%, 115% and 130% of the browser's default
+  font size, so a larger default font size in the browser enlarges the page too (標準 at the usual 16px is the page's
+  original size). The diagrams' own text is not affected; it follows the canvas's zoom. Until you drag them, the left
+  pane, the inspector and the chat open wider (and the narrow-window thresholds below grow) in proportion, so that
+  larger text does not wrap everywhere; a width you dragged is kept.
 - Names follow the 名前の表示 setting: ラベル (the string after a declaration's name, falling back to the
   name), 名前 or 両方. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 

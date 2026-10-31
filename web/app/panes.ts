@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { InspectorTab } from '../inspector';
 import { usePersistentState } from '../shared/layout';
 import { autoInspectorWidth, effectiveLayout, keptOverrides, NO_OVERRIDES, type Dock, type Overrides } from './responsive';
+import { scaledSize } from './text-size';
 
 /** The lists of the left pane, chosen in its activity bar. */
 export type LeftView = 'tree' | 'problems' | 'changes';
@@ -57,23 +58,37 @@ export function useWindowWidth(): number {
 /** The width of the left pane's activity bar (BAR_WIDTH in shell.tsx). */
 const LEFT_BAR = 44;
 
-export function usePanes(): Panes {
+/** The panes' default sizes at a 16px root; until the reader drags a pane, its size is this times the UI scale. */
+export const DEFAULT_PANE_SIZES = { explorerWidth: 260, inspectorHeight: 320, conversationWidth: 380 } as const;
+
+/** A pane's size: the reader's (once dragged), else its default at the UI scale. */
+export function paneSize(saved: number | null, base: number, scale: number): number {
+    return saved ?? scaledSize(base, scale);
+}
+
+/** `uiScale`: how much larger the UI is than at a 16px root (the text size), which the default sizes follow. */
+export function usePanes(uiScale = 1): Panes {
     const [leftSaved, setLeftSaved] = usePersistentState('domaintrail.layout.explorer', true);
     const [dockOpen, setDockOpen] = usePersistentState('domaintrail.layout.inspector', true);
-    const [explorerWidth, setExplorerWidth] = usePersistentState('domaintrail.layout.explorerWidth', 260);
+    // the sizes are null until the reader drags the pane: then they follow the text size
+    const [explorerWidthSaved, setExplorerWidth] = usePersistentState<number | null>('domaintrail.layout.explorerWidth', null);
     const [leftView, setLeftView] = usePersistentState<LeftView>('domaintrail.layout.leftView', 'tree');
     const [dockSaved, setDockSaved] = usePersistentState<Dock>('domaintrail.layout.inspectorDock', 'right');
     // null until the reader drags it: then the width follows the room the other panes leave
     const [inspectorWidthSaved, setInspectorWidth] = usePersistentState<number | null>('domaintrail.layout.inspectorWidth', null);
-    const [inspectorHeight, setInspectorHeight] = usePersistentState('domaintrail.layout.inspectorHeight', 320);
+    const [inspectorHeightSaved, setInspectorHeight] = usePersistentState<number | null>('domaintrail.layout.inspectorHeight', null);
     const [conversationOpen, setConversationOpen] = useState(false);
-    const [conversationWidth, setConversationWidth] = usePersistentState('domaintrail.layout.conversationWidth', 380);
+    const [conversationWidthSaved, setConversationWidth] = usePersistentState<number | null>('domaintrail.layout.conversationWidth', null);
     const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
 
+    const explorerWidth = paneSize(explorerWidthSaved, DEFAULT_PANE_SIZES.explorerWidth, uiScale);
+    const inspectorHeight = paneSize(inspectorHeightSaved, DEFAULT_PANE_SIZES.inspectorHeight, uiScale);
+    const conversationWidth = paneSize(conversationWidthSaved, DEFAULT_PANE_SIZES.conversationWidth, uiScale);
+
     const width = useWindowWidth();
     const [overrides, setOverrides] = useState<Overrides>(NO_OVERRIDES);
-    const layout = effectiveLayout({ width, conversationOpen, left: leftSaved, dock: dockSaved, overrides });
+    const layout = effectiveLayout({ width, conversationOpen, left: leftSaved, dock: dockSaved, overrides, scale: uiScale });
     const { forced } = layout;
     // an override ends with the narrow window (or with the conversation closed): the saved choices are shown again
     useEffect(() => {
@@ -81,7 +96,7 @@ export function usePanes(): Panes {
     }, [forced.left, forced.dock]);
 
     const leftWidth = LEFT_BAR + (layout.left ? explorerWidth : 0);
-    const inspectorWidth = inspectorWidthSaved ?? autoInspectorWidth(width - leftWidth - (conversationOpen ? conversationWidth : 0));
+    const inspectorWidth = inspectorWidthSaved ?? autoInspectorWidth(width - leftWidth - (conversationOpen ? conversationWidth : 0), uiScale);
 
     const setExplorerOpen = (open: boolean): void => {
         if (forced.left) setOverrides((o) => ({ ...o, left: open }));

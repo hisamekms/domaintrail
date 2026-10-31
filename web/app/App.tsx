@@ -26,9 +26,9 @@ export function App() {
     /** What the model is compared with: its graphs give the ghosts of removed elements, its model the inspector's diffs. */
     const base = current?.base ?? null;
     const preferences = usePreferences();
-    const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang } = preferences;
+    const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang, textSize, setTextSize } = preferences;
     const t = MESSAGES[lang];
-    const panes = usePanes();
+    const panes = usePanes(preferences.uiScale);
     const { setExplorerOpen, setInspectorOpen, showLeft, legendOpen, setLegendOpen } = panes;
     const { inspectorTab, setInspectorTab, openInspector } = panes;
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
@@ -87,6 +87,8 @@ export function App() {
                         langPreference={langPreference}
                         lang={lang}
                         onLang={setLangPreference}
+                        textSize={textSize}
+                        onTextSize={setTextSize}
                     />
                 }
                 banners={

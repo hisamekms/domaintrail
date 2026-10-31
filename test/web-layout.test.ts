@@ -63,3 +63,58 @@ describe("the inspector's width until it is dragged", () => {
         expect(autoInspectorWidth(500)).toBe(300);
     });
 });
+
+describe('the text size (文字の大きさ)', () => {
+    test('標準 leaves the root at the browser default; the others scale it', async () => {
+        const { rootFontSize, TEXT_SCALES, TEXT_SIZES, isTextSize } = await import('@domaintrail/web/app/text-size');
+        expect(TEXT_SIZES).toEqual(['small', 'standard', 'large', 'xlarge']);
+        expect(TEXT_SCALES).toEqual({ small: 0.9, standard: 1, large: 1.15, xlarge: 1.3 });
+        expect(rootFontSize('standard')).toBe('');
+        expect(rootFontSize('small')).toBe('90%');
+        expect(rootFontSize('large')).toBe('115%');
+        expect(rootFontSize('xlarge')).toBe('130%');
+        expect(isTextSize('large')).toBe(true);
+        expect(isTextSize('huge')).toBe(false);
+        expect(isTextSize(null)).toBe(false);
+    });
+
+    test("the UI scale is the root font size against 16px (the browser's default and the chosen size together)", async () => {
+        const { uiScale } = await import('@domaintrail/web/app/text-size');
+        expect(uiScale(16)).toBe(1);
+        expect(uiScale(20.8)).toBeCloseTo(1.3);
+        // a browser set to 20px with 標準
+        expect(uiScale(20)).toBe(1.25);
+        expect(uiScale(Number.NaN)).toBe(1);
+        expect(uiScale(0)).toBe(1);
+    });
+
+    test("the panes' default sizes follow the UI scale; a dragged size is kept", async () => {
+        const { DEFAULT_PANE_SIZES, paneSize } = await import('@domaintrail/web/app/panes');
+        expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1)).toBe(260);
+        expect(paneSize(null, DEFAULT_PANE_SIZES.conversationWidth, 1)).toBe(380);
+        expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1.3)).toBe(338);
+        expect(paneSize(null, DEFAULT_PANE_SIZES.conversationWidth, 0.9)).toBe(342);
+        expect(paneSize(300, DEFAULT_PANE_SIZES.explorerWidth, 1.3)).toBe(300);
+    });
+
+    test("the inspector's automatic width and the narrow-window thresholds grow with the UI scale", async () => {
+        const { autoInspectorWidth } = await import('@domaintrail/web/app/responsive');
+        expect(autoInspectorWidth(500, 1.3)).toBe(390);
+        expect(autoInspectorWidth(2400, 1.3)).toBe(546);
+        expect(autoInspectorWidth(1000, 1.3)).toBe(390);
+        const saved = { left: true, dock: 'right' as const, overrides: NO_OVERRIDES, conversationOpen: true };
+        // 1400px fits the left pane beside the conversation at 標準, not at 特大
+        expect(effectiveLayout({ ...saved, width: 1400 })).toMatchObject({ left: true });
+        expect(effectiveLayout({ ...saved, width: 1400, scale: 1.3 })).toMatchObject({ left: false, dock: 'right' });
+        expect(effectiveLayout({ ...saved, width: 1300, scale: 1.3 })).toMatchObject({ left: false, dock: 'bottom' });
+    });
+
+    test("the UI's font sizes in styles.css are in rem (the canvas's shapes keep px: the zoom scales them)", async () => {
+        const css = await Bun.file(new URL('../web/styles.css', import.meta.url)).text();
+        const sections = css.split(/(?=\/\* -{10} )/);
+        const pxFonts = (s: string): string[] => s.match(/(?:font-size|font|line-height):\s*[\d.]+px[^;]*/g) ?? [];
+        const ui = sections.filter((s) => !s.startsWith('/* ---------- canvas shapes'));
+        expect(ui.flatMap(pxFonts)).toEqual([]);
+        expect(pxFonts(sections.find((s) => s.startsWith('/* ---------- canvas shapes')) ?? '').length).toBeGreaterThan(0);
+    });
+});

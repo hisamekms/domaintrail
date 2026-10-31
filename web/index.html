@@ -6,7 +6,7 @@
     <title>DomainTrail</title>
     <link rel="stylesheet" href="./styles.css" />
     <script>
-      // Apply the theme before the app loads so that the page does not flash light (see web/theme.ts).
+      // Apply the theme before the app loads so that the page does not flash light (see web/theme.ts),
       try {
         const pref = JSON.parse(localStorage.getItem('domaintrail.theme') ?? '"auto"');
         const dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -14,6 +14,12 @@
       } catch {
         document.documentElement.dataset.theme = 'light';
       }
+      // and the text size (see web/app/text-size.ts), so that the panes open at their size
+      try {
+        const scales = { small: 0.9, large: 1.15, xlarge: 1.3 };
+        const scale = scales[JSON.parse(localStorage.getItem('domaintrail.textSize') ?? '"standard"')];
+        if (typeof scale === 'number') document.documentElement.style.fontSize = `${Math.round(scale * 1000) / 10}%`;
+      } catch {}
     </script>
   </head>
   <body>

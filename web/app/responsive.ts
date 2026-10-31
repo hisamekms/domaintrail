@@ -21,9 +21,12 @@ export interface Overrides {
 
 export const NO_OVERRIDES: Overrides = {};
 
-/** Which of the reader's choices the page overrides at this width. */
-export function forced(width: number, conversationOpen: boolean): { readonly left: boolean; readonly dock: boolean } {
-    return { left: conversationOpen && width < COLLAPSE_LEFT_BELOW, dock: conversationOpen && width < DOCK_BELOW_BELOW };
+/**
+ * Which of the reader's choices the page overrides at this width. With larger text (`scale`, see text-size.ts) the
+ * panes are wider by default, so the thresholds grow with it.
+ */
+export function forced(width: number, conversationOpen: boolean, scale = 1): { readonly left: boolean; readonly dock: boolean } {
+    return { left: conversationOpen && width < COLLAPSE_LEFT_BELOW * scale, dock: conversationOpen && width < DOCK_BELOW_BELOW * scale };
 }
 
 /**
@@ -31,12 +34,12 @@ export function forced(width: number, conversationOpen: boolean): { readonly lef
  * the conversation; then what the reader chose since (`overrides`), else the page's choice (the left pane collapsed,
  * the inspector below).
  */
-export function effectiveLayout(input: { width: number; conversationOpen: boolean; left: boolean; dock: Dock; overrides: Overrides }): {
+export function effectiveLayout(input: { width: number; conversationOpen: boolean; left: boolean; dock: Dock; overrides: Overrides; scale?: number }): {
     readonly left: boolean;
     readonly dock: Dock;
     readonly forced: { readonly left: boolean; readonly dock: boolean };
 } {
-    const f = forced(input.width, input.conversationOpen);
+    const f = forced(input.width, input.conversationOpen, input.scale);
     return {
         left: f.left ? (input.overrides.left ?? false) : input.left,
         dock: f.dock ? (input.overrides.dock ?? 'bottom') : input.dock,
@@ -52,9 +55,12 @@ export function keptOverrides(overrides: Overrides, f: { readonly left: boolean;
     return { ...(left !== undefined && { left }), ...(dock !== undefined && { dock }) };
 }
 
-/** The inspector's width on the right until the reader drags it: about a third of the room beside the left pane and the conversation, within 300–420px. */
+/**
+ * The inspector's width on the right until the reader drags it: about a third of the room beside the left pane and the
+ * conversation, within 300–420px (times the UI scale: larger text, a wider inspector).
+ */
 export const AUTO_INSPECTOR_MIN = 300;
 export const AUTO_INSPECTOR_MAX = 420;
-export function autoInspectorWidth(room: number): number {
-    return Math.round(Math.min(AUTO_INSPECTOR_MAX, Math.max(AUTO_INSPECTOR_MIN, room * 0.36)));
+export function autoInspectorWidth(room: number, scale = 1): number {
+    return Math.round(Math.min(AUTO_INSPECTOR_MAX * scale, Math.max(AUTO_INSPECTOR_MIN * scale, room * 0.36)));
 }

@@ -3,11 +3,12 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DISPLAY_MODES, type DisplayMode, type Lang } from '@domaintrail/visualization/domain/graph/ir';
 import { LANG_NAMES, useT, type LangPreference } from './i18n';
 import type { Theme, ThemePreference } from './theme';
+import { TEXT_SIZES, type TextSize } from './app/text-size';
 
 const THEMES: ThemePreference[] = ['auto', 'light', 'dark'];
 const LANG_PREFERENCES: LangPreference[] = ['auto', 'ja', 'en'];
 
-/** Header button opening a modal dialog with the settings (the names, the theme and the language). */
+/** Header button opening a modal dialog with the settings (the names, the theme, the language and the text size). */
 export function SettingsDialog(props: {
     mode: DisplayMode;
     onMode: (m: DisplayMode) => void;
@@ -17,8 +18,10 @@ export function SettingsDialog(props: {
     langPreference: LangPreference;
     lang: Lang;
     onLang: (l: LangPreference) => void;
+    textSize: TextSize;
+    onTextSize: (s: TextSize) => void;
 }) {
-    const { mode, onMode, themePreference, theme, onTheme, langPreference, lang, onLang } = props;
+    const { mode, onMode, themePreference, theme, onTheme, langPreference, lang, onLang, textSize, onTextSize } = props;
     const t = useT();
     const [open, setOpen] = useState(false);
     const dialog = useRef<HTMLDialogElement>(null);
@@ -81,6 +84,13 @@ export function SettingsDialog(props: {
                         {LANG_PREFERENCES.map((l) => (
                             <button key={l} className={langPreference === l ? 'active' : ''} aria-pressed={langPreference === l} onClick={() => onLang(l)}>
                                 {l === 'auto' ? t.themes.auto : LANG_NAMES[l]}
+                            </button>
+                        ))}
+                    </SettingsRow>
+                    <SettingsRow id="settings-text-size" caption={t.textSize} hint={t.textSizeHint}>
+                        {TEXT_SIZES.map((size) => (
+                            <button key={size} className={textSize === size ? 'active' : ''} aria-pressed={textSize === size} onClick={() => onTextSize(size)}>
+                                {t.textSizes[size]}
                             </button>
                         ))}
                     </SettingsRow>
