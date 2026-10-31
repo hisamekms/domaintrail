@@ -78,6 +78,25 @@
     --shared-bg: rgba(230, 244, 244, 0.6);
     --edge: #55555f;
     --edge-label: #3a3a44;
+
+    /* Event Storming sticky notes (spec §9.4: default colors, with no meaning): background, border */
+    --es-event: #ffd8a8;
+    --es-event-border: #e8590c;
+    --es-command: #cfe5ff;
+    --es-command-border: #1c7ed6;
+    --es-policy: #e5dbff;
+    --es-policy-border: #7048e8;
+    --es-aggregate: #fff3bf;
+    --es-aggregate-border: #d9a400;
+    --es-readmodel: #d3f9d8;
+    --es-readmodel-border: #2f9e44;
+    --es-hotspot: #ffdeeb;
+    --es-hotspot-border: #d6336c;
+    --es-actor: #fff9db;
+    --es-actor-border: #a07d00;
+    --es-external: #f1e4f7;
+    --es-external-border: #9c36b5;
+    --es-sequence: #b8530f;
     --ref-edge: #3a6fd8;
     --ref-label: #2f5fbf;
 
@@ -162,6 +181,24 @@
     --shared-bg: rgba(30, 70, 70, 0.35);
     --edge: #9a9aa6;
     --edge-label: #d0d0d8;
+
+    --es-event: #4a2b14;
+    --es-event-border: #ff922b;
+    --es-command: #16304d;
+    --es-command-border: #4dabf7;
+    --es-policy: #2c2250;
+    --es-policy-border: #9775fa;
+    --es-aggregate: #3d3410;
+    --es-aggregate-border: #fcc419;
+    --es-readmodel: #173a22;
+    --es-readmodel-border: #51cf66;
+    --es-hotspot: #4a1a2e;
+    --es-hotspot-border: #f06595;
+    --es-actor: #36321a;
+    --es-actor-border: #e0c050;
+    --es-external: #3a2244;
+    --es-external-border: #cc5de8;
+    --es-sequence: #ff9f5a;
     --ref-edge: #6c9bff;
     --ref-label: #8fb3ff;
 
@@ -450,6 +487,50 @@ code.block {
     background: var(--amber-tint);
     color: var(--amber-text);
 }
+.kind-es-event {
+    background: var(--es-event);
+    border: 1px solid var(--es-event-border);
+}
+.kind-es-command {
+    background: var(--es-command);
+    border: 1px solid var(--es-command-border);
+}
+.kind-es-policy {
+    background: var(--es-policy);
+    border: 1px solid var(--es-policy-border);
+}
+.kind-es-aggregate {
+    background: var(--es-aggregate);
+    border: 1px solid var(--es-aggregate-border);
+}
+.kind-es-readmodel {
+    background: var(--es-readmodel);
+    border: 1px solid var(--es-readmodel-border);
+}
+.kind-es-hotspot {
+    background: var(--es-hotspot);
+    border: 1px solid var(--es-hotspot-border);
+}
+.kind-es-actor {
+    background: var(--es-actor);
+    border: 1px solid var(--es-actor-border);
+}
+.kind-es-external {
+    background: var(--es-external);
+    border: 1px dashed var(--es-external-border);
+}
+.kind-es-group,
+.kind-es-timeline {
+    border: 1px dashed var(--es-event-border);
+}
+.es-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.es-list li {
+    padding: 2px 0;
+}
 .kind-error {
     background: var(--red-tint);
     color: var(--red-text);
@@ -694,6 +775,64 @@ a.field-origin {
     border: none;
     background: transparent;
 }
+/* Event Storming sticky notes: square corners, a colored paper, the text of the theme */
+.dn-esEvent,
+.dn-esCommand,
+.dn-esPolicy,
+.dn-esActor,
+.dn-esExternal,
+.dn-esAggregate,
+.dn-esReadModel,
+.dn-esHotspot {
+    border-radius: 3px;
+    box-shadow: 0 1px 3px var(--shadow);
+}
+.dn-esEvent {
+    border-color: var(--es-event-border);
+    background: var(--es-event);
+}
+.dn-esCommand {
+    border-color: var(--es-command-border);
+    background: var(--es-command);
+}
+.dn-esPolicy {
+    border-color: var(--es-policy-border);
+    background: var(--es-policy);
+}
+.dn-esAggregate {
+    border-color: var(--es-aggregate-border);
+    background: var(--es-aggregate);
+}
+.dn-esReadModel {
+    border-color: var(--es-readmodel-border);
+    background: var(--es-readmodel);
+}
+.dn-esHotspot {
+    border-color: var(--es-hotspot-border);
+    background: var(--es-hotspot);
+}
+.dn-esActor {
+    border-color: var(--es-actor-border);
+    background: var(--es-actor);
+    border-radius: 18px;
+}
+.dn-esExternal {
+    border-color: var(--es-external-border);
+    background: var(--es-external);
+    border-style: dashed;
+}
+/* the notes have no body: the label sits in the middle */
+.dn-esEvent .dn-head,
+.dn-esCommand .dn-head,
+.dn-esPolicy .dn-head,
+.dn-esActor .dn-head,
+.dn-esExternal .dn-head,
+.dn-esAggregate .dn-head,
+.dn-esReadModel .dn-head,
+.dn-esHotspot .dn-head {
+    border-bottom: none;
+    white-space: nowrap;
+}
 .dn-change-added {
     box-shadow: 0 0 0 3px var(--added);
 }
@@ -790,6 +929,14 @@ a.field-origin {
     border: 1.5px dashed var(--boundary-border);
     background: var(--boundary-bg);
 }
+.dg-esGroup {
+    border: 1.5px dashed var(--es-event-border);
+    background: color-mix(in srgb, var(--es-event) 35%, transparent);
+}
+.dg-esGroup .dg-label {
+    font-size: calc(13px * var(--s, 1));
+    color: var(--es-event-border);
+}
 .dg-aggregateBoundary .dg-label {
     font-size: calc(13px * var(--s, 1));
     color: var(--violet);
@@ -837,6 +984,25 @@ a.field-origin {
 }
 .de-transition .de-head {
     fill: var(--purple);
+}
+.de-esCausal .de-line {
+    stroke-width: 1.6;
+}
+.de-esSequence .de-line {
+    stroke: var(--es-sequence);
+    stroke-width: 1.8;
+    stroke-dasharray: 7 5;
+}
+.de-esSequence .de-head {
+    fill: var(--es-sequence);
+}
+.de-esRelated .de-line {
+    stroke: var(--grey-text);
+    stroke-width: 1.1;
+    stroke-dasharray: 1.5 3;
+}
+.de-esRelated .de-head {
+    fill: var(--grey-text);
 }
 .de-label {
     font: 13px var(--sans);
@@ -1668,6 +1834,10 @@ select,
     border-radius: 6px;
     background: var(--panel);
     cursor: pointer;
+}
+.view-toolbar select.view-select {
+    max-width: 220px;
+    text-overflow: ellipsis;
 }
 .view-area {
     flex: 1;

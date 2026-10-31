@@ -2,15 +2,15 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useT } from './i18n';
 
 /**
- * Key for the edges of the canvas views; every edge points from the dependent to its dependency. Closed, it leaves a
- * flat tab on the bottom edge of the canvas that opens it.
+ * Key for the edges of the canvas views; every edge points from the dependent to its dependency (in an Event Storming,
+ * along causes and time). Closed, it leaves a flat tab on the bottom edge of the canvas that opens it.
  */
 export function Legend({
     view,
     open,
     onToggle,
 }: {
-    view: 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states';
+    view: 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states' | 'storming';
     open: boolean;
     onToggle: () => void;
 }) {
@@ -39,7 +39,13 @@ export function Legend({
                         { kind: 'references', text: words.references },
                         { kind: 'value', text: words.value },
                     ]
-                  : [{ kind: 'transition', text: words.transition }];
+                  : view === 'storming'
+                    ? [
+                          { kind: 'esCausal', text: words.esCausal },
+                          { kind: 'esSequence', text: words.esSequence },
+                          { kind: 'esRelated', text: words.esRelated },
+                      ]
+                    : [{ kind: 'transition', text: words.transition }];
     return (
         <>
             <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>
@@ -62,7 +68,8 @@ export function Legend({
                 {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
                 {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
                 {view === 'states' && <div className="legend-note">{t.internalNote}</div>}
-                <div className="legend-note">{t.arrowNote}</div>
+                {view === 'storming' && <div className="legend-note">{t.stormingColorNote}</div>}
+                <div className="legend-note">{view === 'storming' ? t.stormingArrowNote : t.arrowNote}</div>
             </div>
             <button className={`legend-tab${open ? '' : ' shown'}`} inert={open} onClick={onToggle} data-tooltip={t.openLegend} aria-label={t.openLegend}>
                 <ChevronUp size={14} aria-hidden />

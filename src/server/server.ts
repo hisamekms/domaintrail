@@ -17,7 +17,7 @@ import { ViewSession } from './session.js';
 
 export interface ViewServerOptions {
     root: string;
-    /** Globs of DSL files relative to `root` (default `**\/*.dt`). */
+    /** Globs of DSL files relative to `root` (default `DEFAULT_SOURCES`). */
     sources?: readonly string[];
     /** Whether files ignored by `.gitignore` are skipped (default true). */
     respectGitignore?: boolean;

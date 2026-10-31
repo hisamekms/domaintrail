@@ -37,7 +37,7 @@ const paths = (value: unknown): string[] =>
  * they are in Japanese too, and git's (`git`, and the refs `main` and `HEAD` given as examples). `X` is the sample
  * argument.
  */
-const LATIN_IN_JA = new Set(['BC', 'DSL', 'ID', 'OS', 'dt', 'persistent', 'value', 'terms', 'X', 'git', 'main', 'HEAD']);
+const LATIN_IN_JA = new Set(['BC', 'DSL', 'ID', 'OS', 'dt', 'dtes', 'storming', 'persistent', 'value', 'terms', 'X', 'git', 'main', 'HEAD']);
 
 describe('i18n', () => {
     test('every language has the same messages', () => {

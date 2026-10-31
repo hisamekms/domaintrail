@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { DisplayMode, Lang } from '../src/graph/ir';
+import type { ElementKind as EsElementKind, SemanticEdgeKind, ViewLevel } from '../src/dtes/ir';
 import type { ElementKind } from '../src/model/model';
 import type { Connection } from './useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
@@ -27,13 +28,13 @@ const ja = {
     persistentHint: '永続化される契約のイベント（persistent）',
     transientHint: '永続化しないイベント（persistent の指定なし）',
     noModel: 'モデルがまだありません。',
-    noDtFiles: '.dt ファイルがありません',
+    noDtFiles: '.dt・.dtes ファイルがありません',
 
     // header
     nameDisplay: '名前の表示',
     nameDisplayHint: 'モデルの要素を、ラベル（日本語名など）と名前のどちらで表示するか',
     modes: { label: 'ラベル', name: '名前', both: '両方' } as Record<DisplayMode, string>,
-    status: { ok: '正常', invalid: '検証エラー', 'syntax-error': '構文エラー', empty: '.dt なし' } as Record<string, string>,
+    status: { ok: '正常', invalid: '検証エラー', 'syntax-error': '構文エラー', empty: 'ファイルなし' } as Record<string, string>,
     settings: '設定',
     closeSettings: '設定を閉じる',
     theme: 'テーマ',
@@ -57,7 +58,7 @@ const ja = {
     closeBottom: '問題・変更を閉じる',
 
     // views and their toolbar
-    views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ' },
+    views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ', storming: 'イベントストーミング' },
     showAllContexts: '共有・外部の BC も表示',
     structureMode: '構造図の表示',
     structureLevels: {
@@ -75,6 +76,18 @@ const ja = {
     pickContexts: '表示する BC を選んでください',
     loading: '読み込み中…',
     noDiagram: '表示できる図がありません',
+
+    // Event Storming view (its level and timeline are the page's state: they never change a .dtes file)
+    noStormings: 'ストーミングがありません（.dtes ファイルに storming を書くと表示されます）',
+    stormingPicker: '表示するストーミング',
+    stormingLevel: '抽象度',
+    stormingLevels: {
+        'big-picture': { label: 'ビッグピクチャー', hint: 'イベント・タイムライン・ホットスポットだけを表示' },
+        'design-level': { label: 'デザインレベル', hint: 'コマンド・ポリシー・アクター・外部システム・集約・リードモデルも表示' },
+    } as Record<ViewLevel, { label: string; hint: string }>,
+    timelineFilter: 'タイムライン',
+    allTimelines: 'すべて（統合）',
+    staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
 
     // BC picker
     contextsToShow: '表示する BC',
@@ -104,11 +117,57 @@ const ja = {
         aggregateReferences: '参照（ID で別の集約へ。エンティティや値オブジェクトを経由するものも含む）',
         aggregateValue: '別の集約を値として持つ',
         transition: 'コマンドによる遷移（⇒ 発生させるドメインイベント）',
+        esCausal: '型レベルの因果（起こりうる関係。実際に起きたとは限らない）',
+        esSequence: 'タイムラインの時間順',
+        esRelated: '関連（アクター・リードモデル・対象の集約・ホットスポットの対象）',
     },
+    stormingColorNote: '付箋の色は既定の配色で、意味は持ちません',
+    stormingArrowNote: '矢印は因果と時間の向き',
     stubNote: '点線枠の小さな箱は別の BC の要素（スタブ）',
     aggregateStubNote: '点線枠の小さな箱は別の BC の集約（スタブ）',
     arrowNote: '矢印の先が依存先',
     internalNote: '状態の箱の中の ↻ は状態を変えないコマンド',
+
+    // inspector: an element of a storming
+    esKinds: {
+        event: 'イベント',
+        command: 'コマンド',
+        policy: 'ポリシー',
+        actor: 'アクター',
+        external: '外部システム',
+        aggregate: '集約',
+        readmodel: 'リードモデル',
+        hotspot: 'ホットスポット',
+        timeline: 'タイムライン',
+        group: 'グループ',
+    } as Record<EsElementKind, string>,
+    notInStorming: (id: string) => `${id} はストーミングにありません`,
+    inStorming: 'ストーミング',
+    dtRef: '.dt との対応',
+    noDtRef: 'なし（.dt との対応はまだ書かれていません）',
+    unresolvedRef: '.dt にありません',
+    esRelations: '関係',
+    esRelationKinds: {
+        on: 'きっかけ',
+        issues: '発行',
+        emits: '発生',
+        target: '対象',
+        actor: '実行者',
+        reads: '参照',
+        'hotspot-on': '論点',
+    } as Record<SemanticEdgeKind, string>,
+    noRelations: '関係はありません',
+    hotspotStatus: '状態',
+    hotspotStatuses: { open: '未解決', resolved: '解決済み' } as Record<string, string>,
+    resolution: '結論',
+    occurrences: 'タイムラインでの出現',
+    noOccurrences: 'どのタイムラインにも属していません',
+    stepOf: (n: number) => `${n} 番目`,
+    inGroup: (group: string) => `グループ ${group}`,
+    drawnAs: (n: number) => `この図での付箋（${n} 枚）`,
+    sharedNote: '複数のタイムラインで先頭から同じ流れの部分は 1 枚にまとめて描きますが、同じ出来事であるとは限りません',
+    groupEvents: 'グループのイベント（順序なし）',
+    openFile: 'ファイルを開く',
 
     // explorer
     model: 'モデル',
@@ -280,12 +339,12 @@ const en: Messages = {
     persistentHint: 'Persisted by contract (persistent)',
     transientHint: 'Not persisted (not declared persistent)',
     noModel: 'No model yet.',
-    noDtFiles: 'No .dt files',
+    noDtFiles: 'No .dt or .dtes files',
 
     nameDisplay: 'Names',
     nameDisplayHint: 'Whether model elements are shown by their labels, their names or both',
     modes: { label: 'Label', name: 'Name', both: 'Both' },
-    status: { ok: 'OK', invalid: 'Invalid', 'syntax-error': 'Syntax error', empty: 'No .dt' },
+    status: { ok: 'OK', invalid: 'Invalid', 'syntax-error': 'Syntax error', empty: 'No files' },
     settings: 'Settings',
     closeSettings: 'Close the settings',
     theme: 'Theme',
@@ -307,7 +366,7 @@ const en: Messages = {
     openBottom: 'Open problems and changes',
     closeBottom: 'Close problems and changes',
 
-    views: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog' },
+    views: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog', storming: 'Event Storming' },
     showAllContexts: 'Also show shared and external BCs',
     structureMode: 'Structure view',
     structureLevels: {
@@ -325,6 +384,17 @@ const en: Messages = {
     pickContexts: 'Pick the BCs to show',
     loading: 'Loading…',
     noDiagram: 'Nothing to draw',
+
+    noStormings: 'No stormings (write a storming in a .dtes file to see it here)',
+    stormingPicker: 'Storming to show',
+    stormingLevel: 'Level',
+    stormingLevels: {
+        'big-picture': { label: 'Big Picture', hint: 'Events, timelines and hotspots only' },
+        'design-level': { label: 'Design Level', hint: 'Also commands, policies, actors, external systems, aggregates and read models' },
+    },
+    timelineFilter: 'Timeline',
+    allTimelines: 'All (integrated)',
+    staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
     contextsToShow: 'BCs to show',
     allContexts: 'All BCs',
@@ -352,11 +422,56 @@ const en: Messages = {
         aggregateReferences: 'References (by ID, another aggregate, also through entities and value objects)',
         aggregateValue: 'Holds another aggregate as a value',
         transition: 'Transition by a command (⇒ events it raises)',
+        esCausal: 'Type-level cause (a possibility, not something that happened)',
+        esSequence: 'Time order of a timeline',
+        esRelated: 'Related (actor, read model, target aggregate, a hotspot’s event)',
     },
+    stormingColorNote: 'The colors of the notes are defaults, with no meaning',
+    stormingArrowNote: 'Arrows point along causes and time',
     stubNote: 'Small dashed boxes are elements of other BCs (stubs)',
     aggregateStubNote: 'Small dashed boxes are aggregates of other BCs (stubs)',
     arrowNote: 'Arrows point at the dependency',
     internalNote: '↻ in a state’s box: a command that keeps the state',
+
+    esKinds: {
+        event: 'Event',
+        command: 'Command',
+        policy: 'Policy',
+        actor: 'Actor',
+        external: 'External system',
+        aggregate: 'Aggregate',
+        readmodel: 'Read model',
+        hotspot: 'Hotspot',
+        timeline: 'Timeline',
+        group: 'Group',
+    },
+    notInStorming: (id) => `${id} is not in the storming`,
+    inStorming: 'Storming',
+    dtRef: 'In .dt',
+    noDtRef: 'None (no ref to .dt yet)',
+    unresolvedRef: 'not in .dt',
+    esRelations: 'Relations',
+    esRelationKinds: {
+        on: 'on',
+        issues: 'issues',
+        emits: 'emits',
+        target: 'target',
+        actor: 'actor',
+        reads: 'reads',
+        'hotspot-on': 'about',
+    },
+    noRelations: 'No relations',
+    hotspotStatus: 'Status',
+    hotspotStatuses: { open: 'open', resolved: 'resolved' },
+    resolution: 'Resolution',
+    occurrences: 'In timelines',
+    noOccurrences: 'In no timeline',
+    stepOf: (n) => `step ${n}`,
+    inGroup: (group) => `group ${group}`,
+    drawnAs: (n) => `Notes in this view (${n})`,
+    sharedNote: 'Steps that timelines share from their start are drawn once; they are not necessarily the same happening',
+    groupEvents: 'Events of the group (no order)',
+    openFile: 'Open the file',
 
     model: 'Model',
     files: 'Files',

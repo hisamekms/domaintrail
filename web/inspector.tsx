@@ -34,6 +34,7 @@ import {
 import { ownerElement } from './render';
 import { diffRows, rowClass, type RowChange } from './row-diff';
 import { SourceView, type SourceFocus } from './source';
+import { isStormingSelection, stormingSelectionName } from './storming';
 import { usagesOf } from './usages';
 
 export type InspectorTab = 'structure' | 'states' | 'behavior' | 'events' | 'references' | 'source';
@@ -67,6 +68,8 @@ export interface InspectorProps {
     sourceFocus: SourceFocus | undefined;
     /** The state diagram of an aggregate (the 状態遷移 tab). */
     statesView: (aggregateId: string) => ReactNode;
+    /** The details of a storming element (`es/…`), under the back and close buttons (`history`). */
+    stormingView: (id: string, history: ReactNode) => ReactNode;
     tab: InspectorTab;
     onTab: (tab: InspectorTab) => void;
     onSelect: Select;
@@ -109,7 +112,9 @@ function revealTargets(r: Resolved): RevealTarget[] {
 export function Inspector(props: InspectorProps) {
     const { model, selected } = props;
     const tx = useT();
-    const backName = props.backTo && (selectedFile(props.backTo) ?? namer(props.mode, model).id(props.backTo));
+    const backName =
+        props.backTo &&
+        (selectedFile(props.backTo) ?? (isStormingSelection(props.backTo) ? stormingSelectionName(props.backTo) : namer(props.mode, model).id(props.backTo)));
     // its own row above the kind badge: back on the left, close on the right, so the two aren't mistaken for each other
     const history = (
         <div className="history">
@@ -150,6 +155,8 @@ export function Inspector(props: InspectorProps) {
             </div>
         );
     }
+    // a storming is shown even without a model (a workspace of .dtes files only, or .dt files that do not parse)
+    if (isStormingSelection(selected)) return <div className="inspector">{props.stormingView(selected, history)}</div>;
     if (!model)
         return (
             <div className="inspector">

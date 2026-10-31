@@ -3,15 +3,19 @@ import * as path from 'node:path';
 import { analyze } from '../core/analyze.js';
 import { DEFAULT_SOURCES } from '../core/config.js';
 import { loadWorkspace } from '../core/files.js';
+import { VIEW_LEVELS, type RenderGraph, type Storming, type StormingAnalysis, type ViewOptions } from '../dtes/ir.js';
+import { matchRenderNodes, projectView } from '../dtes/project/render.js';
+import { stormingTimelines } from '../dtes/project/semantic.js';
+import { renderToGraph, stormingViewKey } from '../dtes/view/graph.js';
 import { buildStateGraph, buildStructureGraph } from '../graph/build.js';
 import { buildContextMapGraph } from '../graph/context-map.js';
 import { EMPTY_DIFF, diffModels, fingerprints, markLineChanges, type ModelDiff } from '../graph/diff.js';
-import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type StructureLevel, type TransitionLabels } from '../graph/ir.js';
-import type { LayoutEngine } from '../layout/engine.js';
+import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type Point, type StructureLevel, type TransitionLabels } from '../graph/ir.js';
+import type { LayoutEngine, LayoutOptions } from '../layout/engine.js';
 import { supportingContexts } from '../model/dependencies.js';
 import type { DomainModel } from '../model/model.js';
 import { resolveCommit, sourcesAt, type GitCommit } from './git.js';
-import type { BaseView, Baseline, BaselineSpec, ViewPayload } from './protocol.js';
+import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from './protocol.js';
 
 export const LAYOUT_FILE = path.join('.domaintrail', 'layout.json');
 
@@ -56,6 +60,8 @@ interface GitBase {
     error?: string;
 }
 
+const stormingGraphIds = (stormings: readonly StormingView[]): string[] => stormings.flatMap((s) => Object.values(s.views).map((v) => v.graph.id));
+
 export class ViewSession {
     private version = 0;
     private current: ViewPayload;
@@ -77,6 +83,10 @@ export class ViewSession {
     /** Layouts of focused Structure Views (see `focusGraph`), least recently used first. */
     private readonly focusLayouts = new Map<string, LaidOutGraph>();
     private layoutsLoaded = false;
+    /** The stormings last parsed from each `.dtes` file: kept, as stale, while it does not parse. */
+    private stormingsByFile = new Map<string, Storming[]>();
+    /** The render graph each storming graph was laid out for, to pair its nodes with the next one's (`matchRenderNodes`). */
+    private readonly renders = new Map<string, RenderGraph>();
     private queue: Promise<unknown> = Promise.resolve();
     private warnedUnsafeLayoutDir = false;
 
@@ -102,6 +112,7 @@ export class ViewSession {
             focusContexts: [],
             contextMap: null,
             contextMapAll: null,
+            stormings: [],
             diagnostics: [],
         });
     }
@@ -202,6 +213,7 @@ export class ViewSession {
         const sources = await loadWorkspace(this.root, this.sources, this.respectGitignore);
         const analysis = await analyze(sources);
         const files = sources.map((s) => s.path);
+        const stormings = await this.stormingViews(analysis.stormings);
 
         if (sources.length === 0) {
             this.current = this.payload({
@@ -217,11 +229,13 @@ export class ViewSession {
                 focusContexts: [],
                 contextMap: null,
                 contextMapAll: null,
+                stormings,
                 diagnostics: [],
             });
             return this.current;
         }
         if (!analysis.model) {
+            this.forgetLayouts(stormingGraphIds(stormings));
             // Syntax error: keep the last drawable diagram, update diagnostics only.
             this.current = this.payload({
                 ...this.current,
@@ -229,6 +243,7 @@ export class ViewSession {
                 sources,
                 status: 'syntax-error',
                 stale: this.current.model !== null,
+                stormings,
                 diagnostics: analysis.diagnostics,
             });
             return this.current;
@@ -277,8 +292,10 @@ export class ViewSession {
             contextMap.id,
             contextMapAll.id,
             ...Object.values(states).flatMap((byLabels) => Object.values(byLabels).map((g) => g.id)),
+            ...stormingGraphIds(stormings),
         ]);
         for (const id of this.layouts.keys()) if (!live.has(id)) this.layouts.delete(id);
+        for (const id of this.renders.keys()) if (!live.has(id)) this.renders.delete(id);
         await this.saveLayouts();
 
         this.current = this.payload({
@@ -294,9 +311,84 @@ export class ViewSession {
             focusContexts,
             contextMap,
             contextMapAll,
+            stormings,
             diagnostics: analysis.diagnostics,
         });
         return this.current;
+    }
+
+    /**
+     * Every view of every storming, laid out (ADR 0024). A file that does not parse keeps the stormings it last had, as
+     * stale. Of two stormings with one ID (S001), the first is shown.
+     */
+    private async stormingViews(analysis: StormingAnalysis): Promise<StormingView[]> {
+        const broken = new Set(analysis.diagnostics.filter((d) => d.code === 'SYNTAX').map((d) => d.file));
+        const parsed = new Map<string, Storming[]>();
+        for (const s of analysis.stormings) parsed.set(s.range.file, [...(parsed.get(s.range.file) ?? []), s]);
+        const byFile = new Map<string, Storming[]>();
+        for (const file of analysis.files) {
+            const list = broken.has(file) ? this.stormingsByFile.get(file) : parsed.get(file);
+            if (list) byFile.set(file, list);
+        }
+        this.stormingsByFile = byFile;
+
+        const views: StormingView[] = [];
+        const ids = new Set<string>();
+        for (const [file, list] of byFile) {
+            for (const storming of list) {
+                if (ids.has(storming.id)) continue;
+                ids.add(storming.id);
+                const timelines = stormingTimelines(storming).map((t) => ({ id: t.id, ...(t.label !== undefined && { label: t.label }) }));
+                const byKey: StormingView['views'] = {};
+                for (const level of VIEW_LEVELS) {
+                    for (const timelineId of [undefined, ...timelines.map((t) => t.id)]) {
+                        const options: ViewOptions = timelineId === undefined ? { level } : { level, timelineId };
+                        const render = projectView(storming, options);
+                        byKey[stormingViewKey(options)] = { render, graph: await this.layoutStorming(render, storming) };
+                    }
+                }
+                views.push({
+                    id: storming.id,
+                    ...(storming.label !== undefined && { label: storming.label }),
+                    file,
+                    timelines,
+                    storming,
+                    views: byKey,
+                    stale: broken.has(file),
+                });
+            }
+        }
+        return views;
+    }
+
+    /**
+     * Lays out a storming view. A changed one is laid out incrementally: the nodes paired with the previous render graph's
+     * (`matchRenderNodes`, spec §10.3) keep their order within their layer; the others are placed anew.
+     */
+    private layoutStorming(render: RenderGraph, storming: Storming): Promise<LaidOutGraph> {
+        const graph = renderToGraph(render, storming);
+        const previous = this.renders.get(graph.id);
+        this.renders.set(graph.id, render);
+        return this.layout(graph, this.layouts, (cached) => {
+            if (!previous) return {};
+            const positions: Record<string, Point> = {};
+            for (const [next, prev] of matchRenderNodes(previous, render)) {
+                const at = cached.nodeLayout[prev];
+                if (at) positions[next] = { x: at.x, y: at.y };
+            }
+            return { positions };
+        });
+    }
+
+    /** Drops the layouts of storming graphs other than `keep` (the `.dt` graphs are kept while the sources do not parse). */
+    private forgetLayouts(keep: readonly string[]): void {
+        const live = new Set(keep);
+        for (const id of [...this.layouts.keys(), ...this.renders.keys()]) {
+            if (id.startsWith('storming:') && !live.has(id)) {
+                this.layouts.delete(id);
+                this.renders.delete(id);
+            }
+        }
     }
 
     private payload(
@@ -314,6 +406,7 @@ export class ViewSession {
             | 'focusContexts'
             | 'contextMap'
             | 'contextMapAll'
+            | 'stormings'
             | 'diagnostics'
         >,
     ): ViewPayload {
@@ -334,6 +427,7 @@ export class ViewSession {
             focusContexts: p.focusContexts,
             contextMap: p.contextMap,
             contextMapAll: p.contextMapAll,
+            stormings: p.stormings,
             diagnostics: p.diagnostics,
             modelVersion: this.modelVersion,
             diff: this.lastDiff,
@@ -368,14 +462,17 @@ export class ViewSession {
         return laid;
     }
 
-    /** Reuses the cached layout when the graph's shape is unchanged; otherwise lays it out again. */
-    private async layout(graph: Graph, cache = this.layouts): Promise<LaidOutGraph> {
+    /**
+     * Reuses the cached layout when the graph's shape is unchanged; otherwise lays it out again, with the `incremental`
+     * options derived from the cached layout, if any.
+     */
+    private async layout(graph: Graph, cache = this.layouts, incremental?: (cached: LaidOutGraph) => LayoutOptions): Promise<LaidOutGraph> {
         const cached = cache.get(graph.id);
         const signature = graphSignature(graph);
         if (cached && cached.signature === signature) {
             return { ...graph, nodeLayout: cached.nodeLayout, edgeLayout: cached.edgeLayout, signature };
         }
-        const laid = await this.engine.layout(graph);
+        const laid = await this.engine.layout(graph, cached && incremental ? incremental(cached) : {});
         cache.set(graph.id, laid);
         return laid;
     }
