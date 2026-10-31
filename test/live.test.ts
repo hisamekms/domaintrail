@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '../src/composition/view.js';
-import type { ViewPayload } from '../src/visualization/protocol.js';
+import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;
@@ -193,11 +193,11 @@ describe('layout persistence', () => {
     test('never writes through a symlinked layout directory or file', async () => {
         const { mkdtemp, symlink, writeFile: write, readFile: read, mkdir: mk, readlink, rm: remove } = await import('node:fs/promises');
         const { tmpdir } = await import('node:os');
-        const { createViewService } = await import('../src/visualization/application/view-service.js');
-        const { createFileLayoutStore } = await import('../src/visualization/infrastructure/file-layout-store.js');
-        const { createGitRevisions } = await import('../src/visualization/infrastructure/git.js');
-        const { createWorkspaceReader } = await import('../src/workspace/infrastructure/files.js');
-        const { ElkLayoutEngine } = await import('../src/visualization/infrastructure/elk.js');
+        const { createViewService } = await import('@domaintrail/visualization/application/view-service');
+        const { createFileLayoutStore } = await import('@domaintrail/visualization/infrastructure/file-layout-store');
+        const { createGitRevisions } = await import('@domaintrail/visualization/infrastructure/git');
+        const { createWorkspaceReader } = await import('@domaintrail/workspace/infrastructure/files');
+        const { ElkLayoutEngine } = await import('@domaintrail/visualization/infrastructure/elk');
         const base = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
         const outside = path.join(base, 'outside');
         await mk(outside);

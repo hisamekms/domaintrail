@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../src/modeling/core/analyze.js';
-import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { InvariantModel } from '../src/modeling/model/model.js';
-import { CardHead, Invariants as CardInvariants } from '../web/catalog.js';
-import { MESSAGES } from '../web/i18n.js';
-import { Invariants as InspectorInvariants } from '../web/inspector.js';
+import type { InvariantModel } from '@domaintrail/modeling/model/model';
+import { CardHead, Invariants as CardInvariants } from '@domaintrail/web/catalog';
+import { MESSAGES } from '@domaintrail/web/i18n';
+import { Invariants as InspectorInvariants } from '@domaintrail/web/inspector';
 import {
     catalogSections,
     commandsWithOutcome,
@@ -16,7 +16,7 @@ import {
     matchesQuery,
     namer,
     type CatalogFilter,
-} from '../web/model-utils.js';
+} from '@domaintrail/web/model-utils';
 import { EXAMPLES } from './helpers.js';
 
 async function shopModel() {

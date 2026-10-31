@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useValue, type Editor } from 'tldraw';
-import type { StormingView, ViewPayload } from '../../src/visualization/protocol';
+import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import type { RevealTarget } from '../inspector';
 import { resolve, selectedFile } from '../model-utils';
 import { shapeElementId } from '../render';

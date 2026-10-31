@@ -1,10 +1,10 @@
-import { consoleIO, runCli, type CliIO } from '../presentation/cli/main.js';
-import type { CliDeps } from '../presentation/cli/ports.js';
-import type { LanguageServerFiles } from '../presentation/lsp/server.js';
-import { loadConfig } from '../workspace/infrastructure/config.js';
-import { SourceScope, findDomainFiles, loadWorkspace } from '../workspace/infrastructure/files.js';
-import { createGeneratedOutput } from '../workspace/infrastructure/generated-output.js';
-import { LINT_HINT, hasCastLintRule } from '../workspace/infrastructure/lint-hint.js';
+import { consoleIO, runCli, type CliIO } from '@domaintrail/presentation/cli/main';
+import type { CliDeps } from '@domaintrail/presentation/cli/ports';
+import type { LanguageServerFiles } from '@domaintrail/presentation/lsp/server';
+import { loadConfig } from '@domaintrail/workspace/infrastructure/config';
+import { SourceScope, findDomainFiles, loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { createGeneratedOutput } from '@domaintrail/workspace/infrastructure/generated-output';
+import { LINT_HINT, hasCastLintRule } from '@domaintrail/workspace/infrastructure/lint-hint';
 
 /** The language server's view of the workspace: the config and the sources, as `dt check` finds them. */
 const languageServerFiles: LanguageServerFiles = {
@@ -26,7 +26,7 @@ export function cliDeps(): CliDeps {
         generatedOutput: createGeneratedOutput(),
         startViewServer: async (options) => (await import('./view.js')).startViewServer(options),
         startLanguageServer: async (options) => {
-            (await import('../presentation/lsp/server.js')).startLanguageServer(options, languageServerFiles);
+            (await import('@domaintrail/presentation/lsp/server')).startLanguageServer(options, languageServerFiles);
         },
     };
 }

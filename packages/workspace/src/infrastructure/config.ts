@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { CONFIG_FILES, ConfigError, defaultConfig, resolveConfig, type ResolvedConfig } from '../../modeling/core/config.js';
+import { CONFIG_FILES, ConfigError, defaultConfig, resolveConfig, type ResolvedConfig } from '@domaintrail/modeling/core/config';
 
 /** Finds a config file in `start` or its parents (like tsconfig.json). */
 export function findConfigFile(start: string): string | undefined {

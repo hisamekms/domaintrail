@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildFileTree, filesIn, type FileTreeNode } from '../web/file-tree.js';
+import { buildFileTree, filesIn, type FileTreeNode } from '@domaintrail/web/file-tree';
 
 /** `name/` for a directory with its children indented below, `name` for a file. */
 const outline = (nodes: FileTreeNode[], indent = ''): string[] =>

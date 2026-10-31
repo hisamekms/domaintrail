@@ -1,6 +1,6 @@
 import { Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { DISPLAY_MODES, type DisplayMode, type Lang } from '../src/visualization/domain/graph/ir';
+import { DISPLAY_MODES, type DisplayMode, type Lang } from '@domaintrail/visualization/domain/graph/ir';
 import { LANG_NAMES, useT, type LangPreference } from './i18n';
 import type { Theme, ThemePreference } from './theme';
 

@@ -1,6 +1,6 @@
-import { contextDependencies, groupByContext, supportingContexts } from '../../../modeling/model/dependencies.js';
-import type { DomainModel, ElementKind } from '../../../modeling/model/model.js';
-import { elementList } from '../../../modeling/model/model.js';
+import { contextDependencies, groupByContext, supportingContexts } from '@domaintrail/modeling/model/dependencies';
+import type { DomainModel, ElementKind } from '@domaintrail/modeling/model/model';
+import { elementList } from '@domaintrail/modeling/model/model';
 import { named, sized } from './build.js';
 import { maxUnits, perLang, sameText, type Graph, type GraphEdge, type GraphLine, type GraphNode, type Texts } from './ir.js';
 

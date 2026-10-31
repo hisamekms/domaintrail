@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ViewPayload } from '../../src/visualization/protocol';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 export type Connection = 'connecting' | 'open' | 'closed';
 

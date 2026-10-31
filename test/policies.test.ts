@@ -2,10 +2,10 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { showJson, showText } from '../src/presentation/cli/show.js';
-import { formatDomain } from '../src/modeling/format/format.js';
-import { generateTypeScript, type PolicyMode } from '../src/modeling/generator/typescript.js';
-import { contextDependencies, groupByContext } from '../src/modeling/model/dependencies.js';
+import { showJson, showText } from '@domaintrail/presentation/cli/show';
+import { formatDomain } from '@domaintrail/modeling/format/format';
+import { generateTypeScript, type PolicyMode } from '@domaintrail/modeling/generator/typescript';
+import { contextDependencies, groupByContext } from '@domaintrail/modeling/model/dependencies';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

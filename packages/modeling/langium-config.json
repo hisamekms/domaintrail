@@ -3,14 +3,14 @@
   "languages": [
     {
       "id": "domain",
-      "grammar": "src/modeling/language/domain.langium",
+      "grammar": "src/language/domain.langium",
       "fileExtensions": [".dt"]
     },
     {
       "id": "dtes",
-      "grammar": "src/modeling/storming/storming.langium",
+      "grammar": "src/storming/storming.langium",
       "fileExtensions": [".dtes"]
     }
   ],
-  "out": "src/modeling/language/generated"
+  "out": "src/language/generated"
 }

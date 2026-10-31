@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { Diagnostic } from '../src/modeling/core/diagnostics.js';
-import { esElementId, type Clause, type NodeElement, type NodeElementKind, type SourceRange, type Storming } from '../src/modeling/storming/ir.js';
-import { linkStormings, resolveDtRef } from '../src/modeling/storming/link.js';
-import type { DomainModel } from '../src/modeling/model/model.js';
+import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
+import { esElementId, type Clause, type NodeElement, type NodeElementKind, type SourceRange, type Storming } from '@domaintrail/modeling/storming/ir';
+import { linkStormings, resolveDtRef } from '@domaintrail/modeling/storming/link';
+import type { DomainModel } from '@domaintrail/modeling/model/model';
 import { check } from './helpers.js';
 
 // Spec §4's example, as `.dt`: two contexts, a policy across them, and exhaustive `emits`.

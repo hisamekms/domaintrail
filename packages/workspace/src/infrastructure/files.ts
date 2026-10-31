@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { SourceFile } from '../../modeling/core/analyze.js';
-import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from '../../modeling/core/config.js';
+import type { SourceFile } from '@domaintrail/modeling/core/analyze';
+import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from '@domaintrail/modeling/core/config';
 import { GitIgnore } from './gitignore.js';
 
 /**

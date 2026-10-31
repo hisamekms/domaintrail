@@ -1,0 +1,14 @@
+{
+  "name": "@domaintrail/composition",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/presentation": "workspace:*",
+    "@domaintrail/visualization": "workspace:*",
+    "@domaintrail/workspace": "workspace:*"
+  }
+}

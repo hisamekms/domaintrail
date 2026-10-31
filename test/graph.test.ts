@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { analyze } from '../src/modeling/core/analyze.js';
-import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '../src/visualization/domain/graph/build.js';
-import { diffModels } from '../src/visualization/domain/graph/diff.js';
-import { ElkLayoutEngine } from '../src/visualization/infrastructure/elk.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '@domaintrail/visualization/domain/graph/build';
+import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
+import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
 import {
     INTERNAL_PADDING,
     LINE_HEIGHT,
@@ -12,7 +12,7 @@ import {
     sameText,
     transitionText,
     type TransitionLabels,
-} from '../src/visualization/domain/graph/ir.js';
+} from '@domaintrail/visualization/domain/graph/ir';
 import { EXAMPLES, check } from './helpers.js';
 
 const engine = new ElkLayoutEngine();

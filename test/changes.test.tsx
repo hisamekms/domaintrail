@@ -3,12 +3,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { generateTypeScript } from '../src/modeling/generator/typescript.js';
-import { diffModels } from '../src/visualization/domain/graph/diff.js';
-import { CommandCard } from '../web/behavior.js';
-import { highlight } from '../web/highlight.js';
-import { MESSAGES } from '../web/i18n.js';
-import { namer } from '../web/model-utils.js';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
+import { CommandCard } from '@domaintrail/web/behavior';
+import { highlight } from '@domaintrail/web/highlight';
+import { MESSAGES } from '@domaintrail/web/i18n';
+import { namer } from '@domaintrail/web/model-utils';
 import { check, only } from './helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');

@@ -1,7 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { ViewPayload } from '../../visualization/protocol.js';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 /** What the server sends over the WebSocket: the view, as `type: 'update'`. */
 export type ServerMessage = ViewPayload;

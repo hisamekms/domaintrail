@@ -2,11 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import { ConfigError, checkTsContexts, parseJsonc, policyModes } from '../src/modeling/core/config.js';
-import { findConfigFile, loadConfig } from '../src/workspace/infrastructure/config.js';
-import { findDomainFiles } from '../src/workspace/infrastructure/files.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { ConfigError, checkTsContexts, parseJsonc, policyModes } from '@domaintrail/modeling/core/config';
+import { findConfigFile, loadConfig } from '@domaintrail/workspace/infrastructure/config';
+import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -336,7 +336,7 @@ describe('output directories per context', () => {
 describe('generated output safety', () => {
     test('labels cannot break out of comments in generated code', async () => {
         const { check } = await import('./helpers.js');
-        const { generateTypeScript } = await import('../src/modeling/generator/typescript.js');
+        const { generateTypeScript } = await import('@domaintrail/modeling/generator/typescript');
         const evil = 'x\\nexport const injected = 1;';
         const a = await check({
             'a.dt': `context S {

@@ -1,17 +1,17 @@
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
-import { DEFAULT_SOURCES } from '../modeling/core/config.js';
-import { createApiRoutes } from '../presentation/http/routes.js';
-import { defaultWebDir, loadAssets } from '../presentation/http/assets.js';
-import { createViewHttpServer } from '../presentation/http/server.js';
-import { createWebSocketHub } from '../presentation/websocket/hub.js';
-import type { LayoutEngine } from '../visualization/application/layout-engine.js';
-import { createViewService, type ViewService } from '../visualization/application/view-service.js';
-import { ElkLayoutEngine } from '../visualization/infrastructure/elk.js';
-import { createFileLayoutStore } from '../visualization/infrastructure/file-layout-store.js';
-import { createGitRevisions } from '../visualization/infrastructure/git.js';
-import { createWorkspaceReader } from '../workspace/infrastructure/files.js';
-import { createGitRefWatcher, createWorkspaceWatcher } from '../workspace/infrastructure/watchers.js';
+import { DEFAULT_SOURCES } from '@domaintrail/modeling/core/config';
+import { createApiRoutes } from '@domaintrail/presentation/http/routes';
+import { defaultWebDir, loadAssets } from '@domaintrail/presentation/http/assets';
+import { createViewHttpServer } from '@domaintrail/presentation/http/server';
+import { createWebSocketHub } from '@domaintrail/presentation/websocket/hub';
+import type { LayoutEngine } from '@domaintrail/visualization/application/layout-engine';
+import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
+import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
+import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
+import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
+import { createGitRefWatcher, createWorkspaceWatcher } from '@domaintrail/workspace/infrastructure/watchers';
 
 export interface ViewServerOptions {
     root: string;

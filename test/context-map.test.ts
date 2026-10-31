@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { buildStructureGraph, focusGraphId } from '../src/visualization/domain/graph/build.js';
-import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from '../src/visualization/domain/graph/context-map.js';
-import { contextDependencies, groupByContext, supportingContexts } from '../src/modeling/model/dependencies.js';
-import { perLang } from '../src/visualization/domain/graph/ir.js';
-import type { DomainModel } from '../src/modeling/model/model.js';
+import { buildStructureGraph, focusGraphId } from '@domaintrail/visualization/domain/graph/build';
+import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from '@domaintrail/visualization/domain/graph/context-map';
+import { contextDependencies, groupByContext, supportingContexts } from '@domaintrail/modeling/model/dependencies';
+import { perLang } from '@domaintrail/visualization/domain/graph/ir';
+import type { DomainModel } from '@domaintrail/modeling/model/model';
 import { check } from './helpers.js';
 
 const FILES = {

@@ -2,15 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { parseGuide } from '../src/presentation/cli/guide.js';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import { analyze } from '../src/modeling/core/analyze.js';
-import { parseJsonc } from '../src/modeling/core/config.js';
-import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import { formatStorming } from '../src/modeling/storming/format.js';
-import { formatDomain } from '../src/modeling/format/format.js';
-import { generateTypeScript } from '../src/modeling/generator/typescript.js';
+import { parseGuide } from '@domaintrail/presentation/cli/guide';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { parseJsonc } from '@domaintrail/modeling/core/config';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { formatDomain } from '@domaintrail/modeling/format/format';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { EXAMPLES, check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -121,7 +121,7 @@ describe('dt guide', () => {
     });
 
     test('its DSL examples use every keyword of the grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'src', 'modeling', 'language', 'domain.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dt')
             .join('\n')
@@ -145,7 +145,7 @@ describe('dt guide', () => {
     });
 
     test('its storming examples use every keyword of the .dtes grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'src', 'modeling', 'storming', 'storming.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'storming', 'storming.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dtes')
             .filter((b) => /^\/\/ \S+\.dtes\n/.test(b))
@@ -155,7 +155,7 @@ describe('dt guide', () => {
     });
 
     test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
-        const source = await readFile(path.join(ROOT, 'src', 'modeling', 'core', 'diagnostics.ts'), 'utf8');
+        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
         const union = /export type RuleId =([^;]*);/.exec(source)![1];
         const rules = [...union.matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
         const examples = blocks('dtes').flatMap((b) => {
@@ -171,7 +171,7 @@ describe('dt guide', () => {
     });
 
     test('its rules table lists every diagnostic code', async () => {
-        const source = await readFile(path.join(ROOT, 'src', 'modeling', 'core', 'diagnostics.ts'), 'utf8');
+        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
         const union = /export type RuleId =([^;]*);/.exec(source)![1];
         const codes = [...union.matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]);
         expect(codes.length).toBeGreaterThan(10);

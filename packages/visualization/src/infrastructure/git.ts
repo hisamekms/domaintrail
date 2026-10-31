@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import * as path from 'node:path';
-import type { SourceFile } from '../../modeling/core/analyze.js';
-import { sourceMatcher } from '../../modeling/core/config.js';
+import type { SourceFile } from '@domaintrail/modeling/core/analyze';
+import { sourceMatcher } from '@domaintrail/modeling/core/config';
 import { UnknownRevisionError, type GitCommit, type GitRefs, type GitRevisions } from '../application/ports.js';
 
 /**

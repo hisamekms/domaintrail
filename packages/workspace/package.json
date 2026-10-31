@@ -1,0 +1,13 @@
+{
+  "name": "@domaintrail/workspace",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@domaintrail/modeling": "workspace:*",
+    "chokidar": "5.0.0",
+    "ignore": "7.0.5"
+  }
+}

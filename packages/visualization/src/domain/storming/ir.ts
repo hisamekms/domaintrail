@@ -6,7 +6,7 @@
  * - the **render graph** (`RenderGraph`): the nodes and edges of one view (`ViewOptions`), where one event node may stand
  *   for several occurrences of the same event (a pure drawing optimization: it never adds a semantic edge).
  */
-import type { NodeElement, NodeElementKind, TimelineStep } from '../../../modeling/storming/ir.js';
+import type { NodeElement, NodeElementKind, TimelineStep } from '@domaintrail/modeling/storming/ir';
 
 // ---- Semantic graph (spec §7.1, §9.1) ----
 

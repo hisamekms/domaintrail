@@ -1,3 +1,3 @@
-import { runDt } from '../src/composition/cli.js';
+import { runDt } from '@domaintrail/composition/cli';
 
 process.exitCode = await runDt(process.argv.slice(2));

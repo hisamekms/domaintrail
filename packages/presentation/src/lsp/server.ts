@@ -63,18 +63,18 @@ import {
     type WorkspaceEdit,
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
-import { analyze } from '../../modeling/core/analyze.js';
-import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '../../modeling/core/config.js';
-import type { Diagnostic } from '../../modeling/core/diagnostics.js';
-import { LabelResolver, docComment } from '../../modeling/core/labels.js';
-import { ModelIndex, commandsOf } from '../../modeling/core/model-index.js';
-import * as ast from '../../modeling/language/generated/ast.js';
-import { DomainGeneratedModule, DomainGeneratedSharedModule, EventStormingGeneratedModule } from '../../modeling/language/generated/module.js';
-import { DomainModule } from '../../modeling/language/domain-module.js';
-import { EventStormingModule } from '../../modeling/storming/language/module.js';
-import { formatStorming } from '../../modeling/storming/format.js';
-import { formatDomain } from '../../modeling/format/format.js';
-import { elementIdOf } from '../../modeling/model/ids.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '@domaintrail/modeling/core/config';
+import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
+import { LabelResolver, docComment } from '@domaintrail/modeling/core/labels';
+import { ModelIndex, commandsOf } from '@domaintrail/modeling/core/model-index';
+import * as ast from '@domaintrail/modeling/language/generated/ast';
+import { DomainGeneratedModule, DomainGeneratedSharedModule, EventStormingGeneratedModule } from '@domaintrail/modeling/language/generated/module';
+import { DomainModule } from '@domaintrail/modeling/language/domain-module';
+import { EventStormingModule } from '@domaintrail/modeling/storming/language/module';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { formatDomain } from '@domaintrail/modeling/format/format';
+import { elementIdOf } from '@domaintrail/modeling/model/ids';
 
 export interface LanguageServerOptions {
     /** Explicit `--root`: where to look for the config, instead of the client's workspace folder. */

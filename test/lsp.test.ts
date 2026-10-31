@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { URI } from 'langium';
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from 'vscode-jsonrpc/node';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import { formatDomain } from '../src/modeling/format/format.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { formatDomain } from '@domaintrail/modeling/format/format';
 
 const BIN = path.join(import.meta.dir, '..', 'bin', 'dt.ts');
 

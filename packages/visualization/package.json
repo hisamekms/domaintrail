@@ -1,0 +1,12 @@
+{
+  "name": "@domaintrail/visualization",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@domaintrail/modeling": "workspace:*",
+    "elkjs": "0.12.0"
+  }
+}

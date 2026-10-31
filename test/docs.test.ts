@@ -2,11 +2,11 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import { parseJsonc } from '../src/modeling/core/config.js';
-import { formatStorming } from '../src/modeling/storming/format.js';
-import { formatDomain } from '../src/modeling/format/format.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { parseJsonc } from '@domaintrail/modeling/core/config';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { formatDomain } from '@domaintrail/modeling/format/format';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

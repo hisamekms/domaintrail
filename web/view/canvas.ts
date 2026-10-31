@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Box, react, type Editor } from 'tldraw';
-import type { LaidOutGraph } from '../../src/visualization/domain/graph/ir';
+import type { LaidOutGraph } from '@domaintrail/visualization/domain/graph/ir';
 import { findShapeForElement } from '../render';
 
 /**

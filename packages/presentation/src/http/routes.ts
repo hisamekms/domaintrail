@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { STRUCTURE_LEVELS, type StructureLevel } from '../../visualization/domain/graph/ir.js';
-import { UnknownRevisionError, type GitRevisions } from '../../visualization/application/ports.js';
-import type { ViewService } from '../../visualization/application/view-service.js';
-import type { BaselineSpec, ViewPayload } from '../../visualization/protocol.js';
+import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
+import { UnknownRevisionError, type GitRevisions } from '@domaintrail/visualization/application/ports';
+import type { ViewService } from '@domaintrail/visualization/application/view-service';
+import type { BaselineSpec, ViewPayload } from '@domaintrail/visualization/protocol';
 
 /** Answers one API request; the access check has been passed already (see `createViewHttpServer`). */
 export type ApiRoute = (req: IncomingMessage, url: URL, res: ServerResponse) => Promise<void> | void;

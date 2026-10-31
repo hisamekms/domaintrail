@@ -7,10 +7,10 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as path from 'node:path';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import type { ViewPayload } from '../src/visualization/protocol.js';
-import { startViewServer, type ViewServer } from '../src/composition/view.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

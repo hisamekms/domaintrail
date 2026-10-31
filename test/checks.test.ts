@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '../src/modeling/generator/typescript.js';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

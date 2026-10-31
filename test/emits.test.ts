@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '../src/modeling/generator/typescript.js';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { check, checkSales, codes, only } from './helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');

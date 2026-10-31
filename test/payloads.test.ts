@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../src/modeling/core/analyze.js';
-import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { EXAMPLES, checkSales, only } from './helpers.js';
 
 /** The M022 messages of a context body, each with its hint. */

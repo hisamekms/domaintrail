@@ -8,7 +8,7 @@ import {
     type DomainModel,
     type ElementModel,
     type FieldModel,
-} from '../src/modeling/model/model';
+} from '@domaintrail/modeling/model/model';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 import { diffRows, rowClass, type RowChange } from './row-diff';

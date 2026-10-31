@@ -1,16 +1,16 @@
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { analyze, isStormingFile, type Analysis } from '../../modeling/core/analyze.js';
-import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '../../modeling/core/config.js';
-import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../../modeling/core/diagnostics.js';
-import { formatStorming } from '../../modeling/storming/format.js';
-import { formatDomain } from '../../modeling/format/format.js';
-import { generateTypeScript } from '../../modeling/generator/typescript.js';
+import { analyze, isStormingFile, type Analysis } from '@domaintrail/modeling/core/analyze';
+import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '@domaintrail/modeling/core/config';
+import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/modeling/core/diagnostics';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { formatDomain } from '@domaintrail/modeling/format/format';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
 import type { CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
-import guide from '../../../docs/guide.md' with { type: 'text' };
+import guide from '../../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
     out: (line: string) => void;
@@ -302,7 +302,7 @@ Examples:
         )
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
-            const { UnknownRevisionError } = await import('../../visualization/application/ports.js');
+            const { UnknownRevisionError } = await import('@domaintrail/visualization/application/ports');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
             const server = await deps

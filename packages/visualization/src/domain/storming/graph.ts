@@ -5,7 +5,7 @@
  */
 import { named, sized } from '../graph/build.js';
 import { mapTexts, maxUnits, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
-import { esElementId, type NodeElementKind, type Storming } from '../../../modeling/storming/ir.js';
+import { esElementId, type NodeElementKind, type Storming } from '@domaintrail/modeling/storming/ir';
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
 import { firstDeclarations } from './semantic.js';
 

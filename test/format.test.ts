@@ -2,10 +2,10 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import { FormatError, formatDomain } from '../src/modeling/format/format.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { FormatError, formatDomain } from '@domaintrail/modeling/format/format';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

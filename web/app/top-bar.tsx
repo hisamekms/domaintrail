@@ -1,4 +1,4 @@
-import type { ViewPayload } from '../../src/visualization/protocol';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { BaselineButton } from '../baseline-picker';
 import { useT } from '../i18n';
 import { SettingsDialog } from '../settings-dialog';

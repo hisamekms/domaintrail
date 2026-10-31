@@ -18,7 +18,7 @@ const CONTENT_TYPES: Record<string, string> = {
 export function defaultWebDir(): string {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const bundled = path.join(here, 'web');
-    return existsSync(path.join(bundled, 'index.html')) ? bundled : path.resolve(here, '../../../dist/web');
+    return existsSync(path.join(bundled, 'index.html')) ? bundled : path.resolve(here, '../../../../dist/web');
 }
 
 export interface Asset {

@@ -1,5 +1,5 @@
-import { closest, didYouMean, type Candidate } from '../../modeling/core/suggest.js';
-import { aggregateParamName } from '../../modeling/generator/naming.js';
+import { closest, didYouMean, type Candidate } from '@domaintrail/modeling/core/suggest';
+import { aggregateParamName } from '@domaintrail/modeling/generator/naming';
 import {
     elementsIn,
     emitApplies,
@@ -18,8 +18,8 @@ import {
     type StateModel,
     type TermModel,
     type TypeExpr,
-} from '../../modeling/model/model.js';
-import { commandsWithOutcome, fieldSetUsers, fieldUses, fieldUseText, identityOf } from '../../modeling/model/usages.js';
+} from '@domaintrail/modeling/model/model';
+import { commandsWithOutcome, fieldSetUsers, fieldUses, fieldUseText, identityOf } from '@domaintrail/modeling/model/usages';
 
 /**
  * `dt show`: the resolved model of one element (or a context, a state, a command), from the Typed Model.

@@ -15,23 +15,89 @@
         "ws": "8.22.0",
       },
       "devDependencies": {
+        "@domaintrail/composition": "workspace:*",
+        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/presentation": "workspace:*",
+        "@domaintrail/visualization": "workspace:*",
+        "@domaintrail/web": "workspace:*",
+        "@domaintrail/workspace": "workspace:*",
         "@types/bun": "^1.4.3",
-        "@types/picomatch": "4.0.3",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
-        "@types/ws": "8.18.2",
         "fast-check": "4.10.2",
         "langium-cli": "4.4.0",
-        "lucide-react": "1.61.0",
         "oxfmt": "0.74.0",
         "oxlint": "1.89.0",
         "oxlint-tsgolint": "7.0.2005",
         "react": "19.3.1",
         "react-dom": "19.3.1",
-        "tldraw": "5.5.2",
         "typescript": "7.0.2",
         "vscode-jsonrpc": "10.0.0",
         "web-tree-sitter": "0.27.1",
+      },
+    },
+    "packages/composition": {
+      "name": "@domaintrail/composition",
+      "dependencies": {
+        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/presentation": "workspace:*",
+        "@domaintrail/visualization": "workspace:*",
+        "@domaintrail/workspace": "workspace:*",
+      },
+    },
+    "packages/modeling": {
+      "name": "@domaintrail/modeling",
+      "dependencies": {
+        "langium": "4.4.0",
+        "picomatch": "4.0.7",
+      },
+      "devDependencies": {
+        "@types/picomatch": "4.0.3",
+      },
+    },
+    "packages/presentation": {
+      "name": "@domaintrail/presentation",
+      "dependencies": {
+        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/visualization": "workspace:*",
+        "commander": "15.0.0",
+        "langium": "4.4.0",
+        "vscode-languageserver": "10.1.2",
+        "ws": "8.22.0",
+      },
+      "devDependencies": {
+        "@types/ws": "8.18.2",
+      },
+    },
+    "packages/visualization": {
+      "name": "@domaintrail/visualization",
+      "dependencies": {
+        "@domaintrail/modeling": "workspace:*",
+        "elkjs": "0.12.0",
+      },
+    },
+    "packages/workspace": {
+      "name": "@domaintrail/workspace",
+      "dependencies": {
+        "@domaintrail/modeling": "workspace:*",
+        "chokidar": "5.0.0",
+        "ignore": "7.0.5",
+      },
+    },
+    "web": {
+      "name": "@domaintrail/web",
+      "dependencies": {
+        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/visualization": "workspace:*",
+        "lucide-react": "1.61.0",
+        "react": "19.3.1",
+        "react-dom": "19.3.1",
+        "tldraw": "5.5.2",
+      },
+      "devDependencies": {
+        "@tldraw/tlschema": "5.5.2",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
       },
     },
   },
@@ -45,6 +111,18 @@
     "@chevrotain/types": ["@chevrotain/types@13.2.0", "", {}, "sha512-7qrYHRlKfWf2AvBfJi5eVOrKAkbxvMFsy/iIHTGIiApNcEecCaVIdR+mIQhyCBsTDJxBz4JWXHMo6krbhR9hVg=="],
 
     "@chevrotain/utils": ["@chevrotain/utils@13.2.0", "", {}, "sha512-SzKYY68rseOrb9KILVzPsl6SjkQtdWw01SRGB5aCVI5kFcHltQsOYV3JB0Ffst72DgkvHCyDQ0NLwxtmCCf97Q=="],
+
+    "@domaintrail/composition": ["@domaintrail/composition@workspace:packages/composition"],
+
+    "@domaintrail/modeling": ["@domaintrail/modeling@workspace:packages/modeling"],
+
+    "@domaintrail/presentation": ["@domaintrail/presentation@workspace:packages/presentation"],
+
+    "@domaintrail/visualization": ["@domaintrail/visualization@workspace:packages/visualization"],
+
+    "@domaintrail/web": ["@domaintrail/web@workspace:web"],
+
+    "@domaintrail/workspace": ["@domaintrail/workspace@workspace:packages/workspace"],
 
     "@floating-ui/core": ["@floating-ui/core@1.8.0", "", { "dependencies": { "@floating-ui/utils": "^0.2.12" } }, "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ=="],
 

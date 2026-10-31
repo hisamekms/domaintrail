@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../src/modeling/generator/typescript.js';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { check, codes, only } from './helpers.js';
 
 const COMMON = `shared context Common "共通" {

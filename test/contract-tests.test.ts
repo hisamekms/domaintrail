@@ -2,9 +2,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '../src/composition/cli.js';
-import { runCli } from '../src/presentation/cli/main.js';
-import { generateTypeScript } from '../src/modeling/generator/typescript.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { check, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

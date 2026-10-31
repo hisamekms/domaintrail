@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { buildStructureGraph } from '../src/visualization/domain/graph/build.js';
-import { markLineChanges } from '../src/visualization/domain/graph/diff.js';
-import { listRefs, sourcesAt } from '../src/visualization/infrastructure/git.js';
-import type { Baseline, ViewPayload } from '../src/visualization/protocol.js';
-import { startViewServer, type ViewServer } from '../src/composition/view.js';
+import { buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
+import { markLineChanges } from '@domaintrail/visualization/domain/graph/diff';
+import { listRefs, sourcesAt } from '@domaintrail/visualization/infrastructure/git';
+import type { Baseline, ViewPayload } from '@domaintrail/visualization/protocol';
+import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
 import { check, tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

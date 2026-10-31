@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { analyze } from '../src/modeling/core/analyze.js';
-import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import type { DomainModel, ElementModel } from '../src/modeling/model/model.js';
-import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from '../web/behavior.js';
-import { MESSAGES } from '../web/i18n.js';
-import { tabsFor } from '../web/inspector.js';
-import { namer, resolve } from '../web/model-utils.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import type { DomainModel, ElementModel } from '@domaintrail/modeling/model/model';
+import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from '@domaintrail/web/behavior';
+import { MESSAGES } from '@domaintrail/web/i18n';
+import { tabsFor } from '@domaintrail/web/inspector';
+import { namer, resolve } from '@domaintrail/web/model-utils';
 import { EXAMPLES } from './helpers.js';
 
 let model: DomainModel;
