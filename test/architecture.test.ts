@@ -17,13 +17,15 @@ const PACKAGES: Record<string, { dir: string; sources: string; dependsOn: string
     collaboration: { dir: 'packages/collaboration', sources: 'packages/collaboration/src', dependsOn: ['modeling'] },
     workspace: { dir: 'packages/workspace', sources: 'packages/workspace/src', dependsOn: ['modeling'] },
     visualization: { dir: 'packages/visualization', sources: 'packages/visualization/src', dependsOn: ['modeling'] },
-    presentation: { dir: 'packages/presentation', sources: 'packages/presentation/src', dependsOn: ['modeling', 'visualization'] },
+    // the session routes, the agent API and the WS union (ADR 0026): collaboration's application and protocol
+    presentation: { dir: 'packages/presentation', sources: 'packages/presentation/src', dependsOn: ['collaboration', 'modeling', 'visualization'] },
     composition: {
         dir: 'packages/composition',
         sources: 'packages/composition/src',
-        dependsOn: ['modeling', 'presentation', 'visualization', 'workspace'],
+        dependsOn: ['collaboration', 'modeling', 'presentation', 'visualization', 'workspace'],
     },
-    web: { dir: 'web', sources: 'web', dependsOn: ['modeling', 'visualization'] },
+    // the session's messages (types only)
+    web: { dir: 'web', sources: 'web', dependsOn: ['collaboration', 'modeling', 'visualization'] },
 };
 
 /** What collaboration may depend on, and who may depend on it (ADR 0026); its imports of visualization are types only. */

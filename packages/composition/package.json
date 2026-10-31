@@ -6,6 +6,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/presentation": "workspace:*",
     "@domaintrail/visualization": "workspace:*",

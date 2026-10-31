@@ -6,6 +6,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "commander": "15.0.0",

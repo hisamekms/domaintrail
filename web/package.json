@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "lucide-react": "1.62.0",

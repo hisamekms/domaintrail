@@ -49,6 +49,7 @@
     "packages/composition": {
       "name": "@domaintrail/composition",
       "dependencies": {
+        "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/presentation": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
@@ -69,6 +70,7 @@
     "packages/presentation": {
       "name": "@domaintrail/presentation",
       "dependencies": {
+        "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "commander": "15.0.0",
@@ -98,6 +100,7 @@
     "web": {
       "name": "@domaintrail/web",
       "dependencies": {
+        "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "lucide-react": "1.62.0",
