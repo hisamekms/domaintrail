@@ -1,7 +1,7 @@
 // The session's part of the page (ADR 0026): computed on every page, shown only in a session. Under `dt view` no
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
 import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
-import { Users } from 'lucide-react';
+import { MessagesSquare, Users } from 'lucide-react';
 import { createShapeId, useValue } from 'tldraw';
 import { LEVEL_KINDS } from '@domaintrail/visualization/domain/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
@@ -23,6 +23,7 @@ import { viewLocation } from './location';
 import { SessionPanel } from './panel';
 import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
+import type { ViewScope, ViewTarget } from './views';
 import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
 import { defaultDraftStorage, useComposerDraft, useDrafts, usePresence, useSession } from './useSession';
 
@@ -208,6 +209,44 @@ export function useSessionPage(input: {
         [editor, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
     );
 
+    // another participant's view, opened here as it is (the view, not their camera)
+    const viewScope = useMemo(
+        (): ViewScope => ({
+            mode: input.mode,
+            contexts: model?.contexts ?? [],
+            contextLabels: model?.contextLabels ?? {},
+            stormings,
+        }),
+        [input.mode, model, stormings],
+    );
+    const { setStructureLevel, setStructureContexts, setHiddenContexts, setMapAll } = settings;
+    const openView = useCallback(
+        (target: ViewTarget) => {
+            switch (target.kind) {
+                case 'catalog':
+                    return setView({ kind: 'catalog' });
+                case 'contextMap':
+                    setMapAll(target.all);
+                    return setView({ kind: 'contextMap' });
+                case 'structure':
+                    setStructureLevel(target.level);
+                    setStructureContexts(target.focus ? [...target.focus.contexts] : null);
+                    if (target.focus) setHiddenContexts([...target.focus.hidden]);
+                    return setView({ kind: 'structure' });
+                case 'storming': {
+                    const { [target.stormingId]: _, ...others } = stormingChoice.timelines;
+                    setStormingChoice({
+                        stormingId: target.stormingId,
+                        level: target.level,
+                        timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
+                    });
+                    return setView({ kind: 'storming' });
+                }
+            }
+        },
+        [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
+    );
+
     if (!session) return { leftAlternative: undefined, sidePanel: undefined, canvasOverlay: undefined, baselineLocked: false };
     const online = new Set([...session.peers.values()].map((p) => p.participant.id)).size + 1;
     return {
@@ -215,6 +254,7 @@ export function useSessionPage(input: {
         canvasOverlay: <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />,
         leftAlternative: {
             label: t.session.title,
+            icon: <MessagesSquare size={16} aria-hidden />,
             content: (
                 <TargetNamingProvider value={naming}>
                     <SessionChat
@@ -222,6 +262,9 @@ export function useSessionPage(input: {
                         composer={composer}
                         selectionTargets={selectionTargets}
                         candidates={candidates}
+                        location={location}
+                        viewScope={viewScope}
+                        onOpenView={openView}
                         onNavigate={navigate}
                         onClose={() => setExplorerOpen(false)}
                     />

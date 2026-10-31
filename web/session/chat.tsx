@@ -3,7 +3,8 @@
 // for approval, and the composer of a request about the selection. People talk in their meeting; nothing here is a
 // chat between them: what they send are requests.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Bot, ChevronDown, ChevronRight, LogOut, PanelLeftClose, Plus, X } from 'lucide-react';
+import { Ban, Bot, ChevronDown, ChevronRight, CircleHelp, CircleX, LogOut, PanelLeftClose, Play, Plus, Reply, SendHorizontal, X } from 'lucide-react';
+import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi } from './api';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
@@ -11,7 +12,6 @@ import { latestRevision } from './state';
 import {
     agentStatus,
     elapsed,
-    headerParticipants,
     oneLine,
     participantNames,
     pendingRequests,
@@ -36,14 +36,14 @@ import {
     removeChip,
     type MentionCandidate,
 } from './mentions';
+import { ParticipantsButton } from './participants';
 import { targetKey, type ModelTarget, type TargetDraft } from './targets';
+import { continued, isMac } from './views';
+import type { ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
 
 type Tx = Messages['session'];
 type FrozenRequest = Extract<StreamItem, { kind: 'queued' }>['requests'][number];
-
-/** How many avatars the header shows before `+n`. */
-const AVATARS = 8;
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -67,6 +67,12 @@ export function SessionChat(props: {
     /** What `@` offers. */
     candidates: readonly MentionCandidate[];
     onNavigate: (target: ModelTarget) => void;
+    /** This page's location (to tell who is on the same view). */
+    location: ViewLocation;
+    /** Opens the view another participant is on. */
+    onOpenView: (target: ViewTarget) => void;
+    /** What view names are made of, and which views this page can open. */
+    viewScope: ViewScope;
     onClose: () => void;
 }) {
     const { session, composer } = props;
@@ -93,7 +99,17 @@ export function SessionChat(props: {
 
     return (
         <div className="session-chat">
-            <ChatHeader session={session} status={status} now={now} onLeave={() => void leave()} onClose={props.onClose} tx={tx} />
+            <ChatHeader
+                session={session}
+                status={status}
+                now={now}
+                location={props.location}
+                viewScope={props.viewScope}
+                onOpenView={props.onOpenView}
+                onLeave={() => void leave()}
+                onClose={props.onClose}
+                tx={tx}
+            />
             {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
             {(session.status === 'closed' || state.session.state === 'Closed') && <p className="session-note chat-notice">{tx.closed}</p>}
             {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
@@ -105,41 +121,33 @@ export function SessionChat(props: {
     );
 }
 
-function ChatHeader(props: { session: SessionData; status: AgentStatus; now: number; onLeave: () => void; onClose: () => void; tx: Tx }) {
+function ChatHeader(props: {
+    session: SessionData;
+    status: AgentStatus;
+    now: number;
+    location: ViewLocation;
+    viewScope: ViewScope;
+    onOpenView: (target: ViewTarget) => void;
+    onLeave: () => void;
+    onClose: () => void;
+    tx: Tx;
+}) {
     const { session, status, tx } = props;
-    const people = headerParticipants(session.state, session.peers, session.me);
-    const online = people.filter((p) => p.online).length;
-    const shown = people.slice(0, AVATARS);
-    const label = status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : tx.chat.status[status.kind];
+    const label =
+        status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
     return (
         <div className="chat-header">
-            <div
-                className="chat-avatars"
-                role="list"
-                aria-label={tx.chat.participantsOnline(online, people.length)}
-                data-tooltip={tx.chat.participantsOnline(online, people.length)}
-            >
-                {shown.map((p) => (
-                    <span
-                        key={p.id}
-                        role="listitem"
-                        className={`chat-avatar${p.online ? '' : ' away'}${p.role === 'facilitator' ? ' facilitator' : ''}`}
-                        data-participant={p.name}
-                        data-tooltip={`${p.name}${p.me ? ` (${tx.you})` : ''}${p.role === 'facilitator' ? ` · ${tx.roles.facilitator}` : ''}${p.online ? '' : ` · ${tx.chat.away}`}`}
-                    >
-                        <Avatar id={p.id} name={p.name} {...(p.avatarUrl && { url: p.avatarUrl })} />
+            <ParticipantsButton session={session} location={props.location} scope={props.viewScope} onOpenView={props.onOpenView} />
+            {/* idle says nothing: only running, a question or a queued run shows */}
+            <span className="chat-status-slot" aria-live="polite">
+                {status.kind !== 'idle' && (
+                    <span className={`chat-status status-${status.kind}`} data-tooltip={tx.chat.statusHint[status.kind]}>
+                        <span className="chat-status-mark" aria-hidden>
+                            {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
+                        </span>
+                        {label}
                     </span>
-                ))}
-            </div>
-            {/* the avatars may be cut off in a narrow pane: the count always tells who is here */}
-            <span className="chat-online" aria-hidden>
-                {tx.chat.onlineCount(online, people.length)}
-            </span>
-            <span className={`chat-status status-${status.kind}`} data-tooltip={tx.chat.statusHint[status.kind]} aria-live="polite">
-                <span className="chat-status-mark" aria-hidden>
-                    {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : status.kind === 'queued' ? '…' : '○'}
-                </span>
-                {label}
+                )}
             </span>
             {session.status !== 'signed-out' && (
                 <button className="icon-button" onClick={props.onLeave} data-tooltip={tx.leave} aria-label={tx.leave}>
@@ -183,7 +191,8 @@ function Stream(props: {
         for (const child of el.children) observer.observe(child);
         return () => observer.disconnect();
     }, [signature]);
-    const facilitator = session.state.session.facilitator;
+    const rows = streamRows(items, { now, session, nameOf, onNavigate: props.onNavigate, tx });
+    const follows = continued(rows.map((r) => r.author));
     const substantive = items.some((i) => i.kind !== 'session-start');
     return (
         <div
@@ -194,9 +203,9 @@ function Stream(props: {
             }}
         >
             <ol className="chat-items">
-                {items.map((item) => (
-                    <li key={item.key} className={`chat-item chat-${item.kind}`} data-item={item.key}>
-                        <Item item={item} now={now} session={session} facilitator={facilitator} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
+                {rows.map((row, i) => (
+                    <li key={row.key} className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}`} data-item={row.key}>
+                        {row.render(follows[i])}
                     </li>
                 ))}
             </ol>
@@ -205,53 +214,89 @@ function Stream(props: {
     );
 }
 
-function Item(props: {
-    item: StreamItem;
-    now: number;
-    session: SessionData;
-    facilitator: string;
-    nameOf: (id: string) => string;
-    onNavigate: (target: ModelTarget) => void;
-    tx: Tx;
-}) {
-    const { item, nameOf, tx } = props;
-    switch (item.kind) {
-        case 'session-start':
-            return <SystemLine at={item.at}>{tx.chat.sessionStarted(item.revision)}</SystemLine>;
-        case 'confirmed':
-            return <SystemLine at={item.at}>{tx.chat.confirmed(nameOf(item.by), item.revision)}</SystemLine>;
-        case 'restored':
-            return <SystemLine at={item.at}>{tx.chat.restored(item.from, item.revision)}</SystemLine>;
-        case 'queued':
-            return (
-                <>
-                    <SystemLine at={item.at}>
-                        {tx.chat.queued(nameOf(item.by))} <span className="chat-run-tag">{tx.chat.run(item.run)}</span>
-                    </SystemLine>
-                    {item.requests.map((r) => (
-                        <RequestBubble key={r.request} request={r} session={props.session} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
-                    ))}
-                </>
-            );
-        case 'note':
-            return (
-                <Bubble
-                    avatar={<Avatar id={item.by} name={nameOf(item.by)} />}
-                    who={nameOf(item.by)}
-                    badge={<span className="chat-role">{tx.chat.facilitator}</span>}
-                    at={item.at}
-                    className="chat-bubble-facilitator"
-                >
-                    <span className="chat-label">{tx.chat.note}</span>
-                    <Clamped tx={tx}>{item.text}</Clamped>
-                </Bubble>
-            );
-        case 'agent':
-            return <AgentBubble message={item.message} run={item.run} at={item.at} now={props.now} nameOf={nameOf} tx={tx} />;
-    }
+/** A line of the stream: a divider, or a bubble of an author (`agent` for the AI) that may continue the one before. */
+interface Row {
+    readonly key: string;
+    readonly kind: string;
+    readonly author: string | undefined;
+    readonly render: (continues: boolean) => ReactNode;
 }
 
-function SystemLine({ at, children }: { at: string; children: ReactNode }) {
+function streamRows(
+    items: readonly StreamItem[],
+    ctx: { now: number; session: SessionData; nameOf: (id: string) => string; onNavigate: (target: ModelTarget) => void; tx: Tx },
+): Row[] {
+    const { nameOf, tx } = ctx;
+    const divider = (item: StreamItem, content: ReactNode): Row => ({
+        key: item.key,
+        kind: item.kind,
+        author: undefined,
+        render: () => <Divider at={item.at}>{content}</Divider>,
+    });
+    return items.flatMap((item): Row[] => {
+        switch (item.kind) {
+            case 'session-start':
+                return [divider(item, tx.chat.started)];
+            case 'confirmed':
+                return [divider(item, tx.chat.confirmed(nameOf(item.by), item.revision))];
+            case 'restored':
+                return [divider(item, tx.chat.restored(item.from, item.revision))];
+            case 'queued':
+                return [
+                    divider(
+                        item,
+                        <span data-tooltip={tx.chat.queued(nameOf(item.by))}>
+                            <Play size={10} className="chat-run-play" aria-label={tx.chat.run(item.run)} /> {item.run} · {nameOf(item.by)}
+                        </span>,
+                    ),
+                    ...item.requests.map((r): Row => ({
+                        key: `${item.key}:${r.request}`,
+                        kind: 'request',
+                        author: r.author,
+                        render: (continues) => (
+                            <RequestBubble request={r} continues={continues} session={ctx.session} nameOf={nameOf} onNavigate={ctx.onNavigate} tx={tx} />
+                        ),
+                    })),
+                ];
+            case 'note':
+                return [
+                    {
+                        key: item.key,
+                        kind: item.kind,
+                        author: item.by,
+                        render: (continues) => (
+                            <Bubble
+                                avatar={<Avatar id={item.by} name={nameOf(item.by)} />}
+                                who={nameOf(item.by)}
+                                badge={<span className="chat-role">{tx.chat.facilitator}</span>}
+                                at={item.at}
+                                continues={continues}
+                                className="chat-bubble-facilitator"
+                            >
+                                <div className="chat-with-icon">
+                                    <Reply size={14} className="chat-icon" aria-label={tx.chat.note} />
+                                    <Clamped tx={tx}>{item.text}</Clamped>
+                                </div>
+                            </Bubble>
+                        ),
+                    },
+                ];
+            case 'agent':
+                return [
+                    {
+                        key: item.key,
+                        kind: item.kind,
+                        author: 'agent',
+                        render: (continues) => (
+                            <AgentBubble message={item.message} run={item.run} at={item.at} now={ctx.now} continues={continues} nameOf={nameOf} tx={tx} />
+                        ),
+                    },
+                ];
+        }
+    });
+}
+
+function Divider({ at, children }: { at: string; children: ReactNode }) {
     return (
         <div className="chat-system">
             <span className="chat-system-text">{children}</span>
@@ -268,9 +313,20 @@ function Bubble(props: {
     badge?: ReactNode;
     meta?: ReactNode;
     at: string | undefined;
+    /** It continues the bubble before, of the same author: no avatar nor name; the time on hover. */
+    continues?: boolean;
     className?: string;
     children: ReactNode;
 }) {
+    if (props.continues)
+        return (
+            <div className={`chat-message continued ${props.className ?? ''}`} {...(props.at && { title: time(props.at) })}>
+                <span className="chat-avatar-space" aria-hidden />
+                <div className="chat-message-main">
+                    <div className="chat-bubble">{props.children}</div>
+                </div>
+            </div>
+        );
     return (
         <div className={`chat-message ${props.className ?? ''}`}>
             {props.avatar}
@@ -314,7 +370,14 @@ function Clamped({ children, tx }: { children: ReactNode; tx: Tx }) {
     );
 }
 
-function RequestBubble(props: { request: FrozenRequest; session: SessionData; nameOf: (id: string) => string; onNavigate: (t: ModelTarget) => void; tx: Tx }) {
+function RequestBubble(props: {
+    request: FrozenRequest;
+    continues: boolean;
+    session: SessionData;
+    nameOf: (id: string) => string;
+    onNavigate: (t: ModelTarget) => void;
+    tx: Tx;
+}) {
     const { request: r, session, tx } = props;
     const author = props.nameOf(r.author);
     const mine = r.author === session.me.participant.id;
@@ -324,8 +387,8 @@ function RequestBubble(props: { request: FrozenRequest; session: SessionData; na
         <Bubble
             avatar={<Avatar id={r.author} name={author} />}
             who={author}
-            {...(mine && { badge: <span className="chat-mine">{tx.chat.mine}</span> })}
             at={sentAt}
+            continues={props.continues}
             className={`chat-bubble-request${mine ? ' mine' : ''}`}
         >
             <TargetChips targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
@@ -336,7 +399,7 @@ function RequestBubble(props: { request: FrozenRequest; session: SessionData; na
     );
 }
 
-function AgentBubble(props: { message: AgentMessage; run: number; at: string; now: number; nameOf: (id: string) => string; tx: Tx }) {
+function AgentBubble(props: { message: AgentMessage; run: number; at: string; now: number; continues: boolean; nameOf: (id: string) => string; tx: Tx }) {
     const { message: m, tx } = props;
     const says = tx.chat.agentSays;
     let body: ReactNode;
@@ -354,17 +417,22 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
             break;
         case 'clarification':
             body = (
-                <>
-                    <p className="chat-text">{says.clarification}</p>
+                <div className="chat-with-icon">
+                    <CircleHelp size={16} className="chat-icon" aria-label={says.clarification} />
                     <p className="chat-question">{m.question}</p>
-                </>
+                </div>
             );
             break;
         case 'completed':
             body = <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>;
             break;
         case 'failed':
-            body = <p className="chat-text session-error">{says.failed(tx.failureReasons[m.reason])}</p>;
+            body = (
+                <div className="chat-with-icon session-error">
+                    <CircleX size={14} className="chat-icon" aria-label={says.failedLabel} />
+                    <p className="chat-text">{tx.failureReasons[m.reason]}</p>
+                </div>
+            );
             break;
         case 'cancelled':
             body = <p className="chat-text muted">{says.cancelled(props.nameOf(m.by))}</p>;
@@ -380,6 +448,7 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
             who={tx.chat.agent}
             meta={<span className="chat-run-tag">{tx.chat.run(props.run)}</span>}
             at={props.at}
+            continues={props.continues}
             className={`chat-bubble-agent agent-${m.kind}`}
         >
             {body}
@@ -406,7 +475,6 @@ function PendingRow({
     const body = oneLine(bodyText(r.body, r.targets.length));
     return (
         <li className={`chat-pending-row${p.mine ? ' mine' : ''}`} data-request={r.id} title={`${nameOf(r.author)} · ${target}\n${r.body}`}>
-            {p.mine && <span className="chat-mine">{tx.chat.mine}</span>}
             <span className="chat-pending-text">
                 <span className="chat-pending-author">{nameOf(r.author)}</span>
                 <span className="muted"> · </span>
@@ -416,7 +484,9 @@ function PendingRow({
             </span>
             {p.mine && live && (
                 <button
-                    className="chat-small"
+                    className="icon-button chat-dismiss"
+                    aria-label={tx.dismiss}
+                    data-tooltip={tx.dismiss}
                     onClick={(e) => {
                         e.stopPropagation();
                         sessionApi.dismissRequest(r.id).then(
@@ -425,7 +495,7 @@ function PendingRow({
                         );
                     }}
                 >
-                    {tx.dismiss}
+                    <Ban size={13} aria-hidden />
                 </button>
             )}
         </li>
@@ -440,10 +510,16 @@ function Pending({ session, live, nameOf, tx }: { session: SessionData; live: bo
     const rows = open ? pending.all : pending.preview;
     return (
         <section className={`chat-pending${open ? ' open' : ''}`}>
-            <button className="chat-pending-head" aria-expanded={open} onClick={() => setOpen(!open)} data-tooltip={tx.chat.pendingHint}>
+            <button
+                className="chat-pending-head"
+                aria-expanded={open}
+                aria-label={tx.chat.pendingLabel(pending.all.length)}
+                onClick={() => setOpen(!open)}
+                data-tooltip={tx.chat.pendingHint}
+            >
+                <span>{tx.chat.pending}</span>
+                <span className="chat-pending-count">{pending.all.length}</span>
                 {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
-                <span>{tx.chat.pending(pending.all.length)}</span>
-                <span className="chat-pending-toggle muted">{open ? tx.chat.collapse : pending.more > 0 ? tx.chat.expand : ''}</span>
             </button>
             <ul className="chat-pending-list">
                 {rows.map((p) => (
@@ -451,8 +527,13 @@ function Pending({ session, live, nameOf, tx }: { session: SessionData; live: bo
                 ))}
             </ul>
             {!open && pending.more > 0 && (
-                <a className="chat-pending-more" onClick={() => setOpen(true)}>
-                    {tx.chat.others(pending.more)}
+                <a
+                    className="chat-pending-more"
+                    onClick={() => setOpen(true)}
+                    aria-label={tx.chat.others(pending.more)}
+                    data-tooltip={tx.chat.others(pending.more)}
+                >
+                    +{pending.more}
                 </a>
             )}
             {error && <p className="session-note chat-notice session-error">{tx.error(error)}</p>}
@@ -483,6 +564,7 @@ function Composer(props: {
     const open = query !== undefined && query.start !== dismissed;
     const matches = open ? matchCandidates(props.candidates, query.query) : [];
     const canSend = !sending && value.text.trim() !== '';
+    const mac = isMac(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent);
     const nameOf = (target: TargetDraft): string => targetText(target, tx.workspace, naming);
     const kindOf = (c: MentionCandidate): string => {
         const names: Readonly<Record<string, string>> = c.kind.language === 'dt' ? t.kinds : t.esKinds;
@@ -592,29 +674,6 @@ function Composer(props: {
                     }}
                 />
             </div>
-            <div className="chat-chips" aria-label={tx.chat.target}>
-                <span className="muted chat-chips-label">{tx.chat.target}:</span>
-                {value.chips.length === 0 ? (
-                    <span className="chat-target kind-Workspace" data-tooltip={tx.chat.noTargets}>
-                        {tx.workspace}
-                    </span>
-                ) : (
-                    value.chips.map((c, i) => (
-                        <span key={targetKey(c.target.target)} className={`chat-chip kind-${c.target.target.kind}`} data-tooltip={targetKey(c.target.target)}>
-                            <span className="chat-chip-number">{i + 1}</span>
-                            <span className="chat-chip-name">{nameOf(c.target)}</span>
-                            <button
-                                className="chat-chip-remove"
-                                aria-label={tx.chat.removeTarget(nameOf(c.target))}
-                                onClick={() => composer.setValue(removeChip(value, i))}
-                            >
-                                <X size={12} aria-hidden />
-                            </button>
-                        </span>
-                    ))
-                )}
-                {value.chips.length > 0 && <span className="muted small">{tx.chat.targetCount(value.chips.length, MAX_REQUEST_TARGETS)}</span>}
-            </div>
             {onlySelected && (
                 <div className="chat-selection">
                     <span className="muted">{selectionTargets.length > 1 ? tx.chat.selectedMany(selectionTargets.length) : tx.chat.selected}</span>
@@ -634,11 +693,50 @@ function Composer(props: {
                     </button>
                 </div>
             )}
-            <div className="chat-composer-actions">
-                <span className="chat-kept muted small">{value.text !== '' || value.chips.length ? tx.chat.draftKept : ''}</span>
-                <button className="chat-send" disabled={!canSend} onClick={() => void send()}>
-                    {sending ? tx.chat.sending : tx.chat.send}
-                </button>
+            <div className="chat-composer-bar">
+                <div className="chat-chips" aria-label={tx.chat.target}>
+                    {value.chips.length === 0 ? (
+                        <span className="chat-target kind-Workspace" data-tooltip={tx.chat.noTargets}>
+                            {tx.workspace}
+                        </span>
+                    ) : (
+                        value.chips.map((c, i) => (
+                            <span
+                                key={targetKey(c.target.target)}
+                                className={`chat-chip kind-${c.target.target.kind}`}
+                                data-tooltip={targetKey(c.target.target)}
+                            >
+                                <span className="chat-chip-number">{i + 1}</span>
+                                <span className="chat-chip-name">{nameOf(c.target)}</span>
+                                <button
+                                    className="chat-chip-remove"
+                                    aria-label={tx.chat.removeTarget(nameOf(c.target))}
+                                    onClick={() => composer.setValue(removeChip(value, i))}
+                                >
+                                    <X size={12} aria-hidden />
+                                </button>
+                            </span>
+                        ))
+                    )}
+                    {value.chips.length > 0 && <span className="muted small">{tx.chat.targetCount(value.chips.length, MAX_REQUEST_TARGETS)}</span>}
+                </div>
+                <div className="chat-composer-actions">
+                    {/* the shortcut, only while there is something to send */}
+                    {value.text.trim() !== '' && (
+                        <kbd className="chat-shortcut" aria-hidden>
+                            {mac ? '⌘↵' : 'Ctrl↵'}
+                        </kbd>
+                    )}
+                    <button
+                        className="chat-send"
+                        disabled={!canSend}
+                        onClick={() => void send()}
+                        aria-label={sending ? tx.chat.sending : tx.chat.send}
+                        data-tooltip={tx.chat.sendHint(mac ? '⌘+Enter' : 'Ctrl+Enter')}
+                    >
+                        <SendHorizontal size={15} aria-hidden />
+                    </button>
+                </div>
             </div>
             {notice && <p className="session-note">{notice}</p>}
             {(error ?? composer.error) && <p className="session-note session-error">{tx.error(error ?? composer.error ?? '')}</p>}

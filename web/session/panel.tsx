@@ -3,7 +3,7 @@
 // controls (bundling requests into a run, cancelling one, dismissing others' requests, confirming and restoring
 // revisions) are shown to the facilitator only; the server checks the role anyway.
 import { useState, type ReactNode } from 'react';
-import { PanelRightClose, Trash2 } from 'lucide-react';
+import { Ban, PanelRightClose, Trash2 } from 'lucide-react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
 import { useT, type Messages } from '../i18n';
@@ -353,8 +353,8 @@ function RequestItem(props: {
                 </span>
                 {r.state === 'Dismissed' && <span className="session-status status-dismissed">{tx.dismissed}</span>}
                 {props.canDismiss && (
-                    <button className="small" onClick={props.onDismiss}>
-                        {tx.dismiss}
+                    <button className="icon-button" onClick={props.onDismiss} aria-label={tx.dismiss} data-tooltip={tx.dismiss}>
+                        <Ban size={14} aria-hidden />
                     </button>
                 )}
             </div>

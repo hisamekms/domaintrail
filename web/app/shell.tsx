@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
+import { FolderTree, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { useT } from '../i18n';
 import { Resizer } from '../shared/layout';
 import { Tooltips } from '../tooltip';
@@ -17,8 +17,10 @@ const MIN_CANVAS_WIDTH = 320;
  * only, as always.
  */
 export interface LeftPaneAlternative {
-    /** The switch's label for it. */
+    /** The switch's label for it (its tooltip and accessible name). */
     readonly label: string;
+    /** The switch's icon for it. */
+    readonly icon: ReactNode;
     readonly content: ReactNode;
 }
 
@@ -72,18 +74,22 @@ export function AppShell(props: {
                                     <button
                                         role="tab"
                                         aria-selected={!showsAlternative}
+                                        aria-label={t.explorerTab}
+                                        data-tooltip={t.explorerTab}
                                         className={showsAlternative ? '' : 'active'}
                                         onClick={() => setLeftShows('explorer')}
                                     >
-                                        {t.explorerTab}
+                                        <FolderTree size={16} aria-hidden />
                                     </button>
                                     <button
                                         role="tab"
                                         aria-selected={showsAlternative}
+                                        aria-label={alternative.label}
+                                        data-tooltip={alternative.label}
                                         className={showsAlternative ? 'active' : ''}
                                         onClick={() => setLeftShows('alternative')}
                                     >
-                                        {alternative.label}
+                                        {alternative.icon}
                                     </button>
                                 </div>
                                 {/* both stay mounted, so that switching keeps the explorer's filter and the chat's scroll and text */}
