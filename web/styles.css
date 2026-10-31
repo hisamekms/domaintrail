@@ -236,19 +236,9 @@ body,
 
 .app {
     display: flex;
-    flex-direction: column;
     height: 100%;
 }
 
-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 8px 14px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    font-size: 16px;
-}
 .brand {
     font-weight: 700;
 }
@@ -314,12 +304,6 @@ header {
     min-width: 5.5em;
     padding: 6px 14px;
 }
-.status {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
 .pill {
     padding: 2px 8px;
     border-radius: 999px;
@@ -338,6 +322,7 @@ header {
     background: var(--muted);
 }
 .conn {
+    display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
@@ -385,21 +370,18 @@ header {
     font-size: 19px;
     word-break: break-all;
 }
-.pane h3,
-.bottom h3 {
+.pane h3 {
     margin: 16px 0 6px;
     font-size: 14px;
     color: var(--muted);
     text-transform: none;
 }
 .pane a,
-.bottom a,
 .banner a {
     color: var(--accent);
     cursor: pointer;
 }
-.pane a:hover,
-.bottom a:hover {
+.pane a:hover {
     text-decoration: underline;
 }
 .ref {
@@ -1078,7 +1060,6 @@ a.field-origin {
 button,
 select,
 .pane a,
-.bottom a,
 .ref {
     cursor: pointer;
 }
@@ -1714,39 +1695,297 @@ select,
     background: var(--panel);
     font-size: 14px;
 }
-/* A side pane slides between its width and a 28px rail (RAIL_WIDTH in app/shell.tsx) with the button that opens it. */
-.side {
+/* The left pane: its head (the brand and the workspace's name), the activity bar and the lists, and its foot (the
+   health and the settings). Collapsed, it is the 44px activity bar (BAR_WIDTH in app/shell.tsx): the brand's mark at
+   the top, the health and the settings at the bottom. */
+.left {
     flex: none;
-    position: relative;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* clip: never scrolled, not even to show a focused or clicked element of a collapsed pane */
+    overflow: clip;
     background: var(--panel);
+    border-right: 1px solid var(--border);
     transition: width 180ms ease;
 }
-.side-left {
-    border-right: 1px solid var(--border);
+.left-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    height: 40px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
-.side-right {
-    border-left: 1px solid var(--border);
+.brand-mark {
+    flex: none;
+    width: 43px;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
 }
-.side > .pane,
-.side > .rail {
-    position: absolute;
-    top: 0;
-    bottom: 0;
+.brand-text {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding-right: 10px;
     transition: opacity 180ms ease;
 }
-.side-left > * {
-    left: 0;
+.left:not(.open) .brand-text,
+.left:not(.open) .left-pane {
+    opacity: 0;
 }
-.side-right > * {
+.workspace-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: 13px;
+}
+.left-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+.activity-bar {
+    flex: none;
+    width: 43px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding-top: 6px;
+    border-right: 1px solid var(--border);
+}
+.left:not(.open) .activity-bar {
+    border-right-color: transparent;
+}
+.activity {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+}
+.activity:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+.activity.active {
+    color: var(--accent);
+    background: var(--violet-tint);
+}
+.activity-badge {
+    position: absolute;
+    top: 0;
+    right: -1px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 0 0 2px var(--panel);
+}
+.activity-badge.badge-error {
+    background: var(--error);
+}
+.activity-badge.badge-warning {
+    background: var(--warning);
+}
+.left-pane {
+    height: 100%;
+    transition: opacity 180ms ease;
+}
+.left-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 36px;
+    padding: 4px 8px 4px 10px;
+    border-top: 1px solid var(--border);
+}
+.left-foot .settings {
+    margin-left: auto;
+}
+.left:not(.open) .left-foot {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+.left:not(.open) .left-foot .settings {
+    margin-left: 0;
+}
+.left:not(.open) .health-text {
+    display: none;
+}
+
+/* the health: one dot, prominent only when something is wrong; a click shows the details */
+.health {
+    min-width: 0;
+}
+.health-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-height: 24px;
+    padding: 2px 6px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--text-soft);
+    font: inherit;
+    font-size: 12px;
+}
+.health-button:hover {
+    background: var(--hover);
+}
+.health-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--added);
+}
+.health-warning .health-dot,
+.health-error .health-dot {
+    width: 10px;
+    height: 10px;
+}
+.health-warning .health-dot {
+    background: var(--warning);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 28%, transparent);
+}
+.health-error .health-dot {
+    background: var(--error);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 28%, transparent);
+}
+.health-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: 600;
+}
+.health-warning .health-text {
+    color: var(--amber-text);
+}
+.health-error .health-text {
+    color: var(--error);
+}
+.health-popover {
+    position: fixed;
+    z-index: 40;
+    padding: 10px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+    font-size: 13px;
+}
+.health-popover dl {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    gap: 6px 14px;
+    margin: 0;
+}
+.health-popover dt {
+    color: var(--muted);
+}
+.health-popover dd {
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* the canvas and the dock (the inspector, right of the canvas or below it), then the conversation */
+.main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+}
+.main.main-bottom {
+    flex-direction: column;
+}
+.canvas-pane {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.banners:empty {
+    display: none;
+}
+.banner-error {
+    background: var(--error-wash);
+    border-bottom-color: color-mix(in srgb, var(--error) 35%, transparent);
+    color: var(--error);
+}
+/* the dock slides between its size and a 28px rail (RAIL_SIZE in app/shell.tsx) with the buttons that open it */
+.dock {
+    flex: none;
+    position: relative;
+    /* clip: never scrolled, not even to show a focused or clicked element of a collapsed pane */
+    overflow: clip;
+    background: var(--panel);
+    transition:
+        width 180ms ease,
+        height 180ms ease;
+}
+.dock-right {
+    border-left: 1px solid var(--border);
+}
+.dock-bottom {
+    border-top: 1px solid var(--border);
+}
+.dock > .pane,
+.dock > .rail {
+    position: absolute;
+    transition: opacity 180ms ease;
+}
+.dock-right > * {
+    top: 0;
+    bottom: 0;
     right: 0;
 }
-.side > .pane {
-    height: 100%;
+.dock-bottom > * {
+    top: 0;
+    left: 0;
+    right: 0;
 }
-.side:not(.open) > .pane,
-.side.open > .rail {
+.dock:not(.open) > .pane,
+.dock.open > .rail {
     opacity: 0;
+}
+.dock-bottom > .rail {
+    flex-direction: row;
+    width: auto;
+    height: 28px;
+    padding: 0 6px;
+    gap: 4px;
+}
+.dock-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.dock-content[hidden] {
+    display: none;
 }
 .rail {
     width: 28px;
@@ -1754,6 +1993,140 @@ select,
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+.rail .count {
+    margin: 4px 0 0;
+}
+.dock-bottom > .rail .count {
+    margin: 0;
+}
+/* the dock's menu (⋯ in its head) */
+.pane-menu {
+    position: relative;
+}
+.pane-menu-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    min-width: 180px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+}
+.pane-menu-list > button {
+    width: auto;
+    height: auto;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    white-space: nowrap;
+}
+.pane-menu-list > button:hover {
+    background: var(--hover);
+}
+/* the conversation: the whole height at the right end */
+.conversation {
+    flex: none;
+    position: relative;
+    /* clip: never scrolled, not even to show a focused or clicked element of a collapsed pane */
+    overflow: clip;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    transition: width 180ms ease;
+}
+.conversation:not(.open) {
+    border-left: none;
+}
+.conversation-inner {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* the floating button opening it while it is closed, at the bottom right of the canvas (above tldraw's notice) */
+.launcher-slot {
+    position: absolute;
+    right: 18px;
+    bottom: 48px;
+    z-index: 400;
+}
+.chat-launcher {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 14px var(--shadow);
+}
+.chat-launcher:hover {
+    filter: brightness(1.1);
+}
+.chat-launcher-mark {
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--panel);
+    box-shadow: 0 0 0 2px var(--panel);
+}
+svg.chat-launcher-mark {
+    padding: 1px;
+    color: var(--accent);
+}
+.chat-launcher-mark.question {
+    display: grid;
+    place-items: center;
+    background: var(--amber-tint);
+    color: var(--amber-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+.chat-launcher-count {
+    position: absolute;
+    right: -4px;
+    top: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--error);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 0 0 2px var(--panel);
+}
+.chat-launcher-count.pending {
+    background: var(--neutral-tint);
+    color: var(--text-soft);
+}
+.spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 .center {
     flex: 1;
@@ -2271,88 +2644,97 @@ select,
     box-shadow: 0 0 0 1px var(--border);
 }
 
-/* bottom panel */
-
-.bottom-wrap {
-    flex: none;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
-    border-top: 1px solid var(--border);
-    background: var(--panel);
-    transition: height 180ms ease;
-}
 /* no animation while dragging a resizer, nor when the OS asks for less motion */
-.resizing .side,
-.resizing .bottom-wrap {
+.resizing .left,
+.resizing .dock,
+.resizing .conversation {
     transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
-    .side,
-    .side > .pane,
-    .side > .rail,
-    .bottom-wrap,
+    .left,
+    .left-pane,
+    .brand-text,
+    .dock,
+    .dock > .pane,
+    .dock > .rail,
+    .conversation,
     .legend,
-    .legend-tab,
     .tree-children,
     .tree-twisty svg {
         transition: none;
     }
+    .spin {
+        animation: none;
+    }
 }
-.bottom {
+
+/* the lists of the left pane (問題, 差分) */
+.list {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    min-height: 0;
 }
-.bottom-bar {
+.list-head {
     flex: none;
-    height: 32px; /* with the pane's border, BOTTOM_BAR_HEIGHT in app/shell.tsx */
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 0 8px;
+    gap: 4px;
+    height: 37px;
+    padding: 0 6px 0 12px;
     border-bottom: 1px solid var(--border);
 }
-.bottom-bar button {
-    padding: 5px 12px;
-    font: inherit;
-    font-size: 13px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: none;
-    cursor: pointer;
+.list-title {
+    margin-right: 2px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.04em;
 }
-.bottom-bar button.active {
-    border-bottom-color: var(--accent);
-    font-weight: 600;
-}
-.bottom-toggle {
+.list-head > .icon-button:last-child {
     margin-left: auto;
 }
-.bottom-body {
+.list-picker {
+    flex: none;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+}
+.list-picker .baseline-button {
+    width: 100%;
+    max-width: none;
+    font-size: 13px;
+}
+.list-picker .baseline-summary {
+    flex: 1;
+    text-align: left;
+}
+.list-body {
     flex: 1;
     overflow: auto;
     font-size: 13px;
 }
 .problems {
-    width: 100%;
-    border-collapse: collapse;
-}
-.problems td {
-    padding: 4px 10px;
-    border-bottom: 1px solid var(--bg);
-    vertical-align: top;
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
 }
 .problem {
-    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
 }
 .problem:hover {
     background: var(--hover);
 }
 .problem-icon {
-    width: 16px;
+    flex: none;
+    width: 12px;
     font-weight: 700;
 }
 .problem-error .problem-icon {
@@ -2361,30 +2743,37 @@ select,
 .problem-warning .problem-icon {
     color: var(--warning);
 }
+.problem-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
 .problem-msg {
-    width: 100%;
+    overflow-wrap: anywhere;
 }
 .problem-hint {
     color: var(--muted);
     font-size: 12px;
 }
-/* what the changes are relative to, opening the menu choosing it */
-.changes-baseline {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 8px;
-    font-size: 13px;
-    font-weight: 600;
+.problem-where {
+    font-size: 12px;
+    overflow-wrap: anywhere;
 }
-.changes-wrap > .changes-baseline {
-    margin: 10px 14px 0;
+.changes-group {
+    padding: 0 12px;
 }
-.changes {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 16px;
-    padding: 4px 14px 12px;
+.changes-group h3 {
+    margin: 12px 0 4px;
+}
+.changes-group ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.changes-group li {
+    padding: 2px 0;
+    overflow-wrap: anywhere;
 }
 
 /* ---------- legend ---------- */
@@ -2420,34 +2809,6 @@ select,
 }
 .legend .icon-button {
     pointer-events: auto;
-}
-.legend-tab {
-    position: absolute;
-    left: 12px;
-    bottom: 0;
-    z-index: 5;
-    width: 40px;
-    height: 14px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border);
-    border-bottom: none;
-    border-radius: 6px 6px 0 0;
-    background: var(--legend-bg);
-    color: var(--muted);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 180ms ease;
-}
-.legend-tab.shown {
-    opacity: 1;
-    pointer-events: auto;
-}
-.legend-tab:hover {
-    color: var(--text);
-    background: var(--hover);
 }
 .legend-row {
     display: flex;
@@ -2555,8 +2916,7 @@ details.deps > .sub {
 .settings .icon-button,
 .legend .icon-button,
 .pane .icon-button,
-.rail .icon-button,
-.bottom-bar .icon-button {
+.rail .icon-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2572,8 +2932,7 @@ details.deps > .sub {
 .settings .icon-button:hover:not(:disabled),
 .legend .icon-button:hover:not(:disabled),
 .pane .icon-button:hover:not(:disabled),
-.rail .icon-button:hover:not(:disabled),
-.bottom-bar .icon-button:hover:not(:disabled) {
+.rail .icon-button:hover:not(:disabled) {
     background: var(--hover);
     color: inherit;
 }
@@ -2581,8 +2940,7 @@ details.deps > .sub {
 .settings .icon-button:disabled,
 .legend .icon-button:disabled,
 .pane .icon-button:disabled,
-.rail .icon-button:disabled,
-.bottom-bar .icon-button:disabled {
+.rail .icon-button:disabled {
     opacity: 0.35;
     cursor: default;
 }
@@ -2974,9 +3332,6 @@ del.was.block {
 .session-error {
     color: var(--error);
 }
-.side-session .rail .count {
-    margin: 4px 0 0;
-}
 .peer-cursors {
     position: absolute;
     inset: 0;
@@ -3114,39 +3469,7 @@ del.was.block {
     color: var(--muted);
 }
 
-/* ---------- the left pane's switch and the session's chat (dt session start only) ---------- */
-
-/* the explorer and the session's chat take turns in the left pane */
-.left-switch {
-    flex: none;
-    display: flex;
-    gap: 2px;
-    padding: 0 8px;
-    border-bottom: 1px solid var(--border);
-}
-.left-switch > button {
-    padding: 7px 10px 6px;
-    font: inherit;
-    font-size: 13px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: none;
-    color: var(--muted);
-}
-.left-switch > button.active {
-    border-bottom-color: var(--accent);
-    color: var(--accent);
-    font-weight: 600;
-}
-.left-content {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-}
-.left-content[hidden] {
-    display: none;
-}
+/* ---------- the session's chat (dt session start only) ---------- */
 
 .session-chat {
     flex: 1;
@@ -4010,7 +4333,169 @@ del.was.block {
     width: 22px;
     height: 22px;
 }
-.left-switch > button {
-    display: inline-grid;
-    place-items: center;
+
+/* ---------- the left pane's lists, the legend's button, the inspector's head ---------- */
+
+.left-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.left-content[hidden] {
+    display: none;
+}
+.legend-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.view-toolbar .legend-toggle.active,
+.canvas-toolbar .legend-toggle.active {
+    background: var(--violet-tint);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
+}
+.history-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+.history .history-actions .close-button {
+    margin-left: 0;
+}
+
+/* ---------- the conversation: チャット | 履歴 ---------- */
+
+.chat-views {
+    flex: none;
+    margin: 8px 10px 2px;
+}
+.session-chat .chat-views button {
+    flex: 1;
+    padding: 3px 10px;
+    font-size: 12px;
+}
+.chat-view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.chat-view[hidden] {
+    display: none;
+}
+.chat-flash {
+    animation: chat-flash 1.6s ease;
+    border-radius: 6px;
+}
+@keyframes chat-flash {
+    0%,
+    40% {
+        background: var(--violet-tint);
+    }
+    100% {
+        background: transparent;
+    }
+}
+.chat-history {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding-bottom: 12px;
+}
+.chat-history-bar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--border);
+}
+.chat-units {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.chat-unit {
+    border-bottom: 1px solid var(--border);
+}
+.session-chat button.chat-unit-head {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+}
+.session-chat button.chat-unit-head:hover {
+    background: var(--hover);
+}
+.chat-unit-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.chat-unit-icon {
+    flex: none;
+    color: var(--muted);
+}
+.outcome-changed .chat-unit-icon {
+    color: var(--added);
+}
+.outcome-clarification .chat-unit-icon {
+    color: var(--amber-text);
+}
+.outcome-failed .chat-unit-icon {
+    color: var(--error);
+}
+.outcome-running .chat-unit-icon {
+    color: var(--accent);
+    animation: spin 1s linear infinite;
+}
+.chat-unit-runs {
+    font-weight: 600;
+}
+.chat-unit-files {
+    padding: 0 6px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--added) 14%, transparent);
+    color: var(--added);
+    font-size: 11px;
+    font-weight: 600;
+}
+.chat-unit-line .chat-time {
+    margin-left: auto;
+}
+.chat-unit-summary {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.45;
+}
+.chat-unit.open .chat-unit-summary {
+    display: block;
+}
+.chat-unit-who {
+    font-size: 12px;
+}
+.chat-unit-body {
+    padding: 0 10px 10px;
+    background: var(--bg);
+}
+.chat-items.compact .chat-item {
+    margin-top: 6px;
+}
+.chat-unit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding-top: 8px;
+}
+.session-chat button.chat-small svg {
+    vertical-align: -1px;
 }

@@ -320,3 +320,20 @@ export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'fa
         })
         .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
+
+/**
+ * How many items of the stream came after `seen` (an ISO time: when the chat was last shown): the runs queued, the
+ * notes and the agent's messages (each change of a run's state counts again). Nothing is unread before the chat was
+ * ever shown.
+ */
+export function unreadCount(items: readonly StreamItem[], seen: string | undefined): number {
+    if (seen === undefined) return 0;
+    return items.filter((i) => (i.kind === 'queued' || i.kind === 'note' || i.kind === 'agent') && i.at > seen).length;
+}
+
+/** When the stream last changed (its newest item's time), for `unreadCount`. */
+export function latestAt(items: readonly StreamItem[]): string | undefined {
+    let latest: string | undefined;
+    for (const i of items) if (latest === undefined || i.at > latest) latest = i.at;
+    return latest;
+}

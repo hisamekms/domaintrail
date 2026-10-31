@@ -6,7 +6,7 @@ import { TRANSITION_LABELS, type DisplayMode, type Lang, type LaidOutGraph, type
 import { fitAll, highlightElement, usePointerCursor } from './view/canvas';
 import { useT } from './i18n';
 import { usePersistentState } from './shared/layout';
-import { Legend } from './legend';
+import { Legend, LegendToggle } from './legend';
 import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
 import { applyTheme, type Theme } from './theme';
@@ -127,6 +127,7 @@ export function StatesCanvas(props: {
                             ))}
                         </div>
                         <button onClick={() => editor && fitAll(editor, graph, true)}>{t.zoomToFit}</button>
+                        <LegendToggle open={props.legendOpen} onToggle={props.onLegendToggle} />
                     </div>
                     <Legend view="states" open={props.legendOpen} onToggle={props.onLegendToggle} />
                 </>

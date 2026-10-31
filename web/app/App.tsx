@@ -1,22 +1,24 @@
 import { useCallback, useState } from 'react';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import { BaselineMenu, baselineName } from '../baseline-picker';
-import { BottomPanel } from '../bottom';
+import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { Explorer } from '../explorer';
 import { I18nProvider, MESSAGES } from '../i18n';
 import { Inspector } from '../inspector';
+import { changeCount, ChangesList, problemCounts, ProblemsList } from '../lists';
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
 import { StormingDetails } from '../storming';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
 import { usePanes } from './panes';
+import { SettingsDialog } from '../settings-dialog';
 import { usePreferences } from './preferences';
 import { AppShell } from './shell';
-import { TopBar } from './top-bar';
+import { workspaceName } from './health';
+import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
 
-/** The Live View page: composes the shell with the explorer, the view workspace, the inspector and the bottom pane. */
+/** The Live View page: composes the shell with the left pane's lists, the view workspace, the inspector and, in a session, the chat. */
 export function App() {
     const socket = useViewSocket();
     const { current, connection } = socket;
@@ -24,10 +26,10 @@ export function App() {
     /** What the model is compared with: its graphs give the ghosts of removed elements, its model the inspector's diffs. */
     const base = current?.base ?? null;
     const preferences = usePreferences();
-    const { mode, theme, lang } = preferences;
+    const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang } = preferences;
     const t = MESSAGES[lang];
     const panes = usePanes();
-    const { setExplorerOpen, setInspectorOpen, bottomOpen, setBottomOpen, bottomTab, setBottomTab, legendOpen, setLegendOpen } = panes;
+    const { setExplorerOpen, setInspectorOpen, showLeft, legendOpen, setLegendOpen } = panes;
     const { inspectorTab, setInspectorTab, openInspector } = panes;
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
@@ -64,45 +66,94 @@ export function App() {
     };
 
     const empty = { added: [], changed: [], removed: [] };
+    const diagnostics = current?.diagnostics ?? [];
+    const diff = current?.diff ?? empty;
+    const problems = problemCounts(diagnostics);
+    const changes = changeCount(diff);
 
     return (
         <I18nProvider lang={lang}>
             <AppShell
                 panes={panes}
-                topBar={
-                    <TopBar
-                        current={current}
-                        connection={connection}
-                        preferences={preferences}
-                        baselineOpen={!!baselineAnchor}
-                        onBaselineToggle={session.baselineLocked ? undefined : toggleBaselineMenu}
+                workspaceName={current ? workspaceName(current.root) : undefined}
+                health={<HealthButton current={current} connection={connection} />}
+                settings={
+                    <SettingsDialog
+                        mode={mode}
+                        onMode={setMode}
+                        themePreference={themePreference}
+                        theme={theme}
+                        onTheme={setThemePreference}
+                        langPreference={langPreference}
+                        lang={lang}
+                        onLang={setLangPreference}
                     />
                 }
                 banners={
                     <>
+                        {connection === 'closed' && <div className="banner banner-error">{t.connectionLost}</div>}
                         {current?.baseline.kind === 'git' && current.baseline.error && (
                             <div className="banner">{t.baselineError(current.baseline.ref, current.baseline.error)}</div>
                         )}
                         {view.kind === 'storming' && shown?.storming.stale && <div className="banner">{t.staleStorming(shown.storming.file)}</div>}
-                        {current?.stale && <div className="banner">{t.stale(<a onClick={() => setBottomOpen(true)}>{t.problems}</a>)}</div>}
+                        {current?.stale && <div className="banner">{t.stale(<a onClick={() => showLeft('problems')}>{t.problems}</a>)}</div>}
                     </>
                 }
-                explorer={
-                    <Explorer
-                        model={model}
-                        files={current?.files ?? []}
-                        diagnostics={current?.diagnostics ?? []}
-                        diff={current?.diff ?? empty}
-                        mode={mode}
-                        selected={selected}
-                        onSelect={(id) => {
-                            select(id);
-                            if (selectedFile(id)) setInspectorOpen(true);
-                        }}
-                        onOpen={openBest}
-                        onClose={() => setExplorerOpen(false)}
-                    />
-                }
+                lists={{
+                    tree: {
+                        count: 0,
+                        content: (
+                            <Explorer
+                                model={model}
+                                files={current?.files ?? []}
+                                diagnostics={diagnostics}
+                                diff={diff}
+                                mode={mode}
+                                selected={selected}
+                                onSelect={(id) => {
+                                    select(id);
+                                    if (selectedFile(id)) setInspectorOpen(true);
+                                }}
+                                onOpen={openBest}
+                                onClose={() => setExplorerOpen(false)}
+                            />
+                        ),
+                    },
+                    problems: {
+                        count: diagnostics.length,
+                        badge:
+                            problems.errors > 0 ? (
+                                <span className="activity-badge badge-error">{problems.errors}</span>
+                            ) : problems.warnings > 0 ? (
+                                <span className="activity-badge badge-warning">{problems.warnings}</span>
+                            ) : undefined,
+                        content: <ProblemsList items={diagnostics} onLocate={locate} onClose={() => setExplorerOpen(false)} />,
+                    },
+                    changes: {
+                        count: changes,
+                        badge: changes > 0 ? <span className="activity-badge">{changes}</span> : undefined,
+                        content: (
+                            <ChangesList
+                                diff={diff}
+                                model={model}
+                                mode={mode}
+                                baseline={current ? baselineName(current.baseline, t.baselinePrevious) : undefined}
+                                gitBaseline={current?.baseline.kind === 'git'}
+                                picker={
+                                    current && (
+                                        <BaselineButton
+                                            baseline={current.baseline}
+                                            open={!!baselineAnchor}
+                                            onToggle={session.baselineLocked ? undefined : toggleBaselineMenu}
+                                        />
+                                    )
+                                }
+                                onSelect={(id) => select(id)}
+                                onClose={() => setExplorerOpen(false)}
+                            />
+                        ),
+                    },
+                }}
                 workspace={
                     <ViewWorkspace
                         workspace={workspace}
@@ -113,10 +164,12 @@ export function App() {
                         overlay={session.canvasOverlay}
                     />
                 }
-                {...(session.leftAlternative && { leftAlternative: session.leftAlternative })}
-                sidePanel={session.sidePanel}
-                inspector={
+                {...(session.conversation && { conversation: session.conversation })}
+                {...(session.dockAlternative && { dockAlternative: session.dockAlternative })}
+                inspector={(menu) => (
                     <Inspector
+                        menu={menu}
+                        dock={panes.inspectorDock}
                         model={model}
                         mode={mode}
                         selected={selected}
@@ -165,24 +218,7 @@ export function App() {
                         onBack={goBack}
                         onClose={() => setInspectorOpen(false)}
                     />
-                }
-                bottom={
-                    <BottomPanel
-                        tab={bottomTab}
-                        mode={mode}
-                        open={bottomOpen}
-                        model={model}
-                        diagnostics={current?.diagnostics ?? []}
-                        diff={current?.diff ?? empty}
-                        baseline={current ? baselineName(current.baseline, t.baselinePrevious) : undefined}
-                        gitBaseline={current?.baseline.kind === 'git'}
-                        onBaseline={session.baselineLocked ? undefined : toggleBaselineMenu}
-                        onTab={setBottomTab}
-                        onToggle={() => setBottomOpen(!bottomOpen)}
-                        onLocate={locate}
-                        onSelect={(id) => select(id)}
-                    />
-                }
+                )}
                 overlays={
                     current &&
                     baselineAnchor &&

@@ -1,4 +1,4 @@
-import { PanelRightClose, Undo2 } from 'lucide-react';
+import { PanelBottomClose, PanelRightClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
@@ -80,6 +80,10 @@ export interface InspectorProps {
     backTo: string | undefined;
     onBack: () => void;
     onClose: () => void;
+    /** The dock's menu (where the inspector is docked), next to the close button. */
+    menu?: ReactNode;
+    /** Where the inspector is docked: its close button points that way. */
+    dock?: 'right' | 'bottom';
 }
 
 /** Tabs that make sense for a selected item, in display order. */
@@ -124,9 +128,12 @@ export function Inspector(props: InspectorProps) {
                     <span className="back-name">{backName}</span>
                 </button>
             )}
-            <button className="icon-button close-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
-                <PanelRightClose size={16} aria-hidden />
-            </button>
+            <span className="history-actions">
+                {props.menu}
+                <button className="icon-button close-button" onClick={props.onClose} data-tooltip={tx.closeInspector} aria-label={tx.closeInspector}>
+                    {props.dock === 'bottom' ? <PanelBottomClose size={16} aria-hidden /> : <PanelRightClose size={16} aria-hidden />}
+                </button>
+            </span>
         </div>
     );
     // a file can be shown even without a model (e.g. a syntax error before the first valid parse)

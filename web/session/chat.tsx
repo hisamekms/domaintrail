@@ -1,9 +1,29 @@
-// The session's chat in the left pane (ADR 0026), the same for everyone: who is here and what the agent is doing at a
-// glance, the main stream of what the facilitator queued and what followed (`stream.ts`), the requests still waiting
-// for approval, and the composer of a request about the selection. People talk in their meeting; nothing here is a
-// chat between them: what they send are requests.
+// The session's chat in the conversation pillar (ADR 0026), the same for everyone: who is here and what the agent is
+// doing at a glance, then two views: チャット — the main stream of what the facilitator queued and what followed
+// (`stream.ts`), the requests still waiting for approval, and the composer of a request about the selection — and 履歴,
+// the history of changes (`history.ts`). People talk in their meeting; nothing here is a chat between them: what they
+// send are requests.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Ban, Bot, ChevronDown, ChevronRight, CircleHelp, CircleX, LogOut, PanelLeftClose, Play, Reply, SendHorizontal, X } from 'lucide-react';
+import {
+    Ban,
+    Bot,
+    ChevronDown,
+    ChevronRight,
+    CircleCheck,
+    CircleHelp,
+    CircleMinus,
+    CircleSlash,
+    CircleX,
+    Clock,
+    LoaderCircle,
+    LogOut,
+    MessagesSquare,
+    Play,
+    Reply,
+    SendHorizontal,
+    X,
+    type LucideIcon,
+} from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi } from './api';
@@ -25,6 +45,7 @@ import {
     type StreamItem,
 } from './stream';
 import { useTargetNaming } from './naming';
+import { changeUnits, shownUnits, type ChangeUnit, type UnitOutcome } from './history';
 import {
     bodyText,
     composerKey,
@@ -90,7 +111,7 @@ export function SessionChat(props: {
     viewScope: ViewScope;
     onClose: () => void;
 }) {
-    const { session, composer } = props;
+    const { session, composer, focusPending } = props;
     const { state, me } = session;
     const t = useT();
     const tx = t.session;
@@ -111,9 +132,26 @@ export function SessionChat(props: {
             setLeaveError(failure(e));
         }
     };
+    const [view, setView] = useState<'chat' | 'history'>('chat');
+    // the selection confirmed for a request: the composer is in the chat
+    useEffect(() => {
+        if (focusPending) setView('chat');
+    }, [focusPending]);
+    const root = useRef<HTMLDivElement | null>(null);
+    // 履歴's チャットで見る: the run's first line in the stream, scrolled to the top and marked for a moment
+    const showInChat = (run: string): void => {
+        setView('chat');
+        requestAnimationFrame(() => {
+            const el = root.current?.querySelector<HTMLElement>(`.chat-stream [data-item="queued:${run}"]`);
+            if (!el) return;
+            el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            el.classList.add('chat-flash');
+            setTimeout(() => el.classList.remove('chat-flash'), 1600);
+        });
+    };
 
     return (
-        <div className="session-chat">
+        <div className="session-chat" ref={root}>
             <ChatHeader
                 session={session}
                 status={status}
@@ -125,24 +163,209 @@ export function SessionChat(props: {
                 onClose={props.onClose}
                 tx={tx}
             />
+            <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
+                {(['chat', 'history'] as const).map((v) => (
+                    <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
+                        {tx.chat.tabs[v]}
+                    </button>
+                ))}
+            </div>
             {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
             {(session.status === 'closed' || state.session.state === 'Closed') && <p className="session-note chat-notice">{tx.closed}</p>}
             {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
             {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
-            <Stream session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
-            <Pending session={session} live={live} nameOf={nameOf} tx={tx} />
-            {live && (
-                <Composer
-                    session={session}
-                    composer={composer}
-                    selectionTargets={props.selectionTargets}
-                    candidates={props.candidates}
-                    focusPending={props.focusPending}
-                    onFocused={props.onFocused}
-                    tx={tx}
-                />
-            )}
+            {/* both stay mounted, so that switching keeps the stream's scroll and the history's open units */}
+            <div className="chat-view" role="tabpanel" hidden={view !== 'chat'}>
+                <Stream session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
+                <Pending session={session} live={live} nameOf={nameOf} tx={tx} />
+                {live && (
+                    <Composer
+                        session={session}
+                        composer={composer}
+                        selectionTargets={props.selectionTargets}
+                        candidates={props.candidates}
+                        focusPending={focusPending}
+                        onFocused={props.onFocused}
+                        tx={tx}
+                    />
+                )}
+            </div>
+            <div className="chat-view" role="tabpanel" hidden={view !== 'history'}>
+                <History session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} onShowInChat={showInChat} tx={tx} />
+            </div>
         </div>
+    );
+}
+
+const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
+    changed: CircleCheck,
+    unchanged: CircleMinus,
+    clarification: CircleHelp,
+    declined: Ban,
+    failed: CircleX,
+    cancelled: CircleSlash,
+    running: LoaderCircle,
+    queued: Clock,
+};
+
+/**
+ * 履歴: the change units, newest first — the runs that changed files, or all of them (すべて). A unit's row says what
+ * the AI did; opened, it shows the unit's lines of the stream (the requests, the AI's question, the facilitator's
+ * note, the result) and a link to them in the chat. `actions` is the place of the facilitator's actions on a unit
+ * (none yet).
+ */
+function History(props: {
+    session: SessionData;
+    items: StreamItem[];
+    now: number;
+    nameOf: (id: string) => string;
+    onNavigate: (target: ModelTarget) => void;
+    onShowInChat: (run: string) => void;
+    actions?: (unit: ChangeUnit) => ReactNode;
+    tx: Tx;
+}) {
+    const { session, tx } = props;
+    const h = tx.chat.history;
+    const [all, setAll] = useState(false);
+    const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+    const units = shownUnits(changeUnits(session.state), all);
+    const toggle = (key: string): void => {
+        const next = new Set(open);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        setOpen(next);
+    };
+    return (
+        <div className="chat-history">
+            <div className="chat-history-bar">
+                <label className="check small" data-tooltip={h.allHint}>
+                    <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+                    {h.all}
+                </label>
+            </div>
+            {units.length === 0 && <p className="chat-empty muted small">{all ? h.emptyAll : h.empty}</p>}
+            <ol className="chat-units">
+                {units.map((unit) => (
+                    <HistoryUnit key={unit.key} unit={unit} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} {...props} />
+                ))}
+            </ol>
+        </div>
+    );
+}
+
+function HistoryUnit(props: {
+    unit: ChangeUnit;
+    open: boolean;
+    onToggle: () => void;
+    session: SessionData;
+    items: StreamItem[];
+    now: number;
+    nameOf: (id: string) => string;
+    onNavigate: (target: ModelTarget) => void;
+    onShowInChat: (run: string) => void;
+    actions?: (unit: ChangeUnit) => ReactNode;
+    tx: Tx;
+}) {
+    const { unit, open, nameOf, tx } = props;
+    const h = tx.chat.history;
+    const first = unit.runs[0];
+    const last = unit.runs[unit.runs.length - 1];
+    const Icon = OUTCOME_ICONS[unit.outcome];
+    const requesters = unit.requesters.map(nameOf).join(', ');
+    const summary = unit.summary ?? fallbackSummary(last.run, nameOf, tx);
+    const ids = new Set(unit.runs.map((r) => r.run.id));
+    const items = props.items.filter((i) => (i.kind === 'queued' || i.kind === 'note' || i.kind === 'agent') && ids.has(i.key.slice(i.key.indexOf(':') + 1)));
+    const rows = open ? streamRows(items, { now: props.now, session: props.session, nameOf, onNavigate: props.onNavigate, tx }) : [];
+    const follows = continued(rows.map((r) => r.author));
+    return (
+        <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}`} data-unit={unit.key}>
+            <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={props.onToggle}>
+                <span className="chat-unit-line">
+                    <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />
+                    <span className="chat-unit-runs">{h.runs(first.number, last.number)}</span>
+                    {unit.files !== undefined && unit.files > 0 && <span className="chat-unit-files">{h.files(unit.files)}</span>}
+                    <time className="chat-time" dateTime={unit.at}>
+                        {time(unit.at)}
+                    </time>
+                    {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                </span>
+                {/* opened, the result's own bubble says it */}
+                {summary && !open && (
+                    <span className="chat-unit-summary">
+                        {unit.summary !== undefined ? <ReplyText text={unit.summary} onNavigate={props.onNavigate} /> : summary}
+                    </span>
+                )}
+                {requesters && <span className="chat-unit-who muted">{h.requesters(requesters)}</span>}
+            </button>
+            {open && (
+                <div className="chat-unit-body">
+                    <ol className="chat-items compact">
+                        {rows.map((row, i) => (
+                            <li key={row.key} className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}`}>
+                                {row.render(follows[i])}
+                            </li>
+                        ))}
+                    </ol>
+                    <div className="chat-unit-actions">
+                        {props.actions?.(unit)}
+                        <button className="chat-small" onClick={() => props.onShowInChat(first.run.id)}>
+                            <MessagesSquare size={12} aria-hidden /> {h.showInChat}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </li>
+    );
+}
+
+/** What a unit's row says when the AI said nothing (no structured reply): the run's state, as the chat says it. */
+function fallbackSummary(run: ChangeUnit['runs'][number]['run'], nameOf: (id: string) => string, tx: Tx): string | undefined {
+    const says = tx.chat.agentSays;
+    switch (run.state) {
+        case 'Completed':
+            return run.changed ? says.completedChanged(undefined) : says.completedUnchanged;
+        case 'Failed':
+            return tx.failureReasons[run.reason];
+        case 'Cancelled':
+            return says.cancelled(nameOf(run.cancelledBy));
+        case 'Queued':
+            return says.queued;
+        default:
+            return undefined;
+    }
+}
+
+/**
+ * The floating button opening the conversation while it is closed, with the agent's state as a mark (a spinner while
+ * it runs, `?` while it waits for an answer) and how many messages came since the chat was last shown (else how many
+ * requests await approval).
+ */
+export function ChatLauncher(props: { status: AgentStatus; unread: number; pending: number; onOpen: () => void }) {
+    const t = useT();
+    const tx = t.session;
+    const { status, unread, pending } = props;
+    const label = tx.chat.launcher(unread, pending);
+    return (
+        <button className={`chat-launcher status-${status.kind}`} onClick={props.onOpen} aria-label={label} data-tooltip={label}>
+            <MessagesSquare size={20} aria-hidden />
+            {status.kind === 'running' && <LoaderCircle size={14} className="chat-launcher-mark spin" aria-hidden />}
+            {status.kind === 'clarification' && (
+                <span className="chat-launcher-mark question" aria-hidden>
+                    ?
+                </span>
+            )}
+            {unread > 0 ? (
+                <span className="chat-launcher-count" aria-hidden>
+                    {unread}
+                </span>
+            ) : (
+                pending > 0 && (
+                    <span className="chat-launcher-count pending" aria-hidden>
+                        {pending}
+                    </span>
+                )
+            )}
+        </button>
     );
 }
 
@@ -180,7 +403,7 @@ function ChatHeader(props: {
                 </button>
             )}
             <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
-                <PanelLeftClose size={16} aria-hidden />
+                <X size={16} aria-hidden />
             </button>
         </div>
     );

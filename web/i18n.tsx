@@ -40,7 +40,7 @@ const ja = {
     noModel: 'モデルがまだありません。',
     noDtFiles: '.dt・.dtes ファイルがありません',
 
-    // header
+    // settings and status
     nameDisplay: '名前の表示',
     nameDisplayHint: 'モデルの要素を、ラベル（日本語名など）と名前のどちらで表示するか',
     modes: { label: 'ラベル', name: '名前', both: '両方' } as Record<DisplayMode, string>,
@@ -56,17 +56,25 @@ const ja = {
     langHint: '画面の表示言語（モデルのラベルは変わりません）',
     fileCount: (n: number) => `${n} ファイル`,
     connection: { connecting: '接続中', open: '接続済み', closed: '切断' } as Record<Connection, string>,
-    connectionTitle: (state: string) => `サーバーとの接続: ${state}`,
+    connectionLost: 'サーバーとの接続が切れました。つながり直すのを待っています…',
     stale: (problems: ReactNode): ReactNode => <>構文エラーのため、最後に解析できた図を表示しています。{problems}から該当箇所へ移動できます。</>,
 
     // panes
-    openExplorer: 'エクスプローラを開く',
-    closeExplorer: 'エクスプローラを閉じる',
-    explorerTab: 'エクスプローラー',
+    openExplorer: 'サイドバーを開く',
+    closeExplorer: 'サイドバーを閉じる',
+    /** The lists of the left pane, in its activity bar. */
+    lists: { tree: '木', problems: '問題', changes: '差分' },
+    listHints: { tree: '木（モデルとファイル）', problems: '問題（エラーと警告）', changes: '差分（比較対象からの変更）' },
+    listLabel: (name: string, n: number) => (n > 0 ? `${name}（${n}）` : name),
+    listsLabel: 'サイドバーの一覧',
     openInspector: 'インスペクタを開く',
     closeInspector: 'インスペクタを閉じる',
-    openBottom: '問題・変更を開く',
-    closeBottom: '問題・変更を閉じる',
+    paneMenu: 'メニュー',
+    dockBelow: '下に移動',
+    dockRight: '右に移動',
+    health: { ok: '正常', warning: '警告', error: 'エラー' },
+    healthLabel: (health: string) => `状態: ${health}`,
+    healthRows: { status: 'モデル', files: 'ファイル', version: 'バージョン', updated: '更新', connection: '接続' },
 
     // views and their toolbar
     views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ', storming: 'イベントストーミング' },
@@ -209,14 +217,13 @@ const ja = {
         context: 'コンテキスト',
     } as Record<ItemKind, string>,
 
-    // bottom pane
+    // the problems and changes lists
     problems: '問題',
-    changes: '変更',
+    changes: '差分',
+    severity: { error: 'エラー', warning: '警告' },
     noProblems: '問題はありません。',
     noChanges: '直前の正常モデルからの変更はありません。',
     noChangesSince: (ref: string) => `${ref} からの変更はありません。`,
-    changesSince: (ref: string) => `${ref} からの変更`,
-    changeBaseline: '比較対象を切り替える',
 
     // baseline (what the changes are relative to)
     baseline: '比較対象',
@@ -342,6 +349,7 @@ const ja = {
         open: 'セッションを開く',
         close: 'セッションを閉じる',
         showInspector: 'インスペクタに切り替える',
+        showPanel: 'セッション欄に切り替える',
         leave: '退出',
         closed: 'セッションは終了しました。',
         signedOut: 'サインアウトしました。再読み込みすると参加し直せます。',
@@ -463,7 +471,36 @@ const ja = {
             failed: (m: string) => `復元できませんでした: ${m}`,
         },
         chat: {
-            close: 'セッションを閉じる',
+            close: 'チャットを閉じる',
+            open: 'チャットを開く',
+            launcher: (unread: number, pending: number) => {
+                const parts = [unread > 0 ? `新着 ${unread} 件` : '', pending > 0 ? `承認待ち ${pending} 件` : ''].filter((p) => p !== '');
+                return parts.length > 0 ? `チャットを開く（${parts.join('・')}）` : 'チャットを開く';
+            },
+            tabs: { chat: 'チャット', history: '履歴' },
+            tabsLabel: 'チャットと変更の履歴',
+            history: {
+                all: 'すべて',
+                allHint: '変更のなかった実行や、辞退・失敗・取消の実行も表示する',
+                empty: 'ファイルを変更した実行はまだありません。',
+                emptyAll: '実行はまだありません。',
+                showInChat: 'チャットで見る',
+                files: (n: number) => `${n} ファイル`,
+                runs: (first: number, last: number) => (first === last ? `実行 ${first}` : `実行 ${first}–${last}`),
+                outcomes: {
+                    changed: '変更あり',
+                    unchanged: '変更なし',
+                    clarification: '確認待ち',
+                    declined: '辞退',
+                    failed: '失敗',
+                    cancelled: '取消',
+                    running: '実行中',
+                    queued: '実行待ち',
+                },
+                requesters: (names: string) => `依頼: ${names}`,
+                expand: '詳しく見る',
+                collapse: '閉じる',
+            },
             participantsOnline: (online: number, all: number) => `参加者 ${online}/${all} 人がオンライン`,
             onlineCount: (online: number, all: number) => `${online}/${all}`,
             away: 'オフライン',
@@ -583,16 +620,23 @@ const en: Messages = {
     langHint: 'The language of the screen (model labels stay as written)',
     fileCount: (n) => `${n} ${n === 1 ? 'file' : 'files'}`,
     connection: { connecting: 'connecting', open: 'connected', closed: 'disconnected' },
-    connectionTitle: (state) => `Connection to the server: ${state}`,
+    connectionLost: 'The connection to the server was lost. Waiting to reconnect…',
     stale: (problems) => <>Showing the last diagram that could be parsed, because of a syntax error. See {problems} for where it is.</>,
 
-    openExplorer: 'Open the explorer',
-    closeExplorer: 'Close the explorer',
-    explorerTab: 'Explorer',
+    openExplorer: 'Open the sidebar',
+    closeExplorer: 'Close the sidebar',
+    lists: { tree: 'Tree', problems: 'Problems', changes: 'Changes' },
+    listHints: { tree: 'Tree (the model and the files)', problems: 'Problems (errors and warnings)', changes: 'Changes (since the baseline)' },
+    listLabel: (name, n) => (n > 0 ? `${name} (${n})` : name),
+    listsLabel: 'Lists of the sidebar',
     openInspector: 'Open the inspector',
     closeInspector: 'Close the inspector',
-    openBottom: 'Open problems and changes',
-    closeBottom: 'Close problems and changes',
+    paneMenu: 'Menu',
+    dockBelow: 'Move below',
+    dockRight: 'Move to the right',
+    health: { ok: 'OK', warning: 'Warning', error: 'Error' },
+    healthLabel: (health) => `Status: ${health}`,
+    healthRows: { status: 'Model', files: 'Files', version: 'Version', updated: 'Updated', connection: 'Connection' },
 
     views: { contextMap: 'Context Map', structure: 'Structure', catalog: 'Catalog', storming: 'Event Storming' },
     showAllContexts: 'Also show shared and external BCs',
@@ -730,11 +774,10 @@ const en: Messages = {
 
     problems: 'Problems',
     changes: 'Changes',
+    severity: { error: 'Error', warning: 'Warning' },
     noProblems: 'No problems.',
     noChanges: 'No changes since the last valid model.',
     noChangesSince: (ref) => `No changes since ${ref}.`,
-    changesSince: (ref) => `Changes since ${ref}`,
-    changeBaseline: 'Change what the model is compared with',
 
     baseline: 'Compare with',
     baselineHint: 'The model that additions, changes and removals are shown against',
@@ -851,6 +894,7 @@ const en: Messages = {
         open: 'Open the session',
         close: 'Close the session',
         showInspector: 'Switch to the inspector',
+        showPanel: 'Switch to the session panel',
         leave: 'Leave',
         closed: 'The session has ended.',
         signedOut: 'You were signed out. Reload the page to join again.',
@@ -970,7 +1014,36 @@ const en: Messages = {
             failed: (m) => `Not restored: ${m}`,
         },
         chat: {
-            close: 'Close the session',
+            close: 'Close the chat',
+            open: 'Open the chat',
+            launcher: (unread, pending) => {
+                const parts = [unread > 0 ? `${unread} new` : '', pending > 0 ? `${pending} awaiting approval` : ''].filter((p) => p !== '');
+                return parts.length > 0 ? `Open the chat (${parts.join(', ')})` : 'Open the chat';
+            },
+            tabs: { chat: 'Chat', history: 'History' },
+            tabsLabel: 'The chat and the history of changes',
+            history: {
+                all: 'All',
+                allHint: 'Also show the runs that changed nothing, and those declined, failed or cancelled',
+                empty: 'No run has changed files yet.',
+                emptyAll: 'No runs yet.',
+                showInChat: 'Show in the chat',
+                files: (n) => `${n} ${n === 1 ? 'file' : 'files'}`,
+                runs: (first, last) => (first === last ? `Run ${first}` : `Runs ${first}–${last}`),
+                outcomes: {
+                    changed: 'changed',
+                    unchanged: 'unchanged',
+                    clarification: 'awaiting an answer',
+                    declined: 'declined',
+                    failed: 'failed',
+                    cancelled: 'cancelled',
+                    running: 'running',
+                    queued: 'queued',
+                },
+                requesters: (names) => `Requested by ${names}`,
+                expand: 'Show details',
+                collapse: 'Hide details',
+            },
             participantsOnline: (online, all) => `${online} of ${all} participants online`,
             onlineCount: (online, all) => `${online}/${all}`,
             away: 'offline',

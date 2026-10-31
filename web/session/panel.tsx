@@ -37,6 +37,8 @@ export function SessionPanel(props: {
     onNavigate: (target: ModelTarget) => void;
     onShowInspector: () => void;
     onClose: () => void;
+    /** The dock's menu (where the panel is docked), next to the close button. */
+    menu?: ReactNode;
 }) {
     const { session, drafts, selectionTarget } = props;
     const { state, me } = session;
@@ -73,6 +75,7 @@ export function SessionPanel(props: {
                     <button className="small" onClick={props.onShowInspector}>
                         {tx.showInspector}
                     </button>
+                    {props.menu}
                     <button className="icon-button" onClick={props.onClose} data-tooltip={tx.close} aria-label={tx.close}>
                         <PanelRightClose size={16} aria-hidden />
                     </button>

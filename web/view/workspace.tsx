@@ -6,7 +6,7 @@ import type { StormingView, ViewPayload } from '@domaintrail/visualization/proto
 import { Catalog } from '../catalog';
 import { ContextPicker } from '../context-picker';
 import { useT } from '../i18n';
-import { Legend } from '../legend';
+import { Legend, LegendToggle } from '../legend';
 import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
@@ -145,6 +145,7 @@ export function ViewWorkspace(props: {
                             {t.zoomToFit}
                         </button>
                     )}
+                    {graph && isCanvas(view) && <LegendToggle open={legendOpen} onToggle={onLegendToggle} />}
                 </div>
             </div>
             <div className="view-area">
