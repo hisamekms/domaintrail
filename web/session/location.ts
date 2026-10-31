@@ -8,8 +8,29 @@ import type { View } from '../view/navigation';
 /** The `layoutKey` of a view without a laid-out graph (the catalog, a view still loading). */
 export const NO_LAYOUT = '-';
 
-/** The laid-out graph's identity: its ID and its signature (another layout of the same graph is another location). */
-export const layoutKeyOf = (graph: LaidOutGraph | null | undefined): string => (graph ? `${graph.id}@${graph.signature}` : NO_LAYOUT);
+/** A short hash of a text (cyrb53, 53 bits as hex): a signature is the whole layout, far longer than a key may be. */
+export function shortHash(text: string): string {
+    let h1 = 0xdeadbeef;
+    let h2 = 0x41c6ce57;
+    for (let i = 0; i < text.length; i++) {
+        const c = text.charCodeAt(i);
+        h1 = Math.imul(h1 ^ c, 2654435761);
+        h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+}
+
+/** Longest graph ID kept as it is in a `layoutKey` (the server takes keys of at most 512 characters). */
+const MAX_ID = 200;
+
+/**
+ * The laid-out graph's identity: its ID and a hash of its signature (another layout of the same graph is another
+ * location).
+ */
+export const layoutKeyOf = (graph: LaidOutGraph | null | undefined): string =>
+    graph ? `${graph.id.length > MAX_ID ? shortHash(graph.id) : graph.id}@${shortHash(graph.signature)}` : NO_LAYOUT;
 
 /**
  * The location of the page's view. `viewKey` tells the `.dt` views apart as their cameras are (the Structure View's

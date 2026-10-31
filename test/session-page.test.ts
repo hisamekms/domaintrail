@@ -10,7 +10,7 @@ import { projectView } from '@domaintrail/visualization/domain/storming/render';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from '@domaintrail/web/session/drafts';
-import { NO_LAYOUT, sameLocation, viewLocation } from '@domaintrail/web/session/location';
+import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from '@domaintrail/web/session/location';
 import { cursorsOn, initials, NO_PEERS, receivePresence, throttle, whereabouts } from '@domaintrail/web/session/presence';
 import { adopt, applyEvent, disconnected, INITIAL_SESSION, latestRevision, receive } from '@domaintrail/web/session/state';
 import { occurrenceNode, selectionOf, targetKey, targetOfSelection, WORKSPACE_TARGET } from '@domaintrail/web/session/targets';
@@ -31,7 +31,7 @@ describe('ViewLocation', () => {
         expect(viewLocation({ view: { kind: 'structure' }, viewKey: 'structure:detail', graph: graph('structure'), storming: undefined })).toEqual({
             kind: 'dt',
             viewKey: 'structure:detail',
-            layoutKey: 'structure@sig',
+            layoutKey: `structure@${shortHash('sig')}`,
         });
         expect(viewLocation({ view: { kind: 'catalog' }, viewKey: 'catalog:false', graph: null, storming: undefined })).toEqual({
             kind: 'dt',
@@ -53,14 +53,21 @@ describe('ViewLocation', () => {
             stormingId: 'S',
             level: 'design-level',
             timelineId: 'Normal',
-            layoutKey: 'storming:S:design-level:Normal@sig',
+            layoutKey: `storming:S:design-level:Normal@${shortHash('sig')}`,
         });
-        expect(at('big-picture')).toEqual({ kind: 'dtes', stormingId: 'S', level: 'big-picture', layoutKey: 'storming:S:big-picture:*@sig' });
+        expect(at('big-picture')).toEqual({ kind: 'dtes', stormingId: 'S', level: 'big-picture', layoutKey: `storming:S:big-picture:*@${shortHash('sig')}` });
         expect(sameLocation(at('design-level', 'Normal'), at('design-level', 'Normal'))).toBe(true);
         // another timeline, the integrated canvas, another level: never the same view
         expect(sameLocation(at('design-level', 'Normal'), at('design-level', 'Failure'))).toBe(false);
         expect(sameLocation(at('design-level', 'Normal'), at('design-level'))).toBe(false);
         expect(sameLocation(at('big-picture'), at('design-level'))).toBe(false);
+    });
+
+    test('a layout key stays short, whatever the signature, and changes with it', () => {
+        const long = 'x|'.repeat(5000);
+        expect(layoutKeyOf(graph('structure', long)).length).toBeLessThan(64);
+        expect(layoutKeyOf(graph('structure', long))).not.toBe(layoutKeyOf(graph('structure', `${long}y`)));
+        expect(layoutKeyOf(graph('g'.repeat(600))).length).toBeLessThan(64);
     });
 
     test('equal only with the same layout and view key, and never between a .dt and a storming view', () => {
