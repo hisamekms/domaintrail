@@ -1,6 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: bun
+    # the root is enough for the workspace (ADR 0025): Dependabot reads the workspaces of the root package.json
+    # (packages/*, web), merges a dependency declared in several of them into one, and updates every manifest and
+    # bun.lock in one pull request; test/architecture.test.ts fails when their versions differ
     directory: /
     schedule:
       interval: weekly
