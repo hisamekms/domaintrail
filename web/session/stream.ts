@@ -5,7 +5,7 @@
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
 import { timeline } from './timeline';
-import { targetKey, type TargetDraft } from './targets';
+import { targetKey, targetName, type NamingContext, type TargetDraft } from './targets';
 
 type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
@@ -149,9 +149,13 @@ export function pendingRequests(state: Pick<SessionStateBody, 'requests' | 'runs
 /** A text on one line (whitespace collapsed), for the one-line rows. */
 export const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
 
-/** What a target is called in the chat: its label, else its key; the whole workspace by the given word. */
-export function targetText(target: Pick<TargetDraft, 'target' | 'label'>, workspace: string): string {
-    return target.target.kind === 'Workspace' ? workspace : (target.label ?? targetKey(target.target));
+/**
+ * What a target is called on the page: its name now in the display mode (`targetName`), else the label it was taken
+ * with (a target no longer in the sources, or no naming given), else its key; the whole workspace by the given word.
+ */
+export function targetText(target: Pick<TargetDraft, 'target' | 'label'>, workspace: string, naming?: NamingContext): string {
+    if (target.target.kind === 'Workspace') return workspace;
+    return (naming && targetName(target.target, naming)) ?? target.label ?? targetKey(target.target);
 }
 
 /**

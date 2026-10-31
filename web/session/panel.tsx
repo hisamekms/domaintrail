@@ -11,8 +11,9 @@ import { sendable } from './drafts';
 import { Revisions } from './revisions';
 import { initials, listedParticipants, participantColor, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
 import { latestRevision } from './state';
-import { participantNames } from './stream';
-import { targetKey, WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
+import { useTargetNaming } from './naming';
+import { participantNames, targetText } from './stream';
+import { WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
 import type { Drafts, SessionData } from './useSession';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 
@@ -145,11 +146,8 @@ function Participants({ session, location, nameOf, tx }: { session: SessionData;
 }
 
 function TargetLabel({ target, tx }: { target: TargetDraft; tx: Tx }) {
-    return (
-        <span className={`session-target kind-${target.target.kind}`}>
-            {target.target.kind === 'Workspace' ? tx.workspace : (target.label ?? targetKey(target.target))}
-        </span>
-    );
+    const naming = useTargetNaming();
+    return <span className={`session-target kind-${target.target.kind}`}>{targetText(target, tx.workspace, naming)}</span>;
 }
 
 function Composer({ drafts, selectionTarget, state, tx }: { drafts: Drafts; selectionTarget: TargetDraft | undefined; state: SessionStateBody; tx: Tx }) {
@@ -157,6 +155,7 @@ function Composer({ drafts, selectionTarget, state, tx }: { drafts: Drafts; sele
     const [sending, setSending] = useState(false);
     const [failures, setFailures] = useState<string[]>([]);
     const toSend = sendable(drafts.drafts, selected);
+    const naming = useTargetNaming();
 
     const send = async (): Promise<void> => {
         const revision = latestRevision(state);
@@ -181,7 +180,7 @@ function Composer({ drafts, selectionTarget, state, tx }: { drafts: Drafts; sele
         <>
             <Section title={tx.compose}>
                 <p className="muted small session-selection">
-                    {selectionTarget ? tx.selection(selectionTarget.label ?? targetKey(selectionTarget.target)) : tx.nothingSelected}
+                    {selectionTarget ? tx.selection(targetText(selectionTarget, tx.workspace, naming)) : tx.nothingSelected}
                 </p>
                 <div className="session-buttons">
                     <button disabled={!selectionTarget} onClick={() => selectionTarget && drafts.add(selectionTarget)}>

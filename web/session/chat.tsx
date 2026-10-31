@@ -23,6 +23,7 @@ import {
     type PendingRequest,
     type StreamItem,
 } from './stream';
+import { useTargetNaming } from './naming';
 import { targetKey, WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
 import type { ComposerDraft, SessionData } from './useSession';
 
@@ -310,7 +311,8 @@ function TargetChip({
     onNavigate: (t: ModelTarget) => void;
     tx: Tx;
 }) {
-    const text = targetText(target, tx.workspace);
+    const naming = useTargetNaming();
+    const text = targetText(target, tx.workspace, naming);
     const kind = `chat-target kind-${target.target.kind}`;
     if (status === 'current' && target.target.kind !== 'Workspace')
         return (
@@ -412,7 +414,8 @@ function PendingRow({
     onError: (e: string | undefined) => void;
 }) {
     const r = p.request;
-    const target = targetText(r.target, tx.workspace);
+    const naming = useTargetNaming();
+    const target = targetText(r.target, tx.workspace, naming);
     const body = oneLine(r.body);
     return (
         <li className={`chat-pending-row${p.mine ? ' mine' : ''}`} data-request={r.id} title={`${nameOf(r.author)} · ${target}\n${r.body}`}>
@@ -472,6 +475,7 @@ function Pending({ session, live, nameOf, tx }: { session: SessionData; live: bo
 
 function Composer(props: { session: SessionData; composer: ComposerDraft; selectionTarget: TargetDraft | undefined; tx: Tx }) {
     const { session, composer, selectionTarget, tx } = props;
+    const naming = useTargetNaming();
     // the selection is the target, unless the whole workspace was chosen for it; choosing something else selects it again
     const selectionKey = selectionTarget ? targetKey(selectionTarget.target) : undefined;
     const [wholeWorkspace, setWholeWorkspace] = useState(false);
@@ -502,7 +506,7 @@ function Composer(props: { session: SessionData; composer: ComposerDraft; select
             <div className="chat-composer-target">
                 <span className="muted">{tx.chat.target}:</span>
                 <span className={`chat-target kind-${target.target.kind}`} {...(!selectionTarget && { 'data-tooltip': tx.chat.noSelection })}>
-                    {targetText(target, tx.workspace)}
+                    {targetText(target, tx.workspace, naming)}
                 </span>
                 {selectionTarget &&
                     (wholeWorkspace ? (

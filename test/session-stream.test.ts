@@ -2,7 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import type { Me, Presence, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { COMPOSER_DRAFT, composerScope, createMemoryDrafts, newDraft, scopeKey } from '@domaintrail/web/session/drafts';
 import { NO_PEERS } from '@domaintrail/web/session/presence';
-import { WORKSPACE_TARGET } from '@domaintrail/web/session/targets';
+import { targetName, WORKSPACE_TARGET, type NamingContext } from '@domaintrail/web/session/targets';
+import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import type { DomainModel } from '@domaintrail/modeling/model/model';
+import { parseStormings } from '@domaintrail/modeling/storming/parse';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { EXAMPLES } from './helpers.js';
 import { agentStatus, elapsed, headerParticipants, oneLine, participantNames, pendingRequests, streamItems, targetText } from '@domaintrail/web/session/stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -217,5 +224,50 @@ describe("the composer's draft", () => {
         expect(await storage.load(scope)).toEqual([]);
         expect((await storage.load(composerScope(scope))).map((d) => d.body)).toEqual(['unsent']);
         expect(scopeKey(composerScope(scope))).not.toBe(scopeKey(scope));
+    });
+});
+
+const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const { stormings: parsed } = await parseStormings([{ path: 'es.dtes', text: SAMPLE }]);
+const storming = parsed[0];
+const model = (await analyze(await loadWorkspace(EXAMPLES))).model as DomainModel;
+
+describe('targets named in the display setting', () => {
+    const stormings = [{ id: storming.id, storming }];
+    const naming = (mode: NamingContext['mode']): NamingContext => ({ mode, model, stormings });
+    const order = { target: { kind: 'DtElement', element: 'Sales.Order' }, label: '注文 (Sales.Order)' } as const;
+    const occurrence = {
+        kind: 'DtesOccurrence',
+        storming: 'DeliveryCancellation',
+        timeline: 'Normal',
+        eventName: 'ShipmentCancelled',
+        occurrence: '0',
+    } as const;
+
+    test('a .dt element, state or command as the inspector names it, in each mode', () => {
+        expect(targetName(order.target, naming('label'))).toBe('注文');
+        expect(targetName(order.target, naming('name'))).toBe('Order');
+        expect(targetName(order.target, naming('both'))).toBe('注文 (Order)');
+        expect(targetName({ kind: 'DtElement', element: 'Sales.Order#Draft' }, naming('label'))).toBe('注文.下書き');
+        expect(targetText(order, 'All', naming('name'))).toBe('Order');
+    });
+
+    test('a storming element or occurrence as the storming view names it', () => {
+        const element = { kind: 'DtesElement', storming: 'DeliveryCancellation', local: 'ShipmentCancelled' } as const;
+        expect(targetName(element, naming('label'))).toBe('配送キャンセル / 配送がキャンセルされた');
+        expect(targetName(element, naming('name'))).toBe('DeliveryCancellation / ShipmentCancelled');
+        expect(targetName(occurrence, naming('label'))).toBe('配送キャンセル / 配送がキャンセルされた @ 通常キャンセル #1');
+        expect(targetName(occurrence, naming('both'))).toBe(
+            '配送キャンセル (DeliveryCancellation) / 配送がキャンセルされた (ShipmentCancelled) @ 通常キャンセル (Normal) #1',
+        );
+    });
+
+    test('a target no longer in the sources keeps the label it was taken with; the workspace its word', () => {
+        const gone = { target: { kind: 'DtElement', element: 'Sales.Gone' }, label: 'なくなった (Sales.Gone)' } as const;
+        expect(targetName(gone.target, naming('name'))).toBeUndefined();
+        expect(targetText(gone, 'All', naming('name'))).toBe('なくなった (Sales.Gone)');
+        expect(targetText({ target: { kind: 'DtesElement', storming: 'Nope', local: 'X' } }, 'All', naming('label'))).toBe('dtes:Nope/X');
+        expect(targetText(WORKSPACE_TARGET, 'All', naming('label'))).toBe('All');
+        expect(targetText(order, 'All', { ...naming('label'), model: null })).toBe('注文 (Sales.Order)');
     });
 });

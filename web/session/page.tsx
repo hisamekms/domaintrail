@@ -5,6 +5,7 @@ import { Users } from 'lucide-react';
 import { createShapeId, useValue } from 'tldraw';
 import { LEVEL_KINDS } from '@domaintrail/visualization/domain/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
+import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { Panes } from '../app/panes';
 import type { LeftPaneAlternative } from '../app/shell';
@@ -16,10 +17,11 @@ import { highlightElement } from '../view/canvas';
 import type { Workspace } from '../view/workspace';
 import { SessionChat } from './chat';
 import { PeerCursors } from './cursors';
+import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
 import { SessionPanel } from './panel';
 import { cursorsOn } from './presence';
-import { occurrenceNode, targetOfSelection, type ModelTarget } from './targets';
+import { occurrenceNode, targetOfSelection, type ModelTarget, type NamingContext } from './targets';
 import { defaultDraftStorage, useComposerDraft, useDrafts, usePresence, useSession } from './useSession';
 
 /** Width of a closed side pane's rail (RAIL_WIDTH of app/shell.tsx). */
@@ -43,6 +45,8 @@ export function useSessionPage(input: {
     current: ViewPayload | null;
     workspace: Workspace;
     panes: Panes;
+    /** The name display setting (ラベル / 名前 / 両方): targets are named in it. */
+    mode: DisplayMode;
     /** Shows a `.dt` item in the view that suits it best (the explorer's double-click). */
     openBest: (id: string) => void;
 }): SessionPage {
@@ -50,6 +54,8 @@ export function useSessionPage(input: {
     const { editor, stormings, nav, settings, viewGraph } = workspace;
     const { view } = nav;
     const session = useSession(socket, current);
+    const model = current?.model ?? null;
+    const naming = useMemo((): NamingContext => ({ mode: input.mode, model, stormings }), [input.mode, model, stormings]);
     const t = useT();
 
     const location = viewLocation({
@@ -166,13 +172,15 @@ export function useSessionPage(input: {
         leftAlternative: {
             label: t.session.title,
             content: (
-                <SessionChat
-                    session={session}
-                    composer={composer}
-                    selectionTarget={selectionTarget}
-                    onNavigate={navigate}
-                    onClose={() => setExplorerOpen(false)}
-                />
+                <TargetNamingProvider value={naming}>
+                    <SessionChat
+                        session={session}
+                        composer={composer}
+                        selectionTarget={selectionTarget}
+                        onNavigate={navigate}
+                        onClose={() => setExplorerOpen(false)}
+                    />
+                </TargetNamingProvider>
             ),
         },
         sidePanel: facilitator && (
@@ -196,15 +204,17 @@ export function useSessionPage(input: {
                         <span className="count">{online}</span>
                     </div>
                     <aside className="pane" style={{ width }} inert={!shown}>
-                        <SessionPanel
-                            session={session}
-                            drafts={drafts}
-                            location={location}
-                            selectionTarget={selectionTarget}
-                            onNavigate={navigate}
-                            onShowInspector={() => setInspectorOpen(true)}
-                            onClose={() => setOpen(false)}
-                        />
+                        <TargetNamingProvider value={naming}>
+                            <SessionPanel
+                                session={session}
+                                drafts={drafts}
+                                location={location}
+                                selectionTarget={selectionTarget}
+                                onNavigate={navigate}
+                                onShowInspector={() => setInspectorOpen(true)}
+                                onClose={() => setOpen(false)}
+                            />
+                        </TargetNamingProvider>
                     </aside>
                 </div>
             </>

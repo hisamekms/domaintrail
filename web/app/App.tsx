@@ -54,7 +54,7 @@ export function App() {
     };
 
     // in a session (dt session start) only: the session's chat, the facilitator's session pane and the others' cursors
-    const session = useSessionPage({ socket, current, workspace, panes, openBest });
+    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest });
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
