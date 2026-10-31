@@ -136,7 +136,7 @@ export const REF_KINDS: readonly NodeElementKind[] = ['event', 'aggregate', 'com
  */
 export type SemanticEdgeKind = 'on' | 'issues' | 'emits' | 'target' | 'actor' | 'reads' | 'hotspot-on';
 
-/** A valid relation, directed as in spec §9.1 (`Actor → Command`, `Read Model → Command`, the others from the owner). */
+/** A valid relation, directed as in spec §9.1 (`Event → Policy`, `Actor → Command`, `Read Model → Command`, the others from the owner). */
 export interface SemanticEdge {
     /** Local IDs. */
     sourceId: string;
