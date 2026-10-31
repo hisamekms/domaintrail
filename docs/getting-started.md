@@ -597,6 +597,71 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
 }
 ```
 
+### Explore with Event Storming
+
+Before there is a model, or to find what a model lacks, storm the domain with the agent in a `.dtes` file next to the
+model (`dt guide storming`): first the events, the timelines they happen in and the open questions (hotspots), then
+who issues which command on which aggregate, and which policy reacts to which event. An element refers to the model
+with a `ref` once the model has the symbol, and `dt check` checks those `ref`s; nothing changes the `.dt` files but the
+decisions you and the agent make. Add the stormings to the sources of the config,
+`"sources": ["domain/**/*.dt", "domain/**/*.dtes"]`, and ask for example:
+
+- "Let's storm cancellations: only the events, the timelines and hotspots in `domain/stormings/cancellation.dtes`
+  for now, and ask me what is unclear."
+- "Storm the existing model of Booking with refs to it, walk the exceptions as timelines, and list what the model
+  lacks apart from what `dt check` reports."
+
+```dtes
+// domain/stormings/room-booking.dtes
+storming RoomBooking "会議室予約" {
+  event ReservationRequested "予約が申し込まれた" {
+    ref Booking.ReservationRequested
+  }
+  event ReservationConfirmed "予約が確定した" {
+    ref Booking.ReservationConfirmed
+  }
+  event ReservationDeclined "予約が断られた" // not in the model yet
+
+  actor Member "社員"
+  readmodel RoomCapacity "部屋の定員"
+
+  aggregate Reservation "予約" {
+    ref Booking.Reservation
+  }
+
+  command Request "申し込む" {
+    ref Booking.Reservation.request
+    actor Member
+    target Reservation
+    emits ReservationRequested
+  }
+  command Confirm "確定する" {
+    ref Booking.Reservation.confirm
+    reads RoomCapacity
+    target Reservation
+    emits ReservationConfirmed
+    emits ReservationDeclined
+  }
+
+  timeline Confirmed "確定" {
+    ReservationRequested
+    ReservationConfirmed
+  }
+  timeline TooSmall "部屋が狭い" {
+    ReservationRequested
+    ReservationDeclined
+  }
+
+  hotspot WhoConfirms "誰が確定する？ 申込みのときに自動で？" {
+    on ReservationConfirmed
+  }
+}
+```
+
+The storming says that confirming may decline a reservation, which the model does not have yet; the hotspot asks who
+confirms. `dt fmt` and `dt check` take the `.dtes` files with the `.dt` files, and the Live View shows a storming at Big
+Picture (the events) or Design Level, as a whole or one timeline at a time.
+
 ### The complete picture
 
 [examples/shop](../examples/shop/README.md) is a complete project: a model of three contexts, the generated code, and
@@ -612,9 +677,9 @@ text, go to definition, find references, hover, outline, completion, rename and 
 
 ### Zed
 
-The extension in [`editors/zed`](../editors/zed) highlights `.dt` files, gives an outline and starts `dt lsp`. It is
-not in Zed's extension registry yet: install it from a clone of this repository with *zed: install dev extension*,
-choosing the `editors/zed` directory. Building it needs Rust, installed with rustup. It runs the first of:
+The extension in [`editors/zed`](../editors/zed) highlights `.dt` files (not `.dtes`), gives an outline and starts
+`dt lsp`. It is not in Zed's extension registry yet: install it from a clone of this repository with *zed: install dev
+extension*, choosing the `editors/zed` directory. Building it needs Rust, installed with rustup. It runs the first of:
 `lsp.domaintrail.binary` in Zed's settings, `dt` on the `PATH`, else the domaintrail version the extension pins, which
 it installs into its own directory. It does not run the project's `node_modules/.bin/dt` unless the settings name it
 (`dt guide editors`).
@@ -622,15 +687,15 @@ it installs into its own directory. It does not run the project's `node_modules/
 ### Claude Code
 
 A Claude Code plugin can declare the language server in an `.lsp.json` at the plugin root; load the plugin with
-`claude --plugin-dir <plugin directory>`. Claude then sees the diagnostics after each edit of a `.dt` file, without
-running `dt check`:
+`claude --plugin-dir <plugin directory>`. Claude then sees the diagnostics after each edit of a `.dt` or `.dtes` file,
+without running `dt check`:
 
 ```json
 {
   "domaintrail": {
     "command": "dt",
     "args": ["lsp"],
-    "extensionToLanguage": { ".dt": "domaintrail" }
+    "extensionToLanguage": { ".dt": "domaintrail", ".dtes": "dtes" }
   }
 }
 ```
@@ -639,8 +704,8 @@ running `dt check`:
 
 ### Other editors
 
-Any LSP client works with the command `dt lsp` (or `npx dt lsp`), transport stdio, for files ending in `.dt`. There is
-no VS Code extension yet; a generic LSP client extension can start the server. Editors that highlight with
+Any LSP client works with the command `dt lsp` (or `npx dt lsp`), transport stdio, for files ending in `.dt` and
+`.dtes`. There is no VS Code extension yet; a generic LSP client extension can start the server. Editors that highlight with
 tree-sitter (Neovim, Helix, Emacs) can use the grammar in
 [`tree-sitter-domaintrail`](../tree-sitter-domaintrail).
 

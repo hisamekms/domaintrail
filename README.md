@@ -74,15 +74,19 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **The DSL**: contexts and shared contexts, aggregates with states and transitions, entities, value objects, domain
   primitives, unions, field sets, labels (表示名) and terms; invariants, command requirements (`requires`), the fields
   a command changes, the events it emits as an exact contract, verified types and policies.
-- **`dt check`**: syntax, references, types and DDD rules, with a hint on what to change; text or JSON.
-- **`dt fmt`**: one canonical layout for `.dt` files, keeping every comment.
+- **Event Storming** (`.dtes` files, [`dt guide storming`](docs/guide.md#event-storming-dtes)): events, timelines and
+  hotspots at Big Picture, then actors, commands, policies, aggregates and read models at Design Level, next to the
+  model and with checked `ref`s into it — to find the model from a storming, or what an existing model lacks.
+- **`dt check`**: syntax, references, types and DDD rules, with a hint on what to change; text or JSON. It checks the
+  `.dtes` files too, and their `ref`s against the model.
+- **`dt fmt`**: one canonical layout for `.dt` and `.dtes` files, keeping every comment.
 - **`dt generate ts`**: types per context, command contracts and decisions for `decide`, checks of the invariants and
   requirements, constructors of domain primitives, and contract tests with fast-check (bun, vitest, jest, node).
 - **`dt view`**: the Live View — context map, structure, state transitions, behaviour, source and the changes since the
   last save or a git revision, in Japanese or English.
 - **`dt show`**: one element resolved, for people and agents, as text or JSON.
-- **`dt lsp`**: a language server — diagnostics, definitions, references, hover, rename, formatting; a
-  [Zed extension](editors/zed) and a [tree-sitter grammar](tree-sitter-domaintrail).
+- **`dt lsp`**: a language server for `.dt` and `.dtes` files — diagnostics, definitions, references, hover, rename,
+  formatting; a [Zed extension](editors/zed) and a [tree-sitter grammar](tree-sitter-domaintrail) (`.dt` only).
 - **`dt guide`**: the guide in the terminal, one topic at a time.
 
 ## Contributing

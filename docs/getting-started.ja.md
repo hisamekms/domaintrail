@@ -586,6 +586,71 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
 }
 ```
 
+### Event Storming で探る
+
+モデルがまだないとき、あるいはモデルに足りないものを見つけたいときは、モデルの隣の `.dtes` ファイルでエージェントと
+Event Storming をします（`dt guide storming`）。まずイベント、それが起きる timeline、未解決の疑問（ホットスポット）を
+書き、それから誰がどの集約にどのコマンドを発行するか、どのポリシーがどのイベントに反応するかを加えます。モデルに
+シンボルができたら要素から `ref` でそれを参照し、`dt check` がその `ref` を検査します。`.dt` ファイルを変えるのは、
+あなたとエージェントの判断だけです。設定の sources に `"sources": ["domain/**/*.dt", "domain/**/*.dtes"]` のように
+storming を加え、たとえば次のように頼みます。
+
+- 「キャンセルを Event Storming しよう。まずはイベント、timeline、ホットスポットだけを
+  `domain/stormings/cancellation.dtes` に書いて、不明な点を質問して。」
+- 「Booking の既存モデルを ref 付きで Event Storming して、例外を timeline でたどり、`dt check` の報告とは別に
+  モデルに足りないものを挙げて。」
+
+```dtes
+// domain/stormings/room-booking.dtes
+storming RoomBooking "会議室予約" {
+  event ReservationRequested "予約が申し込まれた" {
+    ref Booking.ReservationRequested
+  }
+  event ReservationConfirmed "予約が確定した" {
+    ref Booking.ReservationConfirmed
+  }
+  event ReservationDeclined "予約が断られた" // not in the model yet
+
+  actor Member "社員"
+  readmodel RoomCapacity "部屋の定員"
+
+  aggregate Reservation "予約" {
+    ref Booking.Reservation
+  }
+
+  command Request "申し込む" {
+    ref Booking.Reservation.request
+    actor Member
+    target Reservation
+    emits ReservationRequested
+  }
+  command Confirm "確定する" {
+    ref Booking.Reservation.confirm
+    reads RoomCapacity
+    target Reservation
+    emits ReservationConfirmed
+    emits ReservationDeclined
+  }
+
+  timeline Confirmed "確定" {
+    ReservationRequested
+    ReservationConfirmed
+  }
+  timeline TooSmall "部屋が狭い" {
+    ReservationRequested
+    ReservationDeclined
+  }
+
+  hotspot WhoConfirms "誰が確定する？ 申込みのときに自動で？" {
+    on ReservationConfirmed
+  }
+}
+```
+
+この storming は、確定のときに予約が断られることがある（モデルにはまだない）と言い、誰が確定するのかをホットスポットで
+問うています。`dt fmt` と `dt check` は `.dt` ファイルと一緒に `.dtes` ファイルも扱い、Live View は storming を
+Big Picture（イベント）か Design Level で、全体または timeline ごとに表示します。
+
 ### 全体像
 
 [examples/shop](../examples/shop/README.md) は完全なプロジェクトです。3 つのコンテキストのモデル、生成コード、そして
@@ -601,7 +666,7 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
 
 ### Zed
 
-[`editors/zed`](../editors/zed) の拡張は `.dt` ファイルをハイライトし、アウトラインを出し、`dt lsp` を起動します。
+[`editors/zed`](../editors/zed) の拡張は `.dt` ファイル（`.dtes` は除く）をハイライトし、アウトラインを出し、`dt lsp` を起動します。
 まだ Zed の拡張レジストリにはないので、このリポジトリをクローンし、*zed: install dev extension* で `editors/zed`
 ディレクトリを選んでインストールします。ビルドには rustup で入れた Rust が必要です。言語サーバーは次のうち最初に
 見つかったものを使います: Zed の設定の `lsp.domaintrail.binary`、`PATH` 上の `dt`、なければ拡張が固定している
@@ -612,14 +677,14 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
 
 Claude Code のプラグインは、プラグインのルートに置いた `.lsp.json` で言語サーバーを宣言できます。プラグインは
 `claude --plugin-dir <plugin directory>` で読み込みます。これで Claude は `dt check` を実行しなくても、`.dt`
-ファイルを編集するたびに診断を受け取ります。
+ファイルや `.dtes` ファイルを編集するたびに診断を受け取ります。
 
 ```json
 {
   "domaintrail": {
     "command": "dt",
     "args": ["lsp"],
-    "extensionToLanguage": { ".dt": "domaintrail" }
+    "extensionToLanguage": { ".dt": "domaintrail", ".dtes": "dtes" }
   }
 }
 ```
@@ -628,7 +693,7 @@ Claude Code のプラグインは、プラグインのルートに置いた `.ls
 
 ### そのほかのエディター
 
-どの LSP クライアントでも、コマンド `dt lsp`（または `npx dt lsp`）、トランスポート stdio、拡張子 `.dt` で使えます。
+どの LSP クライアントでも、コマンド `dt lsp`（または `npx dt lsp`）、トランスポート stdio、拡張子 `.dt` と `.dtes` で使えます。
 VS Code の拡張はまだありませんが、汎用の LSP クライアント拡張からサーバーを起動できます。tree-sitter でハイライトする
 エディター（Neovim、Helix、Emacs）は [`tree-sitter-domaintrail`](../tree-sitter-domaintrail) の文法を使えます。
 

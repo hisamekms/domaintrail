@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
 import { parseJsonc } from '../src/core/config.js';
+import { formatStorming } from '../src/dtes/format.js';
 import { formatDomain } from '../src/format/format.js';
 import { check } from './helpers.js';
 
@@ -76,6 +77,16 @@ describe('getting started', () => {
                 expect((await check(files)).diagnostics).toEqual([]);
                 expect(formatDomain(block)).toBe(block);
             }
+        });
+
+        test(`${file}: its storming checks without any diagnostic against the last model, and is formatted`, async () => {
+            const [storming, ...more] = blocksOf(page, 'dtes');
+            expect(more).toEqual([]);
+            const name = /^\/\/ (\S+\.dtes)\n/.exec(storming!)![1]!;
+            expect(formatStorming(storming!)).toBe(storming!);
+            const a = await check({ 'domain/booking/reservation.dt': blocksOf(page, 'dt').at(-1)!, [name]: storming! });
+            expect(a.diagnostics).toEqual([]);
+            expect(a.stormings.stormings.map((s) => s.id)).toEqual(['RoomBooking']);
         });
 
         test(`${file}: its JSONC blocks are valid`, () => {
