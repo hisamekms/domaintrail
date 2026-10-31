@@ -2416,9 +2416,12 @@ page no session chat or panel. Sessions need Node.js 22.13 or later (for `node:s
 - `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
   the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
 
-**Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat in the left pane
-(what was queued and what the agent answered, the requests awaiting approval, and the composer), send requests and
-dismiss their own. The facilitator also has the session panel on the right, where they compare revisions. The
+**Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
+right end of the page (チャット: what was queued and what the agent answered, the requests awaiting approval, and the
+composer; 履歴: the runs that changed files, a question and the run answering it as one row), send requests and
+dismiss their own. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the agent is
+running or waiting for an answer and how many messages are new. The facilitator also has the session panel,
+switchable with the inspector from its menu (⋯), where they compare revisions. The
 **facilitator** is whoever opened the facilitator link while signed in (never derived from Cloudflare Access); a new
 link moves the role, and the previous holder's pages reconnect as a participant. Only the facilitator queues and
 cancels runs, dismisses others' requests, records, confirms and restores revisions, changes the shared 比較対象 (baseline)

@@ -5,18 +5,44 @@ serves the page at <http://127.0.0.1:4321> (`--port`, `--host`, or `view.port` /
 and runs until Ctrl+C. [Getting started](getting-started.md#watch-it-in-the-live-view) shows what to look at first;
 this page describes every pane.
 
-The screen is laid out like an IDE; every pane is closed and opened with the icon button at its top (a closed side
-pane leaves a narrow rail with the button that opens it) and resized by dragging (remembered per browser).
+The screen has no header. It is laid out like an IDE: the left pane with its lists, the main canvas, and the inspector
+(right of the canvas, or below it); in a session, the chat is a pillar of its own at the right end. Panes are closed
+and opened with the icon buttons at their top (a closed inspector leaves a narrow rail with the buttons that open it)
+and resized by dragging; all of it is remembered per browser.
 
-## Explorer (left)
+## Left pane
+
+Its head names the workspace (the folder of `domaintrail.jsonc`) after DomainTrail. A column of icons at its left edge,
+the activity bar, picks the list it shows — 木, 問題 and 差分, with the number of problems and changes as badges — and
+clicking the list shown collapses the pane to the activity bar (it never disappears). At its foot:
+
+- **The health**: a dot, green when all is well, larger and amber or red with a word when it is not (警告: connecting,
+  no sources, an older diagram shown, warnings; エラー: the model does not validate, or the server is gone). A click
+  shows the status, the number of files, the version, the time of the last update and the connection.
+- **The settings** (the gear): 名前の表示, the theme and the language.
+
+Collapsed, the pane keeps the brand's mark at the top of the activity bar, and the health and the gear at its bottom.
+
+### 木 (tree)
 
 The model tree — shared contexts first, then each context grouped by kind; aggregates expand to their states and
 commands — and the `.dt` and `.dtes` files with error/warning counts. Click selects (a file too); double-click opens the item in
 the view or inspector tab that suits it.
 
+### 問題 (problems)
+
+The diagnostics; a click locates one (in the inspector's source for a syntax error, which belongs to no element).
+
+### 差分 (changes)
+
+The 比較対象 button at its top names what the model is compared with and opens the menu choosing it (see below); under
+it, the items added, changed and removed since then. A removed item opens in the inspector as it was in the baseline.
+
 ## Main (center)
 
-Views of the whole model, in tabs with a view-specific toolbar. Anything about one selected item is in the inspector.
+Views of the whole model, in tabs with a view-specific toolbar; the toolbar's 凡例 button shows the legend over the
+canvas. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
 - **Context Map**: one node per bounded context and one edge per dependency between contexts, labeled with the number
@@ -45,10 +71,11 @@ See [ADR 0007](adr/0007-pane-roles.md).
   an arrowhead for a hotspot's event); the colours of the notes are defaults with no
   meaning (see the legend). A storming whose file stops parsing stays as it last parsed, with a banner.
 
-## Inspector (right)
+## Inspector (right or below)
 
 The selected item — name, description, diagnostics, a back button naming the item it returns to (「〇〇 に戻る」), and
-buttons to show it in a view. Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
+buttons to show it in a view. Its menu (⋯, next to its close button) moves it below the canvas (下に移動) or back to its
+right (右に移動). Sub-tabs: 構造 / 状態遷移 / 振る舞い / 参照 / ソース. An event shows 永続化 / 非永続 next
 to its kind, as it does in an aggregate's 発生させる Event list; persistent events have a database icon in the
 explorer.
 
@@ -64,15 +91,9 @@ explorer.
   is highlighted with a button that copies its code (to paste into feedback for an AI agent); clicking a declaration
   selects it. A selected file shows here the same way.
 
-## Problems and changes (bottom)
-
-Diagnostics (click to locate) and additions / changes / removals since the baseline (below), under a heading naming
-it (「main (d22ce69) からの変更」) that opens the menu choosing it; a removed item opens in the inspector as it was
-there.
-
 ## Comparing with a git revision
 
-The 比較対象 menu in the header picks what additions, changes and removals are shown against: 前回の保存 (the last valid
+The 比較対象 menu, at the top of the 差分 list, picks what additions, changes and removals are shown against: 前回の保存 (the last valid
 model shown before, the default) or a git revision of the workspace — a branch, a tag, one of the latest commits, or
 any revision typed in (`main`, `HEAD~3`, a commit). `dt view --base main` starts with one. The model compared is the
 working tree, saved but not necessarily committed, against the `.dt` files of that commit (picked by `sources`). The
@@ -95,24 +116,40 @@ neither baseline: their views are not marked.
 - Selecting never switches the main view by itself; the item is highlighted when the current view shows it.
 - Added / changed elements are highlighted; removed ones appear as ghosts (see
   [Comparing with a git revision](#comparing-with-a-git-revision)). On a syntax error the last diagram stays.
-- The language of the Live View (Japanese or English) follows the browser, or is forced in the settings menu (the gear
-  at the right of the header). It covers the screen and the diagrams' own words (集約 / aggregate…); the model's names
+- The language of the Live View (Japanese or English) follows the browser, or is forced in the settings (the gear at
+  the foot of the left pane). It covers the screen and the diagrams' own words (集約 / aggregate…); the model's names
   and labels are shown as written, and diagnostics are in English.
 - The theme follows the OS (自動), or is forced with ライト / ダーク in the settings menu; both choices are remembered
   per browser.
-- Names follow the 名前の表示 switch in the header: ラベル (the string after a declaration's name, falling back to the
+- Names follow the 名前の表示 setting: ラベル (the string after a declaration's name, falling back to the
   name), 名前 or 両方. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
 
 ## In a session
 
-Under `dt session start` (not `dt view`) the left pane gets a switch (エクスプローラー / セッション) and opens on the
-session's chat, the same for everyone: the participants online and the agent's status at a glance, one stream of the
-requests the facilitator queued and what followed (the facilitator's note, the agent's progress, question, result or
-failure, revisions confirmed or restored), the requests awaiting approval, and a composer for a request about up to
-20 targets (none: the whole workspace), picked with `@` or added from the selection, whose unsent text and targets
-stay in the browser. The others' cursors are drawn on the same view. The facilitator also has the session panel on the right, switchable with the inspector: requests to queue as
-runs, the runs, and the revision timeline with comparison, confirm and restore. `dt view` serves the same page without
-any of it. See
-[`dt guide session`](guide.md#collaboration-sessions).
+Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
+the same for everyone and open when the page joins. Its head shows the participants online (a click lists them) and
+the agent's status at a glance, with ✕ to close it; while it is closed, a round 💬 button at the bottom right of the
+canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
+messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection and `C`
+open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
+its activity bar while the chat is open, and below about 1024px the inspector moves below the canvas (your own choices
+come back when the window is wide again).
+
+The chat has two views:
+
+- **チャット**: one stream of the requests the facilitator queued and what followed (the facilitator's note, the agent's
+  progress, question, result or failure, revisions confirmed or restored), the requests awaiting approval, and a
+  composer for a request about up to 20 targets (none: the whole workspace), picked with `@` or added from the
+  selection, whose unsent text and targets stay in the browser.
+- **履歴**: the history of changes, newest first. Each row is one run that changed files — or a run that asked a
+  question together with the run queued again to answer it — with its number, time, outcome, what the AI says about
+  it, the number of files it changed (measured from the revisions) and who asked. Opened, it shows the requests, the
+  question, the note and the result as in the chat, and チャットで見る scrolls the chat to them. すべて also lists the runs
+  that changed nothing, and those declined, failed or cancelled.
+
+The others' cursors are drawn on the same view. The facilitator also has the session panel, switchable with the
+inspector (from the menu ⋯ in its head, or the rail's buttons when it is closed) and docked where the inspector is:
+requests to queue as runs, the runs, and the revision timeline with comparison, confirm and restore. `dt view` serves
+the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).

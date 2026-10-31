@@ -38,7 +38,7 @@ restored. `.dt` and `.dtes` are first-class from the start. `dt view` stays as i
 | `packages/agent` | `dt session subscribe`: `application/` (the subscriber loop and the run pipeline over the ports `AgentApi`, `AgentRunner`, `DslTools`, `WorkspaceFiles`, `Clock`; the prompt), `infrastructure/` (the SSE client, the Claude Code adapter (child process, no shell interpolation), `dt fmt`/`dt check`, the workspace scan) — in place since S6 | collaboration (protocol and types only) |
 | presentation | session HTTP routes (`/api/session/*`), the agent API on its own loopback listener, the WS message union | + collaboration (application, protocol, generated types) — in place since S4 |
 | composition | `startSessionServer` (view + session in one HTTP process), `startSubscriber`, CLI wiring | + collaboration (infrastructure; since S4), agent (since S6) |
-| web | the session panel in `AppShell`'s `sidePanel`, drafts in IndexedDB, presence overlay | + collaboration (protocol, types) — in place since S4 (`useViewSocket`) |
+| web | the chat in `AppShell`'s `conversation`, the session panel in its `dockAlternative`, drafts in IndexedDB, presence overlay | + collaboration (protocol, types) — in place since S4 (`useViewSocket`) |
 
 The architecture test gets both packages, the graph above and the layer rules (`domain` pure, `application` without
 I/O; only composition imports infrastructure).
