@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
@@ -200,6 +200,8 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
 /** Refuses an agent's `dt` that runs a file of the workspace (see `commandPathsInside`). */
 function checkAgentDt(config: DomainTrailConfigFile, file: string): void {
     const dt = config.session?.agent?.dt;
+    if (dt && isPackageRunner(dt))
+        throw new ConfigError(`${file}: 'session.agent.dt' may not go through a package runner (${dt[0]}): it resolves code from the workspace.`);
     const inside = dt ? commandPathsInside(dt, path.dirname(file)) : [];
     if (inside.length)
         throw new ConfigError(
@@ -215,26 +217,55 @@ export function resolveCommand(command: readonly string[], dir: string): string[
     return command.map((part) => (/[\\/]/.test(part) && !part.startsWith('-') && !path.isAbsolute(part) ? path.resolve(dir, part) : part));
 }
 
-/** A path as it really is (symbolic links followed), or as written when it does not exist. */
+/** A path as it really is: symbolic links followed up to its deepest existing directory, the rest as written. */
 function realPath(p: string): string {
+    const abs = path.resolve(p);
     try {
-        return realpathSync(p);
+        return realpathSync(abs);
     } catch {
-        return path.resolve(p);
+        const parent = path.dirname(abs);
+        return parent === abs ? abs : path.join(realPath(parent), path.basename(abs));
     }
 }
 
 /**
- * The paths of the agent's `dt` command that are inside the workspace (`dir`, the config file's directory), symbolic
- * links followed: the agent writes there during a run, so `dt` may run nothing of it.
+ * The words of the agent's `dt` command that name something inside the workspace (`dir`, the config file's
+ * directory), symbolic links followed and compared by path segments: the program when it is a path, and every argument
+ * that is a path or an existing file (also the value of `--opt=value`), relative ones from `dir`. The agent writes
+ * there during a run, so `dt` may run nothing of it. (The subscriber checks again, with the program found on the PATH.)
  */
 export function commandPathsInside(command: readonly string[], dir: string): string[] {
     const root = realPath(dir);
-    return command.filter((part) => {
-        if (!/[\\/]/.test(part) || part.startsWith('-')) return false;
-        const rel = path.relative(root, realPath(path.resolve(dir, part)));
-        return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
-    });
+    const within = (p: string): boolean => {
+        const rel = path.relative(root, realPath(path.resolve(dir, p)));
+        return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+    };
+    const [program, ...args] = command;
+    const words = [
+        ...(program !== undefined && /[\\/]/.test(program) ? [program] : []),
+        ...args.flatMap((a) => (!a.startsWith('-') ? [a] : a.indexOf('=') > 0 ? [a.slice(a.indexOf('=') + 1)] : [])),
+    ];
+    return words.filter((w) => (/[\\/]/.test(w) || existsSync(path.resolve(dir, w))) && within(w));
+}
+
+/** Package runners, which resolve code from the workspace: never the agent's `dt`. */
+const PACKAGE_RUNNERS = new Set(['npx', 'pnpx', 'bunx']);
+const RUNNER_VERBS: Record<string, readonly string[]> = {
+    npm: ['exec', 'x', 'run', 'run-script'],
+    pnpm: ['dlx', 'exec', 'run'],
+    yarn: ['dlx', 'exec', 'run'],
+    bun: ['run', 'x'],
+};
+
+/** Whether a command goes through a package runner (`npx`, `bunx`, `pnpm dlx`, `bun run`, …). */
+export function isPackageRunner(command: readonly string[]): boolean {
+    const [program = '', ...args] = command;
+    const name = path
+        .basename(program)
+        .toLowerCase()
+        .replace(/\.(exe|cmd|bat|com|js|cjs|mjs)$/, '');
+    const verb = args.find((a) => !a.startsWith('-'));
+    return PACKAGE_RUNNERS.has(name) || (verb !== undefined && (RUNNER_VERBS[name]?.includes(verb) ?? false));
 }
 
 function resolveSession(session: SessionConfigFile | undefined, dir?: string): ResolvedSessionConfig {

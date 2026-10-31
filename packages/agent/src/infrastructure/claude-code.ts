@@ -8,8 +8,7 @@ import { spawn } from 'node:child_process';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../application/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration/domain/reply';
 import { parseReply } from '../application/prompt.js';
-import { checkDtCommand, fingerprintDt, withPathFirst, writeDtShim } from './dt-shim.js';
-import type { DtCommand } from './dt-tools.js';
+import { fingerprintDt, pinDtCommand, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */
 export interface AgentCommand {
@@ -94,7 +93,7 @@ export interface ClaudeCodeOptions {
      * What the agent's `dt` runs: a shim for it goes first on the agent's PATH (none: the PATH as it is). Taken once,
      * when the runner is made: refused inside the workspace, and its files must not change from one run to the next.
      */
-    readonly dt?: DtCommand;
+    readonly dt?: PinnedDt;
 }
 
 /** Kills the agent's process group (it was started detached, as the group's leader), or the agent alone on Windows. */
@@ -112,15 +111,14 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
 
 export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promise<AgentRunner> {
     const command = options.command ?? CLAUDE;
-    const dt = options.dt;
-    if (dt) checkDtCommand(dt, options.root);
+    const dt = options.dt && pinDtCommand({ command: options.dt.program, args: options.dt.args }, options.root);
     const fingerprint = dt && (await fingerprintDt(dt));
     /** The shim of a run, once the command is checked again (a file of it changed: the run fails to start). */
     const shimFor = async (): Promise<Awaited<ReturnType<typeof writeDtShim>> | undefined> => {
         if (!dt) return undefined;
-        checkDtCommand(dt, options.root);
-        if ((await fingerprintDt(dt)) !== fingerprint) throw new Error("A file of the agent's dt changed since the subscriber started: refusing to run it.");
-        return writeDtShim(dt, options.root);
+        const now = pinDtCommand({ command: dt.program, args: dt.args }, options.root);
+        if ((await fingerprintDt(now)) !== fingerprint) throw new Error("A file of the agent's dt changed since the subscriber started: refusing to run it.");
+        return writeDtShim(now, options.root);
     };
     return {
         run(invocation: AgentInvocation): Promise<AgentOutcome> {

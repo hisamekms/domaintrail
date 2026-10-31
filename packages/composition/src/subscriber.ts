@@ -6,7 +6,9 @@ import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { startSubscriber as subscribe, type Subscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
 import { createClaudeCodeRunner, type AgentCommand } from '@domaintrail/agent/infrastructure/claude-code';
+import { pinDtCommand, type PinnedDt } from '@domaintrail/agent/infrastructure/dt-shim';
 import { createDtTools, type DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
+import type { AgentRunner } from '@domaintrail/agent/application/ports';
 import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
 import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
 import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/system';
@@ -87,16 +89,21 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
 
     // the agent's dt, taken once now (never read again from the config file, which is in the workspace)
-    const runner = await createClaudeCodeRunner({ root, command: options.agentCommand, dt: options.dt }).catch((e: unknown) => {
+    let dt: PinnedDt;
+    let runner: AgentRunner;
+    try {
+        dt = pinDtCommand(options.dt, root);
+        runner = await createClaudeCodeRunner({ root, command: options.agentCommand, dt });
+    } catch (e) {
         throw new SessionError(e instanceof Error ? e.message : String(e));
-    });
+    }
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
     const subscriber: Subscriber = subscribe(
         {
             api,
             runner,
-            tools: createDtTools({ dt: options.dt, root, configPath: options.configPath, log }),
+            tools: createDtTools({ dt: { command: dt.program, args: dt.args }, root, configPath: options.configPath, log }),
             workspace: {
                 scan: () => scanWorkspace(root),
                 sources: async () => new Set(await findDomainFiles(root, sources, respectGitignore)),
