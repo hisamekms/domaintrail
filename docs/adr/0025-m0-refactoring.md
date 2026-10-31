@@ -115,7 +115,7 @@ unchanged.
   the camera and the persisted panes; a composition point for a later panel, not the panel. `useViewSocket` keeps
   today's messages.
 
-**T6 (R5a): modeling** (after T1; parallel with T2–T4, but not on `config.ts`, which is T2's)
+**T6 (R5a): modeling** (after T4: its moves rewrite imports across `src/`, including the files T2–T4 change)
 - Owns `src/modeling/` (to become `packages/modeling`): the moves of `src/language`, `src/core`, `src/model`,
   `src/generator`, `src/format` and the modeling half of `src/dtes` (with the storming half of `ir.ts`), the Langium
   config and generated path. No change to diagnostics, codes or generated output.
@@ -129,8 +129,9 @@ unchanged.
   session (composition, the access check, message routing, view update notifications, workspace operations) as a
   README section or ADR. No session feature.
 
-Dependencies: T1 first. T2 → T3 → T4 in order (they change `server.ts`/`session.ts` in turn). T5 and T6 in parallel
-with them. T7 after all of them, T8 last.
+Dependencies: T1 first. T2 → T3 → T4 → T6 in order (they change `server.ts`/`session.ts` in turn, and T6's moves touch
+every import). T5 (only `web/`) in parallel with them. T7 after all of them, T8 last. Each task is done by a worker in
+its own worktree (`refactor/m0-tN`) and merged into `refactor/m0` after review.
 
 ## Consequences
 
