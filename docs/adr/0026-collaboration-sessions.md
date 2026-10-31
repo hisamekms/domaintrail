@@ -36,9 +36,9 @@ restored. `.dt` and `.dtes` are first-class from the start. `dt view` stays as i
 | `packages/collaboration` | `model/*.dt` (Session, Request, AgentRun, Revision) and its committed generated contracts (`src/generated`); `domain/` (pure decisions over the generated types: ADT states, transitions, run success rule, target staleness); `application/` (use cases and ports: `SessionRepository`, `RequestRepository`, `RunQueue`, `RevisionStore`, `WorkspaceSnapshot`, `SnapshotBlobs`, `ModelValidator`, `IdentityProvider`, `Clock`, `IdGenerator`, `EventOutbox`, `UnitOfWork`); `infrastructure/` (`node:sqlite` schema, migrations, transactions, outbox, queue/lease; the snapshot blobs; the validator; the Access/JWT identity adapter and the dev identity); `protocol.ts` (browser and agent messages) | modeling, visualization (types) |
 | workspace | + `infrastructure/snapshot.ts`: the `WorkspaceSnapshot` port of collaboration, implemented structurally (ADR 0025: writes to the sources are a port on the consumer's side, implemented in workspace) | modeling (unchanged) |
 | `packages/agent` | `dt session subscribe`: the SSE client, claim/heartbeat/result, the Claude Code adapter (child process, no shell interpolation) | collaboration (protocol and types) |
-| presentation | session HTTP routes (`/api/session/*`), the agent API on its own loopback listener, the WS message union | + collaboration (application, protocol) |
-| composition | `startSessionServer` (view + session in one HTTP process), `startSubscriber`, CLI wiring | + collaboration, agent |
-| web | the session panel in `AppShell`'s `sidePanel`, drafts in IndexedDB, presence overlay | + collaboration (protocol, types) |
+| presentation | session HTTP routes (`/api/session/*`), the agent API on its own loopback listener, the WS message union | + collaboration (application, protocol, generated types) — in place since S4 |
+| composition | `startSessionServer` (view + session in one HTTP process), `startSubscriber`, CLI wiring | + collaboration (infrastructure; since S4), agent |
+| web | the session panel in `AppShell`'s `sidePanel`, drafts in IndexedDB, presence overlay | + collaboration (protocol, types) — in place since S4 (`useViewSocket`) |
 
 The architecture test gets both packages, the graph above and the layer rules (`domain` pure, `application` without
 I/O; only composition imports infrastructure).
@@ -184,3 +184,44 @@ details S4–S7 need that neither states. `test/session-baseline.test.ts` pins d
   hashes), and a `Restored` revision of what is on disk.
 - **Targets.** A `dtes-occurrence`'s `occurrence` is the step path joined by `.` (`3`, `2.1`); a target is `current`,
   `stale`, or `unknown` when the sources it would be in do not parse.
+
+## Appendix: the session server (S4)
+
+*Decided by the supervisor* for S4, and built so:
+
+- **One open session per workspace.** `dt session start` resumes the open session (`currentSession`, the oldest open
+  one) or starts one; the facilitator's participant is `local:facilitator` (named `Facilitator`), fixed at start.
+- **Facilitator link.** `dt session start` prints a one-time link (`/session/facilitator?code=…`, 32 random bytes,
+  single use, 10 minutes). Opening it while signed in binds that identity to `local:facilitator`; the previous holder
+  loses the role and their pages are disconnected. Access never implies the role. `dt session link` issues another:
+  the code is written (hashed) to the session database, the URL is read from `.domaintrail/session/server.json`.
+  `POST /api/session/facilitator/claim {code}` does the same for a page.
+- **Identity modes**, explicit in `session.identity`: `dev` refuses a non-loopback bind; the first visit gets a join
+  form (no script) and a name; the server keeps a sign-in (the SHA-256 of an opaque 32-byte cookie `dt_session`,
+  HttpOnly, SameSite=Strict, Secure when `publicUrl` is https) mapped to the identity `dev:<uuid>`. `access` takes the
+  token from `Cf-Access-Jwt-Assertion` or `CF_Authorization` and asks the `IdentityProvider`
+  (`application/identity.ts`); the adapter (`infrastructure/identity.ts`) checks issuer, audience and expiry of the
+  claims an `AccessTokenVerifier` returns. Until S8 the only verifier is `createMockAccessVerifier`, and
+  `dt session start` refuses the access mode without a verifier. An Access identity joins on first sight
+  (`access:<sub>`); the e-mail is never sent to pages. Host and Origin: loopback names plus `allowedHosts`; an Origin
+  of the same host when it is loopback, else one of `allowedOrigins` (nothing external without them).
+- **Persistence**: migration 2 adds `facilitator_links`, `facilitators` and `sign_ins` (secrets only as SHA-256),
+  behind `Stores.access` (`AccessStore`) and `application/access.ts` (`SessionAccess`). Closing the session revokes
+  every sign-in.
+- **Authorization result.** `checkAccess(headers, policy)` returns `forbidden | anonymous | participant {participant,
+  role}`; `dt view`'s policy has no `identify`, so its answers are `forbidden`/`anonymous` exactly where they were
+  `'forbidden'`/`'ok'`. In a session `createViewHttpServer` applies it to every request (page, assets, view API,
+  `/api/session/*`, `/session/*`) and the `/ws` upgrade: anonymous gets the join form (dev) or 401 (access) for a
+  page, 401 for an API or the WebSocket.
+- **Agent API**: `createAgentApi` on 127.0.0.1 (`session.agent.port`, default any free port), bearer token from
+  `.domaintrail/session/agent.json` (0600, renamed into place, never through a link; removed on stop), refuses any
+  request with an `Origin` or a non-loopback Host. SSE `GET /agent/events`: `id:` = outbox seq, `Last-Event-ID` (or
+  `?after=`) resumes; each stream reads the outbox from its cursor, 100 at a time, waiting for the socket to drain (the
+  outbox is the queue); at most 8 streams. Leases last 60 s; `expireLeases` runs at start and every 5 s.
+- **Watcher hold**: `SessionServer.watcherHold` (`hold()` → resume, `around(work)`, `held`): while held, a settled
+  burst of file events or a moved ref is deferred; the last resume refreshes and publishes once. The restore route uses
+  it.
+- **Limits**: session API bodies 64 KiB (JSON only, `application/json`), join form 2 KiB, agent bodies 16 KiB, request
+  text 10,000 characters, note and question 4,000, names 60, 100 requests per run, WS messages from a page 16 KiB
+  (checked in the hub as well as by `ws`), presence 20 Hz per participant (a newer update replaces the waiting one),
+  `session.maxParticipants` (default 50). Logs carry no token, cookie, code or e-mail.
