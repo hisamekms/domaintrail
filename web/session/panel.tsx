@@ -192,7 +192,6 @@ function Composer({ drafts, selectionTarget, state, tx }: { drafts: Drafts; sele
                 </div>
             </Section>
             <Section title={tx.drafts(drafts.drafts.length)}>
-                <p className="muted small">{tx.draftsPrivate}</p>
                 {drafts.error && <p className="session-note session-error">{tx.error(drafts.error)}</p>}
                 <ul className="session-list session-drafts">
                     {drafts.drafts.map((d) => (
