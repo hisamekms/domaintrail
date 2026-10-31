@@ -1,5 +1,6 @@
 // The boundaries of the workspace packages (ADR 0025) that the package graph cannot enforce by itself: the layers
-// inside a package, which package may reach which infrastructure, and that each package declares what it imports.
+// inside a package, which package may reach which infrastructure, that each package declares what it imports, and that
+// a dependency declared in several manifests has one version (Dependabot updates them together; see ADR 0025).
 // The isolated linker resolves only declared dependencies from a package's own node_modules, but a lookup that misses
 // there walks up to the root's node_modules, which hold the CLI's dependencies and every @domaintrail/* package.
 import { describe, expect, test } from 'bun:test';
@@ -106,6 +107,26 @@ describe('workspace packages', () => {
             const undeclared = IMPORTS[area].filter((i) => !i.resolved && !isBuiltin(i.specifier) && !declared.has(packageName(i.specifier)));
             expect(show(undeclared)).toEqual([]);
         }
+    });
+
+    test('a third-party dependency has the same version spec in every manifest that declares it', async () => {
+        const root = (await Bun.file(path.join(ROOT, 'package.json')).json()) as PackageJson;
+        const manifests: [string, PackageJson][] = [
+            ['package.json', root],
+            ...AREAS.map((area) => [`${PACKAGES[area].dir}/package.json`, MANIFESTS[area]] as [string, PackageJson]),
+        ];
+        const specs = new Map<string, Map<string, string>>();
+        for (const [file, manifest] of manifests) {
+            for (const [name, spec] of Object.entries({ ...manifest.dependencies, ...manifest.devDependencies })) {
+                if (name.startsWith('@domaintrail/')) continue;
+                specs.set(name, (specs.get(name) ?? new Map<string, string>()).set(file, spec));
+            }
+        }
+        expect([...specs.values()].some((byFile) => byFile.size > 1)).toBe(true);
+        const drifted = [...specs]
+            .filter(([, byFile]) => new Set(byFile.values()).size > 1)
+            .map(([name, byFile]) => ({ name, specs: Object.fromEntries(byFile) }));
+        expect(drifted).toEqual([]);
     });
 
     test('relative imports stay inside their package', () => {
