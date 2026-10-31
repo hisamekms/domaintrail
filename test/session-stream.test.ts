@@ -10,9 +10,11 @@ import type { DomainModel } from '@domaintrail/modeling/model/model';
 import { parseStormings } from '@domaintrail/modeling/storming/parse';
 import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { EXAMPLES } from './helpers.js';
+import { applyEvent } from '@domaintrail/web/session/state';
 import {
     agentStatus,
     elapsed,
+    filesChanged,
     headerParticipants,
     oneLine,
     participantNames,
@@ -130,6 +132,75 @@ describe('the main stream', () => {
                 }),
             ),
         ).toMatchObject({ message: { kind: 'completed', changed: true, result: 5 } });
+    });
+
+    test("the agent's reply: the requests it names resolved to the run's, the files changed measured from the revisions", () => {
+        const file = (p: string, hash: string): object => ({ path: p, language: 'Dt', hash, bytes: 1 });
+        const before = rev('b', 1, { kind: 'RunBase', run: 'x' }, { files: [file('a.dt', '1'), file('b.dt', '2'), file('c.dt', '3')] });
+        const after = rev('a', 2, { kind: 'RunResult', run: 'x' }, { files: [file('a.dt', '1'), file('b.dt', '9'), file('d.dt', '4')] });
+        expect(filesChanged(before, after)).toBe(3);
+        expect(filesChanged(before, before)).toBe(0);
+        expect(filesChanged(before, undefined)).toBeUndefined();
+        const message = (state: object): unknown =>
+            streamItems({ revisions: [before, after], runs: [run('x', 1, [q1, q2], state)] }).find((i) => i.kind === 'agent');
+        const ended = { baseRevision: 'b', startedAt: at(1), resultRevision: 'a', finishedAt: at(3) };
+        const reply = {
+            summary: 'Added.',
+            requests: [
+                { request: 'q2', status: 'Partial', note: 'Only one.' },
+                { request: 'elsewhere', status: 'Done' },
+            ],
+            questions: [],
+            assumptions: [{ text: 'Open only.', requests: ['q1'], alternatives: [{ id: 'all', label: 'All' }] }],
+        };
+        expect(message({ state: 'Completed', ...ended, changed: true, report: {}, reply })).toMatchObject({
+            message: {
+                kind: 'completed',
+                files: 3,
+                reply: {
+                    summary: 'Added.',
+                    // a request the run does not have is left out
+                    requests: [{ request: { number: 2, request: { request: 'q2', author: 'dev:b' } }, status: 'Partial', note: 'Only one.' }],
+                    assumptions: [{ text: 'Open only.', requests: [{ number: 1 }], alternatives: [{ id: 'all', label: 'All' }] }],
+                },
+            },
+        });
+        const question = { id: 'q', text: 'Which?', requests: ['q1'], options: [{ id: 'o', label: 'O' }], multiple: true };
+        expect(message({ state: 'NeedsClarification', ...ended, question: 'Which?', reply: { ...reply, questions: [question] } })).toMatchObject({
+            message: { kind: 'clarification', question: 'Which?', reply: { questions: [{ id: 'q', requests: [{ number: 1 }], multiple: true }] } },
+        });
+        expect(message({ state: 'Declined', ...ended, resultRevision: 'b', reply: { ...reply, summary: 'Not about the model.' } })).toMatchObject({
+            message: { kind: 'declined', files: 0, reply: { summary: 'Not about the model.' } },
+        });
+        // an old run without a reply shows as before
+        expect(message({ state: 'NeedsClarification', ...ended, question: 'Which?' })).toMatchObject({
+            message: { kind: 'clarification', question: 'Which?', result: 2, files: 3 },
+        });
+        expect(JSON.stringify(message({ state: 'NeedsClarification', ...ended, question: 'Which?' }))).not.toContain('reply');
+        // a declined run is not waiting for anyone
+        expect(agentStatus([run('x', 1, [q1], { state: 'Declined', ...ended, reply })])).toEqual({ kind: 'idle' });
+    });
+
+    test('a structured ending asks for the state again: its reply is not in the event', () => {
+        const state = {
+            session: {},
+            requests: [],
+            revisions: [],
+            seq: 1,
+            runs: [run('x', 1, [q1], { state: 'Running', baseRevision: 'r1', startedAt: at(2) })],
+        } as unknown as SessionStateBody;
+        const asked = applyEvent(state, {
+            type: 'run.needs_clarification',
+            seq: 2,
+            event: { type: 'RunNeedsClarification', runId: 'x', question: 'Which?', resultRevision: 'r1', finishedAt: at(3) },
+        });
+        expect([asked.state.runs[0]?.state, asked.refetch]).toEqual(['NeedsClarification', true]);
+        const declined = applyEvent(state, {
+            type: 'run.declined',
+            seq: 2,
+            event: { type: 'RunDeclined', runId: 'x', resultRevision: 'r1', finishedAt: at(3) },
+        });
+        expect(declined.refetch).toBe(true);
     });
 
     test('the status: running, else queued, else waiting for an answer when the latest run asked, else idle', () => {

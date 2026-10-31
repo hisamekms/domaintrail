@@ -86,6 +86,8 @@ interface Step {
     hang?: boolean;
     exitCode?: number;
     outcome?: Record<string, unknown>;
+    /** The structured output (`--json-schema`): the reply as the agent gives it, requests by number. */
+    reply?: Record<string, unknown>;
 }
 
 interface Invocation {
@@ -476,6 +478,93 @@ describe('the pipeline', () => {
         await subscribe(ctx, await ctx.plan([{ outcome: { outcome: 'clarification', question: 'Better in what way: states, fields or names?' } }]));
         const asked = await until(ctx, run, ['Completed', 'Failed', 'NeedsClarification']);
         expect(asked.state === 'NeedsClarification' && asked.question).toBe('Better in what way: states, fields or names?');
+    });
+
+    integration('structured replies: done with notes and assumptions, a clarification answered by choosing, a decline', async () => {
+        const ctx = await setup();
+        const first = await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Add a returns timeline.');
+        const second = await request(ctx, ctx.bob, { kind: 'DtElement', element: 'Sales.Order' }, 'Make it better.');
+        const done = await queue(ctx, [first, second]);
+        const asked = await queue(ctx, [second]);
+        const declined = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Write me a poem.')]);
+        const planFile = await ctx.plan([
+            {
+                edits: ADD_RETURN_CANCELLED,
+                reply: {
+                    outcome: 'done',
+                    summary: 'Added the cancellation to returns.',
+                    requests: [
+                        { request: 1, status: 'done' },
+                        { request: 2, status: 'skipped', note: 'Asked separately.' },
+                    ],
+                    assumptions: [{ text: 'Cancelled before receipt only.', requests: [1], alternatives: [{ id: 'any', label: 'At any time' }] }],
+                },
+            },
+            {
+                reply: {
+                    outcome: 'clarification',
+                    summary: 'Better can mean two things.',
+                    requests: [{ request: 1, status: 'question' }],
+                    questions: [
+                        {
+                            id: 'q1',
+                            text: 'Better in what way?',
+                            requests: [1],
+                            options: [
+                                { id: 'states', label: 'States' },
+                                { id: 'names', label: 'Names', detail: 'Japanese labels' },
+                            ],
+                            multiple: false,
+                        },
+                    ],
+                },
+            },
+            { reply: { outcome: 'declined', summary: 'A poem is not about the model.', requests: [{ request: 1, status: 'skipped', note: 'Out of scope.' }] } },
+            {},
+        ]);
+        await subscribe(ctx, planFile);
+        const ended = [
+            await until(ctx, done, ['Completed', 'Failed']),
+            await until(ctx, asked, ['NeedsClarification', 'Completed', 'Failed']),
+            await until(ctx, declined, ['Declined', 'Completed', 'Failed']),
+        ];
+        const [d, a, x] = ended;
+        // the numbers of the reply are the run's requests by ID
+        expect(d?.state === 'Completed' && d.reply).toEqual({
+            summary: 'Added the cancellation to returns.',
+            requests: [
+                { request: first, status: 'Done' },
+                { request: second, status: 'Skipped', note: 'Asked separately.' },
+            ],
+            questions: [],
+            assumptions: [{ text: 'Cancelled before receipt only.', requests: [first], alternatives: [{ id: 'any', label: 'At any time' }] }],
+        });
+        expect(a?.state === 'NeedsClarification' && [a.question, a.reply?.questions[0]?.requests]).toEqual(['Better in what way?', [second]]);
+        expect(x?.state === 'Declined' && [x.reply.summary, x.resultRevision === x.baseRevision]).toEqual(['A poem is not about the model.', true]);
+        // the agent was given the reply's schema
+        const invocations = await ctx.invocations();
+        expect(invocations[0]?.args).toContain('--json-schema');
+
+        // the facilitator answers by choosing: refused when it does not fit the questions, frozen into the next run
+        const wrong = await api(ctx.server, ctx.ada, 'runs', {
+            requests: [second],
+            answerTo: asked,
+            answer: { answers: [{ question: 'q1', options: ['states', 'names'] }] },
+        });
+        expect(wrong.status).toBe(400);
+        expect(((await wrong.json()) as { error: { type: string } }).error.type).toBe('InvalidAnswer');
+        const res = await api(ctx.server, ctx.ada, 'runs', {
+            requests: [second],
+            answerTo: asked,
+            answer: { answers: [{ question: 'q1', options: ['names'], text: 'and states' }] },
+        });
+        expect(res.status).toBe(201);
+        const answered = ((await res.json()) as { run: { id: string } }).run.id;
+        await until(ctx, answered, ['Completed', 'Failed']);
+        const prompt = (await ctx.invocations()).at(-1)?.prompt ?? '';
+        expect(prompt).toContain('"answersToYourQuestions"');
+        expect(prompt).toContain('"Names (Japanese labels)"');
+        expect(prompt).toContain('"inTheirOwnWords": "and states"');
     });
 
     integration('an agent that changes a file other than a .dt or .dtes source: the run fails as AgentError, and the log names the file', async () => {

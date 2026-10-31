@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import type { AccessClaims } from '@domaintrail/collaboration/infrastructure/identity';
 import { createMockAccessVerifier } from '@domaintrail/collaboration/infrastructure/identity';
 import type { ComparisonBody, Me, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { REPLY_LIMITS } from '@domaintrail/collaboration/domain/reply';
 import {
     startSessionServer,
     issueFacilitatorLink,
@@ -533,10 +534,30 @@ describe('the agent API', () => {
         expect((await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true, newDtErrors: 0 })).status).toBe(
             400,
         );
-        const finished = await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true });
+        // the reply is validated against its shape and limits, and must name the run's requests
+        const facts = { token: lease.token, exitCode: 0, formatted: true, checked: true };
+        const reply = { outcome: 'done', summary: 'Added cancel.', requests: [{ request: request.id, status: 'done' }] };
+        for (const [bad, field] of [
+            [{ ...reply, summary: 'x'.repeat(REPLY_LIMITS.summary + 1) }, 'reply.summary'],
+            [{ ...reply, outcome: 'declined' }, 'reply.outcome'],
+            [{ ...reply, requests: [{ request: 7, status: 'done' }] }, 'reply.requests[0].request'],
+            [{ ...reply, html: '<b>' }, 'reply.html'],
+        ] as const) {
+            const refused = await agent(cred, `runs/${run.id}/finish`, { ...facts, reply: bad });
+            expect([refused.status, ((await refused.json()) as { error: { field: string } }).error.field]).toEqual([400, field]);
+        }
+        const stranger = await agent(cred, `runs/${run.id}/finish`, {
+            ...facts,
+            reply: { ...reply, requests: [{ request: crypto.randomUUID(), status: 'done' }] },
+        });
+        expect([stranger.status, ((await stranger.json()) as { error: { type: string } }).error.type]).toEqual([400, 'InvalidReply']);
+        const finished = await agent(cred, `runs/${run.id}/finish`, { ...facts, reply });
         expect(finished.status).toBe(200);
         const body = (await finished.json()) as { run: { state: string; changed: boolean }; replayed: boolean };
-        expect(body).toMatchObject({ run: { state: 'Completed', changed: false }, replayed: false });
+        expect(body).toMatchObject({
+            run: { state: 'Completed', changed: false, reply: { summary: 'Added cancel.', requests: [{ request: request.id, status: 'Done' }] } },
+            replayed: false,
+        });
         const replay = await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true });
         expect(await replay.json()).toMatchObject({ run: body.run, replayed: true });
         const nothing = await agent(cred, 'runs/claim', { owner: 'test-agent' });

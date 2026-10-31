@@ -3853,6 +3853,135 @@ del.was.block {
 .chat-bubble-agent.agent-failed .chat-icon {
     color: var(--error);
 }
+/* the agent's reply (reply.tsx): measured facts small, then what the AI says, as plain text */
+.chat-bubble-agent.agent-declined .chat-bubble {
+    border-color: var(--grey-border);
+}
+.chat-bubble-agent.agent-declined .chat-icon {
+    color: var(--grey-text);
+}
+.reply-facts {
+    margin: 0 0 2px;
+    color: var(--green-text);
+    font-size: 11px;
+    font-weight: 600;
+}
+.reply-summary {
+    margin: 0;
+}
+.reply-requests,
+.reply-assumptions,
+.reply-questions,
+.reply-options {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+}
+.reply-request,
+.reply-assumption {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+.reply-mark {
+    flex: none;
+    width: 12px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--muted);
+}
+.reply-request.status-Done .reply-mark {
+    color: var(--green-text);
+}
+.reply-request.status-Partial .reply-mark,
+.reply-request.status-Question .reply-mark {
+    color: var(--amber-text);
+}
+.reply-line {
+    min-width: 0;
+    flex: 1;
+}
+.reply-who {
+    font-weight: 600;
+    margin-right: 4px;
+}
+.reply-head {
+    color: var(--muted);
+    word-break: break-word;
+}
+.reply-note,
+.reply-text {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.reply-note {
+    color: var(--text-soft);
+}
+.reply-icon {
+    flex: none;
+    margin-top: 2px;
+    color: var(--amber-text);
+}
+.reply-refs,
+.reply-alternatives {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 2px;
+}
+.reply-ref,
+.reply-alternative {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--neutral-tint);
+    color: var(--text-soft);
+    font-size: 11px;
+}
+.reply-alternative {
+    border: 1px dashed var(--grey-border);
+    background: transparent;
+}
+.reply-question + .reply-question {
+    margin-top: 8px;
+}
+.reply-question > .reply-refs {
+    margin-left: 22px;
+}
+.reply-options {
+    margin-left: 22px;
+}
+.reply-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: default;
+}
+.reply-option input {
+    flex: none;
+    margin: 2px 0 0;
+}
+.reply-option-detail {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+}
+.reply-other .reply-option-label {
+    color: var(--muted);
+}
+.session-run-reply {
+    margin-top: 4px;
+}
 .chat-run-play {
     vertical-align: -1px;
     fill: currentColor;

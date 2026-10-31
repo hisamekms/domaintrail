@@ -346,3 +346,43 @@ describe('rows written before requests had several targets', () => {
         expect(Object.keys(requests[1])).toEqual(['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'dismissedBy', 'dismissedAt']);
     });
 });
+
+describe("rows written before the agent's reply was structured", () => {
+    // a run that needs clarification had a plain question, a completed run no reply, an input no answer: read as they are
+    test('load as runs without a reply, and still hold the invariants of their state', async () => {
+        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, 'fixtures', 'session', 'legacy-run-replies.json'), 'utf8')) as {
+            session: { id: string; state: string; data: unknown };
+            runs: { id: string; state: string; data: unknown }[];
+            outbox: { type: string; payload: unknown }[];
+        };
+        const db = openDatabase(':memory:');
+        const raw = (o: unknown): string => JSON.stringify(o);
+        db.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(fixture.session.id, fixture.session.state, raw(fixture.session.data));
+        fixture.runs.forEach((r, i) =>
+            db
+                .prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)')
+                .run(r.id, fixture.session.id, i + 1, r.state, raw(r.data)),
+        );
+        for (const e of fixture.outbox)
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+                fixture.session.id,
+                e.type,
+                raw(e.payload),
+                at.toISOString(),
+            );
+        const uow = createUnitOfWork(db);
+        const session = C.makeSessionId(fixture.session.id);
+        const { runs, events } = await uow.transaction((st) => ({ runs: st.runs.listBySession(session), events: st.outbox.readAfter(0, 10, session) }));
+        expect(runs.map((r) => r.state)).toEqual(['NeedsClarification', 'Completed']);
+        const [asked, done] = runs;
+        expect(asked?.state === 'NeedsClarification' && asked.question).toContain('税区分は');
+        for (const r of runs) {
+            expect('reply' in r).toBe(false);
+            expect(r.input.answer).toBeUndefined();
+            expect(C.checkRunInput(r.input)).toEqual([]);
+            expect(C.checkAgentRunWith({ serial: () => true })(r)).toEqual([]);
+        }
+        expect(done?.state === 'Completed' && done.changed).toBe(true);
+        expect(events.map((e) => e.event.type)).toEqual(['RunNeedsClarification', 'RunCompleted']);
+    });
+});

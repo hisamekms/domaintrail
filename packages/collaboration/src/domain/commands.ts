@@ -88,13 +88,19 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
 
     // Completed when the report meets the run success rule, Failed (RuleNotMet) with the report otherwise
     finish: decide<Collaboration.FinishAgentRunDecision>(Collaboration.AgentRunShape, {
-        Running: (run, report, resultRevision, changed, finishedAt) => {
-            if (Collaboration.checkFinishAgentRunRequires(run, report, resultRevision, changed, finishedAt) === 'changedMatchesResult')
-                return err({ type: 'ChangedMismatch' });
+        Running: (run, report, resultRevision, changed, reply, finishedAt) => {
+            switch (Collaboration.checkFinishAgentRunRequires(run, report, resultRevision, changed, reply, finishedAt)) {
+                case 'changedMatchesResult':
+                    return err({ type: 'ChangedMismatch' });
+                case 'replyAsksNothing':
+                case 'replyAboutInput':
+                    return err({ type: 'InvalidReply' });
+            }
             if (succeeded(report)) {
                 return ok({
                     Completed: {
-                        set: { report, resultRevision, changed, finishedAt },
+                        // the reply is kept with a completed run only: a failure is the facts'
+                        set: { report, resultRevision, changed, reply, finishedAt },
                         events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
                     },
                 });
@@ -109,13 +115,28 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     }),
 
     askClarification: decide<Collaboration.AskClarificationAgentRunDecision>(Collaboration.AgentRunShape, {
-        Running: (run, question, resultRevision, finishedAt) =>
-            ok({
+        Running: (run, question, reply, resultRevision, finishedAt) => {
+            if (Collaboration.checkAskClarificationAgentRunRequires(run, question, reply, resultRevision, finishedAt) !== undefined)
+                return err({ type: 'InvalidReply' });
+            return ok({
                 NeedsClarification: {
-                    set: { question, resultRevision, finishedAt },
+                    set: { question, reply, resultRevision, finishedAt },
                     events: { RunNeedsClarification: { type: 'RunNeedsClarification', runId: run.id, question, resultRevision, finishedAt } },
                 },
-            }),
+            });
+        },
+    }),
+
+    decline: decide<Collaboration.DeclineAgentRunDecision>(Collaboration.AgentRunShape, {
+        Running: (run, reply, resultRevision, finishedAt) => {
+            if (Collaboration.checkDeclineAgentRunRequires(run, reply, resultRevision, finishedAt) !== undefined) return err({ type: 'InvalidReply' });
+            return ok({
+                Declined: {
+                    set: { reply, resultRevision, finishedAt },
+                    events: { RunDeclined: { type: 'RunDeclined', runId: run.id, resultRevision, finishedAt } },
+                },
+            });
+        },
     }),
 
     // a failure without a report: the run success rule is finish's

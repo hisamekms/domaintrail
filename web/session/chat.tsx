@@ -8,6 +8,7 @@ import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi } from './api';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
+import { ReplyDetails, ReplyFacts, ReplyQuestions } from './reply';
 import { latestRevision } from './state';
 import {
     agentStatus,
@@ -416,7 +417,13 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
             );
             break;
         case 'clarification':
-            body = (
+            body = m.reply ? (
+                <>
+                    {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
+                    <p className="chat-text reply-summary">{m.reply.summary}</p>
+                    <ReplyQuestions reply={m.reply} scope={`run-${props.run}`} nameOf={props.nameOf} tx={tx} />
+                </>
+            ) : (
                 <div className="chat-with-icon">
                     <CircleHelp size={16} className="chat-icon" aria-label={says.clarification} />
                     <p className="chat-question">{m.question}</p>
@@ -424,7 +431,26 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
             );
             break;
         case 'completed':
-            body = <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>;
+            body = m.reply ? (
+                <>
+                    <ReplyFacts files={m.files} changed={m.changed} tx={tx} />
+                    <ReplyDetails reply={m.reply} nameOf={props.nameOf} tx={tx} />
+                </>
+            ) : (
+                <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
+            );
+            break;
+        case 'declined':
+            body = (
+                <>
+                    {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
+                    <div className="chat-with-icon">
+                        <Ban size={14} className="chat-icon" aria-label={tx.chat.reply.declined} />
+                        <p className="chat-text">{m.reply.summary}</p>
+                    </div>
+                    <ReplyDetails reply={m.reply} summary={false} nameOf={props.nameOf} tx={tx} />
+                </>
+            );
             break;
         case 'failed':
             body = (

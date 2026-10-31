@@ -7,6 +7,7 @@
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
+import { resolveAnswer, type AnswerData } from '../domain/reply.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
@@ -52,6 +53,19 @@ export interface NoRequests {
 
 export interface NothingQueued {
     readonly type: 'NothingQueued';
+}
+
+/** The facilitator's answer does not fit the questions of the run it answers (`field`: where in the answer). */
+export interface InvalidAnswer {
+    readonly type: 'InvalidAnswer';
+    readonly field: string;
+    readonly message: string;
+}
+
+/** The run answered is not one that waits for an answer to structured questions (not NeedsClarification, or its reply asked none). */
+export interface NothingToAnswer {
+    readonly type: 'NothingToAnswer';
+    readonly run: AgentRunId;
 }
 
 /** Another run of the session is running or claimed: runs are serial. */
@@ -195,6 +209,8 @@ export interface CollaborationUseCases {
         readonly session: SessionId;
         readonly requests: readonly Collaboration.RequestId[];
         readonly note?: Collaboration.Text;
+        /** The answer to the questions of a run of the session that needs clarification, frozen into the input. */
+        readonly answer?: { readonly answerTo: AgentRunId; readonly answer: AnswerData };
         readonly queuedBy: ParticipantId;
     }): Promise<
         Result<
@@ -207,6 +223,9 @@ export interface CollaborationUseCases {
             | Collaboration.DuplicateRequest
             | Collaboration.InputMismatch
             | NoRequests
+            | NotFound
+            | NothingToAnswer
+            | InvalidAnswer
         >
     >;
     /** Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. */
@@ -232,18 +251,30 @@ export interface CollaborationUseCases {
     /**
      * Ends a running run with the agent's facts: the workspace now is its result revision (the base itself when
      * nothing changed), the diagnostics are compared with the base's, and the run success rule decides Completed or
-     * Failed. Calling it again with the same lease returns the same run.
+     * Failed. The agent's reply is kept with a completed run, never used to decide. Calling it again with the same lease
+     * returns the same run.
      */
     finishRun(input: {
         readonly run: AgentRunId;
         readonly token: string;
         readonly facts: RunFacts;
-    }): Promise<Result<Finished, NotFound | LeaseLost | NotAllowed | BlobMissing | Collaboration.PathOutsideRoot>>;
+        readonly reply?: Collaboration.AgentReply;
+    }): Promise<Result<Finished, NotFound | LeaseLost | NotAllowed | BlobMissing | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>>;
+    /** Ends a running run with the agent's question (plain text, and its structured reply when there is one). */
     askClarification(input: {
         readonly run: AgentRunId;
         readonly token: string;
         readonly question: Collaboration.Text;
-    }): Promise<Result<Ended<Collaboration.NeedsClarificationAgentRun>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot>>;
+        readonly reply?: Collaboration.AgentReply;
+    }): Promise<
+        Result<Ended<Collaboration.NeedsClarificationAgentRun>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>
+    >;
+    /** Ends a running run that the agent declined (its reply says why); the workspace now is its result revision. */
+    declineRun(input: {
+        readonly run: AgentRunId;
+        readonly token: string;
+        readonly reply: Collaboration.AgentReply;
+    }): Promise<Result<Ended<Collaboration.DeclinedAgentRun>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>>;
     /** Ends a running run without a report (the agent's abnormal end). */
     failRun(input: {
         readonly run: AgentRunId;
@@ -336,7 +367,7 @@ const notFound = (aggregate: NotFound['aggregate'], id: string): NotFound => ({ 
 const notAllowed = (command: string, state: string): NotAllowed => ({ type: 'NotAllowed', command, state });
 
 /** The ended states of a run under its lease. */
-type EndedRun = Collaboration.CompletedAgentRun | Collaboration.FailedAgentRun | Collaboration.NeedsClarificationAgentRun;
+type EndedRun = Collaboration.CompletedAgentRun | Collaboration.FailedAgentRun | Collaboration.NeedsClarificationAgentRun | Collaboration.DeclinedAgentRun;
 
 export function createCollaboration(deps: CollaborationDeps): CollaborationUseCases {
     const { uow, clock, ids } = deps;
@@ -379,7 +410,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         const stored = stores.runs.load(run);
         if (stored?.completedWith !== token) return undefined;
         const r = stored.run;
-        return r.state === 'Completed' || r.state === 'Failed' || r.state === 'NeedsClarification' ? r : undefined;
+        return r.state === 'Completed' || r.state === 'Failed' || r.state === 'NeedsClarification' || r.state === 'Declined' ? r : undefined;
     };
 
     /** The running run held with `token` (before or after a snapshot taken between transactions). */
@@ -400,6 +431,52 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         const base = stores.revisions.load(run.baseRevision);
         if (base && base.contentHash === captured.contentHash) return { revision: base, changed: false };
         return { revision: record(stores, run.session, { kind: 'RunResult', run: run.id }, captured, at), changed: true };
+    };
+
+    /**
+     * Ends a running run without `dt fmt`/`dt check` (a question, a decline): the workspace now is its result revision
+     * (the base itself when nothing changed). The same call again with the same lease returns the same run.
+     */
+    const endWithoutChecks = async <S extends 'NeedsClarification' | 'Declined', R extends Extract<EndedRun, { state: S }>>(
+        run: AgentRunId,
+        token: string,
+        state: S,
+        decide: (
+            r: Collaboration.RunningAgentRun,
+            resultRevision: RevisionId,
+            at: Date,
+        ) => Result<{ readonly aggregate: R; readonly events: object }, Collaboration.InvalidReply>,
+    ): Promise<Result<Ended<R>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>> => {
+        const before = await uow.transaction((stores): Result<EndedRun | undefined, NotFound | LeaseLost | NotAllowed> => {
+            const replay = replayOf(stores, run, token);
+            if (replay) return ok(replay);
+            const r = running(stores, run, token, clock.now());
+            return r.ok ? ok(undefined) : r;
+        });
+        if (!before.ok) return before;
+        if (before.value) {
+            const replay = before.value;
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the replayed run is in the state this call ends runs in
+            if (replay.state === state) return ok({ run: replay as R, replayed: true });
+            return err(notAllowed(state === 'Declined' ? 'decline' : 'askClarification', replay.state));
+        }
+        const captured = await capture(deps);
+        if (!captured.ok) return captured;
+        return uow.transaction((stores) => {
+            const r = running(stores, run, token, clock.now());
+            if (!r.ok) return r;
+            const at = clock.now();
+            // decided before the result is recorded: a refused reply records nothing
+            const check = decide(r.value, r.value.baseRevision, at);
+            if (!check.ok) return check;
+            const result = resultOf(stores, r.value, captured.value, at);
+            const decided = decide(r.value, result.revision.id, at);
+            if (!decided.ok) return decided;
+            stores.runs.save(decided.value.aggregate);
+            stores.runs.endLease(run, token);
+            publish(stores, r.value.session, decided.value.events, at);
+            return ok({ run: decided.value.aggregate, replayed: false });
+        });
     };
 
     const useCases: CollaborationUseCases = {
@@ -478,11 +555,20 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async queueRun({ session, requests, note, queuedBy }) {
+        async queueRun({ session, requests, note, answer, queuedBy }) {
             return uow.transaction(async (stores) => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
                 if (!active.ok) return active;
+                let answered: Collaboration.Answer | undefined;
+                if (answer) {
+                    const to = stores.runs.load(answer.answerTo)?.run;
+                    if (!to || to.session !== session) return err(notFound('AgentRun', answer.answerTo));
+                    if (to.state !== 'NeedsClarification' || !to.reply) return err({ type: 'NothingToAnswer', run: to.id });
+                    const resolved = resolveAnswer(answer.answer, to.id, to.reply);
+                    if (!resolved.ok) return err({ type: 'InvalidAnswer', field: resolved.error.path, message: resolved.error.message });
+                    answered = resolved.value;
+                }
                 const pending: Collaboration.PendingRequest[] = [];
                 const frozen: Collaboration.FrozenRequest[] = [];
                 for (const id of requests) {
@@ -501,7 +587,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     Collaboration.makeAgentRunId(ids.newId()),
                     active.value,
                     bundled,
-                    note === undefined ? { requests: input } : { requests: input, note },
+                    { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }) },
                     queuedBy,
                     at,
                 );
@@ -571,7 +657,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async finishRun({ run, token, facts }) {
+        async finishRun({ run, token, facts, reply }) {
             const before = await uow.transaction(
                 (stores): Result<{ replay: EndedRun | undefined; base: Collaboration.Revision | undefined }, NotFound | LeaseLost | NotAllowed> => {
                     const replay = replayOf(stores, run, token);
@@ -584,7 +670,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             if (!before.ok) return before;
             const { replay, base } = before.value;
             if (replay) {
-                if (replay.state === 'NeedsClarification') return err(notAllowed('finish', replay.state));
+                if (replay.state === 'NeedsClarification' || replay.state === 'Declined') return err(notAllowed('finish', replay.state));
                 return ok({ run: replay, replayed: true, diff: undefined });
             }
             if (!base) throw new Error(`The base revision of run ${run} is missing`);
@@ -597,9 +683,13 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const r = running(stores, run, token, clock.now());
                 if (!r.ok) return r;
                 const at = clock.now();
+                const report = runReport(facts, diff);
+                // the reply is checked before the result is recorded: a refused reply records nothing
+                const check = agentRunCommands.finish(r.value, report, r.value.baseRevision, false, reply, at);
+                if (!check.ok && check.error.type === 'InvalidReply') return err(check.error);
                 const result = resultOf(stores, r.value, captured.value, at);
-                const finished = agentRunCommands.finish(r.value, runReport(facts, diff), result.revision.id, result.changed, at);
-                // `changed` is decided from the revisions above
+                const finished = agentRunCommands.finish(r.value, report, result.revision.id, result.changed, reply, at);
+                // `changed` is decided from the revisions above, and the reply was checked
                 if (!finished.ok) throw new Error(`Finishing run ${run} failed: ${finished.error.type}`);
                 const outcome = finished.value.Completed ?? finished.value.Failed;
                 stores.runs.save(outcome.aggregate);
@@ -609,30 +699,17 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async askClarification({ run, token, question }) {
-            const before = await uow.transaction((stores): Result<EndedRun | undefined, NotFound | LeaseLost | NotAllowed> => {
-                const replay = replayOf(stores, run, token);
-                if (replay) return ok(replay);
-                const r = running(stores, run, token, clock.now());
-                return r.ok ? ok(undefined) : r;
+        async askClarification({ run, token, question, reply }) {
+            return endWithoutChecks(run, token, 'NeedsClarification', (r, revision, at) => {
+                const asked = agentRunCommands.askClarification(r, question, reply, revision, at);
+                return asked.ok ? ok(asked.value.NeedsClarification) : asked;
             });
-            if (!before.ok) return before;
-            if (before.value) {
-                if (before.value.state !== 'NeedsClarification') return err(notAllowed('askClarification', before.value.state));
-                return ok({ run: before.value, replayed: true });
-            }
-            const captured = await capture(deps);
-            if (!captured.ok) return captured;
-            return uow.transaction((stores) => {
-                const r = running(stores, run, token, clock.now());
-                if (!r.ok) return r;
-                const at = clock.now();
-                const result = resultOf(stores, r.value, captured.value, at);
-                const { NeedsClarification } = decided(agentRunCommands.askClarification(r.value, question, result.revision.id, at));
-                stores.runs.save(NeedsClarification.aggregate);
-                stores.runs.endLease(run, token);
-                publish(stores, r.value.session, NeedsClarification.events, at);
-                return ok({ run: NeedsClarification.aggregate, replayed: false });
+        },
+
+        async declineRun({ run, token, reply }) {
+            return endWithoutChecks(run, token, 'Declined', (r, revision, at) => {
+                const declined = agentRunCommands.decline(r, reply, revision, at);
+                return declined.ok ? ok(declined.value.Declined) : declined;
             });
         },
 

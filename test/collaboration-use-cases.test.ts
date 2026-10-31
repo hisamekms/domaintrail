@@ -8,6 +8,7 @@ import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
 import type { CollaborationDeps } from '@domaintrail/collaboration/application/ports';
 import { createCollaboration, MAX_COMPARISON_DIFF, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
 import { MAX_DIFF_BYTES } from '@domaintrail/collaboration/domain/compare';
+import { toAgentReply, type ReplyData } from '@domaintrail/collaboration/domain/reply';
 import { encodeOccurrencePath } from '@domaintrail/collaboration/domain/targets';
 import { summarize } from '@domaintrail/collaboration/domain/validation';
 import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
@@ -318,6 +319,150 @@ describe('agent runs', () => {
         clock.t += 2_000;
         expect(await after.use.expireLeases()).toEqual({ failed: [], released: [claimed.id] });
         expect(value(await after.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 1_000 })).run.id).toBe(claimed.id);
+    });
+});
+
+describe('agent replies', () => {
+    /** A reply about the run's requests, as the agent API takes it. */
+    const reply = (over: Partial<ReplyData<C.RequestId>> & Pick<ReplyData<C.RequestId>, 'requests'>): C.AgentReply =>
+        toAgentReply({ outcome: 'done', summary: 'Added cancel.', questions: [], assumptions: [], ...over });
+
+    /** A started run of a fresh session. */
+    async function runningRun(): Promise<{ s: Session; id: C.SessionId; run: C.QueuedAgentRun; token: string; request: C.RequestId }> {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+        value(await s.use.startRun({ run: run.id, token: lease.token }));
+        return { s, id, run, token: lease.token, request: run.input.requests[0].request };
+    }
+
+    test('a completed run keeps the reply; a reply about another request is refused before anything is recorded', async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const stranger = C.makeRequestId('00000000-0000-4000-8000-0000000000ff');
+        const before = value(await s.use.sessionState({ session: id })).revisions.length;
+        await s.write('sales/sales.dt', SALES.replace('    command confirm()', '    command cancel()\n      Draft -> Draft\n\n    command confirm()'));
+        expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request: stranger, status: 'done' }] }) }))).toEqual({
+            type: 'InvalidReply',
+        });
+        expect(value(await s.use.sessionState({ session: id })).revisions).toHaveLength(before);
+        const kept = reply({
+            requests: [{ request, status: 'partial', note: 'Only the command.' }],
+            assumptions: [{ text: 'Only drafts.', requests: [request], alternatives: [{ id: 'all', label: 'Any state' }] }],
+        });
+        const finished = value(await s.use.finishRun({ run: run.id, token, facts, reply: kept }));
+        expect(finished.run).toMatchObject({ state: 'Completed', changed: true, reply: kept });
+        expect(value(await s.use.sessionState({ session: id })).runs[0]).toMatchObject({ reply: kept });
+    });
+
+    test('a failed run keeps no reply: the facts decide', async () => {
+        const { s, run, token, request } = await runningRun();
+        const failed = value(
+            await s.use.finishRun({ run: run.id, token, facts: { ...facts, exitCode: 1 }, reply: reply({ requests: [{ request, status: 'done' }] }) }),
+        );
+        expect(failed.run.state).toBe('Failed');
+        expect('reply' in failed.run).toBe(false);
+    });
+
+    test('a clarification keeps its structured questions; a done reply with questions is refused', async () => {
+        const { s, run, token, request } = await runningRun();
+        const asking = reply({
+            outcome: 'clarification',
+            requests: [{ request, status: 'question' }],
+            questions: [{ id: 'q1', text: 'Which state?', requests: [request], options: [{ id: 'draft', label: 'Draft' }], multiple: false }],
+        });
+        expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: asking }))).toEqual({ type: 'InvalidReply' });
+        expect(error(await s.use.askClarification({ run: run.id, token, question: text('Which?'), reply: reply({ requests: [] }) }))).toEqual({
+            type: 'InvalidReply',
+        });
+        const asked = value(await s.use.askClarification({ run: run.id, token, question: text('Which state?'), reply: asking }));
+        expect(asked.run).toMatchObject({ state: 'NeedsClarification', question: 'Which state?', reply: asking });
+    });
+
+    test('a declined run ends without checks, keeps the reason, and is replayed like the other endings', async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const declined = reply({
+            outcome: 'declined',
+            summary: 'This is not about the model.',
+            requests: [{ request, status: 'skipped', note: 'Out of scope.' }],
+        });
+        const ended = value(await s.use.declineRun({ run: run.id, token, reply: declined }));
+        expect(ended.run).toMatchObject({ state: 'Declined', reply: declined, resultRevision: ended.run.baseRevision });
+        expect(value(await s.use.declineRun({ run: run.id, token, reply: declined })).replayed).toBe(true);
+        expect(error(await s.use.finishRun({ run: run.id, token, facts }))).toEqual({ type: 'NotAllowed', command: 'finish', state: 'Declined' });
+        expect(error(await s.use.askClarification({ run: run.id, token, question: text('x') }))).toEqual({
+            type: 'NotAllowed',
+            command: 'askClarification',
+            state: 'Declined',
+        });
+        const types = (await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id))).map((e) => e.event.type);
+        expect(types.at(-1)).toBe('RunDeclined');
+    });
+
+    test("the facilitator's answer is checked against the questions and frozen into the next run's input", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const asking = reply({
+            outcome: 'clarification',
+            requests: [{ request, status: 'question' }],
+            questions: [
+                {
+                    id: 'q1',
+                    text: 'Which state?',
+                    requests: [request],
+                    options: [
+                        { id: 'draft', label: 'Draft', detail: 'before confirm' },
+                        { id: 'open', label: 'Open' },
+                    ],
+                    multiple: false,
+                },
+                {
+                    id: 'q2',
+                    text: 'Which events?',
+                    requests: [],
+                    options: [
+                        { id: 'a', label: 'A' },
+                        { id: 'b', label: 'B' },
+                    ],
+                    multiple: true,
+                },
+            ],
+        });
+        value(await s.use.askClarification({ run: run.id, token, question: text('Which state?'), reply: asking }));
+        const queue = (answers: { question: string; options: string[]; text?: string }[], answerTo = run.id) =>
+            s.use.queueRun({ session: id, requests: [request], queuedBy: facilitator, answer: { answerTo, answer: { answers } } });
+
+        expect(error(await queue([{ question: 'q9', options: ['draft'] }]))).toMatchObject({ type: 'InvalidAnswer', field: 'answer.answers[0].question' });
+        expect(error(await queue([{ question: 'q1', options: ['draft', 'open'] }]))).toMatchObject({
+            type: 'InvalidAnswer',
+            field: 'answer.answers[0].options',
+        });
+        expect(error(await queue([{ question: 'q1', options: ['closed'] }]))).toMatchObject({ type: 'InvalidAnswer', field: 'answer.answers[0].options[0]' });
+        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        expect(error(await queue([{ question: 'q1', options: ['draft'] }], unknown))).toEqual({ type: 'NotFound', aggregate: 'AgentRun', id: unknown });
+
+        const next = value(
+            await queue([
+                { question: 'q1', options: ['draft'] },
+                { question: 'q2', options: ['a', 'b'], text: 'and C' },
+            ]),
+        );
+        expect(next.input.answer as unknown).toEqual({
+            answerTo: run.id,
+            answers: [
+                { question: 'q1', text: 'Which state?', chosen: [{ id: 'draft', label: 'Draft', detail: 'before confirm' }] },
+                {
+                    question: 'q2',
+                    text: 'Which events?',
+                    chosen: [
+                        { id: 'a', label: 'A' },
+                        { id: 'b', label: 'B' },
+                    ],
+                    freeText: 'and C',
+                },
+            ],
+        });
+        // a run that is not waiting for an answer has nothing to answer
+        expect(error(await queue([{ question: 'q1', options: ['draft'] }], next.id))).toEqual({ type: 'NothingToAnswer', run: next.id });
     });
 });
 

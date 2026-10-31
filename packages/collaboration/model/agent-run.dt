@@ -31,8 +31,96 @@ context Collaboration {
   value RunInput "実行の入力" {
     requests: FrozenRequest[1..*] "依頼"
     note: Text? "ファシリテーターの補足"
+    answer: Answer? "前の実行の問いへの回答"
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
+  }
+
+  /// エージェントの返答の中で、問いや選択肢を指す短いキー（英数字と `_` `-`）。長さの上限は返答の上限（コード）が決める。
+  primitive ReplyKey "返答のキー": String { matches(value, "^[A-Za-z0-9_-]+$") }
+
+  /// 依頼ごとの、エージェントの申告。事実（成否・変わったファイル）ではない。
+  enum RequestProgress "依頼の進み具合" {
+    Done "対応した"
+    Partial "一部だけ対応した"
+    Skipped "対応しなかった"
+    Question "問いがある"
+  }
+
+  /// 依頼1件についての返答。
+  value RequestReply "依頼ごとの返答" {
+    request: RequestId "依頼"
+    status: RequestProgress "進み具合"
+    note: Text? "補足"
+
+    /// 一部だけ・対応しなかった依頼には、そのわけを添える。
+    invariant noteExplains "一部と未対応には補足がある" {
+      (status == RequestProgress.Partial or status == RequestProgress.Skipped) implies exists(note)
+    }
+  }
+
+  /// 問いの選択肢。「その他（自由記述）」は画面がいつも足すので、ここには含めない。
+  value ReplyOption "選択肢" {
+    id: ReplyKey
+    label: Text "ラベル"
+    detail: Text? "説明"
+  }
+
+  /// エージェントがファシリテーターに選んでもらう問い。
+  value ReplyQuestion "問い" {
+    id: ReplyKey
+    text: Text "問い"
+    requests: RequestId[0..*] "関係する依頼"
+    options: ReplyOption[0..*] "選択肢"
+    multiple: Bool "複数選べる"
+
+    invariant distinctOptions "選択肢のキーは1回" { unique(options, o => o.id) }
+  }
+
+  /// 前提の代わりにあり得た選択。
+  value ReplyAlternative "別の選択" {
+    id: ReplyKey
+    label: Text "ラベル"
+  }
+
+  /// 依頼があいまいだったところで、エージェントが置いた前提。
+  value ReplyAssumption "前提" {
+    text: Text "前提"
+    requests: RequestId[0..*] "関係する依頼"
+    alternatives: ReplyAlternative[0..*] "別の選択"
+
+    invariant distinctAlternatives "別の選択のキーは1回" { unique(alternatives, a => a.id) }
+  }
+
+  /// エージェントの返答を検証したもの。AI の申告で、信頼しない入力として上限とともに検証してから持つ。件数と長さの上限は
+  /// コードの1か所（`domain/reply.ts`）にある。
+  value AgentReply "エージェントの返答" {
+    summary: Text "要約"
+    requests: RequestReply[0..*] "依頼ごとの返答"
+    questions: ReplyQuestion[0..*] "問い"
+    assumptions: ReplyAssumption[0..*] "前提"
+
+    invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
+    invariant distinctQuestions "問いのキーは1回" { unique(questions, q => q.id) }
+  }
+
+  /// ファシリテーターが選んだ、問い1つへの答え。登録のときに問いと選択肢を写し取る。
+  value AnsweredQuestion "答えた問い" {
+    question: ReplyKey "問い"
+    text: Text "問いの文"
+    chosen: ReplyOption[0..*] "選んだ選択肢"
+    freeText: Text? "自由記述"
+
+    invariant answered "選択か自由記述がある" { count(chosen) >= 1 or exists(freeText) }
+    invariant distinctChosen "選択肢は1回" { unique(chosen, o => o.id) }
+  }
+
+  /// 確認待ちの実行の問いへの、ファシリテーターの回答。次の実行の入力に凍結する。
+  value Answer "回答" {
+    answerTo: AgentRunId "答える実行"
+    answers: AnsweredQuestion[1..*] "答え"
+
+    invariant distinctQuestions "問いは1回" { unique(answers, a => a.question) }
   }
 
   /// ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
@@ -57,6 +145,7 @@ context Collaboration {
       report: RunReport "報告"
       resultRevision: RevisionId "結果リビジョン"
       changed: Bool "変更あり"
+      reply: AgentReply? "エージェントの返答"
       finishedAt: Timestamp "終了日時"
 
       /// エージェントが 0 で終了し、dt fmt と dt check を実行し、基準リビジョンより .dt のエラーが増えず、すべての .dtes が構文解析できる。
@@ -67,13 +156,40 @@ context Collaboration {
       invariant unchangedKeepsBase "変更がなければ結果は基準リビジョン" {
         (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
       }
+      /// 完了の返答は問わない（問うなら確認待ち）。
+      invariant completedAsksNothing "完了の返答に問いはない" { exists(reply) implies count(reply.questions) == 0 }
+      /// 返答が挙げる依頼は、この実行の依頼。
+      invariant completedReplyAboutInput "完了の返答の依頼は実行の依頼" {
+        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+      }
     }
+    /// エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
     state NeedsClarification "確認待ち" {
       baseRevision: RevisionId "基準リビジョン"
       startedAt: Timestamp "開始日時"
+      /// 問いの平文（構造のない返答、または構造化した問いを文にしたもの）。
       question: Text "問いかけ"
+      reply: AgentReply? "エージェントの返答"
       resultRevision: RevisionId "結果リビジョン"
       finishedAt: Timestamp "終了日時"
+
+      invariant clarificationAsks "確認待ちの返答には問いがある" { exists(reply) implies count(reply.questions) >= 1 }
+      invariant clarificationReplyAboutInput "確認の返答の依頼は実行の依頼" {
+        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+      }
+    }
+    /// エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
+    state Declined "辞退" {
+      baseRevision: RevisionId "基準リビジョン"
+      startedAt: Timestamp "開始日時"
+      reply: AgentReply "エージェントの返答"
+      resultRevision: RevisionId "結果リビジョン"
+      finishedAt: Timestamp "終了日時"
+
+      invariant declinedAsksNothing "辞退の返答に問いはない" { count(reply.questions) == 0 }
+      invariant declinedReplyAboutInput "辞退の返答の依頼は実行の依頼" {
+        (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+      }
     }
     state Failed "失敗" {
       baseRevision: RevisionId "基準リビジョン"
@@ -107,17 +223,39 @@ context Collaboration {
       emits RunStarted
 
     /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。
-    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, finishedAt: Timestamp) "実行を終える"
+    /// 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
+    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, finishedAt: Timestamp) "実行を終える"
       Running -> Completed | Failed
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
         (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
       } else ChangedMismatch
+      requires replyAsksNothing "完了の返答に問いはない" {
+        exists(reply) implies count(reply.questions) == 0
+      } else InvalidReply
+      requires replyAboutInput "返答の依頼は実行の依頼" {
+        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+      } else InvalidReply
       emits RunCompleted when -> Completed,
             RunFailed when -> Failed
 
-    command askClarification(question: Text, resultRevision: RevisionId, finishedAt: Timestamp) "確認を求める"
+    command askClarification(question: Text, reply: AgentReply?, resultRevision: RevisionId, finishedAt: Timestamp) "確認を求める"
       Running -> NeedsClarification
+      requires replyAsks "確認待ちの返答には問いがある" {
+        exists(reply) implies count(reply.questions) >= 1
+      } else InvalidReply
+      requires replyAboutInput "返答の依頼は実行の依頼" {
+        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+      } else InvalidReply
       emits RunNeedsClarification
+
+    /// エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
+    command decline(reply: AgentReply, resultRevision: RevisionId, finishedAt: Timestamp) "辞退する"
+      Running -> Declined
+      requires replyAsksNothing "辞退の返答に問いはない" { count(reply.questions) == 0 } else InvalidReply
+      requires replyAboutInput "返答の依頼は実行の依頼" {
+        (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+      } else InvalidReply
+      emits RunDeclined
 
     /// 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断）。
     command fail(reason: FailureReason, finishedAt: Timestamp) "実行を失敗にする"
@@ -158,6 +296,12 @@ context Collaboration {
     finishedAt: Timestamp
   }
 
+  persistent event RunDeclined "実行辞退" {
+    runId: AgentRunId
+    resultRevision: RevisionId
+    finishedAt: Timestamp
+  }
+
   persistent event RunFailed "実行失敗" {
     runId: AgentRunId
     reason: FailureReason
@@ -181,4 +325,7 @@ context Collaboration {
 
   /// 成功の条件を満たさない失敗は、報告とともに finish で終える。
   error ReportRequired "報告が必要"
+
+  /// エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
+  error InvalidReply "返答の不整合"
 }

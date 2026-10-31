@@ -6,13 +6,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { IdentityKey } from '@domaintrail/collaboration/application/identity';
 import type { CollaborationUseCases, SessionState } from '@domaintrail/collaboration/application/use-cases';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import { Collaboration } from '@domaintrail/collaboration/generated/index';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
-import { body, displayName, MAX_NOTE, MAX_REQUEST_TEXT, requestIds, requestTargets, text, uuid, type InvalidInput } from './input.js';
+import type { AnswerData } from '@domaintrail/collaboration/domain/reply';
+import { answer as answerInput, body, displayName, MAX_NOTE, MAX_REQUEST_TEXT, requestIds, requestTargets, text, uuid, type InvalidInput } from './input.js';
 import { joinPage, messagePage, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
 
@@ -64,6 +65,8 @@ export function statusOf(type: string): number {
         case 'WorkspaceTarget':
         case 'NoRequests':
         case 'UnknownRevision':
+        case 'InvalidReply':
+        case 'InvalidAnswer':
             return 400;
         case 'Unauthenticated':
             return 401;
@@ -305,7 +308,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/runs$/,
             role: 'facilitator',
             handle: async ({ req, res, auth }) => {
-                const raw = await input(req, res, ['requests', 'note']);
+                const raw = await input(req, res, ['requests', 'note', 'answerTo', 'answer']);
                 if (!raw) return;
                 const ids = checked(res, requestIds(raw.requests));
                 if (!ids) return;
@@ -314,7 +317,23 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     note = checked(res, text(raw.note, 'note', MAX_NOTE));
                     if (!note) return;
                 }
-                const queued = await use.queueRun({ session, requests: ids, queuedBy: who(auth).participant.id, ...(note && { note }) });
+                // the answer to a run's questions: both fields, or neither
+                let answered: { answerTo: Collaboration.AgentRunId; answer: AnswerData } | undefined;
+                if (raw.answerTo !== undefined || raw.answer !== undefined) {
+                    if (raw.answerTo === undefined) return fail(res, { type: 'InvalidInput', field: 'answerTo', message: 'Expected the run answered.' });
+                    const to = checked(res, uuid(raw.answerTo, 'answerTo'));
+                    if (!to) return;
+                    const a = checked(res, answerInput(raw.answer));
+                    if (!a) return;
+                    answered = { answerTo: Collaboration.makeAgentRunId(to), answer: a };
+                }
+                const queued = await use.queueRun({
+                    session,
+                    requests: ids,
+                    queuedBy: who(auth).participant.id,
+                    ...(note && { note }),
+                    ...(answered && { answer: answered }),
+                });
                 await answer(res, queued, 201, (run) => ({ run }));
             },
         },

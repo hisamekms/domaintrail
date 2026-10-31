@@ -117,7 +117,8 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
         start: (run, token) => call<Started>('POST', runPath(run, 'start'), { token }),
         heartbeat: (run, token) => call<{ lease: AgentLease }>('POST', runPath(run, 'heartbeat'), { token }),
         finish: (run, token, facts) => call('POST', runPath(run, 'finish'), { token, ...facts }),
-        clarification: (run, token, question) => call('POST', runPath(run, 'clarification'), { token, question }),
+        clarification: (run, token, question, reply) => call('POST', runPath(run, 'clarification'), { token, question, ...(reply && { reply }) }),
+        decline: (run, token, reply) => call('POST', runPath(run, 'decline'), { token, reply }),
         fail: (run, token, reason) => call('POST', runPath(run, 'fail'), { token, reason }),
         release: (run, token) => call('POST', runPath(run, 'release'), { token }),
     };

@@ -21,6 +21,7 @@ export type ItemKind = ElementKind | 'state' | 'command' | 'context';
 
 type RunState = Collaboration.AgentRun['state'];
 type FailureReason = Collaboration.FailureReason;
+type RequestProgress = Collaboration.RequestProgress;
 type RevisionOriginKind = Collaboration.RevisionOrigin['kind'];
 
 const ja = {
@@ -382,6 +383,7 @@ const ja = {
             Running: '実行中',
             Completed: '完了',
             NeedsClarification: '確認待ち',
+            Declined: '辞退',
             Failed: '失敗',
             Cancelled: '取消',
         } as Record<RunState, string>,
@@ -492,6 +494,19 @@ const ja = {
                 completedUnchanged: '完了しました。変更はありません。',
                 failedLabel: '失敗',
                 cancelled: (name: string) => `${name} が取り消しました。`,
+            },
+            reply: {
+                applied: (files: number | undefined) => `反映しました${files === undefined ? '' : `（${files} ファイル）`}`,
+                unchanged: '変更なし',
+                appliedHint: '変わったファイルの数は、実行の前後のリビジョンから数えたものです',
+                declined: '辞退しました',
+                status: { Done: '対応', Partial: '一部', Skipped: '未対応', Question: '確認' } as Record<RequestProgress, string>,
+                request: (n: number) => `依頼 ${n}`,
+                assumption: '前提',
+                alternatives: '別案',
+                other: 'その他…',
+                multiple: '複数選べます',
+                filesUnchangedNote: (files: number) => `（${files} ファイル変更）`,
             },
             confirmed: (name: string, n: number) => `${name} がリビジョン #${n} を確認済みにしました`,
             restored: (from: number | undefined, n: number) => `リビジョン #${from ?? '?'} を復元しました（#${n}）`,
@@ -878,6 +893,7 @@ const en: Messages = {
             Running: 'Running',
             Completed: 'Completed',
             NeedsClarification: 'Needs clarification',
+            Declined: 'Declined',
             Failed: 'Failed',
             Cancelled: 'Cancelled',
         },
@@ -987,6 +1003,19 @@ const en: Messages = {
                 completedUnchanged: 'Done. Nothing changed.',
                 failedLabel: 'Failed',
                 cancelled: (name) => `Cancelled by ${name}.`,
+            },
+            reply: {
+                applied: (files) => `Applied${files === undefined ? '' : ` (${files} ${files === 1 ? 'file' : 'files'})`}`,
+                unchanged: 'No changes',
+                appliedHint: 'The files changed are counted from the revisions before and after the run',
+                declined: 'Declined',
+                status: { Done: 'Done', Partial: 'Partly', Skipped: 'Not done', Question: 'Question' },
+                request: (n) => `Request ${n}`,
+                assumption: 'Assumption',
+                alternatives: 'Alternatives',
+                other: 'Other…',
+                multiple: 'Several may be chosen',
+                filesUnchangedNote: (files) => ` (${files} ${files === 1 ? 'file' : 'files'} changed)`,
             },
             confirmed: (name, n) => `${name} marked revision #${n} as confirmed`,
             restored: (from, n) => `Revision #${from ?? '?'} restored (#${n})`,

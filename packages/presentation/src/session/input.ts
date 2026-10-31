@@ -1,5 +1,6 @@
 // The inputs of the session APIs, checked at the boundary before any use case sees them: IDs, targets, text lengths.
 // A failure names the field and why, and is answered 400 (`InvalidInput`).
+import { checkAgentReplyDeep, readAnswer, readReply, toAgentReply, type AnswerData, type ReplyOutcome } from '@domaintrail/collaboration/domain/reply';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
@@ -214,4 +215,24 @@ export function requestIds(v: unknown, field = 'requests'): Result<Collaboration
         ids.push(Collaboration.makeRequestId(id.value));
     }
     return ok(ids);
+}
+
+/**
+ * The agent's reply as the subscriber sends it (`AgentReplyBody`), validated against the shape and `REPLY_LIMITS`, with
+ * the outcome the route ends the run with; its requests are IDs (that they are the run's requests is the model's
+ * `replyAboutInput`).
+ */
+export function agentReply(v: unknown, outcome: ReplyOutcome, field = 'reply'): Result<Collaboration.AgentReply, InvalidInput> {
+    const read = readReply(v, (x) => (uuid(x, field).ok ? Collaboration.makeRequestId(String(x)) : undefined), MAX_RUN_REQUESTS);
+    if (!read.ok) return invalid(read.error.path, read.error.message);
+    if (read.value.outcome !== outcome) return invalid(`${field}.outcome`, `Expected '${outcome}'.`);
+    const reply = toAgentReply(read.value);
+    const violated = checkAgentReplyDeep(reply);
+    return violated.length ? invalid(field, `Breaks ${violated.join(', ')}.`) : ok(reply);
+}
+
+/** The facilitator's answer to a run's questions (`AnswerBody`): its shape and limits; the run's questions are checked later. */
+export function answer(v: unknown, field = 'answer'): Result<AnswerData, InvalidInput> {
+    const read = readAnswer(v);
+    return read.ok ? read : invalid(read.error.path.replace(/^answer/, field), read.error.message);
 }

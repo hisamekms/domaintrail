@@ -11,15 +11,89 @@ type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
 type FrozenRequest = RunJson['input']['requests'][number];
 type FailureReason = Extract<RunJson, { state: 'Failed' }>['reason'];
+type RevisionJson = SessionStateBody['revisions'][number];
+type ReplyJson = Extract<RunJson, { state: 'Declined' }>['reply'];
+export type RequestProgress = ReplyJson['requests'][number]['status'];
 
-/** What the agent says about a run, from the run's state. */
+/** A request a reply names: the frozen request of the run, and its number in the run (as the prompt numbered it). */
+export interface ReplyRequest {
+    readonly number: number;
+    readonly request: FrozenRequest;
+}
+
+/**
+ * The agent's reply as the page shows it: what the AI says (never a fact), with the requests it names resolved to the
+ * run's frozen requests (author, body). A request it names that is not the run's is left out.
+ */
+export interface ReplyView {
+    readonly summary: string;
+    readonly requests: readonly { readonly request: ReplyRequest; readonly status: RequestProgress; readonly note?: string }[];
+    readonly questions: readonly {
+        readonly id: string;
+        readonly text: string;
+        readonly requests: readonly ReplyRequest[];
+        readonly options: readonly { readonly id: string; readonly label: string; readonly detail?: string }[];
+        readonly multiple: boolean;
+    }[];
+    readonly assumptions: readonly {
+        readonly text: string;
+        readonly requests: readonly ReplyRequest[];
+        readonly alternatives: readonly { readonly id: string; readonly label: string }[];
+    }[];
+}
+
+/** What the agent says about a run, from the run's state; `files`: how many sources the run changed (measured). */
 export type AgentMessage =
     | { readonly kind: 'queued' }
     | { readonly kind: 'running'; readonly since: string }
-    | { readonly kind: 'clarification'; readonly question: string; readonly result: number | undefined }
-    | { readonly kind: 'completed'; readonly changed: boolean; readonly result: number | undefined }
+    | {
+          readonly kind: 'clarification';
+          readonly question: string;
+          readonly result: number | undefined;
+          readonly files: number | undefined;
+          readonly reply?: ReplyView;
+      }
+    | {
+          readonly kind: 'completed';
+          readonly changed: boolean;
+          readonly result: number | undefined;
+          readonly files: number | undefined;
+          readonly reply?: ReplyView;
+      }
+    | { readonly kind: 'declined'; readonly result: number | undefined; readonly files: number | undefined; readonly reply: ReplyView }
     | { readonly kind: 'failed'; readonly reason: FailureReason }
     | { readonly kind: 'cancelled'; readonly by: string };
+
+/** The reply of a run with the requests it names resolved to the run's frozen requests. */
+export function replyView(input: RunJson['input'], reply: ReplyJson): ReplyView {
+    const byId = new Map(input.requests.map((request, i) => [request.request, { number: i + 1, request }]));
+    const resolve = (ids: readonly string[]): ReplyRequest[] => ids.flatMap((id) => byId.get(id) ?? []);
+    return {
+        summary: reply.summary,
+        requests: reply.requests.flatMap((r) => {
+            const request = byId.get(r.request);
+            return request ? [{ request, status: r.status, ...(r.note !== undefined && { note: r.note }) }] : [];
+        }),
+        questions: reply.questions.map((q) => ({ id: q.id, text: q.text, requests: resolve(q.requests), options: q.options, multiple: q.multiple })),
+        assumptions: reply.assumptions.map((a) => ({ text: a.text, requests: resolve(a.requests), alternatives: a.alternatives })),
+    };
+}
+
+/**
+ * How many sources differ between two revisions (added, changed or removed, by path and content hash): the files a
+ * run changed, measured by the server's snapshots. `undefined` when either revision is not known.
+ */
+export function filesChanged(before: RevisionJson | undefined, after: RevisionJson | undefined): number | undefined {
+    if (!before || !after) return undefined;
+    if (before.id === after.id) return 0;
+    const old = new Map(before.files.map((f) => [f.path, f.hash]));
+    let n = 0;
+    for (const f of after.files) {
+        if (old.get(f.path) !== f.hash) n++;
+        old.delete(f.path);
+    }
+    return n + old.size;
+}
 
 /** One item of the main stream. `at` is when it happened (ISO); `key` is stable across updates of the same item. */
 export type StreamItem =
@@ -38,16 +112,49 @@ export type StreamItem =
     | { readonly kind: 'restored'; readonly key: string; readonly at: string; readonly revision: number; readonly from: number | undefined };
 
 /** The agent's message about a run, and when it was said: its latest change of state. */
-function agentMessage(run: RunJson, revisionNumber: (id: string | undefined) => number | undefined): { at: string; message: AgentMessage } {
+function agentMessage(
+    run: RunJson,
+    revisionNumber: (id: string | undefined) => number | undefined,
+    revision: (id: string) => RevisionJson | undefined,
+): { at: string; message: AgentMessage } {
+    const files = (base: string, result: string): number | undefined => filesChanged(revision(base), revision(result));
     switch (run.state) {
         case 'Queued':
             return { at: run.queuedAt, message: { kind: 'queued' } };
         case 'Running':
             return { at: run.startedAt, message: { kind: 'running', since: run.startedAt } };
         case 'NeedsClarification':
-            return { at: run.finishedAt, message: { kind: 'clarification', question: run.question, result: revisionNumber(run.resultRevision) } };
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'clarification',
+                    question: run.question,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                    ...(run.reply && { reply: replyView(run.input, run.reply) }),
+                },
+            };
         case 'Completed':
-            return { at: run.finishedAt, message: { kind: 'completed', changed: run.changed, result: revisionNumber(run.resultRevision) } };
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'completed',
+                    changed: run.changed,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                    ...(run.reply && { reply: replyView(run.input, run.reply) }),
+                },
+            };
+        case 'Declined':
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'declined',
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                    reply: replyView(run.input, run.reply),
+                },
+            };
         case 'Failed':
             return { at: run.finishedAt, message: { kind: 'failed', reason: run.reason } };
         case 'Cancelled':
@@ -63,6 +170,8 @@ function agentMessage(run: RunJson, revisionNumber: (id: string | undefined) => 
 export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
     const revisionNumber = (id: string | undefined): number | undefined => (id === undefined ? undefined : numbers.get(id));
+    const revisions = new Map(state.revisions.map((r) => [r.id, r]));
+    const revision = (id: string): RevisionJson | undefined => revisions.get(id);
     const runs = [...state.runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
     const items: StreamItem[] = [];
     for (const r of state.revisions) {
@@ -76,7 +185,7 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
         const n = i + 1;
         items.push({ kind: 'queued', key: `queued:${run.id}`, at: run.queuedAt, run: n, by: run.queuedBy, requests: run.input.requests });
         if (run.input.note) items.push({ kind: 'note', key: `note:${run.id}`, at: run.queuedAt, run: n, by: run.queuedBy, text: run.input.note });
-        const { at, message } = agentMessage(run, revisionNumber);
+        const { at, message } = agentMessage(run, revisionNumber, revision);
         items.push({ kind: 'agent', key: `agent:${run.id}`, at, run: n, message });
     });
     // by time; items at the same moment keep the order they were pushed in (a run's request, note, then the agent)

@@ -14,7 +14,8 @@ import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { listedParticipants, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
 import { latestRevision } from './state';
 import { useTargetNaming } from './naming';
-import { participantNames, targetText } from './stream';
+import { filesChanged, participantNames, replyView, targetText } from './stream';
+import { ReplyDetails, ReplyQuestions } from './reply';
 import { WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
 import type { Drafts, SessionData } from './useSession';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
@@ -448,14 +449,34 @@ function RunItem(props: {
                     {run.input.note}
                 </p>
             )}
-            {run.state === 'NeedsClarification' && (
-                <p className="small">
-                    <span className="muted">{tx.question}: </span>
-                    {run.question}
-                </p>
+            {run.state === 'NeedsClarification' &&
+                (run.reply ? (
+                    <div className="small session-run-reply">
+                        <p className="chat-text reply-summary">{run.reply.summary}</p>
+                        <ReplyQuestions reply={replyView(run.input, run.reply)} scope={`panel-${run.id}`} nameOf={props.nameOf} tx={tx} />
+                    </div>
+                ) : (
+                    <p className="small">
+                        <span className="muted">{tx.question}: </span>
+                        {run.question}
+                    </p>
+                ))}
+            {run.state === 'Declined' && (
+                <div className="small session-run-reply">
+                    <div className="chat-with-icon">
+                        <Ban size={13} className="chat-icon" aria-label={tx.chat.reply.declined} />
+                        <p className="chat-text">{run.reply.summary}</p>
+                    </div>
+                    <ReplyDetails reply={replyView(run.input, run.reply)} summary={false} nameOf={props.nameOf} tx={tx} />
+                </div>
             )}
             {run.state === 'Failed' && <p className="small session-error">{tx.failureReasons[run.reason]}</p>}
-            {run.state === 'Completed' && <p className="small">{run.changed ? tx.changed : tx.unchanged}</p>}
+            {run.state === 'Completed' && <p className="small">{run.changed ? tx.chat.reply.applied(filesChanged(props.base, props.result)) : tx.unchanged}</p>}
+            {run.state === 'Completed' && run.reply && (
+                <div className="small session-run-reply">
+                    <ReplyDetails reply={replyView(run.input, run.reply)} nameOf={props.nameOf} tx={tx} />
+                </div>
+            )}
             {(run.state === 'Completed' || run.state === 'Failed') && run.report && <Report report={run.report} tx={tx} />}
             {props.base && props.result && <ValidationDiff before={props.base.validation} after={props.result.validation} tx={tx} />}
         </li>

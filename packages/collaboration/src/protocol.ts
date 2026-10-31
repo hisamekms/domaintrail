@@ -88,6 +88,7 @@ export const EVENT_MESSAGE_TYPES = {
     RunStarted: 'run.started',
     RunCompleted: 'run.completed',
     RunNeedsClarification: 'run.needs_clarification',
+    RunDeclined: 'run.declined',
     RunFailed: 'run.failed',
     RunCancelled: 'run.cancelled',
     RevisionRecorded: 'revision.recorded',
@@ -143,10 +144,24 @@ export interface SendRequestBody {
     readonly body: string;
 }
 
-/** `POST /api/session/runs`: the requests to bundle, in order, and the facilitator's note. */
+/**
+ * The facilitator's answer to the questions of a run that needs clarification: for each question answered (by its
+ * `id`), the options chosen (by `id`; at most one for a single-choice question) and/or own words (`text`). Limits:
+ * `REPLY_LIMITS` (`domain/reply.ts`).
+ */
+export interface AnswerBody {
+    readonly answers: readonly { readonly question: string; readonly options: readonly string[]; readonly text?: string }[];
+}
+
+/**
+ * `POST /api/session/runs`: the requests to bundle, in order, and the facilitator's note; with `answerTo` (a run of the
+ * session that needs clarification) and `answer`, the answer to its questions, frozen into the new run's input.
+ */
 export interface QueueRunBody {
     readonly requests: readonly string[];
     readonly note?: string;
+    readonly answerTo?: string;
+    readonly answer?: AnswerBody;
 }
 
 /**
@@ -201,6 +216,7 @@ export const AGENT_EVENT_TYPES = {
     RunStarted: 'run.started',
     RunCompleted: 'run.completed',
     RunNeedsClarification: 'run.needs_clarification',
+    RunDeclined: 'run.declined',
     RunFailed: 'run.failed',
     RunCancelled: 'run.cancel_requested',
     SessionClosed: 'session.closed',
@@ -244,16 +260,48 @@ export interface AgentLeaseBody {
     readonly token: string;
 }
 
-/** `POST /agent/runs/:id/finish`: the agent's facts only; the server compares the diagnostics and decides the rest. */
+/**
+ * The agent's reply as the subscriber sends it (`ReplyData` of `domain/reply.ts`, requests by ID): what the AI says,
+ * validated against the shape and `REPLY_LIMITS` on both sides. Never a fact.
+ */
+export interface AgentReplyBody {
+    readonly outcome: 'done' | 'clarification' | 'declined';
+    readonly summary: string;
+    readonly requests: readonly { readonly request: string; readonly status: 'done' | 'partial' | 'skipped' | 'question'; readonly note?: string }[];
+    readonly questions?: readonly {
+        readonly id: string;
+        readonly text: string;
+        readonly requests?: readonly string[];
+        readonly options: readonly { readonly id: string; readonly label: string; readonly detail?: string }[];
+        readonly multiple: boolean;
+    }[];
+    readonly assumptions?: readonly {
+        readonly text: string;
+        readonly requests?: readonly string[];
+        readonly alternatives?: readonly { readonly id: string; readonly label: string }[];
+    }[];
+}
+
+/**
+ * `POST /agent/runs/:id/finish`: the agent's facts; the server compares the diagnostics and decides the rest. `reply`
+ * (outcome `done`) is kept with a completed run, never used to decide it.
+ */
 export interface AgentFinishBody extends AgentLeaseBody {
     readonly exitCode: number;
     readonly formatted: boolean;
     readonly checked: boolean;
+    readonly reply?: AgentReplyBody;
 }
 
-/** `POST /agent/runs/:id/clarification`. */
+/** `POST /agent/runs/:id/clarification`: the question as plain text, and the structured reply (outcome `clarification`) when there is one. */
 export interface AgentClarificationBody extends AgentLeaseBody {
     readonly question: string;
+    readonly reply?: AgentReplyBody;
+}
+
+/** `POST /agent/runs/:id/decline`: the agent will not do the requests; the reply's summary is why (outcome `declined`). */
+export interface AgentDeclineBody extends AgentLeaseBody {
+    readonly reply: AgentReplyBody;
 }
 
 /** `POST /agent/runs/:id/fail`. */

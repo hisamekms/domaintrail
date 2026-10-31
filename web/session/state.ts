@@ -2,7 +2,7 @@
 // (`session.state`, with the outbox position `seq` it includes) and the events after it. Events that arrive before a
 // state are kept until it comes; an event is applied only when its `seq` is past the state's, and applying one twice
 // changes nothing. An event that does not carry everything the state holds (a queued run's input, a finished run's
-// report, a revision's files) asks for the state to be fetched again.
+// report or the agent's reply, a revision's files) asks for the state to be fetched again.
 import type { EventMessage, Me, SessionServerMessage, SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RequestJson = SessionStateBody['requests'][number];
@@ -114,7 +114,8 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'RunCompleted':
             // the report is not in the event
             return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Completed' };
-        case 'RunNeedsClarification':
+        case 'RunNeedsClarification': {
+            const run = state.runs.find((r) => r.id === e.runId);
             return {
                 state: runs(
                     (r) =>
@@ -123,8 +124,13 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                             : r,
                     e.runId,
                 ),
-                refetch: false,
+                // the agent's structured reply is not in the event
+                refetch: run?.state === 'Running' || run === undefined,
             };
+        }
+        case 'RunDeclined':
+            // the agent's reply (its reason) is not in the event
+            return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Declined' };
         case 'RunFailed': {
             const run = state.runs.find((r) => r.id === e.runId);
             if (run?.state !== 'Running') return { state: at, refetch: run === undefined };

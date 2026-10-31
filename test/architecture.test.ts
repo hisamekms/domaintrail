@@ -218,11 +218,13 @@ describe('layers', () => {
         expect(users.filter((area) => !COLLABORATION_USED_BY.includes(area))).toEqual([]);
     });
 
-    test('agent takes only types from collaboration (its protocol and generated contracts), and only its infrastructure imports node:*', () => {
+    test('agent takes only types from collaboration (its protocol and generated contracts) besides the reply module, and only its infrastructure imports node:*', () => {
         const wrong = IMPORTS.agent.filter(
             (i) =>
                 packageName(i.specifier) === '@domaintrail/collaboration' &&
-                !(i.typeOnly && ['@domaintrail/collaboration/protocol', '@domaintrail/collaboration/generated/index'].includes(i.specifier)),
+                !(i.typeOnly && ['@domaintrail/collaboration/protocol', '@domaintrail/collaboration/generated/index'].includes(i.specifier)) &&
+                // the agent's reply: its limits, schema and validation are one pure module both sides use
+                i.specifier !== '@domaintrail/collaboration/domain/reply',
         );
         expect(show(wrong)).toEqual([]);
         expect(show(IMPORTS.agent.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
