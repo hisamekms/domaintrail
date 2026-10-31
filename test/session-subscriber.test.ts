@@ -351,6 +351,33 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
         expect(await readFile(path.join(ctx.root, 'sales', 'order.dt'), 'utf8')).toContain('  event OrderArchived "注文保管" {\n    orderId: OrderId\n  }');
         expect((await ctx.invocations())[0].prompt).toContain('These requests are about the `.dt` model: change a `.dtes` file only if a request asks for it.');
     });
+    test('three requests in one run → one invocation of the agent with all three; each request stays as it was sent', async () => {
+        const ctx = await setup();
+        const bodies = ['First: name the return reasons.', 'Second: add a refund event.', 'Third: who approves a return?'];
+        const ids = [
+            await request(ctx, ctx.bob, { kind: 'Workspace' }, bodies[0]),
+            await request(ctx, ctx.ada, { kind: 'DtElement', element: 'Sales.Order' }, bodies[1]),
+            await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'ReturnRequested' }, bodies[2]),
+        ];
+        const sent = (await state(ctx)).requests.filter((r) => ids.includes(r.id));
+        const run = await queue(ctx, ids);
+        await subscribe(ctx, await ctx.plan([{ edits: ADD_RETURN_CANCELLED }]));
+        expect((await until(ctx, run, ['Completed', 'Failed', 'NeedsClarification'])).state).toBe('Completed');
+
+        // one agent invocation, whose prompt has the three requests in the order bundled
+        const invocations = await ctx.invocations();
+        expect(invocations).toHaveLength(1);
+        const nonce = /<requests-([0-9a-f]{32})>/.exec(invocations[0].prompt)![1];
+        const prompt = invocations[0].prompt;
+        const block = prompt.slice(prompt.indexOf(`<requests-${nonce}>`) + `<requests-${nonce}>`.length, prompt.indexOf(`</requests-${nonce}>`));
+        expect((JSON.parse(block) as { requests: { body: string }[] }).requests.map((r) => r.body)).toEqual(bodies);
+
+        // the run keeps each request, frozen; the requests themselves are unchanged and still sent
+        const after = await state(ctx);
+        expect(after.runs.find((r) => r.id === run)?.input.requests.map((r) => [r.request, r.body])).toEqual(ids.map((id, i) => [id, bodies[i]]));
+        expect(after.requests.filter((r) => ids.includes(r.id))).toEqual(sent);
+        expect(sent.map((r) => r.state)).toEqual(['Sent', 'Sent', 'Sent']);
+    });
 });
 
 describe('the pipeline', () => {

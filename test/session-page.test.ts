@@ -143,6 +143,25 @@ describe('targets from the selection', () => {
         expect(selectionOf(occ)).toBe('es/DeliveryCancellation/BikeReleased');
     });
 
+    test('an event in two timelines is two occurrences: their targets and keys differ, the element is the same', () => {
+        const occurrenceIn = (timelineId: string) => {
+            const render = projectView(storming, { level: 'design-level', timelineId });
+            const node = render.nodes.find((n) => n.type === 'event' && n.eventId === 'ShipmentCancelled')!.id;
+            return targetOfSelection({
+                ...ctx,
+                selected: 'es/DeliveryCancellation/ShipmentCancelled',
+                timelineView: { stormingId: storming.id, timelineId, render },
+                selectedNode: node,
+            })!.target;
+        };
+        const [normal, failure] = [occurrenceIn('Normal'), occurrenceIn('Failure')];
+        expect(normal).toMatchObject({ kind: 'DtesOccurrence', timeline: 'Normal', eventName: 'ShipmentCancelled', occurrence: '0' });
+        expect(failure).toMatchObject({ kind: 'DtesOccurrence', timeline: 'Failure', eventName: 'ShipmentCancelled', occurrence: '0' });
+        expect(targetKey(normal)).not.toBe(targetKey(failure));
+        expect(targetKey(normal)).not.toBe(targetKey({ kind: 'DtesElement', storming: 'DeliveryCancellation', local: 'ShipmentCancelled' }));
+        expect(selectionOf(normal)).toBe(selectionOf(failure));
+    });
+
     test('the integrated canvas, or a selection not drawn as that note, targets the element', () => {
         const integrated = projectView(storming, { level: 'design-level' });
         const note = integrated.nodes.find((n) => n.type === 'event' && n.eventId === 'ShipmentCancelled')!.id;

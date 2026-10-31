@@ -326,6 +326,28 @@ describe('revisions', () => {
         expect(types.at(-1)).toBe('RevisionRestored');
     });
 
+    test('a .dtes with a syntax error is kept in the revision as written, counted as a .dtes error; restoring an earlier one recovers', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const broken = RETURNS.replace('  timeline Normal {', '  timeline Normal {{');
+        await s.write('stormings/returns.dtes', broken);
+        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        expect(Number(manual.validation.dtesErrors)).toBeGreaterThan(0);
+        expect(Number(manual.validation.dtErrors)).toBe(0);
+        expect(manual.files.map((f): string => f.path)).toEqual(['sales/sales.dt', 'stormings/returns.dtes']);
+        // the snapshot holds the broken text itself
+        const c = value(await s.use.compareRevisions({ session: id, before: start.id, after: manual.id }));
+        const dtes = c.files.find((f) => f.path === 'stormings/returns.dtes');
+        expect(dtes?.status).toBe('changed');
+        expect(dtes?.diff?.kind === 'diff' && dtes.diff.unified).toContain('+  timeline Normal {{');
+
+        value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
+        // and back again: the broken revision can be restored as it was
+        value(await s.use.restoreRevision({ session: id, revision: manual.id, by: facilitator }));
+        expect(await s.read('stormings/returns.dtes')).toBe(broken);
+    });
+
     test('restore refuses external changes since the last revision, symbolic links, and a running run', async () => {
         const s = await session();
         const { id, start } = await started(s);
