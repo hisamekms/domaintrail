@@ -1,6 +1,6 @@
 // The session's part of the page (ADR 0026): computed on every page, shown only in a session. Under `dt view` no
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
-import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { MessagesSquare, Users } from 'lucide-react';
 import { createShapeId, useValue } from 'tldraw';
 import { LEVEL_KINDS } from '@domaintrail/visualization/domain/storming/ir';
@@ -21,6 +21,9 @@ import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
 import { SessionPanel } from './panel';
+import { SelectionAction } from './selection-action';
+import { confirmSelection, isConfirmKey, isTyping } from './suggestions';
+import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
 import type { ViewScope, ViewTarget } from './views';
@@ -130,6 +133,34 @@ export function useSessionPage(input: {
     const scope = session && { session: session.me.session, participant: session.me.participant.id };
     const drafts = useDrafts(storage, scope);
     const composer = useComposerDraft(storage, scope);
+
+    // the selection confirmed as the request's targets (💬 on the canvas, or `C`): the chat shown, the caret in its text
+    const [focusPending, setFocusPending] = useState(false);
+    const [reveal, setReveal] = useState(0);
+    const onFocused = useCallback(() => setFocusPending(false), []);
+    const composerValue = composer.value;
+    const setComposerValue = useCallback((v: ComposerValue) => composer.setValue(v), [composer]);
+    const { setExplorerOpen: openLeft } = panes;
+    const confirm = useCallback(() => {
+        if (selectionTargets.length === 0) return;
+        setComposerValue(confirmSelection(composerValue, selectionTargets).value);
+        openLeft(true);
+        setReveal((n) => n + 1);
+        setFocusPending(true);
+    }, [selectionTargets, composerValue, setComposerValue, openLeft]);
+    const live = session?.status === 'live' && session.state.session.state === 'Open';
+    useEffect(() => {
+        if (!live) return;
+        const onKey = (e: KeyboardEvent): void => {
+            if (selectionTargets.length === 0 || !isConfirmKey(e, isTyping(document.activeElement))) return;
+            e.preventDefault();
+            e.stopPropagation();
+            confirm();
+        };
+        // before tldraw's own shortcuts (it binds no plain `c`, but the key is ours here)
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+    }, [live, selectionTargets.length, confirm]);
 
     // the facilitator's session pane and the inspector take turns on the right (participants have the chat only)
     const [open, setOpen] = usePersistentState('domaintrail.layout.session', true);
@@ -251,8 +282,14 @@ export function useSessionPage(input: {
     const online = new Set([...session.peers.values()].map((p) => p.participant.id)).size + 1;
     return {
         baselineLocked: !facilitator,
-        canvasOverlay: <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />,
+        canvasOverlay: (
+            <>
+                <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />
+                <SelectionAction editor={editor} enabled={live && selectionTargets.length > 0} label={t.session.chat.addToRequest('C')} onConfirm={confirm} />
+            </>
+        ),
         leftAlternative: {
+            reveal,
             label: t.session.title,
             icon: <MessagesSquare size={16} aria-hidden />,
             content: (
@@ -262,6 +299,8 @@ export function useSessionPage(input: {
                         composer={composer}
                         selectionTargets={selectionTargets}
                         candidates={candidates}
+                        focusPending={focusPending}
+                        onFocused={onFocused}
                         location={location}
                         viewScope={viewScope}
                         onOpenView={openView}

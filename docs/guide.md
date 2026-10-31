@@ -2432,7 +2432,9 @@ element (by storming and local ID), or one **occurrence** of an event in a timel
 to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
 Enter or Tab, Esc; Japanese input works: a candidate is never picked while the IME converts): it becomes a chip under
 the text and `@name[n]` in the text, n its number. The chips are the request's targets: delete every mention of one to
-drop it, or remove it with ×, which leaves its mentions as plain text. `選択中: … [+]` adds the selection: selecting a
+drop it, or remove it with ×, which leaves its mentions as plain text. What you select (on the canvas or in the
+explorer) is suggested as dashed chips: sending makes them targets, × drops a suggestion until the selection changes;
+the 💬 button next to the selection on the canvas, or `C`, makes them chips and puts the caret in the text. Selecting a
 note in one timeline's view of a storming targets that occurrence (the timeline and the step), the integrated canvas,
 which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
 text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A

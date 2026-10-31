@@ -3,7 +3,7 @@
 // for approval, and the composer of a request about the selection. People talk in their meeting; nothing here is a
 // chat between them: what they send are requests.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Ban, Bot, ChevronDown, ChevronRight, CircleHelp, CircleX, LogOut, PanelLeftClose, Play, Plus, Reply, SendHorizontal, X } from 'lucide-react';
+import { Ban, Bot, ChevronDown, ChevronRight, CircleHelp, CircleX, LogOut, PanelLeftClose, Play, Reply, SendHorizontal, X } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi } from './api';
@@ -26,7 +26,6 @@ import {
 } from './stream';
 import { useTargetNaming } from './naming';
 import {
-    addChips,
     bodyText,
     composerKey,
     editText,
@@ -38,6 +37,7 @@ import {
     type MentionCandidate,
 } from './mentions';
 import { ParticipantsButton } from './participants';
+import { dismiss, NO_DISMISSALS, suggestions, targetsToSend, type Dismissals } from './suggestions';
 import { targetKey, type ModelTarget, type TargetDraft } from './targets';
 import { continued, isMac } from './views';
 import type { ViewScope, ViewTarget } from './views';
@@ -78,6 +78,9 @@ export function SessionChat(props: {
     selectionTargets: readonly TargetDraft[];
     /** What `@` offers. */
     candidates: readonly MentionCandidate[];
+    /** The composer is asked to take the focus (the selection was just confirmed with 💬 or `C`). */
+    focusPending: boolean;
+    onFocused: () => void;
     onNavigate: (target: ModelTarget) => void;
     /** This page's location (to tell who is on the same view). */
     location: ViewLocation;
@@ -128,7 +131,17 @@ export function SessionChat(props: {
             {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
             <Stream session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
             <Pending session={session} live={live} nameOf={nameOf} tx={tx} />
-            {live && <Composer session={session} composer={composer} selectionTargets={props.selectionTargets} candidates={props.candidates} tx={tx} />}
+            {live && (
+                <Composer
+                    session={session}
+                    composer={composer}
+                    selectionTargets={props.selectionTargets}
+                    candidates={props.candidates}
+                    focusPending={props.focusPending}
+                    onFocused={props.onFocused}
+                    tx={tx}
+                />
+            )}
         </div>
     );
 }
@@ -605,6 +618,8 @@ function Composer(props: {
     composer: ComposerDraft;
     selectionTargets: readonly TargetDraft[];
     candidates: readonly MentionCandidate[];
+    focusPending: boolean;
+    onFocused: () => void;
     tx: Tx;
 }) {
     const { session, composer, selectionTargets, tx } = props;
@@ -619,6 +634,9 @@ function Composer(props: {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [notice, setNotice] = useState<string | undefined>();
+    // the selection as dashed chips: sent as targets unless dismissed (until the selection changes); never stored
+    const [dismissals, setDismissals] = useState<Dismissals>(NO_DISMISSALS);
+    const suggested = suggestions(value, selectionTargets, dismissals);
     const query = mentionQuery(value.text, caret);
     const open = query !== undefined && query.start !== dismissed;
     const matches = open ? matchCandidates(props.candidates, query.query) : [];
@@ -655,6 +673,16 @@ function Composer(props: {
     const moveCaret = (to: number): void => {
         pendingCaret.current = to;
     };
+    // the selection confirmed with 💬 or `C`: the text takes the focus, the caret at its end
+    const { focusPending, onFocused } = props;
+    useEffect(() => {
+        const el = input.current;
+        if (!focusPending || !el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+        setCaret(el.value.length);
+        onFocused();
+    }, [focusPending, onFocused]);
 
     const pick = (c: MentionCandidate | undefined): void => {
         if (!c || !query) return;
@@ -670,8 +698,11 @@ function Composer(props: {
         if (!revision || !canSend) return;
         setSending(true);
         try {
-            await sessionApi.sendRequest({ targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })), body: value.text });
+            const targets = targetsToSend(value, suggested);
+            await sessionApi.sendRequest({ targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })), body: value.text });
             await composer.clear();
+            // what was just sent is not suggested again for the same selection
+            setDismissals(suggested.targets.reduce((d, t) => dismiss(d, selectionTargets, t), dismissals));
             setError(undefined);
             setNotice(undefined);
         } catch (e) {
@@ -681,9 +712,7 @@ function Composer(props: {
         }
     };
 
-    const inChips = new Set(value.chips.map((c) => targetKey(c.target.target)));
-    const addable = selectionTargets.filter((s) => !inChips.has(targetKey(s.target)));
-    const [onlySelected] = selectionTargets;
+    const count = value.chips.length + suggested.targets.length;
 
     return (
         <div className="chat-composer">
@@ -748,28 +777,9 @@ function Composer(props: {
                     }}
                 />
             </div>
-            {onlySelected && (
-                <div className="chat-selection">
-                    <span className="muted">{selectionTargets.length > 1 ? tx.chat.selectedMany(selectionTargets.length) : tx.chat.selected}</span>
-                    {selectionTargets.length === 1 && <span className="chat-selection-name">{nameOf(onlySelected)}</span>}
-                    <button
-                        className="chat-add"
-                        disabled={addable.length === 0 || value.chips.length >= MAX_REQUEST_TARGETS}
-                        aria-label={tx.chat.addSelection}
-                        data-tooltip={addable.length === 0 ? tx.chat.alreadyAdded : tx.chat.addSelection}
-                        onClick={() => {
-                            const added = addChips(value, addable);
-                            composer.setValue(added.value);
-                            setNotice(added.skipped ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : undefined);
-                        }}
-                    >
-                        <Plus size={13} aria-hidden />
-                    </button>
-                </div>
-            )}
             <div className="chat-composer-bar">
                 <div className="chat-chips" aria-label={tx.chat.target}>
-                    {value.chips.length === 0 ? (
+                    {count === 0 ? (
                         <span className="chat-target kind-Workspace" data-tooltip={tx.chat.noTargets}>
                             {tx.workspace}
                         </span>
@@ -792,7 +802,29 @@ function Composer(props: {
                             </span>
                         ))
                     )}
-                    {value.chips.length > 0 && <span className="muted small">{tx.chat.targetCount(value.chips.length, MAX_REQUEST_TARGETS)}</span>}
+                    {suggested.targets.map((s, i) => (
+                        <span
+                            key={`suggested:${targetKey(s.target)}`}
+                            className={`chat-chip suggested kind-${s.target.kind}`}
+                            role="note"
+                            aria-label={tx.chat.suggested(nameOf(s))}
+                            data-tooltip={tx.chat.suggested(nameOf(s))}
+                        >
+                            <span className="chat-chip-number" aria-hidden>
+                                {value.chips.length + i + 1}
+                            </span>
+                            <span className="chat-chip-name">{nameOf(s)}</span>
+                            <button
+                                className="chat-chip-remove"
+                                aria-label={tx.chat.dismissSuggestion(nameOf(s))}
+                                onClick={() => setDismissals(dismiss(dismissals, selectionTargets, s))}
+                            >
+                                <X size={12} aria-hidden />
+                            </button>
+                        </span>
+                    ))}
+                    {count > 0 && <span className="muted small">{tx.chat.targetCount(count, MAX_REQUEST_TARGETS)}</span>}
+                    {suggested.overLimit > 0 && <span className="muted small">{tx.chat.targetsLimit(MAX_REQUEST_TARGETS)}</span>}
                 </div>
                 <div className="chat-composer-actions">
                     {/* the shortcut, only while there is something to send */}

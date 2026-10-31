@@ -506,7 +506,11 @@ a meeting talk about several things at once ("give 注文 the 顧客's address")
   qualified name, shown with their kind and context or storming; ↑↓, Enter/Tab, Esc; while an IME composes
   (`isComposing` or key code 229) no key picks or sends. Picking writes `@name[n] ` and adds chip n (or reuses it);
   deleting every mention of a chip that came from a mention removes it (a chip added otherwise stays); removing a chip
-  turns its mentions into plain text; numbers follow the chips. The selection is offered as `選択中: … [+]`; a selection
+  turns its mentions into plain text; numbers follow the chips. The selection (canvas or explorer) is suggested as
+  dashed chips after the confirmed ones (sent as targets unless dismissed with ×, until the selection changes; never
+  stored in the draft; confirmed + suggested within the 20); the canvas's 💬 next to the selection, or `C` outside
+  text inputs (no tldraw or app binding of a plain `c`), confirms them and focuses the composer. The app has no
+  context menus (tldraw's UI is hidden), so none was added. Formerly `選択中: … [+]`. A selection
   of several shapes adds each targetable element, and an occurrence is added from a timeline's view. The unsent text
   and chips stay in the browser (the composer's draft, IndexedDB).
 

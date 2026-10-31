@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { FolderTree, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { useT } from '../i18n';
 import { Resizer } from '../shared/layout';
@@ -17,6 +17,8 @@ const MIN_CANVAS_WIDTH = 320;
  * only, as always.
  */
 export interface LeftPaneAlternative {
+    /** Changed to show it (switching from the explorer): the session's composer asked for, for instance. */
+    readonly reveal?: number;
     /** The switch's label for it (its tooltip and accessible name). */
     readonly label: string;
     /** The switch's icon for it. */
@@ -54,6 +56,10 @@ export function AppShell(props: {
     const [leftShows, setLeftShows] = useState<'alternative' | 'explorer'>('alternative');
     const alternative = props.leftAlternative;
     const showsAlternative = alternative !== undefined && leftShows === 'alternative';
+    const reveal = alternative?.reveal;
+    useEffect(() => {
+        if (reveal) setLeftShows('alternative');
+    }, [reveal]);
 
     return (
         <div className="app">
