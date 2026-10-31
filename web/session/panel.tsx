@@ -45,12 +45,28 @@ export function SessionPanel(props: {
     names.set(me.participant.id, me.participant.name);
     const nameOf = (id: string): string => names.get(id) ?? id;
     const live = session.status === 'live' && state.session.state === 'Open';
+    const [leaveError, setLeaveError] = useState<string | undefined>();
+    const leave = async (): Promise<void> => {
+        try {
+            const left = await sessionApi.leave();
+            // access: on to Cloudflare Access's logout; dev: the join form again
+            if (left.logout) location.assign(left.logout);
+            else location.reload();
+        } catch (e) {
+            setLeaveError(failure(e));
+        }
+    };
 
     return (
         <div className="session-panel">
             <div className="pane-title pane-title-row">
                 <span>{tx.title}</span>
                 <span className="session-actions">
+                    {session.status !== 'signed-out' && (
+                        <button className="small" onClick={() => void leave()}>
+                            {tx.leave}
+                        </button>
+                    )}
                     <button className="small" onClick={props.onShowInspector}>
                         {tx.showInspector}
                     </button>
@@ -63,6 +79,7 @@ export function SessionPanel(props: {
                 {session.status === 'signed-out' && <p className="session-note">{tx.signedOut}</p>}
                 {(session.status === 'closed' || state.session.state === 'Closed') && <p className="session-note">{tx.closed}</p>}
                 {session.error && <p className="session-note session-error">{tx.error(session.error)}</p>}
+                {leaveError && <p className="session-note session-error">{tx.error(leaveError)}</p>}
                 <Participants session={session} location={props.location} nameOf={nameOf} tx={tx} />
                 {live && <Composer drafts={drafts} selectionTarget={selectionTarget} state={state} tx={tx} />}
                 <Requests session={session} facilitator={facilitator} live={live} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
@@ -85,7 +102,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function Avatar({ id, name, url }: { id: string; name: string; url?: string }) {
-    if (url) return <img className="session-avatar" src={url} alt="" referrerPolicy="no-referrer" />;
+    // only an https avatar is shown; anything else gets the initials
+    if (url?.startsWith('https://')) return <img className="session-avatar" src={url} alt="" referrerPolicy="no-referrer" />;
     return (
         <span className="session-avatar" style={{ background: participantColor(id) }} aria-hidden>
             {initials(name)}

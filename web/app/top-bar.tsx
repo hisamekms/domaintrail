@@ -11,7 +11,8 @@ export function TopBar(props: {
     connection: Connection;
     preferences: Preferences;
     baselineOpen: boolean;
-    onBaselineToggle: (anchor: HTMLElement) => void;
+    /** Absent: the baseline is shown but not changed (a participant of a session). */
+    onBaselineToggle?: (anchor: HTMLElement) => void;
 }) {
     const { current, connection, preferences, baselineOpen, onBaselineToggle } = props;
     const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang } = preferences;

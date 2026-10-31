@@ -19,8 +19,8 @@ export function BottomPanel(props: {
     /** The baseline's name, and whether it is a git revision (else the previous save). */
     baseline?: string;
     gitBaseline?: boolean;
-    /** Opens (or closes) the menu choosing the baseline, next to the heading. */
-    onBaseline: (anchor: HTMLElement) => void;
+    /** Opens (or closes) the menu choosing the baseline, next to the heading; absent: the baseline cannot be changed here. */
+    onBaseline?: (anchor: HTMLElement) => void;
     onTab: (tab: BottomTab) => void;
     onToggle: () => void;
     onLocate: (d: Diagnostic) => void;
@@ -107,13 +107,19 @@ function Changes({
     mode: DisplayMode;
     baseline?: string;
     gitBaseline?: boolean;
-    onBaseline: (anchor: HTMLElement) => void;
+    onBaseline?: (anchor: HTMLElement) => void;
     onSelect: Select;
 }) {
     const t = useT();
     // what the changes are relative to; a click opens the menu that changes it
     const heading = baseline && (
-        <button className="changes-baseline" aria-haspopup="listbox" onClick={(e) => onBaseline(e.currentTarget)} data-tooltip={t.changeBaseline}>
+        <button
+            className="changes-baseline"
+            aria-haspopup="listbox"
+            disabled={!onBaseline}
+            onClick={(e) => onBaseline?.(e.currentTarget)}
+            data-tooltip={t.changeBaseline}
+        >
             <GitCompare size={14} aria-hidden />
             {t.changesSince(baseline)}
             <span aria-hidden>▾</span>

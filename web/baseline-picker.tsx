@@ -14,7 +14,7 @@ export function baselineName(b: Baseline, previous: string): string {
  * The header's button showing what the model is compared with; it opens the menu choosing it (`BaselineMenu`), which
  * the heading of the changes opens too.
  */
-export function BaselineButton({ baseline, open, onToggle }: { baseline: Baseline; open: boolean; onToggle: (anchor: HTMLElement) => void }) {
+export function BaselineButton({ baseline, open, onToggle }: { baseline: Baseline; open: boolean; onToggle?: (anchor: HTMLElement) => void }) {
     const t = useT();
     return (
         <button
@@ -22,7 +22,9 @@ export function BaselineButton({ baseline, open, onToggle }: { baseline: Baselin
             aria-haspopup="listbox"
             aria-expanded={open}
             data-tooltip={t.baselineHint}
-            onClick={(e) => onToggle(e.currentTarget)}
+            // without onToggle the baseline is shown but not changed (a participant of a session)
+            disabled={!onToggle}
+            onClick={(e) => onToggle?.(e.currentTarget)}
         >
             <GitCompare size={14} aria-hidden />
             <span className="baseline-summary">

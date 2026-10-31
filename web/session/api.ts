@@ -61,5 +61,7 @@ export const sessionApi = {
     sendRequest: (body: SendRequestBody): Promise<unknown> => call('requests', { method: 'POST', body }),
     dismissRequest: (id: string): Promise<unknown> => call(`requests/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: {} }),
     queueRun: (body: QueueRunBody): Promise<unknown> => call('runs', { method: 'POST', body }),
+    /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
+    leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
 };

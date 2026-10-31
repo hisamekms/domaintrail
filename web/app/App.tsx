@@ -75,7 +75,7 @@ export function App() {
                         connection={connection}
                         preferences={preferences}
                         baselineOpen={!!baselineAnchor}
-                        onBaselineToggle={toggleBaselineMenu}
+                        onBaselineToggle={session.baselineLocked ? undefined : toggleBaselineMenu}
                     />
                 }
                 banners={
@@ -175,14 +175,18 @@ export function App() {
                         diff={current?.diff ?? empty}
                         baseline={current ? baselineName(current.baseline, t.baselinePrevious) : undefined}
                         gitBaseline={current?.baseline.kind === 'git'}
-                        onBaseline={toggleBaselineMenu}
+                        onBaseline={session.baselineLocked ? undefined : toggleBaselineMenu}
                         onTab={setBottomTab}
                         onToggle={() => setBottomOpen(!bottomOpen)}
                         onLocate={locate}
                         onSelect={(id) => select(id)}
                     />
                 }
-                overlays={current && baselineAnchor && <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />}
+                overlays={
+                    current &&
+                    baselineAnchor &&
+                    !session.baselineLocked && <BaselineMenu baseline={current.baseline} anchor={baselineAnchor} onClose={closeBaselineMenu} />
+                }
             />
         </I18nProvider>
     );

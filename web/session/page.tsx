@@ -30,6 +30,8 @@ export interface SessionPage {
     readonly sidePanel: ReactNode;
     /** The others' cursors over the canvas; undefined outside a session. */
     readonly canvasOverlay: ReactNode;
+    /** In a session only the facilitator changes the shared baseline (the server answers others 403). */
+    readonly baselineLocked: boolean;
 }
 
 export function useSessionPage(input: {
@@ -142,9 +144,10 @@ export function useSessionPage(input: {
         [editor, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
     );
 
-    if (!session) return { sidePanel: undefined, canvasOverlay: undefined };
+    if (!session) return { sidePanel: undefined, canvasOverlay: undefined, baselineLocked: false };
     const online = new Set([...session.peers.values()].map((p) => p.participant.id)).size + 1;
     return {
+        baselineLocked: session.me.participant.role !== 'facilitator',
         canvasOverlay: <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />,
         sidePanel: (
             <>
