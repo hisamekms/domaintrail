@@ -165,7 +165,7 @@ describe('dt guide', () => {
         for (const [code, block] of examples) {
             expect(formatStorming(block)).toBe(block);
             const a = await check({ ...workspace(), 'example.dtes': block });
-            expect({ code, found: [...new Set(a.diagnostics.map((d) => d.code))] }).toEqual({ code, found: [code] });
+            expect({ code, found: [...new Set(a.diagnostics.map((d): string => d.code))] }).toEqual({ code, found: [code] });
         }
     });
 
