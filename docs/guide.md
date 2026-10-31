@@ -2401,7 +2401,7 @@ A **session** is the Live View shared by several people while an AI agent edits 
 **runs**, and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
 time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
 `.dtes` sources that can be compared, marked confirmed or restored. `dt view` is unchanged: it has no session, and its
-page no session panel. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
+page no session chat or panel. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
 **The commands.** All three find the workspace like `dt check` (`-r`, `-c`):
@@ -2416,26 +2416,28 @@ page no session panel. Sessions need Node.js 22.13 or later (for `node:sqlite`).
 - `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
   the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
 
-**Roles.** Everyone signed in is a **participant**: they see the Live View and the session panel, send requests,
-dismiss their own, and compare revisions. The **facilitator** is whoever opened the facilitator link while signed in
-(never derived from Cloudflare Access); a new link moves the role, and the previous holder's pages reconnect as a
-participant. Only the facilitator queues and cancels runs, dismisses others' requests, records, confirms and restores
-revisions, changes the shared 比較対象 (baseline) and closes the session (`POST /api/session/close`, e.g. with `fetch`
-from the browser console: the page has no button for it). The server checks every role; the page only hides what is
-not yours. The facilitator is listed once in the panel, under their own name.
+**Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat in the left pane
+(what was queued and what the agent answered, the requests awaiting approval, and the composer), send requests and
+dismiss their own. The facilitator also has the session panel on the right, where they compare revisions. The
+**facilitator** is whoever opened the facilitator link while signed in (never derived from Cloudflare Access); a new
+link moves the role, and the previous holder's pages reconnect as a participant. Only the facilitator queues and
+cancels runs, dismisses others' requests, records, confirms and restores revisions, changes the shared 比較対象 (baseline)
+and closes the session (`POST /api/session/close`, e.g. with `fetch` from the browser console: the page has no button
+for it). The server checks every role; the page only hides what is not yours. The facilitator is listed once in the
+panel, under their own name.
 
 **Requests and targets.** A request is a text (up to 10,000 characters) about a **target**: the whole workspace, a
 `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes` element (by storming and local
 ID), or one **occurrence** of an event in a timeline. The selection gives the target: selecting a note in one
 timeline's view of a storming targets that occurrence (the timeline and the step), while the integrated canvas, which
-draws each event once, targets the event's definition. Drafts stay in your browser (IndexedDB, per session and
-participant) until you select some and send them, each as its own request. A sent request never changes; dismissing
-it is a mark. Each target shows whether it is still in the sources (`current`), no longer found (`stale`: a target is
-never re-bound to something else), or `unknown` while the file it would be in does not parse.
+draws each event once, targets the event's definition. The text you are writing stays in your browser (IndexedDB, per
+session and participant) until you send it, as one request. A sent request never changes; dismissing it is a mark.
+Each target shows whether it is still in the sources (`current`), no longer found (`stale`: a target is never re-bound
+to something else), or `unknown` while the file it would be in does not parse.
 
 **Runs.** The facilitator selects requests (up to 100), adds a note if needed (up to 4,000 characters) and queues a
 run; its input is frozen then, and a request stays as it was, so it can go into another run later. A run is `Queued`,
-`Running`, then `Completed`, `NeedsClarification` (the agent asked a question, shown in the panel; queue the requests
+`Running`, then `Completed`, `NeedsClarification` (the agent asked a question, shown in the chat; queue the requests
 again with the answer in the note), `Failed` or `Cancelled`; the facilitator can cancel a queued or running one. A run
 **succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new `.dt` error compared with the run's
 base revision, and every `.dtes` file still parses; diagnostics that were there before and `.dtes` warnings are shown
