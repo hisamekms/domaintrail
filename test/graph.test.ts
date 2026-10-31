@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '../src/graph/build.js';
 import { diffModels } from '../src/graph/diff.js';
 import { ElkLayoutEngine } from '../src/layout/elk.js';

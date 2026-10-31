@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { InvariantModel } from '../src/model/model.js';

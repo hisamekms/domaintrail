@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { EXAMPLES, checkSales, codes, only } from './helpers.js';
 

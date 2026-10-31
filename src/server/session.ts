@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyze } from '../core/analyze.js';
 import { DEFAULT_SOURCES } from '../core/config.js';
-import { loadWorkspace } from '../core/files.js';
+import { loadWorkspace } from '../workspace/infrastructure/files.js';
 import { VIEW_LEVELS, type RenderGraph, type Storming, type StormingAnalysis, type ViewOptions } from '../dtes/ir.js';
 import { matchRenderNodes, projectView } from '../dtes/project/render.js';
 import { stormingTimelines } from '../dtes/project/semantic.js';

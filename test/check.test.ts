@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { EXAMPLES, check, checkSales, codes, only } from './helpers.js';
 
 const ORDER = `

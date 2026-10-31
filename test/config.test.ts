@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
 import { ConfigError, checkTsContexts, findConfigFile, loadConfig, parseJsonc, policyModes } from '../src/core/config.js';
-import { findDomainFiles } from '../src/core/files.js';
+import { findDomainFiles } from '../src/workspace/infrastructure/files.js';
 
 const dirs: string[] = [];
 afterEach(async () => {

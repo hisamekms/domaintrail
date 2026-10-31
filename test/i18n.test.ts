@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { buildStateGraph, buildStructureGraph } from '../src/graph/build.js';
 import { buildContextMapGraph } from '../src/graph/context-map.js';
 import type { Graph } from '../src/graph/ir.js';

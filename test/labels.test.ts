@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { buildStateGraph, buildStructureGraph } from '../src/graph/build.js';
 import { anyLang, perLang } from '../src/graph/ir.js';

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { FormatError, formatDomain } from '../src/format/format.js';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 

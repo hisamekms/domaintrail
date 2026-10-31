@@ -6,7 +6,7 @@ import { parseGuide } from '../src/cli/guide.js';
 import { runCli } from '../src/cli/main.js';
 import { analyze } from '../src/core/analyze.js';
 import { parseJsonc } from '../src/core/config.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { formatStorming } from '../src/dtes/format.js';
 import { formatDomain } from '../src/format/format.js';
 import { generateTypeScript } from '../src/generator/typescript.js';

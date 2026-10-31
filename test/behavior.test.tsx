@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import type { DomainModel, ElementModel } from '../src/model/model.js';
 import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from '../web/behavior.js';
 import { MESSAGES } from '../web/i18n.js';

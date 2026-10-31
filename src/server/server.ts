@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { watch, type FSWatcher } from 'chokidar';
 import { WebSocket, WebSocketServer } from 'ws';
 import { DEFAULT_SOURCES, IGNORED_DIRS } from '../core/config.js';
-import { SourceScope } from '../core/files.js';
+import { SourceScope } from '../workspace/infrastructure/files.js';
 import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
