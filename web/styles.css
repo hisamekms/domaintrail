@@ -2204,9 +2204,12 @@ svg.chat-launcher-mark {
     min-width: 0;
     padding: 4px 0;
     display: flex;
+    /* a pane too narrow for the controls puts them on more rows (each control stays whole), right-aligned */
+    flex-wrap: wrap;
+    justify-content: flex-end;
     white-space: nowrap;
     align-items: center;
-    gap: 8px;
+    gap: 4px 8px;
     font-size: 0.8125rem;
 }
 .view-toolbar button,
@@ -2219,6 +2222,9 @@ svg.chat-launcher-mark {
     cursor: pointer;
 }
 .view-toolbar select.view-select {
+    /* on a narrow pane the pickers share a row, shortened (their names cut short) */
+    flex: 1 1 8rem;
+    min-width: 0;
     max-width: 13.75rem;
     text-overflow: ellipsis;
 }

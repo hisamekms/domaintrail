@@ -41,7 +41,7 @@ it, the items added, changed and removed since then. A removed item opens in the
 ## Main (center)
 
 Views of the whole model, in tabs with a toolbar of what to show (view-specific: the BCs, the level…) ending with the
-canvas's menu ⋯. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+canvas's menu ⋯; on a narrow canvas the toolbar goes below the tabs and onto more rows (its pickers shortened). Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
