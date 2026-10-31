@@ -1,43 +1,32 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, LayoutGrid, LayoutList, PanelLeftOpen, PanelRightOpen, type LucideIcon } from 'lucide-react';
-import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
+import { Tldraw, type Editor } from 'tldraw';
 import type { Diagnostic } from '../../src/core/diagnostics';
-import { STRUCTURE_LEVELS, type LaidOutGraph, type StructureLevel } from '../../src/graph/ir';
-import type { BaseView } from '../../src/server/protocol';
+import { STRUCTURE_LEVELS, type StructureLevel } from '../../src/graph/ir';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { BottomPanel } from '../bottom';
 import { Catalog } from '../catalog';
-import { cameraMove, fitAll, fitReadable, highlightElement, usePointerCursor } from '../view/canvas';
-import { Explorer } from '../explorer';
-import { Legend } from '../legend';
-import { backIndex, popHistory, pushHistory, type History } from '../view/history';
-import { Inspector, type RevealTarget } from '../inspector';
-import { Resizer, usePersistentState } from '../shared/layout';
-import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
-import { renderGraph, shapeElementId, withWriteAccess } from '../render';
-import { shapeUtils } from '../shapes';
-import { locationOf, type SourceFocus } from '../source';
 import { ContextPicker } from '../context-picker';
+import { Explorer } from '../explorer';
+import { I18nProvider, MESSAGES } from '../i18n';
+import { Inspector } from '../inspector';
+import { Legend } from '../legend';
+import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
+import { shapeUtils } from '../shapes';
+import { Resizer } from '../shared/layout';
 import { SettingsDialog } from '../settings-dialog';
 import { StatesCanvas } from '../states-canvas';
-import {
-    StormingDetails,
-    StormingToolbar,
-    isStormingSelection,
-    shownStorming,
-    stormingExists,
-    stormingGraph,
-    stormingLocation,
-    type StormingChoice,
-} from '../storming';
-import { Tooltips } from '../tooltip';
+import { StormingDetails, StormingToolbar } from '../storming';
 import { applyTheme } from '../theme';
-import { I18nProvider, MESSAGES } from '../i18n';
+import { Tooltips } from '../tooltip';
+import { useViewCamera } from '../view/camera';
+import { fitAll, usePointerCursor } from '../view/canvas';
+import { useViewGraph } from '../view/graph';
+import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas } from '../view/navigation';
+import { useViewSettings } from '../view/settings';
 import { usePanes } from './panes';
 import { usePreferences } from './preferences';
 import { useViewSocket } from './useViewSocket';
-
-type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' } | { kind: 'storming' };
 
 /** Width of the rail a closed side pane leaves, and height of the bottom pane's tab bar (with its border); see styles.css. */
 const RAIL_WIDTH = 28;
@@ -45,11 +34,7 @@ const BOTTOM_BAR_HEIGHT = 33;
 /** The inspector can be widened until the canvas is this narrow. */
 const MIN_CANVAS_WIDTH = 320;
 
-const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'storming';
-
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
-/** The pushed graph of each Structure View level (focused views are fetched instead). */
-const LEVEL_GRAPHS = { detail: 'structure', overview: 'overview', aggregates: 'aggregates' } as const;
 
 export function App() {
     const { current, connection } = useViewSocket();
@@ -57,28 +42,8 @@ export function App() {
     /** What the model is compared with: its graphs give the ghosts of removed elements, its model the inspector's diffs. */
     const base = current?.base ?? null;
     const [editor, setEditor] = useState<Editor | null>(null);
-    const [view, setView] = useState<View>({ kind: 'structure' });
     const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang } = usePreferences();
     const t = MESSAGES[lang];
-    /** Structure View: all fields (detail), names only in larger text (overview), or aggregates only (aggregates). */
-    const [savedLevel, setStructureLevel] = usePersistentState<StructureLevel>('domaintrail.structureMode', 'detail');
-    const structureLevel = STRUCTURE_LEVELS.includes(savedLevel) ? savedLevel : 'detail';
-    /** Structure View: the bounded contexts to draw (null = every context, including ones added later). */
-    const [structureContexts, setStructureContexts] = usePersistentState<string[] | null>('domaintrail.structureContexts', null);
-    /** Focused Structure View: contexts whose stubs (and the dependencies on and from them) are not drawn. */
-    const [hiddenContexts, setHiddenContexts] = usePersistentState<string[]>('domaintrail.structureHiddenContexts', []);
-    /** Context Map: also show shared and ID-only contexts. */
-    const [mapAll, setMapAll] = usePersistentState('domaintrail.contextMapAll', false);
-    /** Event Storming: the storming, its level and its timeline filter (the page's state, never written to a .dtes file). */
-    const [stormingChoice, setStormingChoice] = usePersistentState<StormingChoice>('domaintrail.storming', {
-        stormingId: undefined,
-        level: 'big-picture',
-        timelines: {},
-    });
-    const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
-    const shown = shownStorming(stormings, stormingChoice);
-    const stormingShown = view.kind === 'storming' ? stormingGraph(stormings, stormingChoice) : undefined;
-
     const {
         explorerOpen,
         setExplorerOpen,
@@ -105,154 +70,18 @@ export function App() {
     const toggleBaselineMenu = (anchor: HTMLElement) => setBaselineAnchor((a) => (a === anchor ? null : anchor));
     const closeBaselineMenu = useCallback(() => setBaselineAnchor(null), []);
 
-    // Selection with a back history
-    const [history, setHistory] = useState<History>([]);
-    const selected = history[history.length - 1];
-    const [sourceFocus, setSourceFocus] = useState<SourceFocus | undefined>();
-
-    const cameras = useRef(new Map<string, TLCamera>());
-    const shownView = useRef<string | null>(null);
-
-    /** The checked contexts that can still be drawn, in model order. */
-    const checked = useMemo(
-        () => (current?.focusContexts ?? []).filter((c) => structureContexts === null || structureContexts.includes(c)),
-        [current?.focusContexts, structureContexts],
-    );
-    const allChecked = checked.length === (current?.focusContexts ?? []).length;
-    /** Some but not all contexts: drawn only them, with their dependencies as stubs. */
-    const focused = useMemo(() => (allChecked ? [] : checked), [allChecked, checked]);
-    const noneChecked = !allChecked && checked.length === 0;
-    /** The hidden contexts that apply: only ones drawn as stubs, so none without a focus. */
-    const hidden = useMemo(
-        () => (focused.length ? (current?.focusContexts ?? []).filter((c) => hiddenContexts.includes(c) && !focused.includes(c)) : []),
-        [current?.focusContexts, hiddenContexts, focused],
-    );
-    const focusKey = focused.length ? `${focused.join('+')}|${hidden.join('+')}|${structureLevel}` : '';
-    /** The focused Structure View is laid out on request by the server. */
-    const [focusGraph, setFocusGraph] = useState<{ key: string; graph: LaidOutGraph } | null>(null);
-    useEffect(() => {
-        if (!focusKey || view.kind !== 'structure') return;
-        let cancelled = false;
-        const params = new URLSearchParams({ contexts: focused.join(','), level: structureLevel, hide: hidden.join(',') });
-        fetch(`/api/focus?${params}`)
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the response of our own server's api/focus
-            .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
-            .then((graph) => {
-                if (!cancelled && graph) setFocusGraph({ key: focusKey, graph });
-            })
-            .catch(() => {});
-        return () => {
-            cancelled = true;
-        };
-        // re-fetch when the model changes, not on every diagnostics update
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [focusKey, current?.modelVersion, view.kind]);
-
-    const graphFor = (p: BaseView | null, v: View): LaidOutGraph | null | undefined => {
-        if (!p || !isCanvas(v)) return null;
-        if (v.kind === 'contextMap') return mapAll ? p.contextMapAll : p.contextMap;
-        if (v.kind === 'structure') {
-            if (noneChecked) return null;
-            if (focusKey) return focusGraph?.key === focusKey ? focusGraph.graph : undefined;
-            return p[LEVEL_GRAPHS[structureLevel]];
-        }
-        return null;
-    };
-    /** Camera key: each view (and each Structure mode and focus, each storming view) keeps its own camera. */
-    const cameraKey = (v: View): string =>
-        v.kind === 'structure'
-            ? focusKey
-                ? `structure:focus:${focusKey}`
-                : `structure:${structureLevel}`
-            : v.kind === 'storming'
-              ? (stormingShown?.graph.id ?? 'storming')
-              : `${v.kind}:${mapAll}`;
-    const graph = view.kind === 'storming' ? stormingShown?.graph : graphFor(current, view);
-
-    // a workspace of .dtes files only opens on its stormings
-    const openedOnStormings = useRef(false);
-    useEffect(() => {
-        if (openedOnStormings.current || !current || current.status === 'empty') return;
-        openedOnStormings.current = true;
-        if (current.stormings.length && !current.focusContexts.length) setView({ kind: 'storming' });
-    }, [current]);
-
-    // Draw the current graph; keep the camera of each view, fit only the first time a view is shown (a storming view: each time).
-    useEffect(() => {
-        if (!editor || !current || !isCanvas(view)) return;
-        const key = cameraKey(view);
-        if (shownView.current && shownView.current !== key) cameras.current.set(shownView.current, editor.getCamera());
-        const switched = shownView.current !== key;
-        if (!graph) {
-            // not marked as shown, so that the graph is fitted once it arrives (focused views load on request)
-            withWriteAccess(editor, () => editor.deleteShapes([...editor.getCurrentPageShapeIds()]));
-            return;
-        }
-        // ghosts of removed elements need the baseline's version of the same graph; focused graphs are not kept
-        const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(base, view) ?? undefined);
-        renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
-        const saved = cameras.current.get(key);
-        const move = cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
-        if (move === 'restore' && saved) editor.setCamera(saved);
-        else if (move === 'fitAll') fitAll(editor, graph);
-        // larger text (overview) allows zooming further out while staying readable
-        else if (move === 'fitReadable') fitReadable(editor, graph.textScale ?? 1);
-        shownView.current = key;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang, stormingShown]);
+    const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
+    const { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal } = useNavigation(editor, current, stormings);
+    const settings = useViewSettings();
+    const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
+    const viewGraph = useViewGraph(current, view, settings, stormings);
+    const { shown, stormingShown, checked, hidden, focusKey, noneChecked, graph } = viewGraph;
+    useOpenOnStormings(current, setView);
+    useViewCamera(editor, current, view, settings, viewGraph, { mode, lang });
 
     useEffect(() => {
         applyTheme(theme, editor);
     }, [theme, editor]);
-
-    /** Highlights `id` in the current view if it is shown there; never switches views. */
-    const highlight = useCallback(
-        (id: string, v: View = view) => {
-            if (editor && isCanvas(v)) highlightElement(editor, id);
-        },
-        [editor, view],
-    );
-
-    const focusSource = useCallback(
-        (id: string) => setSourceFocus(isStormingSelection(id) ? stormingLocation(stormings, id) : locationOf(model, id)),
-        [model, stormings],
-    );
-
-    /** Selects an item: updates the inspector, the history and the highlight in the current view. */
-    const select = useCallback(
-        (id: string, opts: { highlight?: boolean } = {}) => {
-            setHistory((h) => pushHistory(h, id));
-            focusSource(id);
-            if (opts.highlight !== false) highlight(id);
-        },
-        [focusSource, highlight],
-    );
-
-    /** Whether a history entry can still be shown; without a model, elements are kept (they may come back). */
-    const exists = (id: string): boolean => {
-        const file = selectedFile(id);
-        if (file) return (current?.sources ?? []).some((s) => s.path === file);
-        if (isStormingSelection(id)) return stormingExists(stormings, id);
-        // a removed item can still be shown from the baseline
-        return !model || !!resolve(model, id) || (!!base?.model && !!resolve(base.model, id));
-    };
-    const backTo = history[backIndex(history, exists)];
-    const goBack = () => {
-        if (!backTo) return;
-        setHistory(popHistory(history, exists));
-        focusSource(backTo);
-        highlight(backTo);
-    };
-
-    /** Shows `id` in a specific view (explicit user action). */
-    const reveal = useCallback(
-        (target: RevealTarget, id: string) => {
-            const next: View = { kind: target };
-            setView(next);
-            if (isCanvas(next)) requestAnimationFrame(() => requestAnimationFrame(() => highlight(id, next)));
-        },
-        [highlight],
-    );
 
     /** Double-click in the explorer: the view that suits the item best. */
     const openBest = (id: string) => {
@@ -275,20 +104,7 @@ export function App() {
         if (!d.elementId) setInspectorOpen(true);
     };
 
-    // Clicking a shape on the canvas selects it (without moving the camera).
-    const selectedOnCanvas = useValue(
-        'selected element',
-        () => {
-            const only = editor?.getOnlySelectedShape();
-            return only && editor ? shapeElementId(editor, only.id) : undefined;
-        },
-        [editor],
-    );
-    useEffect(() => {
-        if (selectedOnCanvas) select(selectedOnCanvas, { highlight: false });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedOnCanvas]);
-
+    useSelectOnCanvas(editor, select);
     usePointerCursor(editor);
 
     const onMount = useCallback((e: Editor) => {
