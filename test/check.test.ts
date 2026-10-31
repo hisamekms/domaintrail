@@ -53,6 +53,13 @@ describe('diagnostics carry file position and rule ID', () => {
         expect(a.diagnostics[0]).toMatchObject({ file: 'sales.dt', code: 'SYNTAX', severity: 'error', start: { line: 2 } });
     });
 
+    test('an unexpected end of file is named as such, not as an empty token', async () => {
+        const unclosed = await analyze([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {' }]);
+        expect(unclosed.diagnostics.map((d) => d.message)).toEqual(["Expecting token of type '}' but found end of file."]);
+        const noAlternative = await analyze([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {\n    command' }]);
+        expect(noAlternative.diagnostics.map((d) => d.message)).toEqual([expect.stringMatching(/\nbut found end of file$/)]);
+    });
+
     test('M001 unresolved type reference', async () => {
         const a = await checkSales(`${ORDER} value V { x: Nope }`);
         const [d] = only(a, 'M001');

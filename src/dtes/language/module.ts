@@ -15,6 +15,7 @@ import {
 } from 'langium';
 import { isEsGroup, isEsStorming, isEsTimeline, type EsDeclaration, type EsStorming } from '../../language/generated/ast.js';
 import { DomainGeneratedSharedModule, EventStormingGeneratedModule } from '../../language/generated/module.js';
+import { DomainParserErrorMessageProvider } from '../../language/parser-messages.js';
 
 /** Every declaration of a storming in source order, the groups of its timelines included: one namespace (spec §2). */
 export function stormingDeclarations(storming: EsStorming): EsDeclaration[] {
@@ -43,6 +44,9 @@ export class EventStormingScopeProvider extends DefaultScopeProvider {
 export type EventStormingServices = LangiumCoreServices;
 
 export const EventStormingModule = {
+    parser: {
+        ParserErrorMessageProvider: () => new DomainParserErrorMessageProvider(),
+    },
     references: {
         ScopeComputation: (services: LangiumCoreServices) => new EventStormingScopeComputation(services),
         ScopeProvider: (services: LangiumCoreServices) => new EventStormingScopeProvider(services),

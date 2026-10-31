@@ -321,6 +321,11 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
         expect(d.start.line).toBe(2);
     });
 
+    test('an unexpected end of file is named as such, not as an empty token', async () => {
+        expect((await syntaxErrors('storming S {\n  event E')).map((d) => d.message)).toEqual(["Expecting token of type '}' but found end of file."]);
+        expect((await syntaxErrors('storming S {\n  event')).map((d) => d.message)).toEqual(["Expecting token of type 'ID' but found end of file."]);
+    });
+
     test('a file that does not parse gives no stormings; the others still do', async () => {
         const r = await parseStormings([
             { path: 'ok.dtes', text: 'storming Ok { event E }' },
