@@ -8,7 +8,7 @@ import { POLICY_MODES, type PolicyMode } from '../generator/typescript.js';
 /** Config file names, in order of preference within one directory. */
 export const CONFIG_FILES = ['domaintrail.jsonc', 'domaintrail.json'] as const;
 
-export const DEFAULT_SOURCES = ['**/*.dt'];
+export const DEFAULT_SOURCES = ['**/*.dt', '**/*.dtes'];
 export const DEFAULT_TS_OUT = 'generated/domain';
 export const DEFAULT_PORT = 4321;
 export const DEFAULT_HOST = '127.0.0.1';
@@ -17,7 +17,7 @@ export const DEFAULT_POLICIES: PolicyMode = 'optional';
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile {
     $schema?: string;
-    /** Globs of DSL files; `!pattern` excludes. Default: `**\/*.dt`. */
+    /** Globs of DSL files (`.dt` and `.dtes`); `!pattern` excludes. Default: `**\/*.dt`, `**\/*.dtes`. */
     sources?: string[];
     /** Whether files and directories ignored by `.gitignore` are skipped when finding sources. Default: true. */
     respectGitignore?: boolean;

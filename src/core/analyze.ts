@@ -18,6 +18,7 @@ import {
     type Model,
     type Policy,
 } from '../language/generated/ast.js';
+import { analyzeStormings, type StormingAnalysis } from '../dtes/analyze.js';
 import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
@@ -35,6 +36,7 @@ import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
 import { checkUnions } from './checker/unions.js';
 import { checkVerified } from './checker/verified.js';
+import { isStormingFile } from './files.js';
 import { DiagnosticSink, compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from './diagnostics.js';
 import { ModelIndex, commandsOf, statesOf } from './model-index.js';
 import { didYouMean, suggestFrom, type Candidate } from './suggest.js';
@@ -46,16 +48,21 @@ export interface SourceFile {
 }
 
 export interface Analysis {
+    /** Every source analyzed, `.dt` and `.dtes`. */
     files: string[];
+    /** The `.dt` documents. */
     documents: LangiumDocument<Model>[];
     index: ModelIndex;
+    /** The diagnostics of the `.dt` and the `.dtes` sources, sorted. */
     diagnostics: Diagnostic[];
-    /** True when every file parsed without lexer/parser errors. */
+    /** True when every `.dt` file parsed without lexer/parser errors (a `.dtes` syntax error does not count). */
     syntaxOk: boolean;
-    /** True when there are no error-level diagnostics at all. */
+    /** True when there are no error-level diagnostics at all, in `.dt` or `.dtes` files. */
     ok: boolean;
-    /** Typed Model; present whenever the sources parse (semantic errors are tolerated). */
+    /** Typed Model; present whenever the `.dt` sources parse (semantic errors are tolerated). */
     model?: DomainModel;
+    /** The `.dtes` sources (ADR 0024), checked against `model`. */
+    stormings: StormingAnalysis;
 }
 
 /** Maps the property of an unresolved cross-reference to the rule that covers it. */
@@ -68,8 +75,12 @@ const LINK_RULES: Record<string, RuleId> = {
     fieldSets: 'M016',
 };
 
-/** Parses, links and validates a set of `.dt` sources as one workspace. */
-export async function analyze(sources: readonly SourceFile[]): Promise<Analysis> {
+/**
+ * Parses, links and validates a set of `.dt` and `.dtes` sources as one workspace. The `.dtes` sources (by extension) are
+ * analyzed after the `.dt` ones, against their Typed Model.
+ */
+export async function analyze(allSources: readonly SourceFile[]): Promise<Analysis> {
+    const sources = allSources.filter((s) => !isStormingFile(s.path));
     const { shared } = createDomainServices();
     const factory = shared.workspace.LangiumDocumentFactory;
     const fileOf = new Map<string, string>();
@@ -139,15 +150,22 @@ export async function analyze(sources: readonly SourceFile[]): Promise<Analysis>
         diagnostics.push(...sink.items);
     }
 
+    const model = syntaxOk ? buildModel(index, resolveFile) : undefined;
+    const stormings = await analyzeStormings(
+        allSources.filter((s) => isStormingFile(s.path)),
+        model,
+    );
+    diagnostics.push(...stormings.diagnostics);
     diagnostics.sort(compareDiagnostics);
     return {
-        files: sources.map((s) => s.path),
+        files: allSources.map((s) => s.path),
         documents,
         index,
         diagnostics: dedupe(diagnostics),
         syntaxOk,
         ok: syntaxOk && !hasErrors(diagnostics),
-        model: syntaxOk ? buildModel(index, resolveFile) : undefined,
+        model,
+        stormings,
     };
 }
 
