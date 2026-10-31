@@ -1,6 +1,6 @@
 # ADR 0026: Collaboration sessions (`dt session`) — M1
 
-- Status: accepted. Decided by the maintainer: persistence on `node:sqlite` (Node ≥ 22.13), the agent's tools chosen
+- Status: accepted, implemented (S1–S9 on `feat/session`). Decided by the maintainer: persistence on `node:sqlite` (Node ≥ 22.13), the agent's tools chosen
   by the facilitator in configuration, Cloudflare Access verified against mocks with the real end-to-end check done by
   a person from a runbook, and one integration branch with one pull request (marked *Decided by the maintainer*).
 - Date: 2026-10-31
@@ -114,12 +114,62 @@ I/O; only composition imports infrastructure).
 Each task: no change to `dt view`, `.dt`/`.dtes` semantics or the published CLI's existing commands; typecheck, lint,
 format check, tests and build pass.
 
+**As run.** S1, S2, S3 and S4 one after another; then S5, S6 and S8 in parallel (each from `feat/session` after S4);
+then S7 (after S5 and S6); then S9. Each was reviewed and merged into `feat/session`, which becomes one pull request
+to `main`. The appendices below record what each task decided beyond this ADR.
+
+**Security fixes after the automated reviews**, each its own commit on `feat/session`:
+
+- S4: in a session only the facilitator changes the shared baseline (`POST /api/baseline`); a closed session
+  identifies no one, whatever the identity cache holds.
+- S6: Claude Code loads the user's settings only (`--setting-sources user`), so the agent cannot widen the next run's
+  tools through the workspace's `.claude/`; the scan after the agent runs on every way out and fails closed; the paths
+  the agent chose are escaped and cut in the log; a change outside the DSL sources stops the subscriber.
+- S7: a comparison bounds its work before doing it (blob size, lines and edits per file, a character budget), so no
+  participant can exhaust the server.
+
 ## Consequences
 
 - Node 22.12 users must upgrade to 22.13 to run any `dt` command (engines).
 - Two new packages and their dependencies join the bundle; `dt view` gains nothing at runtime.
 - The real Cloudflare Access check is manual until a test environment exists: a person runs
   [the runbook](../session-access.md).
+
+## Test matrix
+
+The plan's test matrix (§9) and completion checklist (§12), each with the tests that cover it (file › test name),
+checked against the tests in S9. *Manual* marks what only a person can check, with where it is written down.
+
+| Plan §9 | Covered by |
+|---|---|
+| Only a `.dt` changes → the Domain view updates, the revision holds it | `session-baseline` › .dt only: the model and its graphs, no storming; `session-subscriber` › a request about a .dt element → the agent edits .dt and .dtes → the Domain view has the new event; dt fmt formatted the agent’s edit; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores; `collaboration-use-cases` › a session starts with a revision of every source, .dt and .dtes, and its events in the outbox |
+| Only a `.dtes` changes → the Storming view updates, the revision holds it | `session-baseline` › .dtes only: the stormings, over an empty model (not `empty`, which is for no source at all); `session-subscriber` › two requests about .dtes elements → one run → the agent edits the .dtes → Big Picture and Design Level change; completed with a result revision |
+| A `.dt` that a `.dtes` `ref`s changes → the link diagnostic shows, both sources stay | `session-baseline` › is a link diagnostic on the .dtes; both sources and the storming stay in the payload; `collaboration-domain` › the summary splits by DSL, with the link rules apart |
+| One event in two timelines → separate occurrences; cursors and requests not confused | `session-baseline` › is one e:<eventId> note on the integrated canvas, and occurrence nodes with their timelines in each timeline view; `session-page` › an event in two timelines is two occurrences: their targets and keys differ, the element is the same (S9); `session-page` › cursors only on the same view: not across timelines, levels or into the catalog; `collaboration-domain` › targets resolve by model ID, storming and local ID, and timeline, event and step path |
+| Big Picture ↔ Design Level → the session goes on; no cursors across layouts | `session-page` › a storming view is its storming, level and timeline; `session-page` › cursors only on the same view: not across timelines, levels or into the catalog; `session-server` › presence: sent to the others only, validated, at most ~20 Hz per participant with the last position kept (the page stays connected as its location changes). That the session goes on is by construction: the page's session state (`useSession`) sits above the views and no view change touches it; no React test switches views. |
+| `.dtes` syntax error → stale, the snapshot keeps the source, recoverable | `session-baseline` › keeps the storming as last parsed, as stale, with the broken text in the sources; fixing it recovers; `collaboration-use-cases` › a .dtes with a syntax error is kept in the revision as written, counted as a .dtes error; restoring an earlier one recovers (S9); `collaboration-domain` › a target is unknown, not stale, when the sources it would be in do not parse; `session-subscriber` › a .dtes the agent leaves broken: dt fmt skips it, the run fails with an unparsed .dtes |
+| An outside change to the files during a run → detected, never overwritten silently | `collaboration-use-cases` › an external edit during or after a run is never overwritten without the two-step; the two-step keeps it as a revision; `collaboration-use-cases` › restore refuses external changes since the last revision, symbolic links, and a running run; `session-server` › saves while a run is in progress make no revision; a restore is refused until the run ends or is cancelled; `session-server` › a restore reaches every page in one publish of the view; an external edit needs the two-step, and is kept as a revision |
+| Three requests in one run → one agent invocation, each request kept | `session-subscriber` › three requests in one run → one invocation of the agent with all three; each request stays as it was sent (S9); `collaboration-use-cases` › a run freezes its requests at queueing, and a request bundled twice is refused |
+| The queue restarts → resumes by lease expiry and the outbox, no double commit | `collaboration-use-cases` › recovery: an expired lease fails a running run (LeaseExpired) and frees a claimed one, across a restart; `session-subscriber` › a subscriber that dies leaves its run to the lease: after a restart of the server, Running → Failed (LeaseExpired); `session-subscriber` › a broken stream is resumed with Last-Event-ID; a run whose event was missed is claimed on reconnection; `session-subscriber` › a finish whose answer is lost is sent again and replayed by the server: the run completes once; `session-server` › claim, start, heartbeat and finish over HTTP; a repeated finish is a replay; SSE resumes with Last-Event-ID; `collaboration-store` › serial: a running run blocks claims, and the store refuses a second running run or lease of a session; `collaboration-store` › the outbox is written in the transaction of the aggregates: a failure rolls both back |
+| Restore → `.dt` and `.dtes` from one snapshot | `collaboration-use-cases` › restore writes .dt and .dtes together from one snapshot; the older revisions stay; the operation is logged; `session-server` › a restore over HTTP runs behind the hold and leaves the workspace as the revision was; `collaboration-node` › a session runs from start to restore with node:sqlite under node, and a second process reads it back |
+| Not signed in to Access → HTTP, WS and the source API refused | `session-access` › without a valid token nothing is served: page, assets, view API, session API, WebSocket; `session-server` › serves nothing without an identity: the page is the join form, the APIs and the WebSocket answer 401; `session-server` › is not reachable through the public port, with or without an identity. *Manual* against the real Cloudflare: [the runbook](../session-access.md), "Refused without Access". |
+| Not the facilitator → queue management, confirm and restore refused | `session-server` › a participant cannot reach the facilitator routes; dismisses only their own requests; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores; `session-server` › the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant; `session-access` › Access lets the user in, not into the facilitator’s role: only the local link gives it |
+| Plain `dt view` → no session feature, compatible | `session-baseline` › answers /api/session and anything below it with 404; `session-baseline` › sends only type "update" over the WebSocket and ignores messages from the page; `test/__snapshots__` unchanged from `main` (`live-contract`) |
+
+| Plan §12 | Covered by |
+|---|---|
+| `dt view` unchanged | The last row above. |
+| The Live View of `.dt` and `.dtes` in a session | `session-server` › serves the Live View to a participant, as dt view does; the two acceptance tests of `session-subscriber` (a run from the browser to the Live View) |
+| Big Picture / Design Level and the timeline filter kept | `session-subscriber` › two requests about .dtes elements → one run → the agent edits the .dtes → Big Picture and Design Level change; completed with a result revision (both levels over the WebSocket); `session-page` › a storming view is its storming, level and timeline; the views are the Live View's own, served unchanged (`session-baseline`) |
+| Event definition and occurrence not confused in targets and presence | `session-page` › an occurrence only in a timeline's view: the selected note's occurrence in that timeline; `session-page` › the integrated canvas, or a selection not drawn as that note, targets the element; `session-page` › an event in two timelines is two occurrences: their targets and keys differ, the element is the same (S9); `collaboration-domain` › an inserted step makes an occurrence stale: it is never re-bound; cursors as in the matrix |
+| Two or more participants with names and avatars | `session-access` › a valid token is a participant: the name and avatar from the Identity API, else the e-mail’s local part; e-mail never sent; `session-access` › presence carries the participant ID, name and avatar only; `session-access` › an avatar only when https, without credentials or port, on an allowed host; else initials (none); `session-page` › initials, and updates throttled to the latest value; `session-page` › the participants once each: the facilitator’s holder is folded into the facilitator, under its name (S9); `session-server` › the state names the participant holding the role, and every page still connected is sent it when the role changes hands (S9). *Manual*: the panel as drawn, in the runbook's "Participants" and in [a first real run](../session-first-run.md). |
+| Private drafts, several sent | `session-page` › kept per session and participant, replaced on save, removed by ID; `session-page` › editing changes one draft; only selected drafts with a text are sent, each on its own |
+| The facilitator bundles several requests into one run | The "three requests in one run" row; `session-subscriber`'s acceptance with two requests |
+| Claude Code: serial, reconnecting, no duplicates | `session-subscriber` › three queued runs run one after another without any confirmation; heartbeats keep a lease longer than it lasts; the stream and finish rows of the matrix; `session-subscriber` › on Node (dist/dt.js): --once runs the queued run with `claude` from the PATH, and dt fmt / dt check with itself (a fake `claude`). *Manual* with the real Claude Code: [a first real run](../session-first-run.md). |
+| `.dt` / `.dtes` edits reach everyone at once | Both acceptance tests of `session-subscriber` (the edit over another participant's WebSocket); `session-server` › a restore reaches every page in one publish of the view; an external edit needs the two-step, and is kept as a revision; `session-server` › aroundWrite refreshes once after a write (not after a refusal) and takes the same sources afterwards as its echo |
+| Workspace history, confirm, restore | The restore rows; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores; `session-page` › newest first, numbered in the order taken, with the runs and revisions an origin refers to; `session-page` › what a restore that did not go through asks next; `collaboration-use-cases` › a write that fails midway keeps the pre-restore revision and reports a manual recovery; the two-step recovers |
+| Cloudflare Access: authentication, roles, profile, WS protection | All of `session-access` (the JWKS verifier, the Identity API and the identity, a session in access mode against a mock of Cloudflare). *Manual* against the real Cloudflare: [the runbook](../session-access.md). |
+| All tests pass | CI (`.github/workflows/ci.yml`): install, build, typecheck, lint, format check and `bun test`, all passing at the end of S9. |
 
 ## Appendix: code map (S1)
 
@@ -402,3 +452,19 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   *Restore…* (hidden on revisions with the latest's content) with the confirmation, the two-step and the cancel-the-run
   path. Participants see everything read-only.
 - **Saves during a run** make no revision: only the run's start (RunBase) and end (RunResult) do (checked by a test).
+
+## Appendix: wrap-up (S9)
+
+- **The facilitator listed once.** The identity that opens the facilitator link joined as a participant of its own
+  (`dev:…`, `access:…`) before it claimed the role, so the panel showed the person twice. The session state
+  (`SessionStateBody`) gains `facilitatorHolder`, that participant's ID, while someone holds the role; every page
+  still connected is sent the state again when the role changes hands (the claiming and the previous holder's pages
+  are disconnected as before); the panel folds that participant into the facilitator's entry, under its name, and a
+  previous holder is listed as a participant again. Nothing else of the model or the protocol changed.
+- **Tests** for the rows of the matrix that no test checked in full: three requests in one run, an event in two
+  timelines as two targets, a `.dtes` syntax error kept in a revision and recovered by a restore; the guide's session
+  configuration example is checked against the config's defaults.
+- **Docs.** `dt guide session` (with `session-config`, `session-revisions`, `session-agent`), a README section,
+  a paragraph in `docs/live-view.md`, and `docs/session-first-run.md` for a first run with the real Claude Code. The
+  guide's list of topics grows by four lines, so its test allows `dt guide` 160 lines instead of 150. The changelogs
+  record released versions only, so they are left for the release.
