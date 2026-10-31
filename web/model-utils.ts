@@ -1,5 +1,5 @@
-import type { DisplayMode } from '../src/graph/ir';
-import { PRIMITIVE_LABELS, typeText } from '../src/graph/build';
+import type { DisplayMode } from '../src/visualization/domain/graph/ir';
+import { PRIMITIVE_LABELS, typeText } from '../src/visualization/domain/graph/build';
 import { type CommandModel, type DomainModel, type ElementKind, type ElementModel, type StateModel, type TypeExpr } from '../src/model/model';
 import { ownerElement } from './render';
 

@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { buildStructureGraph } from '../src/graph/build.js';
-import { markLineChanges } from '../src/graph/diff.js';
-import { listRefs, sourcesAt } from '../src/server/git.js';
-import type { Baseline, ViewPayload } from '../src/server/protocol.js';
+import { buildStructureGraph } from '../src/visualization/domain/graph/build.js';
+import { markLineChanges } from '../src/visualization/domain/graph/diff.js';
+import { listRefs, sourcesAt } from '../src/visualization/infrastructure/git.js';
+import type { Baseline, ViewPayload } from '../src/visualization/protocol.js';
 import { startViewServer, type ViewServer } from '../src/server/server.js';
 import { check, tempCopyOfExamples } from './helpers.js';
 

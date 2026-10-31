@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, LayoutGrid, LayoutList, type LucideIcon } from 'lucide-react';
 import { Tldraw, type Editor } from 'tldraw';
-import { STRUCTURE_LEVELS, type DisplayMode, type Lang, type StructureLevel } from '../../src/graph/ir';
-import type { StormingView, ViewPayload } from '../../src/server/protocol';
+import { STRUCTURE_LEVELS, type DisplayMode, type Lang, type StructureLevel } from '../../src/visualization/domain/graph/ir';
+import type { StormingView, ViewPayload } from '../../src/visualization/protocol';
 import { Catalog } from '../catalog';
 import { ContextPicker } from '../context-picker';
 import { useT } from '../i18n';

@@ -1,7 +1,7 @@
 import { GitCompare } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { GitRefs } from '../src/server/git';
-import type { Baseline, BaselineSpec } from '../src/server/protocol';
+import type { GitRefs } from '../src/visualization/infrastructure/git';
+import type { Baseline, BaselineSpec } from '../src/visualization/protocol';
 import { useT } from './i18n';
 
 /** How the baseline is named in the header: the previous save, or the ref with its commit. */

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { startViewServer, type ViewServer } from '../src/server/server.js';
-import type { ViewPayload } from '../src/server/protocol.js';
+import type { ViewPayload } from '../src/visualization/protocol.js';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;
@@ -193,9 +193,9 @@ describe('layout persistence', () => {
     test('never writes through a symlinked layout directory or file', async () => {
         const { mkdtemp, symlink, writeFile: write, readFile: read, mkdir: mk, readlink, rm: remove } = await import('node:fs/promises');
         const { tmpdir } = await import('node:os');
-        const { ViewSession } = await import('../src/server/session.js');
+        const { ViewSession } = await import('../src/visualization/application/view-service.js');
         const { createWorkspaceReader } = await import('../src/workspace/infrastructure/files.js');
-        const { ElkLayoutEngine } = await import('../src/layout/elk.js');
+        const { ElkLayoutEngine } = await import('../src/visualization/infrastructure/elk.js');
         const base = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
         const outside = path.join(base, 'outside');
         await mk(outside);

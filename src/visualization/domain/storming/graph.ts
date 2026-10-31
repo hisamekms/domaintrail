@@ -3,10 +3,19 @@
  * existing layout and Live View. In a timeline's view every render node becomes one graph node, keeping its path-derived
  * ID, and every render edge one graph edge. The integrated view merges the render nodes of each event into one note.
  */
-import { named, sized } from '../../graph/build.js';
-import { mapTexts, maxUnits, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../../graph/ir.js';
-import { esElementId, isCausal, type NodeElementKind, type RenderEdge, type RenderGraph, type RenderNode, type Storming, type ViewOptions } from '../ir.js';
-import { firstDeclarations } from '../project/semantic.js';
+import { named, sized } from '../graph/build.js';
+import { mapTexts, maxUnits, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
+import {
+    esElementId,
+    isCausal,
+    type NodeElementKind,
+    type RenderEdge,
+    type RenderGraph,
+    type RenderNode,
+    type Storming,
+    type ViewOptions,
+} from '../../../dtes/ir.js';
+import { firstDeclarations } from './semantic.js';
 
 /** Graph ID of a view: `storming:<StormingId>:<level>:<timelineId or *>` (the `storming` prefix lays it out left to right). */
 export const stormingGraphId = (stormingId: string, options: ViewOptions): string => `storming:${stormingId}:${options.level}:${options.timelineId ?? '*'}`;

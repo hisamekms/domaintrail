@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LaidOutGraph } from '../../src/graph/ir';
-import type { BaseView, StormingView, ViewPayload } from '../../src/server/protocol';
+import type { LaidOutGraph } from '../../src/visualization/domain/graph/ir';
+import type { BaseView, StormingView, ViewPayload } from '../../src/visualization/protocol';
 import { shownStorming, stormingGraph } from '../storming';
 import { isCanvas, type View } from './navigation';
 import type { ViewSettings } from './settings';

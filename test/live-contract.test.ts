@@ -8,7 +8,7 @@ import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
-import type { ViewPayload } from '../src/server/protocol.js';
+import type { ViewPayload } from '../src/visualization/protocol.js';
 import { startViewServer, type ViewServer } from '../src/server/server.js';
 import { tempCopyOfExamples } from './helpers.js';
 

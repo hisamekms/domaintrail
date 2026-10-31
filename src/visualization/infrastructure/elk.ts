@@ -15,8 +15,8 @@ import {
     type NodeLayout,
     type Point,
     type Texts,
-} from '../graph/ir.js';
-import type { LayoutEngine, LayoutOptions } from './engine.js';
+} from '../domain/graph/ir.js';
+import type { LayoutEngine, LayoutOptions } from '../application/layout-engine.js';
 
 const ROOT = '__root__';
 const IS_BUN = 'Bun' in globalThis;

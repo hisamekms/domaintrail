@@ -14,7 +14,7 @@ import {
     type SemanticGraph,
     type Storming,
     type Timeline,
-} from '../ir.js';
+} from '../../../dtes/ir.js';
 
 /** The declaration that owns each ID: the first one, as the validator reports the others (S001). */
 export function firstDeclarations(storming: Storming): Map<string, AnyDeclaration> {

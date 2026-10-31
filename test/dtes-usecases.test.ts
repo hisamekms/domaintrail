@@ -5,7 +5,7 @@ import { runCli } from '../src/cli/main.js';
 import type { Analysis } from '../src/core/analyze.js';
 import { formatStorming } from '../src/dtes/format.js';
 import type { ViewOptions } from '../src/dtes/ir.js';
-import { projectView } from '../src/dtes/project/render.js';
+import { projectView } from '../src/visualization/domain/storming/render.js';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
 /**

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { generateTypeScript } from '../src/generator/typescript.js';
-import { diffModels } from '../src/graph/diff.js';
+import { diffModels } from '../src/visualization/domain/graph/diff.js';
 import { CommandCard } from '../web/behavior.js';
 import { highlight } from '../web/highlight.js';
 import { MESSAGES } from '../web/i18n.js';

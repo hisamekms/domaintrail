@@ -14,7 +14,7 @@ import {
     type SemanticEdge,
     type Storming,
     type ViewOptions,
-} from '../ir.js';
+} from '../../../dtes/ir.js';
 import { buildSemanticGraph, stormingTimelines } from './semantic.js';
 import { buildTrie, compare, memberId, type TrieNode } from './trie.js';
 

@@ -1,8 +1,8 @@
 import { PanelRightClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
-import type { DisplayMode } from '../src/graph/ir';
+import type { DisplayMode } from '../src/visualization/domain/graph/ir';
 import type { Diagnostic } from '../src/core/diagnostics';
-import type { ModelDiff } from '../src/graph/diff';
+import type { ModelDiff } from '../src/visualization/domain/graph/diff';
 import {
     emitSuffix,
     emittedEvents,
@@ -14,7 +14,7 @@ import {
     type Location,
     type TypeExpr,
 } from '../src/model/model';
-import { dependencyCounts } from '../src/graph/context-map';
+import { dependencyCounts } from '../src/visualization/domain/graph/context-map';
 import { contextDependencies, groupByContext, supportingContexts, type ContextDependency } from '../src/model/dependencies';
 import { Changes, CommandCard, OldType, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';

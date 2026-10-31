@@ -7,12 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { DEFAULT_SOURCES } from '../core/config.js';
 import { createWorkspaceReader } from '../workspace/infrastructure/files.js';
-import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
-import { ElkLayoutEngine } from '../layout/elk.js';
-import type { LayoutEngine } from '../layout/engine.js';
-import { gitDirs, listRefs, resolveCommit, UnknownRevisionError } from './git.js';
-import type { BaselineSpec } from './protocol.js';
-import { ViewSession } from './session.js';
+import { STRUCTURE_LEVELS, type StructureLevel } from '../visualization/domain/graph/ir.js';
+import { ElkLayoutEngine } from '../visualization/infrastructure/elk.js';
+import type { LayoutEngine } from '../visualization/application/layout-engine.js';
+import { gitDirs, listRefs, resolveCommit, UnknownRevisionError } from '../visualization/infrastructure/git.js';
+import type { BaselineSpec } from '../visualization/protocol.js';
+import { ViewSession } from '../visualization/application/view-service.js';
 import { createGitRefWatcher, createWorkspaceWatcher } from '../workspace/infrastructure/watchers.js';
 
 export interface ViewServerOptions {

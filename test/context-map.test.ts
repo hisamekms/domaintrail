@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { buildStructureGraph, focusGraphId } from '../src/graph/build.js';
-import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from '../src/graph/context-map.js';
+import { buildStructureGraph, focusGraphId } from '../src/visualization/domain/graph/build.js';
+import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from '../src/visualization/domain/graph/context-map.js';
 import { contextDependencies, groupByContext, supportingContexts } from '../src/model/dependencies.js';
-import { perLang } from '../src/graph/ir.js';
+import { perLang } from '../src/visualization/domain/graph/ir.js';
 import type { DomainModel } from '../src/model/model.js';
 import { check } from './helpers.js';
 

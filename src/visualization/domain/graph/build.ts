@@ -1,6 +1,6 @@
-import type { CommandModel, DomainModel, ElementModel, FieldModel, TypeExpr, VariantModel } from '../model/model.js';
-import { contextDependencies, representative, supportingContexts } from '../model/dependencies.js';
-import { allFieldsOf, elementList, emitApplies } from '../model/model.js';
+import type { CommandModel, DomainModel, ElementModel, FieldModel, TypeExpr, VariantModel } from '../../../model/model.js';
+import { contextDependencies, representative, supportingContexts } from '../../../model/dependencies.js';
+import { allFieldsOf, elementList, emitApplies } from '../../../model/model.js';
 import {
     CHAR_WIDTH,
     CONTAINER_PADDING,

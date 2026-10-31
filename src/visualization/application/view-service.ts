@@ -1,21 +1,29 @@
 import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze } from '../core/analyze.js';
-import { DEFAULT_SOURCES } from '../core/config.js';
-import { VIEW_LEVELS, type RenderGraph, type Storming, type StormingAnalysis, type ViewOptions } from '../dtes/ir.js';
-import { matchRenderNodes, projectView } from '../dtes/project/render.js';
-import { stormingTimelines } from '../dtes/project/semantic.js';
-import { renderToGraph, stormingViewKey } from '../dtes/view/graph.js';
-import { buildStateGraph, buildStructureGraph } from '../graph/build.js';
-import { buildContextMapGraph } from '../graph/context-map.js';
-import { EMPTY_DIFF, diffModels, fingerprints, markLineChanges, type ModelDiff } from '../graph/diff.js';
-import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type Point, type StructureLevel, type TransitionLabels } from '../graph/ir.js';
-import type { LayoutEngine, LayoutOptions } from '../layout/engine.js';
-import { supportingContexts } from '../model/dependencies.js';
-import type { DomainModel } from '../model/model.js';
-import { resolveCommit, sourcesAt, type GitCommit } from './git.js';
-import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from './protocol.js';
-import type { WorkspaceReader } from '../workspace/ports.js';
+import { analyze } from '../../core/analyze.js';
+import { DEFAULT_SOURCES } from '../../core/config.js';
+import { VIEW_LEVELS, type RenderGraph, type Storming, type StormingAnalysis, type ViewOptions } from '../../dtes/ir.js';
+import { matchRenderNodes, projectView } from '../domain/storming/render.js';
+import { stormingTimelines } from '../domain/storming/semantic.js';
+import { renderToGraph, stormingViewKey } from '../domain/storming/graph.js';
+import { buildStateGraph, buildStructureGraph } from '../domain/graph/build.js';
+import { buildContextMapGraph } from '../domain/graph/context-map.js';
+import { EMPTY_DIFF, diffModels, fingerprints, markLineChanges, type ModelDiff } from '../domain/graph/diff.js';
+import {
+    TRANSITION_LABELS,
+    graphSignature,
+    type Graph,
+    type LaidOutGraph,
+    type Point,
+    type StructureLevel,
+    type TransitionLabels,
+} from '../domain/graph/ir.js';
+import type { LayoutEngine, LayoutOptions } from './layout-engine.js';
+import { supportingContexts } from '../../model/dependencies.js';
+import type { DomainModel } from '../../model/model.js';
+import { resolveCommit, sourcesAt, type GitCommit } from '../infrastructure/git.js';
+import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from '../protocol.js';
+import type { WorkspaceReader } from '../../workspace/ports.js';
 
 export const LAYOUT_FILE = path.join('.domaintrail', 'layout.json');
 

@@ -15,9 +15,9 @@ import {
     type Timeline,
     type ViewOptions,
 } from '../src/dtes/ir.js';
-import { matchRenderNodes, projectView } from '../src/dtes/project/render.js';
-import { buildSemanticGraph } from '../src/dtes/project/semantic.js';
-import { timelineOccurrences } from '../src/dtes/project/trie.js';
+import { matchRenderNodes, projectView } from '../src/visualization/domain/storming/render.js';
+import { buildSemanticGraph } from '../src/visualization/domain/storming/semantic.js';
+import { timelineOccurrences } from '../src/visualization/domain/storming/trie.js';
 
 // ---- IR built by hand (the parser is not needed) ----
 

@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import * as path from 'node:path';
-import type { SourceFile } from '../core/analyze.js';
-import { sourceMatcher } from '../core/config.js';
+import type { SourceFile } from '../../core/analyze.js';
+import { sourceMatcher } from '../../core/config.js';
 
 /**
  * Read-only access to the git repository around a Live View workspace, for comparing the model with a revision. Every

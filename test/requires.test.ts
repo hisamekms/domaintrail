@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from '../src/generator/typescript.js';
-import { diffModels } from '../src/graph/diff.js';
+import { diffModels } from '../src/visualization/domain/graph/diff.js';
 import { highlight } from '../web/highlight.js';
 import { check, checkSales, codes, only } from './helpers.js';
 

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { DisplayMode, Lang } from '../src/graph/ir';
+import type { DisplayMode, Lang } from '../src/visualization/domain/graph/ir';
 import type { ElementKind as EsElementKind, SemanticEdgeKind, ViewLevel } from '../src/dtes/ir';
 import type { ElementKind } from '../src/model/model';
 import type { Connection } from './app/useViewSocket';

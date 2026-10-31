@@ -11,12 +11,12 @@ import {
     type ViewLevel,
     type ViewOptions,
 } from '../src/dtes/ir';
-import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '../src/dtes/project/semantic';
-import { timelineOccurrences } from '../src/dtes/project/trie';
-import { stormingViewKey } from '../src/dtes/view/graph';
-import type { DisplayMode, LaidOutGraph } from '../src/graph/ir';
+import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '../src/visualization/domain/storming/semantic';
+import { timelineOccurrences } from '../src/visualization/domain/storming/trie';
+import { stormingViewKey } from '../src/visualization/domain/storming/graph';
+import type { DisplayMode, LaidOutGraph } from '../src/visualization/domain/graph/ir';
 import type { DomainModel } from '../src/model/model';
-import type { StormingView } from '../src/server/protocol';
+import type { StormingView } from '../src/visualization/protocol';
 import { useT } from './i18n';
 import { fileSelection, nameIn, type Select } from './model-utils';
 import type { SourceFocus } from './source';

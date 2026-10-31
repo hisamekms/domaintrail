@@ -310,7 +310,7 @@ Examples:
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
             const { startViewServer } = await import('../server/server.js');
-            const { UnknownRevisionError } = await import('../server/git.js');
+            const { UnknownRevisionError } = await import('../visualization/infrastructure/git.js');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
             const server = await startViewServer({

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { buildStructureGraph } from '../src/graph/build.js';
+import { buildStructureGraph } from '../src/visualization/domain/graph/build.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { contextDependencies } from '../src/model/dependencies.js';
 import { OutcomeCard } from '../web/behavior.js';

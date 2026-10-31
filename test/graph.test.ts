@@ -1,10 +1,18 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { analyze } from '../src/core/analyze.js';
 import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '../src/graph/build.js';
-import { diffModels } from '../src/graph/diff.js';
-import { ElkLayoutEngine } from '../src/layout/elk.js';
-import { INTERNAL_PADDING, LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, anyLang, sameText, transitionText, type TransitionLabels } from '../src/graph/ir.js';
+import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '../src/visualization/domain/graph/build.js';
+import { diffModels } from '../src/visualization/domain/graph/diff.js';
+import { ElkLayoutEngine } from '../src/visualization/infrastructure/elk.js';
+import {
+    INTERNAL_PADDING,
+    LINE_HEIGHT,
+    TRANSITION_SUB_LINE_HEIGHT,
+    anyLang,
+    sameText,
+    transitionText,
+    type TransitionLabels,
+} from '../src/visualization/domain/graph/ir.js';
 import { EXAMPLES, check } from './helpers.js';
 
 const engine = new ElkLayoutEngine();
