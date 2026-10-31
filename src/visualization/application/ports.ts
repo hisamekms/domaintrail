@@ -1,4 +1,6 @@
 import type { SourceFile } from '../../core/analyze.js';
+import type { LaidOutGraph } from '../domain/graph/ir.js';
+import type { LayoutEngine } from './layout-engine.js';
 
 /**
  * What the view service needs from outside, defined here on its side (ADR 0025): the adapters implement these
@@ -42,4 +44,18 @@ export interface GitRevisions {
     listRefs(): Promise<GitRefs>;
     /** The git directories to watch for moving refs (`HEAD`, branches), or undefined outside a repository. */
     gitDirs(): Promise<string[] | undefined>;
+}
+
+/** Laid-out graphs by graph ID, as cached between refreshes. */
+export type LayoutCache = Map<string, LaidOutGraph>;
+
+/** The layout engine a cache was computed with: layouts of another engine, or another version of it, are not reused. */
+export type LayoutEngineId = Pick<LayoutEngine, 'name' | 'version'>;
+
+/** Where the layouts are kept between runs, apart from the DSL. */
+export interface LayoutStore {
+    /** The layouts saved for `engine`; empty when there are none, they cannot be read, or are another engine's. */
+    load(engine: LayoutEngineId): Promise<LayoutCache>;
+    /** Replaces the saved layouts with `layouts`, as laid out by `engine`. */
+    save(engine: LayoutEngineId, layouts: ReadonlyMap<string, LaidOutGraph>): Promise<void>;
 }

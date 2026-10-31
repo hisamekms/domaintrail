@@ -11,9 +11,10 @@ import { STRUCTURE_LEVELS, type StructureLevel } from '../visualization/domain/g
 import { ElkLayoutEngine } from '../visualization/infrastructure/elk.js';
 import type { LayoutEngine } from '../visualization/application/layout-engine.js';
 import { UnknownRevisionError } from '../visualization/application/ports.js';
-import { gitDirs, listRefs, resolveCommit } from '../visualization/infrastructure/git.js';
+import { createFileLayoutStore } from '../visualization/infrastructure/file-layout-store.js';
+import { createGitRevisions } from '../visualization/infrastructure/git.js';
 import type { BaselineSpec } from '../visualization/protocol.js';
-import { ViewSession } from '../visualization/application/view-service.js';
+import { createViewService, type ViewService } from '../visualization/application/view-service.js';
 import { createGitRefWatcher, createWorkspaceWatcher } from '../workspace/infrastructure/watchers.js';
 
 export interface ViewServerOptions {
@@ -36,7 +37,7 @@ export interface ViewServerOptions {
 
 export interface ViewServer {
     url: string;
-    session: ViewSession;
+    session: ViewService;
     /** Resolves once the watcher is ready to report changes. */
     ready: Promise<void>;
     stop(): Promise<void>;
@@ -159,8 +160,17 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
     // an unknown revision stops the server from starting, rather than showing nothing as changed
-    if (options.base) await resolveCommit(options.root, options.base);
-    const session = new ViewSession(options.root, engine, createWorkspaceReader(options.root, sources, respectGitignore), sources, options.base);
+    const git = createGitRevisions(options.root);
+    if (options.base) await git.resolveCommit(options.base);
+    const session = createViewService({
+        root: options.root,
+        engine,
+        workspace: createWorkspaceReader(options.root, sources, respectGitignore),
+        layoutStore: createFileLayoutStore(options.root),
+        git,
+        sources,
+        baseRef: options.base,
+    });
     await session.refresh();
 
     const assets = await loadAssets(options.webDir ?? defaultWebDir());
@@ -188,7 +198,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         // the revisions the page offers as baselines
         if (url.pathname === '/api/git/refs') {
             if (!isTrusted(req.headers, allowedHost)) return send(res, 403, 'text/plain', 'Forbidden');
-            return send(res, 200, 'application/json', JSON.stringify(await listRefs(options.root)));
+            return send(res, 200, 'application/json', JSON.stringify(await git.listRefs()));
         }
         // POST `{"kind":"git","ref":"main"}` or `{"kind":"previous"}`: what the model is compared with, for every page
         if (url.pathname === '/api/baseline') {
@@ -251,7 +261,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         publish(JSON.stringify(payload));
         if (after.kind === 'git') log(`baseline ${after.ref} is now ${after.commit?.hash.slice(0, 7) ?? '(unknown)'}`);
     };
-    const dirs = await gitDirs(options.root);
+    const dirs = await git.gitDirs();
     const gitRefsWatch = dirs
         ? createGitRefWatcher(dirs).subscribe(
               () => void refreshGitBaseline(),
