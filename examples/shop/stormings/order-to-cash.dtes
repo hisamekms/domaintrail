@@ -82,7 +82,6 @@ storming OrderToCash "注文から入金まで" {
   timeline Normal "通常の注文" {
     OrderPlaced
     ItemAdded
-    ItemAdded
     OrderConfirmed
     InvoiceIssued
     InvoicePaid

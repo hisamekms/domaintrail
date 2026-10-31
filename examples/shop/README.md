@@ -35,8 +35,8 @@ rejected by the application, as `NotAllowed`). `InvoicePaid` became `persistent`
 
 - `order-to-cash.dtes` (UC2: stormed from the model) — from an order to its payment, at Design Level, with a `ref` from
   every event, aggregate and command that the model has. Its policy `BillConfirmedOrder` crosses from Sales to Billing
-  like the `.dt` one. Its three timelines share their start (the Live View draws `OrderPlaced → ItemAdded` once), an
-  item may be added again, and a group holds the two results of cancelling a confirmed order. What the model lacks is
+  like the `.dt` one. Its three timelines share their start (the Live View draws `OrderPlaced → ItemAdded → OrderConfirmed`
+  once), and a group holds the two results of cancelling a confirmed order. What the model lacks is
   left without `ref` and asked in hotspots: `Invoice.issue` emits no event (`InvoiceIssued`), a payment may fail
   (`PaymentFailed`, reported by the external `PaymentService`), and the invoice of a cancelled order is open. The
   hotspot on mixed currencies is resolved: the model's `singleCurrency` answers it.
