@@ -599,3 +599,65 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   target chip; one that does not resolve shows its identifier (without braces or `es:`) as plain text. Replies without
   tokens are unchanged.
 
+
+## Appendix: messages, apply, classification and the agent's dt (amendment)
+
+- **Data model: a message is a `Request`.** Option (a) of the two weighed: everything posted in the chat — the
+  facilitator's own posts too — is a `Request` as before (author, 0–20 targets, body; it never changes), shown as a chat
+  message. *Applied* is not a state of its own: a message is applied when a run's frozen input holds it, so nothing is
+  migrated and every existing row (including those with the old `Dismissed` state) loads unchanged; the run input, the
+  prompt and the numbering of requests in it (`@name[n]`) are untouched. A new `Message` entity was rejected: it would
+  have duplicated `Request`'s targets, invariants and events for no state the model needs. `POST /api/session/requests`
+  takes `apply` (`true` or `{ note }`, the facilitator's only): the message is queued as a run of its own in the same
+  call — what a later solo chat under `dt view` will use to apply the facilitator's messages at once.
+- **Dismiss is dropped from the product.** Messages are talk, not a queue to clear: the page has no 見送る and the
+  `POST /api/session/requests/:id/dismiss` route is gone. The model keeps the `Dismissed` state, its event and the use
+  case so that older sessions load and replay; such requests show as messages.
+- **The facilitator works in the chat.** The right-side `SessionPanel` (and the inspector menu's switch to it) is gone.
+  ⤓ applies one message at once (runs stay serial: it waits as 実行待ち); ▾ adds a note first or enters selection; Shift/⌘
+  chooses several, and まとめてアプライ queues them as one run; 取り消す (a few seconds) cancels the run while it is still
+  queued. A clarification card offers the reply's options (radio or checkbox, plus その他 in own words) and 答えて再実行
+  queues the same requests with `answerTo` + `answer` at once. **An assumption's alternative** is asked for in the
+  run's **note** (`前提「…」は採らず、「…」としてやり直してください。`): `answer` is reserved for a run that asked
+  (`NothingToAnswer` otherwise), and a note needs no change to the model. Cancel is ✕ on the status (head) and on queued
+  or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯; recording, a new
+  facilitator link (`POST /api/session/facilitator/link`, what `dt session link` does) and closing the session in the
+  head's ⋯.
+- **Cards.** One card per change unit, updated in place (`web/session/history.ts`, `cards.ts`, pure and unit-tested). A
+  run joins the unit of the run its `answer.answerTo` names, else the latest unit whose latest run asked or completed
+  with exactly the same requests (an alternative picked, the same messages applied again); after a cancel, a failure or
+  a decline it starts a card of its own. Each run of a card quotes the messages it applied with the reply's status for
+  each (✓ ◐ – ?) and note — the reply's per-request lines, no longer repeated below — and an applied message shows its
+  latest run's mark and number (`✓ #3`) to everyone. 履歴 shows the same cards, compact.
+- **Classification (opt-in).** `session.classifier` (`enabled` false by default, `provider` `cloudflare-clef`, `model`
+  `clef-flash` | `clef`, `accountId`, `apiTokenEnv` — the *name* of the variable holding the token —, `threshold` 0.5).
+  A `MessageClassifier` port in the collaboration application (`application/classifier.ts`), the Clef adapter in its
+  infrastructure (`infrastructure/clef.ts`, plain `fetch`), a fake in the tests. Verified against Cloudflare's Workers
+  AI docs for `@cf/cloudflare/clef-flash` (developers.cloudflare.com/workers-ai/models/clef-flash/, its
+  `schema-input.json` and `schema-output.json`): `POST https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}`
+  with `{ model, state, questions: { <id>: { type: "noul", instructions, criteria: { true, false } } } }`, answered
+  `{ answers: { <id>: { type: "noul", noul: <probability of yes> } }, usage }` inside Cloudflare's `{ result, success }`.
+  Each message is asked once, in the background after it is sent (8 s timeout); a failure, a timeout or a probability
+  within 0.1 of the threshold leaves it applicable (the decision falls back to the human), and a message read as talk
+  can still be applied from ▾. Results are kept in memory and sent to the facilitator's pages only
+  (`session.classifications` on connect, `session.classification` as they come); participants never see them. Neither
+  the message nor the token is logged. Message text goes to Cloudflare only when enabled; Workers AI's data usage page
+  states that customer content is not used to train models. `DOMAINTRAIL_CLASSIFIER_URL` points the adapter at a local
+  mock (tests, demos).
+- **The agent's `dt`.** A real run's reply said `dt` was not on the agent's `PATH`. The subscriber now puts a `dt` shim
+  first on the agent's `PATH` for each run, so the prompt and `allowedTools` stay `dt fmt` / `dt check`. What it runs is
+  `session.agent.dt` or, unset, the running `dt` itself; the same command runs `dt fmt` / `dt check` after the agent.
+  Since the agent can write in the workspace during a run (and the check for non-DSL changes only runs after it), the
+  rules are positive and few, after three rounds of security review: (1) only `["node" | "bun" | "deno", "<script>"]` or
+  `["<dt executable>"]`, paths relative to the config file, refused at config load when inside the workspace (symbolic
+  links followed, compared by path segments: `<root>/..evil` is inside); (2) pinned once when the subscriber starts —
+  never re-read from the config file, which is in the workspace — to absolute real paths (the runtime found on the
+  `PATH`), refused inside the workspace, fingerprinted (SHA-256 of the runtime and the script) and checked before each
+  run; (3) the shim never parses words with a shell: `dt` / `dt.cmd` only starts the runtime on a launcher that holds
+  the command as JSON and spawns it with `shell: false`; (4) the agent's `dt` takes `fmt` or `check` and then `.dt` /
+  `.dtes` files of the workspace only — any option (`--prefix`, `-r`, `--config`, …) or other argument is refused with a
+  message to the agent — and the launcher always adds `-r <workspace>` itself; (5) the shim lives in a private (0700)
+  temporary directory outside the workspace, and `dt` (the agent's and the pipeline's) runs with a private working
+  directory, never the workspace, so no runtime picks up a config of it.
+- **Inspector width.** Until the reader drags it, the inspector on the right takes about a third of the room beside
+  the left pane and the chat (300–420 px), so that the canvas keeps its share when the chat is open.

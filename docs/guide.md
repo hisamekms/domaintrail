@@ -2396,12 +2396,12 @@ formatting, hover, an outline and go to definition.
 ## Collaboration sessions
 
 A **session** is the Live View shared by several people while an AI agent edits the model: the facilitator runs
-`dt session start` on their machine, the participants open the page in their browsers, see each other, and send
-**requests** about elements of the `.dt` model or the `.dtes` stormings; the facilitator bundles requests into
-**runs**, and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
+`dt session start` on their machine, the participants open the page in their browsers, see each other, and post
+**messages** in a chat, about elements of the `.dt` model or the `.dtes` stormings; the facilitator applies messages as
+**runs** (requests to the agent), and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
 time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
 `.dtes` sources that can be compared, marked confirmed or restored. `dt view` is unchanged: it has no session, and its
-page no session chat or panel. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
+page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
 **The commands.** All three find the workspace like `dt check` (`-r`, `-c`):
@@ -2417,17 +2417,34 @@ page no session chat or panel. Sessions need Node.js 22.13 or later (for `node:s
   the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
-right end of the page (チャット: what was queued and what the agent answered, the requests awaiting approval, and the
-composer; 履歴: the runs that changed files, a question and the run answering it as one row), send requests and
-dismiss their own. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the agent is
-running or waiting for an answer and how many messages are new. The facilitator also has the session panel,
-switchable with the inspector from its menu (⋯), where they compare revisions. The
-**facilitator** is whoever opened the facilitator link while signed in (never derived from Cloudflare Access); a new
-link moves the role, and the previous holder's pages reconnect as a participant. Only the facilitator queues and
-cancels runs, dismisses others' requests, records, confirms and restores revisions, changes the shared 比較対象 (baseline)
-and closes the session (`POST /api/session/close`, e.g. with `fetch` from the browser console: the page has no button
-for it). The server checks every role; the page only hides what is not yours. The facilitator is listed once in the
-panel, under their own name.
+right end of the page — チャット: every message posted, one card per run, and the composer; 履歴: the runs that changed
+files — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
+agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
+opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
+chat's ⋯ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
+facilitator applies messages, answers the agent, cancels runs, records, confirms and restores revisions, changes the
+shared 比較対象 (baseline) and closes the session (the chat's ⋯). The server checks every role; the page only hides what
+is not yours.
+
+**Messages and apply.** Everything posted in the chat is a **message**, shown in the stream as it is sent; nothing
+runs until the facilitator **applies** it. On each message the facilitator has ⤓ (apply: a run of that message,
+queued at once; runs are serial, so it waits as 実行待ち while another runs) and ▾ (補足を付けてアプライ: a note for the
+agent first; 選択: choose several). Shift- or ⌘-click chooses messages too; a bar then offers a note and まとめてアプライ,
+one run of all of them, and Esc leaves it. Right after applying, 取り消す cancels the run while it is still queued.
+Participants see a run only once it is in the stream: there is no queue to watch. A message that was applied shows the
+mark of its latest run at its right end (`✓ #3`, `◐`, `–`, `?`, …), for everyone; a click goes to the run's card.
+
+**Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
+failed or cancelled. At its top, a quote of each message it applied with what the reply says of it (✓ done, ◐ partly,
+– not done, ? a question, and a short note); a click goes to the message, and hovering either one marks the other. A
+run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
+card under the one before (question → answer → result); a run of the same messages after a completed one too. The card
+stays where its first run was queued; when it changes out of sight, a pill at the bottom of the stream
+(「#3 が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
+when it says so, and その他 in own words) and 答えて再実行 queues the run's messages again with that answer at once; on a
+done card, an alternative of an assumption queues them again with a note asking for it; ✕ on a queued or running card
+(or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
+it was before the run (asked first) or compares the two.
 
 **Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
 whole workspace. A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
@@ -2441,15 +2458,15 @@ the 💬 button next to the selection on the canvas, or `C`, makes them chips an
 note in one timeline's view of a storming targets that occurrence (the timeline and the step), the integrated canvas,
 which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
 text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
-sent request never changes; dismissing it is a mark. Each target shows whether it is still in the sources
+sent message never changes. (Sessions from before kept a *dismissed* mark on some requests; they load and show as
+messages, and the page no longer dismisses.) Each target shows whether it is still in the sources
 (`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
 would be in does not parse. The agent sees each request's targets numbered from 1, so `@注文[1]` in one request never
 means another request's target.
 
-**Runs.** The facilitator selects requests (up to 100), adds a note if needed (up to 4,000 characters) and queues a
-run; its input is frozen then, and a request stays as it was, so it can go into another run later. A run is `Queued`,
-`Running`, then `Completed`, `NeedsClarification` (the agent asked questions, shown in the chat; queue the requests
-again with the answer in the note), `Declined` (the agent would not do the requests: they break its rules or are not
+**Runs.** A run is up to 100 applied messages (requests) with the facilitator's note if any (up to 4,000
+characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.
+A run is `Queued`, `Running`, then `Completed`, `NeedsClarification` (the agent asked questions, answered in its card), `Declined` (the agent would not do the requests: they break its rules or are not
 about the model; the chat shows why, and no `dt fmt`/`dt check` runs), `Failed` or `Cancelled`; the facilitator can
 cancel a queued or running one. A run **succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new
 `.dt` error compared with the run's base revision, and every `.dtes` file still parses; diagnostics that were there
@@ -2464,9 +2481,20 @@ counted from the revisions before and after the run — then what the AI says, a
 identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows them in the name display setting, as
 links to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
-summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). The API already takes
-the facilitator's answer by choosing (`answerTo` and `answer` when queueing the requests again); the panel's controls
-for it come later.
+summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). An answer chosen in the
+card is frozen into the next run as `answerTo` and `answer` (the question and the options as they were shown); another
+alternative is asked for in the run's note.
+
+**Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
+Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
+message appears at once; its classification follows, shown to the facilitator only (a small 依頼 / 会話 mark).
+⤓ is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a probability near
+`threshold` leaves a message applicable — while a message read as talk can still be applied from its ▾. Results are
+kept in memory: after a restart, earlier messages are all applicable. **The text of each message is sent to
+Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
+the file); Cloudflare states that it does not use customer content processed by Workers AI to train models
+([Workers AI data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)). Disabled (the default),
+nothing is sent and every message can be applied.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
@@ -2515,14 +2543,26 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       "port": 0,               // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
       // Claude Code permission rules; this is the default
       "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+      // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
+      // ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], relative to this file, outside the workspace:
+      // "dt": ["node", "../domaintrail/dist/dt.js"]
     },
-    "maxParticipants": 50
+    "maxParticipants": 50,
+    // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
+    "classifier": {
+      "enabled": false,
+      "provider": "cloudflare-clef",
+      "model": "clef-flash",   // or "clef"
+      // "accountId": "<your Cloudflare account ID, 32 hex digits>", // required when enabled
+      "apiTokenEnv": "CLOUDFLARE_API_TOKEN",       // the NAME of the variable holding a Workers AI token
+      "threshold": 0.5         // from this probability a message is a request
+    }
   }
 }
 ```
 
 **Identity modes.** `dev` is for a session on one machine: the first visit gets a join form asking for a name, and an
-HttpOnly cookie keeps the sign-in (the panel's *Leave* signs out). `access` puts the session behind Cloudflare Access
+HttpOnly cookie keeps the sign-in (the chat's leave button signs out). `access` puts the session behind Cloudflare Access
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
@@ -2534,10 +2574,10 @@ hand. `--port` and `--host` win over the file.
 A **revision** is every `.dt` and `.dtes` source of the workspace at one moment, with the validation per DSL (`.dt`
 errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One is taken when the session starts,
 before and after each run, when the facilitator records the current state (*Record the current state*), and around a
-restore; saves while a run is in progress make none. The panel lists them newest first, numbered in the order taken,
-with their origin.
+restore; saves while a run is in progress make none. They are numbered in the order taken; the chat shows those
+confirmed or restored, and a run's card reaches the two around it (its ⋯).
 
-- **Compare**: anyone chooses two revisions and gets every file of either, `.dt` and `.dtes` together, as added,
+- **Compare**: a run's card (⋯ → 比較) shows its revisions compared, every file of either, `.dt` and `.dtes` together, as added,
   removed, changed or unchanged, with a line diff, and both validations side by side. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
@@ -2563,7 +2603,18 @@ with their origin.
 --permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
 tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings; then `dt fmt` and `dt check` run (this same `dt`), and the server records the result.
+stormings; then `dt fmt` and `dt check` run, and the server records the result.
+
+- **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
+  for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
+  the workspace. It runs `session.agent.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
+  clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
+  That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
+  pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
+  workspace (symbolic links followed), and fingerprinted: a run does not start once either file changed. The agent's
+  `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only; any option or other argument is
+  refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
+  `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
 
 - **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests in a
   delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a

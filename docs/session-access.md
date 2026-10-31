@@ -76,10 +76,10 @@ Tick each line; for a failure, record what is listed under [When something fails
 
 - [ ] Participant A opens `https://session.example.com/`, signs in through Access and sees the Live View.
 - [ ] Participant B does the same with another identity.
-- [ ] Each sees the other in the session panel with their **name** (the Identity API's `name`; if that API was not
+- [ ] Each sees the other in the chat's participants with their **name** (the Identity API's `name`; if that API was not
       reachable, the part of the e-mail before `@`) and an **avatar** when `avatarHosts` allows the picture's host,
       else **initials**.
-- [ ] No page shows anyone's e-mail address (look at the panel, and in the browser's developer tools at
+- [ ] No page shows anyone's e-mail address (look at the chat, and in the browser's developer tools at
       `/api/session/me`, `/api/session/state` and the WebSocket messages: no `@`).
 - [ ] A and B are participants; only the facilitator's browser shows the facilitator's actions. A participant who
       calls a facilitator action (e.g. `POST /api/session/runs` from the developer tools' console) gets 403

@@ -33,25 +33,31 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 1. **Start the session** (terminal 1): `dt -r /tmp/dt-session session start`. It prints `Session: … (started, identity
    dev)`, the Live View's URL (`http://127.0.0.1:4321/`), a facilitator link and the agent API's address.
 2. **Become the facilitator**: open the Live View in your browser, give a name on the join form (*Ada*), then open the
-   facilitator link. The session panel (the people icon on the rail at the right edge) lists you once, as *Facilitator*.
-3. **A second participant**: a private window, the same URL, another name (*Bob*). Each panel lists the other.
+   facilitator link. The chat opens at the right end; its participants (the avatars in its head) list you once, as
+   *Facilitator*.
+3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
 4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session session subscribe --agent claude --once`. It prints
    `Subscribed to session …; waiting for runs.`
-5. **Requests** (as Bob): in the Event Storming view, pick the storming `Returns`, one timeline and Design Level, select
-   an event's note, write a draft about the selection (e.g. "Add an event for a return the customer cancels"), and a
-   second draft about the whole workspace; select both and send them. Ada's panel lists both requests, the first with
-   its occurrence (the timeline and the step).
-6. **A run** (as Ada): include both requests, add a note if you like, and queue the run. Terminal 2 logs the run's
-   progress; within a few minutes the run is *Completed* (or *Needs clarification* with the agent's questions and
-   their options, *Declined* with its reason, or *Failed* with its report). Both pages show the storming as the agent left it, without a reload.
+5. **Messages** (as Bob): in the Event Storming view, pick the storming `Returns`, one timeline and Design Level, select
+   an event's note, write a message about the selection (e.g. "Add an event for a return the customer cancels") and
+   send it, then a second about the whole workspace. Both appear in everyone's chat, the first with its occurrence
+   (the timeline and the step).
+6. **A run** (as Ada): Shift-click both messages and まとめてアプライ (or ⤓ on one). The run's card appears; terminal 2
+   logs its progress; within a few minutes the card is *done* (or asks questions — choose and 答えて再実行 — or is
+   *declined* with its reason, or *failed* with its report). Both pages show the storming as the agent left it, without
+   a reload. The agent runs `dt fmt` / `dt check` itself through the `dt` the subscriber puts on its `PATH`.
 7. **Check the files**: `git -C /tmp/dt-session status --short` lists only `.dt` and `.dtes` files, and
    `git -C /tmp/dt-session diff` is what the requests asked for. `--once` has ended the subscriber.
-8. **Revisions** (as Ada): the timeline has *Before a run* and *Run result*; compare the two (the diff matches `git
-   diff`), mark the result as confirmed, then restore *Before a run*: both pages show the model as it was, and `git -C
-   /tmp/dt-session diff` is empty.
+8. **Revisions** (as Ada): the card's ⋯ → 比較 compares the run's revisions (the diff matches `git diff`); ⋯ → 確認済み
+   marks the result; ⋯ → 実行前に戻す… restores the workspace as before the run: both pages show the model as it was, and
+   `git -C /tmp/dt-session diff` is empty.
 9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt session start`). To end it,
-   as Ada, in the browser console: `fetch('/api/session/close', { method: 'POST', headers: { 'content-type':
-   'application/json' }, body: '{}' })` — every page closes. Then remove `/tmp/dt-session`.
+   as Ada, the chat's ⋯ → セッションを終了… — every page closes. Then remove `/tmp/dt-session`.
+
+**Developing DomainTrail itself?** Point the agent's `dt` at your clone in the workspace's `domaintrail.jsonc`, outside
+the workspace: `"session": { "agent": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
+"../domaintrail/bin/dt.ts"]`). It is read when `dt session subscribe` starts; restart the subscriber after changing
+it, and after rebuilding the clone (a changed script stops the next run).
 
 If terminal 2 logs `not claiming further runs: review …`, the agent changed a file other than a `.dt` or `.dtes`
 source: look at those files (`git -C /tmp/dt-session status`), in particular anything under `.claude/`, before you
@@ -61,5 +67,5 @@ start the subscriber again.
 
 Record, without tokens, cookies or the facilitator link's code: the step and what you saw; the clone's commit (`git rev-parse --short HEAD`), `claude
 --version`, `node --version` and the OS; the output of both terminals around that time (they print no token, no
-prompt and no request text); the run's state, failure reason and report in the panel (exit code, formatted, checked,
+prompt and no request text); the run's state, failure reason and report in its card (exit code, formatted, checked,
 new `.dt` errors, `.dtes` not parsed); and `git -C /tmp/dt-session status --short`.

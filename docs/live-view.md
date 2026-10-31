@@ -139,17 +139,17 @@ come back when the window is wide again).
 
 The chat has two views:
 
-- **チャット**: one stream of the requests the facilitator queued and what followed (the facilitator's note, the agent's
-  progress, question, result or failure, revisions confirmed or restored), the requests awaiting approval, and a
-  composer for a request about up to 20 targets (none: the whole workspace), picked with `@` or added from the
-  selection, whose unsent text and targets stay in the browser.
+- **チャット**: one stream of every message posted, one card per run — updated in place, with the runs that continue it
+  (an answer, an alternative) one under the other and a quote of each message it applied with the reply's mark — the
+  revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace),
+  picked with `@` or added from the selection, whose unsent text and targets stay in the browser. An applied message
+  shows its latest run's mark (`✓ #3`). The facilitator applies messages from the stream (⤓, ▾ with a note, several
+  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
+  restore and comparison from a card's ⋯ and the session's actions from the head's ⋯.
 - **履歴**: the history of changes, newest first. Each row is one run that changed files — or a run that asked a
   question together with the run queued again to answer it — with its number, time, outcome, what the AI says about
-  it, the number of files it changed (measured from the revisions) and who asked. Opened, it shows the requests, the
-  question, the note and the result as in the chat, and チャットで見る scrolls the chat to them. すべて also lists the runs
+  it, the number of files it changed (measured from the revisions) and who asked. Opened, it shows the run's card, and
+  チャットで見る scrolls the chat to it. すべて also lists the runs
   that changed nothing, and those declined, failed or cancelled.
 
-The others' cursors are drawn on the same view. The facilitator also has the session panel, switchable with the
-inspector (from the menu ⋯ in its head, or the rail's buttons when it is closed) and docked where the inspector is:
-requests to queue as runs, the runs, and the revision timeline with comparison, confirm and restore. `dt view` serves
-the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
+The others' cursors are drawn on the same view. `dt view` serves the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).
