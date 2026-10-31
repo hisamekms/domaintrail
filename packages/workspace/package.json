@@ -8,6 +8,6 @@
   "dependencies": {
     "@domaintrail/modeling": "workspace:*",
     "chokidar": "5.0.0",
-    "ignore": "7.0.5"
+    "ignore": "7.0.14"
   }
 }
