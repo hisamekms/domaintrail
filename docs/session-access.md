@@ -129,7 +129,7 @@ Tick each line; for a failure, record what is listed under [When something fails
 Record, without tokens, cookies or e-mail addresses (they are personal data and credentials):
 
 - the step, the time (with time zone) and what was expected and seen;
-- the `dt --version`, Node's version, the OS, and the `cloudflared` version;
+- the domaintrail version (`npm ls domaintrail`, or the commit of a clone), Node's version, the OS, and the `cloudflared` version;
 - the `dt session start` output around that time (it never prints tokens or e-mail);
 - the HTTP status and the error `type` of the failing request (developer tools → Network), the WebSocket's close code;
 - whether the request carried a `Cf-Access-Jwt-Assertion` header at the origin (if you can see the request at the

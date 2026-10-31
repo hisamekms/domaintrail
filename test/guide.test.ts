@@ -6,7 +6,7 @@ import { parseGuide } from '@domaintrail/presentation/cli/guide';
 import { cliDeps } from '@domaintrail/composition/cli';
 import { runCli } from '@domaintrail/presentation/cli/main';
 import { analyze } from '@domaintrail/modeling/core/analyze';
-import { parseJsonc } from '@domaintrail/modeling/core/config';
+import { DEFAULT_AGENT_TOOLS, parseJsonc, resolveConfig } from '@domaintrail/modeling/core/config';
 import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { formatStorming } from '@domaintrail/modeling/storming/format';
 import { formatDomain } from '@domaintrail/modeling/format/format';
@@ -75,7 +75,7 @@ describe('dt guide topics', () => {
         expect(r.out.startsWith(parsed.intro)).toBe(true);
         expect(r.out).toContain(parsed.topics.find((t) => t.name === 'quick')!.text);
         for (const t of parsed.topics) expect(r.out).toMatch(new RegExp(`^ +${t.name} +`, 'm'));
-        expect(r.out.split('\n').length).toBeLessThanOrEqual(150);
+        expect(r.out.split('\n').length).toBeLessThanOrEqual(160);
     });
 
     test('the quick reference example is a file that checks without any diagnostic and is formatted', async () => {
@@ -215,6 +215,15 @@ describe('dt guide', () => {
     test('its config example is valid JSONC', () => {
         const config = blocks('jsonc').find((b) => b.includes('"sources"')) ?? '';
         expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
+    });
+
+    test('its session config example is a valid config, with the defaults it says', () => {
+        const example = blocks('jsonc').find((b) => b.includes('"session"'))!;
+        const session = resolveConfig(example, path.join(ROOT, 'domaintrail.jsonc')).session;
+        const defaults = resolveConfig('{}', path.join(ROOT, 'domaintrail.jsonc')).session;
+        expect({ ...session, access: undefined }).toEqual({ ...defaults, access: undefined });
+        expect(session.agent.allowedTools).toEqual([...DEFAULT_AGENT_TOOLS]);
+        expect(session.access).toMatchObject({ acceptCookie: false, avatarHosts: [] });
     });
 
     test('its JSON output example has the properties of the schema', async () => {

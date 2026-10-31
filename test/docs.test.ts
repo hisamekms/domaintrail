@@ -166,7 +166,18 @@ describe('getting started', () => {
 });
 
 describe('documentation links', () => {
-    const FILES = ['README.md', 'CONTRIBUTING.md', EN, JA, 'docs/guide.md', 'docs/live-view.md', 'docs/session-access.md', 'CHANGELOG.md', 'CHANGELOG.ja.md'];
+    const FILES = [
+        'README.md',
+        'CONTRIBUTING.md',
+        EN,
+        JA,
+        'docs/guide.md',
+        'docs/live-view.md',
+        'docs/session-access.md',
+        'docs/session-first-run.md',
+        'CHANGELOG.md',
+        'CHANGELOG.ja.md',
+    ];
 
     for (const file of FILES) {
         test(`the relative links of ${file} resolve to files and headings`, async () => {

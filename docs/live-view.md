@@ -104,3 +104,10 @@ neither baseline: their views are not marked.
   name), 名前 or 両方. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
+
+## In a session
+
+Under `dt session start` (not `dt view`) the page gains a session panel on the right: the participants and where they
+are, the others' cursors on the same view, drafts and requests about the selection, the runs of the agent and the
+revision timeline with comparison, confirm and restore. `dt view` serves the same page without it. See
+[`dt guide session`](guide.md#collaboration-sessions).
