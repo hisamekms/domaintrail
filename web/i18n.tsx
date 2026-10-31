@@ -426,8 +426,11 @@ const ja = {
             restoring: (n: number | undefined) => `#${n ?? '?'} の復元の前`,
             restoredFrom: (from: number | undefined, pre: number | undefined) => `#${from ?? '?'} から（復元前は #${pre ?? '?'}）`,
         },
-        validationByDsl: (dtErrors: number, dtesErrors: number, dtesWarnings: number, links: number) =>
-            `.dt エラー ${dtErrors} · .dtes エラー ${dtesErrors}・警告 ${dtesWarnings} · 参照の警告 ${links}`,
+        validationCounts: {
+            dt: (errors: number) => `.dt エラー ${errors}`,
+            dtes: (errors: number, warnings: number) => `.dtes エラー ${errors}・警告 ${warnings}`,
+            links: (n: number) => `参照の警告 ${n}`,
+        },
         chooseForComparison: (n: number) => `#${n} を比較に選ぶ`,
         chooseTwo: '比較するリビジョンを2つ選んでください',
         compare: (a: string, b: string) => `#${a} と #${b} を比較`,
@@ -441,8 +444,8 @@ const ja = {
             restore: (n: string) => `#${n} を復元する`,
             cancel: 'やめる',
             close: '閉じる',
-            external: (paths: readonly string[]) =>
-                `最後のリビジョンのあとで、ワークスペースが外部で変わっています（${paths.join(', ')}）。上書きせずに止めました。いまの状態をリビジョンとして記録してから復元できます。`,
+            external: (paths: string) =>
+                `最後のリビジョンのあとで、ワークスペースが外部で変わっています（${paths}）。上書きせずに止めました。いまの状態をリビジョンとして記録してから復元できます。`,
             recordThenRestore: 'いまの状態を記録してから復元する',
             run: (n: number | undefined) =>
                 `実行${n === undefined ? '' : ` ${n}`}が進行中のため復元できません。実行が終わるのを待つか、取り消してから復元してください。`,
@@ -450,8 +453,8 @@ const ja = {
             cancelled:
                 '実行を取り消しました。エージェントが止まってから復元してください（エージェントが変えたファイルがあれば外部の変更として扱われ、記録してから復元します）。',
             retry: 'もう一度復元する',
-            manual: (cause: string, message: string, pre: string) =>
-                `書き込みの途中で失敗しました（${cause}: ${message}）。ワークスペースは書きかけかもしれません。手動での復旧が必要です。復元前の状態はリビジョン #${pre} に残っています。ファイルを確かめてから、それを復元してください。`,
+            manual: (cause: string, pre: string) =>
+                `書き込みの途中で失敗しました（${cause}）。ワークスペースは書きかけかもしれません。手動での復旧が必要です。復元前の状態はリビジョン #${pre} に残っています。ファイルを確かめてから、それを復元してください。`,
             restorePre: (n: string) => `#${n} を復元する…`,
             done: (n: string, m: string) => `#${n} を復元しました（新しいリビジョン #${m}）。`,
             failed: (m: string) => `復元できませんでした: ${m}`,
@@ -856,8 +859,11 @@ const en: Messages = {
             restoring: (n) => `before restoring #${n ?? '?'}`,
             restoredFrom: (from, pre) => `from #${from ?? '?'} (before: #${pre ?? '?'})`,
         },
-        validationByDsl: (dtErrors, dtesErrors, dtesWarnings, links) =>
-            `.dt errors ${dtErrors} · .dtes errors ${dtesErrors}, warnings ${dtesWarnings} · reference warnings ${links}`,
+        validationCounts: {
+            dt: (errors) => `.dt errors ${errors}`,
+            dtes: (errors, warnings) => `.dtes errors ${errors}, warnings ${warnings}`,
+            links: (n) => `reference warnings ${n}`,
+        },
         chooseForComparison: (n) => `Choose #${n} for a comparison`,
         chooseTwo: 'Choose two revisions to compare',
         compare: (a, b) => `Compare #${a} and #${b}`,
@@ -872,15 +878,15 @@ const en: Messages = {
             cancel: 'Cancel',
             close: 'Close',
             external: (paths) =>
-                `The workspace changed outside the session since the last revision (${paths.join(', ')}). Nothing was overwritten. You can record the current state as a revision, then restore.`,
+                `The workspace changed outside the session since the last revision (${paths}). Nothing was overwritten. You can record the current state as a revision, then restore.`,
             recordThenRestore: 'Record the current state, then restore',
             run: (n) => `A run${n === undefined ? '' : ` (run ${n})`} is in progress: wait for it to end, or cancel it first, then restore.`,
             cancelRun: 'Cancel the run',
             cancelled:
                 'The run was cancelled. Restore once its agent has stopped (files the agent changed count as external changes: they are recorded before the restore).',
             retry: 'Restore again',
-            manual: (cause, message, pre) =>
-                `The restore failed while writing (${cause}: ${message}). The workspace may be half written: manual recovery needed. The state before the restore is revision #${pre}; check the files, then restore it.`,
+            manual: (cause, pre) =>
+                `The restore failed while writing (${cause}). The workspace may be half written: manual recovery needed. The state before the restore is revision #${pre}; check the files, then restore it.`,
             restorePre: (n) => `Restore #${n}…`,
             done: (n, m) => `Restored #${n} (new revision #${m}).`,
             failed: (m) => `Not restored: ${m}`,

@@ -179,7 +179,11 @@ function RevisionItem(props: {
                 )}
             </div>
             <div className="muted small session-validation">
-                {tx.validationByDsl(r.validation.dtErrors, r.validation.dtesErrors, r.validation.dtesWarnings, r.validation.linkWarnings)}
+                {[
+                    tx.validationCounts.dt(r.validation.dtErrors),
+                    tx.validationCounts.dtes(r.validation.dtesErrors, r.validation.dtesWarnings),
+                    tx.validationCounts.links(r.validation.linkWarnings),
+                ].join(' · ')}
                 {r.validation.stale && ` · ${tx.staleValidation}`}
             </div>
             {props.control && (r.state === 'Recorded' || !entry.sameAsLatest) && (
@@ -231,7 +235,7 @@ function RestoreBox(props: {
                 };
             case 'external':
                 return {
-                    text: r.external(flow.paths),
+                    text: r.external(flow.paths.join(', ')),
                     actions: (
                         <button className="primary session-restore-two-step" disabled={busy} onClick={() => props.onRestore(flow.revision, true)}>
                             {r.recordThenRestore}
@@ -258,7 +262,7 @@ function RestoreBox(props: {
                       };
             case 'manual':
                 return {
-                    text: r.manual(flow.cause, flow.message, n(flow.preRestore)),
+                    text: r.manual(`${flow.cause}: ${flow.message}`, n(flow.preRestore)),
                     error: true,
                     actions: (
                         <button className="small" disabled={busy} onClick={() => props.onAsk(flow.preRestore)}>
