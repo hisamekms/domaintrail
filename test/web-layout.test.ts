@@ -53,3 +53,13 @@ describe('the head and the foot of the left pane', () => {
         expect(healthOf({ ...ok, warnings: 2 })).toBe('warning');
     });
 });
+
+describe("the inspector's width until it is dragged", () => {
+    test('about a third of the room the other panes leave, within 300–420px', async () => {
+        const { autoInspectorWidth } = await import('@domaintrail/web/app/responsive');
+        // 1600px with the left pane (304) and the chat (380) open
+        expect(autoInspectorWidth(1600 - 304 - 380)).toBe(330);
+        expect(autoInspectorWidth(2400)).toBe(420);
+        expect(autoInspectorWidth(500)).toBe(300);
+    });
+});

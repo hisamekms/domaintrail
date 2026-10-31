@@ -428,6 +428,7 @@ describe('session section (ADR 0026)', () => {
             identity: 'dev',
             agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'] },
             maxParticipants: 50,
+            classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
         });
     });
 
@@ -462,6 +463,30 @@ describe('session section (ADR 0026)', () => {
             },
             agent: { port: 9000, allowedTools: ['Read'] },
             maxParticipants: 5,
+            classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
+        });
+    });
+
+    test("the agent's dt: relative paths against the config file, bare names and options as written", async () => {
+        const dir = await project({
+            'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['bun', '../clone/bin/dt.ts', '--smol', '/abs/dt.js'] } } }),
+        });
+        const c = await loadConfig({ start: dir });
+        expect(c.session.agent.dt).toEqual(['bun', path.resolve(dir, '../clone/bin/dt.ts'), '--smol', '/abs/dt.js']);
+    });
+
+    test('the classifier: opt-in, Clef Flash, the token by the name of its variable', async () => {
+        const text = JSON.stringify({
+            session: { classifier: { enabled: true, accountId: '0123456789abcdef0123456789abcdef', model: 'clef', threshold: 0.7 } },
+        });
+        const c = await loadConfig({ start: await project({ 'domaintrail.json': text }) });
+        expect(c.session.classifier).toEqual({
+            enabled: true,
+            provider: 'cloudflare-clef',
+            model: 'clef',
+            accountId: '0123456789abcdef0123456789abcdef',
+            apiTokenEnv: 'CLOUDFLARE_API_TOKEN',
+            threshold: 0.7,
         });
     });
 
@@ -478,6 +503,16 @@ describe('session section (ADR 0026)', () => {
         [{ agent: { port: 70000 } }, "'session.agent.port'"],
         [{ maxParticipants: 0 }, "'session.maxParticipants'"],
         [{ token: 'x' }, "unknown key 'session.token'"],
+        [{ agent: { dt: [] } }, "'session.agent.dt' must be a command"],
+        [{ agent: { dt: ['node', ''] } }, "'session.agent.dt' must be a command"],
+        [{ agent: { dt: 'node dist/dt.js' } }, "'session.agent.dt' must be a command"],
+        [{ classifier: { enabled: true } }, "needs 'accountId'"],
+        [{ classifier: { provider: 'openai' } }, "'session.classifier.provider'"],
+        [{ classifier: { model: 'jev' } }, "'session.classifier.model'"],
+        [{ classifier: { accountId: 'acct' } }, "'session.classifier.accountId'"],
+        [{ classifier: { apiTokenEnv: 'cf-token value' } }, "'session.classifier.apiTokenEnv'"],
+        [{ classifier: { threshold: 1 } }, "'session.classifier.threshold'"],
+        [{ classifier: { token: 'x' } }, "unknown key 'session.classifier.token'"],
     ])('%j is refused', async (session, message) => {
         const dir = await project({ 'domaintrail.json': JSON.stringify({ session }) });
         const e = await loadConfig({ start: dir }).then(

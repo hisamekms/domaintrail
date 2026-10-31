@@ -2,11 +2,14 @@
 // argument array (no shell) in the workspace root, the prompt on stdin, the facilitator's tools as the only ones
 // allowed (`--permission-mode dontAsk` refuses everything else without asking), the reply's JSON schema as the
 // structured output (`--json-schema`), and the result as JSON on stdout (the reply in its `structured_output`). On
-// cancel the whole process group is killed. Neither the prompt nor the agent's output is logged.
+// cancel the whole process group is killed. Neither the prompt nor the agent's output is logged. The agent's `dt` is a
+// shim first on its PATH (`dt-shim.ts`).
 import { spawn } from 'node:child_process';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../application/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration/domain/reply';
 import { parseReply } from '../application/prompt.js';
+import { withPathFirst, writeDtShim } from './dt-shim.js';
+import type { DtCommand } from './dt-tools.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */
 export interface AgentCommand {
@@ -87,6 +90,8 @@ export interface ClaudeCodeOptions {
     readonly root: string;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
     readonly command?: AgentCommand;
+    /** What the agent's `dt` runs: a shim for it goes first on the agent's PATH (none: the PATH as it is). */
+    readonly dt?: DtCommand;
 }
 
 /** Kills the agent's process group (it was started detached, as the group's leader), or the agent alone on Windows. */
@@ -109,49 +114,59 @@ export function createClaudeCodeRunner(options: ClaudeCodeOptions): AgentRunner 
             const { signal } = invocation;
             if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
             const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests)];
-            return new Promise<AgentOutcome>((resolve, reject) => {
-                const child = spawn(command.command, args, {
-                    cwd: options.root,
-                    shell: false,
-                    detached: process.platform !== 'win32',
-                    stdio: ['pipe', 'pipe', 'pipe'],
-                    windowsHide: true,
-                });
-                let stdout = '';
-                let kept = 0;
-                child.stdout.setEncoding('utf8');
-                child.stdout.on('data', (chunk: string) => {
-                    if (kept >= MAX_OUTPUT) return;
-                    stdout += chunk;
-                    kept += chunk.length;
-                });
-                // stderr is read so that the agent never blocks on it, and dropped: it may echo the prompt
-                child.stderr.resume();
-                child.stdin.on('error', (e: Error & { code?: string }) => {
-                    // the agent exited before reading the whole prompt: its exit code says what happened
-                    if (e.code !== 'EPIPE') reject(e);
-                });
-                let killer: ReturnType<typeof setTimeout> | undefined;
-                const stop = (): void => {
-                    killTree(child.pid, 'SIGTERM');
-                    killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), KILL_GRACE_MS);
-                    killer.unref();
-                };
-                signal.addEventListener('abort', stop, { once: true });
-                child.once('error', (e) => {
-                    signal.removeEventListener('abort', stop);
-                    reject(e);
-                });
-                child.once('close', (code) => {
-                    signal.removeEventListener('abort', stop);
-                    // the agent is gone; anything it left in its group goes with it
-                    if (signal.aborted) killTree(child.pid, 'SIGKILL');
-                    if (killer) clearTimeout(killer);
-                    const result = resultOf(stdout);
-                    resolve({ exitCode: code ?? -1, ...parseReply(result.structured, result.text, invocation.requests) });
-                });
-                child.stdin.end(invocation.prompt);
+            const shimmed = options.dt ? writeDtShim(options.dt) : Promise.resolve(undefined);
+            return shimmed.then((shim) => {
+                const ran = spawnAgent(shim && withPathFirst(process.env, shim.dir));
+                return shim ? ran.finally(() => shim.dispose()) : ran;
             });
+            function spawnAgent(env: NodeJS.ProcessEnv | undefined): Promise<AgentOutcome> {
+                // cancelled while the shim was written
+                if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
+                return new Promise<AgentOutcome>((resolve, reject) => {
+                    const child = spawn(command.command, args, {
+                        cwd: options.root,
+                        ...(env && { env }),
+                        shell: false,
+                        detached: process.platform !== 'win32',
+                        stdio: ['pipe', 'pipe', 'pipe'],
+                        windowsHide: true,
+                    });
+                    let stdout = '';
+                    let kept = 0;
+                    child.stdout.setEncoding('utf8');
+                    child.stdout.on('data', (chunk: string) => {
+                        if (kept >= MAX_OUTPUT) return;
+                        stdout += chunk;
+                        kept += chunk.length;
+                    });
+                    // stderr is read so that the agent never blocks on it, and dropped: it may echo the prompt
+                    child.stderr.resume();
+                    child.stdin.on('error', (e: Error & { code?: string }) => {
+                        // the agent exited before reading the whole prompt: its exit code says what happened
+                        if (e.code !== 'EPIPE') reject(e);
+                    });
+                    let killer: ReturnType<typeof setTimeout> | undefined;
+                    const stop = (): void => {
+                        killTree(child.pid, 'SIGTERM');
+                        killer = setTimeout(() => killTree(child.pid, 'SIGKILL'), KILL_GRACE_MS);
+                        killer.unref();
+                    };
+                    signal.addEventListener('abort', stop, { once: true });
+                    child.once('error', (e) => {
+                        signal.removeEventListener('abort', stop);
+                        reject(e);
+                    });
+                    child.once('close', (code) => {
+                        signal.removeEventListener('abort', stop);
+                        // the agent is gone; anything it left in its group goes with it
+                        if (signal.aborted) killTree(child.pid, 'SIGKILL');
+                        if (killer) clearTimeout(killer);
+                        const result = resultOf(stdout);
+                        resolve({ exitCode: code ?? -1, ...parseReply(result.structured, result.text, invocation.requests) });
+                    });
+                    child.stdin.end(invocation.prompt);
+                });
+            }
         },
     };
 }

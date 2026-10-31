@@ -21,6 +21,12 @@ export type SessionIdentity = (typeof SESSION_IDENTITIES)[number];
  */
 export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
 export const DEFAULT_MAX_PARTICIPANTS = 50;
+/** The classifiers of a session's chat messages (request or chat), and the models of Cloudflare's Clef. */
+export const CLASSIFIER_PROVIDERS = ['cloudflare-clef'] as const;
+export const CLEF_MODELS = ['clef-flash', 'clef'] as const;
+export type ClefModel = (typeof CLEF_MODELS)[number];
+export const DEFAULT_CLASSIFIER_TOKEN_ENV = 'CLOUDFLARE_API_TOKEN';
+export const DEFAULT_CLASSIFIER_THRESHOLD = 0.5;
 
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile {
@@ -76,9 +82,39 @@ export interface SessionConfigFile {
         port?: number;
         /** The tools the agent may use, as Claude Code permission rules. Default: `DEFAULT_AGENT_TOOLS`. */
         allowedTools?: string[];
+        /**
+         * The command the agent's `dt` runs, as an argument array (e.g. `["node", "../clone/dist/dt.js"]`); an element
+         * with a path separator that is not absolute is relative to the config file. Default: the running `dt` itself.
+         */
+        dt?: string[];
     };
     /** Most participants a session admits. Default: 50. */
     maxParticipants?: number;
+    /** Telling the chat's requests from its talk (opt-in; the message text goes to the provider). */
+    classifier?: {
+        /** Default: false (every message can be applied). */
+        enabled?: boolean;
+        /** Default: `cloudflare-clef` (Workers AI). */
+        provider?: (typeof CLASSIFIER_PROVIDERS)[number];
+        /** Default: `clef-flash`. */
+        model?: ClefModel;
+        /** The Cloudflare account of Workers AI; required when enabled. */
+        accountId?: string;
+        /** The name of the environment variable holding the API token (never the token). Default: `CLOUDFLARE_API_TOKEN`. */
+        apiTokenEnv?: string;
+        /** The probability from which a message is a request. Default: 0.5. */
+        threshold?: number;
+    };
+}
+
+/** The `session.classifier` section resolved. */
+export interface ResolvedClassifierConfig {
+    enabled: boolean;
+    provider: (typeof CLASSIFIER_PROVIDERS)[number];
+    model: ClefModel;
+    accountId?: string;
+    apiTokenEnv: string;
+    threshold: number;
 }
 
 /** The `session` section resolved: every default applied. */
@@ -95,8 +131,10 @@ export interface ResolvedSessionConfig {
         acceptCookie: boolean;
         avatarHosts: string[];
     };
-    agent: { port: number; allowedTools: string[] };
+    /** `dt`: the command (absolute paths) the agent's `dt` runs, when configured. */
+    agent: { port: number; allowedTools: string[]; dt?: string[] };
     maxParticipants: number;
+    classifier: ResolvedClassifierConfig;
 }
 
 export interface ResolvedConfig {
@@ -153,11 +191,19 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
         },
         ...(config.generate?.ts?.tests && { tsTests: config.generate.ts.tests }),
         view: { port: config.view?.port ?? DEFAULT_PORT, host: config.view?.host ?? DEFAULT_HOST },
-        session: resolveSession(config.session),
+        session: resolveSession(config.session, path.dirname(file)),
     };
 }
 
-function resolveSession(session: SessionConfigFile | undefined): ResolvedSessionConfig {
+/**
+ * A command of the config as it runs: each element with a path separator that is not absolute is resolved against the
+ * config file's directory (`./dist/dt.js`, `../clone/bin/dt.ts`); bare names (`node`) and options stay as written.
+ */
+export function resolveCommand(command: readonly string[], dir: string): string[] {
+    return command.map((part) => (/[\\/]/.test(part) && !part.startsWith('-') && !path.isAbsolute(part) ? path.resolve(dir, part) : part));
+}
+
+function resolveSession(session: SessionConfigFile | undefined, dir?: string): ResolvedSessionConfig {
     const access = session?.access;
     return {
         port: session?.port ?? DEFAULT_PORT,
@@ -174,8 +220,20 @@ function resolveSession(session: SessionConfigFile | undefined): ResolvedSession
                 avatarHosts: access.avatarHosts ?? [],
             },
         }),
-        agent: { port: session?.agent?.port ?? 0, allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS] },
+        agent: {
+            port: session?.agent?.port ?? 0,
+            allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS],
+            ...(session?.agent?.dt && { dt: dir === undefined ? [...session.agent.dt] : resolveCommand(session.agent.dt, dir) }),
+        },
         maxParticipants: session?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS,
+        classifier: {
+            enabled: session?.classifier?.enabled ?? false,
+            provider: session?.classifier?.provider ?? 'cloudflare-clef',
+            model: session?.classifier?.model ?? 'clef-flash',
+            ...(session?.classifier?.accountId !== undefined && { accountId: session.classifier.accountId }),
+            apiTokenEnv: session?.classifier?.apiTokenEnv ?? DEFAULT_CLASSIFIER_TOKEN_ENV,
+            threshold: session?.classifier?.threshold ?? DEFAULT_CLASSIFIER_THRESHOLD,
+        },
     };
 }
 
@@ -299,7 +357,7 @@ const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(
 function validateSession(session: unknown, fail: (msg: string) => never): void {
     if (!isObject(session)) return fail("'session' must be an object");
     for (const key of Object.keys(session)) {
-        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants'].includes(key)) fail(`unknown key 'session.${key}'`);
+        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants', 'classifier'].includes(key)) fail(`unknown key 'session.${key}'`);
     }
     if (session.port !== undefined && !isPort(session.port)) fail("'session.port' must be a port number");
     if (session.host !== undefined && (typeof session.host !== 'string' || !session.host)) fail("'session.host' must be a string");
@@ -340,9 +398,29 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
     const agent = session.agent;
     if (agent !== undefined) {
         if (!isObject(agent)) return fail("'session.agent' must be an object");
-        for (const key of Object.keys(agent)) if (!['port', 'allowedTools'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
+        for (const key of Object.keys(agent)) if (!['port', 'allowedTools', 'dt'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
         if (agent.port !== undefined && !isPort(agent.port)) fail("'session.agent.port' must be a port number");
         if (agent.allowedTools !== undefined && !isStringList(agent.allowedTools)) fail("'session.agent.allowedTools' must be an array of tool rules");
+        if (agent.dt !== undefined && !(isStringList(agent.dt) && agent.dt.length > 0 && agent.dt.every((a) => !/[\0\r\n]/.test(a))))
+            fail('\'session.agent.dt\' must be a command as a non-empty array of non-empty strings (e.g. ["node", "dist/dt.js"])');
+    }
+    const classifier = session.classifier;
+    if (classifier !== undefined) {
+        if (!isObject(classifier)) return fail("'session.classifier' must be an object");
+        for (const key of Object.keys(classifier))
+            if (!['enabled', 'provider', 'model', 'accountId', 'apiTokenEnv', 'threshold'].includes(key)) fail(`unknown key 'session.classifier.${key}'`);
+        if (classifier.enabled !== undefined && typeof classifier.enabled !== 'boolean') fail("'session.classifier.enabled' must be a boolean");
+        if (classifier.provider !== undefined && !(CLASSIFIER_PROVIDERS as readonly unknown[]).includes(classifier.provider))
+            fail(`'session.classifier.provider' must be one of ${CLASSIFIER_PROVIDERS.map((p) => `'${p}'`).join(', ')}`);
+        if (classifier.model !== undefined && !(CLEF_MODELS as readonly unknown[]).includes(classifier.model))
+            fail(`'session.classifier.model' must be one of ${CLEF_MODELS.map((m) => `'${m}'`).join(', ')}`);
+        if (classifier.accountId !== undefined && (typeof classifier.accountId !== 'string' || !/^[0-9a-f]{32}$/i.test(classifier.accountId)))
+            fail("'session.classifier.accountId' must be a Cloudflare account ID (32 hexadecimal digits)");
+        if (classifier.apiTokenEnv !== undefined && (typeof classifier.apiTokenEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(classifier.apiTokenEnv)))
+            fail("'session.classifier.apiTokenEnv' must be the name of an environment variable (the token itself never goes in the file)");
+        if (classifier.threshold !== undefined && !(typeof classifier.threshold === 'number' && classifier.threshold > 0 && classifier.threshold < 1))
+            fail("'session.classifier.threshold' must be a number between 0 and 1");
+        if (classifier.enabled === true && classifier.accountId === undefined) fail("'session.classifier' enabled needs 'accountId'");
     }
     if (
         session.maxParticipants !== undefined &&

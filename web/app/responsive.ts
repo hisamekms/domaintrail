@@ -51,3 +51,10 @@ export function keptOverrides(overrides: Overrides, f: { readonly left: boolean;
     if (left === overrides.left && dock === overrides.dock) return overrides;
     return { ...(left !== undefined && { left }), ...(dock !== undefined && { dock }) };
 }
+
+/** The inspector's width on the right until the reader drags it: about a third of the room beside the left pane and the conversation, within 300–420px. */
+export const AUTO_INSPECTOR_MIN = 300;
+export const AUTO_INSPECTOR_MAX = 420;
+export function autoInspectorWidth(room: number): number {
+    return Math.round(Math.min(AUTO_INSPECTOR_MAX, Math.max(AUTO_INSPECTOR_MIN, room * 0.36)));
+}

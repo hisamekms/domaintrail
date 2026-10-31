@@ -408,7 +408,7 @@ Examples:
 Connects to the session server running on the workspace (\`dt session start\`) through its agent API, with the
 credential in .domaintrail/session/agent.json, and takes the runs the facilitator queues: for each, Claude Code
 (\`claude\` on the PATH, in print mode, with the tools of session.agent.allowedTools only) edits the .dt and .dtes
-files, then \`dt fmt\` and \`dt check\` run and the server records the result as a revision. A run that changes any
+files (its \`dt\` is session.agent.dt, else this very CLI), then \`dt fmt\` and \`dt check\` run and the server records the result as a revision. A run that changes any
 other file fails. The next queued run starts as soon as one ends. Ctrl+C stops the agent and fails its run as
 interrupted.
 
@@ -427,6 +427,7 @@ Examples:
                     respectGitignore: cfg.respectGitignore,
                     configPath: configPath === undefined ? undefined : path.resolve(configPath),
                     agent: opts.agent,
+                    ...(cfg.session.agent.dt && { dt: cfg.session.agent.dt }),
                     once: opts.once ?? false,
                     log: io.out,
                 })

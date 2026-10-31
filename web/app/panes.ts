@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { InspectorTab } from '../inspector';
 import { usePersistentState } from '../shared/layout';
-import { effectiveLayout, keptOverrides, NO_OVERRIDES, type Dock, type Overrides } from './responsive';
+import { autoInspectorWidth, effectiveLayout, keptOverrides, NO_OVERRIDES, type Dock, type Overrides } from './responsive';
 
 /** The lists of the left pane, chosen in its activity bar. */
 export type LeftView = 'tree' | 'problems' | 'changes';
@@ -33,6 +33,7 @@ export interface Panes {
     setDockContent: (content: DockContent) => void;
     inspectorDock: Dock;
     setInspectorDock: (dock: Dock) => void;
+    /** The inspector's width on the right: the reader's (once dragged), else one that leaves the canvas its share. */
     inspectorWidth: number;
     setInspectorWidth: (width: number) => void;
     inspectorHeight: number;
@@ -61,6 +62,9 @@ export function useWindowWidth(): number {
     return width;
 }
 
+/** The width of the left pane's activity bar (BAR_WIDTH in shell.tsx). */
+const LEFT_BAR = 44;
+
 export function usePanes(): Panes {
     const [leftSaved, setLeftSaved] = usePersistentState('domaintrail.layout.explorer', true);
     const [dockOpen, setDockOpen] = usePersistentState('domaintrail.layout.inspector', true);
@@ -69,7 +73,8 @@ export function usePanes(): Panes {
     const [dockSaved, setDockSaved] = usePersistentState<Dock>('domaintrail.layout.inspectorDock', 'right');
     // the facilitator's session panel first, as before; without one the dock always shows the inspector
     const [dockContent, setDockContent] = usePersistentState<DockContent>('domaintrail.layout.dockContent', 'alternative');
-    const [inspectorWidth, setInspectorWidth] = usePersistentState('domaintrail.layout.inspectorWidth', 420);
+    // null until the reader drags it: then the width follows the room the other panes leave
+    const [inspectorWidthSaved, setInspectorWidth] = usePersistentState<number | null>('domaintrail.layout.inspectorWidth', null);
     const [inspectorHeight, setInspectorHeight] = usePersistentState('domaintrail.layout.inspectorHeight', 320);
     const [conversationOpen, setConversationOpen] = useState(false);
     const [conversationWidth, setConversationWidth] = usePersistentState('domaintrail.layout.conversationWidth', 380);
@@ -84,6 +89,9 @@ export function usePanes(): Panes {
     useEffect(() => {
         setOverrides((o) => keptOverrides(o, { left: forced.left, dock: forced.dock }));
     }, [forced.left, forced.dock]);
+
+    const leftWidth = LEFT_BAR + (layout.left ? explorerWidth : 0);
+    const inspectorWidth = inspectorWidthSaved ?? autoInspectorWidth(width - leftWidth - (conversationOpen ? conversationWidth : 0));
 
     const setExplorerOpen = (open: boolean): void => {
         if (forced.left) setOverrides((o) => ({ ...o, left: open }));

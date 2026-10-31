@@ -1,6 +1,6 @@
 // `dt session subscribe --agent claude` (ADR 0026, S6): the subscriber of the session server running on the
-// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code, this CLI's `dt fmt`/`dt check`
-// and the workspace's files.
+// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code, `dt fmt`/`dt check` (this CLI,
+// or `session.agent.dt`, for the agent too) and the workspace's files.
 import { lstat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -32,7 +32,10 @@ export interface SubscriberOptions {
     agent: AgentName;
     /** Handle one run, then end. */
     once?: boolean;
-    /** How `dt` is started for `dt fmt` and `dt check` (the CLI passes its own runtime and entry). */
+    /**
+     * How `dt` is started for `dt fmt` and `dt check` after the agent, and by the agent itself (its `dt`): the CLI passes
+     * `session.agent.dt` when configured, else its own runtime and entry.
+     */
     dt: DtCommand;
     log?: (line: string) => void;
     /** The agent's program instead of `claude` on the PATH: for the tests only, not a CLI option. */
@@ -88,7 +91,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     const subscriber: Subscriber = subscribe(
         {
             api,
-            runner: createClaudeCodeRunner({ root, command: options.agentCommand }),
+            runner: createClaudeCodeRunner({ root, command: options.agentCommand, dt: options.dt }),
             tools: createDtTools({ dt: options.dt, root, configPath: options.configPath, log }),
             workspace: {
                 scan: () => scanWorkspace(root),
