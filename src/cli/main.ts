@@ -1,11 +1,11 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { analyze, type Analysis } from '../core/analyze.js';
+import { analyze, isStormingFile, type Analysis } from '../core/analyze.js';
 import { ConfigError, checkTsContexts, loadConfig, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
 import { LINT_HINT, hasCastLintRule } from '../core/lint-hint.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
-import { findDomainFiles, isStormingFile, loadWorkspace } from '../core/files.js';
+import { findDomainFiles, loadWorkspace } from '../core/files.js';
 import { formatStorming } from '../dtes/format.js';
 import { formatDomain } from '../format/format.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';

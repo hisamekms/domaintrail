@@ -36,7 +36,6 @@ import { checkStructure } from './checker/structure.js';
 import { checkTsNames } from './checker/tsnames.js';
 import { checkUnions } from './checker/unions.js';
 import { checkVerified } from './checker/verified.js';
-import { isStormingFile } from './files.js';
 import { DiagnosticSink, compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from './diagnostics.js';
 import { ModelIndex, commandsOf, statesOf } from './model-index.js';
 import { didYouMean, suggestFrom, type Candidate } from './suggest.js';
@@ -45,6 +44,11 @@ export interface SourceFile {
     /** Path used in diagnostics (typically relative to the workspace root). */
     path: string;
     text: string;
+}
+
+/** Whether a source is an Event Storming file (`.dtes`, ADR 0024); every other source is a `.dt` file. */
+export function isStormingFile(file: string): boolean {
+    return file.endsWith('.dtes');
 }
 
 export interface Analysis {

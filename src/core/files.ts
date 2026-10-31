@@ -4,11 +4,6 @@ import type { SourceFile } from './analyze.js';
 import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from './config.js';
 import { GitIgnore } from './gitignore.js';
 
-/** Whether a source is an Event Storming file (`.dtes`, ADR 0024); every other source is a `.dt` file. */
-export function isStormingFile(file: string): boolean {
-    return file.endsWith('.dtes');
-}
-
 /**
  * Which files below a root are the workspace's sources: those matching `sources`, outside the directories never scanned
  * (`IGNORED_DIRS`) and, with `respectGitignore`, not ignored by `.gitignore` (see `GitIgnore`). `dt check`, the other
