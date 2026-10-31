@@ -1,14 +1,14 @@
-// A card of the chat (ADR 0026, amendment): one change unit, updated in place — queued → running → done, a question,
-// declined, failed or cancelled — with the runs that continue it one under the other (the question, the facilitator's
-// answer or note, the result). At the top of each run, a quote of each message it applied with what the reply says of
-// it (✓ ◐ – ?); a click goes to the message, a hover marks it. The facilitator answers a question by choosing, picks
-// another alternative of an assumption, cancels a run, and through the card's menu confirms its result, restores the
-// workspace as it was before it or compares the two.
-import { useRef, useState, type ReactNode } from 'react';
-import { Ban, Bot, CircleHelp, CircleX, Ellipsis, Lightbulb, Play, Quote as QuoteIcon, Reply, RotateCcw, X } from 'lucide-react';
+// A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
+// a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
+// facilitator's answer or note, the result). At the top of each run, a quote of each message it applied (with what the
+// reply says of each, ✓ ◐ – ?, when there are several); a click goes to the message, a hover marks it. The facilitator
+// answers a question by choosing, picks another alternative of an assumption, cancels a run, and through the card's
+// menu confirms its result, restores the workspace as it was before it or compares the two.
+import { Fragment, useRef, useState, type ReactNode } from 'react';
+import { Bot, CircleX, Ellipsis, RotateCcw, X } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
-import { cardRuns, type CardRun, type Quote } from './cards';
+import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { useChat, type Tx } from './chat-context';
 import type { ChangeUnit } from './history';
 import { bodyText } from './mentions';
@@ -34,36 +34,49 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     const last = runs[runs.length - 1];
     const status = statusOf(last.message);
     const cancellable = control && (last.run.state === 'Queued' || last.run.state === 'Running');
+    const queuedBy = nameOf(first.run.queuedBy);
+    // an AI turn: the AI's avatar and name, the runs' numbers and time; the state only when it is not simply done
     return (
         <div className={`run-card status-${status}${compact ? ' compact' : ''}`} data-card={unit.key}>
-            <div className="run-card-head">
-                <Play size={10} className="chat-run-play" aria-hidden />
-                <span className="run-card-number">{first.number === last.number ? `#${first.number}` : `#${first.number}–${last.number}`}</span>
-                <span className="muted">· {nameOf(first.run.queuedBy)}</span>
-                <time className="chat-time" dateTime={first.run.queuedAt}>
-                    {time(first.run.queuedAt)}
-                </time>
-                <span className={`chat-status status-${status === 'done' ? 'idle' : status}`}>
-                    {status === 'running' && last.message.kind === 'running'
-                        ? tx.chat.status.running(elapsed(last.message.since, chat.now))
-                        : tx.chat.marks[status]}
-                    {cancellable && (
-                        <button
-                            className="run-card-cancel"
-                            onClick={() => void chat.actions.cancel(last.run.id)}
-                            aria-label={tx.chat.cancelRun}
-                            data-tooltip={tx.chat.cancelRun}
-                        >
-                            <X size={11} aria-hidden />
-                        </button>
+            <span className="session-avatar chat-agent-avatar" aria-hidden>
+                <Bot size={13} />
+            </span>
+            <div className="run-card-main">
+                <div className="run-card-head">
+                    <span className="chat-who">{tx.chat.agent}</span>
+                    <span className="run-card-meta">
+                        <span className="run-card-number">{first.number === last.number ? `#${first.number}` : `#${first.number}–${last.number}`}</span>
+                        {' · '}
+                        <time dateTime={first.run.queuedAt}>{time(first.run.queuedAt)}</time>
+                        {' · '}
+                        <span data-tooltip={tx.chat.queued(queuedBy)}>{queuedBy}</span>
+                    </span>
+                    {status !== 'done' && (
+                        <span className={`run-card-status status-${status}`}>
+                            {status === 'running' && last.message.kind === 'running'
+                                ? tx.chat.status.running(elapsed(last.message.since, chat.now))
+                                : tx.chat.marks[status]}
+                            {cancellable && (
+                                <button
+                                    className="run-card-cancel"
+                                    onClick={() => void chat.actions.cancel(last.run.id)}
+                                    aria-label={tx.chat.cancelRun}
+                                    data-tooltip={tx.chat.cancelRun}
+                                >
+                                    <X size={11} aria-hidden />
+                                </button>
+                            )}
+                        </span>
                     )}
-                </span>
-                {control && !compact && <CardMenu last={last.run} />}
-                {actions}
+                    <span className="run-card-tools">
+                        {control && !compact && <CardMenu last={last.run} />}
+                        {actions}
+                    </span>
+                </div>
+                {runs.map((r, i) => (
+                    <RunSection key={r.run.id} run={r} display={quoteDisplay(runs, i)} first={i === 0} last={i === runs.length - 1} compact={compact} />
+                ))}
             </div>
-            {runs.map((r, i) => (
-                <RunSection key={r.run.id} run={r} first={i === 0} last={i === runs.length - 1} compact={compact} />
-            ))}
         </div>
     );
 }
@@ -115,53 +128,48 @@ function CardMenu({ last }: { last: RunJson }) {
     );
 }
 
-function RunSection({ run, first, last, compact }: { run: CardRun; first: boolean; last: boolean; compact: boolean }) {
+function RunSection({ run, display, first, last, compact }: { run: CardRun; display: QuoteDisplay; first: boolean; last: boolean; compact: boolean }) {
     const { tx, nameOf, control, session } = useChat();
     const live = session.status === 'live' && session.state.session.state === 'Open';
+    const reply = run.message.kind === 'clarification' ? run.message.reply : undefined;
+    const asking = last && control && live && !compact && reply !== undefined && reply.questions.length > 0;
     return (
-        <div className="run-section">
+        <div className={`run-section${first ? '' : ' chained'}`}>
+            {/* a run that continues the card: its number and time, quietly */}
             {!first && (
-                <div className="run-section-divider">
-                    <Play size={9} className="chat-run-play" aria-hidden /> #{run.number}
+                <div className="run-section-number">
+                    #{run.number} · <time dateTime={run.run.queuedAt}>{time(run.run.queuedAt)}</time>
                 </div>
             )}
             {run.answer && <AnswerLine run={run} />}
             {run.note && (
-                <div className="run-note">
-                    <Reply size={13} aria-label={tx.chat.note} />
-                    <span className="chat-text">{run.note}</span>
-                    <span className="muted small">{nameOf(run.run.queuedBy)}</span>
-                </div>
+                <p className="run-line">
+                    ↳ {tx.chat.note} {nameOf(run.run.queuedBy)}: <span className="run-line-text">{run.note}</span>
+                </p>
             )}
-            <ul className="run-quotes">
-                {run.quotes.map((q) => (
-                    <QuoteLine key={q.request.request} quote={q} />
-                ))}
-            </ul>
-            <div className="run-agent">
-                <span className="session-avatar chat-agent-avatar" aria-hidden>
-                    <Bot size={13} />
-                </span>
-                <div className="run-agent-body">
-                    <AgentBody message={run.message} />
-                    {last &&
-                        control &&
-                        live &&
-                        !compact &&
-                        run.message.kind === 'clarification' &&
-                        run.message.reply &&
-                        run.message.reply.questions.length > 0 && <AnswerForm run={run.run} reply={run.message.reply} />}
-                    {run.message.kind === 'completed' && run.message.reply && run.message.reply.assumptions.length > 0 && (
-                        <Assumptions run={run.run} reply={run.message.reply} offer={last && control && live && !compact} />
-                    )}
-                </div>
+            {display.quotes && (
+                <ul className="run-quotes">
+                    {run.quotes.map((q) => (
+                        <QuoteLine key={q.request.request} quote={q} detailed={display.perRequest} />
+                    ))}
+                </ul>
+            )}
+            <div className="run-agent-body">
+                <AgentBody message={run.message} asking={asking} />
+                {asking && reply && <AnswerForm run={run.run} reply={reply} />}
+                {run.message.kind === 'completed' && run.message.reply && run.message.reply.assumptions.length > 0 && (
+                    <Assumptions run={run.run} reply={run.message.reply} offer={last && control && live && !compact} />
+                )}
             </div>
         </div>
     );
 }
 
-/** A message the run applied: its author and the head of its body, with what the reply says of it. */
-function QuoteLine({ quote }: { quote: Quote }) {
+/**
+ * A message the run applied, on one muted line (`↳ name: the head of its body`); with several messages, what the
+ * reply says of each too (its mark and note). A click goes to the message, a hover marks it.
+ */
+function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
     const { tx, nameOf, hovered, hover, jump, onNavigate } = useChat();
     const r = quote.request;
     const head = oneLine(bodyText(r.body, r.targets.length));
@@ -172,16 +180,15 @@ function QuoteLine({ quote }: { quote: Quote }) {
             onMouseLeave={() => hover(undefined)}
         >
             <button className="run-quote-main" onClick={() => jump(`message:${r.request}`)} data-tooltip={tx.chat.quoteHint}>
-                <QuoteIcon size={11} className="run-quote-icon" aria-hidden />
-                <span className="run-quote-who">{nameOf(r.author)}</span>
+                <span className="run-quote-who">↳ {nameOf(r.author)}:</span>
                 <span className="run-quote-head">{head}</span>
             </button>
-            {quote.progress && (
+            {detailed && quote.progress && (
                 <span className="reply-mark" role="img" aria-label={tx.chat.reply.status[quote.progress]} data-tooltip={tx.chat.reply.status[quote.progress]}>
                     {PROGRESS_MARK[quote.progress]}
                 </span>
             )}
-            {quote.note && (
+            {detailed && quote.note && (
                 <span className="run-quote-note">
                     <ReplyText text={quote.note} onNavigate={onNavigate} />
                 </span>
@@ -190,27 +197,24 @@ function QuoteLine({ quote }: { quote: Quote }) {
     );
 }
 
-/** The facilitator's answer frozen into a run: each question with what was chosen and written. */
+/** The facilitator's answer frozen into a run, on one muted line: what was chosen and written (the questions in the tooltip). */
 function AnswerLine({ run }: { run: CardRun }) {
     const { tx, nameOf } = useChat();
     const answers = run.answer?.answers ?? [];
+    const said = (a: (typeof answers)[number]): string => [...a.chosen.map((o) => o.label), ...(a.freeText ? [a.freeText] : [])].join(' / ');
     return (
-        <div className="run-note run-answer">
-            <Reply size={13} aria-label={tx.chat.answered} />
-            <span className="chat-text">
-                {answers.map((a, i) => (
-                    <span key={i} className="run-answer-line">
-                        <span className="muted">{a.text}</span> → {[...a.chosen.map((o) => o.label), ...(a.freeText ? [a.freeText] : [])].join(' / ')}
-                    </span>
-                ))}
-            </span>
-            <span className="muted small">{nameOf(run.run.queuedBy)}</span>
-        </div>
+        <p className="run-line run-answer" data-tooltip={answers.map((a) => `${a.text} → ${said(a)}`).join('\n')}>
+            ↳ {tx.chat.answered} {nameOf(run.run.queuedBy)}: <span className="run-line-text">{answers.map(said).join(tx.chat.listSeparator)}</span>
+        </p>
     );
 }
 
-/** What the agent says of a run, as the chat said it (the reply's per-request lines are the quotes above). */
-function AgentBody({ message: m }: { message: AgentMessage }) {
+/**
+ * What the agent says of a run, as the chat said it, then the files it changed, small; nothing when none changed (the
+ * reply's per-request lines are the quotes above). A question it asks has the one amber mark: a bar beside it — on its
+ * summary, unless the questions themselves are offered below (`asking`).
+ */
+function AgentBody({ message: m, asking }: { message: AgentMessage; asking: boolean }) {
     const { tx, nameOf, onNavigate, now } = useChat();
     const says = tx.chat.agentSays;
     switch (m.kind) {
@@ -225,40 +229,30 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
             );
         case 'clarification':
             return m.reply ? (
-                <>
-                    {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
-                    <p className="chat-text reply-summary">
-                        <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    </p>
-                </>
+                <p className={`chat-text reply-summary${asking ? '' : ' run-question'}`}>
+                    <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
+                    <ReplyFacts files={m.files} changed={m.files !== undefined && m.files > 0} tx={tx} />
+                </p>
             ) : (
-                <div className="chat-with-icon">
-                    <CircleHelp size={16} className="chat-icon" aria-label={says.clarification} />
-                    <p className="chat-question">{m.question}</p>
-                </div>
+                <p className="chat-text run-question" aria-label={says.clarification}>
+                    {m.question}
+                </p>
             );
         case 'completed':
             return m.reply ? (
-                <>
+                <p className="chat-text reply-summary">
+                    <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
                     <ReplyFacts files={m.files} changed={m.changed} tx={tx} />
-                    <p className="chat-text reply-summary">
-                        <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    </p>
-                </>
+                </p>
             ) : (
                 <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
             );
         case 'declined':
             return (
-                <>
-                    {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
-                    <div className="chat-with-icon">
-                        <Ban size={14} className="chat-icon" aria-label={tx.chat.reply.declined} />
-                        <p className="chat-text">
-                            <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                        </p>
-                    </div>
-                </>
+                <p className="chat-text" aria-label={tx.chat.reply.declined}>
+                    <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
+                    <ReplyFacts files={m.files} changed={m.files !== undefined && m.files > 0} tx={tx} />
+                </p>
             );
         case 'failed':
             return (
@@ -301,12 +295,9 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
                     const chosen = choices[q.id]?.options ?? [];
                     return (
                         <li key={q.id} className="reply-question">
-                            <div className="chat-with-icon">
-                                <CircleHelp size={16} className="chat-icon" aria-hidden />
-                                <p className="chat-question">
-                                    <ReplyText text={q.text} onNavigate={onNavigate} />
-                                </p>
-                            </div>
+                            <p className="chat-text run-question">
+                                <ReplyText text={q.text} onNavigate={onNavigate} />
+                            </p>
                             <ul className="reply-options" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
                                 {q.options.map((o) => (
                                     <li key={o.id}>
@@ -361,40 +352,45 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
     );
 }
 
-/** The assumptions of a reply with their alternatives; the facilitator picks one to run the requests again with it. */
+/**
+ * The assumptions of a reply as text — 「前提: …」 and 「別案: A / B」 —; the facilitator picks an alternative (a link) to
+ * run the requests again with it.
+ */
 function Assumptions({ run, reply, offer }: { run: RunJson; reply: ReplyView; offer: boolean }) {
     const { tx, actions, onNavigate } = useChat();
+    const r = tx.chat.reply;
     return (
         <ul className="reply-assumptions">
             {reply.assumptions.map((a, i) => (
                 <li key={i} className="reply-assumption">
-                    <Lightbulb size={13} className="reply-icon" aria-label={tx.chat.reply.assumption} />
-                    <span className="reply-line">
-                        <span className="reply-text">
-                            <ReplyText text={a.text} onNavigate={onNavigate} />
-                        </span>
-                        {a.alternatives.length > 0 && (
-                            <span className="reply-alternatives" aria-label={tx.chat.reply.alternatives}>
-                                {a.alternatives.map((alt) =>
-                                    offer ? (
+                    <span className="reply-text">
+                        <span className="reply-label">{r.assumption}: </span>
+                        <ReplyText text={a.text} onNavigate={onNavigate} />
+                    </span>
+                    {a.alternatives.length > 0 && (
+                        <span className="reply-alternatives">
+                            <span className="reply-label">{r.alternatives}: </span>
+                            {a.alternatives.map((alt, j) => (
+                                <Fragment key={alt.id}>
+                                    {j > 0 && ' / '}
+                                    {offer ? (
                                         <button
-                                            key={alt.id}
                                             className="reply-alternative pickable"
                                             disabled={actions.busy}
                                             data-tooltip={tx.chat.pickAlternative}
                                             onClick={() => void actions.requeue(run, tx.chat.alternativeNote(a.text, alt.label))}
                                         >
-                                            <RotateCcw size={10} aria-hidden /> <ReplyText text={alt.label} onNavigate={onNavigate} />
+                                            <ReplyText text={alt.label} onNavigate={onNavigate} />
                                         </button>
                                     ) : (
-                                        <span key={alt.id} className="reply-alternative">
+                                        <span className="reply-alternative">
                                             <ReplyText text={alt.label} onNavigate={onNavigate} />
                                         </span>
-                                    ),
-                                )}
-                            </span>
-                        )}
-                    </span>
+                                    )}
+                                </Fragment>
+                            ))}
+                        </span>
+                    )}
                 </li>
             ))}
         </ul>

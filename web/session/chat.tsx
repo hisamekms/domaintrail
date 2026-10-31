@@ -40,7 +40,7 @@ import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { ReplyText } from './reply';
 import { useRevisionTools } from './revisions';
 import { latestRevision } from './state';
-import { agentStatus, elapsed, participantNames, streamItems, targetText, type AgentStatus, type StreamItem } from './stream';
+import { agentStatus, elapsed, isFacilitator, participantNames, speakerName, streamItems, targetText, type AgentStatus, type StreamItem } from './stream';
 import { dismiss, NO_DISMISSALS, suggestions, targetsToSend, type Dismissals } from './suggestions';
 import { targetKey, type ModelTarget, type TargetDraft } from './targets';
 import { continued, isMac } from './views';
@@ -502,13 +502,14 @@ const MARK_GLYPH: Record<MarkState, string> = {
 };
 
 /**
- * A message of the stream: who sent it, its targets and text; at its right end, the mark of its latest run (`✓ #3`,
+ * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓ #3`,
  * a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump } = useChat();
     const author = nameOf(r.author);
     const mine = r.author === session.me.participant.id;
+    const facilitator = isFacilitator(session.state, r.author);
     const statuses = session.targets?.statuses[r.id];
     const mark = marks.get(r.id);
     const classification = classifications?.[r.id];
@@ -574,7 +575,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             )}
             <Bubble
                 avatar={<Avatar id={r.author} name={author} />}
-                who={author}
+                who={speakerName(r.author, session.me.participant.id, nameOf, tx.chat.you)}
+                badge={facilitator && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
                 at={r.sentAt}
                 continues={continues}
                 className={`chat-bubble-request${mine ? ' mine' : ''}`}

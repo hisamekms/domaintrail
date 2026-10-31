@@ -1788,10 +1788,10 @@ select,
     height: 1rem;
     padding: 0 4px;
     border-radius: 8px;
-    background: var(--accent);
-    color: #fff;
+    background: var(--neutral-tint);
+    color: var(--text-soft);
     font-size: 0.625rem;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1rem;
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -3579,15 +3579,17 @@ del.was.block {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 4px 10px 10px;
+    padding: 4px 16px 16px;
 }
 .chat-items {
     list-style: none;
     margin: 0;
     padding: 0;
 }
+/* the stream is separated by space: 1.25rem between turns, 0.5rem between messages of one speaker (.continued) and
+   0.375rem inside a message; no rules nor boxes */
 .chat-item {
-    margin-top: 8px;
+    margin-top: 1.25rem;
 }
 .chat-system {
     display: flex;
@@ -3595,26 +3597,6 @@ del.was.block {
     gap: 6px;
     color: var(--muted);
     font-size: 0.75rem;
-}
-.chat-system::before,
-.chat-system::after {
-    content: '';
-    flex: 1;
-    min-width: 12px;
-    border-top: 1px solid var(--border);
-    align-self: center;
-}
-.chat-system-text {
-    text-align: center;
-}
-.chat-run-tag {
-    padding: 0 5px;
-    border-radius: 4px;
-    background: var(--neutral-tint);
-    color: var(--muted);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    white-space: nowrap;
 }
 .chat-time {
     color: var(--muted);
@@ -3627,8 +3609,7 @@ del.was.block {
 .chat-message {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    margin-top: 6px;
+    gap: 10px;
 }
 .chat-message > .session-avatar {
     margin-top: 2px;
@@ -3647,69 +3628,34 @@ del.was.block {
     font-weight: 600;
 }
 .chat-role {
-    color: var(--accent);
+    color: var(--muted);
     font-size: 0.6875rem;
-    font-weight: 600;
 }
-.chat-mine {
-    flex: none;
-    padding: 0 5px;
-    border-radius: 4px;
-    background: var(--violet-tint);
-    color: var(--accent);
-    font-size: 0.6875rem;
-    font-weight: 600;
-}
+/* a message's body: plain text under the name, no box */
 .chat-bubble {
-    margin-top: 2px;
-    padding: 6px 9px;
-    border-radius: 2px 10px 10px 10px;
-    background: var(--bg);
-    border: 1px solid var(--border);
+    margin-top: 0.375rem;
 }
-.chat-bubble-request.mine .chat-bubble {
-    border-left: 3px solid var(--accent);
-}
-.chat-bubble-facilitator .chat-bubble {
-    background: var(--violet-wash);
-    border-color: var(--violet-border);
-}
-.chat-bubble-agent .chat-bubble {
-    background: var(--panel);
-}
-.chat-bubble-agent.agent-clarification .chat-bubble {
-    background: var(--warning-wash);
-    border-color: var(--warning);
-}
-.chat-bubble-agent.agent-failed .chat-bubble {
-    background: var(--error-wash);
-    border-color: var(--error);
+.chat-message.continued .chat-bubble {
+    margin-top: 0;
 }
 .chat-agent-avatar {
     background: var(--accent);
 }
-.chat-label {
-    display: block;
+/* a sent message's targets: one line of links above its body (`→ 注文、請求書`) */
+.chat-targets {
+    margin: 0 0 2px;
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    word-break: break-word;
 }
 .chat-target {
-    display: inline-block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: bottom;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: var(--neutral-tint);
-    color: var(--text-soft);
-    font-size: 0.75rem;
-    font-weight: 600;
+    color: var(--muted);
 }
 .pane a.chat-target {
     color: var(--accent);
     text-decoration: none;
+    cursor: pointer;
 }
 .pane a.chat-target:hover {
     text-decoration: underline;
@@ -3719,10 +3665,10 @@ del.was.block {
     color: var(--muted);
 }
 .chat-text {
-    margin: 2px 0 0;
+    margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: 1.45;
+    line-height: 1.6;
 }
 .chat-text.clamped {
     display: -webkit-box;
@@ -3734,13 +3680,10 @@ del.was.block {
 .chat-more {
     font-size: 0.75rem;
 }
-.chat-question {
-    margin: 4px 0 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    white-space: pre-wrap;
-    word-break: break-word;
-    line-height: 1.45;
+/* the AI's question: the one amber mark, a bar beside it */
+.run-question {
+    padding-left: 8px;
+    border-left: 2px solid var(--warning);
 }
 .chat-pulse {
     display: inline-block;
@@ -3748,7 +3691,7 @@ del.was.block {
     height: 7px;
     margin-right: 6px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--muted);
     vertical-align: middle;
     animation: chat-blink 1.2s ease-in-out infinite;
 }
@@ -3825,28 +3768,22 @@ del.was.block {
     padding: 4px 6px;
     font-size: 0.75rem;
 }
-/* a mention in a sent body: a link to its target while it is in the sources */
-.chat-mention {
-    font-weight: 600;
-}
-.pane a.chat-mention {
+/* a mention in a sent body, and an element the AI's reply names: a link to it (violet, a thin underline), never bold */
+.pane a.chat-mention,
+.pane a.reply-element {
     color: var(--accent);
-    text-decoration: none;
-}
-.pane a.chat-mention:hover {
     text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    cursor: pointer;
+}
+.pane a.chat-mention:hover,
+.pane a.reply-element:hover {
+    text-decoration-color: currentColor;
 }
 .chat-mention.stale {
     color: var(--muted);
-}
-.chat-targets {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    max-width: 100%;
-}
-.chat-targets > .chat-target {
-    min-width: 0;
 }
 .chat-chips {
     display: flex;
@@ -3866,9 +3803,8 @@ del.was.block {
     max-width: 100%;
     min-width: 0;
     padding: 0 2px 0 3px;
-    border: 1px solid var(--violet-border);
+    border: 1px solid var(--border);
     border-radius: 10px;
-    background: var(--violet-wash);
     font-size: 0.75rem;
 }
 .chat-chip-number {
@@ -3888,7 +3824,6 @@ del.was.block {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 600;
 }
 .session-chat button.chat-chip-remove {
     flex: none;
@@ -3908,17 +3843,14 @@ del.was.block {
 }
 .chat-chip.suggested {
     border-style: dashed;
-    border-color: var(--accent);
-    background: transparent;
+    border-color: var(--border-strong);
 }
 .chat-chip.suggested .chat-chip-name {
-    font-weight: 500;
     color: var(--text-soft);
 }
 .chat-chip.suggested .chat-chip-number {
     background: transparent;
-    border: 1px dashed var(--accent);
-    color: var(--accent);
+    border: 1px dashed var(--border-strong);
 }
 /* the selection's 💬 on the canvas: next to its bounds, above the shapes */
 .selection-action {
@@ -4100,7 +4032,7 @@ del.was.block {
 
 /* the stream, with less text */
 .chat-item.continued {
-    margin-top: 3px;
+    margin-top: 0.5rem;
 }
 .chat-message.continued {
     margin-top: 0;
@@ -4123,30 +4055,15 @@ del.was.block {
 .chat-with-icon > .chat-text {
     margin: 0;
 }
-.chat-bubble-facilitator .chat-icon {
-    color: var(--accent);
-}
-.chat-bubble-agent.agent-clarification .chat-icon {
-    color: var(--amber-text);
-}
-.chat-bubble-agent.agent-clarification .chat-question {
-    margin: 0;
-}
-.chat-bubble-agent.agent-failed .chat-icon {
+.chat-with-icon.session-error > .chat-icon {
     color: var(--error);
 }
-/* the agent's reply (reply.tsx): measured facts small, then what the AI says, as plain text */
-.chat-bubble-agent.agent-declined .chat-bubble {
-    border-color: var(--grey-border);
-}
-.chat-bubble-agent.agent-declined .chat-icon {
-    color: var(--grey-text);
-}
+/* the agent's reply (reply.tsx): what the AI says, as plain text, then the measured facts, small */
 .reply-facts {
-    margin: 0 0 2px;
-    color: var(--green-text);
+    margin-left: 0.5em;
+    color: var(--muted);
     font-size: 0.6875rem;
-    font-weight: 600;
+    white-space: nowrap;
 }
 .reply-summary {
     margin: 0;
@@ -4155,18 +4072,27 @@ del.was.block {
 .reply-assumptions,
 .reply-questions,
 .reply-options {
-    margin: 4px 0 0;
+    margin: 0.375rem 0 0;
     padding: 0;
     list-style: none;
 }
-.reply-request,
-.reply-assumption {
+.reply-request {
     display: flex;
     align-items: flex-start;
     gap: 6px;
     margin-top: 2px;
     font-size: 0.75rem;
-    line-height: 1.4;
+    line-height: 1.5;
+}
+/* an assumption as text: 「前提: …」 and 「別案: A / B」 */
+.reply-assumption {
+    margin-top: 2px;
+    color: var(--text-soft);
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+.reply-label {
+    color: var(--muted);
 }
 .reply-mark {
     flex: none;
@@ -4175,10 +4101,6 @@ del.was.block {
     font-weight: 700;
     color: var(--muted);
 }
-.reply-request.status-Done .reply-mark {
-    color: var(--green-text);
-}
-.reply-request.status-Partial .reply-mark,
 .reply-request.status-Question .reply-mark {
     color: var(--amber-text);
 }
@@ -4187,7 +4109,6 @@ del.was.block {
     flex: 1;
 }
 .reply-who {
-    font-weight: 600;
     margin-right: 4px;
 }
 .reply-head {
@@ -4203,42 +4124,29 @@ del.was.block {
 .reply-note {
     color: var(--text-soft);
 }
-.reply-icon {
-    flex: none;
-    margin-top: 2px;
-    color: var(--amber-text);
-}
-.reply-refs,
-.reply-alternatives {
+.reply-refs {
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
     margin-top: 2px;
 }
-.reply-ref,
-.reply-alternative {
+.reply-ref {
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: var(--neutral-tint);
-    color: var(--text-soft);
+    color: var(--muted);
     font-size: 0.6875rem;
 }
-.reply-alternative {
-    border: 1px dashed var(--grey-border);
-    background: transparent;
+.reply-alternatives {
+    display: block;
 }
 .reply-question + .reply-question {
-    margin-top: 8px;
+    margin-top: 0.75rem;
 }
-.reply-question > .reply-refs {
-    margin-left: 22px;
-}
+.reply-question > .reply-refs,
 .reply-options {
-    margin-left: 22px;
+    margin-left: 10px;
 }
 .reply-option {
     display: flex;
@@ -4246,7 +4154,7 @@ del.was.block {
     gap: 6px;
     margin-top: 2px;
     font-size: 0.8125rem;
-    line-height: 1.4;
+    line-height: 1.5;
     cursor: default;
 }
 .reply-option input {
@@ -4260,13 +4168,6 @@ del.was.block {
 }
 .reply-other .reply-option-label {
     color: var(--muted);
-}
-.session-run-reply {
-    margin-top: 4px;
-}
-.chat-run-play {
-    vertical-align: -1px;
-    fill: currentColor;
 }
 .session-chat button.chat-dismiss {
     flex: none;
@@ -4446,19 +4347,21 @@ del.was.block {
     align-items: flex-start;
     gap: 6px;
     flex-wrap: wrap;
+    /* room for the subtle background of a paired or chosen message, without moving it */
+    margin: -3px -6px;
+    padding: 3px 6px;
     border-radius: 6px;
 }
 .chat-row > .chat-message {
     flex: 1;
     min-width: 0;
 }
-.chat-row.paired .chat-bubble,
+.chat-row.paired,
 .run-quote.paired {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--hover);
 }
-.chat-row.selected .chat-bubble {
+.chat-row.selected {
     background: var(--violet-tint);
-    border-color: var(--accent);
 }
 .chat-row.talk .chat-bubble {
     opacity: 0.85;
@@ -4483,40 +4386,36 @@ del.was.block {
     top: 0;
 }
 .chat-row .chat-message.continued .chat-message-side {
-    top: 4px;
+    top: 2px;
 }
-.chat-row .chat-bubble-request .chat-bubble {
+/* the side's room: beside the name, or beside a continued message's body */
+.chat-row .chat-bubble-request .chat-message-head,
+.chat-row .chat-bubble-request.continued .chat-bubble {
     margin-right: 84px;
 }
 .chat-message-side:empty {
     display: none;
 }
+/* the applied mark (`✓ #2`): small muted text, a click goes to the card */
 .session-chat button.chat-mark {
-    padding: 0 6px;
-    border: 1px solid var(--border);
-    border-radius: 9px;
-    background: var(--panel);
-    color: var(--text-soft);
+    padding: 0 2px;
+    border: none;
+    background: none;
+    color: var(--muted);
     font-size: 0.6875rem;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
 }
 .session-chat button.chat-mark:hover {
-    border-color: var(--accent);
+    color: var(--text);
+    text-decoration: underline;
 }
-.chat-mark.mark-done {
-    color: var(--added);
-}
-.chat-mark.mark-partial,
-.chat-mark.mark-question,
-.chat-mark.mark-clarification {
+.session-chat button.chat-mark.mark-question,
+.session-chat button.chat-mark.mark-clarification {
     color: var(--amber-text);
 }
-.chat-mark.mark-failed {
+.session-chat button.chat-mark.mark-failed {
     color: var(--error);
-}
-.chat-mark.mark-running {
-    color: var(--accent);
 }
 .chat-apply {
     display: inline-flex;
@@ -4535,19 +4434,10 @@ del.was.block {
 .session-chat .chat-apply-button {
     color: var(--accent);
 }
+/* how a message reads (the facilitator's): small muted text */
 .chat-class {
-    padding: 0 5px;
-    border-radius: 4px;
-    font-size: 0.625rem;
-    font-weight: 600;
-}
-.chat-class.class-request {
-    background: var(--violet-tint);
-    color: var(--accent);
-}
-.chat-class.class-chat {
-    background: var(--neutral-tint);
     color: var(--muted);
+    font-size: 0.625rem;
 }
 .chat-apply-note {
     flex-basis: 100%;
@@ -4630,44 +4520,55 @@ del.was.block {
     overflow-wrap: anywhere;
 }
 
-/* a card: one change unit, its runs one under the other */
+/* a card: one change unit as an AI turn — the AI's avatar and name row, its runs one under the other — no box */
 .run-card {
-    margin-top: 4px;
-    padding: 6px 8px 8px;
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: 6px 10px 10px 6px;
-    background: var(--panel);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
 }
-.run-card.status-clarification {
-    border-left-color: var(--warning);
+.run-card > .session-avatar {
+    margin-top: 2px;
 }
-.run-card.status-failed {
-    border-left-color: var(--error);
-}
-.run-card.status-cancelled,
-.run-card.status-declined {
-    border-left-color: var(--border-strong);
+.run-card-main {
+    flex: 1;
+    min-width: 0;
 }
 .run-card-head {
     display: flex;
-    align-items: center;
+    align-items: baseline;
+    flex-wrap: wrap;
     gap: 6px;
-    font-size: 0.75rem;
 }
-.run-card-number {
-    font-weight: 700;
+.run-card-meta {
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
 }
-.run-card-head .chat-time {
-    margin-right: auto;
+/* the state, only when it is not simply done: muted, amber for a question, red for a failure */
+.run-card-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
-.run-card-head .chat-status.status-done {
-    background: color-mix(in srgb, var(--added) 14%, transparent);
-    color: var(--added);
+.run-card-status.status-clarification {
+    color: var(--amber-text);
 }
-.run-card-head .chat-status.status-failed {
-    background: var(--error-wash);
+.run-card-status.status-failed {
     color: var(--error);
+}
+.run-card-tools {
+    margin-left: auto;
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.run-card-tools:empty {
+    display: none;
 }
 .session-chat button.run-card-cancel {
     display: inline-grid;
@@ -4683,56 +4584,51 @@ del.was.block {
     cursor: pointer;
 }
 .session-chat button.run-card-cancel:hover {
-    background: var(--panel);
+    background: var(--hover);
 }
 .run-card .pane-menu .icon-button {
     width: 22px;
     height: 20px;
 }
-.run-section-divider {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin: 8px 0 2px;
-    padding-top: 6px;
-    border-top: 1px dashed var(--border);
+.run-section.chained {
+    margin-top: 0.75rem;
+}
+.run-section-number {
     color: var(--muted);
     font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
 }
-.run-note {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    margin: 4px 0;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: var(--violet-wash);
-    border: 1px solid var(--violet-border);
+/* the facilitator's note or answer, and the messages a run applied: muted lines like a quote (`↳ name: …`) */
+.run-line {
+    margin: 0.375rem 0 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
-.run-note svg {
-    flex: none;
-    color: var(--accent);
-    align-self: center;
-}
-.run-note .chat-text {
-    flex: 1;
-}
-.run-answer-line {
-    display: block;
+.run-section-number + .run-line {
+    margin-top: 2px;
 }
 .run-quotes {
     list-style: none;
-    margin: 4px 0;
+    margin: 0.375rem 0 0;
     padding: 0;
+}
+.run-section-number + .run-quotes {
+    margin-top: 2px;
 }
 .run-quote {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     gap: 4px;
-    padding: 1px 4px;
+    margin: 0 -4px;
+    padding: 0 4px;
     border-radius: 4px;
+    color: var(--muted);
     font-size: 0.75rem;
+    line-height: 1.5;
 }
 .session-chat button.run-quote-main {
     min-width: 0;
@@ -4747,63 +4643,48 @@ del.was.block {
     text-align: left;
     cursor: pointer;
 }
-.run-quote-icon {
-    flex: none;
-    color: var(--muted);
+.session-chat button.run-quote-main:hover .run-quote-head {
+    text-decoration: underline;
 }
 .run-quote-who {
     flex: none;
-    font-weight: 600;
 }
 .run-quote-head {
     min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    color: var(--text-soft);
 }
-.run-quote.status-Done .reply-mark {
-    color: var(--added);
+.run-quote .reply-mark {
+    font-weight: 400;
 }
-.run-quote.status-Partial .reply-mark,
 .run-quote.status-Question .reply-mark {
     color: var(--amber-text);
 }
 .run-quote-note {
     flex-basis: 100%;
-    padding-left: 15px;
-    color: var(--muted);
-}
-.run-agent {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    margin-top: 4px;
-}
-.run-agent > .session-avatar {
-    flex: none;
-    width: 1.25rem;
-    height: 1.25rem;
+    padding-left: 1em;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 .run-agent-body {
-    flex: 1;
-    min-width: 0;
+    margin-top: 0.375rem;
 }
-.run-card.status-clarification .run-agent-body .chat-question {
-    color: var(--amber-text);
+.run-section-number + .run-agent-body {
+    margin-top: 2px;
 }
 .run-answer-form {
-    margin-top: 6px;
-    padding: 6px 8px;
-    border-radius: 6px;
-    background: var(--warning-wash);
-    border: 1px solid var(--warning);
+    margin-top: 0.375rem;
 }
 .run-answer-form .reply-other {
     align-items: center;
 }
+.run-answer-form .reply-other .reply-option-label {
+    flex: none;
+}
 .run-answer-text {
     flex: 1;
+    width: auto;
     min-width: 0;
     padding: 2px 6px;
     font: inherit;
@@ -4812,22 +4693,30 @@ del.was.block {
 .run-answer-actions {
     display: flex;
     justify-content: flex-end;
-    margin-top: 6px;
+    margin-top: 0.375rem;
 }
+/* an alternative the facilitator can pick: a link */
 .session-chat button.reply-alternative.pickable {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border: 1px solid var(--accent);
+    display: inline;
+    padding: 0;
+    border: none;
+    background: none;
     color: var(--accent);
-    background: var(--panel);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    text-align: left;
     cursor: pointer;
 }
 .session-chat button.reply-alternative.pickable:hover {
-    background: var(--violet-tint);
+    text-decoration-color: currentColor;
+}
+.session-chat button.reply-alternative.pickable:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 .run-card.compact {
-    border-left-width: 2px;
     font-size: 0.75rem;
 }
 .chat-unit-body .run-card {

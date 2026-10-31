@@ -585,6 +585,9 @@ const ja = {
             agent: 'AI',
             note: '補足',
             facilitator: 'ファシリテーター',
+            facilitatorShort: 'ファシリ',
+            you: 'あなた',
+            listSeparator: '、',
             agentSays: {
                 queued: '順番を待っています。',
                 running: (time: string) => `作業中です… ${time}`,
@@ -595,7 +598,7 @@ const ja = {
                 cancelled: (name: string) => `${name} が取り消しました。`,
             },
             reply: {
-                applied: (files: number | undefined) => `反映しました${files === undefined ? '' : `（${files} ファイル）`}`,
+                applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
                 unchanged: '変更なし',
                 appliedHint: '変わったファイルの数は、実行の前後のリビジョンから数えたものです',
                 declined: '辞退しました',
@@ -1186,6 +1189,9 @@ const en: Messages = {
             agent: 'AI',
             note: 'Note',
             facilitator: 'Facilitator',
+            facilitatorShort: 'facilitator',
+            you: 'You',
+            listSeparator: ', ',
             agentSays: {
                 queued: 'Waiting for my turn.',
                 running: (time) => `Working on it… ${time}`,
@@ -1196,7 +1202,7 @@ const en: Messages = {
                 cancelled: (name) => `Cancelled by ${name}.`,
             },
             reply: {
-                applied: (files) => `Applied${files === undefined ? '' : ` (${files} ${files === 1 ? 'file' : 'files'})`}`,
+                applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),
                 unchanged: 'No changes',
                 appliedHint: 'The files changed are counted from the revisions before and after the run',
                 declined: 'Declined',

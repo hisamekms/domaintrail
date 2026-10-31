@@ -49,9 +49,16 @@ describe('reply text with element references', () => {
         if (order?.kind !== 'ref' || returned?.kind !== 'ref' || gone?.kind !== 'ref' || goneEs?.kind !== 'ref') throw new Error('not references');
         expect(referenceText(order, naming('label'))).toEqual({ text: '注文', resolved: true });
         expect(referenceText(order, naming('name'))).toEqual({ text: 'Order', resolved: true });
-        expect(referenceText(returned, naming('name'))).toEqual({ text: 'Returns / ReturnRequested', resolved: true });
+        // its own name shown; what it is in only in the path (the tooltip)
+        expect(referenceText(returned, naming('name'))).toEqual({ text: 'ReturnRequested', resolved: true, path: 'Returns / ReturnRequested' });
         expect(referenceText(gone, naming('label'))).toEqual({ text: 'Sales.Gone', resolved: false });
         expect(referenceText(goneEs, naming('label'))).toEqual({ text: 'Returns/Gone', resolved: false });
         expect(referenceText(order, undefined)).toEqual({ text: 'Sales.Order', resolved: false });
+        const [draft] = refs('@{Sales.Order#Draft}');
+        const [confirm] = refs('@{Sales.Order:confirm}');
+        if (draft?.kind !== 'ref' || confirm?.kind !== 'ref') throw new Error('not references');
+        expect(referenceText(draft, naming('label'))).toEqual({ text: '下書き', resolved: true, path: '注文.下書き' });
+        expect(referenceText(confirm, naming('name'))).toEqual({ text: 'confirm', resolved: true, path: 'Order.confirm' });
+        expect(referenceText(draft, naming('both'))).toMatchObject({ text: '下書き (Draft)', resolved: true });
     });
 });

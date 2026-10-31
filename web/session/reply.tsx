@@ -1,10 +1,9 @@
 // The agent's reply as the chat and the facilitator's panel show it (ADR 0026, appendix "Structured replies"): the
-// measured facts first and small (the files the run changed), then what the AI says — its summary, a line per request
+// measured facts small after what the AI says (the files the run changed), and what the AI says — its summary, a line per request
 // with its status, the assumptions it made with their alternatives, its questions with their options — as plain
 // text, never markup; element references in it (`references.ts`) are named in the display setting and link to the
 // element. Nothing here can be chosen yet: the options are shown as they will be offered, disabled.
 import { Fragment } from 'react';
-import { CircleHelp, Lightbulb } from 'lucide-react';
 import type { Messages } from '../i18n';
 import { bodyText } from './mentions';
 import { useTargetNaming } from './naming';
@@ -15,7 +14,10 @@ import type { ModelTarget } from './targets';
 type Tx = Messages['session'];
 type Navigate = (target: ModelTarget) => void;
 
-/** Text of the reply: its element references as links named in the display setting, unresolved ones as their identifier. */
+/**
+ * Text of the reply: its element references as links by their own name in the display setting (the whole path in the
+ * tooltip), unresolved ones as their identifier.
+ */
 export function ReplyText({ text, onNavigate }: { text: string; onNavigate: Navigate }) {
     const naming = useTargetNaming();
     return (
@@ -24,7 +26,7 @@ export function ReplyText({ text, onNavigate }: { text: string; onNavigate: Navi
                 if (seg.kind === 'text') return <Fragment key={i}>{seg.text}</Fragment>;
                 const shown = referenceText(seg, naming);
                 return shown.resolved ? (
-                    <a key={i} className="chat-mention reply-element" onClick={() => onNavigate(seg.target)}>
+                    <a key={i} className="reply-element" onClick={() => onNavigate(seg.target)} {...(shown.path && { 'data-tooltip': shown.path })}>
                         {shown.text}
                     </a>
                 ) : (
@@ -46,13 +48,14 @@ function head(r: ReplyRequest, max = 48): string {
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-/** The measured facts of a run: how many files it changed (from its revisions), or none. */
+/** The measured facts of a run, small after what the AI says: how many files it changed (from its revisions); nothing for none. */
 export function ReplyFacts({ files, changed, tx }: { files: number | undefined; changed: boolean; tx: Tx }) {
     const r = tx.chat.reply;
+    if (!changed) return null;
     return (
-        <p className="reply-facts" data-tooltip={r.appliedHint}>
-            {changed ? r.applied(files) : r.unchanged}
-        </p>
+        <span className="reply-facts" data-tooltip={r.appliedHint}>
+            {r.applied(files)}
+        </span>
     );
 }
 
@@ -120,18 +123,22 @@ export function ReplyDetails({
                 <ul className="reply-assumptions">
                     {reply.assumptions.map((a, i) => (
                         <li key={i} className="reply-assumption">
-                            <Lightbulb size={13} className="reply-icon" aria-label={r.assumption} />
                             <span className="reply-line">
                                 <span className="reply-text">
+                                    <span className="reply-label">{r.assumption}: </span>
                                     <ReplyText text={a.text} onNavigate={onNavigate} />
                                 </span>
                                 <RequestRefs requests={a.requests} nameOf={nameOf} tx={tx} />
                                 {a.alternatives.length > 0 && (
-                                    <span className="reply-alternatives" aria-label={r.alternatives}>
-                                        {a.alternatives.map((alt) => (
-                                            <span key={alt.id} className="reply-alternative">
-                                                <ReplyText text={alt.label} onNavigate={onNavigate} />
-                                            </span>
+                                    <span className="reply-alternatives">
+                                        <span className="reply-label">{r.alternatives}: </span>
+                                        {a.alternatives.map((alt, j) => (
+                                            <Fragment key={alt.id}>
+                                                {j > 0 && ' / '}
+                                                <span className="reply-alternative">
+                                                    <ReplyText text={alt.label} onNavigate={onNavigate} />
+                                                </span>
+                                            </Fragment>
                                         ))}
                                     </span>
                                 )}
@@ -166,12 +173,9 @@ export function ReplyQuestions({
                 const name = `${scope}:${q.id}`;
                 return (
                     <li key={q.id} className="reply-question">
-                        <div className="chat-with-icon">
-                            <CircleHelp size={16} className="chat-icon" aria-hidden />
-                            <p className="chat-question">
-                                <ReplyText text={q.text} onNavigate={onNavigate} />
-                            </p>
-                        </div>
+                        <p className="chat-text run-question">
+                            <ReplyText text={q.text} onNavigate={onNavigate} />
+                        </p>
                         <RequestRefs requests={q.requests} nameOf={nameOf} tx={tx} />
                         <ul className="reply-options" {...(q.multiple && { 'aria-label': r.multiple })}>
                             {q.options.map((o) => (

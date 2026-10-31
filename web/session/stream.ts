@@ -253,6 +253,13 @@ export function participantNames(state: Pick<SessionStateBody, 'session' | 'faci
     return names;
 }
 
+/** How the chat names a message's author: by the given word (「あなた」) when it is me, else by their name. */
+export const speakerName = (author: string, me: string, nameOf: (id: string) => string, you: string): string => (author === me ? you : nameOf(author));
+
+/** Whether a participant is the facilitator now: the session's facilitator, or who holds the role for it. */
+export const isFacilitator = (state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, id: string): boolean =>
+    id === state.session.facilitator || id === state.facilitatorHolder;
+
 /** A participant in the header's row of avatars. */
 export interface HeaderParticipant {
     readonly id: string;

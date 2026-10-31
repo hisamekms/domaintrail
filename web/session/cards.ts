@@ -52,6 +52,25 @@ export function cardRuns(unit: ChangeUnit, lookup: ReturnType<typeof revisionLoo
     });
 }
 
+/** What a run of a card shows of the messages it applied. */
+export interface QuoteDisplay {
+    /** Their quotes: not when the run before on the card applied the same messages (its quotes say it). */
+    readonly quotes: boolean;
+    /** A line per message with the reply's mark and note: only for several; one message's is what the summary says. */
+    readonly perRequest: boolean;
+}
+
+const sameRequests = (a: CardRun, b: CardRun): boolean =>
+    a.quotes.length === b.quotes.length && a.quotes.every((q, i) => q.request.request === b.quotes[i]?.request.request);
+
+/** What the `i`-th run of a card shows of the messages it applied. */
+export function quoteDisplay(runs: readonly CardRun[], i: number): QuoteDisplay {
+    const run = runs[i];
+    const before = i > 0 ? runs[i - 1] : undefined;
+    if (!run) return { quotes: false, perRequest: false };
+    return { quotes: !before || !sameRequests(before, run), perRequest: run.quotes.length > 1 };
+}
+
 /** What an applied message shows of its latest run. */
 export type MarkState = 'queued' | 'running' | 'clarification' | 'done' | 'partial' | 'skipped' | 'question' | 'declined' | 'failed' | 'cancelled';
 

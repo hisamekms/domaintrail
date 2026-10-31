@@ -9,7 +9,7 @@
 // A token is `@{`, an identifier without whitespace, braces or `@`, and `}`. A request body's mention is `@name[n]`
 // (no braces), so the two never read as each other. `\@{` is a literal `@{` (the backslash is dropped). Pure: no React.
 import type { ModelTarget, NamingContext } from './targets';
-import { targetName } from './targets';
+import { targetName, targetShortName } from './targets';
 
 /** A piece of reply text: text as written, or an element reference (its target and the identifier written). */
 export type ReplySegment = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'ref'; readonly target: ModelTarget; readonly id: string };
@@ -48,9 +48,19 @@ export function parseReplyText(text: string): ReplySegment[] {
     return out;
 }
 
-/** What a reference shows: its name in the display setting when it resolves now, else its identifier (no `es:`). */
-export function referenceText(ref: Extract<ReplySegment, { kind: 'ref' }>, naming: NamingContext | undefined): { text: string; resolved: boolean } {
-    const name = naming && targetName(ref.target, naming);
-    if (name !== undefined) return { text: name, resolved: true };
+/**
+ * What a reference shows: its own name in the display setting when it resolves now (a state or a command without its
+ * aggregate, a storming element without its storming), with its whole name as `path` when that says more; else its
+ * identifier (no `es:`).
+ */
+export function referenceText(
+    ref: Extract<ReplySegment, { kind: 'ref' }>,
+    naming: NamingContext | undefined,
+): { text: string; resolved: boolean; path?: string } {
+    const name = naming && targetShortName(ref.target, naming);
+    if (naming && name !== undefined) {
+        const full = targetName(ref.target, naming);
+        return { text: name, resolved: true, ...(full !== undefined && full !== name && { path: full }) };
+    }
     return { text: ref.target.kind === 'DtesElement' ? `${ref.target.storming}/${ref.target.local}` : ref.id, resolved: false };
 }

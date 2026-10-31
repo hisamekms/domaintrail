@@ -16,11 +16,13 @@ import {
     elapsed,
     filesChanged,
     headerParticipants,
+    isFacilitator,
     oneLine,
     participantNames,
     streamItems,
     agentMessage,
     revisionLookup,
+    speakerName,
     targetsSummary,
     targetText,
 } from '@domaintrail/web/session/stream';
@@ -264,6 +266,15 @@ describe('the participants of the header', () => {
             ['Hana', 'facilitator', false, false, undefined],
         ]);
         expect(participantNames(state, NO_PEERS, me).get('local:facilitator')).toBe('Hana');
+    });
+
+    test("a message's author: 「あなた」 for my own, else their name; the facilitator and its holder are the facilitator", () => {
+        const nameOf = (id: string): string => participantNames(state, NO_PEERS, me).get(id) ?? id;
+        expect(speakerName('dev:a', me.participant.id, nameOf, 'あなた')).toBe('あなた');
+        expect(speakerName('dev:b', me.participant.id, nameOf, 'あなた')).toBe('Bob');
+        expect(isFacilitator(state, 'local:facilitator')).toBe(true);
+        expect(isFacilitator(state, 'dev:host')).toBe(true);
+        expect(isFacilitator(state, 'dev:b')).toBe(false);
     });
 });
 

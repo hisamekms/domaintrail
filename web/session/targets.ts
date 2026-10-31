@@ -199,3 +199,27 @@ export function targetName(t: ModelTarget, ctx: NamingContext): string | undefin
         }
     }
 }
+
+/**
+ * A target's own name in the current display mode, without what it is in: a state's or a command's without its
+ * aggregate, a storming element's without its storming (`targetName` says the whole path). An occurrence keeps its
+ * timeline and step. Undefined where `targetName` is.
+ */
+export function targetShortName(t: ModelTarget, ctx: NamingContext): string | undefined {
+    switch (t.kind) {
+        case 'DtElement': {
+            const r = ctx.model ? resolve(ctx.model, t.element) : undefined;
+            if (!r || r.kind === 'context') return undefined;
+            if (r.kind === 'element') return nameIn(ctx.mode, r.el.name, r.el.label);
+            const own = r.kind === 'state' ? r.state : r.command;
+            return nameIn(ctx.mode, own.name, own.label);
+        }
+        case 'DtesElement': {
+            const view = ctx.stormings.find((s) => s.id === t.storming);
+            const declaration = view && firstDeclarations(view.storming).get(t.local);
+            return declaration ? nameIn(ctx.mode, t.local, declaration.label) : undefined;
+        }
+        default:
+            return targetName(t, ctx);
+    }
+}

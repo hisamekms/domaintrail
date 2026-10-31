@@ -2435,8 +2435,9 @@ Participants see a run only once it is in the stream: there is no queue to watch
 mark of its latest run at its right end (`✓ #3`, `◐`, `–`, `?`, …), for everyone; a click goes to the run's card.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
-failed or cancelled. At its top, a quote of each message it applied with what the reply says of it (✓ done, ◐ partly,
-– not done, ? a question, and a short note); a click goes to the message, and hovering either one marks the other. A
+failed or cancelled. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
+the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
+hovering either one marks the other. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
 card under the one before (question → answer → result); a run of the same messages after a completed one too. The card
 stays where its first run was queued; when it changes out of sight, a pill at the bottom of the stream
@@ -2476,10 +2477,11 @@ base revision as its result.
 **The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
-options (the page always adds "other"). The chat shows the measured facts first and small — `反映しました (2 ファイル)`,
-counted from the revisions before and after the run — then what the AI says, as plain text. The AI names elements by
-identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows them in the name display setting, as
-links to the element. Whether a run succeeded is
+options (the page always adds "other"). The chat shows what the AI says, as plain text, then the measured facts,
+small — `2 ファイル変更`, counted from the revisions before and after the run; nothing when no file changed. The AI names
+elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
+name display setting (a state or a command without its aggregate, a storming element without its storming; the whole
+name in its tooltip), as a link to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
 summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). An answer chosen in the
 card is frozen into the next run as `answerTo` and `answer` (the question and the options as they were shown); another

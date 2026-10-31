@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { answerBody } from '@domaintrail/web/session/actions';
-import { cardRuns, messageMarks, updatedCards } from '@domaintrail/web/session/cards';
+import { cardRuns, messageMarks, quoteDisplay, updatedCards } from '@domaintrail/web/session/cards';
 import { changedPaths, changeUnits, shownUnits } from '@domaintrail/web/session/history';
 import { latestAt, revisionLookup, streamItems, unreadCount } from '@domaintrail/web/session/stream';
 
@@ -204,6 +204,16 @@ describe('the cards of the chat', () => {
             { request: frozen(qb), progress: 'Question', note: 'Which total?' },
         ]);
         expect(runs[1]).toMatchObject({ answer, quotes: [{ request: frozen(qa) }, { request: frozen(qb) }] });
+    });
+
+    test('a run quotes its messages unless the run before applied the same; a line per message only for several', () => {
+        const [unit] = changeUnits({ runs: [asked, answered], revisions });
+        const runs = cardRuns(unit, revisionLookup({ revisions, runs: [asked, answered] }));
+        expect(quoteDisplay(runs, 0)).toEqual({ quotes: true, perRequest: true });
+        expect(quoteDisplay(runs, 1)).toEqual({ quotes: false, perRequest: true });
+        const one = run('run3', 9, [qc], { state: 'Failed', baseRevision: 'r0', startedAt: at(9), reason: 'AgentError', finishedAt: at(10) });
+        const [single] = changeUnits({ runs: [one], revisions });
+        expect(quoteDisplay(cardRuns(single, revisionLookup({ revisions, runs: [one] })), 0)).toEqual({ quotes: true, perRequest: false });
     });
 
     test("an applied message shows its latest run's state and number, and the card it is on; a message never applied none", () => {
