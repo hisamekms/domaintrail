@@ -1714,7 +1714,7 @@ select,
     background: var(--panel);
     font-size: 14px;
 }
-/* A side pane slides between its width and a 28px rail (RAIL_WIDTH in App.tsx) with the button that opens it. */
+/* A side pane slides between its width and a 28px rail (RAIL_WIDTH in app/shell.tsx) with the button that opens it. */
 .side {
     flex: none;
     position: relative;
@@ -2308,7 +2308,7 @@ select,
 }
 .bottom-bar {
     flex: none;
-    height: 32px; /* with the pane's border, BOTTOM_BAR_HEIGHT in App.tsx */
+    height: 32px; /* with the pane's border, BOTTOM_BAR_HEIGHT in app/shell.tsx */
     display: flex;
     align-items: center;
     gap: 2px;
