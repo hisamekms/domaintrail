@@ -44,6 +44,7 @@ export function Legend({
                           { kind: 'esCausal', text: words.esCausal },
                           { kind: 'esSequence', text: words.esSequence },
                           { kind: 'esRelated', text: words.esRelated },
+                          { kind: 'esHotspot', text: words.esHotspot },
                       ]
                     : [{ kind: 'transition', text: words.transition }];
     return (
@@ -60,7 +61,7 @@ export function Legend({
                         <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
                             <path d="M4,7 L42,7" className="de-line" />
                             {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
-                            <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />
+                            {r.kind !== 'esHotspot' && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
                         </svg>
                         <span>{r.text}</span>
                     </div>

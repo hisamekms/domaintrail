@@ -218,7 +218,9 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   edge joins consecutive steps of the trie (to and from a group node, never inside it), so groups have no inner order
   (R04).
 - **Integrated canvas**: the whole trie, the `e:` nodes of events in no timeline (R15), and the other elements of the
-  level with their semantic edges.
+  level with their semantic edges. *Revised:* `renderToGraph` draws it with one note per event (`e:<eventId>`) and no
+  group frames, and the time order as one edge per pair of consecutive events naming the timelines it is in (none
+  when it is in all of them); spec §8.5.
 - **Timeline filter** (§9.3): the selected timeline's trie path, which is a chain, plus each 1-hop path
   `Event → Policy → Command → Event` whose two events occur in that timeline, with the actors, read models and target
   of those commands. There are no multi-hop paths and nothing outside the timeline (R16).
@@ -234,7 +236,8 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
 - `renderToGraph(render, storming)` (T7, `src/dtes/view/graph.ts`) converts a `RenderGraph` into the existing `Graph`
   IR. Its node kinds are `esEvent`, `esCommand`, `esPolicy`, `esActor`, `esExternal`, `esAggregate`, `esReadModel`,
   `esHotspot` and `esGroup` (a container whose children are its event nodes). Its edge kinds are `esCausal` (solid,
-  directed), `esRelated` (dotted) and `esSequence` (dashed). These kinds are added to `NodeKind`/`EdgeKind` in
+  directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed). Notes
+  are squares whose label wraps. These kinds are added to `NodeKind`/`EdgeKind` in
   `src/graph/ir.ts`. The label is the element's label, its ID in name mode, and both in both mode. The stereotype is
   the kind. The `.dt` `ref` and the occurrences with their timelines go to the inspector (§6, §8.4).
 - Layout uses the existing `ElkLayoutEngine`, with direction `RIGHT` for graph IDs with the prefix `storming`
@@ -242,7 +245,7 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   layout**: the render graph's nodes and edges are sorted (`RenderGraph` is canonical), ELK runs with the existing
   model-order options and fixed seed, and the same storming, view and engine give the same layout. **Incremental
   layout**: the existing signature cache keeps an unchanged graph's layout. For a changed one, the positions of the
-  nodes paired by `matchRenderNodes` seed ELK's interactive/semi-interactive strategies. Should that not keep the
+  nodes paired by `matchRenderNodes` (and, on the integrated canvas, of the notes with the same ID) seed ELK's interactive/semi-interactive strategies. Should that not keep the
   timeline order (§10.2's first priority), v0.1 ships canonical layout only and records incremental layout as a
   follow-up. Positions are never written to `.dtes`, only to `.domaintrail/layout.json` like every layout.
 - No new drawing library. tldraw shapes in `web/shapes.tsx` get the new kinds. The spec's colours are defaults, with

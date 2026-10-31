@@ -1866,10 +1866,12 @@ A storming is viewed along two independent axes, neither of which changes the `.
   (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
   and a hotspot without `on` is shown on the integrated canvas only.
 
-Timelines that start with the same steps (the same event, or a group of the same events) are drawn sharing those steps,
-until they differ; later common steps are not merged. Sharing is only drawing: it does not make two occurrences the
-same happening. Solid arrows are type-level causal relations (`on`, `issues`, `emits`: possible, not "happened"),
-dotted lines the other relations (`actor`, `reads`, `target`, a hotspot's `on`), dashed arrows the order of a timeline.
+The integrated canvas draws each event once, without group frames: the time order is one dashed arrow per pair of
+consecutive events, naming the timelines it belongs to when not all of them do, and an event that repeats loops back
+to its note. One timeline draws each occurrence of an event, and a group as a frame. Drawing an event once does not
+make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
+relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
+`target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
 `dt view`, the イベントストーミング tab shows one storming at a time, with the timeline and the level picked in its
 toolbar; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.

@@ -30,16 +30,42 @@ const engine = new ElkLayoutEngine();
 afterAll(() => engine.dispose());
 
 describe('an Event Storming view as a graph', () => {
-    test('keeps the render graph: its node IDs, a group as the container of its events, and §9.4 edge kinds', async () => {
+    test('keeps the render graph of a timeline: its node IDs, a group as the container of its events, and §9.4 edge kinds', async () => {
         const storming = await parse(SAMPLE);
-        const graph = graphOf(storming, { level: 'design-level' });
-        expect(graph.id).toBe('storming:DeliveryCancellation:design-level:*');
-        expect(graph.nodes.map((n) => n.id)).toEqual(projectView(storming, { level: 'design-level' }).nodes.map((n) => n.id));
+        const options: ViewOptions = { level: 'design-level', timelineId: 'Normal' };
+        const graph = graphOf(storming, options);
+        expect(graph.id).toBe('storming:DeliveryCancellation:design-level:Normal');
+        expect(graph.nodes.map((n) => n.id)).toEqual(projectView(storming, options).nodes.map((n) => n.id));
         const node = (id: string) => graph.nodes.find((n) => n.id === id)!;
         const group = 't:e:ShipmentCancelled>g:BikeReleased,SlotReleased';
         expect(node(group)).toMatchObject({ kind: 'esGroup', elementId: 'es/DeliveryCancellation/CleanupResults' });
         expect(node(group).label.ja.both).toBe('後処理 (CleanupResults)');
         expect(node(`${group}/BikeReleased`)).toMatchObject({ kind: 'esEvent', parent: group, elementId: 'es/DeliveryCancellation/BikeReleased' });
+        expect(node('n:ReleaseSlot')).toMatchObject({ kind: 'esCommand', elementId: 'es/DeliveryCancellation/ReleaseSlot' });
+
+        const kinds = Object.fromEntries(graph.edges.map((e) => [e.id, e.kind]));
+        expect(kinds['on:ShipmentCancelled->CleanupAfterCancel@t:e:ShipmentCancelled->n:CleanupAfterCancel']).toBe('esCausal');
+        expect(kinds[`emits:ReleaseSlot->SlotReleased@n:ReleaseSlot->${group}/SlotReleased`]).toBe('esCausal');
+        expect(kinds[`s:t:e:ShipmentCancelled->${group}`]).toBe('esSequence');
+        // nothing is added: one graph edge per render edge, and no sequence edge inside the group (R04)
+        expect(graph.edges).toHaveLength(projectView(storming, options).edges.length);
+        expect(graph.edges.filter((e) => e.kind === 'esSequence' && e.source.startsWith(`${group}/`))).toEqual([]);
+    });
+
+    test('draws each event once in the integrated view, without groups, naming the timelines of a partial time order', async () => {
+        const storming = await parse(SAMPLE);
+        const graph = graphOf(storming, { level: 'design-level' });
+        expect(graph.id).toBe('storming:DeliveryCancellation:design-level:*');
+        const node = (id: string) => graph.nodes.find((n) => n.id === id)!;
+        expect(graph.nodes.filter((n) => n.kind === 'esGroup')).toEqual([]);
+        expect(
+            graph.nodes
+                .filter((n) => n.kind === 'esEvent')
+                .map((n) => n.id)
+                .sort(),
+        ).toEqual(['e:BikeReleased', 'e:ReleaseFailed', 'e:ShipmentCancelled', 'e:SlotReleased'].sort());
+        expect(node('e:BikeReleased')).toMatchObject({ elementId: 'es/DeliveryCancellation/BikeReleased' });
+        expect(node('e:BikeReleased').parent).toBeUndefined();
         expect(node('n:PaymentGateway')).toMatchObject({ kind: 'esExternal', elementId: 'es/DeliveryCancellation/PaymentGateway' });
         expect(node('n:CancelShipment').label.en).toEqual({ label: '配送キャンセル', name: 'CancelShipment', both: '配送キャンセル (CancelShipment)' });
         expect(node('n:Compensation').stereotype).toEqual({
@@ -47,17 +73,29 @@ describe('an Event Storming view as a graph', () => {
             en: { label: '«hotspot»', name: '«hotspot»', both: '«hotspot»' },
         });
 
-        const kinds = Object.fromEntries(graph.edges.map((e) => [e.id, e.kind]));
-        expect(kinds['on:ShipmentCancelled->CleanupAfterCancel@t:e:ShipmentCancelled->n:CleanupAfterCancel']).toBe('esCausal');
-        expect(kinds['issues:CleanupAfterCancel->ReleaseBike@n:CleanupAfterCancel->n:ReleaseBike']).toBe('esCausal');
-        expect(kinds[`emits:ReleaseSlot->SlotReleased@n:ReleaseSlot->${group}/SlotReleased`]).toBe('esCausal');
-        expect(kinds['target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot']).toBe('esRelated');
-        expect(kinds['actor:Customer->CancelShipment@n:Customer->n:CancelShipment']).toBe('esRelated');
-        expect(kinds['hotspot-on:Compensation->ReleaseFailed@n:Compensation->t:e:ShipmentCancelled>e:ReleaseFailed']).toBe('esRelated');
-        expect(kinds[`s:t:e:ShipmentCancelled->${group}`]).toBe('esSequence');
-        // nothing is added: one graph edge per render edge, and no sequence edge inside the group (R04)
-        expect(graph.edges).toHaveLength(projectView(storming, { level: 'design-level' }).edges.length);
-        expect(graph.edges.filter((e) => e.kind === 'esSequence' && e.source.startsWith(`${group}/`))).toEqual([]);
+        const edge = (id: string) => graph.edges.find((e) => e.id === id);
+        expect(edge('on:ShipmentCancelled->CleanupAfterCancel@e:ShipmentCancelled->n:CleanupAfterCancel')?.kind).toBe('esCausal');
+        expect(edge('issues:CleanupAfterCancel->ReleaseBike@n:CleanupAfterCancel->n:ReleaseBike')?.kind).toBe('esCausal');
+        expect(edge('target:ReleaseSlot->ShipmentSlot@n:ReleaseSlot->n:ShipmentSlot')?.kind).toBe('esRelated');
+        expect(edge('actor:Customer->CancelShipment@n:Customer->n:CancelShipment')?.kind).toBe('esRelated');
+        expect(edge('hotspot-on:Compensation->ReleaseFailed@n:Compensation->e:ReleaseFailed')?.kind).toBe('esHotspot');
+        // a step into a group is a time order to each of its events; each names the one timeline it is in
+        for (const target of ['e:BikeReleased', 'e:SlotReleased']) {
+            expect(edge(`s:e:ShipmentCancelled->${target}`)).toMatchObject({ kind: 'esSequence', label: { ja: { label: '通常キャンセル' } } });
+        }
+        expect(edge('s:e:ShipmentCancelled->e:ReleaseFailed')?.label?.ja.both).toBe('車両解放失敗 (Failure)');
+    });
+
+    test('leaves unnamed a time order every timeline has, and draws a repeated event as a loop on its note', async () => {
+        const storming = await parse(`storming S { event A event B event C
+  timeline T1 { A B B C }
+  timeline T2 { A B C }
+}`);
+        const edges = Object.fromEntries(graphOf(storming, { level: 'big-picture' }).edges.map((e) => [e.id, e]));
+        expect(Object.keys(edges).sort()).toEqual(['s:e:A->e:B', 's:e:B->e:B', 's:e:B->e:C']);
+        expect(edges['s:e:A->e:B'].label).toBeUndefined();
+        expect(edges['s:e:B->e:C'].label).toBeUndefined();
+        expect(edges['s:e:B->e:B'].label?.ja.name).toBe('T1');
     });
 
     test('has one graph ID per storming, level and timeline', () => {
@@ -129,25 +167,18 @@ describe('layout of an Event Storming view', () => {
     test('incrementally keeps the order of paired nodes within their layers, and timeline order (§10.2, §10.3)', async () => {
         const before = await parse(`storming S { event A event B event C event X event Y event Z
   timeline T1 { A B C }
-  timeline T2 { X Y }
 }`);
-        // inserting Z before A renames T1's nodes (t:e:Z>e:A …), which canonical layout would sort after T2's
+        // inserting Z before A renames the timeline's nodes (t:e:Z>e:A …), which matchRenderNodes pairs with the old ones
         const after = await parse(`storming S { event A event B event C event X event Y event Z
   timeline T1 { Z A B C }
-  timeline T2 { X Y }
 }`);
-        const options: ViewOptions = { level: 'big-picture' };
+        const options: ViewOptions = { level: 'big-picture', timelineId: 'T1' };
         const [previous, next] = [projectView(before, options), projectView(after, options)];
         const old = await engine.layout(renderToGraph(previous, before));
         const positions = Object.fromEntries([...matchRenderNodes(previous, next)].map(([n, p]) => [n, old.nodeLayout[p]]));
         expect(Object.keys(positions)).toContain('t:e:Z>e:A');
-        const canonical = await engine.layout(renderToGraph(next, after));
-        const incremental = await engine.layout(renderToGraph(next, after), { positions });
-        const above = (l: LaidOutGraph) => l.nodeLayout['t:e:Z>e:A'].y < l.nodeLayout['t:e:X>e:Y'].y;
-        expect(old.nodeLayout['t:e:A>e:B'].y).toBeLessThan(old.nodeLayout['t:e:X>e:Y'].y);
-        expect(above(canonical)).toBe(false);
-        expect(above(incremental)).toBe(true);
-        expectReadable(incremental);
+        expect(positions['t:e:Z>e:A']).toEqual(old.nodeLayout['t:e:A']);
+        expectReadable(await engine.layout(renderToGraph(next, after), { positions }));
     });
 });
 

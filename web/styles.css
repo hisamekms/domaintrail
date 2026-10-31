@@ -821,7 +821,7 @@ a.field-origin {
     background: var(--es-external);
     border-style: dashed;
 }
-/* the notes have no body: the label sits in the middle */
+/* the notes are squares with no body: the label wraps and sits in the middle */
 .dn-esEvent .dn-head,
 .dn-esCommand .dn-head,
 .dn-esPolicy .dn-head,
@@ -831,7 +831,12 @@ a.field-origin {
 .dn-esReadModel .dn-head,
 .dn-esHotspot .dn-head {
     border-bottom: none;
-    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 100%;
+    overflow-wrap: anywhere;
 }
 .dn-change-added {
     box-shadow: 0 0 0 3px var(--added);
@@ -996,7 +1001,12 @@ a.field-origin {
 .de-esSequence .de-head {
     fill: var(--es-sequence);
 }
-.de-esRelated .de-line {
+.de-esSequence .de-label {
+    fill: var(--es-sequence);
+    font-weight: 600;
+}
+.de-esRelated .de-line,
+.de-esHotspot .de-line {
     stroke: var(--grey-text);
     stroke-width: 1.1;
     stroke-dasharray: 1.5 3;

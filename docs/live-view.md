@@ -38,9 +38,11 @@ See [ADR 0007](adr/0007-pane-roles.md).
   the storming (表示するストーミング, when there are several), the タイムライン — すべて（統合） for the integrated canvas,
   or one timeline with its one-hop causal paths — and the level: ビッグピクチャー (events, timelines and hotspots only)
   or デザインレベル (also commands, policies, actors, external systems, aggregates and read models). The choices are
-  remembered per browser and never change the `.dtes` file. Timelines that start alike share their first notes, and a
-  group is a frame around its events. Solid arrows are type-level causes (possible, not "happened"), dashed orange
-  arrows the order of a timeline, dotted lines the other relations; the colours of the notes are defaults with no
+  remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
+  frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
+  timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes
+  (possible, not "happened"), dashed orange arrows the order of a timeline, dotted lines the other relations (without
+  an arrowhead for a hotspot's event); the colours of the notes are defaults with no
   meaning (see the legend). A storming whose file stops parsing stays as it last parsed, with a banner.
 
 ## Inspector (right)

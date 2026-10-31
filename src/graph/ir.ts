@@ -31,9 +31,9 @@ export type NodeKind =
 
 /**
  * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming: `esCausal` (a policy's
- * `on`, `issues`, `emits`), `esRelated` (`actor`, `reads`, `target`, a hotspot's `on`) and `esSequence` (timeline order).
+ * `on`, `issues`, `emits`), `esRelated` (`actor`, `reads`, `target`), `esHotspot` (a hotspot's `on`, undirected) and `esSequence` (timeline order).
  */
-export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn' | 'esCausal' | 'esRelated' | 'esSequence';
+export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn' | 'esCausal' | 'esRelated' | 'esHotspot' | 'esSequence';
 
 /** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
 export type DisplayMode = 'label' | 'name' | 'both';

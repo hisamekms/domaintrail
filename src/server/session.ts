@@ -372,6 +372,11 @@ export class ViewSession {
         return this.layout(graph, this.layouts, (cached) => {
             if (!previous) return {};
             const positions: Record<string, Point> = {};
+            // the integrated view's notes are one per element (`renderToGraph`): the same ID is the same note
+            for (const n of graph.nodes) {
+                const at = cached.nodeLayout[n.id];
+                if (at) positions[n.id] = { x: at.x, y: at.y };
+            }
             for (const [next, prev] of matchRenderNodes(previous, render)) {
                 const at = cached.nodeLayout[prev];
                 if (at) positions[next] = { x: at.x, y: at.y };
