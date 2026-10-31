@@ -1,7 +1,7 @@
 // The session's persistence on node:sqlite (ADR 0026): one database per workspace, `.domaintrail/session/session.db`.
 // Aggregates are stored whole as JSON next to the columns the queries and constraints need; the outbox is a table
 // appended in the transaction that saves the aggregates. Every transaction is BEGIN IMMEDIATE, one at a time.
-// Only node:sqlite's DatabaseSync is used (no Bun API), so the same code runs in the CLI on Node and in the tests on Bun.
+// Only node:sqlite's DatabaseSync is used (no Bun API), so the same code runs in the CLI under Node and in the tests under Bun as well.
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite';
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
