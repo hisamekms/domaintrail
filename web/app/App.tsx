@@ -7,6 +7,7 @@ import { I18nProvider, MESSAGES } from '../i18n';
 import { Inspector } from '../inspector';
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { StatesCanvas } from '../states-canvas';
+import { useSessionPage } from '../session/page';
 import { StormingDetails } from '../storming';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
 import { usePanes } from './panes';
@@ -17,7 +18,8 @@ import { useViewSocket } from './useViewSocket';
 
 /** The Live View page: composes the shell with the explorer, the view workspace, the inspector and the bottom pane. */
 export function App() {
-    const { current, connection } = useViewSocket();
+    const socket = useViewSocket();
+    const { current, connection } = socket;
     const model = current?.model ?? null;
     /** What the model is compared with: its graphs give the ghosts of removed elements, its model the inspector's diffs. */
     const base = current?.base ?? null;
@@ -50,6 +52,9 @@ export function App() {
         } else if (inCatalog(r.el.kind)) reveal('catalog', id);
         else openInspector('source');
     };
+
+    // in a session (dt session start) only: the session pane and the others' cursors
+    const session = useSessionPage({ socket, current, workspace, panes, openBest });
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
@@ -105,8 +110,10 @@ export function App() {
                         mode={mode}
                         legendOpen={legendOpen}
                         onLegendToggle={() => setLegendOpen(!legendOpen)}
+                        overlay={session.canvasOverlay}
                     />
                 }
+                sidePanel={session.sidePanel}
                 inspector={
                     <Inspector
                         model={model}

@@ -2788,3 +2788,215 @@ del.was.block {
         animation: none;
     }
 }
+
+/* ---------- the session pane and the others' cursors (dt session start only) ---------- */
+
+.session-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+.session-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.session-body {
+    flex: 1;
+    overflow: auto;
+    padding: 0 12px 16px;
+}
+.session-section h3 {
+    margin: 14px 0 6px;
+}
+.session-panel button:not(.icon-button) {
+    font: inherit;
+    font-size: 13px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--panel);
+}
+.session-panel button.primary {
+    margin-top: 6px;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+.session-panel button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.session-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.session-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.session-list > li {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+.session-list > li:last-child {
+    border-bottom: none;
+}
+.session-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.session-participant {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.session-participant.where-away {
+    opacity: 0.55;
+}
+.session-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.session-avatar {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    object-fit: cover;
+}
+.session-role {
+    font-size: 12px;
+    color: var(--muted);
+}
+.session-role.role-facilitator {
+    color: var(--accent);
+    font-weight: 600;
+}
+.session-target {
+    font-weight: 600;
+    word-break: break-all;
+}
+.session-text {
+    width: 100%;
+    margin-top: 4px;
+    font: inherit;
+    font-size: 13px;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    padding: 4px 6px;
+    resize: vertical;
+}
+.session-body-text {
+    margin: 4px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.session-status {
+    padding: 0 6px;
+    border-radius: 9px;
+    font-size: 12px;
+    background: var(--border);
+}
+.session-status.status-current,
+.session-status.run-state-Completed {
+    background: var(--added);
+    color: #fff;
+}
+.session-status.status-stale,
+.session-status.run-state-Failed {
+    background: var(--error);
+    color: #fff;
+}
+.session-status.status-unknown,
+.session-status.run-state-NeedsClarification {
+    background: var(--warning);
+    color: #fff;
+}
+.session-status.run-state-Running {
+    background: var(--accent);
+    color: #fff;
+}
+.session-request.state-Dismissed {
+    opacity: 0.6;
+}
+.session-facilitator {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-strong);
+}
+.session-run-requests {
+    margin: 4px 0;
+    padding-left: 18px;
+    font-size: 13px;
+}
+.session-table {
+    margin-top: 4px;
+    border-collapse: collapse;
+}
+.session-table caption {
+    text-align: left;
+}
+.session-table th {
+    padding-right: 10px;
+    font-weight: normal;
+    text-align: left;
+    color: var(--muted);
+}
+.session-table tr.worse td {
+    color: var(--error);
+}
+.session-table tr.better td {
+    color: var(--added);
+}
+.session-note {
+    margin: 8px 0;
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: var(--banner-bg);
+    border: 1px solid var(--banner-border);
+}
+.session-error {
+    color: var(--error);
+}
+.side-session .rail .count {
+    margin: 4px 0 0;
+}
+.peer-cursors {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 300;
+}
+.peer-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-start;
+    transition: transform 60ms linear;
+}
+.peer-cursor-name {
+    margin: 12px 0 0 2px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+}

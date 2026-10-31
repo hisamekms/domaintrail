@@ -5,6 +5,10 @@ import type { SemanticEdgeKind, ViewLevel } from '@domaintrail/visualization/dom
 import type { ElementKind } from '@domaintrail/modeling/model/model';
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
+import type { Role } from '@domaintrail/collaboration/protocol';
+import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
+import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import type { Whereabouts } from './session/presence';
 
 /** The user's choice: follow the browser, or force a language. */
 export type LangPreference = 'auto' | Lang;
@@ -14,6 +18,10 @@ export const LANG_KEY = 'domaintrail.lang';
 
 /** Kinds of item shown in the explorer and the inspector. */
 export type ItemKind = ElementKind | 'state' | 'command' | 'context';
+
+type RunState = Collaboration.AgentRun['state'];
+type FailureReason = Collaboration.FailureReason;
+type RevisionOriginKind = Collaboration.RevisionOrigin['kind'];
 
 const ja = {
     added: '追加',
@@ -325,6 +333,92 @@ const ja = {
     triggeredBy: '実行するポリシー',
     reactedToBy: '反応するポリシー',
     labelSources: { term: '用語', type: '型' },
+
+    // the session panel (dt session start)
+    session: {
+        title: 'セッション',
+        open: 'セッションを開く',
+        close: 'セッションを閉じる',
+        showInspector: 'インスペクタに切り替える',
+        closed: 'セッションは終了しました。',
+        signedOut: 'サインアウトしました。再読み込みすると参加し直せます。',
+        error: (m: string) => `エラー: ${m}`,
+        participants: (n: number) => `参加者（${n}）`,
+        you: '自分',
+        roles: { facilitator: 'ファシリテーター', participant: '参加者' } as Record<Role, string>,
+        whereabouts: { here: 'このページ', 'same-view': '同じビュー', 'another-view': '別のビュー', away: 'オフライン' } as Record<Whereabouts, string>,
+        compose: '依頼を書く',
+        selection: (label: string) => `選択中: ${label}`,
+        nothingSelected: '依頼の対象にできる要素が選ばれていません',
+        draftAboutSelection: '選択中の要素について下書き',
+        draftAboutWorkspace: 'ワークスペース全体について下書き',
+        drafts: (n: number) => `自分の下書き（${n}）`,
+        draftsPrivate: '下書きはこのブラウザにだけ保存され、送るまでほかの人には見えません。',
+        draftPlaceholder: '依頼の内容',
+        selectDraft: 'この下書きを選ぶ',
+        deleteDraft: '下書きを削除',
+        send: (n: number) => `選んだ下書きを送る（${n}件）`,
+        sendFailed: (m: string) => `送れませんでした: ${m}`,
+        requests: (n: number) => `依頼（${n}）`,
+        noRequests: '送られた依頼はまだありません。',
+        selectRequest: '実行に含める',
+        dismiss: '見送る',
+        dismissed: '見送り',
+        workspace: 'ワークスペース全体',
+        targetStatus: { current: '最新', stale: '古い', unknown: '不明' } as Record<TargetStatus, string>,
+        targetStatusHint: {
+            current: 'いまのソースにあります。クリックで移動します',
+            stale: 'もうソースで見つかりません（付け替えません）',
+            unknown: '対象のあるソースが解析できません',
+        } as Record<TargetStatus, string>,
+        runNote: '補足（任意）',
+        queueRun: (n: number) => `選んだ依頼で実行を登録（${n}件）`,
+        runs: (n: number) => `実行（${n}）`,
+        noRuns: '実行はまだありません。',
+        runStates: {
+            Queued: '待機中',
+            Running: '実行中',
+            Completed: '完了',
+            NeedsClarification: '確認待ち',
+            Failed: '失敗',
+            Cancelled: '取消',
+        } as Record<RunState, string>,
+        failureReasons: {
+            RuleNotMet: '成功の条件を満たさない',
+            AgentError: 'エージェントの異常終了',
+            LeaseExpired: '応答の途絶',
+            Interrupted: '中断',
+        } as Record<FailureReason, string>,
+        queuedBy: (name: string) => `登録: ${name}`,
+        note: '補足',
+        question: '問いかけ',
+        cancelRun: '取り消す',
+        changed: '変更あり',
+        unchanged: '変更なし',
+        report: '報告',
+        reportRows: {
+            exitCode: '終了コード',
+            formatted: '整形',
+            checked: '検査',
+            newDtErrors: '増えた .dt のエラー',
+            unparsedDtes: '解析できない .dtes',
+        },
+        yes: 'はい',
+        no: 'いいえ',
+        diagnostics: '検証の差（実行前 → 結果）',
+        validationRows: { dtErrors: '.dt のエラー', dtesErrors: '.dtes のエラー', dtesWarnings: '.dtes の警告', linkWarnings: 'モデルへの参照の警告' },
+        revisions: (n: number) => `リビジョン（${n}）`,
+        origins: {
+            SessionStart: 'セッション開始',
+            RunBase: '実行前',
+            RunResult: '実行結果',
+            PreRestore: '復元前',
+            Manual: '手動',
+            Restored: '復元',
+        } as Record<RevisionOriginKind, string>,
+        confirmed: '確認済み',
+        staleValidation: '検証が古い',
+    },
 };
 
 export type Messages = typeof ja;
@@ -619,6 +713,91 @@ const en: Messages = {
     reactedToBy: 'Policies that react to it',
     returns: (n) => `Errors it may return (${n})`,
     labelSources: { term: 'term', type: 'type' },
+
+    session: {
+        title: 'Session',
+        open: 'Open the session',
+        close: 'Close the session',
+        showInspector: 'Switch to the inspector',
+        closed: 'The session has ended.',
+        signedOut: 'You were signed out. Reload the page to join again.',
+        error: (m) => `Error: ${m}`,
+        participants: (n) => `Participants (${n})`,
+        you: 'you',
+        roles: { facilitator: 'Facilitator', participant: 'Participant' },
+        whereabouts: { here: 'this page', 'same-view': 'same view', 'another-view': 'another view', away: 'offline' },
+        compose: 'Write a request',
+        selection: (label) => `Selected: ${label}`,
+        nothingSelected: 'Nothing a request can be about is selected',
+        draftAboutSelection: 'Draft about the selection',
+        draftAboutWorkspace: 'Draft about the whole workspace',
+        drafts: (n) => `My drafts (${n})`,
+        draftsPrivate: 'Drafts are kept in this browser only; nobody else sees them until you send them.',
+        draftPlaceholder: 'What should change',
+        selectDraft: 'Select this draft',
+        deleteDraft: 'Delete the draft',
+        send: (n) => `Send the selected drafts (${n})`,
+        sendFailed: (m) => `Not sent: ${m}`,
+        requests: (n) => `Requests (${n})`,
+        noRequests: 'No request has been sent yet.',
+        selectRequest: 'Include in a run',
+        dismiss: 'Dismiss',
+        dismissed: 'Dismissed',
+        workspace: 'The whole workspace',
+        targetStatus: { current: 'current', stale: 'stale', unknown: 'unknown' },
+        targetStatusHint: {
+            current: 'In the sources now. Click to go there',
+            stale: 'No longer found in the sources (never re-bound)',
+            unknown: 'The sources it would be in do not parse',
+        },
+        runNote: 'Note (optional)',
+        queueRun: (n) => `Queue a run of the selected requests (${n})`,
+        runs: (n) => `Runs (${n})`,
+        noRuns: 'No run yet.',
+        runStates: {
+            Queued: 'Queued',
+            Running: 'Running',
+            Completed: 'Completed',
+            NeedsClarification: 'Needs clarification',
+            Failed: 'Failed',
+            Cancelled: 'Cancelled',
+        },
+        failureReasons: {
+            RuleNotMet: 'The success rule was not met',
+            AgentError: 'The agent failed',
+            LeaseExpired: 'The agent stopped answering',
+            Interrupted: 'Interrupted',
+        },
+        queuedBy: (name) => `Queued by ${name}`,
+        note: 'Note',
+        question: 'Question',
+        cancelRun: 'Cancel',
+        changed: 'Changed',
+        unchanged: 'No changes',
+        report: 'Report',
+        reportRows: {
+            exitCode: 'Exit code',
+            formatted: 'Formatted',
+            checked: 'Checked',
+            newDtErrors: 'New .dt errors',
+            unparsedDtes: '.dtes not parsed',
+        },
+        yes: 'yes',
+        no: 'no',
+        diagnostics: 'Validation (before → after)',
+        validationRows: { dtErrors: '.dt errors', dtesErrors: '.dtes errors', dtesWarnings: '.dtes warnings', linkWarnings: 'Model reference warnings' },
+        revisions: (n) => `Revisions (${n})`,
+        origins: {
+            SessionStart: 'Session start',
+            RunBase: 'Before a run',
+            RunResult: 'Run result',
+            PreRestore: 'Before a restore',
+            Manual: 'Manual',
+            Restored: 'Restored',
+        },
+        confirmed: 'Confirmed',
+        staleValidation: 'validation out of date',
+    },
 };
 
 export const MESSAGES: Record<Lang, Messages> = { ja, en };

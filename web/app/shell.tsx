@@ -23,8 +23,8 @@ export function AppShell(props: {
     workspace: ReactNode;
     inspector: ReactNode;
     /**
-     * Composition point for another side panel (e.g. a later session panel), placed after the inspector in the
-     * workspace row. Nothing is passed today; such a panel brings its own pane state and resizer.
+     * Composition point for another side panel, placed after the inspector in the workspace row: the session pane in a
+     * session (`dt session start`), nothing under `dt view`. Such a panel brings its own pane state and resizer.
      */
     sidePanel?: ReactNode;
     bottom: ReactNode;

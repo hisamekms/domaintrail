@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Box, LayoutGrid, LayoutList, type LucideIcon } from 'lucide-react';
 import { Tldraw, type Editor } from 'tldraw';
 import { STRUCTURE_LEVELS, type DisplayMode, type Lang, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
@@ -65,6 +65,8 @@ export function ViewWorkspace(props: {
     mode: DisplayMode;
     legendOpen: boolean;
     onLegendToggle: () => void;
+    /** Drawn over the canvas (a session's cursors of the others). */
+    overlay?: ReactNode;
 }) {
     const { workspace, current, mode, legendOpen, onLegendToggle } = props;
     const { editor, onMount, stormings, nav, settings, viewGraph } = workspace;
@@ -147,6 +149,7 @@ export function ViewWorkspace(props: {
             </div>
             <div className="view-area">
                 <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
+                {isCanvas(view) && props.overlay}
                 {graph && isCanvas(view) && (
                     <Legend
                         view={
