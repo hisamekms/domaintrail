@@ -53,7 +53,7 @@ export function App() {
         else openInspector('source');
     };
 
-    // in a session (dt session start) only: the session pane and the others' cursors
+    // in a session (dt session start) only: the session's chat, the facilitator's session pane and the others' cursors
     const session = useSessionPage({ socket, current, workspace, panes, openBest });
 
     const locate = (d: Diagnostic) => {
@@ -113,6 +113,7 @@ export function App() {
                         overlay={session.canvasOverlay}
                     />
                 }
+                {...(session.leftAlternative && { leftAlternative: session.leftAlternative })}
                 sidePanel={session.sidePanel}
                 inspector={
                     <Inspector

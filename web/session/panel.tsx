@@ -11,6 +11,7 @@ import { sendable } from './drafts';
 import { Revisions } from './revisions';
 import { initials, listedParticipants, participantColor, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
 import { latestRevision } from './state';
+import { participantNames } from './stream';
 import { targetKey, WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
 import type { Drafts, SessionData } from './useSession';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
@@ -20,7 +21,8 @@ type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 type Validation = RevisionJson['validation'];
 
-const failure = (e: unknown): string => (e instanceof SessionApiError ? (e.message && e.message !== e.type ? `${e.type}: ${e.message}` : e.type) : String(e));
+export const failure = (e: unknown): string =>
+    e instanceof SessionApiError ? (e.message && e.message !== e.type ? `${e.type}: ${e.message}` : e.type) : String(e);
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -42,10 +44,7 @@ export function SessionPanel(props: {
     const facilitator = me.participant.role === 'facilitator';
     // the names the participants are signed in with now (the facilitator's participant is named after the role, or
     // after the person holding it)
-    const names = new Map<string, string>(state.session.participants.map((p) => [p.id, p.name]));
-    for (const p of listedParticipants(state)) names.set(p.id, p.name);
-    for (const p of session.peers.values()) names.set(p.participant.id, p.participant.name);
-    names.set(me.participant.id, me.participant.name);
+    const names = participantNames(state, session.peers, me);
     const nameOf = (id: string): string => names.get(id) ?? id;
     const live = session.status === 'live' && state.session.state === 'Open';
     const [leaveError, setLeaveError] = useState<string | undefined>();
@@ -104,7 +103,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     );
 }
 
-function Avatar({ id, name, url }: { id: string; name: string; url?: string }) {
+export function Avatar({ id, name, url }: { id: string; name: string; url?: string }) {
     // only an https avatar is shown; anything else gets the initials
     if (url?.startsWith('https://')) return <img className="session-avatar" src={url} alt="" referrerPolicy="no-referrer" />;
     return (

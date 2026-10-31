@@ -7,7 +7,18 @@ import type { Cursor, Me, SessionStateBody, ViewLocation } from '@domaintrail/co
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { SessionApiError, sessionApi, type TargetStatuses } from './api';
-import { createIndexedDbDrafts, createMemoryDrafts, editDraft, newDraft, type Draft, type DraftScope, type DraftStorage } from './drafts';
+import {
+    COMPOSER_DRAFT,
+    composerScope,
+    createIndexedDbDrafts,
+    createMemoryDrafts,
+    editDraft,
+    newDraft,
+    type Draft,
+    type DraftScope,
+    type DraftStorage,
+} from './drafts';
+import { WORKSPACE_TARGET } from './targets';
 import { hasCanvas } from './location';
 import { NO_PEERS, receivePresence, throttle, type Peers } from './presence';
 import { adopt, disconnected, INITIAL_SESSION, receive, refetched, type SessionModel } from './state';
@@ -282,4 +293,68 @@ export function useDrafts(storage: DraftStorage, scope: DraftScope | undefined):
     );
 
     return { drafts, error, add, edit, remove };
+}
+
+export interface ComposerDraft {
+    /** The unsent text ('' while there is none, and until it is loaded). */
+    readonly body: string;
+    readonly error: string | undefined;
+    /** Changes the text; it is saved shortly after typing stops. */
+    setBody(body: string): void;
+    /** Forgets the text (once it was sent). */
+    clear(): Promise<void>;
+}
+
+/** The chat composer's one unsent text of a participant in a session, kept in the drafts' storage until it is sent. */
+export function useComposerDraft(storage: DraftStorage, scope: DraftScope | undefined): ComposerDraft {
+    const [body, setBodyState] = useState('');
+    const [error, setError] = useState<string | undefined>();
+    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const session = scope?.session;
+    const participant = scope?.participant;
+    const key = useMemo(() => (session && participant ? composerScope({ session, participant }) : undefined), [session, participant]);
+
+    useEffect(() => {
+        setBodyState('');
+        if (!key) return;
+        let cancelled = false;
+        storage.load(key).then(
+            (loaded) => {
+                const draft = loaded.find((d) => d.id === COMPOSER_DRAFT);
+                // typing before the load finished wins
+                if (!cancelled && draft) setBodyState((b) => (b === '' ? draft.body : b));
+            },
+            (e: unknown) => setError(message(e)),
+        );
+        return () => {
+            cancelled = true;
+            clearTimeout(timer.current);
+        };
+    }, [storage, key]);
+
+    const setBody = useCallback(
+        (next: string) => {
+            setBodyState(next);
+            clearTimeout(timer.current);
+            if (!key) return;
+            timer.current = setTimeout(() => {
+                const now = Date.now();
+                const write =
+                    next === '' ? storage.remove(key, COMPOSER_DRAFT) : storage.save(key, { ...newDraft(COMPOSER_DRAFT, WORKSPACE_TARGET, now), body: next });
+                write.then(
+                    () => setError(undefined),
+                    (e: unknown) => setError(message(e)),
+                );
+            }, AUTOSAVE_MS);
+        },
+        [storage, key],
+    );
+
+    const clear = useCallback(async () => {
+        clearTimeout(timer.current);
+        setBodyState('');
+        if (key) await storage.remove(key, COMPOSER_DRAFT);
+    }, [storage, key]);
+
+    return { body, error, setBody, clear };
 }

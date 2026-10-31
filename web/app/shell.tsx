@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { useT } from '../i18n';
 import { Resizer } from '../shared/layout';
@@ -12,6 +12,17 @@ const BOTTOM_BAR_HEIGHT = 33;
 const MIN_CANVAS_WIDTH = 320;
 
 /**
+ * Another content for the left pane, next to the explorer: the session's chat in a session (`dt session start`). With
+ * one, the pane gets a switch at its top and shows this content first; without one (`dt view`) it shows the explorer
+ * only, as always.
+ */
+export interface LeftPaneAlternative {
+    /** The switch's label for it. */
+    readonly label: string;
+    readonly content: ReactNode;
+}
+
+/**
  * The page's layout: the top bar and its banners, the explorer and the inspector as resizable side panes around the
  * workspace, and the bottom pane. What goes in each place is the caller's.
  */
@@ -20,6 +31,8 @@ export function AppShell(props: {
     topBar: ReactNode;
     banners: ReactNode;
     explorer: ReactNode;
+    /** Composition point for another content of the left pane, switchable with the explorer; nothing under `dt view`. */
+    leftAlternative?: LeftPaneAlternative;
     workspace: ReactNode;
     inspector: ReactNode;
     /**
@@ -35,6 +48,10 @@ export function AppShell(props: {
     const { explorerOpen, setExplorerOpen, explorerWidth, setExplorerWidth, inspectorOpen, setInspectorOpen, inspectorWidth, setInspectorWidth } = panes;
     const { bottomOpen, setBottomOpen, bottomHeight, setBottomHeight } = panes;
     const t = useT();
+    // the alternative comes first whenever there is one; the choice is the page's (a reload starts on it again)
+    const [leftShows, setLeftShows] = useState<'alternative' | 'explorer'>('alternative');
+    const alternative = props.leftAlternative;
+    const showsAlternative = alternative !== undefined && leftShows === 'alternative';
 
     return (
         <div className="app">
@@ -49,7 +66,37 @@ export function AppShell(props: {
                         </button>
                     </div>
                     <aside className="pane" style={{ width: explorerWidth }} inert={!explorerOpen}>
-                        {props.explorer}
+                        {alternative ? (
+                            <>
+                                <div className="left-switch" role="tablist">
+                                    <button
+                                        role="tab"
+                                        aria-selected={!showsAlternative}
+                                        className={showsAlternative ? '' : 'active'}
+                                        onClick={() => setLeftShows('explorer')}
+                                    >
+                                        {t.explorerTab}
+                                    </button>
+                                    <button
+                                        role="tab"
+                                        aria-selected={showsAlternative}
+                                        className={showsAlternative ? 'active' : ''}
+                                        onClick={() => setLeftShows('alternative')}
+                                    >
+                                        {alternative.label}
+                                    </button>
+                                </div>
+                                {/* both stay mounted, so that switching keeps the explorer's filter and the chat's scroll and text */}
+                                <div className="left-content" hidden={showsAlternative}>
+                                    {props.explorer}
+                                </div>
+                                <div className="left-content" hidden={!showsAlternative}>
+                                    {alternative.content}
+                                </div>
+                            </>
+                        ) : (
+                            props.explorer
+                        )}
                     </aside>
                 </div>
                 <Resizer

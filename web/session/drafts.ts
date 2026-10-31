@@ -29,6 +29,15 @@ export interface DraftStorage {
 
 export const scopeKey = (scope: DraftScope): string => `${scope.session}\u0000${scope.participant}`;
 
+/**
+ * Where the chat's composer keeps its one unsent text: a scope of its own next to the participant's drafts, so that
+ * the drafts list (the facilitator's panel) never shows it. A participant ID has no NUL, so no participant has it.
+ */
+export const composerScope = (scope: DraftScope): DraftScope => ({ session: scope.session, participant: `${scope.participant}\u0000composer` });
+
+/** The ID of the composer's one draft in its scope. */
+export const COMPOSER_DRAFT = 'composer';
+
 export const newDraft = (id: string, target: TargetDraft, now: number): Draft => ({ id, target, body: '', createdAt: now, updatedAt: now });
 
 /** The drafts with one changed (its text or its target), in the same order. */

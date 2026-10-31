@@ -7,18 +7,20 @@ import { LEVEL_KINDS } from '@domaintrail/visualization/domain/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { Panes } from '../app/panes';
+import type { LeftPaneAlternative } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { Resizer, usePersistentState } from '../shared/layout';
 import { stormingGraph, type StormingChoice } from '../storming';
 import { highlightElement } from '../view/canvas';
 import type { Workspace } from '../view/workspace';
+import { SessionChat } from './chat';
 import { PeerCursors } from './cursors';
 import { viewLocation } from './location';
 import { SessionPanel } from './panel';
 import { cursorsOn } from './presence';
 import { occurrenceNode, targetOfSelection, type ModelTarget } from './targets';
-import { defaultDraftStorage, useDrafts, usePresence, useSession } from './useSession';
+import { defaultDraftStorage, useComposerDraft, useDrafts, usePresence, useSession } from './useSession';
 
 /** Width of a closed side pane's rail (RAIL_WIDTH of app/shell.tsx). */
 const RAIL_WIDTH = 28;
@@ -26,7 +28,9 @@ const RAIL_WIDTH = 28;
 const NODE_SHAPE = 'shape:n:';
 
 export interface SessionPage {
-    /** The session pane for `AppShell`'s `sidePanel`; undefined outside a session. */
+    /** The session's chat for `AppShell`'s `leftAlternative`, for everyone; undefined outside a session. */
+    readonly leftAlternative: LeftPaneAlternative | undefined;
+    /** The facilitator's session pane for `AppShell`'s `sidePanel`; undefined outside a session and for participants. */
     readonly sidePanel: ReactNode;
     /** The others' cursors over the canvas; undefined outside a session. */
     readonly canvasOverlay: ReactNode;
@@ -72,13 +76,23 @@ export function useSessionPage(input: {
     usePresence(socket, session, editor, location, selectionTarget?.target);
 
     const storage = useMemo(defaultDraftStorage, []);
-    const drafts = useDrafts(storage, session && { session: session.me.session, participant: session.me.participant.id });
+    const scope = session && { session: session.me.session, participant: session.me.participant.id };
+    const drafts = useDrafts(storage, scope);
+    const composer = useComposerDraft(storage, scope);
 
-    // the session pane and the inspector take turns on the right
+    // the facilitator's session pane and the inspector take turns on the right (participants have the chat only)
     const [open, setOpen] = usePersistentState('domaintrail.layout.session', true);
     const [width, setWidth] = usePersistentState('domaintrail.layout.sessionWidth', 380);
-    const { inspectorOpen, setInspectorOpen } = panes;
-    const shown = session !== undefined && open;
+    const { inspectorOpen, setInspectorOpen, setExplorerOpen } = panes;
+    const facilitator = session?.me.participant.role === 'facilitator';
+    const shown = session !== undefined && facilitator && open;
+    // the chat is the session's first place: the left pane opens on it when the page joins a session
+    const inSession = session !== undefined;
+    useEffect(() => {
+        if (inSession) setExplorerOpen(true);
+        // only joining opens it; closing it afterwards is the reader's choice
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inSession]);
     useEffect(() => {
         if (inspectorOpen && shown) setOpen(false);
         // only the inspector opening closes the session pane
@@ -144,12 +158,24 @@ export function useSessionPage(input: {
         [editor, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
     );
 
-    if (!session) return { sidePanel: undefined, canvasOverlay: undefined, baselineLocked: false };
+    if (!session) return { leftAlternative: undefined, sidePanel: undefined, canvasOverlay: undefined, baselineLocked: false };
     const online = new Set([...session.peers.values()].map((p) => p.participant.id)).size + 1;
     return {
-        baselineLocked: session.me.participant.role !== 'facilitator',
+        baselineLocked: !facilitator,
         canvasOverlay: <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />,
-        sidePanel: (
+        leftAlternative: {
+            label: t.session.title,
+            content: (
+                <SessionChat
+                    session={session}
+                    composer={composer}
+                    selectionTarget={selectionTarget}
+                    onNavigate={navigate}
+                    onClose={() => setExplorerOpen(false)}
+                />
+            ),
+        },
+        sidePanel: facilitator && (
             <>
                 <Resizer
                     direction="x"
