@@ -43,7 +43,7 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 | `packages/workspace/src` | the workspace on disk: sources and `.gitignore`, config loading, the output of `dt generate ts`, the file and git ref watchers |
 | `packages/visualization/src` | the Live View's model: graph IR and diff, the storming views, the view service and its ports, the ELK layout, the layout file and git adapters, `protocol.ts` |
 | `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check) |
-| `packages/collaboration` | the collaboration contracts (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs) |
+| `packages/collaboration` | collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `test/collaboration-contract-run.test.ts` runs its contract tests); `domain` (the commands and pure decisions), `application` (use cases, ports), `infrastructure` (`node:sqlite` store, blobs, validator) |
 | `packages/composition/src` | the wiring: `cli.ts` (`runDt`, called by `bin/dt.ts`), `view.ts` (`startViewServer`) |
 | `web` | the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `shared` |
 | `docs` | the guide (`dt guide`), Getting started, the Live View, the ADRs, releasing |

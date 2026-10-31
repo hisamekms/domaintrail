@@ -33,7 +33,8 @@ restored. `.dt` and `.dtes` are first-class from the start. `dt view` stays as i
 
 | Package | Holds | Depends on |
 |---|---|---|
-| `packages/collaboration` | `model/*.dt` (Session, Request, AgentRun, Revision) and its committed generated contracts (`src/generated`); `domain/` (pure decisions over the generated types: ADT states, transitions, run success rule, target staleness); `application/` (use cases and ports: `SessionRepository`, `RequestRepository`, `RunQueue`, `RevisionStore`, `WorkspaceSnapshot`, `ModelValidator`, `IdentityProvider`, `Clock`, `IdGenerator`, `EventOutbox`); `infrastructure/` (`node:sqlite` schema, migrations, transactions, outbox, queue/lease; the snapshot store; the Access/JWT identity adapter and the dev identity); `protocol.ts` (browser and agent messages) | modeling, visualization (types) |
+| `packages/collaboration` | `model/*.dt` (Session, Request, AgentRun, Revision) and its committed generated contracts (`src/generated`); `domain/` (pure decisions over the generated types: ADT states, transitions, run success rule, target staleness); `application/` (use cases and ports: `SessionRepository`, `RequestRepository`, `RunQueue`, `RevisionStore`, `WorkspaceSnapshot`, `SnapshotBlobs`, `ModelValidator`, `IdentityProvider`, `Clock`, `IdGenerator`, `EventOutbox`, `UnitOfWork`); `infrastructure/` (`node:sqlite` schema, migrations, transactions, outbox, queue/lease; the snapshot blobs; the validator; the Access/JWT identity adapter and the dev identity); `protocol.ts` (browser and agent messages) | modeling, visualization (types) |
+| workspace | + `infrastructure/snapshot.ts`: the `WorkspaceSnapshot` port of collaboration, implemented structurally (ADR 0025: writes to the sources are a port on the consumer's side, implemented in workspace) | modeling (unchanged) |
 | `packages/agent` | `dt session subscribe`: the SSE client, claim/heartbeat/result, the Claude Code adapter (child process, no shell interpolation) | collaboration (protocol and types) |
 | presentation | session HTTP routes (`/api/session/*`), the agent API on its own loopback listener, the WS message union | + collaboration (application, protocol) |
 | composition | `startSessionServer` (view + session in one HTTP process), `startSubscriber`, CLI wiring | + collaboration, agent |
@@ -60,6 +61,12 @@ I/O; only composition imports infrastructure).
   check` ran, no new `.dt` error compared with the base revision, and every `.dtes` file still parses. Pre-existing
   diagnostics and `.dtes` semantic warnings are shown as a diff to the facilitator, not a failure. `dt generate ts` is
   not a criterion.
+- **Recovery** (decided in S3): a run whose lease expired is never re-queued once it started: a `Running` run fails
+  with `LeaseExpired` (the agent may have edited the workspace; a second execution on a changed base would be silent),
+  while a run only claimed (still `Queued`) goes back to the queue. `expireLeases` applies it at startup and
+  periodically; a run with a live lease keeps it across a server restart (its subscriber may still heartbeat). A
+  completion (`finish`, `askClarification`, `fail`) is keyed by run ID and lease token: the same call again returns
+  the same run without recording anything, a stale token gets `LeaseLost`.
 - **Presence**: ephemeral, never stored. `ViewLocation` = `{ kind: 'dt', viewKey, layoutKey }` |
   `{ kind: 'dtes', stormingId, level, timelineId?, layoutKey }`, where `layoutKey` is the laid-out graph's ID and
   signature; cursors (tldraw world coordinates, ≤ 20 Hz) are drawn only for an equal `ViewLocation`.
@@ -156,3 +163,24 @@ details S4–S7 need that neither states. `test/session-baseline.test.ts` pins d
   `catalog`, `storming`); the storming, level and timeline are `StormingChoice` and `shownStorming`
   (`web/storming.tsx`). `layoutKey` is `LaidOutGraph.id` plus `signature` (`domain/graph/ir.ts`); storming graph IDs are
   `storming:<Storming>:<level>:<timelineId or *>` (`stormingGraphId`).
+
+## Appendix: persistence and ports (S3)
+
+- **Model changes.** `Revision.take`/`restore` require the content hash to match the files (`hashMatchesFiles`,
+  declared, `ContentHashMismatch`); `AgentRun.finish` requires `changed` to agree with the result revision
+  (`changedMatchesResult`, `ChangedMismatch`); `RevisionOrigin` gains `Manual { takenBy }` (a facilitator's snapshot,
+  to accept external changes before a restore). The content hash is the SHA-256 of `path NUL fileHash LF` per file in
+  path order (UTF-16 code unit order), computed in the domain without I/O.
+- **Store.** `.domaintrail/session/session.db` (WAL, foreign keys, `busy_timeout`), a `.gitignore` of `*` beside it,
+  migrations by `user_version`, transactions `BEGIN IMMEDIATE` queued one at a time per connection. Tables `sessions`,
+  `requests`, `agent_runs` (lease owner, token, expiry in ms, `completed_with`), `run_requests`, `revisions`
+  (`content_hash`, `origin`), `outbox` (`seq` is the SSE event ID). Unique partial indexes keep one `Running` run and
+  one lease per session. The claim is one `UPDATE … WHERE id = (first queued without a lease) AND NOT EXISTS (running
+  or live lease) RETURNING id`. Blobs are `.domaintrail/session/blobs/<2 hex>/<sha256>`, written through temporary
+  files and read back only when their hash holds. Nothing is written through a symbolic link.
+- **Restore.** Refused while a run is active, when a source path is a symbolic link or outside the root, or when the
+  workspace differs from the session's last revision (`ExternalChangesSinceSnapshot`; `takeRevision` records it as
+  `Manual`). Then a `PreRestore` revision, the write (checked again against it: links on the way, the re-scanned
+  hashes), and a `Restored` revision of what is on disk.
+- **Targets.** A `dtes-occurrence`'s `occurrence` is the step path joined by `.` (`3`, `2.1`); a target is `current`,
+  `stale`, or `unknown` when the sources it would be in do not parse.
