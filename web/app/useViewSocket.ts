@@ -12,9 +12,11 @@ export interface ViewState {
 /** The socket of the page: the view, and in a session its other messages (not rendered yet; the session panel's). */
 export interface ViewSocket extends ViewState {
     /** Listens to the session's messages (`session.*`, `request.*`, `run.*`, `revision.*`, `presence.*`); returns the unsubscribe. */
-    subscribe(listener: (message: SessionServerMessage) => void): () => void;
+    subscribe: (listener: (message: SessionServerMessage) => void) => () => void;
     /** Sends a message to the server (presence); false when the socket is not open. */
-    send(message: ClientMessage): boolean;
+    send: (message: ClientMessage) => boolean;
+    /** Listens to the socket closing, with its close code (a session closes with 4000 or 4001); returns the unsubscribe. */
+    subscribeClose: (listener: (code: number) => void) => () => void;
 }
 
 type ServerMessage = ViewPayload | SessionServerMessage;
@@ -25,6 +27,7 @@ export function useViewSocket(): ViewSocket {
     const retry = useRef(0);
     const socket = useRef<WebSocket | undefined>(undefined);
     const listeners = useRef(new Set<(message: SessionServerMessage) => void>());
+    const closeListeners = useRef(new Set<(code: number) => void>());
 
     useEffect(() => {
         let ws: WebSocket | undefined;
@@ -45,8 +48,9 @@ export function useViewSocket(): ViewSocket {
                 if (message.type === 'update') setState({ current: message, connection: 'open' });
                 else for (const listener of listeners.current) listener(message);
             };
-            ws.onclose = () => {
+            ws.onclose = (ev) => {
                 if (disposed) return;
+                for (const listener of closeListeners.current) listener(ev.code);
                 setState((s) => ({ ...s, connection: 'closed' }));
                 timer = setTimeout(connect, Math.min(5000, 500 * 2 ** retry.current++));
             };
@@ -70,5 +74,10 @@ export function useViewSocket(): ViewSocket {
         return true;
     }, []);
 
-    return { ...state, subscribe, send };
+    const subscribeClose = useCallback((listener: (code: number) => void) => {
+        closeListeners.current.add(listener);
+        return () => void closeListeners.current.delete(listener);
+    }, []);
+
+    return { ...state, subscribe, send, subscribeClose };
 }
