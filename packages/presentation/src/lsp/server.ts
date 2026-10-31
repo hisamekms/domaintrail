@@ -64,7 +64,7 @@ import {
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
 import { analyze } from '@domaintrail/modeling/core/analyze';
-import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '@domaintrail/modeling/core/config';
+import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, defaultConfig, type ResolvedConfig } from '@domaintrail/modeling/core/config';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import { LabelResolver, docComment } from '@domaintrail/modeling/core/labels';
 import { ModelIndex, commandsOf } from '@domaintrail/modeling/core/model-index';
@@ -112,16 +112,7 @@ export interface SourceScope {
  * `NearestConfig`). There is one workspace per session.
  */
 export class DomainWorkspace {
-    config: ResolvedConfig = {
-        root: process.cwd(),
-        sources: DEFAULT_SOURCES,
-        respectGitignore: true,
-        lintHint: true,
-        tsOut: '',
-        tsContexts: {},
-        tsPolicies: { project: 'optional', contexts: {} },
-        view: { port: 0, host: '' },
-    };
+    config: ResolvedConfig = { ...defaultConfig(process.cwd()), tsOut: '', view: { port: 0, host: '' } };
     /** Where the config was searched from: the nearest config of a document is only searched up to it. */
     start = process.cwd();
     /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */

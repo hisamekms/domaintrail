@@ -418,3 +418,68 @@ describe('generated output safety', () => {
         expect(manifest.files).toEqual(['generated/domain/S.ts', 'generated/domain/_runtime.ts', 'generated/domain/index.ts']);
     });
 });
+
+describe('session section (ADR 0026)', () => {
+    test('defaults: dev identity on loopback, the default agent tools, 50 participants', async () => {
+        const c = await loadConfig({ start: await project({ 'domaintrail.json': '{}' }) });
+        expect(c.session).toEqual({
+            port: 4321,
+            host: '127.0.0.1',
+            identity: 'dev',
+            agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'] },
+            maxParticipants: 50,
+        });
+    });
+
+    test('access: the team, the audience and the explicit hosts and origins', async () => {
+        const text = JSON.stringify({
+            session: {
+                identity: 'access',
+                access: {
+                    teamDomain: 'team.cloudflareaccess.com',
+                    audience: 'aud',
+                    publicUrl: 'https://s.example.com',
+                    allowedHosts: ['s.example.com'],
+                    allowedOrigins: ['https://s.example.com'],
+                },
+                agent: { port: 9000, allowedTools: ['Read'] },
+                maxParticipants: 5,
+            },
+        });
+        const c = await loadConfig({ start: await project({ 'domaintrail.json': text }) });
+        expect(c.session).toEqual({
+            port: 4321,
+            host: '127.0.0.1',
+            identity: 'access',
+            access: {
+                teamDomain: 'team.cloudflareaccess.com',
+                audience: 'aud',
+                publicUrl: 'https://s.example.com',
+                allowedHosts: ['s.example.com'],
+                allowedOrigins: ['https://s.example.com'],
+            },
+            agent: { port: 9000, allowedTools: ['Read'] },
+            maxParticipants: 5,
+        });
+    });
+
+    test.each([
+        [{ identity: 'basic' }, "'session.identity' must be one of"],
+        [{ identity: 'access' }, "needs 'session.access'"],
+        [{ access: { teamDomain: 't' } }, "'session.access.audience'"],
+        [{ access: { teamDomain: 't', audience: 'a', allowedOrigins: ['https://x.example/path'] } }, "'session.access.allowedOrigins'"],
+        [{ access: { teamDomain: 't', audience: 'a', allowedHosts: ['*.example.com'] } }, "'session.access.allowedHosts'"],
+        [{ agent: { allowedTools: [''] } }, "'session.agent.allowedTools'"],
+        [{ agent: { port: 70000 } }, "'session.agent.port'"],
+        [{ maxParticipants: 0 }, "'session.maxParticipants'"],
+        [{ token: 'x' }, "unknown key 'session.token'"],
+    ])('%j is refused', async (session, message) => {
+        const dir = await project({ 'domaintrail.json': JSON.stringify({ session }) });
+        const e = await loadConfig({ start: dir }).then(
+            () => undefined,
+            (x: unknown) => x,
+        );
+        expect(e).toBeInstanceOf(ConfigError);
+        expect(String(e)).toContain(message);
+    });
+});
