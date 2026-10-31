@@ -203,11 +203,9 @@ describe('validateStormings', () => {
             { code: 'S008', severity: 'error', line: lineOf(text, 'policy NoCommand') },
             { code: 'S008', severity: 'error', line: lineOf(text, 'policy Empty') },
         ]);
-        expect(ds[0]!.message).toBe(
-            "Policy 'NoTrigger' has no `on`; a policy reacts to at least one event (`on`) and may issue at least one command (`issues`).",
-        );
+        expect(ds[0]!.message).toBe("Policy 'NoTrigger' has no `on`; a policy reacts to at least one event (`on`) and issues at least one command (`issues`).");
         expect(ds[0]!.hint).toBe('add `on <Event>`; while it is unknown, record the question as a hotspot instead');
-        expect(ds[2]!.message).toContain('has no `on` and `issues`');
+        expect(ds[2]!.message).toContain('has neither `on` nor `issues`');
     });
 
     test('ES08 hotspot status and resolution', () => {
@@ -439,6 +437,10 @@ describe('validateStormings', () => {
             validate('storming S {\n  aggregate Shipment\n  event Shipped\n  command C {\n    target Shipmen\n    emits Shipment\n  }\n}\n').map((d) => d.hint),
         ).toEqual(["did you mean 'Shipment'?", "name one of 'Shipped'"]);
         expect(validate('storming S {\n  event E\n  command C {\n    reads E\n  }\n}\n')[0]!.hint).toBe('declare a read model first and name it here');
+        // a duplicate declaration (S001) is listed once
+        expect(validate('storming S {\n  event E\n  event E\n  command C\n  timeline T {\n    C\n  }\n}\n').find((d) => d.code === 'S003')!.hint).toBe(
+            "name one of 'E'",
+        );
     });
 
     test('an undefined reference is an error, with a suggestion', () => {
@@ -511,7 +513,7 @@ describe('validateStormings', () => {
         const ds = validate(text);
         expect(summary(ds)).toEqual([{ code: 'S014', severity: 'warning', line: lineOf(text, 'policy RetryOnFailure') }]);
         expect(ds[0]!.message).toBe(
-            "Policy 'RetryOnFailure' is on a type-level cycle: RetryOnFailure → RetryRelease → ReleaseFailed → RetryOnFailure. Each step only may follow the previous one, so this is a cycle of possibilities, not an infinite loop.",
+            "Policy 'RetryOnFailure' is on a type-level cycle: RetryOnFailure → RetryRelease → ReleaseFailed → RetryOnFailure. Every step is only a possibility, so this is a cycle of possibilities, not an infinite loop.",
         );
         expect(ds[0]!.message).not.toMatch(/infinite loop\b(?<!not an infinite loop)/);
         expect(ds[0]!.hint).toContain('nothing to change if the repetition is intended');

@@ -167,7 +167,7 @@ export function linkStormings(stormings: readonly Storming[], model: DomainModel
                     esDiagnostic(
                         'warning',
                         'S013',
-                        `'${el.id}' emits '${emits.target}', which refers to '${dtEvent}', but the .dt command '${ref.path}' never emits it: its emits is exhaustive.`,
+                        `'${el.id}' emits '${emits.target}', which refers to '${dtEvent}', but the .dt command '${ref.path}' never emits it: a .dt command emits only the events of its emits.`,
                         emits.range,
                         {
                             hint: `add '${dtEvent}' to the emits of '${ref.path}' (or, for a failure, an error of it), or correct the ref of '${el.id}' or '${emits.target}'`,

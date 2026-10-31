@@ -108,7 +108,7 @@ function validateStorming(storming: Storming): Diagnostic[] {
     const resolve = (name: string, range: SourceRange, allowed: readonly ElementKind[], where: string, ownerId: string): AnyDeclaration | undefined => {
         const target = byId.get(name);
         if (target && allowed.includes(target.kind)) return target;
-        const candidates = decls.filter((d) => allowed.includes(d.kind)).map((d) => d.id);
+        const candidates = [...new Set(decls.filter((d) => allowed.includes(d.kind)).map((d) => d.id))];
         const suggestion = didYouMean(name, candidates);
         if (!target) {
             out.push(
@@ -246,12 +246,12 @@ function validateStorming(storming: Storming): Diagnostic[] {
         const has = (keyword: RelationKeyword) => el.clauses.some((c) => c.type === 'relation' && c.keyword === keyword);
         const missing = (['on', 'issues'] as const).filter((k) => !has(k));
         if (!missing.length) return;
-        const clauses = missing.map((k) => `\`${k}\``).join(' and ');
+        const clauses = missing.length === 2 ? 'neither `on` nor `issues`' : `no \`${missing[0]}\``;
         out.push(
             esDiagnostic(
                 'error',
                 'S008',
-                `Policy '${el.id}' has no ${clauses}; a policy reacts to at least one event (\`on\`) and may issue at least one command (\`issues\`).`,
+                `Policy '${el.id}' has ${clauses}; a policy reacts to at least one event (\`on\`) and issues at least one command (\`issues\`).`,
                 el.nameRange,
                 {
                     hint: `add ${missing.map((k) => (k === 'on' ? '`on <Event>`' : '`issues <Command>`')).join(' and ')}; while it is unknown, record the question as a hotspot instead`,
@@ -353,7 +353,7 @@ function cycles(storming: Storming, byId: ReadonlyMap<string, AnyDeclaration>): 
             esDiagnostic(
                 'warning',
                 'S014',
-                `Policy '${policy.id}' is on a type-level cycle: ${path.join(' → ')}. Each step only may follow the previous one, so this is a cycle of possibilities, not an infinite loop.`,
+                `Policy '${policy.id}' is on a type-level cycle: ${path.join(' → ')}. Every step is only a possibility, so this is a cycle of possibilities, not an infinite loop.`,
                 policy.nameRange,
                 {
                     hint: `nothing to change if the repetition is intended (a retry, a recurring process); otherwise check the \`on\`, \`issues\` and \`emits\` along the cycle, or record the stop condition in a hotspot`,
