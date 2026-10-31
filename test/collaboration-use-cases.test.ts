@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
 import type { CollaborationDeps } from '@domaintrail/collaboration/application/ports';
-import { createCollaboration, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
+import { createCollaboration, MAX_COMPARISON_DIFF, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
+import { MAX_DIFF_BYTES } from '@domaintrail/collaboration/domain/compare';
 import { encodeOccurrencePath } from '@domaintrail/collaboration/domain/targets';
 import { summarize } from '@domaintrail/collaboration/domain/validation';
 import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
@@ -582,6 +583,29 @@ describe('revisions', () => {
             type: 'RevisionOfAnotherSession',
             revision: other.id,
         });
+    });
+
+    test('compare bounds its work: a blob over the limit is never read, and the diffs stop at the budget', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        await s.write('sales/0-huge.dt', `// ${'x'.repeat(MAX_DIFF_BYTES)}\n`);
+        const row = (i: number): string => `// ${String(i).padStart(6, '0')} ${'y'.repeat(490)}`;
+        for (const f of ['a', 'b', 'c']) await s.write(`sales/${f}.dt`, `${Array.from({ length: 900 }, (_, i) => row(i)).join('\n')}\n`);
+        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const read: string[] = [];
+        const counting: CollaborationDeps = {
+            ...s.deps,
+            blobs: { put: (files) => s.deps.blobs.put(files), get: (hash) => (read.push(hash), s.deps.blobs.get(hash)) },
+        };
+        const c = value(await createCollaboration(counting).compareRevisions({ session: id, before: start.id, after: manual.id }));
+        const by = new Map(c.files.map((f) => [String(f.path), f]));
+        const huge = by.get('sales/0-huge.dt');
+        expect(huge?.diff).toEqual({ kind: 'tooLarge' });
+        expect(read).not.toContain(huge?.after);
+        const [a, b, last] = ['a', 'b', 'c'].map((f) => by.get(`sales/${f}.dt`)?.diff);
+        expect([a?.kind === 'diff' && a.truncated, b?.kind === 'diff' && b.truncated, last, c.diffsOmitted]).toEqual([false, true, undefined, true]);
+        const shown = [a, b].reduce((n, d) => n + (d?.kind === 'diff' ? d.unified.length : 0), 0);
+        expect(shown).toBeLessThanOrEqual(MAX_COMPARISON_DIFF);
     });
 
     test("targets of requests are current, stale or unknown in the workspace now; they're never re-bound", async () => {

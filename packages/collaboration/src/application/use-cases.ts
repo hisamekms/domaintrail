@@ -6,7 +6,7 @@
 // is decided by the caller (S4); the use cases take the participant as a fact.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
-import { compareFiles, lineDiff, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
+import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
@@ -124,6 +124,8 @@ export interface Comparison {
 
 /** The most characters of unified diff text a comparison carries; the files after it get no diff. */
 export const MAX_COMPARISON_DIFF = 512 * 1024;
+/** The least budget a file's diff is started with: below it, the rest of the comparison's diffs are omitted. */
+const MIN_DIFF_ROOM = 2 * 1024;
 
 /** Everything a session holds, for a page that shows it. */
 export interface SessionState {
@@ -812,25 +814,33 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const bytes = await deps.blobs.get(hash);
                 return bytes ? ok(decoder.decode(bytes)) : err({ type: 'BlobMissing', path, hash });
             };
+            const sizes = new Map<string, number>([...a.files, ...b.files].map((f) => [f.hash, f.bytes]));
             const files: ComparedFile[] = [];
-            let size = 0;
+            let left = MAX_COMPARISON_DIFF;
             let diffsOmitted = false;
             for (const f of compareFiles(a.files, b.files)) {
                 if (f.status === 'unchanged') {
                     files.push(f);
                     continue;
                 }
-                if (size >= MAX_COMPARISON_DIFF) {
+                // too little left for a hunk: the files from here on get no diff
+                if (left < MIN_DIFF_ROOM) {
                     diffsOmitted = true;
                     files.push(f);
+                    continue;
+                }
+                // a side too large is never read nor decoded: changed, diff omitted
+                const large = [f.before, f.after].some((h) => h !== undefined && (sizes.get(h) ?? 0) > MAX_DIFF_BYTES);
+                if (large) {
+                    files.push({ ...f, diff: { kind: 'tooLarge' } });
                     continue;
                 }
                 const was = await textOf(f.path, f.before);
                 if (!was.ok) return was;
                 const is = await textOf(f.path, f.after);
                 if (!is.ok) return is;
-                const diff = lineDiff(was.value, is.value);
-                if (diff.kind === 'diff') size += diff.unified.length;
+                const diff = lineDiff(was.value, is.value, left);
+                if (diff.kind === 'diff') left -= diff.unified.length + 1;
                 files.push({ ...f, diff });
             }
             return ok({ before: a, after: b, files, counts: statusCounts(files), diffsOmitted });

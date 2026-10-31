@@ -6,7 +6,16 @@ import { createHash } from 'node:crypto';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
-import { compareFiles, lineDiff, MAX_DIFF_LINES, MAX_EDITS, MAX_OUTPUT_LINES } from '@domaintrail/collaboration/domain/compare';
+import {
+    compareFiles,
+    LINE_CUT,
+    lineDiff,
+    MAX_DIFF_BYTES,
+    MAX_DIFF_LINES,
+    MAX_EDITS,
+    MAX_LINE_CHARS,
+    MAX_OUTPUT_LINES,
+} from '@domaintrail/collaboration/domain/compare';
 import { sha256Hex } from '@domaintrail/collaboration/domain/sha256';
 import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from '@domaintrail/collaboration/domain/snapshot';
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from '@domaintrail/collaboration/domain/targets';
@@ -387,6 +396,20 @@ describe('comparing revisions', () => {
             lines(MAX_OUTPUT_LINES + 10, (i) => `${i}`),
         );
         expect(long.kind === 'diff' && [long.truncated, long.unified.split('\n').length, long.added]).toEqual([true, MAX_OUTPUT_LINES, MAX_OUTPUT_LINES + 10]);
+    });
+
+    test('bounded before the work: a text over the byte limit, a very long line, and a character budget', () => {
+        expect(lineDiff('x'.repeat(MAX_DIFF_BYTES + 1), '')).toEqual({ kind: 'tooLarge' });
+        const long = lineDiff('a\n', `${'y'.repeat(MAX_LINE_CHARS * 50)}\n`);
+        expect(long.kind === 'diff' && long.unified.split('\n')).toEqual(['@@ -1,1 +1,1 @@', '-a', `+${'y'.repeat(MAX_LINE_CHARS - 1)}${LINE_CUT}`]);
+        const many = lineDiff(
+            '',
+            lines(1_500, (i) => `changed line ${i}`),
+            1_000,
+        );
+        if (many.kind !== 'diff') throw new Error('expected a diff');
+        expect([many.truncated, many.unified.length <= 1_000, many.added]).toEqual([true, true, 1_500]);
+        expect(lineDiff('a\n', 'b\n', 0)).toMatchObject({ unified: '', truncated: true });
     });
 
     test('the files of two revisions by path, with their status and DSL', () => {
