@@ -117,4 +117,18 @@ describe('the text size (文字の大きさ)', () => {
         expect(ui.flatMap(pxFonts)).toEqual([]);
         expect(pxFonts(sections.find((s) => s.startsWith('/* ---------- canvas shapes')) ?? '').length).toBeGreaterThan(0);
     });
+
+    test("the explorer's rows: the first level one step inside the section titles, in rem so that it grows with the text size", async () => {
+        const { indent } = await import('@domaintrail/web/explorer');
+        expect(indent(0)).toEqual({ '--depth': 0 });
+        expect(indent(3)).toEqual({ '--depth': 3 });
+        const css = await Bun.file(new URL('../web/styles.css', import.meta.url)).text();
+        const rule = (selector: string): string => css.slice(css.indexOf(`${selector} {`)).split('}')[0] ?? '';
+        expect(rule('.explorer-section-title')).toContain('padding: 4px 12px 4px 8px;');
+        const padding = /padding-left: calc\(([\d.]+)rem \+ \(var\(--depth, 0\) \+ 1\) \* ([\d.]+)rem\);/.exec(rule('.tree-group'));
+        if (!padding) throw new Error('no rem padding-left with --depth on .tree-item, .tree-group');
+        // at 標準 (16px): the section titles' 8px, then 14px a level, starting one level in
+        const px = (depth: number): number => (Number(padding[1]) + (depth + 1) * Number(padding[2])) * 16;
+        expect([0, 1, 2, 3].map(px)).toEqual([22, 36, 50, 64]);
+    });
 });
