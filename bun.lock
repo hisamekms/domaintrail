@@ -15,6 +15,7 @@
         "ws": "8.22.0",
       },
       "devDependencies": {
+        "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/composition": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
@@ -37,6 +38,12 @@
         "web-tree-sitter": "0.27.1",
       },
     },
+    "packages/agent": {
+      "name": "@domaintrail/agent",
+      "dependencies": {
+        "@domaintrail/collaboration": "workspace:*",
+      },
+    },
     "packages/collaboration": {
       "name": "@domaintrail/collaboration",
       "dependencies": {
@@ -49,6 +56,7 @@
     "packages/composition": {
       "name": "@domaintrail/composition",
       "dependencies": {
+        "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/presentation": "workspace:*",
@@ -125,6 +133,8 @@
     "@chevrotain/types": ["@chevrotain/types@13.2.0", "", {}, "sha512-7qrYHRlKfWf2AvBfJi5eVOrKAkbxvMFsy/iIHTGIiApNcEecCaVIdR+mIQhyCBsTDJxBz4JWXHMo6krbhR9hVg=="],
 
     "@chevrotain/utils": ["@chevrotain/utils@13.2.0", "", {}, "sha512-SzKYY68rseOrb9KILVzPsl6SjkQtdWw01SRGB5aCVI5kFcHltQsOYV3JB0Ffst72DgkvHCyDQ0NLwxtmCCf97Q=="],
+
+    "@domaintrail/agent": ["@domaintrail/agent@workspace:packages/agent"],
 
     "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:packages/collaboration"],
 

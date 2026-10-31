@@ -19,10 +19,12 @@ const PACKAGES: Record<string, { dir: string; sources: string; dependsOn: string
     visualization: { dir: 'packages/visualization', sources: 'packages/visualization/src', dependsOn: ['modeling'] },
     // the session routes, the agent API and the WS union (ADR 0026): collaboration's application and protocol
     presentation: { dir: 'packages/presentation', sources: 'packages/presentation/src', dependsOn: ['collaboration', 'modeling', 'visualization'] },
+    // the subscriber of a session and its Claude Code adapter (ADR 0026, S6): collaboration's protocol and types only
+    agent: { dir: 'packages/agent', sources: 'packages/agent/src', dependsOn: ['collaboration'] },
     composition: {
         dir: 'packages/composition',
         sources: 'packages/composition/src',
-        dependsOn: ['collaboration', 'modeling', 'presentation', 'visualization', 'workspace'],
+        dependsOn: ['agent', 'collaboration', 'modeling', 'presentation', 'visualization', 'workspace'],
     },
     // the session's messages (types only)
     web: { dir: 'web', sources: 'web', dependsOn: ['collaboration', 'modeling', 'visualization'] },
@@ -214,6 +216,17 @@ describe('layers', () => {
     test('only agent, composition, presentation and web depend on collaboration', () => {
         const users = AREAS.filter((area) => PACKAGES[area].dependsOn.includes('collaboration'));
         expect(users.filter((area) => !COLLABORATION_USED_BY.includes(area))).toEqual([]);
+    });
+
+    test('agent takes only types from collaboration (its protocol and generated contracts), and only its infrastructure imports node:*', () => {
+        const wrong = IMPORTS.agent.filter(
+            (i) =>
+                packageName(i.specifier) === '@domaintrail/collaboration' &&
+                !(i.typeOnly && ['@domaintrail/collaboration/protocol', '@domaintrail/collaboration/generated/index'].includes(i.specifier)),
+        );
+        expect(show(wrong)).toEqual([]);
+        expect(show(IMPORTS.agent.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
+        expect(show(IMPORTS.agent.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
     });
 
     test('modeling imports no other @domaintrail/* package', () => {
