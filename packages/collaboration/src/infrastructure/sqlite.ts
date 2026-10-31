@@ -5,7 +5,9 @@
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite';
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
+import type { Identity, IdentityKey, IdentityMode } from '../application/identity.js';
 import type {
+    AccessStore,
     EventOutbox,
     Lease,
     OutboxEntry,
@@ -88,6 +90,32 @@ export const MIGRATIONS: readonly string[] = [
         recorded_at TEXT NOT NULL
     ) STRICT;
     CREATE INDEX outbox_by_session ON outbox(session_id, seq);
+    `,
+    // who may act in a session (S4): the one-time facilitator links, the facilitator's identity, the dev sign-ins;
+    // secrets are kept only as their SHA-256
+    `
+    CREATE TABLE facilitator_links (
+        code_hash TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        expires_at INTEGER NOT NULL,
+        used_at INTEGER
+    ) STRICT;
+
+    CREATE TABLE facilitators (
+        session_id TEXT PRIMARY KEY REFERENCES sessions(id),
+        provider TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        bound_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE sign_ins (
+        token_hash TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        identity TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        revoked_at INTEGER
+    ) STRICT;
+    CREATE INDEX sign_ins_by_session ON sign_ins(session_id) WHERE revoked_at IS NULL;
     `,
 ];
 
@@ -205,6 +233,7 @@ function sessions(db: DatabaseSync): SessionRepository {
     const save = db.prepare(
         'INSERT INTO sessions (id, state, data) VALUES (:id, :state, :data) ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data',
     );
+    const open = db.prepare("SELECT data FROM sessions WHERE state = 'Open' ORDER BY rowid");
     return {
         load(id) {
             const r = load.get(params({ id }));
@@ -212,6 +241,9 @@ function sessions(db: DatabaseSync): SessionRepository {
         },
         save(session) {
             save.run(params({ id: session.id, state: session.state, data: encodeJson(session) }));
+        },
+        listOpen() {
+            return open.all().map((r) => decoded<Collaboration.OpenSession>(text(r, 'data')));
         },
     };
 }
@@ -381,9 +413,64 @@ function outbox(db: DatabaseSync): EventOutbox {
     };
 }
 
+const isMode = (v: string): v is IdentityMode => v === 'dev' || v === 'access';
+
+function access(db: DatabaseSync): AccessStore {
+    const addLink = db.prepare('INSERT INTO facilitator_links (code_hash, session_id, expires_at) VALUES (:hash, :session, :expires)');
+    const useLink = db.prepare(
+        'UPDATE facilitator_links SET used_at = :now WHERE code_hash = :hash AND used_at IS NULL AND expires_at > :now RETURNING session_id',
+    );
+    const facilitator = db.prepare('SELECT provider, subject FROM facilitators WHERE session_id = :session');
+    const setFacilitator = db.prepare(
+        `INSERT INTO facilitators (session_id, provider, subject, bound_at) VALUES (:session, :provider, :subject, :at)
+         ON CONFLICT (session_id) DO UPDATE SET provider = excluded.provider, subject = excluded.subject, bound_at = excluded.bound_at`,
+    );
+    const addSignIn = db.prepare('INSERT INTO sign_ins (token_hash, session_id, identity, created_at) VALUES (:hash, :session, :identity, :at)');
+    const signIn = db.prepare('SELECT session_id, identity FROM sign_ins WHERE token_hash = :hash AND revoked_at IS NULL');
+    const revokeSignIn = db.prepare('UPDATE sign_ins SET revoked_at = :at WHERE token_hash = :hash AND revoked_at IS NULL');
+    const revokeSignIns = db.prepare('UPDATE sign_ins SET revoked_at = :at WHERE session_id = :session AND revoked_at IS NULL RETURNING identity');
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the session of a row, written from a SessionId
+    const sessionOf = (r: Row): Collaboration.SessionId => text(r, 'session_id') as Collaboration.SessionId;
+    return {
+        addLink(codeHash, session, expiresAt) {
+            addLink.run(params({ hash: codeHash, session, expires: expiresAt.getTime() }));
+        },
+        useLink(codeHash, now) {
+            const r = useLink.get(params({ hash: codeHash, now: now.getTime() }));
+            return r ? sessionOf(r) : undefined;
+        },
+        facilitator(session) {
+            const r = facilitator.get(params({ session }));
+            if (!r) return undefined;
+            const provider = text(r, 'provider');
+            if (!isMode(provider)) throw new Error(`Unknown identity provider ${provider}`);
+            return { provider, subject: text(r, 'subject') } satisfies IdentityKey;
+        },
+        setFacilitator(session, identity, at) {
+            setFacilitator.run(params({ session, provider: identity.provider, subject: identity.subject, at: at.getTime() }));
+        },
+        addSignIn(tokenHash, { session, identity }, at) {
+            addSignIn.run(params({ hash: tokenHash, session, identity: encodeJson(identity), at: at.getTime() }));
+        },
+        signIn(tokenHash) {
+            const r = signIn.get(params({ hash: tokenHash }));
+            return r ? { session: sessionOf(r), identity: decoded<Identity>(text(r, 'identity')) } : undefined;
+        },
+        revokeSignIn(tokenHash, at) {
+            return revokeSignIn.run(params({ hash: tokenHash, at: at.getTime() })).changes === 1;
+        },
+        revokeSignIns(session, at) {
+            return revokeSignIns.all(params({ session, at: at.getTime() })).map((r) => {
+                const { provider, subject } = decoded<Identity>(text(r, 'identity'));
+                return { provider, subject };
+            });
+        },
+    };
+}
+
 /** The stores over one database connection; use them inside a transaction of `createUnitOfWork`. */
 export function createStores(db: DatabaseSync): Stores {
-    return { sessions: sessions(db), requests: requests(db), runs: runs(db), revisions: revisions(db), outbox: outbox(db) };
+    return { sessions: sessions(db), requests: requests(db), runs: runs(db), revisions: revisions(db), outbox: outbox(db), access: access(db) };
 }
 
 /**

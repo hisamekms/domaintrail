@@ -5,6 +5,7 @@ import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import type { DomainModel } from '@domaintrail/modeling/model/model';
 import type { Storming } from '@domaintrail/modeling/storming/ir';
 import type { Collaboration } from '../generated/index.js';
+import type { Identity, IdentityKey } from './identity.js';
 
 type SessionId = Collaboration.SessionId;
 type AgentRunId = Collaboration.AgentRunId;
@@ -18,10 +19,17 @@ export interface IdGenerator {
     newId(): string;
 }
 
+/** Secrets: a new random token each time (at least 256 bits, URL-safe), for links, cookies and credentials. */
+export interface SecretGenerator {
+    newSecret(): string;
+}
+
 export interface SessionRepository {
     load(id: SessionId): Collaboration.Session | undefined;
     /** Inserts or replaces the session. */
     save(session: Collaboration.Session): void;
+    /** The sessions still open, oldest first (a workspace has at most one; see `currentSession`). */
+    listOpen(): Collaboration.OpenSession[];
 }
 
 export interface RequestRepository {
@@ -101,6 +109,32 @@ export interface EventOutbox {
     readAfter(cursor: number, limit: number, session?: SessionId): OutboxEntry[];
 }
 
+/** A sign-in of the `dev` identity mode: the session cookie's hash and the identity it stands for. */
+export interface SignIn {
+    readonly session: SessionId;
+    readonly identity: Identity;
+}
+
+/**
+ * Who may act in a session, outside the model (technical, ADR 0026): the one-time facilitator links, the identity
+ * bound to the facilitator, and the sign-ins of the `dev` mode. Secrets are kept only as their SHA-256.
+ */
+export interface AccessStore {
+    addLink(codeHash: string, session: SessionId, expiresAt: Date): void;
+    /** Marks a link used when it is unused and not expired at `now`: the session it is for; `undefined` otherwise. */
+    useLink(codeHash: string, now: Date): SessionId | undefined;
+    /** The identity that holds the facilitator role of the session, if one claimed it. */
+    facilitator(session: SessionId): IdentityKey | undefined;
+    setFacilitator(session: SessionId, identity: IdentityKey, at: Date): void;
+    addSignIn(tokenHash: string, signIn: SignIn, at: Date): void;
+    /** The sign-in of a cookie's hash, unless it was revoked. */
+    signIn(tokenHash: string): SignIn | undefined;
+    /** Revokes one sign-in; false when there was none (or it was revoked already). */
+    revokeSignIn(tokenHash: string, at: Date): boolean;
+    /** Revokes every sign-in of the session: the identities they stood for. */
+    revokeSignIns(session: SessionId, at: Date): IdentityKey[];
+}
+
 /** The stores, as one transaction sees them. */
 export interface Stores {
     readonly sessions: SessionRepository;
@@ -108,6 +142,7 @@ export interface Stores {
     readonly runs: RunQueue;
     readonly revisions: RevisionStore;
     readonly outbox: EventOutbox;
+    readonly access: AccessStore;
 }
 
 export interface UnitOfWork {

@@ -35,10 +35,13 @@ export async function plainDirectory(dir: string): Promise<void> {
     }
 }
 
-/** Writes `text` to `file` through a new temporary file renamed into place (a rename replaces a link, never follows it). */
-export async function replaceFile(file: string, text: string | Uint8Array): Promise<void> {
+/**
+ * Writes `text` to `file` through a new temporary file renamed into place (a rename replaces a link, never follows it).
+ * `mode` is the new file's permissions (before the umask), e.g. `0o600` for a credential.
+ */
+export async function replaceFile(file: string, text: string | Uint8Array, mode = 0o666): Promise<void> {
     const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`);
-    await writeFile(temp, text, { flag: 'wx' });
+    await writeFile(temp, text, { flag: 'wx', mode });
     await rename(temp, file);
 }
 

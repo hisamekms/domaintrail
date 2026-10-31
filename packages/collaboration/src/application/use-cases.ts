@@ -9,7 +9,7 @@ import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } 
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
-import type { CollaborationDeps, Lease, StoredRun, Stores } from './ports.js';
+import type { CollaborationDeps, Lease, OutboxEntry, StoredRun, Stores } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
 
@@ -224,6 +224,10 @@ export interface CollaborationUseCases {
     sessionState(input: { readonly session: SessionId }): Promise<Result<SessionState, NotFound>>;
     /** Validates the workspace now and tells, for each request of the session, whether its target still resolves. */
     targetStatuses(input: { readonly session: SessionId }): Promise<Result<TargetStatuses, NotFound | Collaboration.PathOutsideRoot>>;
+    /** The open session of the workspace, if any: `dt session start` resumes it rather than starting another. */
+    currentSession(): Promise<Collaboration.OpenSession | undefined>;
+    /** At most `limit` events of the session after the outbox position `cursor` (0: from the start), in order. */
+    eventsAfter(input: { readonly session: SessionId; readonly cursor: number; readonly limit: number }): Promise<readonly OutboxEntry[]>;
 }
 
 /** The success value of a command that cannot fail. */
@@ -691,6 +695,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 contentHash: captured.value.contentHash,
                 statuses: new Map(requests.map((r) => [r.id, targetStatus(r.target.target, scope)])),
             });
+        },
+
+        async currentSession() {
+            // one open session per workspace: the oldest one if a store ever holds more
+            return uow.transaction((stores) => stores.sessions.listOpen()[0]);
+        },
+
+        async eventsAfter({ session, cursor, limit }) {
+            return uow.transaction((stores) => stores.outbox.readAfter(cursor, limit, session));
         },
     };
     return useCases;
