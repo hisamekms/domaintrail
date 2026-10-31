@@ -33,7 +33,7 @@ export interface ViewServerOptions {
 
 export interface ViewServer {
     url: string;
-    session: ViewService;
+    view: ViewService;
     /** Resolves once the watcher is ready to report changes. */
     ready: Promise<void>;
     stop(): Promise<void>;
@@ -51,7 +51,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     // an unknown revision stops the server from starting, rather than showing nothing as changed
     const git = createGitRevisions(options.root);
     if (options.base) await git.resolveCommit(options.base);
-    const session = createViewService({
+    const view = createViewService({
         root: options.root,
         engine,
         workspace: createWorkspaceReader(options.root, sources, respectGitignore),
@@ -60,14 +60,14 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         sources,
         baseRef: options.base,
     });
-    await session.refresh();
+    await view.refresh();
 
     const assets = await loadAssets(options.webDir ?? defaultWebDir());
     const host = options.host ?? '127.0.0.1';
-    const hub = createWebSocketHub(() => session.state);
+    const hub = createWebSocketHub(() => view.state);
     const http = createViewHttpServer({
         host,
-        api: createApiRoutes({ view: session, git, publish: (payload) => hub.publish(payload), log }),
+        api: createApiRoutes({ view, git, publish: (payload) => hub.publish(payload), log }),
         assets,
         upgrade: (req, socket, head) => hub.handleUpgrade(req, socket, head),
     });
@@ -79,7 +79,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const { port } = http.address() as AddressInfo;
 
     const refreshSources = async (): Promise<void> => {
-        const payload = await session.refresh();
+        const payload = await view.refresh();
         hub.publish(payload);
         const errors = payload.diagnostics.filter((d) => d.severity === 'error').length;
         const d = payload.diff;
@@ -93,8 +93,8 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
 
     // a git baseline moves with its branch (a commit, a checkout): watch the refs, not the objects
     const refreshGitBaseline = async (): Promise<void> => {
-        const before = session.state.baseline;
-        const payload = await session.refresh();
+        const before = view.state.baseline;
+        const payload = await view.refresh();
         const after = payload.baseline;
         if (after.kind === 'git' && before.kind === 'git' && after.commit?.hash === before.commit?.hash) return;
         hub.publish(payload);
@@ -104,13 +104,13 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const gitRefsWatch = dirs
         ? createGitRefWatcher(dirs).subscribe(
               () => void refreshGitBaseline(),
-              () => session.state.baseline.kind === 'git',
+              () => view.state.baseline.kind === 'git',
           )
         : undefined;
 
     return {
         url: `http://${host.includes(':') ? `[${host}]` : host}:${port}/`,
-        session,
+        view,
         ready,
         async stop() {
             for (const unsubscribe of await Promise.all([sourcesWatch, gitRefsWatch])) await unsubscribe?.();

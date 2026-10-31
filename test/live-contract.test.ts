@@ -103,7 +103,7 @@ describe('the Live View server', () => {
         await new Promise((r) => (socket.onopen = r));
         const closed = new Promise((r) => (socket.onclose = r));
         const { port } = new URL(local.url);
-        const version = local.session.state.version;
+        const version = local.view.state.version;
         await local.stop();
         await closed;
         const refused = await new Promise<boolean>((r) => {
@@ -114,7 +114,7 @@ describe('the Live View server', () => {
         expect(refused).toBe(true);
         await writeFile(path.join(dir, 'later.dt'), 'context Later { value V { a: String } }');
         await Bun.sleep(300);
-        expect(local.session.state.version).toBe(version);
+        expect(local.view.state.version).toBe(version);
         await rm(path.join(dir, 'later.dt'));
     });
 });
