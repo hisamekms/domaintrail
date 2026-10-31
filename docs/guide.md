@@ -1870,7 +1870,9 @@ Timelines that start with the same steps (the same event, or a group of the same
 until they differ; later common steps are not merged. Sharing is only drawing: it does not make two occurrences the
 same happening. Solid arrows are type-level causal relations (`on`, `issues`, `emits`: possible, not "happened"),
 dotted lines the other relations (`actor`, `reads`, `target`, a hotspot's `on`), dashed arrows the order of a timeline.
-The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.
+The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
+`dt view`, the イベントストーミング tab shows one storming at a time, with the timeline and the level picked in its
+toolbar; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
