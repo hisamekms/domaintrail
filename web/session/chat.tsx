@@ -8,7 +8,7 @@ import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi } from './api';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
-import { ReplyDetails, ReplyFacts, ReplyQuestions } from './reply';
+import { ReplyDetails, ReplyFacts, ReplyQuestions, ReplyText } from './reply';
 import { latestRevision } from './state';
 import {
     agentStatus,
@@ -300,7 +300,16 @@ function streamRows(
                         kind: item.kind,
                         author: 'agent',
                         render: (continues) => (
-                            <AgentBubble message={item.message} run={item.run} at={item.at} now={ctx.now} continues={continues} nameOf={nameOf} tx={tx} />
+                            <AgentBubble
+                                message={item.message}
+                                run={item.run}
+                                at={item.at}
+                                now={ctx.now}
+                                continues={continues}
+                                nameOf={nameOf}
+                                onNavigate={ctx.onNavigate}
+                                tx={tx}
+                            />
                         ),
                     },
                 ];
@@ -411,7 +420,16 @@ function RequestBubble(props: {
     );
 }
 
-function AgentBubble(props: { message: AgentMessage; run: number; at: string; now: number; continues: boolean; nameOf: (id: string) => string; tx: Tx }) {
+function AgentBubble(props: {
+    message: AgentMessage;
+    run: number;
+    at: string;
+    now: number;
+    continues: boolean;
+    nameOf: (id: string) => string;
+    onNavigate: (t: ModelTarget) => void;
+    tx: Tx;
+}) {
     const { message: m, tx } = props;
     const says = tx.chat.agentSays;
     let body: ReactNode;
@@ -431,8 +449,10 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
             body = m.reply ? (
                 <>
                     {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
-                    <p className="chat-text reply-summary">{m.reply.summary}</p>
-                    <ReplyQuestions reply={m.reply} scope={`run-${props.run}`} nameOf={props.nameOf} tx={tx} />
+                    <p className="chat-text reply-summary">
+                        <ReplyText text={m.reply.summary} onNavigate={props.onNavigate} />
+                    </p>
+                    <ReplyQuestions reply={m.reply} scope={`run-${props.run}`} nameOf={props.nameOf} onNavigate={props.onNavigate} tx={tx} />
                 </>
             ) : (
                 <div className="chat-with-icon">
@@ -445,7 +465,7 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
             body = m.reply ? (
                 <>
                     <ReplyFacts files={m.files} changed={m.changed} tx={tx} />
-                    <ReplyDetails reply={m.reply} nameOf={props.nameOf} tx={tx} />
+                    <ReplyDetails reply={m.reply} nameOf={props.nameOf} onNavigate={props.onNavigate} tx={tx} />
                 </>
             ) : (
                 <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
@@ -457,9 +477,11 @@ function AgentBubble(props: { message: AgentMessage; run: number; at: string; no
                     {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
                     <div className="chat-with-icon">
                         <Ban size={14} className="chat-icon" aria-label={tx.chat.reply.declined} />
-                        <p className="chat-text">{m.reply.summary}</p>
+                        <p className="chat-text">
+                            <ReplyText text={m.reply.summary} onNavigate={props.onNavigate} />
+                        </p>
                     </div>
-                    <ReplyDetails reply={m.reply} summary={false} nameOf={props.nameOf} tx={tx} />
+                    <ReplyDetails reply={m.reply} summary={false} nameOf={props.nameOf} onNavigate={props.onNavigate} tx={tx} />
                 </>
             );
             break;

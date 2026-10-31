@@ -2455,7 +2455,9 @@ base revision as its result.
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
 options (the page always adds "other"). The chat shows the measured facts first and small — `反映しました (2 ファイル)`,
-counted from the revisions before and after the run — then what the AI says, as plain text. Whether a run succeeded is
+counted from the revisions before and after the run — then what the AI says, as plain text. The AI names elements by
+identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows them in the name display setting, as
+links to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
 summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). The API already takes
 the facilitator's answer by choosing (`answerTo` and `answer` when queueing the requests again); the panel's controls

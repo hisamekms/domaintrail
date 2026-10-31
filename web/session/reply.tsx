@@ -1,13 +1,41 @@
 // The agent's reply as the chat and the facilitator's panel show it (ADR 0026, appendix "Structured replies"): the
 // measured facts first and small (the files the run changed), then what the AI says — its summary, a line per request
 // with its status, the assumptions it made with their alternatives, its questions with their options — as plain
-// text, never markup. Nothing here can be chosen yet: the options are shown as they will be offered, disabled.
+// text, never markup; element references in it (`references.ts`) are named in the display setting and link to the
+// element. Nothing here can be chosen yet: the options are shown as they will be offered, disabled.
+import { Fragment } from 'react';
 import { CircleHelp, Lightbulb } from 'lucide-react';
 import type { Messages } from '../i18n';
 import { bodyText } from './mentions';
+import { useTargetNaming } from './naming';
+import { parseReplyText, referenceText } from './references';
 import { oneLine, type ReplyRequest, type ReplyView, type RequestProgress } from './stream';
+import type { ModelTarget } from './targets';
 
 type Tx = Messages['session'];
+type Navigate = (target: ModelTarget) => void;
+
+/** Text of the reply: its element references as links named in the display setting, unresolved ones as their identifier. */
+export function ReplyText({ text, onNavigate }: { text: string; onNavigate: Navigate }) {
+    const naming = useTargetNaming();
+    return (
+        <>
+            {parseReplyText(text).map((seg, i) => {
+                if (seg.kind === 'text') return <Fragment key={i}>{seg.text}</Fragment>;
+                const shown = referenceText(seg, naming);
+                return shown.resolved ? (
+                    <a key={i} className="chat-mention reply-element" onClick={() => onNavigate(seg.target)}>
+                        {shown.text}
+                    </a>
+                ) : (
+                    <span key={i} className="reply-element unresolved">
+                        {shown.text}
+                    </span>
+                );
+            })}
+        </>
+    );
+}
 
 /** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
 const MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
@@ -47,11 +75,27 @@ function RequestRefs({ requests, nameOf, tx }: { requests: readonly ReplyRequest
 }
 
 /** The summary (unless `summary` is false: shown otherwise), the requests' lines and the assumptions of a reply. */
-export function ReplyDetails({ reply, summary = true, nameOf, tx }: { reply: ReplyView; summary?: boolean; nameOf: (id: string) => string; tx: Tx }) {
+export function ReplyDetails({
+    reply,
+    summary = true,
+    nameOf,
+    onNavigate,
+    tx,
+}: {
+    reply: ReplyView;
+    summary?: boolean;
+    nameOf: (id: string) => string;
+    onNavigate: Navigate;
+    tx: Tx;
+}) {
     const r = tx.chat.reply;
     return (
         <>
-            {summary && <p className="chat-text reply-summary">{reply.summary}</p>}
+            {summary && (
+                <p className="chat-text reply-summary">
+                    <ReplyText text={reply.summary} onNavigate={onNavigate} />
+                </p>
+            )}
             {reply.requests.length > 0 && (
                 <ul className="reply-requests">
                     {reply.requests.map((line) => (
@@ -62,7 +106,11 @@ export function ReplyDetails({ reply, summary = true, nameOf, tx }: { reply: Rep
                             <span className="reply-line">
                                 <span className="reply-who">{nameOf(line.request.request.author)}</span>
                                 <span className="reply-head">{head(line.request)}</span>
-                                {line.note && <span className="reply-note">{line.note}</span>}
+                                {line.note && (
+                                    <span className="reply-note">
+                                        <ReplyText text={line.note} onNavigate={onNavigate} />
+                                    </span>
+                                )}
                             </span>
                         </li>
                     ))}
@@ -74,13 +122,15 @@ export function ReplyDetails({ reply, summary = true, nameOf, tx }: { reply: Rep
                         <li key={i} className="reply-assumption">
                             <Lightbulb size={13} className="reply-icon" aria-label={r.assumption} />
                             <span className="reply-line">
-                                <span className="reply-text">{a.text}</span>
+                                <span className="reply-text">
+                                    <ReplyText text={a.text} onNavigate={onNavigate} />
+                                </span>
                                 <RequestRefs requests={a.requests} nameOf={nameOf} tx={tx} />
                                 {a.alternatives.length > 0 && (
                                     <span className="reply-alternatives" aria-label={r.alternatives}>
                                         {a.alternatives.map((alt) => (
                                             <span key={alt.id} className="reply-alternative">
-                                                {alt.label}
+                                                <ReplyText text={alt.label} onNavigate={onNavigate} />
                                             </span>
                                         ))}
                                     </span>
@@ -95,7 +145,19 @@ export function ReplyDetails({ reply, summary = true, nameOf, tx }: { reply: Rep
 }
 
 /** The questions of a reply, each with its options as they will be offered (disabled), and "other" always last. */
-export function ReplyQuestions({ reply, scope, nameOf, tx }: { reply: ReplyView; scope: string; nameOf: (id: string) => string; tx: Tx }) {
+export function ReplyQuestions({
+    reply,
+    scope,
+    nameOf,
+    onNavigate,
+    tx,
+}: {
+    reply: ReplyView;
+    scope: string;
+    nameOf: (id: string) => string;
+    onNavigate: Navigate;
+    tx: Tx;
+}) {
     const r = tx.chat.reply;
     return (
         <ol className="reply-questions">
@@ -106,7 +168,9 @@ export function ReplyQuestions({ reply, scope, nameOf, tx }: { reply: ReplyView;
                     <li key={q.id} className="reply-question">
                         <div className="chat-with-icon">
                             <CircleHelp size={16} className="chat-icon" aria-hidden />
-                            <p className="chat-question">{q.text}</p>
+                            <p className="chat-question">
+                                <ReplyText text={q.text} onNavigate={onNavigate} />
+                            </p>
                         </div>
                         <RequestRefs requests={q.requests} nameOf={nameOf} tx={tx} />
                         <ul className="reply-options" {...(q.multiple && { 'aria-label': r.multiple })}>
@@ -115,8 +179,14 @@ export function ReplyQuestions({ reply, scope, nameOf, tx }: { reply: ReplyView;
                                     <label className="reply-option">
                                         <input type={type} name={name} disabled />
                                         <span>
-                                            <span className="reply-option-label">{o.label}</span>
-                                            {o.detail && <span className="reply-option-detail">{o.detail}</span>}
+                                            <span className="reply-option-label">
+                                                <ReplyText text={o.label} onNavigate={onNavigate} />
+                                            </span>
+                                            {o.detail && (
+                                                <span className="reply-option-detail">
+                                                    <ReplyText text={o.detail} onNavigate={onNavigate} />
+                                                </span>
+                                            )}
                                         </span>
                                     </label>
                                 </li>

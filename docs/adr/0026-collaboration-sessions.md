@@ -582,4 +582,16 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   body and the note) and the assumptions with their alternatives as read-only chips; a clarification shows the summary
   and each question with the requests it is about and its options as disabled radio buttons or checkboxes, plus
   "その他…"; a declined run a neutral bubble with its reason. A run without a structured reply is shown as before.
+- **Element references in the reply.** In any text of the reply (summary, request notes, questions, option labels and
+  details, assumptions, alternative labels) the agent names an element by its identifier, never its label, as a token:
+  `@{<model ID>}` for a `.dt` element, state or command (`@{Sales.Order}`, `@{Sales.Order#Draft}`,
+  `@{Sales.Order:confirm}`: the `element` of a `DtElement` target) and `@{es:<storming>/<local>}` for a `.dtes`
+  element (`@{es:Returns/ReturnRequested}`: the `storming` and `local` of a `DtesElement` target, the identifiers of
+  the `.dtes` source). The identifier has no whitespace, braces or `@` (at most 200 characters); `\@{` is a literal
+  `@{`. A request body's mention is `@name[n]`, without braces, so neither reads as the other; reply text is never
+  parsed for mentions. Tokens count as written toward the limits (unchanged). The prompt gives the format in one rule
+  with one example each. The page (`web/session/references.ts`, pure, unit-tested) resolves a token against the model
+  and stormings now and shows it as `targetName` does in the name display setting, as a link that navigates like a
+  target chip; one that does not resolve shows its identifier (without braces or `es:`) as plain text. Replies without
+  tokens are unchanged.
 

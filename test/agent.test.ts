@@ -80,6 +80,8 @@ describe('the prompt', () => {
         expect(prompt).toContain(`at most ${REPLY_LIMITS.summary} characters`);
         expect(prompt).toContain(`1 to ${REPLY_LIMITS.questions}`);
         expect(prompt).toContain('Never add an "other" or free-text option');
+        expect(prompt).toContain('`@{Sales.Order}`');
+        expect(prompt).toContain('`@{es:Returns/ReturnRequested}`');
         expect(prompt).not.toContain(OUTCOME_MARKER);
     });
 

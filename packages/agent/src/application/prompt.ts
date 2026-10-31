@@ -108,7 +108,10 @@ function replyDescription(): string {
   options may be chosen). Never add an "other" or free-text option: people can always answer in their own words.
 - assumptions (optional, at most ${L.assumptions}): where a request left a choice open and you chose without asking,
   what you assumed (text at most ${L.assumptionText}, requests) and up to ${L.alternatives} alternatives (id, label at
-  most ${L.alternativeLabel}).`;
+  most ${L.alternativeLabel}).
+In any of its text, name an element by its identifier, never its label: a \`.dt\` element, state or command as
+\`@{Sales.Order}\`, \`@{Sales.Order#Draft}\` or \`@{Sales.Order:confirm}\`, a \`.dtes\` element as
+\`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
 }
 
 /**
