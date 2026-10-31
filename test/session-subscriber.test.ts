@@ -683,7 +683,7 @@ describe('the stream and the completions', () => {
         const subscriber = startApplicationSubscriber(
             {
                 api: wrap(real),
-                runner: createClaudeCodeRunner({ root: ctx.root, command: { command: process.execPath, args: [FAKE, planFile] } }),
+                runner: await createClaudeCodeRunner({ root: ctx.root, command: { command: process.execPath, args: [FAKE, planFile] } }),
                 tools: createDtTools({ dt: DT, root: ctx.root, log: (l) => log.push(l) }),
                 workspace: wrapWorkspace({ scan: () => scanWorkspace(ctx.root), sources: async () => new Set(await findDomainFiles(ctx.root)) }),
                 clock: systemClock,

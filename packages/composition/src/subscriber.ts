@@ -86,12 +86,16 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.session !== credential.session) throw new SessionError('The agent credential is not for the session the server runs.');
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
 
+    // the agent's dt, taken once now (never read again from the config file, which is in the workspace)
+    const runner = await createClaudeCodeRunner({ root, command: options.agentCommand, dt: options.dt }).catch((e: unknown) => {
+        throw new SessionError(e instanceof Error ? e.message : String(e));
+    });
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
     const subscriber: Subscriber = subscribe(
         {
             api,
-            runner: createClaudeCodeRunner({ root, command: options.agentCommand, dt: options.dt }),
+            runner,
             tools: createDtTools({ dt: options.dt, root, configPath: options.configPath, log }),
             workspace: {
                 scan: () => scanWorkspace(root),

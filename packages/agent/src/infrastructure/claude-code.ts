@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../application/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration/domain/reply';
 import { parseReply } from '../application/prompt.js';
-import { withPathFirst, writeDtShim } from './dt-shim.js';
+import { checkDtCommand, fingerprintDt, withPathFirst, writeDtShim } from './dt-shim.js';
 import type { DtCommand } from './dt-tools.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */
@@ -90,7 +90,10 @@ export interface ClaudeCodeOptions {
     readonly root: string;
     /** The program (default `claude` on the PATH); the tests start a fake agent. */
     readonly command?: AgentCommand;
-    /** What the agent's `dt` runs: a shim for it goes first on the agent's PATH (none: the PATH as it is). */
+    /**
+     * What the agent's `dt` runs: a shim for it goes first on the agent's PATH (none: the PATH as it is). Taken once,
+     * when the runner is made: refused inside the workspace, and its files must not change from one run to the next.
+     */
     readonly dt?: DtCommand;
 }
 
@@ -107,15 +110,24 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
     }
 }
 
-export function createClaudeCodeRunner(options: ClaudeCodeOptions): AgentRunner {
+export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promise<AgentRunner> {
     const command = options.command ?? CLAUDE;
+    const dt = options.dt;
+    if (dt) checkDtCommand(dt, options.root);
+    const fingerprint = dt && (await fingerprintDt(dt));
+    /** The shim of a run, once the command is checked again (a file of it changed: the run fails to start). */
+    const shimFor = async (): Promise<Awaited<ReturnType<typeof writeDtShim>> | undefined> => {
+        if (!dt) return undefined;
+        checkDtCommand(dt, options.root);
+        if ((await fingerprintDt(dt)) !== fingerprint) throw new Error("A file of the agent's dt changed since the subscriber started: refusing to run it.");
+        return writeDtShim(dt, options.root);
+    };
     return {
         run(invocation: AgentInvocation): Promise<AgentOutcome> {
             const { signal } = invocation;
             if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
             const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests)];
-            const shimmed = options.dt ? writeDtShim(options.dt) : Promise.resolve(undefined);
-            return shimmed.then((shim) => {
+            return shimFor().then((shim) => {
                 const ran = spawnAgent(shim && withPathFirst(process.env, shim.dir));
                 return shim ? ran.finally(() => shim.dispose()) : ran;
             });

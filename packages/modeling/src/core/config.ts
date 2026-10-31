@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
@@ -177,6 +178,7 @@ export function defaultConfig(root: string): ResolvedConfig {
 export function resolveConfig(text: string, file: string): ResolvedConfig {
     const raw = parseJsonc(text, file);
     const config = validate(raw, file);
+    checkAgentDt(config, file);
     return {
         root: path.dirname(file),
         file,
@@ -195,12 +197,44 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
     };
 }
 
+/** Refuses an agent's `dt` that runs a file of the workspace (see `commandPathsInside`). */
+function checkAgentDt(config: DomainTrailConfigFile, file: string): void {
+    const dt = config.session?.agent?.dt;
+    const inside = dt ? commandPathsInside(dt, path.dirname(file)) : [];
+    if (inside.length)
+        throw new ConfigError(
+            `${file}: 'session.agent.dt' may not run anything inside the workspace (${inside.join(', ')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
+        );
+}
+
 /**
  * A command of the config as it runs: each element with a path separator that is not absolute is resolved against the
  * config file's directory (`./dist/dt.js`, `../clone/bin/dt.ts`); bare names (`node`) and options stay as written.
  */
 export function resolveCommand(command: readonly string[], dir: string): string[] {
     return command.map((part) => (/[\\/]/.test(part) && !part.startsWith('-') && !path.isAbsolute(part) ? path.resolve(dir, part) : part));
+}
+
+/** A path as it really is (symbolic links followed), or as written when it does not exist. */
+function realPath(p: string): string {
+    try {
+        return realpathSync(p);
+    } catch {
+        return path.resolve(p);
+    }
+}
+
+/**
+ * The paths of the agent's `dt` command that are inside the workspace (`dir`, the config file's directory), symbolic
+ * links followed: the agent writes there during a run, so `dt` may run nothing of it.
+ */
+export function commandPathsInside(command: readonly string[], dir: string): string[] {
+    const root = realPath(dir);
+    return command.filter((part) => {
+        if (!/[\\/]/.test(part) || part.startsWith('-')) return false;
+        const rel = path.relative(root, realPath(path.resolve(dir, part)));
+        return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+    });
 }
 
 function resolveSession(session: SessionConfigFile | undefined, dir?: string): ResolvedSessionConfig {
