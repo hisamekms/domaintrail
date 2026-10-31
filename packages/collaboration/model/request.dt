@@ -1,0 +1,62 @@
+context Collaboration {
+  /// 依頼の識別子。
+  id RequestId "依頼ID": UUID
+
+  /// まだ見送られていない、そのセッションの依頼だと、エージェント実行に束ねるときに確かめたもの。
+  verified PendingRequest "未処理の依頼" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestAlreadyDismissed
+
+  /// 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  aggregate Request "依頼" {
+    id: RequestId
+    references session: SessionId -> Session
+    author: ParticipantId "依頼者"
+    owns target: TargetSnapshot "対象"
+    body: Text "本文"
+    sentAt: Timestamp "送信日時"
+
+    state Sent "送信済み"
+    /// 見送りは印で、依頼そのものは残る。
+    state Dismissed "見送り" {
+      dismissedBy: ParticipantId "見送った人"
+      dismissedAt: Timestamp "見送り日時"
+    }
+
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, target: TargetSnapshot, body: Text, sentAt: Timestamp) "依頼を送る"
+      -> Sent
+      emits RequestSent
+
+    command dismiss(dismissedBy: ParticipantId, dismissedAt: Timestamp) "依頼を見送る"
+      Sent -> Dismissed
+      emits RequestDismissed
+  }
+
+  persistent event RequestSent "依頼送信" {
+    requestId: RequestId
+    session: SessionId
+    author: ParticipantId
+    target: TargetSnapshot
+    body: Text
+    sentAt: Timestamp
+  }
+
+  persistent event RequestDismissed "依頼見送り" {
+    requestId: RequestId
+    dismissedBy: ParticipantId
+    dismissedAt: Timestamp
+  }
+
+  /// 指定した依頼がない。
+  error RequestNotFound "依頼なし" {
+    request: RequestId
+  }
+
+  /// 依頼は別のセッションのもの。
+  error RequestOfAnotherSession "別のセッションの依頼" {
+    request: RequestId
+  }
+
+  /// 依頼はすでに見送られている。
+  error RequestAlreadyDismissed "見送り済みの依頼" {
+    request: RequestId
+  }
+}

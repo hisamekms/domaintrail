@@ -89,6 +89,84 @@
         "port": { "type": "integer", "minimum": 0, "maximum": 65535, "default": 4321 },
         "host": { "type": "string", "default": "127.0.0.1" }
       }
+    },
+    "session": {
+      "description": "Collaboration sessions (dt session start, ADR 0026).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": { "description": "Port of the session's page and API.", "type": "integer", "minimum": 0, "maximum": 65535, "default": 4321 },
+        "host": { "description": "Address to bind; the dev identity mode refuses anything but a loopback address.", "type": "string", "default": "127.0.0.1" },
+        "identity": {
+          "description": "How participants prove who they are: dev (loopback only, a name picked on the first visit, a session cookie) or access (Cloudflare Access). Never inferred from headers.",
+          "enum": ["dev", "access"],
+          "default": "dev"
+        },
+        "access": {
+          "description": "Cloudflare Access, required with identity \"access\".",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["teamDomain", "audience"],
+          "properties": {
+            "teamDomain": {
+              "description": "<team>.cloudflareaccess.com: the issuer of the tokens.",
+              "type": "string",
+              "pattern": "^(https://)?[A-Za-z0-9.-]+/?$"
+            },
+            "audience": { "description": "The Access application's audience tag (AUD).", "type": "string", "minLength": 1 },
+            "publicUrl": {
+              "description": "The public URL of the session (the tunnel's, https). Not used to allow anything: dt session start refuses it unless its host is in allowedHosts and its origin in allowedOrigins.",
+              "type": "string",
+              "format": "uri"
+            },
+            "allowedHosts": {
+              "description": "Host names the server answers to besides loopback (nothing external is allowed without them).",
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+              "default": []
+            },
+            "allowedOrigins": {
+              "description": "Origins (https://host[:port]) whose pages may call the server besides loopback.",
+              "type": "array",
+              "items": { "type": "string", "format": "uri" },
+              "default": []
+            },
+            "acceptCookie": {
+              "description": "Accept the CF_Authorization cookie when the Cf-Access-Jwt-Assertion header is absent (Cloudflare recommends the header).",
+              "type": "boolean",
+              "default": false
+            },
+            "avatarHosts": {
+              "description": "Hosts an avatar (the identity's https picture) may come from; without them the page shows initials.",
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+              "default": []
+            }
+          }
+        },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "port": {
+              "description": "Port of the agent API, bound to 127.0.0.1 only; 0 picks a free port (written to .domaintrail/session/agent.json).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535,
+              "default": 0
+            },
+            "allowedTools": {
+              "description": "The tools the agent may use, chosen by the facilitator, as Claude Code permission rules.",
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+            }
+          }
+        },
+        "maxParticipants": { "description": "Most participants a session admits.", "type": "integer", "minimum": 1, "default": 50 }
+      },
+      "if": { "properties": { "identity": { "const": "access" } }, "required": ["identity"] },
+      "then": { "required": ["access"] }
     }
   }
 }

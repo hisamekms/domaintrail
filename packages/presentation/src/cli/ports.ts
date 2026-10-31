@@ -1,5 +1,5 @@
 import type { SourceFile } from '@domaintrail/modeling/core/analyze';
-import type { ResolvedConfig } from '@domaintrail/modeling/core/config';
+import type { ResolvedConfig, ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**
@@ -19,6 +19,19 @@ export interface CliDeps {
     generatedOutput: GeneratedOutput;
     /** Starts the Live View; rejects with `UnknownRevisionError` for an unknown `base`, or a system error (`EADDRINUSE`). */
     startViewServer(options: ViewServerOptions): Promise<{ url: string }>;
+    /**
+     * Starts the session server (`dt session start`): resumes the workspace's open session or starts one. Rejects with
+     * `SessionError` when the configuration cannot start it, `UnknownRevisionError` for an unknown `base`, or a
+     * system error (`EADDRINUSE`).
+     */
+    startSessionServer(options: SessionServerOptions): Promise<StartedSession>;
+    /** Another facilitator link for the session server running on the workspace; rejects with `SessionError` when none runs. */
+    issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
+    /**
+     * Subscribes to the session server running on the workspace (`dt session subscribe`) and runs its agent runs, one
+     * at a time. Rejects with `SessionError` when no server runs or its credential is refused.
+     */
+    startSubscriber(options: SubscribeOptions): Promise<StartedSubscriber>;
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
 }
@@ -33,6 +46,53 @@ export interface ViewServerOptions {
     base?: string;
     log: (line: string) => void;
 }
+
+/** What `dt session start` asks of the session server. */
+export interface SessionServerOptions {
+    root: string;
+    sources: readonly string[];
+    respectGitignore: boolean;
+    base?: string;
+    /** The `session` section, with `--port` and `--host` applied. */
+    session: ResolvedSessionConfig;
+    log: (line: string) => void;
+}
+
+/** A running session server, as the CLI reports it. */
+export interface StartedSession {
+    url: string;
+    agentUrl: string;
+    session: string;
+    resumed: boolean;
+    facilitatorLink: string;
+    /** Resolves when the facilitator closes the session. */
+    closed: Promise<void>;
+    stop(): Promise<void>;
+}
+
+/** What `dt session subscribe` asks of the subscriber. */
+export interface SubscribeOptions {
+    root: string;
+    sources: readonly string[];
+    respectGitignore: boolean;
+    /** The config file given with `-c` (for `dt fmt` and `dt check` after the agent). */
+    configPath?: string;
+    agent: 'claude';
+    /** Handle one run (waiting for one if none is queued), then end. */
+    once: boolean;
+    log: (line: string) => void;
+}
+
+/** A running subscriber, as the CLI reports it. */
+export interface StartedSubscriber {
+    session: string;
+    /** Resolves when it ends: `once` after its run, `closed` with the session, `stopped`, or `lost` (the server is gone). */
+    done: Promise<'once' | 'closed' | 'stopped' | 'lost'>;
+    stop(): Promise<unknown>;
+}
+
+/** A session cannot be started, or no session server runs (`dt session …`): printed as one line. */
+export class SessionError extends Error {}
 
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {

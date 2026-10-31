@@ -2788,3 +2788,328 @@ del.was.block {
         animation: none;
     }
 }
+
+/* ---------- the session pane and the others' cursors (dt session start only) ---------- */
+
+.session-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+.session-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.session-body {
+    flex: 1;
+    overflow: auto;
+    padding: 0 12px 16px;
+}
+.session-section h3 {
+    margin: 14px 0 6px;
+}
+.session-panel button:not(.icon-button) {
+    font: inherit;
+    font-size: 13px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--panel);
+}
+.session-panel button.primary {
+    margin-top: 6px;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+.session-panel button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.session-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.session-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.session-list > li {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+.session-list > li:last-child {
+    border-bottom: none;
+}
+.session-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.session-participant {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.session-participant.where-away {
+    opacity: 0.55;
+}
+.session-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.session-avatar {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    object-fit: cover;
+}
+.session-role {
+    font-size: 12px;
+    color: var(--muted);
+}
+.session-role.role-facilitator {
+    color: var(--accent);
+    font-weight: 600;
+}
+.session-target {
+    font-weight: 600;
+    word-break: break-all;
+}
+.session-text {
+    width: 100%;
+    margin-top: 4px;
+    font: inherit;
+    font-size: 13px;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    padding: 4px 6px;
+    resize: vertical;
+}
+.session-body-text {
+    margin: 4px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.session-status {
+    padding: 0 6px;
+    border-radius: 9px;
+    font-size: 12px;
+    background: var(--border);
+}
+.session-status.status-current,
+.session-status.run-state-Completed {
+    background: var(--added);
+    color: #fff;
+}
+.session-status.status-stale,
+.session-status.run-state-Failed {
+    background: var(--error);
+    color: #fff;
+}
+.session-status.status-unknown,
+.session-status.run-state-NeedsClarification {
+    background: var(--warning);
+    color: #fff;
+}
+.session-status.run-state-Running {
+    background: var(--accent);
+    color: #fff;
+}
+.session-request.state-Dismissed {
+    opacity: 0.6;
+}
+.session-facilitator {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-strong);
+}
+.session-run-requests {
+    margin: 4px 0;
+    padding-left: 18px;
+    font-size: 13px;
+}
+.session-table {
+    margin-top: 4px;
+    border-collapse: collapse;
+}
+.session-table caption {
+    text-align: left;
+}
+.session-table th {
+    padding-right: 10px;
+    font-weight: normal;
+    text-align: left;
+    color: var(--muted);
+}
+.session-table tr.worse td {
+    color: var(--error);
+}
+.session-table tr.better td {
+    color: var(--added);
+}
+.session-note {
+    margin: 8px 0;
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: var(--banner-bg);
+    border: 1px solid var(--banner-border);
+}
+.session-error {
+    color: var(--error);
+}
+.side-session .rail .count {
+    margin: 4px 0 0;
+}
+.peer-cursors {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 300;
+}
+.peer-cursor {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: flex-start;
+    transition: transform 60ms linear;
+}
+.peer-cursor-name {
+    margin: 12px 0 0 2px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* ---------- the revision timeline, its comparison and the restore (dt session start only) ---------- */
+
+.session-revision-number {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.session-revision.latest .session-revision-number {
+    color: var(--accent);
+}
+.session-revision-origin {
+    flex: 1;
+    min-width: 0;
+}
+.session-revision-actions {
+    margin-top: 4px;
+}
+.session-panel button.small {
+    font-size: 12px;
+    padding: 1px 6px;
+}
+.session-restore p {
+    margin: 0 0 6px;
+}
+.session-restore .session-buttons button.primary {
+    margin-top: 0;
+}
+.session-dialog {
+    width: min(1100px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px var(--shadow);
+    font-size: 14px;
+}
+.session-dialog[open] {
+    display: flex;
+    flex-direction: column;
+}
+.session-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+}
+.session-comparison-body h3 {
+    margin: 16px 0 6px;
+}
+.session-validation-sides td {
+    padding: 0 12px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.session-file {
+    margin: 6px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+.session-file > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    cursor: pointer;
+    background: var(--bg);
+    border-radius: 6px 6px 0 0;
+}
+.session-file-path {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-weight: 600;
+    word-break: break-all;
+}
+.session-status.file-added {
+    background: var(--added);
+    color: #fff;
+}
+.session-status.file-removed {
+    background: var(--removed);
+    color: #fff;
+}
+.session-status.file-changed {
+    background: var(--accent);
+    color: #fff;
+}
+.diff-count-add {
+    color: var(--added);
+}
+.diff-count-remove {
+    color: var(--removed);
+}
+.session-diff {
+    margin: 0;
+    padding: 6px 0;
+    overflow-x: auto;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.diff-line {
+    display: block;
+    padding: 0 10px;
+    white-space: pre;
+}
+.diff-add {
+    background: color-mix(in srgb, var(--added) 16%, transparent);
+}
+.diff-remove {
+    background: color-mix(in srgb, var(--removed) 16%, transparent);
+}
+.diff-hunk,
+.diff-note {
+    color: var(--muted);
+}

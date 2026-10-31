@@ -2391,3 +2391,167 @@ grammar in `tree-sitter-domaintrail`.
 
 **`.dtes` files** have no tree-sitter grammar and are not highlighted, in Zed either; `dt lsp` gives them diagnostics,
 formatting, hover, an outline and go to definition.
+
+<!-- topic: session -->
+## Collaboration sessions
+
+A **session** is the Live View shared by several people while an AI agent edits the model: the facilitator runs
+`dt session start` on their machine, the participants open the page in their browsers, see each other, and send
+**requests** about elements of the `.dt` model or the `.dtes` stormings; the facilitator bundles requests into
+**runs**, and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
+time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
+`.dtes` sources that can be compared, marked confirmed or restored. `dt view` is unchanged: it has no session, and its
+page no session panel. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
+`docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
+
+**The commands.** All three find the workspace like `dt check` (`-r`, `-c`):
+
+- `dt session start` — the session server: the Live View as `dt view` serves it, plus the session, at
+  `http://127.0.0.1:4321` (`--port`, `--host`, or `session.port` / `session.host`; `--base <ref>` as in `dt view`),
+  until Ctrl+C or until the facilitator closes the session. A workspace has one open session: starting again resumes
+  it, with its sign-ins, requests, runs and revisions. It prints the page's URL, a one-time **facilitator link** and the
+  agent API's address.
+- `dt session link` — another facilitator link, for the server running on the workspace (each link works once, for 10
+  minutes).
+- `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
+  the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
+
+**Roles.** Everyone signed in is a **participant**: they see the Live View and the session panel, send requests,
+dismiss their own, and compare revisions. The **facilitator** is whoever opened the facilitator link while signed in
+(never derived from Cloudflare Access); a new link moves the role, and the previous holder's pages reconnect as a
+participant. Only the facilitator queues and cancels runs, dismisses others' requests, records, confirms and restores
+revisions, changes the shared 比較対象 (baseline) and closes the session (`POST /api/session/close`, e.g. with `fetch`
+from the browser console: the page has no button for it). The server checks every role; the page only hides what is
+not yours. The facilitator is listed once in the panel, under their own name.
+
+**Requests and targets.** A request is a text (up to 10,000 characters) about a **target**: the whole workspace, a
+`.dt` element (a context's element, a state or a command, by its model ID), a `.dtes` element (by storming and local
+ID), or one **occurrence** of an event in a timeline. The selection gives the target: selecting a note in one
+timeline's view of a storming targets that occurrence (the timeline and the step), while the integrated canvas, which
+draws each event once, targets the event's definition. Drafts stay in your browser (IndexedDB, per session and
+participant) until you select some and send them, each as its own request. A sent request never changes; dismissing
+it is a mark. Each target shows whether it is still in the sources (`current`), no longer found (`stale`: a target is
+never re-bound to something else), or `unknown` while the file it would be in does not parse.
+
+**Runs.** The facilitator selects requests (up to 100), adds a note if needed (up to 4,000 characters) and queues a
+run; its input is frozen then, and a request stays as it was, so it can go into another run later. A run is `Queued`,
+`Running`, then `Completed`, `NeedsClarification` (the agent asked a question, shown in the panel; queue the requests
+again with the answer in the note), `Failed` or `Cancelled`; the facilitator can cancel a queued or running one. A run
+**succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new `.dt` error compared with the run's
+base revision, and every `.dtes` file still parses; diagnostics that were there before and `.dtes` warnings are shown
+(before → after), not a failure. A run that changes nothing completes with its base revision as its result.
+
+**Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
+offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
+view with the same layout, or the same storming, level and timeline (Big Picture and Design Level, or two timelines, are
+different views). An occurrence is only told apart in a timeline's view.
+
+**Privacy.** Pages show participants by name only: the name picked on the join form (`dev`), or the Access identity's
+name, else the part of the e-mail before `@` (`access`). The e-mail is never sent to any page, not even your own, and
+never logged; an avatar is shown only from the hosts in `session.access.avatarHosts`, else initials. The server's log
+has no token, cookie, link code or e-mail. A run's prompt carries the requests' text and their authors' names to the
+agent.
+
+**What is stored where.** Everything of the session is in `.domaintrail/session/` of the workspace, beside a
+`.gitignore` that ignores it all: `session.db` (SQLite: the session, requests, runs, revisions, the event outbox,
+sign-ins and facilitator links as hashes, the log of restores), `blobs/` (the revisions' file contents, by SHA-256),
+`agent.json` (the agent API's address and credential, mode 0600, removed when the server stops) and `server.json`
+(the page's URL, for `dt session link`). Drafts are in each browser; presence only in memory.
+
+**Limitations.** The log of restores is in `session.db` only, not served over HTTP. In the `access` mode, leaving the
+session sends the page to Access's logout, but the server cannot see a sign-out made elsewhere: the person's other
+pages stay until their token expires. Comparisons are bounded (below). Claude Code is the only agent, and there is
+one open session per workspace.
+
+<!-- topic: session-config -->
+### Session configuration
+
+The `session` section of `domaintrail.jsonc`; every key is optional, and the defaults are shown:
+
+```jsonc
+{
+  "session": {
+    "port": 4321,              // the page and its API
+    "host": "127.0.0.1",       // the dev identity refuses a non-loopback address
+    "identity": "dev",         // "dev" or "access"
+    // only with "identity": "access" (then teamDomain and audience are required); see docs/session-access.md
+    "access": {
+      "teamDomain": "myteam.cloudflareaccess.com", // your team domain
+      "audience": "<the Access application's AUD tag>",
+      "publicUrl": "https://session.example.com", // optional; must be https, in allowedHosts and allowedOrigins
+      "allowedHosts": ["session.example.com"],    // default: none (loopback names only)
+      "allowedOrigins": ["https://session.example.com"], // default: none
+      "acceptCookie": false,   // also accept the CF_Authorization cookie when the header is missing
+      "avatarHosts": []        // hosts an https avatar may come from; default: none, initials
+    },
+    "agent": {
+      "port": 0,               // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
+      // Claude Code permission rules; this is the default
+      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+    },
+    "maxParticipants": 50
+  }
+}
+```
+
+**Identity modes.** `dev` is for a session on one machine: the first visit gets a join form asking for a name, and an
+HttpOnly cookie keeps the sign-in (the panel's *Leave* signs out). `access` puts the session behind Cloudflare Access
+and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
+expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
+configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
+hand. `--port` and `--host` win over the file.
+
+<!-- topic: session-revisions -->
+### Revisions, comparison and restore
+
+A **revision** is every `.dt` and `.dtes` source of the workspace at one moment, with the validation per DSL (`.dt`
+errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One is taken when the session starts,
+before and after each run, when the facilitator records the current state (*Record the current state*), and around a
+restore; saves while a run is in progress make none. The panel lists them newest first, numbered in the order taken,
+with their origin.
+
+- **Compare**: anyone chooses two revisions and gets every file of either, `.dt` and `.dtes` together, as added,
+  removed, changed or unchanged, with a line diff, and both validations side by side. The work is bounded: a file over
+  1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
+  stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
+- **Mark as confirmed**: the facilitator's mark on a revision. It blocks nothing.
+- **Restore**: the facilitator writes a past revision back: every source becomes that revision's, on everyone's page
+  at once. The current state is kept first as a *before a restore* revision, so a restore can itself be undone by
+  restoring that one. A restore is refused, and nothing is written, when:
+  - a run is in progress: wait for it, or cancel it from the restore dialog, then restore again (files the agent
+    changed before it stopped count as external changes, below);
+  - the workspace changed since the last revision (an edit by hand, a `git checkout`): the dialog lists the files and
+    offers *Record the current state, then restore*, which keeps the current state as a revision first;
+  - a source is a symbolic link or outside the root.
+
+  If writing fails halfway, nothing is recorded as restored and the page says that manual recovery is needed: check
+  the files, then restore the *before a restore* revision it names (through *Record the current state, then restore*,
+  since the workspace now differs from the last revision).
+
+<!-- topic: session-agent -->
+### The agent and its security
+
+`dt session subscribe --agent claude` runs `claude` from the `PATH` in the workspace's root, for each run, as
+`claude --print --output-format json --no-session-persistence --strict-mcp-config --setting-sources user
+--permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
+tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
+the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
+stormings; then `dt fmt` and `dt check` run (this same `dt`), and the server records the result.
+
+- **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests in a
+  delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
+  plain `Bash`).
+- **Your own settings still apply.** `--setting-sources user` keeps the workspace's `.claude/settings.json` and
+  `.claude/settings.local.json` out (the agent could write them), but loads `~/.claude/settings.json` of whoever runs
+  the subscriber: check that its allow rules, hooks and `apiKeyHelper` allow nothing more than you want for a run.
+- **A change outside the DSL stops the subscriber.** The workspace is scanned before and after the agent; if any file
+  other than a `.dt` or `.dtes` source was added, changed or removed (`.claude/` included, and files that `.gitignore`
+  ignores), the run fails (`AgentError`) and the subscriber claims no further run. Its log names the files (`not
+  claiming further runs: review … then restart the subscriber`). Review them and undo what you do not want, then start
+  `dt session subscribe --agent claude` again and queue the requests in a new run. A scan that fails stops it the same
+  way.
+- **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token in `.domaintrail/session/agent.json`
+  (mode 0600); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.
+- **One run at a time.** Each run is claimed with a lease kept alive by heartbeats. If the subscriber dies, the run's
+  lease expires and a running run fails (`LeaseExpired`) rather than run twice; a run only claimed goes back to the
+  queue. Ctrl+C fails the running run as `Interrupted`.

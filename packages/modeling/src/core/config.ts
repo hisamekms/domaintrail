@@ -12,6 +12,16 @@ export const DEFAULT_PORT = 4321;
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_POLICIES: PolicyMode = 'optional';
 
+/** How the participants of a session prove who they are (ADR 0026): explicit, never inferred from headers. */
+export const SESSION_IDENTITIES = ['dev', 'access'] as const;
+export type SessionIdentity = (typeof SESSION_IDENTITIES)[number];
+/**
+ * The tools the agent of a session may use unless the facilitator chooses others (ADR 0026), as Claude Code permission
+ * rules: reading, editing and writing files, finding them, and `dt fmt` and `dt check`.
+ */
+export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
+export const DEFAULT_MAX_PARTICIPANTS = 50;
+
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile {
     $schema?: string;
@@ -32,6 +42,61 @@ export interface DomainTrailConfigFile {
         };
     };
     view?: { port?: number; host?: string };
+    /** Collaboration sessions (`dt session start`, ADR 0026). */
+    session?: SessionConfigFile;
+}
+
+/** The `session` section of the config file. */
+export interface SessionConfigFile {
+    /** Port of the session's page and API. Default: 4321. */
+    port?: number;
+    /** Address to bind. Default: 127.0.0.1; `dev` refuses anything but a loopback address. */
+    host?: string;
+    /** `dev` (loopback only, a name picked on the first visit) or `access` (Cloudflare Access). Default: `dev`. */
+    identity?: SessionIdentity;
+    /** Cloudflare Access, required with `identity: "access"`. */
+    access?: {
+        /** `<team>.cloudflareaccess.com`: the issuer of the tokens. */
+        teamDomain: string;
+        /** The Access application's audience tag (AUD). */
+        audience: string;
+        /** The public URL of the session (the tunnel's). Not used to allow anything: its host and origin must also be in `allowedHosts` and `allowedOrigins`. */
+        publicUrl?: string;
+        /** Host names the server answers to besides loopback. Default: none. */
+        allowedHosts?: string[];
+        /** Origins (`https://host[:port]`) whose pages may call the server besides loopback. Default: none. */
+        allowedOrigins?: string[];
+        /** Whether the `CF_Authorization` cookie is accepted when the `Cf-Access-Jwt-Assertion` header is absent. Default: false. */
+        acceptCookie?: boolean;
+        /** Hosts an avatar (the identity's `https` picture) may come from. Default: none, the page shows initials. */
+        avatarHosts?: string[];
+    };
+    agent?: {
+        /** Port of the agent API, on 127.0.0.1 only. Default: 0 (any free port, written to `.domaintrail/session/agent.json`). */
+        port?: number;
+        /** The tools the agent may use, as Claude Code permission rules. Default: `DEFAULT_AGENT_TOOLS`. */
+        allowedTools?: string[];
+    };
+    /** Most participants a session admits. Default: 50. */
+    maxParticipants?: number;
+}
+
+/** The `session` section resolved: every default applied. */
+export interface ResolvedSessionConfig {
+    port: number;
+    host: string;
+    identity: SessionIdentity;
+    access?: {
+        teamDomain: string;
+        audience: string;
+        publicUrl?: string;
+        allowedHosts: string[];
+        allowedOrigins: string[];
+        acceptCookie: boolean;
+        avatarHosts: string[];
+    };
+    agent: { port: number; allowedTools: string[] };
+    maxParticipants: number;
 }
 
 export interface ResolvedConfig {
@@ -57,6 +122,7 @@ export interface ResolvedConfig {
      */
     tsTests?: { out?: string; runner?: Runner };
     view: { port: number; host: string };
+    session: ResolvedSessionConfig;
 }
 
 export class ConfigError extends Error {}
@@ -87,6 +153,29 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
         },
         ...(config.generate?.ts?.tests && { tsTests: config.generate.ts.tests }),
         view: { port: config.view?.port ?? DEFAULT_PORT, host: config.view?.host ?? DEFAULT_HOST },
+        session: resolveSession(config.session),
+    };
+}
+
+function resolveSession(session: SessionConfigFile | undefined): ResolvedSessionConfig {
+    const access = session?.access;
+    return {
+        port: session?.port ?? DEFAULT_PORT,
+        host: session?.host ?? DEFAULT_HOST,
+        identity: session?.identity ?? 'dev',
+        ...(access && {
+            access: {
+                teamDomain: access.teamDomain,
+                audience: access.audience,
+                ...(access.publicUrl !== undefined && { publicUrl: access.publicUrl }),
+                allowedHosts: access.allowedHosts ?? [],
+                allowedOrigins: access.allowedOrigins ?? [],
+                acceptCookie: access.acceptCookie ?? false,
+                avatarHosts: access.avatarHosts ?? [],
+            },
+        }),
+        agent: { port: session?.agent?.port ?? 0, allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS] },
+        maxParticipants: session?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS,
     };
 }
 
@@ -99,6 +188,7 @@ function defaults(): Omit<ResolvedConfig, 'root' | 'file'> {
         tsContexts: {},
         tsPolicies: { project: DEFAULT_POLICIES, contexts: {} },
         view: { port: DEFAULT_PORT, host: DEFAULT_HOST },
+        session: resolveSession(undefined),
     };
 }
 
@@ -143,7 +233,7 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
     if (!isObject(raw)) return fail('expected an object');
     const c = raw;
     for (const key of Object.keys(c)) {
-        if (!['$schema', 'sources', 'respectGitignore', 'lintHint', 'generate', 'view'].includes(key)) fail(`unknown key '${key}'`);
+        if (!['$schema', 'sources', 'respectGitignore', 'lintHint', 'generate', 'view', 'session'].includes(key)) fail(`unknown key '${key}'`);
     }
     const sources = c.sources;
     if (sources !== undefined && (!Array.isArray(sources) || sources.some((s) => typeof s !== 'string'))) {
@@ -198,8 +288,67 @@ function validate(raw: unknown, file: string): DomainTrailConfigFile {
             fail("'view.port' must be a port number");
         if (view.host !== undefined && typeof view.host !== 'string') fail("'view.host' must be a string");
     }
+    if (c.session !== undefined) validateSession(c.session, fail);
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- every key was checked above
     return c as DomainTrailConfigFile;
+}
+
+const isPort = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 65535;
+const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === 'string' && s.trim() !== '');
+
+function validateSession(session: unknown, fail: (msg: string) => never): void {
+    if (!isObject(session)) return fail("'session' must be an object");
+    for (const key of Object.keys(session)) {
+        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants'].includes(key)) fail(`unknown key 'session.${key}'`);
+    }
+    if (session.port !== undefined && !isPort(session.port)) fail("'session.port' must be a port number");
+    if (session.host !== undefined && (typeof session.host !== 'string' || !session.host)) fail("'session.host' must be a string");
+    if (session.identity !== undefined && !(SESSION_IDENTITIES as readonly unknown[]).includes(session.identity))
+        fail(`'session.identity' must be one of ${SESSION_IDENTITIES.map((m) => `'${m}'`).join(', ')}`);
+    const access = session.access;
+    if (access !== undefined) {
+        if (!isObject(access)) return fail("'session.access' must be an object");
+        for (const key of Object.keys(access)) {
+            if (!['teamDomain', 'audience', 'publicUrl', 'allowedHosts', 'allowedOrigins', 'acceptCookie', 'avatarHosts'].includes(key))
+                fail(`unknown key 'session.access.${key}'`);
+        }
+        if (typeof access.teamDomain !== 'string' || !access.teamDomain.trim()) fail("'session.access.teamDomain' must be a non-empty string");
+        if (!/^(https:\/\/)?[a-z0-9.-]+\/?$/i.test(access.teamDomain))
+            fail(`'session.access.teamDomain' must be a host name like '<team>.cloudflareaccess.com': '${access.teamDomain}'`);
+        if (typeof access.audience !== 'string' || !access.audience.trim()) fail("'session.access.audience' must be a non-empty string");
+        if (access.publicUrl !== undefined && (typeof access.publicUrl !== 'string' || !URL.canParse(access.publicUrl)))
+            fail("'session.access.publicUrl' must be a URL");
+        if (access.allowedHosts !== undefined) {
+            if (!isStringList(access.allowedHosts)) return fail("'session.access.allowedHosts' must be an array of host names");
+            for (const h of access.allowedHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.allowedHosts' must hold host names only: '${h}'`);
+        }
+        if (access.acceptCookie !== undefined && typeof access.acceptCookie !== 'boolean') fail("'session.access.acceptCookie' must be a boolean");
+        if (access.avatarHosts !== undefined) {
+            if (!isStringList(access.avatarHosts)) return fail("'session.access.avatarHosts' must be an array of host names");
+            for (const h of access.avatarHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.avatarHosts' must hold host names only: '${h}'`);
+        }
+        if (access.allowedOrigins !== undefined) {
+            if (!isStringList(access.allowedOrigins)) return fail("'session.access.allowedOrigins' must be an array of origins");
+            for (const o of access.allowedOrigins) {
+                const origin = URL.canParse(o) ? new URL(o) : undefined;
+                if (!origin || !['http:', 'https:'].includes(origin.protocol) || origin.origin !== o)
+                    fail(`'session.access.allowedOrigins' must hold origins like 'https://example.com': '${o}'`);
+            }
+        }
+    }
+    if (session.identity === 'access' && access === undefined) fail("'session.identity' \"access\" needs 'session.access' with 'teamDomain' and 'audience'");
+    const agent = session.agent;
+    if (agent !== undefined) {
+        if (!isObject(agent)) return fail("'session.agent' must be an object");
+        for (const key of Object.keys(agent)) if (!['port', 'allowedTools'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
+        if (agent.port !== undefined && !isPort(agent.port)) fail("'session.agent.port' must be a port number");
+        if (agent.allowedTools !== undefined && !isStringList(agent.allowedTools)) fail("'session.agent.allowedTools' must be an array of tool rules");
+    }
+    if (
+        session.maxParticipants !== undefined &&
+        !(typeof session.maxParticipants === 'number' && Number.isInteger(session.maxParticipants) && session.maxParticipants >= 1)
+    )
+        fail("'session.maxParticipants' must be a positive integer");
 }
 
 /** An output directory: a string inside the directory of the config file. */

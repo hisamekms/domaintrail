@@ -32,7 +32,7 @@
     "CHANGELOG.ja.md"
   ],
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "workspaces": [
     "packages/*",
@@ -61,6 +61,8 @@
     "ws": "8.22.0"
   },
   "devDependencies": {
+    "@domaintrail/agent": "workspace:*",
+    "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/composition": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/presentation": "workspace:*",

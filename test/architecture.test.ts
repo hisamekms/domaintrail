@@ -13,16 +13,26 @@ const ROOT = path.join(import.meta.dir, '..');
 /** The workspace packages, their sources, and the @domaintrail/* packages each depends on (ADR 0025). */
 const PACKAGES: Record<string, { dir: string; sources: string; dependsOn: string[] }> = {
     modeling: { dir: 'packages/modeling', sources: 'packages/modeling/src', dependsOn: [] },
+    // the collaboration contracts and their implementation (ADR 0026): modeling, and visualization's types once it imports them
+    collaboration: { dir: 'packages/collaboration', sources: 'packages/collaboration/src', dependsOn: ['modeling'] },
     workspace: { dir: 'packages/workspace', sources: 'packages/workspace/src', dependsOn: ['modeling'] },
     visualization: { dir: 'packages/visualization', sources: 'packages/visualization/src', dependsOn: ['modeling'] },
-    presentation: { dir: 'packages/presentation', sources: 'packages/presentation/src', dependsOn: ['modeling', 'visualization'] },
+    // the session routes, the agent API and the WS union (ADR 0026): collaboration's application and protocol
+    presentation: { dir: 'packages/presentation', sources: 'packages/presentation/src', dependsOn: ['collaboration', 'modeling', 'visualization'] },
+    // the subscriber of a session and its Claude Code adapter (ADR 0026, S6): collaboration's protocol and types only
+    agent: { dir: 'packages/agent', sources: 'packages/agent/src', dependsOn: ['collaboration'] },
     composition: {
         dir: 'packages/composition',
         sources: 'packages/composition/src',
-        dependsOn: ['modeling', 'presentation', 'visualization', 'workspace'],
+        dependsOn: ['agent', 'collaboration', 'modeling', 'presentation', 'visualization', 'workspace'],
     },
-    web: { dir: 'web', sources: 'web', dependsOn: ['modeling', 'visualization'] },
+    // the session's messages (types only)
+    web: { dir: 'web', sources: 'web', dependsOn: ['collaboration', 'modeling', 'visualization'] },
 };
+
+/** What collaboration may depend on, and who may depend on it (ADR 0026); its imports of visualization are types only. */
+const COLLABORATION_REACHES = ['modeling', 'visualization'];
+const COLLABORATION_USED_BY = ['agent', 'composition', 'presentation', 'web'];
 
 /** Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js). */
 const OUTSIDE_PACKAGE: Record<string, string[]> = {
@@ -41,16 +51,21 @@ interface Import {
     specifier: string;
     /** For a relative import, the imported path relative to the repository. */
     resolved?: string;
+    /** `import type` / `export type`: erased at run time. */
+    typeOnly: boolean;
 }
 
 /**
  * The module specifiers of a file's import and export declarations and dynamic imports. A declaration starts its
  * line, so the code that the generators write into template literals (`import * as fc from 'fast-check';`) is not one.
  */
-function specifiers(source: string): string[] {
-    const declarations = source.matchAll(/^\s*(?:import|export)\s+(?:type\s+)?(?:[\w$*{},\s]+?\s+from\s+)?['"]([^'"]+)['"]/gm);
+function specifiers(source: string): { specifier: string; typeOnly: boolean }[] {
+    const declarations = source.matchAll(/^\s*(?:import|export)\s+(type\s+)?(?:[\w$*{},\s]+?\s+from\s+)?['"]([^'"]+)['"]/gm);
     const dynamic = source.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g);
-    return [...declarations, ...dynamic].map((m) => m[1]);
+    return [
+        ...[...declarations].map((m) => ({ specifier: m[2], typeOnly: m[1] !== undefined })),
+        ...[...dynamic].map((m) => ({ specifier: m[1], typeOnly: false })),
+    ];
 }
 
 async function importsOf(area: string): Promise<Import[]> {
@@ -59,9 +74,9 @@ async function importsOf(area: string): Promise<Import[]> {
     for await (const rel of new Glob('**/*.{ts,tsx}').scan({ cwd: path.join(ROOT, sources) })) {
         if (rel.split('/').includes('node_modules')) continue;
         const file = path.posix.join(sources, rel);
-        for (const specifier of specifiers(await readFile(path.join(ROOT, file), 'utf8'))) {
+        for (const { specifier, typeOnly } of specifiers(await readFile(path.join(ROOT, file), 'utf8'))) {
             const resolved = specifier.startsWith('.') ? path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier)) : undefined;
-            imports.push({ file, specifier, resolved });
+            imports.push({ file, specifier, resolved, typeOnly });
         }
     }
     return imports;
@@ -148,6 +163,11 @@ describe('layers', () => {
         expect(show(wrong.map(({ imp }) => imp))).toEqual([]);
     });
 
+    test('no domain/ file imports node:*', () => {
+        const wrong = all.filter(({ imp }) => segments(imp.file).includes('domain') && imp.specifier.startsWith('node:'));
+        expect(show(wrong.map(({ imp }) => imp))).toEqual([]);
+    });
+
     test('no application/ file imports node:*, chokidar, ws or elkjs', () => {
         const application = all.filter(({ imp }) => segments(imp.file).includes('application'));
         expect(application.length).toBeGreaterThan(0);
@@ -174,6 +194,39 @@ describe('layers', () => {
     test('presentation imports neither composition nor workspace', () => {
         const wrong = IMPORTS.presentation.filter((i) => ['@domaintrail/composition', '@domaintrail/workspace'].includes(packageName(i.specifier)));
         expect(show(wrong)).toEqual([]);
+    });
+
+    test('collaboration reaches only modeling and the types of visualization', () => {
+        expect(PACKAGES.collaboration.dependsOn.filter((d) => !COLLABORATION_REACHES.includes(d))).toEqual([]);
+        const wrong = IMPORTS.collaboration.filter(
+            (i) =>
+                i.specifier.startsWith('@domaintrail/') &&
+                packageName(i.specifier) !== '@domaintrail/collaboration' &&
+                !(packageName(i.specifier) === '@domaintrail/modeling' || (packageName(i.specifier) === '@domaintrail/visualization' && i.typeOnly)),
+        );
+        expect(show(wrong)).toEqual([]);
+    });
+
+    test('collaboration runs on Node: only its infrastructure imports node:*, and nothing but the generated bun tests imports bun', () => {
+        const runtime = IMPORTS.collaboration.filter((i) => !i.file.startsWith('packages/collaboration/src/generated/tests/'));
+        expect(show(runtime.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
+        expect(show(runtime.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
+    });
+
+    test('only agent, composition, presentation and web depend on collaboration', () => {
+        const users = AREAS.filter((area) => PACKAGES[area].dependsOn.includes('collaboration'));
+        expect(users.filter((area) => !COLLABORATION_USED_BY.includes(area))).toEqual([]);
+    });
+
+    test('agent takes only types from collaboration (its protocol and generated contracts), and only its infrastructure imports node:*', () => {
+        const wrong = IMPORTS.agent.filter(
+            (i) =>
+                packageName(i.specifier) === '@domaintrail/collaboration' &&
+                !(i.typeOnly && ['@domaintrail/collaboration/protocol', '@domaintrail/collaboration/generated/index'].includes(i.specifier)),
+        );
+        expect(show(wrong)).toEqual([]);
+        expect(show(IMPORTS.agent.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
+        expect(show(IMPORTS.agent.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
     });
 
     test('modeling imports no other @domaintrail/* package', () => {

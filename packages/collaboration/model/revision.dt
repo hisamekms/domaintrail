@@ -1,0 +1,148 @@
+context Collaboration {
+  /// リビジョンの識別子。
+  id RevisionId "リビジョンID": UUID
+
+  /// 過去のリビジョンを書き戻せると、復元の前に確かめたもの。シンボリックリンク、ルートの外のパス、
+  /// 最後のスナップショットのあとの外部での変更があれば復元しない。
+  verified RestorableRevision "復元できるリビジョン" of RevisionId for SessionId errors RevisionNotFound, RevisionOfAnotherSession, SymlinkInWorkspace, PathOutsideRoot, ExternalChangesSinceSnapshot
+
+  /// スナップショットに含まれる1つのソース。
+  value SnapshotFile "スナップショットのファイル" {
+    path: WorkspacePath
+    language: SourceLanguage
+    hash: ContentHash "ファイルの内容ハッシュ"
+    bytes: Int "バイト数"
+
+    invariant nonNegativeBytes "バイト数は0以上" { bytes >= 0 }
+  }
+
+  /// リビジョンの検証結果を、DSL ごとに件数でまとめたもの。
+  value ValidationSummary "検証の要約" {
+    dtErrors: Tally ".dt のエラー"
+    dtesErrors: Tally ".dtes のエラー"
+    dtesWarnings: Tally ".dtes の警告"
+    linkWarnings: Tally "モデルへの参照の警告"
+    /// 要約がスナップショットの内容より前の検証から作られている。
+    stale: Bool "検証が古い"
+  }
+
+  /// リビジョンが取られたきっかけ。
+  union RevisionOrigin "リビジョンの由来" {
+    SessionStart "セッション開始" {
+      session: SessionId
+    }
+    RunBase "実行前" {
+      run: AgentRunId
+    }
+    RunResult "実行結果" {
+      run: AgentRunId
+    }
+    PreRestore "復元前" {
+      restoring: RevisionId "復元するリビジョン"
+    }
+    /// ファシリテーターが取ったスナップショット（外部での変更を取り込むときなど）。
+    Manual "手動" {
+      takenBy: ParticipantId "取った人"
+    }
+    Restored "復元" {
+      restoredFrom: RevisionId "復元元"
+      preRestore: RevisionId "復元前のリビジョン"
+    }
+  }
+
+  /// ワークスペースのすべてのソース（`.dt` と `.dtes`）の、ある時点のスナップショット。内容ハッシュで識別する。
+  /// 確認は印で、ほかの操作を止めない。
+  aggregate Revision "リビジョン" {
+    id: RevisionId
+    references session: SessionId -> Session
+    origin: RevisionOrigin "由来"
+    contentHash: ContentHash "内容ハッシュ"
+    owns files: SnapshotFile[0..*] "ファイル"
+    owns validation: ValidationSummary "検証の要約"
+    takenAt: Timestamp "取得日時"
+
+    invariant distinctPaths "パスは1ファイル1回" { unique(files, f => f.path) }
+    /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
+    invariant hashOfFiles "内容ハッシュはファイルから決まる"
+
+    state Recorded "記録済み"
+    state Confirmed "確認済み" {
+      confirmedBy: ParticipantId "確認した人"
+      confirmedAt: Timestamp "確認日時"
+    }
+
+    create command take(id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: SnapshotFile[0..*], validation: ValidationSummary, takenAt: Timestamp) "スナップショットを取る"
+      -> Recorded
+      requires notRestored "復元でない" { origin.kind != RevisionOrigin.Restored } else RestoreNeedsCheck
+      /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
+      requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
+      emits RevisionRecorded
+
+    /// 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
+    create command restore(id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: SnapshotFile[0..*], validation: ValidationSummary, takenAt: Timestamp) "リビジョンを復元する"
+      -> Recorded
+      /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
+      requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
+      emits RevisionRestored
+
+    command confirm(confirmedBy: ParticipantId, confirmedAt: Timestamp) "リビジョンを確認済みにする"
+      Recorded -> Confirmed
+      emits RevisionConfirmed
+  }
+
+  persistent event RevisionRecorded "リビジョン記録" {
+    revisionId: RevisionId
+    session: SessionId
+    origin: RevisionOrigin
+    contentHash: ContentHash
+    validation: ValidationSummary
+    takenAt: Timestamp
+  }
+
+  persistent event RevisionRestored "リビジョン復元" {
+    revisionId: RevisionId
+    session: SessionId
+    restoredFrom: RevisionId
+    preRestore: RevisionId
+    contentHash: ContentHash
+    validation: ValidationSummary
+    takenAt: Timestamp
+  }
+
+  persistent event RevisionConfirmed "リビジョン確認" {
+    revisionId: RevisionId
+    confirmedBy: ParticipantId
+    confirmedAt: Timestamp
+  }
+
+  /// 指定したリビジョンがない。
+  error RevisionNotFound "リビジョンなし" {
+    revision: RevisionId
+  }
+
+  /// リビジョンは別のセッションのもの。
+  error RevisionOfAnotherSession "別のセッションのリビジョン" {
+    revision: RevisionId
+  }
+
+  /// ワークスペースのソースのパスにシンボリックリンクがある。
+  error SymlinkInWorkspace "シンボリックリンク" {
+    path: WorkspacePath
+  }
+
+  /// リビジョンのパスがワークスペースのルートの外を指す。
+  error PathOutsideRoot "ルートの外のパス" {
+    path: String
+  }
+
+  /// 最後のスナップショットのあとで、ワークスペースのソースが外部で変わった。
+  error ExternalChangesSinceSnapshot "外部での変更" {
+    paths: WorkspacePath[1..*]
+  }
+
+  /// 内容ハッシュが、ファイルのパスと内容ハッシュから決まるものと合わない。
+  error ContentHashMismatch "内容ハッシュの不一致"
+
+  /// 復元の由来のリビジョンは、復元できると確かめてから restore で記録する。
+  error RestoreNeedsCheck "復元は確認が必要"
+}

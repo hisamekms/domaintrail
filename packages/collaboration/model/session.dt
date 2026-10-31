@@ -1,0 +1,89 @@
+context Collaboration {
+  /// セッションの識別子。
+  id SessionId "セッションID": UUID
+
+  /// 参加者の識別子。認証された本人（または開発用の本人）ごとに決まる。
+  id ParticipantId "参加者ID": String { length(value) >= 1 }
+
+  /// 他の参加者に見せる名前。メールアドレスは他の参加者に見せない。
+  primitive DisplayName "表示名": String { length(value) >= 1 and length(value) <= 200 }
+
+  /// セッションでの役割。ファシリテーターはセッションを始めた人で、認証から導かない。
+  enum ParticipantRole "役割" { Facilitator "ファシリテーター" Participant "参加者" }
+
+  /// いま開いていることを、依頼の送信やエージェント実行の登録のときに確かめたセッション。
+  verified ActiveSession "開いているセッション" of SessionId errors SessionNotFound, SessionAlreadyClosed
+
+  /// ファシリテーターが `dt session start` で開く共同編集の場。
+  aggregate Session "セッション" {
+    id: SessionId
+    facilitator: ParticipantId
+    owns participants: Participant[1..*] "参加者"
+    startedAt: Timestamp "開始日時"
+
+    invariant distinctParticipants "参加者は1人1回" { unique(participants) }
+    invariant facilitatorListed "ファシリテーターは参加者の1人" {
+      any(participants, p => p.id == facilitator and p.role == ParticipantRole.Facilitator)
+    }
+    invariant soleFacilitator "ファシリテーターは1人" {
+      all(participants, p => p.role == ParticipantRole.Facilitator implies p.id == facilitator)
+    }
+
+    state Open "開催中"
+    state Closed "終了" {
+      closedAt: Timestamp "終了日時"
+    }
+
+    create command start(id: SessionId, facilitator: ParticipantId, name: DisplayName, startedAt: Timestamp) "セッションを始める"
+      -> Open
+      emits SessionStarted
+
+    /// 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。
+    command join(participant: ParticipantId, name: DisplayName, joinedAt: Timestamp) "参加する"
+      Open -> Open
+      requires newcomer "まだ参加していない" { all(participants, p => p.id != participant) } else AlreadyJoined
+      changes participants
+      emits ParticipantJoined
+
+    command close(closedAt: Timestamp) "セッションを終える"
+      Open -> Closed
+      emits SessionClosed
+  }
+
+  entity Participant "参加者" {
+    id: ParticipantId
+    name: DisplayName
+    role: ParticipantRole
+    joinedAt: Timestamp "参加日時"
+  }
+
+  persistent event SessionStarted "セッション開始" {
+    sessionId: SessionId
+    facilitator: ParticipantId
+    name: DisplayName
+    startedAt: Timestamp
+  }
+
+  persistent event ParticipantJoined "参加" {
+    sessionId: SessionId
+    participant: ParticipantId
+    name: DisplayName
+    joinedAt: Timestamp
+  }
+
+  persistent event SessionClosed "セッション終了" {
+    sessionId: SessionId
+    closedAt: Timestamp
+  }
+
+  /// その参加者はすでにセッションに参加している。
+  error AlreadyJoined "参加済み" {
+    participant: ParticipantId
+  }
+
+  /// 指定したセッションがない。
+  error SessionNotFound "セッションなし"
+
+  /// セッションはすでに終わっている。
+  error SessionAlreadyClosed "セッション終了済み"
+}

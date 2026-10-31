@@ -1,0 +1,11 @@
+{
+  "name": "@domaintrail/agent",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@domaintrail/collaboration": "workspace:*"
+  }
+}

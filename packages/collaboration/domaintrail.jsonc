@@ -1,0 +1,13 @@
+{
+  "$schema": "../../schema/domaintrail.schema.json",
+  // The collaboration contracts (ADR 0026): the model in model/, its TypeScript in src/generated (committed;
+  // test/collaboration-contracts.test.ts fails when generating again gives a different output)
+  "sources": ["model/**/*.dt"],
+  "generate": {
+    "ts": {
+      "out": "src/generated",
+      // the contract tests for the hand-written decisions (src/domain), registered with bun:test
+      "tests": { "runner": "bun" },
+    },
+  },
+}

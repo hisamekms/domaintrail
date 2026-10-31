@@ -11,7 +11,7 @@ generated types and held to the model by the compiler and the tests.
 
 ## Quick start
 
-Requires Node.js 22.12 or later.
+Requires Node.js 22.13 or later.
 
 ```bash
 npm i -D domaintrail
@@ -89,6 +89,14 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **`dt lsp`**: a language server for `.dt` and `.dtes` files — diagnostics, definitions, references, hover, rename,
   formatting; a [Zed extension](editors/zed) and a [tree-sitter grammar](tree-sitter-domaintrail) (`.dt` only).
 - **`dt guide`**: the guide in the terminal, one topic at a time.
+
+## Sessions
+
+`dt session start` shares the Live View with several people while an AI agent edits the model: participants send
+requests about `.dt` and `.dtes` elements from their browsers, the facilitator bundles them into runs that
+`dt session subscribe --agent claude` hands to Claude Code, and every run leaves a revision to compare, confirm or
+restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
+and, behind Cloudflare Access, [the access check](docs/session-access.md).
 
 ## Contributing
 

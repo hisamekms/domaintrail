@@ -1,0 +1,184 @@
+context Collaboration {
+  /// エージェント実行の識別子。
+  id AgentRunId "エージェント実行ID": UUID
+
+  /// 実行が失敗した理由。
+  enum FailureReason "失敗の理由" {
+    RuleNotMet "成功の条件を満たさない"
+    AgentError "エージェントの異常終了"
+    LeaseExpired "応答の途絶"
+    Interrupted "中断"
+  }
+
+  /// エージェントの実行のあとに、実行パイプラインが集めた事実。
+  value RunReport "実行の報告" {
+    exitCode: Int "終了コード"
+    formatted: Bool "dt fmt を実行した"
+    checked: Bool "dt check を実行した"
+    newDtErrors: Tally "基準リビジョンより増えた .dt のエラー"
+    unparsedDtes: Tally "構文解析できない .dtes"
+  }
+
+  /// 登録のときに写し取った依頼。あとで依頼が見送られても、実行の入力は変わらない。
+  value FrozenRequest "凍結した依頼" {
+    request: RequestId
+    author: ParticipantId "依頼者"
+    target: TargetSnapshot "対象"
+    body: Text "本文"
+  }
+
+  /// 登録のときに凍結した、実行の入力。束ねた依頼（依頼と実行の多対多）はここにある。
+  value RunInput "実行の入力" {
+    requests: FrozenRequest[1..*] "依頼"
+    note: Text? "ファシリテーターの補足"
+
+    invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
+  }
+
+  /// ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
+  aggregate AgentRun "エージェント実行" {
+    id: AgentRunId
+    references session: SessionId -> Session
+    owns input: RunInput "凍結した入力"
+    queuedBy: ParticipantId "登録した人"
+    queuedAt: Timestamp "登録日時"
+
+    /// セッションの実行は1つずつ順に行う。実行キューのリース（ストア）が守る。
+    invariant serial "セッションで実行中の実行は1つ"
+
+    state Queued "待機中"
+    state Running "実行中" {
+      baseRevision: RevisionId "基準リビジョン"
+      startedAt: Timestamp "開始日時"
+    }
+    state Completed "完了" {
+      baseRevision: RevisionId "基準リビジョン"
+      startedAt: Timestamp "開始日時"
+      report: RunReport "報告"
+      resultRevision: RevisionId "結果リビジョン"
+      changed: Bool "変更あり"
+      finishedAt: Timestamp "終了日時"
+
+      /// エージェントが 0 で終了し、dt fmt と dt check を実行し、基準リビジョンより .dt のエラーが増えず、すべての .dtes が構文解析できる。
+      invariant succeeded "成功の条件を満たす" {
+        report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0
+      }
+      /// 何も変わらなかった実行の結果リビジョンは基準リビジョンそのもの。
+      invariant unchangedKeepsBase "変更がなければ結果は基準リビジョン" {
+        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+      }
+    }
+    state NeedsClarification "確認待ち" {
+      baseRevision: RevisionId "基準リビジョン"
+      startedAt: Timestamp "開始日時"
+      question: Text "問いかけ"
+      resultRevision: RevisionId "結果リビジョン"
+      finishedAt: Timestamp "終了日時"
+    }
+    state Failed "失敗" {
+      baseRevision: RevisionId "基準リビジョン"
+      startedAt: Timestamp "開始日時"
+      reason: FailureReason
+      report: RunReport? "報告"
+      resultRevision: RevisionId? "結果リビジョン"
+      finishedAt: Timestamp "終了日時"
+
+      invariant ruleNotMetReported "成功の条件を満たさないことが報告にある" {
+        reason == FailureReason.RuleNotMet implies (exists(report) and not (report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0))
+      }
+    }
+    state Cancelled "取消" {
+      baseRevision: RevisionId? "基準リビジョン"
+      cancelledBy: ParticipantId "取り消した人"
+      cancelledAt: Timestamp "取消日時"
+    }
+
+    create command queue(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedAt: Timestamp) "実行を登録する"
+      -> Queued
+      requires distinctRequests "依頼は1件1回" { unique(requests) } else DuplicateRequest
+      requires inputCoversRequests "入力は束ねた依頼の写し" {
+        count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+      } else InputMismatch
+      emits RunQueued
+
+    /// 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
+    command start(baseRevision: RevisionId, startedAt: Timestamp) "実行を始める"
+      Queued -> Running
+      emits RunStarted
+
+    /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。
+    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, finishedAt: Timestamp) "実行を終える"
+      Running -> Completed | Failed
+      requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
+        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+      } else ChangedMismatch
+      emits RunCompleted when -> Completed,
+            RunFailed when -> Failed
+
+    command askClarification(question: Text, resultRevision: RevisionId, finishedAt: Timestamp) "確認を求める"
+      Running -> NeedsClarification
+      emits RunNeedsClarification
+
+    /// 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断）。
+    command fail(reason: FailureReason, finishedAt: Timestamp) "実行を失敗にする"
+      Running -> Failed
+      requires abnormal "報告のない失敗" { reason != FailureReason.RuleNotMet } else ReportRequired
+      emits RunFailed
+
+    command cancel(cancelledBy: ParticipantId, cancelledAt: Timestamp) "実行を取り消す"
+      Queued | Running -> Cancelled
+      emits RunCancelled
+  }
+
+  persistent event RunQueued "実行登録" {
+    runId: AgentRunId
+    session: SessionId
+    requests: RequestId[1..*]
+    queuedBy: ParticipantId
+    queuedAt: Timestamp
+  }
+
+  persistent event RunStarted "実行開始" {
+    runId: AgentRunId
+    baseRevision: RevisionId
+    startedAt: Timestamp
+  }
+
+  persistent event RunCompleted "実行完了" {
+    runId: AgentRunId
+    resultRevision: RevisionId
+    changed: Bool
+    finishedAt: Timestamp
+  }
+
+  persistent event RunNeedsClarification "確認依頼" {
+    runId: AgentRunId
+    question: Text
+    resultRevision: RevisionId
+    finishedAt: Timestamp
+  }
+
+  persistent event RunFailed "実行失敗" {
+    runId: AgentRunId
+    reason: FailureReason
+    finishedAt: Timestamp
+  }
+
+  persistent event RunCancelled "実行取消" {
+    runId: AgentRunId
+    cancelledBy: ParticipantId
+    cancelledAt: Timestamp
+  }
+
+  /// 同じ依頼を2回束ねた。
+  error DuplicateRequest "依頼の重複"
+
+  /// 凍結した入力が、束ねた依頼と合わない。
+  error InputMismatch "入力の不一致"
+
+  /// 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
+  error ChangedMismatch "変更の有無の不一致"
+
+  /// 成功の条件を満たさない失敗は、報告とともに finish で終える。
+  error ReportRequired "報告が必要"
+}
