@@ -63,8 +63,10 @@ export const sessionApi = {
     state: (): Promise<SessionStateBody> => call('state'),
     targets: (): Promise<TargetStatuses> => call('targets'),
     sendRequest: (body: SendRequestBody): Promise<unknown> => call('requests', { method: 'POST', body }),
-    dismissRequest: (id: string): Promise<unknown> => call(`requests/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: {} }),
-    queueRun: (body: QueueRunBody): Promise<unknown> => call('runs', { method: 'POST', body }),
+    /** Another one-time facilitator link, to hand the role over. */
+    facilitatorLink: (): Promise<{ link: string; expiresAt: string }> => call('facilitator/link', { method: 'POST', body: {} }),
+    close: (): Promise<unknown> => call('close', { method: 'POST', body: {} }),
+    queueRun: (body: QueueRunBody): Promise<{ run: { id: string } }> => call('runs', { method: 'POST', body }),
     /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),

@@ -6,9 +6,6 @@ import { autoInspectorWidth, effectiveLayout, keptOverrides, NO_OVERRIDES, type 
 /** The lists of the left pane, chosen in its activity bar. */
 export type LeftView = 'tree' | 'problems' | 'changes';
 
-/** What the dock (right of or below the canvas) shows: the inspector, or another content of the page (the facilitator's session panel). */
-export type DockContent = 'inspector' | 'alternative';
-
 /**
  * Which panes are open, their sizes and contents, and whether the legend is open (remembered per browser). The left
  * pane and the dock are as shown: on a narrow window with the conversation open the page may override the reader's
@@ -23,14 +20,9 @@ export interface Panes {
     leftView: LeftView;
     /** Opens the left pane on `view`. */
     showLeft: (view: LeftView) => void;
-    /** The dock is open (on the inspector or on its alternative). */
+    /** The inspector (the dock) is open. */
     inspectorOpen: boolean;
-    /** Opens the dock on the inspector (`true`), or closes it. */
     setInspectorOpen: (open: boolean) => void;
-    /** Opens or closes the dock on what it shows. */
-    setDockOpen: (open: boolean) => void;
-    dockContent: DockContent;
-    setDockContent: (content: DockContent) => void;
     inspectorDock: Dock;
     setInspectorDock: (dock: Dock) => void;
     /** The inspector's width on the right: the reader's (once dragged), else one that leaves the canvas its share. */
@@ -71,8 +63,6 @@ export function usePanes(): Panes {
     const [explorerWidth, setExplorerWidth] = usePersistentState('domaintrail.layout.explorerWidth', 260);
     const [leftView, setLeftView] = usePersistentState<LeftView>('domaintrail.layout.leftView', 'tree');
     const [dockSaved, setDockSaved] = usePersistentState<Dock>('domaintrail.layout.inspectorDock', 'right');
-    // the facilitator's session panel first, as before; without one the dock always shows the inspector
-    const [dockContent, setDockContent] = usePersistentState<DockContent>('domaintrail.layout.dockContent', 'alternative');
     // null until the reader drags it: then the width follows the room the other panes leave
     const [inspectorWidthSaved, setInspectorWidth] = usePersistentState<number | null>('domaintrail.layout.inspectorWidth', null);
     const [inspectorHeight, setInspectorHeight] = usePersistentState('domaintrail.layout.inspectorHeight', 320);
@@ -101,10 +91,7 @@ export function usePanes(): Panes {
         if (forced.dock) setOverrides((o) => ({ ...o, dock }));
         else setDockSaved(dock);
     };
-    const setInspectorOpen = (open: boolean): void => {
-        if (open) setDockContent('inspector');
-        setDockOpen(open);
-    };
+    const setInspectorOpen = setDockOpen;
     const openInspector = (tab: InspectorTab): void => {
         setInspectorTab(tab);
         setInspectorOpen(true);
@@ -122,9 +109,6 @@ export function usePanes(): Panes {
         showLeft,
         inspectorOpen: dockOpen,
         setInspectorOpen,
-        setDockOpen,
-        dockContent,
-        setDockContent,
         inspectorDock: layout.dock,
         setInspectorDock,
         inspectorWidth,

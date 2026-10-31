@@ -1,14 +1,13 @@
 // The session's part of the page (ADR 0026): computed on every page, shown only in a session. Under `dt view` no
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Users } from 'lucide-react';
 import { createShapeId, useValue } from 'tldraw';
 import { LEVEL_KINDS } from '@domaintrail/visualization/domain/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
 import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { Panes } from '../app/panes';
-import type { Conversation, DockAlternative } from '../app/shell';
+import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { stormingGraph, type StormingChoice } from '../storming';
@@ -19,7 +18,6 @@ import { ChatLauncher, SessionChat } from './chat';
 import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
-import { SessionPanel } from './panel';
 import { SelectionAction } from './selection-action';
 import { confirmSelection, isConfirmKey, isTyping } from './suggestions';
 import type { ComposerValue } from './mentions';
@@ -27,8 +25,8 @@ import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
 import type { ViewScope, ViewTarget } from './views';
 import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
-import { agentStatus, latestAt, pendingRequests, streamItems, unreadCount } from './stream';
-import { defaultDraftStorage, useComposerDraft, useDrafts, usePresence, useSession } from './useSession';
+import { agentStatus, latestAt, streamItems, unreadCount } from './stream';
+import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
 
 /** The graph node of a shape on the canvas (`render.ts`: `n:<graph node ID>`). */
 const NODE_SHAPE = 'shape:n:';
@@ -36,8 +34,6 @@ const NODE_SHAPE = 'shape:n:';
 export interface SessionPage {
     /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
     readonly conversation: Conversation | undefined;
-    /** The facilitator's session panel for `AppShell`'s `dockAlternative`; undefined outside a session and for participants. */
-    readonly dockAlternative: DockAlternative | undefined;
     /** The others' cursors over the canvas; undefined outside a session. */
     readonly canvasOverlay: ReactNode;
     /** In a session only the facilitator changes the shared baseline (the server answers others 403). */
@@ -129,7 +125,6 @@ export function useSessionPage(input: {
 
     const storage = useMemo(defaultDraftStorage, []);
     const scope = session && { session: session.me.session, participant: session.me.participant.id };
-    const drafts = useDrafts(storage, scope);
     const composer = useComposerDraft(storage, scope);
 
     // the selection confirmed as the request's targets (💬 on the canvas, or `C`): the chat shown, the caret in its text
@@ -158,9 +153,6 @@ export function useSessionPage(input: {
         return () => document.removeEventListener('keydown', onKey, true);
     }, [live, selectionTargets.length, confirm]);
 
-    // the facilitator's session panel takes turns with the inspector in the dock (participants have the chat only)
-    const { setInspectorOpen, setDockOpen } = panes;
-    const facilitator = session?.me.participant.role === 'facilitator';
     // the chat is the session's first place: the conversation opens when the page joins a session
     const inSession = session !== undefined;
     useEffect(() => {
@@ -261,8 +253,8 @@ export function useSessionPage(input: {
         [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
     );
 
-    if (!session) return { conversation: undefined, dockAlternative: undefined, canvasOverlay: undefined, baselineLocked: false };
-    const online = new Set([...session.peers.values()].map((p) => p.participant.id)).size + 1;
+    if (!session) return { conversation: undefined, canvasOverlay: undefined, baselineLocked: false };
+    const facilitator = session.me.participant.role === 'facilitator';
     return {
         baselineLocked: !facilitator,
         canvasOverlay: (
@@ -293,31 +285,9 @@ export function useSessionPage(input: {
                 <ChatLauncher
                     status={agentStatus(session.state.runs)}
                     unread={conversationOpen ? 0 : unreadCount(items, seen)}
-                    pending={pendingRequests(session.state, session.me.participant.id).all.length}
                     onOpen={() => setConversationOpen(true)}
                 />
             ),
         },
-        dockAlternative: facilitator
-            ? {
-                  label: t.session.showPanel,
-                  icon: <Users size={16} aria-hidden />,
-                  badge: <span className="count">{online}</span>,
-                  content: (menu) => (
-                      <TargetNamingProvider value={naming}>
-                          <SessionPanel
-                              session={session}
-                              drafts={drafts}
-                              location={location}
-                              selectionTarget={selectionTarget}
-                              onNavigate={navigate}
-                              onShowInspector={() => setInspectorOpen(true)}
-                              onClose={() => setDockOpen(false)}
-                              menu={menu}
-                          />
-                      </TargetNamingProvider>
-                  ),
-              }
-            : undefined,
     };
 }

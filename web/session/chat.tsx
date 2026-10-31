@@ -1,12 +1,12 @@
-// The session's chat in the conversation pillar (ADR 0026), the same for everyone: who is here and what the agent is
-// doing at a glance, then two views: チャット — the main stream of what the facilitator queued and what followed
-// (`stream.ts`), the requests still waiting for approval, and the composer of a request about the selection — and 履歴,
-// the history of changes (`history.ts`). People talk in their meeting; nothing here is a chat between them: what they
-// send are requests.
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+// The session's chat in the conversation pillar (ADR 0026, amendment: messages and apply), the same for everyone: who
+// is here and what the agent is doing at a glance, then two views. チャット: one stream of every message (each is chat;
+// the facilitator applies some: a run), one card per run with the runs that continue it (`card.tsx`), the revisions
+// confirmed or restored, and the composer of a message about the selection. 履歴: the history of changes, the same
+// cards. The facilitator's controls are in the stream itself: apply on a message (⤓, ▾ with a note, several selected
+// with Shift/⌘), answer or pick an alternative on a card, cancel, and the menus of the cards and of the head.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    Ban,
-    Bot,
+    ArrowDownToLine,
     ChevronDown,
     ChevronRight,
     CircleCheck,
@@ -15,57 +15,39 @@ import {
     CircleSlash,
     CircleX,
     Clock,
+    Ellipsis,
     LoaderCircle,
     LogOut,
     MessagesSquare,
-    Play,
-    Reply,
     SendHorizontal,
+    Ban,
     X,
     type LucideIcon,
 } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
-import { useT, type Messages } from '../i18n';
+import { useDismiss } from '../shared/layout';
+import { useT } from '../i18n';
+import { useChatActions } from './actions';
 import { sessionApi } from './api';
-import { Avatar, failure, MentionedText, TargetChips } from './parts';
-import { ReplyDetails, ReplyFacts, ReplyQuestions, ReplyText } from './reply';
-import { latestRevision } from './state';
-import {
-    agentStatus,
-    elapsed,
-    oneLine,
-    participantNames,
-    pendingRequests,
-    streamItems,
-    targetsSummary,
-    targetText,
-    type AgentMessage,
-    type AgentStatus,
-    type PendingRequest,
-    type StreamItem,
-} from './stream';
-import { useTargetNaming } from './naming';
+import { RunCard } from './card';
+import { messageMarks, updatedCards, type MarkState } from './cards';
+import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { changeUnits, shownUnits, type ChangeUnit, type UnitOutcome } from './history';
-import {
-    bodyText,
-    composerKey,
-    editText,
-    insertMention,
-    matchCandidates,
-    MAX_REQUEST_TARGETS,
-    mentionQuery,
-    removeChip,
-    type MentionCandidate,
-} from './mentions';
+import { composerKey, editText, insertMention, matchCandidates, MAX_REQUEST_TARGETS, mentionQuery, removeChip, type MentionCandidate } from './mentions';
+import { useTargetNaming } from './naming';
 import { ParticipantsButton } from './participants';
+import { Avatar, failure, MentionedText, TargetChips } from './parts';
+import { ReplyText } from './reply';
+import { useRevisionTools } from './revisions';
+import { latestRevision } from './state';
+import { agentStatus, elapsed, participantNames, streamItems, targetText, type AgentStatus, type StreamItem } from './stream';
 import { dismiss, NO_DISMISSALS, suggestions, targetsToSend, type Dismissals } from './suggestions';
 import { targetKey, type ModelTarget, type TargetDraft } from './targets';
 import { continued, isMac } from './views';
 import type { ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
 
-type Tx = Messages['session'];
-type FrozenRequest = Extract<StreamItem, { kind: 'queued' }>['requests'][number];
+type RequestJson = SessionData['state']['requests'][number];
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -118,10 +100,15 @@ export function SessionChat(props: {
     const names = participantNames(state, session.peers, me);
     const nameOf = (id: string): string => names.get(id) ?? id;
     const live = session.status === 'live' && state.session.state === 'Open';
+    const control = live && me.participant.role === 'facilitator';
     const status = agentStatus(state.runs);
-    const items = streamItems(state);
-    const running = items.some((i) => i.kind === 'agent' && i.message.kind === 'running');
-    const now = useNow(status.kind === 'running' || running);
+    const items = useMemo(() => streamItems(state), [state]);
+    const units = useMemo(() => changeUnits(state), [state]);
+    const marks = useMemo(() => messageMarks(units), [units]);
+    const running = state.runs.some((r) => r.state === 'Running');
+    const now = useNow(running);
+    const actions = useChatActions();
+    const revisions = useRevisionTools(state, tx);
     const [leaveError, setLeaveError] = useState<string | undefined>();
     const leave = async (): Promise<void> => {
         try {
@@ -137,62 +124,600 @@ export function SessionChat(props: {
     useEffect(() => {
         if (focusPending) setView('chat');
     }, [focusPending]);
+
+    // the messages chosen to apply together
+    const [selecting, setSelecting] = useState(false);
+    const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+    const selection = useMemo(
+        () => ({
+            active: selecting,
+            ids: selected,
+            toggle: (id: string) =>
+                setSelected((s) => {
+                    const next = new Set(s);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                }),
+            start: (id: string) => {
+                setSelecting(true);
+                setSelected((s) => new Set([...s, id]));
+            },
+            clear: () => {
+                setSelecting(false);
+                setSelected(new Set());
+            },
+        }),
+        [selecting, selected],
+    );
+    useEffect(() => {
+        if (!selecting) return;
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === 'Escape') selection.clear();
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [selecting, selection]);
+
+    const [hovered, hover] = useState<string | undefined>();
     const root = useRef<HTMLDivElement | null>(null);
-    // 履歴's チャットで見る: the run's first line in the stream, scrolled to the top and marked for a moment
-    const showInChat = (run: string): void => {
+    // an item of the stream, scrolled to the middle and marked for a moment (from 履歴, a quote or a mark)
+    const jump = useCallback((key: string): void => {
         setView('chat');
         requestAnimationFrame(() => {
-            const el = root.current?.querySelector<HTMLElement>(`.chat-stream [data-item="queued:${run}"]`);
+            const el = root.current?.querySelector<HTMLElement>(`.chat-stream [data-item="${CSS.escape(key)}"]`);
             if (!el) return;
-            el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' });
             el.classList.add('chat-flash');
             setTimeout(() => el.classList.remove('chat-flash'), 1600);
         });
+    }, []);
+
+    const context: ChatContextValue = {
+        session,
+        tx,
+        now,
+        nameOf,
+        onNavigate: props.onNavigate,
+        control,
+        actions,
+        revisions,
+        marks,
+        classifications: me.participant.role === 'facilitator' ? session.classifications : undefined,
+        selection,
+        hovered,
+        hover,
+        jump,
     };
 
     return (
-        <div className="session-chat" ref={root}>
-            <ChatHeader
-                session={session}
-                status={status}
-                now={now}
-                location={props.location}
-                viewScope={props.viewScope}
-                onOpenView={props.onOpenView}
-                onLeave={() => void leave()}
-                onClose={props.onClose}
-                tx={tx}
-            />
-            <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
-                {(['chat', 'history'] as const).map((v) => (
-                    <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
-                        {tx.chat.tabs[v]}
-                    </button>
-                ))}
+        <ChatProvider value={context}>
+            <div className="session-chat" ref={root}>
+                <ChatHeader
+                    session={session}
+                    status={status}
+                    now={now}
+                    control={control}
+                    location={props.location}
+                    viewScope={props.viewScope}
+                    onOpenView={props.onOpenView}
+                    onLeave={() => void leave()}
+                    onClose={props.onClose}
+                    tx={tx}
+                />
+                <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
+                    {(['chat', 'history'] as const).map((v) => (
+                        <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
+                            {tx.chat.tabs[v]}
+                        </button>
+                    ))}
+                </div>
+                {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
+                {(session.status === 'closed' || state.session.state === 'Closed') && <p className="session-note chat-notice">{tx.closed}</p>}
+                {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
+                {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
+                {/* both stay mounted, so that switching keeps the stream's scroll and the history's open units */}
+                <div className="chat-view" role="tabpanel" hidden={view !== 'chat'}>
+                    <Stream items={items} />
+                    <div className="chat-tray">
+                        {revisions.node}
+                        {actions.error && <p className="session-note chat-notice session-error">{tx.error(actions.error)}</p>}
+                        {actions.undo && <UndoBar />}
+                        {control && selection.active && <SelectionBar />}
+                    </div>
+                    {live && (
+                        <Composer
+                            session={session}
+                            composer={composer}
+                            selectionTargets={props.selectionTargets}
+                            candidates={props.candidates}
+                            focusPending={focusPending}
+                            onFocused={props.onFocused}
+                            tx={tx}
+                        />
+                    )}
+                </div>
+                <div className="chat-view" role="tabpanel" hidden={view !== 'history'}>
+                    <History units={units} />
+                </div>
             </div>
-            {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
-            {(session.status === 'closed' || state.session.state === 'Closed') && <p className="session-note chat-notice">{tx.closed}</p>}
-            {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
-            {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
-            {/* both stay mounted, so that switching keeps the stream's scroll and the history's open units */}
-            <div className="chat-view" role="tabpanel" hidden={view !== 'chat'}>
-                <Stream session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
-                <Pending session={session} live={live} nameOf={nameOf} tx={tx} />
-                {live && (
-                    <Composer
-                        session={session}
-                        composer={composer}
-                        selectionTargets={props.selectionTargets}
-                        candidates={props.candidates}
-                        focusPending={focusPending}
-                        onFocused={props.onFocused}
-                        tx={tx}
-                    />
+        </ChatProvider>
+    );
+}
+
+function ChatHeader(props: {
+    session: SessionData;
+    status: AgentStatus;
+    now: number;
+    control: boolean;
+    location: ViewLocation;
+    viewScope: ViewScope;
+    onOpenView: (target: ViewTarget) => void;
+    onLeave: () => void;
+    onClose: () => void;
+    tx: Tx;
+}) {
+    const { session, status, tx } = props;
+    const label =
+        status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
+    const runningRun = session.state.runs.find((r) => r.state === 'Running');
+    return (
+        <div className="chat-header">
+            <ParticipantsButton session={session} location={props.location} scope={props.viewScope} onOpenView={props.onOpenView} />
+            {/* idle says nothing: only running, a question or a queued run shows */}
+            <span className="chat-status-slot" aria-live="polite">
+                {status.kind !== 'idle' && (
+                    <span className={`chat-status status-${status.kind}`} data-tooltip={tx.chat.statusHint[status.kind]}>
+                        <span className="chat-status-mark" aria-hidden>
+                            {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
+                        </span>
+                        {label}
+                        {props.control && runningRun && <CancelButton run={runningRun.id} />}
+                    </span>
                 )}
+            </span>
+            {props.control && <SessionMenu />}
+            {session.status !== 'signed-out' && (
+                <button className="icon-button" onClick={props.onLeave} data-tooltip={tx.leave} aria-label={tx.leave}>
+                    <LogOut size={15} aria-hidden />
+                </button>
+            )}
+            <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
+                <X size={16} aria-hidden />
+            </button>
+        </div>
+    );
+}
+
+function CancelButton({ run }: { run: string }) {
+    const { tx, actions } = useChat();
+    return (
+        <button className="run-card-cancel" onClick={() => void actions.cancel(run)} aria-label={tx.chat.cancelRun} data-tooltip={tx.chat.cancelRun}>
+            <X size={11} aria-hidden />
+        </button>
+    );
+}
+
+/** The session's menu (the facilitator's): record the workspace, a link to hand the role over, close the session. */
+function SessionMenu() {
+    const { tx, revisions } = useChat();
+    const [open, setOpen] = useState(false);
+    const [note, setNote] = useState<string | undefined>();
+    const root = useRef<HTMLDivElement>(null);
+    useDismiss(open, root, () => setOpen(false));
+    const pick = (f: () => void | Promise<void>) => (): void => {
+        setOpen(false);
+        void f();
+    };
+    return (
+        <div className="pane-menu" ref={root}>
+            <button
+                className="icon-button"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label={tx.chat.sessionMenu}
+                data-tooltip={tx.chat.sessionMenu}
+                onClick={() => setOpen(!open)}
+            >
+                <Ellipsis size={16} aria-hidden />
+            </button>
+            {open && (
+                <div className="pane-menu-list" role="menu">
+                    <button role="menuitem" onClick={pick(() => revisions.take())}>
+                        {tx.takeRevision}
+                    </button>
+                    <button
+                        role="menuitem"
+                        onClick={pick(async () => {
+                            try {
+                                const { link } = await sessionApi.facilitatorLink();
+                                await navigator.clipboard?.writeText(link).catch(() => undefined);
+                                setNote(tx.chat.linkIssued(link));
+                            } catch (e) {
+                                setNote(tx.error(failure(e)));
+                            }
+                        })}
+                    >
+                        {tx.chat.handOver}
+                    </button>
+                    <button
+                        role="menuitem"
+                        className="danger"
+                        onClick={pick(async () => {
+                            if (!window.confirm(tx.chat.closeConfirm)) return;
+                            await sessionApi.close().catch((e: unknown) => setNote(tx.error(failure(e))));
+                        })}
+                    >
+                        {tx.chat.closeSession}
+                    </button>
+                </div>
+            )}
+            {note && (
+                <div className="pane-menu-list session-menu-note" role="status">
+                    <p className="small">{note}</p>
+                    <button className="chat-small" onClick={() => setNote(undefined)}>
+                        {tx.restoreFlow.close}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/** Whether a scrolled element is at its bottom (within a few pixels). */
+const atBottomOf = (el: HTMLElement): boolean => el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+/** Whether `item` is wholly in the visible part of `list`. */
+const inViewOf = (list: HTMLElement, item: HTMLElement): boolean => {
+    const a = list.getBoundingClientRect();
+    const b = item.getBoundingClientRect();
+    return b.top >= a.top - 1 && b.bottom <= a.bottom + 1;
+};
+
+function Stream({ items }: { items: StreamItem[] }) {
+    const { tx, jump } = useChat();
+    const ref = useRef<HTMLDivElement | null>(null);
+    // follows the newest item only while the reader is at the bottom (true until they scroll up)
+    const atBottom = useRef(true);
+    const toBottom = (): void => {
+        const el = ref.current;
+        if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+    };
+    const signature = items.map((i) => `${i.key}@${i.kind === 'card' ? i.updatedAt : i.at}`).join('|');
+    useLayoutEffect(toBottom, [signature]);
+    // the pane shown again, resized, or a bubble grown: still at the bottom
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(toBottom);
+        observer.observe(el);
+        for (const child of el.children) observer.observe(child);
+        return () => observer.disconnect();
+    }, [signature]);
+
+    // a card that moved on while out of sight: a pill at the bottom goes to it
+    const cards = items.flatMap((i) => (i.kind === 'card' ? [{ key: i.key, updatedAt: i.updatedAt, number: i.unit.runs[0].number }] : []));
+    const seen = useRef(new Map<string, string>());
+    const [pill, setPill] = useState<{ key: string; number: number } | undefined>();
+    useEffect(() => {
+        const el = ref.current;
+        const changed = updatedCards(cards, seen.current);
+        for (const c of cards) seen.current.set(c.key, c.updatedAt);
+        if (!el) return;
+        const hidden = changed.filter((key) => {
+            const item = el.querySelector<HTMLElement>(`[data-item="${CSS.escape(key)}"]`);
+            return item && !inViewOf(el, item);
+        });
+        const last = hidden.at(-1);
+        if (last) setPill({ key: last, number: cards.find((c) => c.key === last)?.number ?? 0 });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [signature]);
+    const onScroll = (el: HTMLElement): void => {
+        atBottom.current = atBottomOf(el);
+        if (!pill) return;
+        const item = el.querySelector<HTMLElement>(`[data-item="${CSS.escape(pill.key)}"]`);
+        if (item && inViewOf(el, item)) setPill(undefined);
+    };
+
+    const rows = streamRows(items, tx);
+    const follows = continued(rows.map((r) => r.author));
+    const substantive = items.some((i) => i.kind !== 'session-start');
+    return (
+        <div className="chat-stream-wrap">
+            <div className="chat-stream" ref={ref} onScroll={(e) => onScroll(e.currentTarget)}>
+                <ol className="chat-items">
+                    {rows.map((row, i) => (
+                        <li key={row.key} className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}`} data-item={row.key}>
+                            {row.render(follows[i])}
+                        </li>
+                    ))}
+                </ol>
+                {!substantive && <p className="chat-empty muted small">{tx.chat.empty}</p>}
             </div>
-            <div className="chat-view" role="tabpanel" hidden={view !== 'history'}>
-                <History session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} onShowInChat={showInChat} tx={tx} />
-            </div>
+            {pill && (
+                <button
+                    className="chat-updated-pill"
+                    onClick={() => {
+                        jump(pill.key);
+                        setPill(undefined);
+                    }}
+                >
+                    {tx.chat.cardUpdated(pill.number)}
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** A line of the stream: a divider, a card, or a message of an author that may continue the one before. */
+interface Row {
+    readonly key: string;
+    readonly kind: string;
+    readonly author: string | undefined;
+    readonly render: (continues: boolean) => ReactNode;
+}
+
+function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
+    return items.map((item): Row => {
+        switch (item.kind) {
+            case 'session-start':
+                return { key: item.key, kind: item.kind, author: undefined, render: () => <Divider at={item.at}>{tx.chat.started}</Divider> };
+            case 'confirmed':
+                return { key: item.key, kind: item.kind, author: undefined, render: () => <ConfirmedDivider item={item} /> };
+            case 'restored':
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    author: undefined,
+                    render: () => <Divider at={item.at}>{tx.chat.restored(item.from, item.revision)}</Divider>,
+                };
+            case 'message':
+                return {
+                    key: item.key,
+                    kind: item.kind,
+                    author: item.request.author,
+                    render: (continues) => <MessageRow request={item.request} continues={continues} />,
+                };
+            case 'card':
+                return { key: item.key, kind: item.kind, author: undefined, render: () => <RunCard unit={item.unit} /> };
+        }
+    });
+}
+
+function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirmed' }> }) {
+    const { tx, nameOf } = useChat();
+    return <Divider at={item.at}>{tx.chat.confirmed(nameOf(item.by), item.revision)}</Divider>;
+}
+
+const MARK_GLYPH: Record<MarkState, string> = {
+    queued: '…',
+    running: '●',
+    clarification: '?',
+    question: '?',
+    done: '✓',
+    partial: '◐',
+    skipped: '–',
+    declined: '⊘',
+    failed: '✕',
+    cancelled: '⊘',
+};
+
+/**
+ * A message of the stream: who sent it, its targets and text; at its right end, the mark of its latest run (`✓ #3`,
+ * a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
+ */
+function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
+    const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump } = useChat();
+    const author = nameOf(r.author);
+    const mine = r.author === session.me.participant.id;
+    const statuses = session.targets?.statuses[r.id];
+    const mark = marks.get(r.id);
+    const classification = classifications?.[r.id];
+    const talk = classification?.kind === 'chat';
+    const selected = selection.ids.has(r.id);
+    const [note, setNote] = useState<string | undefined>();
+    const choose = (e: React.MouseEvent): void => {
+        if (!control) return;
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            if (selection.active) selection.toggle(r.id);
+            else selection.start(r.id);
+        } else if (selection.active && !(e.target instanceof Element && e.target.closest('a, button, input'))) selection.toggle(r.id);
+    };
+    const side = (
+        <div className="chat-message-side">
+            {control && classification && classification.kind !== 'unknown' && (
+                <span
+                    className={`chat-class class-${classification.kind}`}
+                    data-tooltip={tx.chat.classificationHint(tx.chat.classification[classification.kind], classification.probability)}
+                >
+                    {tx.chat.classification[classification.kind]}
+                </span>
+            )}
+            {mark && (
+                <button
+                    className={`chat-mark mark-${mark.state}`}
+                    onClick={() => jump(`card:${mark.card}`)}
+                    data-tooltip={tx.chat.markHint(mark.run, tx.chat.marks[mark.state])}
+                >
+                    {MARK_GLYPH[mark.state]} #{mark.run}
+                </button>
+            )}
+            {control && !selection.active && (
+                <span className="chat-apply">
+                    {!mark && !talk && (
+                        <button
+                            className="icon-button chat-apply-button"
+                            disabled={actions.busy}
+                            onClick={() => void actions.apply([r.id])}
+                            aria-label={tx.chat.apply}
+                            data-tooltip={tx.chat.apply}
+                        >
+                            <ArrowDownToLine size={14} aria-hidden />
+                        </button>
+                    )}
+                    <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
+                </span>
+            )}
+        </div>
+    );
+    return (
+        <div
+            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${talk ? ' talk' : ''}`}
+            onClickCapture={choose}
+            // Shift / ⌘ chooses the message: no text selection
+            onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}
+            onMouseEnter={() => hover(r.id)}
+            onMouseLeave={() => hover(undefined)}
+        >
+            {control && selection.active && (
+                <input type="checkbox" className="chat-select" checked={selected} onChange={() => selection.toggle(r.id)} aria-label={tx.chat.select} />
+            )}
+            <Bubble
+                avatar={<Avatar id={r.author} name={author} />}
+                who={author}
+                at={r.sentAt}
+                continues={continues}
+                className={`chat-bubble-request${mine ? ' mine' : ''}`}
+                side={side}
+            >
+                <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
+                <Clamped tx={tx}>
+                    <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
+                </Clamped>
+            </Bubble>
+            {note !== undefined && (
+                <form
+                    className="chat-apply-note"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        void actions.apply([r.id], note).then((ok) => ok && setNote(undefined));
+                    }}
+                >
+                    <input
+                        className="session-text"
+                        autoFocus
+                        value={note}
+                        maxLength={4000}
+                        placeholder={tx.runNote}
+                        aria-label={tx.runNote}
+                        onChange={(e) => setNote(e.target.value)}
+                    />
+                    <button type="submit" className="chat-small primary" disabled={actions.busy}>
+                        <ArrowDownToLine size={12} aria-hidden /> {tx.chat.applyNow}
+                    </button>
+                    <button type="button" className="icon-button" onClick={() => setNote(undefined)} aria-label={tx.restoreFlow.cancel}>
+                        <X size={13} aria-hidden />
+                    </button>
+                </form>
+            )}
+        </div>
+    );
+}
+
+/** A message's menu (the facilitator's): apply with a note (▾), choose it among several, apply it anyway. */
+function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boolean; talk: boolean; onNote: () => void }) {
+    const { tx, actions, selection } = useChat();
+    const [open, setOpen] = useState(false);
+    const root = useRef<HTMLDivElement>(null);
+    useDismiss(open, root, () => setOpen(false));
+    const pick = (f: () => void) => (): void => {
+        setOpen(false);
+        f();
+    };
+    return (
+        <div className="pane-menu" ref={root}>
+            <button
+                className="icon-button chat-apply-more"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label={tx.chat.messageMenu}
+                data-tooltip={tx.chat.messageMenu}
+                onClick={() => setOpen(!open)}
+            >
+                <ChevronDown size={13} aria-hidden />
+            </button>
+            {open && (
+                <div className="pane-menu-list" role="menu">
+                    <button role="menuitem" onClick={pick(onNote)}>
+                        {tx.chat.applyWithNote}
+                    </button>
+                    <button role="menuitem" onClick={pick(() => selection.start(id))}>
+                        {tx.chat.selectMany}
+                    </button>
+                    {(applied || talk) && (
+                        <button role="menuitem" onClick={pick(() => void actions.apply([id]))}>
+                            {applied ? tx.chat.applyAgain : tx.chat.applyAnyway}
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/** The bar of the messages chosen to apply together, as one run. */
+function SelectionBar() {
+    const { tx, selection, actions } = useChat();
+    const [note, setNote] = useState('');
+    const [noting, setNoting] = useState(false);
+    const n = selection.ids.size;
+    const apply = async (): Promise<void> => {
+        // in the stream's order
+        const ids = [...document.querySelectorAll<HTMLElement>('.chat-stream [data-item^="message:"]')]
+            .map((el) => el.dataset.item?.slice('message:'.length) ?? '')
+            .filter((id) => selection.ids.has(id));
+        if (await actions.apply(ids, note)) {
+            selection.clear();
+            setNote('');
+            setNoting(false);
+        }
+    };
+    return (
+        <div className="chat-selection-bar" role="toolbar" aria-label={tx.chat.selected(n)}>
+            <span className="chat-selection-count">{tx.chat.selected(n)}</span>
+            {noting ? (
+                <input
+                    className="session-text"
+                    autoFocus
+                    value={note}
+                    maxLength={4000}
+                    placeholder={tx.runNote}
+                    aria-label={tx.runNote}
+                    onChange={(e) => setNote(e.target.value)}
+                />
+            ) : (
+                <button className="chat-small" onClick={() => setNoting(true)}>
+                    {tx.chat.addNote}
+                </button>
+            )}
+            <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void apply()}>
+                <ArrowDownToLine size={12} aria-hidden /> {tx.chat.applySelected}
+            </button>
+            <button className="icon-button" onClick={() => selection.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
+                <X size={14} aria-hidden />
+            </button>
+        </div>
+    );
+}
+
+/** Right after applying: 取り消す, while the run is still queued. */
+function UndoBar() {
+    const { tx, actions, session } = useChat();
+    const run = session.state.runs.find((r) => r.id === actions.undo?.run);
+    const sorted = [...session.state.runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
+    const number = run ? sorted.indexOf(run) + 1 : undefined;
+    const queued = !run || run.state === 'Queued';
+    return (
+        <div className="chat-undo" role="status">
+            <span>{tx.chat.appliedAs(number)}</span>
+            {queued && (
+                <button className="chat-small" onClick={() => actions.undoNow()}>
+                    {tx.chat.undo}
+                </button>
+            )}
+            <button className="icon-button" onClick={() => actions.dismissUndo()} aria-label={tx.restoreFlow.close}>
+                <X size={13} aria-hidden />
+            </button>
         </div>
     );
 }
@@ -210,25 +735,15 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
 
 /**
  * 履歴: the change units, newest first — the runs that changed files, or all of them (すべて). A unit's row says what
- * the AI did; opened, it shows the unit's lines of the stream (the requests, the AI's question, the facilitator's
- * note, the result) and a link to them in the chat. `actions` is the place of the facilitator's actions on a unit
- * (none yet).
+ * the AI did; opened, it shows the unit's card (compact) and a link to it in the chat. The card's own menu is the
+ * place of the facilitator's actions on a unit.
  */
-function History(props: {
-    session: SessionData;
-    items: StreamItem[];
-    now: number;
-    nameOf: (id: string) => string;
-    onNavigate: (target: ModelTarget) => void;
-    onShowInChat: (run: string) => void;
-    actions?: (unit: ChangeUnit) => ReactNode;
-    tx: Tx;
-}) {
-    const { session, tx } = props;
+function History({ units: all }: { units: readonly ChangeUnit[] }) {
+    const { tx } = useChat();
     const h = tx.chat.history;
-    const [all, setAll] = useState(false);
+    const [everything, setEverything] = useState(false);
     const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-    const units = shownUnits(changeUnits(session.state), all);
+    const units = shownUnits(all, everything);
     const toggle = (key: string): void => {
         const next = new Set(open);
         if (next.has(key)) next.delete(key);
@@ -239,47 +754,31 @@ function History(props: {
         <div className="chat-history">
             <div className="chat-history-bar">
                 <label className="check small" data-tooltip={h.allHint}>
-                    <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+                    <input type="checkbox" checked={everything} onChange={(e) => setEverything(e.target.checked)} />
                     {h.all}
                 </label>
             </div>
-            {units.length === 0 && <p className="chat-empty muted small">{all ? h.emptyAll : h.empty}</p>}
+            {units.length === 0 && <p className="chat-empty muted small">{everything ? h.emptyAll : h.empty}</p>}
             <ol className="chat-units">
                 {units.map((unit) => (
-                    <HistoryUnit key={unit.key} unit={unit} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} {...props} />
+                    <HistoryUnit key={unit.key} unit={unit} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
                 ))}
             </ol>
         </div>
     );
 }
 
-function HistoryUnit(props: {
-    unit: ChangeUnit;
-    open: boolean;
-    onToggle: () => void;
-    session: SessionData;
-    items: StreamItem[];
-    now: number;
-    nameOf: (id: string) => string;
-    onNavigate: (target: ModelTarget) => void;
-    onShowInChat: (run: string) => void;
-    actions?: (unit: ChangeUnit) => ReactNode;
-    tx: Tx;
-}) {
-    const { unit, open, nameOf, tx } = props;
+function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean; onToggle: () => void }) {
+    const { tx, nameOf, onNavigate, jump } = useChat();
     const h = tx.chat.history;
     const first = unit.runs[0];
     const last = unit.runs[unit.runs.length - 1];
     const Icon = OUTCOME_ICONS[unit.outcome];
     const requesters = unit.requesters.map(nameOf).join(', ');
     const summary = unit.summary ?? fallbackSummary(last.run, nameOf, tx);
-    const ids = new Set(unit.runs.map((r) => r.run.id));
-    const items = props.items.filter((i) => (i.kind === 'queued' || i.kind === 'note' || i.kind === 'agent') && ids.has(i.key.slice(i.key.indexOf(':') + 1)));
-    const rows = open ? streamRows(items, { now: props.now, session: props.session, nameOf, onNavigate: props.onNavigate, tx }) : [];
-    const follows = continued(rows.map((r) => r.author));
     return (
         <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}`} data-unit={unit.key}>
-            <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={props.onToggle}>
+            <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={onToggle}>
                 <span className="chat-unit-line">
                     <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />
                     <span className="chat-unit-runs">{h.runs(first.number, last.number)}</span>
@@ -289,29 +788,25 @@ function HistoryUnit(props: {
                     </time>
                     {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
                 </span>
-                {/* opened, the result's own bubble says it */}
+                {/* opened, the card says it */}
                 {summary && !open && (
                     <span className="chat-unit-summary">
-                        {unit.summary !== undefined ? <ReplyText text={unit.summary} onNavigate={props.onNavigate} /> : summary}
+                        {unit.summary !== undefined ? <ReplyText text={unit.summary} onNavigate={onNavigate} /> : summary}
                     </span>
                 )}
                 {requesters && <span className="chat-unit-who muted">{h.requesters(requesters)}</span>}
             </button>
             {open && (
                 <div className="chat-unit-body">
-                    <ol className="chat-items compact">
-                        {rows.map((row, i) => (
-                            <li key={row.key} className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}`}>
-                                {row.render(follows[i])}
-                            </li>
-                        ))}
-                    </ol>
-                    <div className="chat-unit-actions">
-                        {props.actions?.(unit)}
-                        <button className="chat-small" onClick={() => props.onShowInChat(first.run.id)}>
-                            <MessagesSquare size={12} aria-hidden /> {h.showInChat}
-                        </button>
-                    </div>
+                    <RunCard
+                        unit={unit}
+                        compact
+                        actions={
+                            <button className="chat-small" onClick={() => jump(`card:${unit.key}`)}>
+                                <MessagesSquare size={12} aria-hidden /> {h.showInChat}
+                            </button>
+                        }
+                    />
                 </div>
             )}
         </li>
@@ -337,14 +832,13 @@ function fallbackSummary(run: ChangeUnit['runs'][number]['run'], nameOf: (id: st
 
 /**
  * The floating button opening the conversation while it is closed, with the agent's state as a mark (a spinner while
- * it runs, `?` while it waits for an answer) and how many messages came since the chat was last shown (else how many
- * requests await approval).
+ * it runs, `?` while it waits for an answer) and how many messages and cards changed since the chat was last shown.
  */
-export function ChatLauncher(props: { status: AgentStatus; unread: number; pending: number; onOpen: () => void }) {
+export function ChatLauncher(props: { status: AgentStatus; unread: number; onOpen: () => void }) {
     const t = useT();
     const tx = t.session;
-    const { status, unread, pending } = props;
-    const label = tx.chat.launcher(unread, pending);
+    const { status, unread } = props;
+    const label = tx.chat.launcher(unread);
     return (
         <button className={`chat-launcher status-${status.kind}`} onClick={props.onOpen} aria-label={label} data-tooltip={label}>
             <MessagesSquare size={20} aria-hidden />
@@ -354,203 +848,13 @@ export function ChatLauncher(props: { status: AgentStatus; unread: number; pendi
                     ?
                 </span>
             )}
-            {unread > 0 ? (
+            {unread > 0 && (
                 <span className="chat-launcher-count" aria-hidden>
                     {unread}
                 </span>
-            ) : (
-                pending > 0 && (
-                    <span className="chat-launcher-count pending" aria-hidden>
-                        {pending}
-                    </span>
-                )
             )}
         </button>
     );
-}
-
-function ChatHeader(props: {
-    session: SessionData;
-    status: AgentStatus;
-    now: number;
-    location: ViewLocation;
-    viewScope: ViewScope;
-    onOpenView: (target: ViewTarget) => void;
-    onLeave: () => void;
-    onClose: () => void;
-    tx: Tx;
-}) {
-    const { session, status, tx } = props;
-    const label =
-        status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
-    return (
-        <div className="chat-header">
-            <ParticipantsButton session={session} location={props.location} scope={props.viewScope} onOpenView={props.onOpenView} />
-            {/* idle says nothing: only running, a question or a queued run shows */}
-            <span className="chat-status-slot" aria-live="polite">
-                {status.kind !== 'idle' && (
-                    <span className={`chat-status status-${status.kind}`} data-tooltip={tx.chat.statusHint[status.kind]}>
-                        <span className="chat-status-mark" aria-hidden>
-                            {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
-                        </span>
-                        {label}
-                    </span>
-                )}
-            </span>
-            {session.status !== 'signed-out' && (
-                <button className="icon-button" onClick={props.onLeave} data-tooltip={tx.leave} aria-label={tx.leave}>
-                    <LogOut size={15} aria-hidden />
-                </button>
-            )}
-            <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
-                <X size={16} aria-hidden />
-            </button>
-        </div>
-    );
-}
-
-/** Whether a scrolled element is at its bottom (within a few pixels). */
-const atBottomOf = (el: HTMLElement): boolean => el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-
-function Stream(props: {
-    session: SessionData;
-    items: StreamItem[];
-    now: number;
-    nameOf: (id: string) => string;
-    onNavigate: (target: ModelTarget) => void;
-    tx: Tx;
-}) {
-    const { session, items, now, nameOf, tx } = props;
-    const ref = useRef<HTMLDivElement | null>(null);
-    // follows the newest item only while the reader is at the bottom (true until they scroll up)
-    const atBottom = useRef(true);
-    const toBottom = (): void => {
-        const el = ref.current;
-        if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-    };
-    const signature = items.map((i) => `${i.key}@${i.at}`).join('|');
-    useLayoutEffect(toBottom, [signature]);
-    // the pane shown again, resized, or a bubble grown: still at the bottom
-    useEffect(() => {
-        const el = ref.current;
-        if (!el || typeof ResizeObserver === 'undefined') return;
-        const observer = new ResizeObserver(toBottom);
-        observer.observe(el);
-        for (const child of el.children) observer.observe(child);
-        return () => observer.disconnect();
-    }, [signature]);
-    const rows = streamRows(items, { now, session, nameOf, onNavigate: props.onNavigate, tx });
-    const follows = continued(rows.map((r) => r.author));
-    const substantive = items.some((i) => i.kind !== 'session-start');
-    return (
-        <div
-            className="chat-stream"
-            ref={ref}
-            onScroll={(e) => {
-                atBottom.current = atBottomOf(e.currentTarget);
-            }}
-        >
-            <ol className="chat-items">
-                {rows.map((row, i) => (
-                    <li key={row.key} className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}`} data-item={row.key}>
-                        {row.render(follows[i])}
-                    </li>
-                ))}
-            </ol>
-            {!substantive && <p className="chat-empty muted small">{tx.chat.empty}</p>}
-        </div>
-    );
-}
-
-/** A line of the stream: a divider, or a bubble of an author (`agent` for the AI) that may continue the one before. */
-interface Row {
-    readonly key: string;
-    readonly kind: string;
-    readonly author: string | undefined;
-    readonly render: (continues: boolean) => ReactNode;
-}
-
-function streamRows(
-    items: readonly StreamItem[],
-    ctx: { now: number; session: SessionData; nameOf: (id: string) => string; onNavigate: (target: ModelTarget) => void; tx: Tx },
-): Row[] {
-    const { nameOf, tx } = ctx;
-    const divider = (item: StreamItem, content: ReactNode): Row => ({
-        key: item.key,
-        kind: item.kind,
-        author: undefined,
-        render: () => <Divider at={item.at}>{content}</Divider>,
-    });
-    return items.flatMap((item): Row[] => {
-        switch (item.kind) {
-            case 'session-start':
-                return [divider(item, tx.chat.started)];
-            case 'confirmed':
-                return [divider(item, tx.chat.confirmed(nameOf(item.by), item.revision))];
-            case 'restored':
-                return [divider(item, tx.chat.restored(item.from, item.revision))];
-            case 'queued':
-                return [
-                    divider(
-                        item,
-                        <span data-tooltip={tx.chat.queued(nameOf(item.by))}>
-                            <Play size={10} className="chat-run-play" aria-label={tx.chat.run(item.run)} /> {item.run} · {nameOf(item.by)}
-                        </span>,
-                    ),
-                    ...item.requests.map((r): Row => ({
-                        key: `${item.key}:${r.request}`,
-                        kind: 'request',
-                        author: r.author,
-                        render: (continues) => (
-                            <RequestBubble request={r} continues={continues} session={ctx.session} nameOf={nameOf} onNavigate={ctx.onNavigate} tx={tx} />
-                        ),
-                    })),
-                ];
-            case 'note':
-                return [
-                    {
-                        key: item.key,
-                        kind: item.kind,
-                        author: item.by,
-                        render: (continues) => (
-                            <Bubble
-                                avatar={<Avatar id={item.by} name={nameOf(item.by)} />}
-                                who={nameOf(item.by)}
-                                badge={<span className="chat-role">{tx.chat.facilitator}</span>}
-                                at={item.at}
-                                continues={continues}
-                                className="chat-bubble-facilitator"
-                            >
-                                <div className="chat-with-icon">
-                                    <Reply size={14} className="chat-icon" aria-label={tx.chat.note} />
-                                    <Clamped tx={tx}>{item.text}</Clamped>
-                                </div>
-                            </Bubble>
-                        ),
-                    },
-                ];
-            case 'agent':
-                return [
-                    {
-                        key: item.key,
-                        kind: item.kind,
-                        author: 'agent',
-                        render: (continues) => (
-                            <AgentBubble
-                                message={item.message}
-                                run={item.run}
-                                at={item.at}
-                                now={ctx.now}
-                                continues={continues}
-                                nameOf={nameOf}
-                                onNavigate={ctx.onNavigate}
-                                tx={tx}
-                            />
-                        ),
-                    },
-                ];
-        }
-    });
 }
 
 function Divider({ at, children }: { at: string; children: ReactNode }) {
@@ -573,6 +877,8 @@ function Bubble(props: {
     /** It continues the bubble before, of the same author: no avatar nor name; the time on hover. */
     continues?: boolean;
     className?: string;
+    /** At the right end of the bubble: a message's mark and the facilitator's tools. */
+    side?: ReactNode;
     children: ReactNode;
 }) {
     if (props.continues)
@@ -581,6 +887,7 @@ function Bubble(props: {
                 <span className="chat-avatar-space" aria-hidden />
                 <div className="chat-message-main">
                     <div className="chat-bubble">{props.children}</div>
+                    {props.side}
                 </div>
             </div>
         );
@@ -599,6 +906,7 @@ function Bubble(props: {
                     )}
                 </div>
                 <div className="chat-bubble">{props.children}</div>
+                {props.side}
             </div>
         </div>
     );
@@ -624,215 +932,6 @@ function Clamped({ children, tx }: { children: ReactNode; tx: Tx }) {
                 </a>
             )}
         </>
-    );
-}
-
-function RequestBubble(props: {
-    request: FrozenRequest;
-    continues: boolean;
-    session: SessionData;
-    nameOf: (id: string) => string;
-    onNavigate: (t: ModelTarget) => void;
-    tx: Tx;
-}) {
-    const { request: r, session, tx } = props;
-    const author = props.nameOf(r.author);
-    const mine = r.author === session.me.participant.id;
-    const sentAt = session.state.requests.find((q) => q.id === r.request)?.sentAt;
-    const statuses = session.targets?.statuses[r.request];
-    return (
-        <Bubble
-            avatar={<Avatar id={r.author} name={author} />}
-            who={author}
-            at={sentAt}
-            continues={props.continues}
-            className={`chat-bubble-request${mine ? ' mine' : ''}`}
-        >
-            <TargetChips targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
-            <Clamped tx={tx}>
-                <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
-            </Clamped>
-        </Bubble>
-    );
-}
-
-function AgentBubble(props: {
-    message: AgentMessage;
-    run: number;
-    at: string;
-    now: number;
-    continues: boolean;
-    nameOf: (id: string) => string;
-    onNavigate: (t: ModelTarget) => void;
-    tx: Tx;
-}) {
-    const { message: m, tx } = props;
-    const says = tx.chat.agentSays;
-    let body: ReactNode;
-    switch (m.kind) {
-        case 'queued':
-            body = <p className="chat-text muted">{says.queued}</p>;
-            break;
-        case 'running':
-            body = (
-                <p className="chat-text">
-                    <span className="chat-pulse" aria-hidden />
-                    {says.running(elapsed(m.since, props.now))}
-                </p>
-            );
-            break;
-        case 'clarification':
-            body = m.reply ? (
-                <>
-                    {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
-                    <p className="chat-text reply-summary">
-                        <ReplyText text={m.reply.summary} onNavigate={props.onNavigate} />
-                    </p>
-                    <ReplyQuestions reply={m.reply} scope={`run-${props.run}`} nameOf={props.nameOf} onNavigate={props.onNavigate} tx={tx} />
-                </>
-            ) : (
-                <div className="chat-with-icon">
-                    <CircleHelp size={16} className="chat-icon" aria-label={says.clarification} />
-                    <p className="chat-question">{m.question}</p>
-                </div>
-            );
-            break;
-        case 'completed':
-            body = m.reply ? (
-                <>
-                    <ReplyFacts files={m.files} changed={m.changed} tx={tx} />
-                    <ReplyDetails reply={m.reply} nameOf={props.nameOf} onNavigate={props.onNavigate} tx={tx} />
-                </>
-            ) : (
-                <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
-            );
-            break;
-        case 'declined':
-            body = (
-                <>
-                    {m.files !== undefined && m.files > 0 && <p className="reply-facts">{tx.chat.reply.applied(m.files)}</p>}
-                    <div className="chat-with-icon">
-                        <Ban size={14} className="chat-icon" aria-label={tx.chat.reply.declined} />
-                        <p className="chat-text">
-                            <ReplyText text={m.reply.summary} onNavigate={props.onNavigate} />
-                        </p>
-                    </div>
-                    <ReplyDetails reply={m.reply} summary={false} nameOf={props.nameOf} onNavigate={props.onNavigate} tx={tx} />
-                </>
-            );
-            break;
-        case 'failed':
-            body = (
-                <div className="chat-with-icon session-error">
-                    <CircleX size={14} className="chat-icon" aria-label={says.failedLabel} />
-                    <p className="chat-text">{tx.failureReasons[m.reason]}</p>
-                </div>
-            );
-            break;
-        case 'cancelled':
-            body = <p className="chat-text muted">{says.cancelled(props.nameOf(m.by))}</p>;
-            break;
-    }
-    return (
-        <Bubble
-            avatar={
-                <span className="session-avatar chat-agent-avatar" aria-hidden>
-                    <Bot size={15} />
-                </span>
-            }
-            who={tx.chat.agent}
-            meta={<span className="chat-run-tag">{tx.chat.run(props.run)}</span>}
-            at={props.at}
-            continues={props.continues}
-            className={`chat-bubble-agent agent-${m.kind}`}
-        >
-            {body}
-        </Bubble>
-    );
-}
-
-function PendingRow({
-    p,
-    live,
-    nameOf,
-    tx,
-    onError,
-}: {
-    p: PendingRequest;
-    live: boolean;
-    nameOf: (id: string) => string;
-    tx: Tx;
-    onError: (e: string | undefined) => void;
-}) {
-    const r = p.request;
-    const naming = useTargetNaming();
-    const target = targetsSummary(r.targets, tx.workspace, naming);
-    const body = oneLine(bodyText(r.body, r.targets.length));
-    return (
-        <li className={`chat-pending-row${p.mine ? ' mine' : ''}`} data-request={r.id} title={`${nameOf(r.author)} · ${target}\n${r.body}`}>
-            <span className="chat-pending-text">
-                <span className="chat-pending-author">{nameOf(r.author)}</span>
-                <span className="muted"> · </span>
-                <span className="chat-pending-target">{target}</span>
-                <span className="muted"> · </span>
-                {body}
-            </span>
-            {p.mine && live && (
-                <button
-                    className="icon-button chat-dismiss"
-                    aria-label={tx.dismiss}
-                    data-tooltip={tx.dismiss}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        sessionApi.dismissRequest(r.id).then(
-                            () => onError(undefined),
-                            (err: unknown) => onError(failure(err)),
-                        );
-                    }}
-                >
-                    <Ban size={13} aria-hidden />
-                </button>
-            )}
-        </li>
-    );
-}
-
-function Pending({ session, live, nameOf, tx }: { session: SessionData; live: boolean; nameOf: (id: string) => string; tx: Tx }) {
-    const [open, setOpen] = useState(false);
-    const [error, setError] = useState<string | undefined>();
-    const pending = pendingRequests(session.state, session.me.participant.id);
-    if (pending.all.length === 0) return error ? <p className="session-note chat-notice session-error">{tx.error(error)}</p> : null;
-    const rows = open ? pending.all : pending.preview;
-    return (
-        <section className={`chat-pending${open ? ' open' : ''}`}>
-            <button
-                className="chat-pending-head"
-                aria-expanded={open}
-                aria-label={tx.chat.pendingLabel(pending.all.length)}
-                onClick={() => setOpen(!open)}
-                data-tooltip={tx.chat.pendingHint}
-            >
-                <span>{tx.chat.pending}</span>
-                <span className="chat-pending-count">{pending.all.length}</span>
-                {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
-            </button>
-            <ul className="chat-pending-list">
-                {rows.map((p) => (
-                    <PendingRow key={p.request.id} p={p} live={live} nameOf={nameOf} tx={tx} onError={setError} />
-                ))}
-            </ul>
-            {!open && pending.more > 0 && (
-                <a
-                    className="chat-pending-more"
-                    onClick={() => setOpen(true)}
-                    aria-label={tx.chat.others(pending.more)}
-                    data-tooltip={tx.chat.others(pending.more)}
-                >
-                    +{pending.more}
-                </a>
-            )}
-            {error && <p className="session-note chat-notice session-error">{tx.error(error)}</p>}
-        </section>
     );
 }
 

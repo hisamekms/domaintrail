@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { answerBody } from '@domaintrail/web/session/actions';
+import { cardRuns, messageMarks, updatedCards } from '@domaintrail/web/session/cards';
 import { changedPaths, changeUnits, shownUnits } from '@domaintrail/web/session/history';
-import { latestAt, streamItems, unreadCount } from '@domaintrail/web/session/stream';
+import { latestAt, revisionLookup, streamItems, unreadCount } from '@domaintrail/web/session/stream';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
@@ -117,7 +119,7 @@ describe('the history of changes', () => {
         expect(changeUnits({ runs: [asked], revisions })[0]).toMatchObject({ outcome: 'clarification', summary: 'Which one?', files: 0 });
     });
 
-    test('failed, declined and cancelled runs are units of their own, without files', () => {
+    test('the same messages queued again after a completed run continue its card; after a failure or a cancel they start one', () => {
         const failed = run('run1', 1, [qa], { state: 'Failed', baseRevision: 'r0', startedAt: at(1), reason: 'AgentError', finishedAt: at(2) });
         const cancelled = run('run2', 3, [qa], { state: 'Cancelled', cancelledBy: 'local:facilitator', cancelledAt: at(4) });
         const units = changeUnits({ runs: [failed, cancelled], revisions });
@@ -126,13 +128,27 @@ describe('the history of changes', () => {
             ['run1', 'failed', undefined],
         ]);
         expect(shownUnits(units, false)).toEqual([]);
+        const done = run('run1', 1, [qa, qb], {
+            state: 'Completed',
+            baseRevision: 'r0',
+            startedAt: at(1),
+            resultRevision: 'r1',
+            changed: true,
+            report: {},
+            finishedAt: at(2),
+        });
+        const alternative = run('run2', 3, [qb, qa], { state: 'Queued' }, { note: 'The other way.' });
+        const fewer = run('run3', 4, [qa], { state: 'Queued' });
+        expect(changeUnits({ runs: [done, alternative, fewer], revisions }).map((u) => u.runs.map((r) => r.number))).toEqual([[3], [1, 2]]);
+        expect(changeUnits({ runs: [done, alternative], revisions })[0].start).toBe(at(1));
     });
 });
 
 describe('the floating chat button', () => {
-    test('counts the runs queued, the notes and the messages of the agent since the chat was last shown', () => {
+    test('counts the messages sent and the cards that moved on since the chat was last shown', () => {
         const items = streamItems({
             revisions,
+            requests: [qa, qb],
             runs: [
                 run('run1', 1, [qa], {
                     state: 'Completed',
@@ -148,7 +164,88 @@ describe('the floating chat button', () => {
         });
         expect(latestAt(items)).toBe(at(5));
         expect(unreadCount(items, undefined)).toBe(0);
-        expect(unreadCount(items, at(3))).toBe(3);
+        expect(unreadCount(items, at(2))).toBe(2);
+        expect(unreadCount(items, at(3))).toBe(1);
         expect(unreadCount(items, at(5))).toBe(0);
+    });
+});
+
+describe('the cards of the chat', () => {
+    const asked = run('run1', 1, [qa, qb], {
+        state: 'NeedsClarification',
+        baseRevision: 'r0',
+        startedAt: at(1),
+        question: 'Which?',
+        resultRevision: 'r1',
+        finishedAt: at(3),
+        reply: {
+            outcome: 'clarification',
+            summary: 'Which one?',
+            requests: [
+                { request: 'qa', status: 'Done' },
+                { request: 'qb', status: 'Question', note: 'Which total?' },
+            ],
+            questions: [{ id: 'x', text: 'Which total?', requests: ['qb'], options: [{ id: 'gross', label: 'Gross' }], multiple: false }],
+            assumptions: [],
+        },
+    });
+    const answer = { answerTo: 'run1', answers: [{ question: 'x', text: 'Which total?', chosen: [{ id: 'gross', label: 'Gross' }] }] };
+    const answered = run('run2', 4, [qa, qb], { state: 'Running', baseRevision: 'r1', startedAt: at(5) }, { answer });
+
+    test('a card holds its runs one under the other: the quotes with what the reply says of each, the note or answer, the agent', () => {
+        const [unit] = changeUnits({ runs: [asked, answered], revisions });
+        const runs = cardRuns(unit, revisionLookup({ revisions, runs: [asked, answered] }));
+        expect(runs.map((r) => [r.number, r.message.kind])).toEqual([
+            [1, 'clarification'],
+            [2, 'running'],
+        ]);
+        expect(runs[0].quotes).toEqual([
+            { request: frozen(qa), progress: 'Done' },
+            { request: frozen(qb), progress: 'Question', note: 'Which total?' },
+        ]);
+        expect(runs[1]).toMatchObject({ answer, quotes: [{ request: frozen(qa) }, { request: frozen(qb) }] });
+    });
+
+    test("an applied message shows its latest run's state and number, and the card it is on; a message never applied none", () => {
+        const units = changeUnits({ runs: [asked], revisions });
+        expect(Object.fromEntries(messageMarks(units))).toEqual({
+            qa: { state: 'done', run: 1, card: 'run1' },
+            qb: { state: 'question', run: 1, card: 'run1' },
+        });
+        const later = changeUnits({ runs: [asked, answered], revisions });
+        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', run: 2, card: 'run1' });
+        expect(messageMarks(later).has('qc')).toBe(false);
+        const failed = run('run3', 9, [qc], { state: 'Failed', baseRevision: 'r0', startedAt: at(9), reason: 'AgentError', finishedAt: at(10) });
+        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', run: 1, card: 'run3' });
+    });
+
+    test('the cards that moved on since the reader last saw them', () => {
+        const seen = new Map([
+            ['card:a', at(1)],
+            ['card:b', at(2)],
+        ]);
+        expect(
+            updatedCards(
+                [
+                    { key: 'card:a', updatedAt: at(1) },
+                    { key: 'card:b', updatedAt: at(4) },
+                    { key: 'card:c', updatedAt: at(5) },
+                ],
+                seen,
+            ),
+        ).toEqual(['card:b']);
+    });
+
+    test("the facilitator's answer: the questions answered only, by option or in own words", () => {
+        const questions = [{ id: 'x' }, { id: 'y' }, { id: 'z' }];
+        expect(
+            answerBody(questions, { x: { options: ['gross'] }, y: { options: [], text: '  net, after discounts ' }, z: { options: [], text: ' ' } }),
+        ).toEqual({
+            answers: [
+                { question: 'x', options: ['gross'] },
+                { question: 'y', options: [], text: 'net, after discounts' },
+            ],
+        });
+        expect(answerBody(questions, {})).toBeUndefined();
     });
 });

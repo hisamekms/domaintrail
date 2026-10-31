@@ -165,7 +165,6 @@ export function App() {
                     />
                 }
                 {...(session.conversation && { conversation: session.conversation })}
-                {...(session.dockAlternative && { dockAlternative: session.dockAlternative })}
                 inspector={(menu) => (
                     <Inspector
                         menu={menu}

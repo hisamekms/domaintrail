@@ -1,6 +1,6 @@
-// The session's history of changes (the chat pillar's 履歴), without React: the runs grouped into "change units". A
-// unit is one run, or a run that asked for clarification followed by the run queued to answer it (the same requests
-// again, or the answer to it), and so on. Everything is derived from the session's state on the page.
+// The session's runs grouped into "change units", without React: one card of the chat, and one row of its 履歴. A
+// unit is one run, or a run followed by the runs that continue it (the answer to its question, an alternative picked,
+// the same messages applied again), and so on. Everything is derived from the session's state on the page.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -23,6 +23,8 @@ export interface ChangeUnit {
     readonly runs: readonly UnitRun[];
     /** When it last changed: the latest run's latest change of state. */
     readonly at: string;
+    /** When its first run was queued (where its card stays in the chat). */
+    readonly start: string;
     readonly outcome: UnitOutcome;
     /**
      * How many sources the unit's runs changed (measured from the revisions before and after each run, a file counted
@@ -70,11 +72,15 @@ function revisionsOf(run: RunJson): { base: string; result: string } | undefined
     return undefined;
 }
 
-/** Whether `next` continues a unit whose latest run is `last`: it queues some of its requests again after its question. */
+/**
+ * Whether `next` continues a unit whose latest run is `last`: it queues the same messages again once that run asked a
+ * question (the answer as a note) or completed (another alternative picked, or applied again). A run after a cancel, a
+ * failure or a decline starts a card of its own.
+ */
 function continues(last: RunJson, next: RunJson): boolean {
-    if (last.state !== 'NeedsClarification') return false;
-    const asked = new Set(last.input.requests.map((r) => r.request));
-    return next.input.requests.some((r) => asked.has(r.request));
+    if (last.state !== 'NeedsClarification' && last.state !== 'Completed') return false;
+    const before = new Set(last.input.requests.map((r) => r.request));
+    return next.input.requests.length === before.size && next.input.requests.every((r) => before.has(r.request));
 }
 
 function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
@@ -98,8 +104,8 @@ function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
 
 /**
  * The change units of a session, newest first (by when each last changed). A run joins the unit of the run it answers
- * (`answer.answerTo`), or else the latest unit whose latest run asked for clarification and had any of its requests;
- * otherwise it starts a unit.
+ * (`answer.answerTo`), or else the latest unit whose latest run asked or completed with the same messages (queued again
+ * with a note, an alternative picked, applied again); otherwise it starts a unit. A unit is one card of the chat.
  */
 export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>): ChangeUnit[] {
     const revisions = new Map(state.revisions.map((r) => [r.id, r]));
@@ -130,6 +136,7 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
             key: runsOf[0].run.id,
             runs: runsOf,
             at: runAt(last),
+            start: runsOf[0].run.queuedAt,
             outcome: outcomeOf(last, files),
             files,
             summary,

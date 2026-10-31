@@ -6,6 +6,8 @@ import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
 
+export type { Classification };
+
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
 

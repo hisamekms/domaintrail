@@ -18,8 +18,9 @@ import {
     headerParticipants,
     oneLine,
     participantNames,
-    pendingRequests,
     streamItems,
+    agentMessage,
+    revisionLookup,
     targetsSummary,
     targetText,
 } from '@domaintrail/web/session/stream';
@@ -81,31 +82,29 @@ describe('the main stream', () => {
         'The first one.',
     );
 
-    test('the session start, each run with its requests, the note and the agent, and the revisions confirmed or restored, oldest first', () => {
-        const items = streamItems({ revisions, runs: [run2, run1] });
+    test('the session start, every message, one card per run and the runs continuing it, and the revisions confirmed or restored, oldest first', () => {
+        const items = streamItems({ revisions, runs: [run2, run1], requests: [q1, q2, q3] });
         expect(items.map((i) => [i.kind, i.at])).toEqual([
             ['session-start', at(0)],
-            ['queued', at(5)],
-            ['agent', at(7)],
+            ['message', at(1)],
+            ['message', at(2)],
+            ['message', at(3)],
+            ['card', at(5)],
             ['confirmed', at(9)],
-            ['queued', at(10)],
-            ['note', at(10)],
-            ['agent', at(12)],
             ['restored', at(21)],
         ]);
-        expect(items[1]).toMatchObject({ kind: 'queued', run: 1, by: 'local:facilitator' });
-        expect(items[1].kind === 'queued' && items[1].requests.map((r) => r.request)).toEqual(['q1', 'q2']);
-        expect(items[2]).toMatchObject({ kind: 'agent', run: 1, message: { kind: 'clarification', question: 'Which?', result: 3 } });
-        expect(items[3]).toMatchObject({ kind: 'confirmed', revision: 3, by: 'local:facilitator' });
-        expect(items[5]).toMatchObject({ kind: 'note', run: 2, text: 'The first one.' });
-        expect(items[6]).toMatchObject({ kind: 'agent', run: 2, message: { kind: 'completed', changed: false, result: 3 } });
-        expect(items[7]).toMatchObject({ kind: 'restored', revision: 5, from: 1 });
-        // pending requests are not part of the stream
-        expect(JSON.stringify(streamItems({ revisions, runs: [run1, run2] }))).not.toContain(q3.id);
+        // run 2 queued the requests of run 1 again after its question: one card, where run 1 was queued, updated since
+        const card = items[4];
+        expect(card.kind === 'card' && [card.unit.runs.map((r) => r.number), card.updatedAt]).toEqual([[1, 2], at(12)]);
+        expect(items[5]).toMatchObject({ kind: 'confirmed', revision: 3, by: 'local:facilitator' });
+        expect(items[6]).toMatchObject({ kind: 'restored', revision: 5, from: 1 });
+        // every message is in the stream, applied or not
+        expect(items.filter((i) => i.kind === 'message').map((i) => i.kind === 'message' && i.request.id)).toEqual(['q1', 'q2', 'q3']);
     });
 
     test("one agent message per run, at the run's latest change of state", () => {
-        const message = (r: RunJson): unknown => streamItems({ revisions, runs: [r] }).find((i) => i.kind === 'agent');
+        const lookup = revisionLookup({ revisions, runs: [] });
+        const message = (r: RunJson): unknown => agentMessage(r, lookup);
         expect(message(run('x', 1, [q1], { state: 'Queued' }))).toMatchObject({ at: at(1), message: { kind: 'queued' } });
         expect(message(run('x', 1, [q1], { state: 'Running', baseRevision: 'r1', startedAt: at(2) }))).toMatchObject({
             at: at(2),
@@ -141,8 +140,7 @@ describe('the main stream', () => {
         expect(filesChanged(before, after)).toBe(3);
         expect(filesChanged(before, before)).toBe(0);
         expect(filesChanged(before, undefined)).toBeUndefined();
-        const message = (state: object): unknown =>
-            streamItems({ revisions: [before, after], runs: [run('x', 1, [q1, q2], state)] }).find((i) => i.kind === 'agent');
+        const message = (state: object): unknown => agentMessage(run('x', 1, [q1, q2], state), revisionLookup({ revisions: [before, after], runs: [] }));
         const ended = { baseRevision: 'b', startedAt: at(1), resultRevision: 'a', finishedAt: at(3) };
         const reply = {
             summary: 'Added.',
@@ -223,35 +221,7 @@ describe('the main stream', () => {
     });
 });
 
-describe('the requests waiting for approval', () => {
-    const state = {
-        requests: [
-            request('old-mine', 'dev:a', 1),
-            request('in-run', 'dev:a', 2),
-            request('theirs', 'dev:b', 3),
-            request('dismissed', 'dev:a', 4, { state: 'Dismissed', dismissedBy: 'dev:a', dismissedAt: at(5) }),
-            request('new-mine', 'dev:a', 6),
-            request('newer-theirs', 'dev:c', 7),
-            request('newest-theirs', 'dev:b', 8),
-        ],
-        runs: [run('run1', 3, [request('in-run', 'dev:a', 2)], { state: 'Queued' })],
-    };
-
-    test('sent and in no run: mine first, newest first within each, a preview of three and how many more', () => {
-        const pending = pendingRequests(state, 'dev:a');
-        expect(pending.all.map((p) => [p.request.id, p.mine])).toEqual([
-            ['new-mine', true],
-            ['old-mine', true],
-            ['newest-theirs', false],
-            ['newer-theirs', false],
-            ['theirs', false],
-        ]);
-        expect(pending.preview.map((p) => p.request.id)).toEqual(['new-mine', 'old-mine', 'newest-theirs']);
-        expect(pending.more).toBe(2);
-        expect(pendingRequests(state, 'dev:z').all[0].request.id).toBe('newest-theirs');
-        expect(pendingRequests({ requests: [], runs: [] }, 'dev:a')).toEqual({ all: [], preview: [], more: 0 });
-    });
-
+describe('the names of the chat', () => {
     test('a one-line row and a target as the chat names it', () => {
         expect(oneLine('  first line\n\n second\tline ')).toBe('first line second line');
         expect(targetText(WORKSPACE_TARGET, 'All')).toBe('All');

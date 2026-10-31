@@ -13,19 +13,6 @@ const MIN_CANVAS_WIDTH = 320;
 const MIN_CANVAS_HEIGHT = 200;
 
 /**
- * Another content of the dock, switchable with the inspector from the dock's menu: the facilitator's session panel in
- * a session (`dt session start`). `content` is given the dock's menu, to place in its head.
- */
-export interface DockAlternative {
-    /** The menu item and the rail's button switching to it. */
-    readonly label: string;
-    readonly icon: ReactNode;
-    /** Next to its button on the rail (e.g. how many are online). */
-    readonly badge?: ReactNode;
-    readonly content: (menu: ReactNode) => ReactNode;
-}
-
-/**
  * The conversation: a pillar at the right end of the page, the whole height, opened and closed by the reader (a
  * session's chat). While it is closed, `launcher` floats at the bottom right of the canvas to open it.
  */
@@ -63,22 +50,28 @@ export function AppShell(props: {
     workspace: ReactNode;
     /** The inspector, given the dock's menu to place in its head. */
     inspector: (menu: ReactNode) => ReactNode;
-    dockAlternative?: DockAlternative;
     /** Composition point for the conversation pillar; nothing under `dt view` (yet). */
     conversation?: Conversation;
     /** Popups placed over the page (e.g. the baseline menu). */
     overlays: ReactNode;
 }) {
-    const { panes, dockAlternative, conversation } = props;
+    const { panes, conversation } = props;
     const { explorerOpen: leftOpen, setExplorerOpen, explorerWidth, setExplorerWidth, leftView, showLeft } = panes;
-    const { inspectorOpen: dockOpen, setDockOpen, inspectorDock: dock, inspectorWidth, setInspectorWidth, inspectorHeight, setInspectorHeight } = panes;
+    const {
+        inspectorOpen: dockOpen,
+        setInspectorOpen: setDockOpen,
+        inspectorDock: dock,
+        inspectorWidth,
+        setInspectorWidth,
+        inspectorHeight,
+        setInspectorHeight,
+    } = panes;
     const { conversationOpen, setConversationOpen, conversationWidth, setConversationWidth } = panes;
     const t = useT();
-    const showsAlternative = dockAlternative !== undefined && panes.dockContent === 'alternative';
     const conversationShown = conversation !== undefined && conversationOpen;
     const right = dock === 'right';
     const dockSize = right ? inspectorWidth : inspectorHeight;
-    const menu = <DockMenu panes={panes} showsAlternative={showsAlternative} {...(dockAlternative && { alternative: dockAlternative.label })} />;
+    const menu = <DockMenu panes={panes} />;
     const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
     const conversationSpace = conversationShown ? conversationWidth : 0;
 
@@ -175,33 +168,9 @@ export function AppShell(props: {
                         >
                             {right ? <PanelRightOpen size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
                         </button>
-                        {dockAlternative && (
-                            <>
-                                <button
-                                    className="icon-button"
-                                    onClick={() => {
-                                        panes.setDockContent('alternative');
-                                        setDockOpen(true);
-                                    }}
-                                    data-tooltip={dockAlternative.label}
-                                    aria-label={dockAlternative.label}
-                                >
-                                    {dockAlternative.icon}
-                                </button>
-                                {dockAlternative.badge}
-                            </>
-                        )}
                     </div>
                     <aside className="pane" style={right ? { width: dockSize } : { height: dockSize }} inert={!dockOpen}>
-                        {/* both stay mounted, so that switching keeps what is typed in the session panel */}
-                        <div className="dock-content" hidden={showsAlternative}>
-                            {props.inspector(menu)}
-                        </div>
-                        {dockAlternative && (
-                            <div className="dock-content" hidden={!showsAlternative}>
-                                {dockAlternative.content(menu)}
-                            </div>
-                        )}
+                        {props.inspector(menu)}
                     </aside>
                 </div>
             </div>
@@ -233,19 +202,12 @@ export function AppShell(props: {
     );
 }
 
-/**
- * The dock's menu (⋯ in the head of the inspector and of its alternative): where the dock is (下に移動 / 右に移動), and
- * switching to the alternative, if there is one.
- */
-function DockMenu({ panes, alternative, showsAlternative }: { panes: Panes; alternative?: string; showsAlternative: boolean }) {
+/** The dock's menu (⋯ in the inspector's head): where the dock is (下に移動 / 右に移動), and room for more. */
+function DockMenu({ panes }: { panes: Panes }) {
     const t = useT();
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
     useDismiss(open, root, () => setOpen(false));
-    const pick = (f: () => void) => (): void => {
-        f();
-        setOpen(false);
-    };
     const below = panes.inspectorDock === 'right';
     return (
         <div className="pane-menu" ref={root}>
@@ -261,14 +223,15 @@ function DockMenu({ panes, alternative, showsAlternative }: { panes: Panes; alte
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
-                    <button role="menuitem" onClick={pick(() => panes.setInspectorDock(below ? 'bottom' : 'right'))}>
+                    <button
+                        role="menuitem"
+                        onClick={() => {
+                            panes.setInspectorDock(below ? 'bottom' : 'right');
+                            setOpen(false);
+                        }}
+                    >
                         {below ? t.dockBelow : t.dockRight}
                     </button>
-                    {alternative && (
-                        <button role="menuitem" onClick={pick(() => panes.setDockContent(showsAlternative ? 'inspector' : 'alternative'))}>
-                            {showsAlternative ? t.session.showInspector : alternative}
-                        </button>
-                    )}
                 </div>
             )}
         </div>

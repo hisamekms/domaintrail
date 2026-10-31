@@ -3,7 +3,7 @@
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from 'tldraw';
-import type { Cursor, Me, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { Classification, Cursor, Me, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { SessionApiError, sessionApi, type TargetStatuses } from './api';
@@ -46,6 +46,8 @@ export interface SessionData {
     readonly epoch: number;
     /** The last failure of a call the page made by itself (state, targets, me). */
     readonly error: string | undefined;
+    /** The facilitator's: how each message reads, when the session classifies them (else undefined: all applicable). */
+    readonly classifications: Readonly<Record<string, Classification>> | undefined;
 }
 
 const message = (e: unknown): string => (e instanceof SessionApiError ? `${e.type} (${e.status})` : e instanceof Error ? e.message : String(e));
@@ -59,10 +61,13 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     const [epoch, setEpoch] = useState(0);
     const [targets, setTargets] = useState<TargetStatuses | undefined>();
     const [error, setError] = useState<string | undefined>();
+    const [classifications, setClassifications] = useState<Readonly<Record<string, Classification>> | undefined>();
 
     useEffect(
         () =>
             subscribe((m) => {
+                if (m.type === 'session.classifications') return setClassifications(m.classifications);
+                if (m.type === 'session.classification') return setClassifications((c) => ({ ...c, [m.request]: m.classification }));
                 if (m.type === 'session.state') {
                     setEpoch((e) => e + 1);
                     setStatus('live');
@@ -125,8 +130,8 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     }, [inSession, requestCount, current]);
 
     return useMemo(
-        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error } : undefined),
-        [model.state, model.me, peers, status, targets, epoch, error],
+        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error, classifications } : undefined),
+        [model.state, model.me, peers, status, targets, epoch, error, classifications],
     );
 }
 

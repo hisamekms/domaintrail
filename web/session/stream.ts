@@ -4,6 +4,7 @@
 // the names of the participants. Everything is derived from the session's state on the page: nothing here is sent.
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
+import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
 import { targetKey, targetName, type NamingContext, type TargetDraft } from './targets';
 
@@ -95,29 +96,31 @@ export function filesChanged(before: RevisionJson | undefined, after: RevisionJs
     return n + old.size;
 }
 
-/** One item of the main stream. `at` is when it happened (ISO); `key` is stable across updates of the same item. */
+/**
+ * One item of the main stream. `at` is where it stands (ISO); `key` is stable across updates of the same item. A card
+ * stays where its first run was queued, `updatedAt` telling when it last changed.
+ */
 export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
-    | {
-          readonly kind: 'queued';
-          readonly key: string;
-          readonly at: string;
-          readonly run: number;
-          readonly by: string;
-          readonly requests: readonly FrozenRequest[];
-      }
-    | { readonly kind: 'note'; readonly key: string; readonly at: string; readonly run: number; readonly by: string; readonly text: string }
-    | { readonly kind: 'agent'; readonly key: string; readonly at: string; readonly run: number; readonly message: AgentMessage }
+    | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
+    | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
     | { readonly kind: 'confirmed'; readonly key: string; readonly at: string; readonly revision: number; readonly by: string }
     | { readonly kind: 'restored'; readonly key: string; readonly at: string; readonly revision: number; readonly from: number | undefined };
 
+/** The numbers of the session's revisions, and the revisions by ID, for the agent's messages. */
+export function revisionLookup(state: Pick<SessionStateBody, 'revisions' | 'runs'>): {
+    readonly number: (id: string | undefined) => number | undefined;
+    readonly revision: (id: string) => RevisionJson | undefined;
+} {
+    const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
+    const revisions = new Map(state.revisions.map((r) => [r.id, r]));
+    return { number: (id) => (id === undefined ? undefined : numbers.get(id)), revision: (id) => revisions.get(id) };
+}
+
 /** The agent's message about a run, and when it was said: its latest change of state. */
-function agentMessage(
-    run: RunJson,
-    revisionNumber: (id: string | undefined) => number | undefined,
-    revision: (id: string) => RevisionJson | undefined,
-): { at: string; message: AgentMessage } {
-    const files = (base: string, result: string): number | undefined => filesChanged(revision(base), revision(result));
+export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLookup>): { at: string; message: AgentMessage } {
+    const revisionNumber = lookup.number;
+    const files = (base: string, result: string): number | undefined => filesChanged(lookup.revision(base), lookup.revision(result));
     switch (run.state) {
         case 'Queued':
             return { at: run.queuedAt, message: { kind: 'queued' } };
@@ -163,16 +166,12 @@ function agentMessage(
 }
 
 /**
- * The main stream, oldest first: the session's start, each run as it was queued (with its requests), the
- * facilitator's note on it, the agent's message about it (one per run, at its latest change of state), and the
- * revisions confirmed or restored. Requests not in any run are not in it (see `pendingRequests`).
+ * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the facilitator
+ * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions confirmed
+ * or restored.
  */
-export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions'>): StreamItem[] {
+export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
-    const revisionNumber = (id: string | undefined): number | undefined => (id === undefined ? undefined : numbers.get(id));
-    const revisions = new Map(state.revisions.map((r) => [r.id, r]));
-    const revision = (id: string): RevisionJson | undefined => revisions.get(id);
-    const runs = [...state.runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
     const items: StreamItem[] = [];
     for (const r of state.revisions) {
         const revision = numbers.get(r.id) ?? 0;
@@ -181,19 +180,17 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
             items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(r.origin.restoredFrom) });
         if (r.state === 'Confirmed') items.push({ kind: 'confirmed', key: `confirmed:${r.id}`, at: r.confirmedAt, revision, by: r.confirmedBy });
     }
-    runs.forEach((run, i) => {
-        const n = i + 1;
-        items.push({ kind: 'queued', key: `queued:${run.id}`, at: run.queuedAt, run: n, by: run.queuedBy, requests: run.input.requests });
-        if (run.input.note) items.push({ kind: 'note', key: `note:${run.id}`, at: run.queuedAt, run: n, by: run.queuedBy, text: run.input.note });
-        const { at, message } = agentMessage(run, revisionNumber, revision);
-        items.push({ kind: 'agent', key: `agent:${run.id}`, at, run: n, message });
-    });
-    // by time; items at the same moment keep the order they were pushed in (a run's request, note, then the agent)
+    for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
+    for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+    // by time; items at the same moment keep the order they were pushed in (a message before the card applying it)
     return items
         .map((item, i) => ({ item, i }))
         .sort((a, b) => a.item.at.localeCompare(b.item.at) || a.i - b.i)
         .map(({ item }) => item);
 }
+
+/** When an item last changed: a card when its runs did, anything else when it was added. */
+export const changedAt = (item: StreamItem): string => (item.kind === 'card' ? item.updatedAt : item.at);
 
 /** The status of the session's agent at a glance. */
 export type AgentStatus =
@@ -222,37 +219,6 @@ export function elapsed(since: string, now: number): string {
     const m = Math.floor((total % 3600) / 60);
     const s = String(total % 60).padStart(2, '0');
     return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
-}
-
-/** A request waiting for approval, as the pending list shows it. */
-export interface PendingRequest {
-    readonly request: RequestJson;
-    /** Sent by the participant this page is signed in as. */
-    readonly mine: boolean;
-}
-
-/** The pending requests and the few the collapsed list shows. */
-export interface PendingRequests {
-    /** All of them: mine first, newest first within each group. */
-    readonly all: readonly PendingRequest[];
-    /** The first `limit` of them. */
-    readonly preview: readonly PendingRequest[];
-    /** How many the preview leaves out. */
-    readonly more: number;
-}
-
-/**
- * The requests waiting for the facilitator: sent (not dismissed) and in no run yet. Mine first, then the others',
- * newest first within each.
- */
-export function pendingRequests(state: Pick<SessionStateBody, 'requests' | 'runs'>, me: string, limit = 3): PendingRequests {
-    const inRuns = new Set(state.runs.flatMap((r) => r.input.requests.map((q) => q.request)));
-    const all = state.requests
-        .filter((r) => r.state === 'Sent' && !inRuns.has(r.id))
-        .map((request) => ({ request, mine: request.author === me }))
-        .sort((a, b) => Number(b.mine) - Number(a.mine) || b.request.sentAt.localeCompare(a.request.sentAt) || a.request.id.localeCompare(b.request.id));
-    const preview = all.slice(0, limit);
-    return { all, preview, more: all.length - preview.length };
 }
 
 /** A text on one line (whitespace collapsed), for the one-line rows. */
@@ -322,18 +288,17 @@ export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'fa
 }
 
 /**
- * How many items of the stream came after `seen` (an ISO time: when the chat was last shown): the runs queued, the
- * notes and the agent's messages (each change of a run's state counts again). Nothing is unread before the chat was
- * ever shown.
+ * How many items of the stream changed after `seen` (an ISO time: when the chat was last shown): the messages sent and
+ * the cards whose runs moved on (each change of a run's state counts). Nothing is unread before the chat was ever shown.
  */
 export function unreadCount(items: readonly StreamItem[], seen: string | undefined): number {
     if (seen === undefined) return 0;
-    return items.filter((i) => (i.kind === 'queued' || i.kind === 'note' || i.kind === 'agent') && i.at > seen).length;
+    return items.filter((i) => (i.kind === 'message' || i.kind === 'card') && changedAt(i) > seen).length;
 }
 
-/** When the stream last changed (its newest item's time), for `unreadCount`. */
+/** When the stream last changed (its latest change), for `unreadCount`. */
 export function latestAt(items: readonly StreamItem[]): string | undefined {
     let latest: string | undefined;
-    for (const i of items) if (latest === undefined || i.at > latest) latest = i.at;
+    for (const i of items) if (latest === undefined || changedAt(i) > latest) latest = changedAt(i);
     return latest;
 }
