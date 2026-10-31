@@ -1708,6 +1708,20 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
+| S001 | `.dtes`: the IDs of a storming's declarations are unique across kinds (groups and timelines included), and storming IDs are unique in the workspace |
+| S002 | `.dtes`: a relation target or timeline step names a declaration of its storming |
+| S003 | `.dtes`: a reference names a declaration of the right kind (`target` an aggregate, `reads` a read model, `actor` an actor or external, `emits` / `on` and timeline steps an event, `issues` a command) |
+| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status` and `resolution` per element |
+| S005 | `.dtes`: only events, aggregates and commands have a `ref` |
+| S006 | `.dtes`: an element has only the clauses of its kind |
+| S007 | `.dtes`: an event appears at most once in a group |
+| S008 | `.dtes`: a policy has at least one `on` and one `issues` |
+| S009 | `.dtes`: a hotspot's `status` is `open` or `resolved`; `resolved` needs a `resolution`, `open` has none |
+| S010 | `.dtes`: a `ref` is fully qualified (`Context.Event`, `Context.Aggregate`, `Context.Aggregate.command`) and resolves in the `.dt` model |
+| S011 | `.dtes`: a `ref` names a `.dt` symbol of its element's kind |
+| S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate its `target` refers to |
+| S013 | (warning) `.dtes`: a command does not emit an event that its `.dt` command never emits |
+| S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
 
 <!-- topic: show -->
 ## Looking up one element

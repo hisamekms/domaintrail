@@ -9,7 +9,7 @@ export type Severity = 'error' | 'warning';
  * M019 (parameters named like fields their command's requirements see),
  * M020 (factories take the new aggregate's ID as a parameter), M021 (the fields a command `changes`),
  * M022 (event and error fields named after their source), M023 (policies), M024 (verified types),
- * L001–L003 (Japanese names) and SYNTAX for lexer/parser errors.
+ * L001–L003 (Japanese names), S001–S014 (the Event Storming DSL `.dtes`, ADR 0024) and SYNTAX for lexer/parser errors.
  */
 export type RuleId =
     | 'SYNTAX'
@@ -39,7 +39,21 @@ export type RuleId =
     | 'M024'
     | 'L001'
     | 'L002'
-    | 'L003';
+    | 'L003'
+    | 'S001'
+    | 'S002'
+    | 'S003'
+    | 'S004'
+    | 'S005'
+    | 'S006'
+    | 'S007'
+    | 'S008'
+    | 'S009'
+    | 'S010'
+    | 'S011'
+    | 'S012'
+    | 'S013'
+    | 'S014';
 
 export interface Position {
     /** 1-based */
