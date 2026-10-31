@@ -12,3 +12,5 @@
 66fe3ccac38562e9af16baee6113c266dc92e6cb
 # T6: the modeling sources to src/modeling, cli and lsp to src/presentation
 6b52dc016b7f7a3767f0b426e4b6c7728442fcff
+# T7: src/<area> to packages/<area>/src and the langium config to packages/modeling
+6997923a94fdbf80d5f2e2ea9c20311ee105ba55
