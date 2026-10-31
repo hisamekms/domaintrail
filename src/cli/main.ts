@@ -2,7 +2,8 @@ import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } f
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { analyze, isStormingFile, type Analysis } from '../core/analyze.js';
-import { ConfigError, checkTsContexts, loadConfig, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
+import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
+import { loadConfig } from '../workspace/infrastructure/config.js';
 import { LINT_HINT, hasCastLintRule } from '../workspace/infrastructure/lint-hint.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
 import { findDomainFiles, loadWorkspace } from '../workspace/infrastructure/files.js';

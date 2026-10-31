@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
-import { ConfigError, checkTsContexts, findConfigFile, loadConfig, parseJsonc, policyModes } from '../src/core/config.js';
+import { ConfigError, checkTsContexts, parseJsonc, policyModes } from '../src/core/config.js';
+import { findConfigFile, loadConfig } from '../src/workspace/infrastructure/config.js';
 import { findDomainFiles } from '../src/workspace/infrastructure/files.js';
 
 const dirs: string[] = [];

@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
@@ -63,30 +61,17 @@ export interface ResolvedConfig {
 
 export class ConfigError extends Error {}
 
-/** Finds a config file in `start` or its parents (like tsconfig.json). */
-export function findConfigFile(start: string): string | undefined {
-    let dir = path.resolve(start);
-    for (;;) {
-        for (const name of CONFIG_FILES) {
-            const candidate = path.join(dir, name);
-            if (existsSync(candidate)) return candidate;
-        }
-        const parent = path.dirname(dir);
-        if (parent === dir) return undefined;
-        dir = parent;
-    }
+/** The configuration without a config file: the defaults, rooted at `root`. */
+export function defaultConfig(root: string): ResolvedConfig {
+    return { root: path.resolve(root), ...defaults() };
 }
 
 /**
- * Resolves the configuration: an explicit `--config` file, else a config file found from `start` upwards,
- * else defaults rooted at `start`.
+ * Resolves the contents of the config file `file` (an absolute path): its directory is the root. Throws a ConfigError
+ * when they are not valid. Reading the file is the workspace's (`loadConfig`).
  */
-export async function loadConfig(opts: { start: string; configPath?: string }): Promise<ResolvedConfig> {
-    const file = opts.configPath ? path.resolve(opts.configPath) : findConfigFile(opts.start);
-    if (opts.configPath && !existsSync(file!)) throw new ConfigError(`Config file not found: ${opts.configPath}`);
-    if (!file) return { root: path.resolve(opts.start), ...defaults() };
-
-    const raw = parseJsonc(await readFile(file, 'utf8'), file);
+export function resolveConfig(text: string, file: string): ResolvedConfig {
+    const raw = parseJsonc(text, file);
     const config = validate(raw, file);
     return {
         root: path.dirname(file),

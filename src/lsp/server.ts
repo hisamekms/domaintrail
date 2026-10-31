@@ -64,7 +64,8 @@ import {
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
 import { analyze } from '../core/analyze.js';
-import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, loadConfig, type ResolvedConfig } from '../core/config.js';
+import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '../core/config.js';
+import { loadConfig } from '../workspace/infrastructure/config.js';
 import type { Diagnostic } from '../core/diagnostics.js';
 import { SourceScope, findDomainFiles } from '../workspace/infrastructure/files.js';
 import { LabelResolver, docComment } from '../core/labels.js';
