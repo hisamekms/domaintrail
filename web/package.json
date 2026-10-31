@@ -5,7 +5,7 @@
   "dependencies": {
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
-    "lucide-react": "1.61.0",
+    "lucide-react": "1.62.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tldraw": "5.5.2"
