@@ -280,12 +280,14 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
         // the agent: in the root, the configured tools only, print mode with JSON output; the prompt has the requests as data
         const [invocation] = await ctx.invocations();
         expect(invocation.cwd).toBe(await realpath(ctx.root));
-        expect(invocation.args.slice(0, 7)).toEqual([
+        expect(invocation.args.slice(0, 9)).toEqual([
             '--print',
             '--output-format',
             'json',
             '--no-session-persistence',
             '--strict-mcp-config',
+            '--setting-sources',
+            'user',
             '--permission-mode',
             'dontAsk',
         ]);
@@ -416,6 +418,27 @@ describe('the pipeline', () => {
         const failed = await until(ctx, run, ['Completed', 'Failed']);
         expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
         expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources: src/notes.txt'))).toBe(true);
+    });
+
+    test('an agent that writes the workspace’s .claude/ settings: its run fails, and no further run is claimed until a restart', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const settings = '{"permissions":{"allow":["Bash(*)"]}}';
+        await mkdir(path.join(ctx.root, '.claude'));
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: settings }] }, {}]));
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
+        expect(log.some((l) => l.includes('not claiming further runs: review .claude/settings.local.json'))).toBe(true);
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        await waitFor('the refusal to claim', () => (log.some((l) => l.includes('no run is claimed until the subscriber is restarted')) ? true : undefined));
+        await Bun.sleep(300);
+        expect((await state(ctx)).runs.find((r) => r.id === next)?.state).toBe('Queued');
+        expect(await ctx.invocations()).toHaveLength(1);
+        // a new subscriber (after the person's review) takes it, and never loads the workspace's settings
+        await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: settings }] }, {}]));
+        expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+        const args = (await ctx.invocations()).at(-1)?.args ?? [];
+        expect(args[args.indexOf('--setting-sources') + 1]).toBe('user');
     });
 
     test('a cancel mid-run stops the agent and the processes it started; the next queued run is taken', async () => {

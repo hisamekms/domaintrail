@@ -91,6 +91,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
     const done = new Promise<SubscriberEnd>((resolve) => (resolveDone = resolve));
     /** The run in hand, and how to stop its agent when the facilitator cancels it. */
     let current: { readonly run: string; readonly cancel: AbortController } | undefined;
+    /** The non-DSL paths an agent changed: set, the subscriber claims no more runs (a person reviews them first). */
+    let halted: readonly string[] | undefined;
 
     // the worker sleeps until something may be queued: an event, a reconnection, a failure to retry
     let woken = true;
@@ -199,6 +201,10 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         if (outside.length) {
             const shown = outside.slice(0, 20).join(', ') + (outside.length > 20 ? `, and ${outside.length - 20} more` : '');
             log(`run ${id}: the agent changed files other than .dt/.dtes sources: ${shown}`);
+            // they stay on disk and may change how the next agent runs (e.g. `.claude/` settings): no more runs until a
+            // person has reviewed them and restarted the subscriber
+            halted = outside;
+            log(`not claiming further runs: review ${shown}, then restart the subscriber`);
             return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
         }
         if (outcome.question !== undefined && outcome.exitCode === 0) {
@@ -214,16 +220,20 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         );
     };
 
-    /** Claims and runs queued runs until none is left (or, with `once`, after one). */
+    /** Claims and runs queued runs until none is left (or, with `once`, after one); never again once halted. */
     const work = async (): Promise<void> => {
         while (!end) {
-            if (!woken) {
+            if (!woken || halted) {
+                if (woken && halted) {
+                    woken = false;
+                    log(`a run is queued, but no run is claimed until the subscriber is restarted (review ${halted.join(', ')})`);
+                }
                 await new Promise<void>((resolve) => (wakeWorker = resolve));
                 wakeWorker = () => {};
                 continue;
             }
             woken = false;
-            while (!end) {
+            while (!end && !halted) {
                 let claimed: ApiResult<AgentClaimed>;
                 try {
                     claimed = await api.claim(deps.owner);
@@ -239,6 +249,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 }
                 await handle(claimed.value);
                 if (options.once) finish('once');
+                else if (halted) break;
             }
         }
     };

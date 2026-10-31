@@ -25,7 +25,8 @@ export function toolNames(rules: readonly string[]): string[] {
 }
 
 /**
- * The arguments of `claude` for a run: print mode, JSON output, no saved session, no MCP server, the built-in tools
+ * The arguments of `claude` for a run: print mode, JSON output, no saved session, no MCP server, the user's settings
+ * only (never the workspace's `.claude/` project or local settings, which an agent could have written), the built-in tools
  * narrowed to the rules' tools, and the rules allowed without asking (anything else is refused). A rule that looks like
  * an option is refused: the configuration comes from the facilitator, but no value may become a flag.
  */
@@ -40,6 +41,9 @@ export function claudeArguments(allowedTools: readonly string[]): string[] {
         'json',
         '--no-session-persistence',
         '--strict-mcp-config',
+        // the user's settings only: the workspace's project and local settings (`.claude/`) are files the agent can write
+        '--setting-sources',
+        'user',
         '--permission-mode',
         'dontAsk',
         '--tools',

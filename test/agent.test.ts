@@ -122,6 +122,8 @@ describe('the Claude Code arguments', () => {
             'json',
             '--no-session-persistence',
             '--strict-mcp-config',
+            '--setting-sources',
+            'user',
             '--permission-mode',
             'dontAsk',
             '--tools',
