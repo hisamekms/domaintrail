@@ -6,10 +6,12 @@
 // is decided by the caller (S4); the use cases take the participant as a fact.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
+import { compareFiles, lineDiff, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
-import type { CollaborationDeps, Lease, OutboxEntry, StoredRun, Stores } from './ports.js';
+import type { IdentityKey } from './identity.js';
+import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
 
@@ -64,6 +66,18 @@ export interface LeaseLost {
     readonly run: AgentRunId;
 }
 
+/**
+ * A restore failed after it started writing the workspace: the sources may be partly written. Nothing was recorded as
+ * restored; the workspace as it was before is the pre-restore revision, to be restored (or looked at) by a person.
+ */
+export interface ManualRecoveryNeeded {
+    readonly type: 'ManualRecoveryNeeded';
+    readonly preRestore: RevisionId;
+    /** What failed: `WriteFailed`, `WriteRefused` (a refusal after part of the write), `ReadBackFailed`, `ContentDiffers`, `RecordFailed`. */
+    readonly cause: string;
+    readonly message: string;
+}
+
 export type { BlobMissing };
 
 // ---- Results ----
@@ -88,7 +102,28 @@ export interface Finished extends Ended<Collaboration.CompletedAgentRun | Collab
 export interface Restored {
     readonly restored: Collaboration.RecordedRevision;
     readonly preRestore: Collaboration.RecordedRevision;
+    /** The external changes recorded first (Manual), when the restore was asked to keep them. */
+    readonly manual?: Collaboration.RecordedRevision;
 }
+
+/** A file of a comparison: its status and, unless it is unchanged, the line diff of its two texts. */
+export interface ComparedFile extends FileComparison {
+    /** Absent for an unchanged file, and once the comparison's diffs reached `MAX_COMPARISON_DIFF` characters. */
+    readonly diff?: LineDiff;
+}
+
+/** Two revisions of a session side by side. */
+export interface Comparison {
+    readonly before: Collaboration.Revision;
+    readonly after: Collaboration.Revision;
+    readonly files: readonly ComparedFile[];
+    readonly counts: Record<Collaboration.SourceLanguage, Record<FileStatus, number>>;
+    /** Some diffs were left out: the comparison's diffs reached `MAX_COMPARISON_DIFF` characters. */
+    readonly diffsOmitted: boolean;
+}
+
+/** The most characters of unified diff text a comparison carries; the files after it get no diff. */
+export const MAX_COMPARISON_DIFF = 512 * 1024;
 
 /** Everything a session holds, for a page that shows it. */
 export interface SessionState {
@@ -113,7 +148,8 @@ export type RestoreError =
     | Collaboration.RevisionOfAnotherSession
     | Collaboration.SymlinkInWorkspace
     | Collaboration.PathOutsideRoot
-    | Collaboration.ExternalChangesSinceSnapshot;
+    | Collaboration.ExternalChangesSinceSnapshot
+    | ManualRecoveryNeeded;
 
 export interface CollaborationUseCases {
     /** Opens a session with its facilitator, and records the workspace as its first revision (SessionStart). */
@@ -216,11 +252,27 @@ export interface CollaborationUseCases {
         readonly by: ParticipantId;
     }): Promise<Result<Collaboration.ConfirmedRevision, NotFound | NotAllowed>>;
     /**
-     * Writes a past revision back: refused while a run is running, or when the workspace has a symbolic link, a path
-     * outside the root, or changes since the session's last revision. The workspace before is recorded first
-     * (PreRestore), then the restored sources (Restored).
+     * Writes a past revision back: refused while a run is running or claimed, or when the workspace has a symbolic
+     * link, a path outside the root, or changes since the session's last revision — unless `recordExternalChanges`,
+     * which records them first (Manual) and goes on. The workspace before is recorded first (PreRestore), then written,
+     * validated and recorded (Restored). A failure once the write started is `ManualRecoveryNeeded` with the
+     * pre-restore revision; nothing is recorded as restored then. Every attempt is kept in the operation log.
      */
-    restoreRevision(input: { readonly session: SessionId; readonly revision: RevisionId }): Promise<Result<Restored, RestoreError>>;
+    restoreRevision(input: {
+        readonly session: SessionId;
+        readonly revision: RevisionId;
+        readonly by: ParticipantId;
+        readonly identity?: IdentityKey;
+        readonly recordExternalChanges?: boolean;
+    }): Promise<Result<Restored, RestoreError>>;
+    /** Two revisions of the session side by side: each file's status and line diff (bounded), and both validations. */
+    compareRevisions(input: {
+        readonly session: SessionId;
+        readonly before: RevisionId;
+        readonly after: RevisionId;
+    }): Promise<Result<Comparison, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
+    /** The restores attempted in the session, in order. */
+    restoreOperations(input: { readonly session: SessionId }): Promise<readonly RestoreOperation[]>;
     sessionState(input: { readonly session: SessionId }): Promise<Result<SessionState, NotFound>>;
     /** Validates the workspace now and tells, for each request of the session, whether its target still resolves. */
     targetStatuses(input: { readonly session: SessionId }): Promise<Result<TargetStatuses, NotFound | Collaboration.PathOutsideRoot>>;
@@ -228,6 +280,36 @@ export interface CollaborationUseCases {
     currentSession(): Promise<Collaboration.OpenSession | undefined>;
     /** At most `limit` events of the session after the outbox position `cursor` (0: from the start), in order. */
     eventsAfter(input: { readonly session: SessionId; readonly cursor: number; readonly limit: number }): Promise<readonly OutboxEntry[]>;
+}
+
+/** A failure of a restore after it started writing, with its cause (see `ManualRecoveryNeeded`). */
+class RestoreFailure extends Error {
+    constructor(
+        readonly failure: string,
+        message: string,
+    ) {
+        super(message);
+    }
+}
+
+/** A refusal of the workspace's writer as the model's error. */
+function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinceSnapshot | Collaboration.SymlinkInWorkspace | Collaboration.PathOutsideRoot {
+    if (e.type === 'ExternalChangesSinceSnapshot') {
+        const paths: Collaboration.WorkspacePath[] = [];
+        for (const raw of e.paths) {
+            const p = workspacePath(raw);
+            if (!p.ok) return p.error;
+            paths.push(p.value);
+        }
+        const changed = nonEmpty(paths);
+        if (!changed) throw new Error('The workspace adapter refused a write for external changes without naming a path');
+        return { type: 'ExternalChangesSinceSnapshot', paths: changed };
+    }
+    if (e.type === 'SymlinkInWorkspace') {
+        const p = workspacePath(e.path);
+        return p.ok ? { type: 'SymlinkInWorkspace', path: p.value } : p.error;
+    }
+    return { type: 'PathOutsideRoot', path: e.path };
 }
 
 /** The success value of a command that cannot fail. */
@@ -608,68 +690,154 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async restoreRevision({ session, revision }) {
-            const busy = await uow.transaction((stores) => {
-                if (!stores.sessions.load(session)) return err(notFound('Session', session));
-                const active = stores.runs.active(session, clock.now());
-                return active ? err<RunInProgress>({ type: 'RunInProgress', run: active.run.id }) : ok(undefined);
-            });
-            if (!busy.ok) return busy;
-            const restorable = await makeRestorable(revision, session);
-            if (!restorable.ok) return restorable;
-            const target = await uow.transaction((stores) => stores.revisions.load(revision));
-            if (!target) return err(notFound('Revision', revision));
-            const sources = await sourcesOf(deps, target);
-            if (!sources.ok) return sources;
-
-            // the workspace before, kept first: what the write expects to replace
-            const before = await capture(deps);
-            if (!before.ok) return before;
-            const preRestore = await uow.transaction((stores) =>
-                record(stores, session, { kind: 'PreRestore', restoring: revision }, before.value, clock.now()),
-            );
-
-            const written = await deps.workspace.write(sources.value, before.value.files);
-            if (!written.ok) {
-                const e = written.error;
-                if (e.type === 'ExternalChangesSinceSnapshot') {
-                    const paths: Collaboration.WorkspacePath[] = [];
-                    for (const raw of e.paths) {
-                        const p = workspacePath(raw);
-                        if (!p.ok) return p;
-                        paths.push(p.value);
-                    }
-                    const changed = nonEmpty(paths);
-                    if (!changed) throw new Error('The workspace adapter refused a write for external changes without naming a path');
-                    return err({ type: 'ExternalChangesSinceSnapshot', paths: changed });
-                }
-                if (e.type === 'SymlinkInWorkspace') {
-                    const p = workspacePath(e.path);
-                    return p.ok ? err({ type: 'SymlinkInWorkspace', path: p.value }) : p;
-                }
-                return err({ type: 'PathOutsideRoot', path: e.path });
-            }
-
-            const after = await capture(deps);
-            if (!after.ok) return after;
-            return uow.transaction((stores) => {
-                const at = clock.now();
-                const id = Collaboration.makeRevisionId(ids.newId());
-                const restored = revisionCommands.restore(
-                    id,
-                    session,
-                    restorable.value,
-                    preRestore.id,
-                    after.value.contentHash,
-                    after.value.files,
-                    after.value.validation,
-                    at,
+        async restoreRevision({ session, revision, by, identity, recordExternalChanges }) {
+            const exists = await uow.transaction((stores) => stores.sessions.load(session) !== undefined);
+            if (!exists) return err(notFound('Session', session));
+            const recorded: { manual?: Collaboration.RecordedRevision; preRestore?: Collaboration.RecordedRevision } = {};
+            /** Keeps the attempt in the operation log. */
+            const log = (outcome: Pick<RestoreOperation, 'result' | 'reason' | 'detail' | 'restored'>): Promise<void> =>
+                uow.transaction((stores) =>
+                    stores.operations.recordRestore({
+                        id: ids.newId(),
+                        session,
+                        at: clock.now(),
+                        by,
+                        ...(identity && { identity: { provider: identity.provider, subject: identity.subject } }),
+                        revision,
+                        ...(recorded.manual && { manual: recorded.manual.id }),
+                        ...(recorded.preRestore && { preRestore: recorded.preRestore.id }),
+                        ...outcome,
+                    }),
                 );
-                if (!restored.ok) throw new Error(`Recording the restore failed: ${restored.error.type}`);
-                stores.revisions.save(restored.value.Recorded.aggregate);
-                publish(stores, session, restored.value.Recorded.events, at);
-                return ok({ restored: restored.value.Recorded.aggregate, preRestore });
-            });
+            const refused = async <E extends { readonly type: string }>(e: E): Promise<Result<never, E>> => {
+                await log({ result: 'Refused', reason: e.type });
+                return err(e);
+            };
+            const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+            let writing = false;
+            try {
+                const busy = await uow.transaction((stores) => stores.runs.active(session, clock.now()));
+                if (busy) return refused<RunInProgress>({ type: 'RunInProgress', run: busy.run.id });
+                let restorable = await makeRestorable(revision, session);
+                if (!restorable.ok && restorable.error.type === 'ExternalChangesSinceSnapshot' && recordExternalChanges) {
+                    // the two-step: the external changes become a revision of their own, then the restore goes on
+                    const captured = await capture(deps);
+                    if (!captured.ok) return refused(captured.error);
+                    recorded.manual = await uow.transaction((stores) => record(stores, session, { kind: 'Manual', takenBy: by }, captured.value, clock.now()));
+                    restorable = await makeRestorable(revision, session);
+                }
+                if (!restorable.ok) return refused(restorable.error);
+                const target = await uow.transaction((stores) => stores.revisions.load(revision));
+                if (!target) return refused(notFound('Revision', revision));
+                const sources = await sourcesOf(deps, target);
+                if (!sources.ok) return refused(sources.error);
+
+                // the workspace before, kept first: what the write expects to replace
+                const before = await capture(deps);
+                if (!before.ok) return refused(before.error);
+                const preRestore = await uow.transaction((stores) =>
+                    record(stores, session, { kind: 'PreRestore', restoring: revision }, before.value, clock.now()),
+                );
+                recorded.preRestore = preRestore;
+
+                writing = true;
+                const written = await deps.workspace.write(sources.value, before.value.files);
+                if (!written.ok) {
+                    // a refusal is made before anything is written, unless the workspace changed under the write
+                    const now = await deps.workspace.read();
+                    const was = new Map<string, string>(before.value.files.map((f) => [f.path, f.hash]));
+                    const untouched = now.files.length === was.size && now.files.every((f) => was.get(f.path) === f.hash);
+                    if (!untouched) throw new RestoreFailure('WriteRefused', `The write was refused (${written.error.type}) after it changed the workspace`);
+                    writing = false;
+                    return refused(writeRefusal(written.error));
+                }
+
+                const after = await capture(deps).catch((e: unknown) => {
+                    throw new RestoreFailure('ReadBackFailed', message(e));
+                });
+                if (!after.ok) throw new RestoreFailure('ReadBackFailed', `A source is outside the root: ${after.error.path}`);
+                if (after.value.contentHash !== target.contentHash)
+                    throw new RestoreFailure('ContentDiffers', 'The workspace after the write is not the revision restored');
+                const restored = await uow
+                    .transaction((stores) => {
+                        const at = clock.now();
+                        const made = revisionCommands.restore(
+                            Collaboration.makeRevisionId(ids.newId()),
+                            session,
+                            restorable.value,
+                            preRestore.id,
+                            after.value.contentHash,
+                            after.value.files,
+                            after.value.validation,
+                            at,
+                        );
+                        if (!made.ok) throw new Error(`Recording the restore failed: ${made.error.type}`);
+                        stores.revisions.save(made.value.Recorded.aggregate);
+                        publish(stores, session, made.value.Recorded.events, at);
+                        return made.value.Recorded.aggregate;
+                    })
+                    .catch((e: unknown) => {
+                        throw new RestoreFailure('RecordFailed', message(e));
+                    });
+                await log({ result: 'Restored', restored: restored.id });
+                return ok({ restored, preRestore, ...(recorded.manual && { manual: recorded.manual }) });
+            } catch (e) {
+                const preRestore = recorded.preRestore;
+                if (!writing || !preRestore) {
+                    await log({ result: 'Failed', reason: 'Error', detail: message(e) });
+                    throw e;
+                }
+                const cause = e instanceof RestoreFailure ? e.failure : 'WriteFailed';
+                const failure: ManualRecoveryNeeded = { type: 'ManualRecoveryNeeded', preRestore: preRestore.id, cause, message: message(e) };
+                await log({ result: 'Failed', reason: cause, detail: failure.message });
+                return err(failure);
+            }
+        },
+
+        async compareRevisions({ session, before, after }) {
+            const found = await uow.transaction((stores) => ({ a: stores.revisions.load(before), b: stores.revisions.load(after) }));
+            for (const [id, r] of [
+                [before, found.a],
+                [after, found.b],
+            ] as const) {
+                if (!r) return err(notFound('Revision', id));
+                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+            }
+            const { a, b } = found;
+            if (!a || !b) throw new Error('Both revisions were found above');
+            const decoder = new TextDecoder();
+            const textOf = async (path: Collaboration.WorkspacePath, hash: Collaboration.ContentHash | undefined): Promise<Result<string, BlobMissing>> => {
+                if (hash === undefined) return ok('');
+                const bytes = await deps.blobs.get(hash);
+                return bytes ? ok(decoder.decode(bytes)) : err({ type: 'BlobMissing', path, hash });
+            };
+            const files: ComparedFile[] = [];
+            let size = 0;
+            let diffsOmitted = false;
+            for (const f of compareFiles(a.files, b.files)) {
+                if (f.status === 'unchanged') {
+                    files.push(f);
+                    continue;
+                }
+                if (size >= MAX_COMPARISON_DIFF) {
+                    diffsOmitted = true;
+                    files.push(f);
+                    continue;
+                }
+                const was = await textOf(f.path, f.before);
+                if (!was.ok) return was;
+                const is = await textOf(f.path, f.after);
+                if (!is.ok) return is;
+                const diff = lineDiff(was.value, is.value);
+                if (diff.kind === 'diff') size += diff.unified.length;
+                files.push({ ...f, diff });
+            }
+            return ok({ before: a, after: b, files, counts: statusCounts(files), diffsOmitted });
+        },
+
+        async restoreOperations({ session }) {
+            return uow.transaction((stores) => stores.operations.restores(session));
         },
 
         async sessionState({ session }) {

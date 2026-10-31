@@ -13,6 +13,9 @@ import type {
     OutboxEntry,
     RequestRepository,
     RevisionStore,
+    OperationLog,
+    RestoreOperation,
+    RestoreResult,
     RunQueue,
     SessionRepository,
     StoredRun,
@@ -116,6 +119,27 @@ export const MIGRATIONS: readonly string[] = [
         revoked_at INTEGER
     ) STRICT;
     CREATE INDEX sign_ins_by_session ON sign_ins(session_id) WHERE revoked_at IS NULL;
+    `,
+    // every attempted restore (S7): who, which revision, the revisions it recorded, and how it ended
+    `
+    CREATE TABLE restore_operations (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        at INTEGER NOT NULL,
+        participant TEXT NOT NULL,
+        identity_provider TEXT,
+        identity_subject TEXT,
+        revision_id TEXT NOT NULL,
+        manual_revision_id TEXT,
+        pre_restore_id TEXT,
+        restored_id TEXT,
+        result TEXT NOT NULL CHECK (result IN ('Restored', 'Refused', 'Failed')),
+        reason TEXT,
+        detail TEXT,
+        CHECK ((identity_provider IS NULL) = (identity_subject IS NULL))
+    ) STRICT;
+    CREATE INDEX restore_operations_by_session ON restore_operations(session_id, seq);
     `,
 ];
 
@@ -468,9 +492,82 @@ function access(db: DatabaseSync): AccessStore {
     };
 }
 
+const isRestoreResult = (v: string): v is RestoreResult => v === 'Restored' || v === 'Refused' || v === 'Failed';
+
+function operations(db: DatabaseSync): OperationLog {
+    const record = db.prepare(
+        `INSERT INTO restore_operations (id, session_id, seq, at, participant, identity_provider, identity_subject, revision_id,
+                                         manual_revision_id, pre_restore_id, restored_id, result, reason, detail)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM restore_operations), :at, :participant, :provider, :subject,
+                 :revision, :manual, :preRestore, :restored, :result, :reason, :detail)`,
+    );
+    const list = db.prepare('SELECT * FROM restore_operations WHERE session_id = :session ORDER BY seq');
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the IDs of our own rows, written from values of these types
+    const id = <T>(r: Row, column: string): T | undefined => optionalText(r, column) as T | undefined;
+    return {
+        recordRestore(op) {
+            record.run(
+                params({
+                    id: op.id,
+                    session: op.session,
+                    at: op.at.getTime(),
+                    participant: op.by,
+                    provider: op.identity?.provider ?? null,
+                    subject: op.identity?.subject ?? null,
+                    revision: op.revision,
+                    manual: op.manual ?? null,
+                    preRestore: op.preRestore ?? null,
+                    restored: op.restored ?? null,
+                    result: op.result,
+                    reason: op.reason ?? null,
+                    detail: op.detail ?? null,
+                }),
+            );
+        },
+        restores(session) {
+            return list.all(params({ session })).map((r): RestoreOperation => {
+                const result = text(r, 'result');
+                if (!isRestoreResult(result)) throw new Error(`Unknown restore result ${result}`);
+                const provider = optionalText(r, 'identity_provider');
+                if (provider !== undefined && !isMode(provider)) throw new Error(`Unknown identity provider ${provider}`);
+                const manual = id<Collaboration.RevisionId>(r, 'manual_revision_id');
+                const preRestore = id<Collaboration.RevisionId>(r, 'pre_restore_id');
+                const restored = id<Collaboration.RevisionId>(r, 'restored_id');
+                const reason = optionalText(r, 'reason');
+                const detail = optionalText(r, 'detail');
+                const revision = id<Collaboration.RevisionId>(r, 'revision_id');
+                const by = id<Collaboration.ParticipantId>(r, 'participant');
+                if (!revision || !by) throw new Error('A restore operation without its revision or participant');
+                return {
+                    id: text(r, 'id'),
+                    session,
+                    at: new Date(integer(r, 'at')),
+                    by,
+                    ...(provider !== undefined && { identity: { provider, subject: text(r, 'identity_subject') } }),
+                    revision,
+                    ...(manual && { manual }),
+                    ...(preRestore && { preRestore }),
+                    ...(restored && { restored }),
+                    result,
+                    ...(reason !== undefined && { reason }),
+                    ...(detail !== undefined && { detail }),
+                };
+            });
+        },
+    };
+}
+
 /** The stores over one database connection; use them inside a transaction of `createUnitOfWork`. */
 export function createStores(db: DatabaseSync): Stores {
-    return { sessions: sessions(db), requests: requests(db), runs: runs(db), revisions: revisions(db), outbox: outbox(db), access: access(db) };
+    return {
+        sessions: sessions(db),
+        requests: requests(db),
+        runs: runs(db),
+        revisions: revisions(db),
+        outbox: outbox(db),
+        access: access(db),
+        operations: operations(db),
+    };
 }
 
 /**

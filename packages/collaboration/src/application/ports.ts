@@ -135,6 +135,42 @@ export interface AccessStore {
     revokeSignIns(session: SessionId, at: Date): IdentityKey[];
 }
 
+/** How an attempted restore ended: written and recorded, refused before anything was written, or failed after. */
+export type RestoreResult = 'Restored' | 'Refused' | 'Failed';
+
+/**
+ * A restore as it was attempted (ADR 0026, S7), kept whatever its outcome: who asked, which revision, the revisions it
+ * recorded, and how it ended. Never a token, a cookie or an e-mail: the participant and the identity's provider and
+ * subject only.
+ */
+export interface RestoreOperation {
+    readonly id: string;
+    readonly session: SessionId;
+    readonly at: Date;
+    /** The participant who asked (the facilitator's participant is the same whoever holds the role). */
+    readonly by: Collaboration.ParticipantId;
+    /** The identity that acted as that participant, when known: who held the role then. */
+    readonly identity?: IdentityKey;
+    /** The revision to restore. */
+    readonly revision: Collaboration.RevisionId;
+    /** The revision of the external changes recorded first (the two-step), if any. */
+    readonly manual?: Collaboration.RevisionId;
+    readonly preRestore?: Collaboration.RevisionId;
+    readonly restored?: Collaboration.RevisionId;
+    readonly result: RestoreResult;
+    /** Why it was refused or failed: an error type (`RunInProgress`, `ExternalChangesSinceSnapshot`, `WriteFailed`, …). */
+    readonly reason?: string;
+    /** What failed, for a person to read (an error's message); never a secret. */
+    readonly detail?: string;
+}
+
+/** The operations of a session that are kept for the record but are not the model's (technical, ADR 0026). */
+export interface OperationLog {
+    recordRestore(operation: RestoreOperation): void;
+    /** The restores of a session, in the order they were attempted. */
+    restores(session: SessionId): RestoreOperation[];
+}
+
 /** The stores, as one transaction sees them. */
 export interface Stores {
     readonly sessions: SessionRepository;
@@ -143,6 +179,7 @@ export interface Stores {
     readonly revisions: RevisionStore;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
+    readonly operations: OperationLog;
 }
 
 export interface UnitOfWork {

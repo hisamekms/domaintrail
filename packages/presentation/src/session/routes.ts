@@ -35,8 +35,11 @@ export interface SessionHttpDeps {
     readonly pump: () => Promise<void>;
     /** The outbox position the pages were sent up to (the `seq` of a state). */
     readonly cursor: () => number;
-    /** Runs `work` with the workspace watcher's refresh and publish held (a restore writes the sources). */
-    readonly holdWatcher: <T>(work: () => Promise<T>) => Promise<T>;
+    /**
+     * Runs `work`, a write of the sources (a restore), with the workspace watcher's refresh and publish held; when
+     * `wrote(result)`, every page gets the written sources in one refresh and publish on resume.
+     */
+    readonly holdWatcher: <T>(work: () => Promise<T>, wrote: (result: T) => boolean) => Promise<T>;
     /** An identity's sign-in ended or its role changed: its pages are disconnected (they reconnect as what they are now). */
     readonly disconnect: (identity: IdentityKey, reason: string) => void;
     /** The facilitator closed the session (after the use case): revoke, disconnect, stop. */
@@ -68,8 +71,10 @@ export function statusOf(type: string): number {
         case 'SessionNotFound':
         case 'RequestNotFound':
         case 'RevisionNotFound':
+        case 'RevisionOfAnotherSession':
             return 404;
         case 'BlobMissing':
+        case 'ManualRecoveryNeeded':
             return 500;
         default:
             // the state does not allow it now: closed session, dismissed request, run in progress, lost lease, …
@@ -342,14 +347,55 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             method: 'POST',
             path: /^\/api\/session\/revisions\/([^/]+)\/restore$/,
             role: 'facilitator',
-            handle: async ({ res, params }) => {
+            handle: async ({ req, res, auth, params }) => {
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;
+                const raw = await input(req, res, ['recordExternalChanges']);
+                if (!raw) return;
+                if (raw.recordExternalChanges !== undefined && typeof raw.recordExternalChanges !== 'boolean')
+                    return fail(res, { type: 'InvalidInput', field: 'recordExternalChanges', message: 'Expected true or false.' });
                 const revision = (await state()).revisions.find((r) => r.id === id);
                 if (!revision) return fail(res, { type: 'NotFound', aggregate: 'Revision', id });
-                const restored = await deps.holdWatcher(() => use.restoreRevision({ session, revision: revision.id }));
-                if (restored.ok) deps.log(`restored revision ${revision.id}`);
+                const me = who(auth);
+                const restored = await deps.holdWatcher(
+                    () =>
+                        use.restoreRevision({
+                            session,
+                            revision: revision.id,
+                            by: me.participant.id,
+                            identity: me.participant.identity,
+                            recordExternalChanges: raw.recordExternalChanges === true,
+                        }),
+                    (r) => r.ok || r.error.type === 'ManualRecoveryNeeded',
+                );
+                if (restored.ok) deps.log(`restored revision ${revision.id} (by ${me.participant.id})`);
+                else if (restored.error.type === 'ManualRecoveryNeeded')
+                    deps.log(
+                        `restore of revision ${revision.id} failed after writing (${restored.error.cause}): manual recovery needed, the workspace before is revision ${restored.error.preRestore}`,
+                    );
+                else deps.log(`restore of revision ${revision.id} refused: ${restored.error.type}`);
+                // the revisions recorded on the way (the external changes, the pre-restore) reach the pages either way
+                await deps.pump();
                 await answer(res, restored, 200, (r) => r);
+            },
+        },
+        {
+            method: 'GET',
+            path: /^\/api\/session\/revisions\/([^/]+)\/compare\/([^/]+)$/,
+            role: 'participant',
+            handle: async ({ res, params }) => {
+                const before = checked(res, uuid(params[0], 'before'));
+                if (!before) return;
+                const after = checked(res, uuid(params[1], 'after'));
+                if (!after) return;
+                const revisions = (await state()).revisions;
+                const a = revisions.find((r) => r.id === before);
+                if (!a) return fail(res, { type: 'NotFound', aggregate: 'Revision', id: before });
+                const b = revisions.find((r) => r.id === after);
+                if (!b) return fail(res, { type: 'NotFound', aggregate: 'Revision', id: after });
+                const compared = await use.compareRevisions({ session, before: a.id, after: b.id });
+                if (!compared.ok) return fail(res, compared.error);
+                sendJson(res, 200, compared.value);
             },
         },
         {

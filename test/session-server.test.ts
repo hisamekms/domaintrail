@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { AccessClaims } from '@domaintrail/collaboration/infrastructure/identity';
 import { createMockAccessVerifier } from '@domaintrail/collaboration/infrastructure/identity';
-import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { ComparisonBody, Me, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import {
     startSessionServer,
     issueFacilitatorLink,
@@ -19,6 +19,7 @@ import {
     type SessionServer,
     type SessionServerOptions,
 } from '@domaintrail/composition/session';
+import { createWatcherHold, ECHO_MS } from '@domaintrail/composition/watcher-hold';
 import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
 import { cliDeps } from '@domaintrail/composition/cli';
 import { runCli } from '@domaintrail/presentation/cli/main';
@@ -610,6 +611,47 @@ describe('the watcher hold (for a restore, S7)', () => {
         }
     });
 
+    test('aroundWrite refreshes once after a write (not after a refusal) and takes the same sources afterwards as its echo', async () => {
+        const refreshed: { sources: boolean; git: boolean }[] = [];
+        let print = 'a';
+        let t = 0;
+        const hold = createWatcherHold(async (missed) => void refreshed.push(missed), { fingerprint: async () => print, now: () => t });
+        expect(
+            await hold.aroundWrite(
+                async () => 'refused',
+                () => false,
+            ),
+        ).toBe('refused');
+        expect([refreshed, await hold.echo?.()]).toEqual([[], false]);
+        await hold.aroundWrite(
+            async () => 'written',
+            () => true,
+        );
+        expect(refreshed).toEqual([{ sources: true, git: false }]);
+        expect(await hold.echo?.()).toBe(true);
+        expect(await hold.echo?.()).toBe(true);
+        print = 'b';
+        expect(await hold.echo?.()).toBe(false);
+        print = 'a';
+        expect(await hold.echo?.()).toBe(false);
+        await hold.aroundWrite(
+            async () => 'written',
+            () => true,
+        );
+        t += ECHO_MS + 1;
+        expect(await hold.echo?.()).toBe(false);
+        // a write that throws leaves the workspace unknown: refreshed all the same
+        expect(
+            await hold
+                .aroundWrite(
+                    () => Promise.reject(new Error('boom')),
+                    () => false,
+                )
+                .catch((e: unknown) => e),
+        ).toEqual(new Error('boom'));
+        expect(refreshed).toHaveLength(3);
+    });
+
     test('a restore over HTTP runs behind the hold and leaves the workspace as the revision was', async () => {
         const root = await workspace();
         const server = await start(root);
@@ -631,6 +673,160 @@ describe('the watcher hold (for a restore, S7)', () => {
             expect(restored.status).toBe(200);
             expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toBe(DT);
             expect(server.watcherHold.held).toBe(false);
+        } finally {
+            await server.stop();
+        }
+    });
+});
+
+describe('revisions: comparison and restore (S7)', () => {
+    const errorOf = async (res: Response): Promise<{ type: string; [k: string]: unknown }> => ((await res.json()) as { error: { type: string } }).error;
+    const updates = (s: Socket): ViewPayload[] => s.received.filter((m) => m.type === 'update') as unknown as ViewPayload[];
+    const revisions = async (server: SessionServer, cookie: string): Promise<SessionStateBody['revisions']> =>
+        ((await (await api(server, cookie, 'state')).json()) as SessionStateBody).revisions;
+    const SHIPPED = DT.replace('state Placed', 'state Placed\n    state Shipped');
+
+    test('any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            await server.ready;
+            const ada = await join(server, 'Ada');
+            const bob = await join(server, 'Bob');
+            await claim(server, ada);
+            const [first] = await revisions(server, bob);
+            await writeFile(path.join(root, 'shop.dt'), SHIPPED);
+            await writeFile(path.join(root, 'more.dtes'), 'storming More {\n  event Happened\n}\n');
+            for (const p of ['revisions', `revisions/${first.id}/confirm`, `revisions/${first.id}/restore`]) {
+                const res = await api(server, bob, p, {});
+                expect([p, res.status, (await errorOf(res)).type]).toEqual([p, 403, 'FacilitatorOnly']);
+            }
+            expect((await api(server, ada, 'revisions', {})).status).toBe(201);
+            expect((await api(server, ada, `revisions/${first.id}/confirm`, {})).status).toBe(200);
+            const second = (await revisions(server, bob)).at(-1);
+            if (!second) throw new Error('no revision');
+
+            const res = await api(server, bob, `revisions/${first.id}/compare/${second.id}`);
+            expect(res.status).toBe(200);
+            const c = (await res.json()) as ComparisonBody;
+            expect([c.before.id, c.before.state, c.after.id]).toEqual([first.id, 'Confirmed', second.id]);
+            expect(c.files.map((f) => [f.path, f.language, f.status])).toEqual([
+                ['more.dtes', 'Dtes', 'added'],
+                ['ordering.dtes', 'Dtes', 'unchanged'],
+                ['shop.dt', 'Dt', 'changed'],
+            ]);
+            expect(c.files[2].diff).toMatchObject({ kind: 'diff', added: 1, removed: 0 });
+            expect(c.files[2].diff?.kind === 'diff' && c.files[2].diff.unified).toContain('+    state Shipped');
+            expect(c.files[1].diff).toBeUndefined();
+            expect([c.before.validation, c.after.validation].map((v) => v.dtErrors)).toEqual([0, 0]);
+
+            const unknown = await api(server, bob, `revisions/${first.id}/compare/00000000-0000-4000-8000-000000000000`);
+            expect([unknown.status, (await errorOf(unknown)).type]).toEqual([404, 'NotFound']);
+            const bad = await api(server, bob, `revisions/x/compare/${first.id}`);
+            expect([bad.status, (await errorOf(bad)).type]).toEqual([400, 'InvalidInput']);
+            const anonymous = await fetch(`${server.url}api/session/revisions/${first.id}/compare/${second.id}`);
+            expect(anonymous.status).toBe(401);
+        } finally {
+            await server.stop();
+        }
+    });
+
+    test('a restore reaches every page in one publish of the view; an external edit needs the two-step, and is kept as a revision', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            await server.ready;
+            const ada = await join(server, 'Ada');
+            const bob = await join(server, 'Bob');
+            await claim(server, ada);
+            const pages = [await socket(server, ada), await socket(server, bob)];
+            for (const page of pages) await page.next('session.state');
+            const [first] = await revisions(server, ada);
+            await writeFile(path.join(root, 'shop.dt'), SHIPPED);
+            for (const page of pages) await page.next('update');
+            expect((await api(server, ada, 'revisions', {})).status).toBe(201);
+            await Bun.sleep(300);
+
+            const seen = pages.map((p) => updates(p).length);
+            const restored = await api(server, ada, `revisions/${first.id}/restore`, {});
+            expect(restored.status).toBe(200);
+            const body = (await restored.json()) as RestoredBody;
+            expect(body.restored.origin).toEqual({ kind: 'Restored', restoredFrom: first.id, preRestore: body.preRestore.id });
+            expect(body.manual).toBeUndefined();
+            // the watcher's own events of the write come later: they are absorbed, the pages get one update
+            await Bun.sleep(800);
+            for (const [i, page] of pages.entries()) {
+                const after = updates(page).slice(seen[i]);
+                expect(after).toHaveLength(1);
+                expect(JSON.stringify(after[0].model)).not.toContain('Shipped');
+                await page.next('revision.restored');
+            }
+            expect(server.watcherHold.held).toBe(false);
+
+            // an edit by hand afterwards: refused, nothing written; the two-step records it, then restores
+            const byHand = `${SHIPPED}\n// by hand\n`;
+            await writeFile(path.join(root, 'shop.dt'), byHand);
+            await Bun.sleep(200);
+            const refused = await api(server, ada, `revisions/${first.id}/restore`, {});
+            expect([refused.status, await errorOf(refused)]).toEqual([409, { type: 'ExternalChangesSinceSnapshot', paths: ['shop.dt'] }]);
+            expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toBe(byHand);
+            const invalid = await api(server, ada, `revisions/${first.id}/restore`, { recordExternalChanges: 'yes' });
+            expect([invalid.status, (await errorOf(invalid)).type]).toEqual([400, 'InvalidInput']);
+            const twoStep = await api(server, ada, `revisions/${first.id}/restore`, { recordExternalChanges: true });
+            expect(twoStep.status).toBe(200);
+            const kept = (await twoStep.json()) as RestoredBody;
+            expect(kept.manual?.origin).toEqual({ kind: 'Manual', takenBy: 'local:facilitator' });
+            expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toBe(DT);
+            const diff = ((await (await api(server, bob, `revisions/${first.id}/compare/${kept.manual?.id}`)).json()) as ComparisonBody).files.find(
+                (f) => f.path === 'shop.dt',
+            )?.diff;
+            expect(diff?.kind === 'diff' && diff.unified).toContain('+// by hand');
+
+            const ops = await server.collaboration.restoreOperations({ session: server.session });
+            expect(ops.map((o) => [o.result, o.reason, o.by, o.identity?.provider])).toEqual([
+                ['Restored', undefined, 'local:facilitator', 'dev'],
+                ['Refused', 'ExternalChangesSinceSnapshot', 'local:facilitator', 'dev'],
+                ['Restored', undefined, 'local:facilitator', 'dev'],
+            ]);
+            for (const page of pages) page.ws.close();
+        } finally {
+            await server.stop();
+        }
+    });
+
+    test('saves while a run is in progress make no revision; a restore is refused until the run ends or is cancelled', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            await server.ready;
+            const ada = await join(server, 'Ada');
+            await claim(server, ada);
+            const cred = await agentCredential(root);
+            const [first] = await revisions(server, ada);
+            const target = { target: { kind: 'Workspace' }, sourceRevision: first.id };
+            const request = ((await (await api(server, ada, 'requests', { target, body: 'Ship it.' })).json()) as { request: { id: string } }).request;
+            const run = ((await (await api(server, ada, 'runs', { requests: [request.id] })).json()) as { run: { id: string } }).run;
+            const { lease } = (await (await agent(cred, 'runs/claim', { owner: 'test-agent' })).json()) as { lease: { token: string } };
+            const claimedOnly = await api(server, ada, `revisions/${first.id}/restore`, {});
+            expect([claimedOnly.status, await errorOf(claimedOnly)]).toEqual([409, { type: 'RunInProgress', run: run.id }]);
+            expect((await agent(cred, `runs/${run.id}/start`, { token: lease.token })).status).toBe(200);
+            const atStart = (await revisions(server, ada)).length;
+            for (const n of [1, 2, 3]) {
+                await writeFile(path.join(root, 'shop.dt'), DT.replace('state Placed', `state Placed\n    state Step${n}`));
+                await Bun.sleep(150);
+            }
+            expect((await revisions(server, ada)).length).toBe(atStart);
+            const running = await api(server, ada, `revisions/${first.id}/restore`, { recordExternalChanges: true });
+            expect([running.status, await errorOf(running)]).toEqual([409, { type: 'RunInProgress', run: run.id }]);
+            expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toContain('Step3');
+
+            // cancelled: the lease ends; the agent's edits are external to the run's base, so the two-step keeps them
+            expect((await api(server, ada, `runs/${run.id}/cancel`, {})).status).toBe(200);
+            const external = await api(server, ada, `revisions/${first.id}/restore`, {});
+            expect([external.status, (await errorOf(external)).type]).toEqual([409, 'ExternalChangesSinceSnapshot']);
+            expect((await api(server, ada, `revisions/${first.id}/restore`, { recordExternalChanges: true })).status).toBe(200);
+            expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toBe(DT);
+            expect((await revisions(server, ada)).map((r) => r.origin.kind)).toEqual(['SessionStart', 'RunBase', 'Manual', 'PreRestore', 'Restored']);
         } finally {
             await server.stop();
         }

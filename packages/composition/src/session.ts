@@ -172,9 +172,10 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     const opened: { http?: Server; agent?: Server } = {};
     try {
         const uow = createUnitOfWork(db);
+        const snapshot = createWorkspaceSnapshot(options.root, sources, respectGitignore);
         const collaboration = createCollaboration({
             uow,
-            workspace: createWorkspaceSnapshot(options.root, sources, respectGitignore),
+            workspace: snapshot,
             blobs: await openSessionBlobs(options.root),
             validator: createModelValidator(),
             clock,
@@ -277,10 +278,17 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         // a restore writes the sources: the watcher holds, then refreshes once
         // subscribed once the server listens
         let watch: Awaited<ReturnType<typeof watchLiveView>> | undefined;
-        const watcherHold = createWatcherHold(async (missed) => {
-            if (missed.sources) await watch?.refreshSources();
-            else if (missed.git) await watch?.refreshGitBaseline();
-        });
+        const watcherHold = createWatcherHold(
+            async (missed) => {
+                if (missed.sources) await watch?.refreshSources();
+                else if (missed.git) await watch?.refreshGitBaseline();
+            },
+            {
+                // what a write left on disk: the watcher's late events of the same sources are its echo
+                fingerprint: async () => (await snapshot.read()).files.map((f) => `${f.path}\u0000${f.hash}`).join('\n'),
+                log,
+            },
+        );
 
         const accessConfig = config.access;
         const surface = createSessionHttp({
@@ -290,7 +298,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             hostPolicy: sessionHostPolicy(accessConfig?.allowedHosts ?? [], accessConfig?.allowedOrigins ?? []),
             pump,
             cursor,
-            holdWatcher: (work) => watcherHold.around(work),
+            holdWatcher: (work, wrote) => watcherHold.aroundWrite(work, wrote),
             disconnect,
             closed: onClosed,
             secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,

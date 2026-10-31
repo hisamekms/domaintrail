@@ -108,8 +108,19 @@ export async function watchLiveView(
         const d = payload.diff;
         log(`v${payload.version} ${payload.status}: ${errors} error(s); +${d.added.length} ~${d.changed.length} -${d.removed.length}`);
     };
+    /** A settled burst: refreshed, unless it is only the echo of a write the gate already refreshed and published. */
+    const settled = async (): Promise<void> => {
+        if (gate?.echo && !gate.held) {
+            const absorbed = await gate.echo().catch((e: unknown) => {
+                log(`could not tell a write's echo: ${e instanceof Error ? e.message : String(e)}`);
+                return false;
+            });
+            if (absorbed) return;
+        }
+        await refreshSources();
+    };
     const sourcesWatch = createWorkspaceWatcher(options.root, { sources, respectGitignore, debounceMs: options.debounceMs }).subscribe((event) => {
-        if (event.kind === 'settled') void refreshSources();
+        if (event.kind === 'settled') void settled();
         else log(`${event.kind} ${path.relative(options.root, event.file)}`);
     });
     const ready = sourcesWatch.then(() => undefined);

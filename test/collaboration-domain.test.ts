@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
+import { compareFiles, lineDiff, MAX_DIFF_LINES, MAX_EDITS, MAX_OUTPUT_LINES } from '@domaintrail/collaboration/domain/compare';
 import { sha256Hex } from '@domaintrail/collaboration/domain/sha256';
 import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from '@domaintrail/collaboration/domain/snapshot';
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from '@domaintrail/collaboration/domain/targets';
@@ -322,5 +323,89 @@ describe('transitions', () => {
         const restored = value(revisionCommands.restore(id, sessionId, restorable, result, snapshotHash(files), files, validation, at)).Recorded;
         expect(restored.aggregate.origin).toEqual({ kind: 'Restored', restoredFrom: base, preRestore: result });
         expect(restored.events.RevisionRestored).toMatchObject({ restoredFrom: base, preRestore: result });
+    });
+});
+
+describe('comparing revisions', () => {
+    const lines = (n: number, f: (i: number) => string): string => `${Array.from({ length: n }, (_, i) => f(i)).join('\n')}\n`;
+
+    test('a unified line diff with three lines of context; hunks apart stay apart, close ones merge', () => {
+        const a = lines(20, (i) => `line ${i}`);
+        const b = a.replace('line 3\n', 'line 3x\n').replace('line 15\n', '').replace('line 18\n', 'line 18\nnew\n');
+        expect(lineDiff(a, b)).toEqual({
+            kind: 'diff',
+            unified: [
+                '@@ -1,7 +1,7 @@',
+                ' line 0',
+                ' line 1',
+                ' line 2',
+                '-line 3',
+                '+line 3x',
+                ' line 4',
+                ' line 5',
+                ' line 6',
+                '@@ -13,8 +13,8 @@',
+                ' line 12',
+                ' line 13',
+                ' line 14',
+                '-line 15',
+                ' line 16',
+                ' line 17',
+                ' line 18',
+                '+new',
+                ' line 19',
+            ].join('\n'),
+            added: 2,
+            removed: 2,
+            truncated: false,
+        });
+        expect(lineDiff(a, a)).toEqual({ kind: 'diff', unified: '', added: 0, removed: 0, truncated: false });
+    });
+
+    test('an added or removed file, and a line end missing at the end', () => {
+        expect(lineDiff('', 'x\ny\n')).toMatchObject({ unified: '@@ -0,0 +1,2 @@\n+x\n+y', added: 2, removed: 0 });
+        expect(lineDiff('x\n', '')).toMatchObject({ unified: '@@ -1,1 +0,0 @@\n-x', added: 0, removed: 1 });
+        expect(lineDiff('a\nb', 'a\nb\n')).toMatchObject({ unified: '@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b', added: 1, removed: 1 });
+    });
+
+    test('bounded: too many lines or edits are not diffed; a long diff is cut', () => {
+        expect(
+            lineDiff(
+                lines(MAX_DIFF_LINES + 1, (i) => `${i}`),
+                '',
+            ),
+        ).toEqual({ kind: 'tooLarge' });
+        const n = MAX_EDITS / 2 + 1;
+        expect(
+            lineDiff(
+                lines(n, (i) => `a${i}`),
+                lines(n, (i) => `b${i}`),
+            ),
+        ).toEqual({ kind: 'tooLarge' });
+        const long = lineDiff(
+            '',
+            lines(MAX_OUTPUT_LINES + 10, (i) => `${i}`),
+        );
+        expect(long.kind === 'diff' && [long.truncated, long.unified.split('\n').length, long.added]).toEqual([true, MAX_OUTPUT_LINES, MAX_OUTPUT_LINES + 10]);
+    });
+
+    test('the files of two revisions by path, with their status and DSL', () => {
+        const f = (path: string, hash: string): Pick<C.SnapshotFile, 'path' | 'language' | 'hash'> => ({
+            path: value(C.makeWorkspacePath(path)),
+            language: languageOf(path),
+            hash: value(C.makeContentHash(hash.repeat(64))),
+        });
+        expect(
+            compareFiles([f('a.dt', 'a'), f('b.dtes', 'b'), f('c.dt', 'c')], [f('a.dt', 'a'), f('b.dtes', 'd'), f('d.dtes', 'e')]).map((x): string[] => [
+                x.path,
+                x.language,
+                x.status,
+            ]),
+        ).toEqual([
+            ['a.dt', 'Dt', 'unchanged'],
+            ['b.dtes', 'Dtes', 'changed'],
+            ['c.dt', 'Dt', 'removed'],
+            ['d.dtes', 'Dtes', 'added'],
+        ]);
     });
 });

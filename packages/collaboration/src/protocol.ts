@@ -2,6 +2,7 @@
 // (REST under `/api/session/`, and the WebSocket next to the Live View's `type: 'update'`) and the agent subscriber
 // (the agent API on its own loopback listener: REST and an SSE stream). Types only, shared by presentation, the page
 // (S5) and the subscriber (S6); what goes over the wire is JSON, so a `Date` arrives as an ISO string (`Json<T>`).
+import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { Collaboration } from './generated/index.js';
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
@@ -138,6 +139,46 @@ export interface SendRequestBody {
 export interface QueueRunBody {
     readonly requests: readonly string[];
     readonly note?: string;
+}
+
+/**
+ * `POST /api/session/revisions/:id/restore` (the facilitator). `recordExternalChanges`: the workspace's changes since
+ * the session's last revision are recorded first as a revision (Manual), then the restore goes on; without it they
+ * make the restore refuse (`ExternalChangesSinceSnapshot`).
+ */
+export interface RestoreBody {
+    readonly recordExternalChanges?: boolean;
+}
+
+/** `POST /api/session/revisions/:id/restore` → 200. */
+export interface RestoredBody {
+    readonly restored: Json<Collaboration.RecordedRevision>;
+    readonly preRestore: Json<Collaboration.RecordedRevision>;
+    readonly manual?: Json<Collaboration.RecordedRevision>;
+}
+
+/**
+ * `POST /api/session/revisions/:id/restore` → 500 `ManualRecoveryNeeded`: the write started and did not finish; the
+ * workspace before it is the revision `preRestore`.
+ */
+export interface ManualRecoveryNeededBody {
+    readonly error: { readonly type: 'ManualRecoveryNeeded'; readonly preRestore: string; readonly cause: string; readonly message: string };
+}
+
+/** A file of a comparison: its status by path and DSL, and the line diff of its texts unless it is unchanged. */
+export interface ComparedFileBody extends Json<FileComparison> {
+    /** Absent for an unchanged file, and for the files after the comparison's diffs reached their limit (`diffsOmitted`). */
+    readonly diff?: LineDiff;
+}
+
+/** `GET /api/session/revisions/:before/compare/:after` (any participant): two revisions side by side. */
+export interface ComparisonBody {
+    readonly before: Json<Collaboration.Revision>;
+    readonly after: Json<Collaboration.Revision>;
+    /** Every source of either revision, by path. */
+    readonly files: readonly ComparedFileBody[];
+    readonly counts: Readonly<Record<Collaboration.SourceLanguage, Readonly<Record<FileStatus, number>>>>;
+    readonly diffsOmitted: boolean;
 }
 
 // ---- Agent API (loopback listener, `Authorization: Bearer <agent.json token>`) ----

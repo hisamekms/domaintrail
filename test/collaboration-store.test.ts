@@ -99,7 +99,18 @@ describe('schema and transactions', () => {
             .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
             .all()
             .map((r) => r.name);
-        expect(tables).toEqual(['agent_runs', 'facilitator_links', 'facilitators', 'outbox', 'requests', 'revisions', 'run_requests', 'sessions', 'sign_ins']);
+        expect(tables).toEqual([
+            'agent_runs',
+            'facilitator_links',
+            'facilitators',
+            'outbox',
+            'requests',
+            'restore_operations',
+            'revisions',
+            'run_requests',
+            'sessions',
+            'sign_ins',
+        ]);
         db.exec(`PRAGMA user_version = ${MIGRATIONS.length + 1}`);
         db.close();
         expect(() => openDatabase(file)).toThrow(NewerSchema);

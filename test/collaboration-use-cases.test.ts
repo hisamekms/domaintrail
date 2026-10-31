@@ -316,7 +316,7 @@ describe('revisions', () => {
         const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
         expect(manual.origin).toEqual({ kind: 'Manual', takenBy: facilitator });
 
-        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id }));
+        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
         expect(await s.read('sales/sales.dt')).toBe(SALES);
         expect(await readFile(path.join(s.root, 'extra/new.dt')).catch(() => 'gone')).toBe('gone');
         expect(preRestore).toMatchObject({ origin: { kind: 'PreRestore', restoring: start.id }, contentHash: manual.contentHash });
@@ -329,14 +329,14 @@ describe('revisions', () => {
         const s = await session();
         const { id, start } = await started(s);
         await s.write('sales/sales.dt', `${SALES}\n`);
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id }))).toEqual({
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
             type: 'ExternalChangesSinceSnapshot',
             paths: [value(C.makeWorkspacePath('sales/sales.dt'))],
         });
         value(await s.use.takeRevision({ session: id, by: facilitator }));
 
         await symlink(path.join(s.root, 'sales'), path.join(s.root, 'linked'));
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id }))).toEqual({
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
             type: 'SymlinkInWorkspace',
             path: value(C.makeWorkspacePath('linked')),
         });
@@ -344,13 +344,244 @@ describe('revisions', () => {
 
         const run = await queuedRun(s, id, start);
         const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id }))).toEqual({ type: 'RunInProgress', run: run.id });
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({ type: 'RunInProgress', run: run.id });
         value(await s.use.releaseRun({ run: run.id, token: lease.token }));
-        expect(error(await s.use.restoreRevision({ session: id, revision: C.makeRevisionId('00000000-0000-4000-8000-999999999999') }))).toMatchObject({
+        expect(
+            error(await s.use.restoreRevision({ session: id, revision: C.makeRevisionId('00000000-0000-4000-8000-999999999999'), by: facilitator })),
+        ).toMatchObject({
             type: 'RevisionNotFound',
         });
-        value(await s.use.restoreRevision({ session: id, revision: start.id }));
+        value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
         expect(await s.read('sales/sales.dt')).toBe(SALES);
+    });
+
+    test('restore writes .dt and .dtes together from one snapshot; the older revisions stay; the operation is logged', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
+        await s.write('stormings/returns.dtes', RETURNS.replace('  event Received', '  event Received\n  event Refunded'));
+        await s.write('stormings/more.dtes', 'storming More {\n  event Happened\n}\n');
+        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const identity = { provider: 'dev' as const, subject: 'ada' };
+        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator, identity }));
+        expect([await s.read('sales/sales.dt'), await s.read('stormings/returns.dtes')]).toEqual([SALES, RETURNS]);
+        expect(await readFile(path.join(s.root, 'stormings/more.dtes')).catch(() => 'gone')).toBe('gone');
+        expect(restored.files.map((f): string[] => [f.path, f.language])).toEqual([
+            ['sales/sales.dt', 'Dt'],
+            ['stormings/returns.dtes', 'Dtes'],
+        ]);
+        const history = value(await s.use.sessionState({ session: id })).revisions;
+        expect(history.map((r) => [r.id, r.origin.kind])).toEqual([
+            [start.id, 'SessionStart'],
+            [manual.id, 'Manual'],
+            [preRestore.id, 'PreRestore'],
+            [restored.id, 'Restored'],
+        ]);
+        expect(history[1].contentHash).toBe(manual.contentHash);
+        expect(await s.use.restoreOperations({ session: id })).toEqual([
+            {
+                id: expect.any(String),
+                session: id,
+                at: expect.any(Date),
+                by: facilitator,
+                identity,
+                revision: start.id,
+                preRestore: preRestore.id,
+                restored: restored.id,
+                result: 'Restored',
+            },
+        ]);
+    });
+
+    test('an external edit during or after a run is never overwritten without the two-step; the two-step keeps it as a revision', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+        value(await s.use.startRun({ run: run.id, token: lease.token }));
+        const edited = SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled');
+        await s.write('sales/sales.dt', edited);
+        // during the run: refused, nothing written
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator, recordExternalChanges: true }))).toEqual({
+            type: 'RunInProgress',
+            run: run.id,
+        });
+        expect(await s.read('sales/sales.dt')).toBe(edited);
+        value(await s.use.finishRun({ run: run.id, token: lease.token, facts }));
+
+        // after the run: an edit by hand is an external change
+        const byHand = `${edited}\n// by hand\n`;
+        await s.write('sales/sales.dt', byHand);
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
+            type: 'ExternalChangesSinceSnapshot',
+            paths: [value(C.makeWorkspacePath('sales/sales.dt'))],
+        });
+        expect(await s.read('sales/sales.dt')).toBe(byHand);
+        const before = value(await s.use.sessionState({ session: id })).revisions.length;
+        expect(before).toBe(3); // SessionStart, RunBase, RunResult: a refusal records nothing
+
+        const { manual, preRestore, restored } = value(
+            await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator, recordExternalChanges: true }),
+        );
+        expect(await s.read('sales/sales.dt')).toBe(SALES);
+        expect(manual).toMatchObject({ origin: { kind: 'Manual', takenBy: facilitator } });
+        const kept = value(await s.use.compareRevisions({ session: id, before: start.id, after: manual?.id ?? start.id }));
+        const diff = kept.files.find((f) => f.path === 'sales/sales.dt')?.diff;
+        expect(diff?.kind === 'diff' && diff.unified).toContain('+// by hand');
+        const ops = await s.use.restoreOperations({ session: id });
+        expect(ops.map((o) => [o.result, o.reason, o.manual, o.preRestore, o.restored])).toEqual([
+            ['Refused', 'RunInProgress', undefined, undefined, undefined],
+            ['Refused', 'ExternalChangesSinceSnapshot', undefined, undefined, undefined],
+            ['Restored', undefined, manual?.id, preRestore.id, restored.id],
+        ]);
+    });
+
+    test('restore refuses a path no longer under the sources, and a symbolic link made before the write; nothing is written', async () => {
+        const root = await workspace();
+        const s = await session(root, 'file');
+        const { id, start } = await started(s);
+        // the same workspace with narrower sources: the revision's .dtes is not a source there
+        const narrow: CollaborationDeps = { ...s.deps, workspace: createWorkspaceSnapshot(root, ['sales/**/*.dt']) };
+        const use = createCollaboration(narrow);
+        value(await use.takeRevision({ session: id, by: facilitator }));
+        const refused = error(await use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        expect(refused).toEqual({ type: 'PathOutsideRoot', path: 'stormings/returns.dtes' });
+        expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
+
+        // a link appears between the checks and the write: the writer refuses before writing anything
+        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        await s.write('sales/sales.dt', `${SALES}\n`);
+        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const racing: CollaborationDeps = {
+            ...s.deps,
+            workspace: {
+                read: () => s.deps.workspace.read(),
+                async write(files, expected) {
+                    await symlink(path.join(root, 'sales'), path.join(root, 'linked'));
+                    return s.deps.workspace.write(files, expected);
+                },
+            },
+        };
+        expect(error(await createCollaboration(racing).restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
+            type: 'SymlinkInWorkspace',
+            path: value(C.makeWorkspacePath('linked')),
+        });
+        expect(await s.read('sales/sales.dt')).toBe(`${SALES}\n`);
+        const ops = await s.use.restoreOperations({ session: id });
+        expect(ops.map((o) => [o.result, o.reason, o.preRestore !== undefined])).toEqual([
+            ['Refused', 'PathOutsideRoot', true],
+            ['Refused', 'SymlinkInWorkspace', true],
+        ]);
+    });
+
+    test('a write that fails midway keeps the pre-restore revision and reports a manual recovery; the two-step recovers', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const edited = SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled');
+        await s.write('sales/sales.dt', edited);
+        await s.write('stormings/returns.dtes', RETURNS.replace('  event Received', '  event Received\n  event Refunded'));
+        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const failing: CollaborationDeps = {
+            ...s.deps,
+            workspace: {
+                read: () => s.deps.workspace.read(),
+                async write(files) {
+                    // the first file is written, then the disk fails
+                    const [first] = files;
+                    await writeFile(path.join(s.root, first.path), first.bytes);
+                    throw new Error('EIO: i/o error, write');
+                },
+            },
+        };
+        const failed = error(await createCollaboration(failing).restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        const history = value(await s.use.sessionState({ session: id })).revisions;
+        const preRestore = history.at(-1);
+        expect(preRestore?.origin).toEqual({ kind: 'PreRestore', restoring: start.id });
+        expect(failed).toMatchObject({
+            type: 'ManualRecoveryNeeded',
+            preRestore: preRestore?.id ?? '',
+            cause: 'WriteFailed',
+            message: 'EIO: i/o error, write',
+        });
+        expect(history.some((r) => r.origin.kind === 'Restored')).toBe(false);
+        // half written: the .dt is the old one, the .dtes still the new one
+        expect(await s.read('sales/sales.dt')).toBe(SALES);
+        expect(await s.read('stormings/returns.dtes')).not.toBe(RETURNS);
+        expect((await s.use.restoreOperations({ session: id })).map((o) => [o.result, o.reason, o.preRestore, o.detail])).toEqual([
+            ['Failed', 'WriteFailed', preRestore?.id, 'EIO: i/o error, write'],
+        ]);
+
+        // the workspace differs from the last revision now: the two-step records it and restores the pre-restore one
+        const pre = preRestore?.id ?? start.id;
+        expect(error(await s.use.restoreRevision({ session: id, revision: pre, by: facilitator }))).toMatchObject({ type: 'ExternalChangesSinceSnapshot' });
+        value(await s.use.restoreRevision({ session: id, revision: pre, by: facilitator, recordExternalChanges: true }));
+        expect(await s.read('sales/sales.dt')).toBe(edited);
+    });
+
+    test('restore refuses while a run is claimed or running', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({ type: 'RunInProgress', run: run.id });
+        value(await s.use.startRun({ run: run.id, token: lease.token }));
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({ type: 'RunInProgress', run: run.id });
+        // cancelled: the lease ends, the restore goes on (the workspace is still the run's base)
+        value(await s.use.cancelRun({ run: run.id, by: facilitator }));
+        value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+    });
+
+    test('compare: each file by DSL, added, removed, changed or unchanged, with a line diff, and both validations', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        await s.write(
+            'sales/sales.dt',
+            SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled').replace('Draft -> Confirmed', 'Draft -> Nowhere'),
+        );
+        await rm(path.join(s.root, 'stormings/returns.dtes'));
+        await s.write('stormings/more.dtes', 'storming More {\n  event Happened\n}\n');
+        await s.write('sales/other.dt', 'context Other {}\n');
+        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const c = value(await s.use.compareRevisions({ session: id, before: start.id, after: manual.id }));
+        expect(c.files.map((f): string[] => [f.path, f.language, f.status])).toEqual([
+            ['sales/other.dt', 'Dt', 'added'],
+            ['sales/sales.dt', 'Dt', 'changed'],
+            ['stormings/more.dtes', 'Dtes', 'added'],
+            ['stormings/returns.dtes', 'Dtes', 'removed'],
+        ]);
+        expect(c.counts).toEqual({ Dt: { added: 1, removed: 0, changed: 1, unchanged: 0 }, Dtes: { added: 1, removed: 1, changed: 0, unchanged: 0 } });
+        const sales = c.files[1].diff;
+        expect(sales).toEqual({
+            kind: 'diff',
+            unified: [
+                '@@ -6,11 +6,12 @@',
+                ' ',
+                '     state Draft',
+                '     state Confirmed',
+                '+    state Cancelled',
+                ' ',
+                '     create command place(id: OrderId)',
+                '       -> Draft',
+                ' ',
+                '     command confirm()',
+                '-      Draft -> Confirmed',
+                '+      Draft -> Nowhere',
+                '   }',
+                ' }',
+            ].join('\n'),
+            added: 2,
+            removed: 1,
+            truncated: false,
+        });
+        expect(c.files[3].diff).toMatchObject({ kind: 'diff', added: 0, removed: RETURNS.split('\n').length - 1 });
+        expect([Number(c.before.validation.dtErrors), c.after.validation.dtErrors > 0]).toEqual([0, true]);
+        expect(value(await s.use.compareRevisions({ session: id, before: start.id, after: start.id })).files.every((f) => f.status === 'unchanged')).toBe(true);
+
+        const other = value(await s.use.startSession({ facilitator, name })).revision;
+        expect(error(await s.use.compareRevisions({ session: id, before: start.id, after: other.id }))).toEqual({
+            type: 'RevisionOfAnotherSession',
+            revision: other.id,
+        });
     });
 
     test("targets of requests are current, stale or unknown in the workspace now; they're never re-bound", async () => {
