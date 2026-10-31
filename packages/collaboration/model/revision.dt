@@ -40,6 +40,10 @@ context Collaboration {
     PreRestore "復元前" {
       restoring: RevisionId "復元するリビジョン"
     }
+    /// ファシリテーターが取ったスナップショット（外部での変更を取り込むときなど）。
+    Manual "手動" {
+      takenBy: ParticipantId "取った人"
+    }
     Restored "復元" {
       restoredFrom: RevisionId "復元元"
       preRestore: RevisionId "復元前のリビジョン"
@@ -70,11 +74,15 @@ context Collaboration {
     create command take(id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: SnapshotFile[0..*], validation: ValidationSummary, takenAt: Timestamp) "スナップショットを取る"
       -> Recorded
       requires notRestored "復元でない" { origin.kind != RevisionOrigin.Restored } else RestoreNeedsCheck
+      /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
+      requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
       emits RevisionRecorded
 
     /// 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
     create command restore(id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: SnapshotFile[0..*], validation: ValidationSummary, takenAt: Timestamp) "リビジョンを復元する"
       -> Recorded
+      /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
+      requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
       emits RevisionRestored
 
     command confirm(confirmedBy: ParticipantId, confirmedAt: Timestamp) "リビジョンを確認済みにする"
@@ -131,6 +139,9 @@ context Collaboration {
   error ExternalChangesSinceSnapshot "外部での変更" {
     paths: WorkspacePath[1..*]
   }
+
+  /// 内容ハッシュが、ファイルのパスと内容ハッシュから決まるものと合わない。
+  error ContentHashMismatch "内容ハッシュの不一致"
 
   /// 復元の由来のリビジョンは、復元できると確かめてから restore で記録する。
   error RestoreNeedsCheck "復元は確認が必要"

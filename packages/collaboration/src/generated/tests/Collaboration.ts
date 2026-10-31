@@ -76,6 +76,8 @@ export interface Arbitraries {
 export interface DeclaredChecks {
     readonly AgentRun?: Partial<Collaboration.AgentRunDeclaredChecks>;
     readonly Revision?: Partial<Collaboration.RevisionDeclaredChecks>;
+    readonly TakeRevision?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
+    readonly RestoreRevision?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
 }
 
 /** Examples run before the generated inputs: aggregates per state (mixed into the generated ones) and arguments per command. */
@@ -162,7 +164,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         RestorableRevision: () => given.RestorableRevision ?? testing.cast<Collaboration.RestorableRevision>(a.RevisionId),
         SnapshotFile: () => testing.valid(given.SnapshotFile ?? testing.cast<Collaboration.SnapshotFile>(fc.record({ path: a.WorkspacePath, language: a.SourceLanguage, hash: a.ContentHash, bytes: testing.cast<number>(scalar.Int) })), (v) => Collaboration.checkSnapshotFile(v).length === 0, 'Collaboration.SnapshotFile'),
         ValidationSummary: () => given.ValidationSummary ?? testing.cast<Collaboration.ValidationSummary>(fc.record({ dtErrors: a.Tally, dtesErrors: a.Tally, dtesWarnings: a.Tally, linkWarnings: a.Tally, stale: testing.cast<boolean>(scalar.Bool) })),
-        RevisionOrigin: () => given.RevisionOrigin ?? testing.cast<Collaboration.RevisionOrigin>(fc.oneof(fc.record({ kind: fc.constant('SessionStart' as const), session: a.SessionId }), fc.record({ kind: fc.constant('RunBase' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('RunResult' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('PreRestore' as const), restoring: a.RevisionId }), fc.record({ kind: fc.constant('Restored' as const), restoredFrom: a.RevisionId, preRestore: a.RevisionId }))),
+        RevisionOrigin: () => given.RevisionOrigin ?? testing.cast<Collaboration.RevisionOrigin>(fc.oneof(fc.record({ kind: fc.constant('SessionStart' as const), session: a.SessionId }), fc.record({ kind: fc.constant('RunBase' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('RunResult' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('PreRestore' as const), restoring: a.RevisionId }), fc.record({ kind: fc.constant('Manual' as const), takenBy: a.ParticipantId }), fc.record({ kind: fc.constant('Restored' as const), restoredFrom: a.RevisionId, preRestore: a.RevisionId }))),
         RecordedRevision: () => testing.withExamples(testing.valid(given.RecordedRevision ?? testing.cast<Collaboration.RecordedRevision>(fc.record({ state: fc.constant('Recorded' as const), id: a.RevisionId, session: a.SessionId, origin: a.RevisionOrigin, contentHash: a.ContentHash, files: testing.many(a.SnapshotFile, 0), validation: a.ValidationSummary, takenAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRecordedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision))(v).length === 0, 'Collaboration.RecordedRevision'), options.examples?.Revision?.states?.Recorded, Collaboration.checkRecordedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision)), 'Collaboration.RecordedRevision'),
         ConfirmedRevision: () => testing.withExamples(testing.valid(given.ConfirmedRevision ?? testing.cast<Collaboration.ConfirmedRevision>(fc.record({ state: fc.constant('Confirmed' as const), id: a.RevisionId, session: a.SessionId, origin: a.RevisionOrigin, contentHash: a.ContentHash, files: testing.many(a.SnapshotFile, 0), validation: a.ValidationSummary, takenAt: testing.cast<Date>(scalar.Timestamp), confirmedBy: a.ParticipantId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkConfirmedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision))(v).length === 0, 'Collaboration.ConfirmedRevision'), options.examples?.Revision?.states?.Confirmed, Collaboration.checkConfirmedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision)), 'Collaboration.ConfirmedRevision'),
         Revision: () => given.Revision ?? fc.oneof(a.RecordedRevision, a.ConfirmedRevision),
@@ -406,8 +408,9 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(fc.oneof(a.RunningAgentRun), a.RunReport, a.RevisionId, testing.cast<boolean>(scalar.Bool), testing.cast<Date>(scalar.Timestamp)),
                 examples: options.examples?.AgentRun?.commands?.finish ?? [],
                 factory: false,
-                requires: [],
+                requires: [{ name: 'changedMatchesResult', error: 'ChangedMismatch' }],
                 declaredRequires: [],
+                firstFailing: () => Collaboration.checkFinishAgentRunRequires,
                 invariants: Collaboration.checkAgentRunWith,
                 declaredInvariants: ['serial'],
                 givenInvariants: declared.AgentRun,
@@ -491,9 +494,10 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(a.RevisionId, a.SessionId, a.RevisionOrigin, a.ContentHash, testing.many(a.SnapshotFile, 0), a.ValidationSummary, testing.cast<Date>(scalar.Timestamp)),
                 examples: options.examples?.Revision?.commands?.take ?? [],
                 factory: true,
-                requires: [{ name: 'notRestored', error: 'RestoreNeedsCheck' }],
-                declaredRequires: [],
-                firstFailing: () => Collaboration.checkTakeRevisionRequires,
+                requires: [{ name: 'notRestored', error: 'RestoreNeedsCheck' }, { name: 'hashMatchesFiles', error: 'ContentHashMismatch' }],
+                declaredRequires: ['hashMatchesFiles'],
+                firstFailing: Collaboration.checkTakeRevisionRequiresWith,
+                givenRequires: declared.TakeRevision,
                 invariants: Collaboration.checkRevisionWith,
                 declaredInvariants: ['hashOfFiles'],
                 givenInvariants: declared.Revision,
@@ -506,8 +510,10 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(a.RevisionId, a.SessionId, a.RestorableRevision, a.RevisionId, a.ContentHash, testing.many(a.SnapshotFile, 0), a.ValidationSummary, testing.cast<Date>(scalar.Timestamp)),
                 examples: options.examples?.Revision?.commands?.restore ?? [],
                 factory: true,
-                requires: [],
-                declaredRequires: [],
+                requires: [{ name: 'hashMatchesFiles', error: 'ContentHashMismatch' }],
+                declaredRequires: ['hashMatchesFiles'],
+                firstFailing: Collaboration.checkRestoreRevisionRequiresWith,
+                givenRequires: declared.RestoreRevision,
                 invariants: Collaboration.checkRevisionWith,
                 declaredInvariants: ['hashOfFiles'],
                 givenInvariants: declared.Revision,

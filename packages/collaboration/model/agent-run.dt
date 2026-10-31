@@ -109,6 +109,9 @@ context Collaboration {
     /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。
     command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, finishedAt: Timestamp) "実行を終える"
       Running -> Completed | Failed
+      requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
+        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+      } else ChangedMismatch
       emits RunCompleted when -> Completed,
             RunFailed when -> Failed
 
@@ -172,6 +175,9 @@ context Collaboration {
 
   /// 凍結した入力が、束ねた依頼と合わない。
   error InputMismatch "入力の不一致"
+
+  /// 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
+  error ChangedMismatch "変更の有無の不一致"
 
   /// 成功の条件を満たさない失敗は、報告とともに finish で終える。
   error ReportRequired "報告が必要"

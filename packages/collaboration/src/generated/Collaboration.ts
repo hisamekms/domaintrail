@@ -445,6 +445,7 @@ export type StartAgentRunDecision = {
  * 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。
  * @param report 実行の報告
  * @param resultRevision リビジョンID
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
  * @changes none — the command changes no common field
  * @emits RunCompleted — exactly once when it ends in Completed
  * @emits RunFailed — exactly once when it ends in Failed
@@ -471,12 +472,13 @@ export type FinishAgentRun = (
           };
           readonly Completed?: never;
       },
-    never
+    ChangedMismatch
 >;
 
 /**
  * AgentRun.finish, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
  * @changes none — the command changes no common field
  * Running -> Completed — set: report (new in Completed), resultRevision (new in Completed), changed (new in Completed), finishedAt (new in Completed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
@@ -502,9 +504,18 @@ export type FinishAgentRunDecision = {
               };
               readonly Completed?: never;
           },
-        never
+        ChangedMismatch
     >;
 };
+
+/**
+ * The first requirement of AgentRun.finish that does not hold, in declaration order; `undefined` when all hold.
+ * @see model/agent-run.dt:110
+ */
+export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: RunReport, resultRevision: RevisionId, changed: boolean, _finishedAt: Timestamp): 'changedMatchesResult' | undefined {
+    if (!((!(changed === true) || !(resultRevision === agentRun.baseRevision)) && (!(changed === false) || (resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
+    return undefined;
+}
 
 /**
  * AgentRun.askClarification (Running -> NeedsClarification)
@@ -513,7 +524,7 @@ export type FinishAgentRunDecision = {
  * @param resultRevision リビジョンID
  * @changes none — the command changes no common field
  * @emits RunNeedsClarification — exactly once when the command succeeds
- * @see model/agent-run.dt:115
+ * @see model/agent-run.dt:118
  */
 export type AskClarificationAgentRun = (
     agentRun: RunningAgentRun,
@@ -532,7 +543,7 @@ export type AskClarificationAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Running -> NeedsClarification — set: question (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:115
+ * @see model/agent-run.dt:118
  */
 export type AskClarificationAgentRunDecision = {
     /** @emits RunNeedsClarification — exactly once when the command succeeds */
@@ -552,7 +563,7 @@ export type AskClarificationAgentRunDecision = {
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * @emits RunFailed — exactly once when the command succeeds
- * @see model/agent-run.dt:120
+ * @see model/agent-run.dt:123
  */
 export type FailAgentRun = (
     agentRun: RunningAgentRun,
@@ -571,7 +582,7 @@ export type FailAgentRun = (
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:120
+ * @see model/agent-run.dt:123
  */
 export type FailAgentRunDecision = {
     /** @emits RunFailed — exactly once when the command succeeds */
@@ -585,7 +596,7 @@ export type FailAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.fail that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:120
+ * @see model/agent-run.dt:123
  */
 export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: FailureReason, _finishedAt: Timestamp): 'abnormal' | undefined {
     if (!(!(reason === "RuleNotMet"))) return 'abnormal';
@@ -598,7 +609,7 @@ export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: Fa
  * @param cancelledBy 参加者ID
  * @changes none — the command changes no common field
  * @emits RunCancelled — exactly once when the command succeeds
- * @see model/agent-run.dt:125
+ * @see model/agent-run.dt:128
  */
 export type CancelAgentRun = (
     agentRun: QueuedAgentRun | RunningAgentRun,
@@ -617,7 +628,7 @@ export type CancelAgentRun = (
  * @changes none — the command changes no common field
  * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt
  * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
- * @see model/agent-run.dt:125
+ * @see model/agent-run.dt:128
  */
 export type CancelAgentRunDecision = {
     /** @emits RunCancelled — exactly once when the command succeeds */
@@ -665,7 +676,7 @@ export type AgentRunEvent = RunQueued | RunStarted | RunCompleted | RunFailed | 
 /**
  * 実行登録
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:130
+ * @see model/agent-run.dt:133
  */
 export interface RunQueued {
     readonly type: 'RunQueued';
@@ -683,7 +694,7 @@ export interface RunQueued {
 /**
  * 実行開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:138
+ * @see model/agent-run.dt:141
  */
 export interface RunStarted {
     readonly type: 'RunStarted';
@@ -697,7 +708,7 @@ export interface RunStarted {
 /**
  * 実行完了
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:144
+ * @see model/agent-run.dt:147
  */
 export interface RunCompleted {
     readonly type: 'RunCompleted';
@@ -712,7 +723,7 @@ export interface RunCompleted {
 /**
  * 確認依頼
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:151
+ * @see model/agent-run.dt:154
  */
 export interface RunNeedsClarification {
     readonly type: 'RunNeedsClarification';
@@ -728,7 +739,7 @@ export interface RunNeedsClarification {
 /**
  * 実行失敗
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:158
+ * @see model/agent-run.dt:161
  */
 export interface RunFailed {
     readonly type: 'RunFailed';
@@ -742,7 +753,7 @@ export interface RunFailed {
 /**
  * 実行取消
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:164
+ * @see model/agent-run.dt:167
  */
 export interface RunCancelled {
     readonly type: 'RunCancelled';
@@ -756,7 +767,7 @@ export interface RunCancelled {
 /**
  * 依頼の重複
  * 同じ依頼を2回束ねた。
- * @see model/agent-run.dt:171
+ * @see model/agent-run.dt:174
  */
 export interface DuplicateRequest {
     readonly type: 'DuplicateRequest';
@@ -765,16 +776,25 @@ export interface DuplicateRequest {
 /**
  * 入力の不一致
  * 凍結した入力が、束ねた依頼と合わない。
- * @see model/agent-run.dt:174
+ * @see model/agent-run.dt:177
  */
 export interface InputMismatch {
     readonly type: 'InputMismatch';
 }
 
 /**
+ * 変更の有無の不一致
+ * 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
+ * @see model/agent-run.dt:180
+ */
+export interface ChangedMismatch {
+    readonly type: 'ChangedMismatch';
+}
+
+/**
  * 報告が必要
  * 成功の条件を満たさない失敗は、報告とともに finish で終える。
- * @see model/agent-run.dt:177
+ * @see model/agent-run.dt:183
  */
 export interface ReportRequired {
     readonly type: 'ReportRequired';
@@ -1452,6 +1472,15 @@ export type RevisionOrigin =
           /** 復元するリビジョン */
           readonly restoring: RevisionId;
       }
+    /**
+     * 手動
+     * ファシリテーターが取ったスナップショット（外部での変更を取り込むときなど）。
+     */
+    | {
+          readonly kind: 'Manual';
+          /** 取った人 */
+          readonly takenBy: ParticipantId;
+      }
     /** 復元 */
     | {
           readonly kind: 'Restored';
@@ -1483,6 +1512,10 @@ export function equalRevisionOrigin(a: RevisionOrigin, b: RevisionOrigin): boole
         const y = b as Extract<RevisionOrigin, { readonly kind: 'PreRestore' }>;
         return a.restoring === y.restoring;
     }
+    if (a.kind === 'Manual') {
+        const y = b as Extract<RevisionOrigin, { readonly kind: 'Manual' }>;
+        return a.takenBy === y.takenBy;
+    }
     if (a.kind === 'Restored') {
         const y = b as Extract<RevisionOrigin, { readonly kind: 'Restored' }>;
         return a.restoredFrom === y.restoredFrom && a.preRestore === y.preRestore;
@@ -1494,7 +1527,7 @@ export function equalRevisionOrigin(a: RevisionOrigin, b: RevisionOrigin): boole
  * Fields shared by every state of リビジョン (Revision).
  * @invariant distinctPaths (パスは1ファイル1回): unique(files, f => f.path)
  * @invariant hashOfFiles (内容ハッシュはファイルから決まる): not expressed in the DSL
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export interface RevisionCommon {
     /** リビジョンID */
@@ -1515,7 +1548,7 @@ export interface RevisionCommon {
 
 /**
  * 記録済み
- * @see model/revision.dt:64
+ * @see model/revision.dt:68
  */
 export interface RecordedRevision extends RevisionCommon {
     readonly state: 'Recorded';
@@ -1523,7 +1556,7 @@ export interface RecordedRevision extends RevisionCommon {
 
 /**
  * 確認済み
- * @see model/revision.dt:65
+ * @see model/revision.dt:69
  */
 export interface ConfirmedRevision extends RevisionCommon {
     readonly state: 'Confirmed';
@@ -1537,13 +1570,13 @@ export interface ConfirmedRevision extends RevisionCommon {
  * リビジョン
  * ワークスペースのすべてのソース（`.dt` と `.dtes`）の、ある時点のスナップショット。内容ハッシュで識別する。
  * 確認は印で、ほかの操作を止めない。
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export type Revision = RecordedRevision | ConfirmedRevision;
 
 /**
  * The fields of Revision as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export const RevisionShape: Shape = {
     fields: ['id', 'session', 'origin', 'contentHash', 'files', 'validation', 'takenAt'],
@@ -1552,13 +1585,13 @@ export const RevisionShape: Shape = {
 
 /**
  * The invariants of Revision that the DSL does not express: implement them in your code and pass them to `checkRevisionWith`.
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export type RevisionDeclaredChecks = { readonly hashOfFiles: (revision: Revision) => boolean };
 
 /**
  * The invariants of Revision in state Recorded (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/revision.dt:64
+ * @see model/revision.dt:68
  */
 export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revision: RecordedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
@@ -1571,7 +1604,7 @@ export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revi
 
 /**
  * The invariants of Revision in state Confirmed (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/revision.dt:65
+ * @see model/revision.dt:69
  */
 export function checkConfirmedRevisionWith(checks: RevisionDeclaredChecks): (revision: ConfirmedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
@@ -1584,7 +1617,7 @@ export function checkConfirmedRevisionWith(checks: RevisionDeclaredChecks): (rev
 
 /**
  * The invariants of Revision in the state it is in that an aggregate violates (see the check of each state).
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export function checkRevisionWith(checks: RevisionDeclaredChecks): (revision: Revision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
@@ -1605,8 +1638,9 @@ export function checkRevisionWith(checks: RevisionDeclaredChecks): (revision: Re
  * @param files スナップショットのファイル
  * @param validation 検証の要約
  * @requires notRestored (復元でない) else RestoreNeedsCheck: origin.kind != RevisionOrigin.Restored
+ * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRecorded — exactly once when the command succeeds
- * @see model/revision.dt:70
+ * @see model/revision.dt:74
  */
 export type TakeRevision = (
     id: RevisionId,
@@ -1621,15 +1655,16 @@ export type TakeRevision = (
         readonly aggregate: RecordedRevision;
         readonly events: { readonly RevisionRecorded: RevisionRecorded };
     };
-}, RestoreNeedsCheck>;
+}, RestoreNeedsCheck | ContentHashMismatch>;
 
 /**
  * Revision.take, decided by one function; implement it with `decide(RevisionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * @requires notRestored (復元でない) else RestoreNeedsCheck: origin.kind != RevisionOrigin.Restored
+ * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * new -> Recorded — set: every field
  * @emits RevisionRecorded — exactly once when the command succeeds
- * @see model/revision.dt:70
+ * @see model/revision.dt:74
  */
 export type TakeRevisionDecision = (
     id: RevisionId,
@@ -1644,15 +1679,24 @@ export type TakeRevisionDecision = (
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
         readonly events: { readonly RevisionRecorded: RevisionRecorded };
     };
-}, RestoreNeedsCheck>;
+}, RestoreNeedsCheck | ContentHashMismatch>;
+
+/**
+ * The requirements of Revision.take that the DSL does not express: implement them in your code and pass them to `checkTakeRevisionRequiresWith`.
+ * @see model/revision.dt:74
+ */
+export type TakeRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => boolean };
 
 /**
  * The first requirement of Revision.take that does not hold, in declaration order; `undefined` when all hold.
- * @see model/revision.dt:70
+ * @see model/revision.dt:74
  */
-export function checkTakeRevisionRequires(_id: RevisionId, _session: SessionId, origin: RevisionOrigin, _contentHash: ContentHash, _files: readonly SnapshotFile[], _validation: ValidationSummary, _takenAt: Timestamp): 'notRestored' | undefined {
-    if (!(!(origin.kind === "Restored"))) return 'notRestored';
-    return undefined;
+export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequires): (id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => 'notRestored' | 'hashMatchesFiles' | undefined {
+    return (id, session, origin, contentHash, files, validation, takenAt) => {
+        if (!(!(origin.kind === "Restored"))) return 'notRestored';
+        if (!checks.hashMatchesFiles(id, session, origin, contentHash, files, validation, takenAt)) return 'hashMatchesFiles';
+        return undefined;
+    };
 }
 
 /**
@@ -1666,8 +1710,9 @@ export function checkTakeRevisionRequires(_id: RevisionId, _session: SessionId, 
  * @param contentHash 内容ハッシュ
  * @param files スナップショットのファイル
  * @param validation 検証の要約
+ * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see model/revision.dt:76
+ * @see model/revision.dt:82
  */
 export type RestoreRevision = (
     id: RevisionId,
@@ -1683,14 +1728,15 @@ export type RestoreRevision = (
         readonly aggregate: RecordedRevision;
         readonly events: { readonly RevisionRestored: RevisionRestored };
     };
-}, never>;
+}, ContentHashMismatch>;
 
 /**
  * Revision.restore, decided by one function; implement it with `decide(RevisionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * new -> Recorded — set: every field
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see model/revision.dt:76
+ * @see model/revision.dt:82
  */
 export type RestoreRevisionDecision = (
     id: RevisionId,
@@ -1706,7 +1752,24 @@ export type RestoreRevisionDecision = (
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
         readonly events: { readonly RevisionRestored: RevisionRestored };
     };
-}, never>;
+}, ContentHashMismatch>;
+
+/**
+ * The requirements of Revision.restore that the DSL does not express: implement them in your code and pass them to `checkRestoreRevisionRequiresWith`.
+ * @see model/revision.dt:82
+ */
+export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => boolean };
+
+/**
+ * The first requirement of Revision.restore that does not hold, in declaration order; `undefined` when all hold.
+ * @see model/revision.dt:82
+ */
+export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => 'hashMatchesFiles' | undefined {
+    return (id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt) => {
+        if (!checks.hashMatchesFiles(id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt)) return 'hashMatchesFiles';
+        return undefined;
+    };
+}
 
 /**
  * Revision.confirm (Recorded -> Confirmed)
@@ -1714,7 +1777,7 @@ export type RestoreRevisionDecision = (
  * @param confirmedBy 参加者ID
  * @changes none — the command changes no common field
  * @emits RevisionConfirmed — exactly once when the command succeeds
- * @see model/revision.dt:80
+ * @see model/revision.dt:88
  */
 export type ConfirmRevision = (
     revision: RecordedRevision,
@@ -1732,7 +1795,7 @@ export type ConfirmRevision = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Recorded -> Confirmed — set: confirmedBy (new in Confirmed), confirmedAt (new in Confirmed); carried over: id, session, origin, contentHash, files, validation, takenAt
- * @see model/revision.dt:80
+ * @see model/revision.dt:88
  */
 export type ConfirmRevisionDecision = {
     /** @emits RevisionConfirmed — exactly once when the command succeeds */
@@ -1747,7 +1810,7 @@ export type ConfirmRevisionDecision = {
 /**
  * Command contracts of Revision. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export interface RevisionCommands {
     /** スナップショットを取る */
@@ -1760,14 +1823,14 @@ export interface RevisionCommands {
 
 /**
  * Events that the commands of Revision may emit.
- * @see model/revision.dt:51
+ * @see model/revision.dt:55
  */
 export type RevisionEvent = RevisionRecorded | RevisionRestored | RevisionConfirmed;
 
 /**
  * リビジョン記録
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/revision.dt:85
+ * @see model/revision.dt:93
  */
 export interface RevisionRecorded {
     readonly type: 'RevisionRecorded';
@@ -1787,7 +1850,7 @@ export interface RevisionRecorded {
 /**
  * リビジョン復元
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/revision.dt:94
+ * @see model/revision.dt:102
  */
 export interface RevisionRestored {
     readonly type: 'RevisionRestored';
@@ -1809,7 +1872,7 @@ export interface RevisionRestored {
 /**
  * リビジョン確認
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/revision.dt:104
+ * @see model/revision.dt:112
  */
 export interface RevisionConfirmed {
     readonly type: 'RevisionConfirmed';
@@ -1823,7 +1886,7 @@ export interface RevisionConfirmed {
 /**
  * リビジョンなし
  * 指定したリビジョンがない。
- * @see model/revision.dt:111
+ * @see model/revision.dt:119
  */
 export interface RevisionNotFound {
     readonly type: 'RevisionNotFound';
@@ -1834,7 +1897,7 @@ export interface RevisionNotFound {
 /**
  * 別のセッションのリビジョン
  * リビジョンは別のセッションのもの。
- * @see model/revision.dt:116
+ * @see model/revision.dt:124
  */
 export interface RevisionOfAnotherSession {
     readonly type: 'RevisionOfAnotherSession';
@@ -1845,7 +1908,7 @@ export interface RevisionOfAnotherSession {
 /**
  * シンボリックリンク
  * ワークスペースのソースのパスにシンボリックリンクがある。
- * @see model/revision.dt:121
+ * @see model/revision.dt:129
  */
 export interface SymlinkInWorkspace {
     readonly type: 'SymlinkInWorkspace';
@@ -1856,7 +1919,7 @@ export interface SymlinkInWorkspace {
 /**
  * ルートの外のパス
  * リビジョンのパスがワークスペースのルートの外を指す。
- * @see model/revision.dt:126
+ * @see model/revision.dt:134
  */
 export interface PathOutsideRoot {
     readonly type: 'PathOutsideRoot';
@@ -1866,7 +1929,7 @@ export interface PathOutsideRoot {
 /**
  * 外部での変更
  * 最後のスナップショットのあとで、ワークスペースのソースが外部で変わった。
- * @see model/revision.dt:131
+ * @see model/revision.dt:139
  */
 export interface ExternalChangesSinceSnapshot {
     readonly type: 'ExternalChangesSinceSnapshot';
@@ -1875,9 +1938,18 @@ export interface ExternalChangesSinceSnapshot {
 }
 
 /**
+ * 内容ハッシュの不一致
+ * 内容ハッシュが、ファイルのパスと内容ハッシュから決まるものと合わない。
+ * @see model/revision.dt:144
+ */
+export interface ContentHashMismatch {
+    readonly type: 'ContentHashMismatch';
+}
+
+/**
  * 復元は確認が必要
  * 復元の由来のリビジョンは、復元できると確かめてから restore で記録する。
- * @see model/revision.dt:136
+ * @see model/revision.dt:147
  */
 export interface RestoreNeedsCheck {
     readonly type: 'RestoreNeedsCheck';
