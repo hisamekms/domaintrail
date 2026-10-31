@@ -13,8 +13,8 @@ const ROOT = path.join(import.meta.dir, '..');
 /** The workspace packages, their sources, and the @domaintrail/* packages each depends on (ADR 0025). */
 const PACKAGES: Record<string, { dir: string; sources: string; dependsOn: string[] }> = {
     modeling: { dir: 'packages/modeling', sources: 'packages/modeling/src', dependsOn: [] },
-    // the collaboration contracts (ADR 0026): may depend on modeling and on visualization's types, once it imports them
-    collaboration: { dir: 'packages/collaboration', sources: 'packages/collaboration/src', dependsOn: [] },
+    // the collaboration contracts and their implementation (ADR 0026): modeling, and visualization's types once it imports them
+    collaboration: { dir: 'packages/collaboration', sources: 'packages/collaboration/src', dependsOn: ['modeling'] },
     workspace: { dir: 'packages/workspace', sources: 'packages/workspace/src', dependsOn: ['modeling'] },
     visualization: { dir: 'packages/visualization', sources: 'packages/visualization/src', dependsOn: ['modeling'] },
     presentation: { dir: 'packages/presentation', sources: 'packages/presentation/src', dependsOn: ['modeling', 'visualization'] },
