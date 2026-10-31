@@ -57,6 +57,8 @@ const LATIN_IN_JA = new Set([
     'Enter',
     'Tab',
     'Esc',
+    'Shift',
+    'U',
 ]);
 
 describe('i18n', () => {

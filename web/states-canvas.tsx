@@ -6,10 +6,10 @@ import { TRANSITION_LABELS, type DisplayMode, type Lang, type LaidOutGraph, type
 import { fitAll, highlightElement, usePointerCursor } from './view/canvas';
 import { useT } from './i18n';
 import { usePersistentState } from './shared/layout';
-import { Legend, LegendToggle } from './legend';
 import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
 import { applyTheme, type Theme } from './theme';
+import { CanvasControls, EdgeHint } from './view/canvas-controls';
 
 /** Camera of each aggregate's diagram, kept while the page is open (the canvas unmounts with its inspector tab). */
 const cameras = new Map<string, TLCamera>();
@@ -126,10 +126,13 @@ export function StatesCanvas(props: {
                                 </button>
                             ))}
                         </div>
-                        <button onClick={() => editor && fitAll(editor, graph, true)}>{t.zoomToFit}</button>
-                        <LegendToggle open={props.legendOpen} onToggle={props.onLegendToggle} />
                     </div>
-                    <Legend view="states" open={props.legendOpen} onToggle={props.onLegendToggle} />
+                    <CanvasControls
+                        editor={editor}
+                        fitAll={() => editor && fitAll(editor, graph, true)}
+                        legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
+                    />
+                    <EdgeHint editor={editor} view="states" />
                 </>
             ) : (
                 <div className="empty">{t.noDiagram}</div>

@@ -2779,10 +2779,6 @@ svg.chat-launcher-mark {
 /* ---------- legend ---------- */
 
 .legend {
-    position: absolute;
-    left: 12px;
-    bottom: 12px;
-    z-index: 5;
     padding: 8px 12px;
     font-size: 12px;
     background: var(--legend-bg);
@@ -2794,7 +2790,7 @@ svg.chat-launcher-mark {
         transform 180ms ease,
         opacity 180ms ease;
 }
-/* closed, it shrinks into the tab on the canvas's bottom edge */
+/* closed, it shrinks into its button at the canvas's bottom-left */
 .legend-closed {
     transform: scale(0.2);
     opacity: 0;
@@ -4345,17 +4341,6 @@ del.was.block {
 .left-content[hidden] {
     display: none;
 }
-.legend-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-.view-toolbar .legend-toggle.active,
-.canvas-toolbar .legend-toggle.active {
-    background: var(--violet-tint);
-    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    color: var(--accent);
-}
 .history-actions {
     flex-shrink: 0;
     display: flex;
@@ -4498,4 +4483,141 @@ del.was.block {
 }
 .session-chat button.chat-small svg {
     vertical-align: -1px;
+}
+
+/* ---------- the canvas's bottom-left controls (web/view/canvas-controls.tsx) ---------- */
+
+/* the legend opens upward from the bar; the canvas stays draggable around them */
+.canvas-controls {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    z-index: 5;
+    /* never under the chat's launcher at the bottom right */
+    max-width: calc(100% - 96px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    pointer-events: none;
+}
+.canvas-controls-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px;
+    font-size: 12px;
+    background: var(--legend-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--shadow);
+    pointer-events: auto;
+}
+.canvas-controls-bar > * {
+    position: relative;
+}
+.canvas-controls-bar > * + *::before {
+    content: '';
+    position: absolute;
+    left: -4px;
+    top: 5px;
+    bottom: 5px;
+    width: 1px;
+    background: var(--border);
+}
+.canvas-controls-group {
+    display: flex;
+    align-items: center;
+}
+.canvas-controls-bar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    white-space: nowrap;
+}
+.canvas-controls-bar button:hover:not([aria-disabled='true']) {
+    background: var(--hover);
+    color: inherit;
+}
+.canvas-controls-bar button[aria-disabled='true'] {
+    opacity: 0.35;
+    cursor: default;
+}
+.canvas-controls-bar .canvas-zoom-level {
+    min-width: 44px;
+    font-variant-numeric: tabular-nums;
+}
+.canvas-controls-bar .canvas-legend-button.active {
+    background: var(--violet-tint);
+    color: var(--accent);
+}
+
+/* the canvas pane's menu, at the right end of the view toolbar */
+.view-toolbar .canvas-menu > .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+}
+.view-toolbar .canvas-menu > .icon-button:hover {
+    background: var(--hover);
+    color: inherit;
+}
+.view-toolbar .canvas-menu .pane-menu-list > button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: none;
+    background: none;
+}
+.view-toolbar .canvas-menu .pane-menu-list > button:hover {
+    background: var(--hover);
+}
+.pane-menu-check {
+    display: inline-flex;
+    width: 14px;
+    color: var(--accent);
+}
+.pane-menu-heading {
+    padding: 4px 10px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.pane-menu-note {
+    margin-top: 4px;
+    padding: 6px 10px 4px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+}
+
+/* what an edge under the pointer means (web/view/canvas-controls.tsx EdgeHint) */
+.edge-hint {
+    position: fixed;
+    z-index: 1000;
+    max-width: 320px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--text);
+    color: var(--panel);
+    font: 12px/1.4 var(--sans);
+    box-shadow: 0 2px 8px var(--shadow);
+    pointer-events: none;
 }

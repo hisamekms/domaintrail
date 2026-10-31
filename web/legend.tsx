@@ -1,52 +1,61 @@
-import { BookOpen, ChevronDown } from 'lucide-react';
-import { useT } from './i18n';
+import { ChevronDown } from 'lucide-react';
+import type { EdgeKind } from '@domaintrail/visualization/domain/graph/ir';
+import { useT, type Messages } from './i18n';
+
+/** The canvas views a legend is for (the structure's levels, focused or not, read differently). */
+export type LegendView = 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states' | 'storming';
+
+/** One kind of edge of a view, with what it means there. */
+export interface LegendRow {
+    readonly kind: EdgeKind;
+    readonly text: string;
+}
+
+/** The kinds of edge a view draws, with what each means in it: the legend's rows, and the edges' hover hints. */
+export function legendRows(view: LegendView, words: Messages['legendRows']): readonly LegendRow[] {
+    switch (view) {
+        case 'contextMap':
+            return [
+                { kind: 'references', text: words.mapReferences },
+                { kind: 'dependsOn', text: words.mapDependsOn },
+            ];
+        case 'structureFocus':
+            return [
+                { kind: 'owns', text: words.owns },
+                { kind: 'references', text: words.focusReferences },
+                { kind: 'value', text: words.focusValue },
+            ];
+        case 'aggregates':
+        case 'aggregatesFocus':
+            return [
+                { kind: 'references', text: words.aggregateReferences },
+                { kind: 'value', text: words.aggregateValue },
+            ];
+        case 'structure':
+            return [
+                { kind: 'owns', text: words.owns },
+                { kind: 'references', text: words.references },
+                { kind: 'value', text: words.value },
+            ];
+        case 'storming':
+            return [
+                { kind: 'esCausal', text: words.esCausal },
+                { kind: 'esSequence', text: words.esSequence },
+                { kind: 'esRelated', text: words.esRelated },
+                { kind: 'esHotspot', text: words.esHotspot },
+            ];
+        case 'states':
+            return [{ kind: 'transition', text: words.transition }];
+    }
+}
 
 /**
  * Key for the edges of the canvas views; every edge points from the dependent to its dependency (in an Event Storming,
- * along causes and time). It floats over the canvas while open; the toolbar's `LegendToggle` opens and closes it.
+ * along causes and time). It opens upward from the 凡例 button of the canvas's bottom-left controls.
  */
-export function Legend({
-    view,
-    open,
-    onToggle,
-}: {
-    view: 'contextMap' | 'structure' | 'structureFocus' | 'aggregates' | 'aggregatesFocus' | 'states' | 'storming';
-    open: boolean;
-    onToggle: () => void;
-}) {
+export function Legend({ view, open, onToggle }: { view: LegendView; open: boolean; onToggle: () => void }) {
     const t = useT();
-    const words = t.legendRows;
-    const rows =
-        view === 'contextMap'
-            ? [
-                  { kind: 'references', text: words.mapReferences },
-                  { kind: 'dependsOn', text: words.mapDependsOn },
-              ]
-            : view === 'structureFocus'
-              ? [
-                    { kind: 'owns', text: words.owns },
-                    { kind: 'references', text: words.focusReferences },
-                    { kind: 'value', text: words.focusValue },
-                ]
-              : view === 'aggregates' || view === 'aggregatesFocus'
-                ? [
-                      { kind: 'references', text: words.aggregateReferences },
-                      { kind: 'value', text: words.aggregateValue },
-                  ]
-                : view === 'structure'
-                  ? [
-                        { kind: 'owns', text: words.owns },
-                        { kind: 'references', text: words.references },
-                        { kind: 'value', text: words.value },
-                    ]
-                  : view === 'storming'
-                    ? [
-                          { kind: 'esCausal', text: words.esCausal },
-                          { kind: 'esSequence', text: words.esSequence },
-                          { kind: 'esRelated', text: words.esRelated },
-                          { kind: 'esHotspot', text: words.esHotspot },
-                      ]
-                    : [{ kind: 'transition', text: words.transition }];
+    const rows = legendRows(view, t.legendRows);
     return (
         <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>
             <div className="legend-title">
@@ -71,16 +80,5 @@ export function Legend({
             {view === 'storming' && <div className="legend-note">{t.stormingColorNote}</div>}
             <div className="legend-note">{view === 'storming' ? t.stormingArrowNote : t.arrowNote}</div>
         </div>
-    );
-}
-
-/** The toolbar's button opening and closing the legend that floats over the canvas. */
-export function LegendToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-    const t = useT();
-    return (
-        <button className={`legend-toggle${open ? ' active' : ''}`} aria-pressed={open} onClick={onToggle} data-tooltip={open ? t.closeLegend : t.openLegend}>
-            <BookOpen size={14} aria-hidden />
-            {t.legend}
-        </button>
     );
 }

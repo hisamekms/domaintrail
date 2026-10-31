@@ -6,11 +6,12 @@ import type { StormingView, ViewPayload } from '@domaintrail/visualization/proto
 import { Catalog } from '../catalog';
 import { ContextPicker } from '../context-picker';
 import { useT } from '../i18n';
-import { Legend, LegendToggle } from '../legend';
+import type { LegendView } from '../legend';
 import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
+import { CanvasControls, CanvasMenu, EdgeHint } from './canvas-controls';
 import { fitAll, usePointerCursor } from './canvas';
 import { useViewGraph, type ViewGraph } from './graph';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
@@ -76,6 +77,20 @@ export function ViewWorkspace(props: {
     const model = current?.model ?? null;
     const t = useT();
     const empty = { added: [], changed: [], removed: [] };
+    const legendView: LegendView | null =
+        !graph || !isCanvas(view)
+            ? null
+            : view.kind === 'contextMap'
+              ? 'contextMap'
+              : view.kind === 'storming'
+                ? 'storming'
+                : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`;
+    /** Fits the whole view: a storming view like when it is shown (its graph, never zoomed in past normal size). */
+    const fitView = (): void => {
+        if (!editor) return;
+        if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
+        else editor.zoomToFit({ animation: { duration: 200 } });
+    };
 
     return (
         <section className="center">
@@ -133,37 +148,21 @@ export function ViewWorkspace(props: {
                         </div>
                     )}
                     {view.kind === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
-                    {isCanvas(view) && (
-                        <button
-                            onClick={() => {
-                                // a storming view is fitted like when it is shown: its graph, never zoomed in past normal size
-                                if (!editor) return;
-                                if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
-                                else editor.zoomToFit({ animation: { duration: 200 } });
-                            }}
-                        >
-                            {t.zoomToFit}
-                        </button>
-                    )}
-                    {graph && isCanvas(view) && <LegendToggle open={legendOpen} onToggle={onLegendToggle} />}
+                    {isCanvas(view) && <CanvasMenu />}
                 </div>
             </div>
             <div className="view-area">
                 <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
                 {isCanvas(view) && props.overlay}
-                {graph && isCanvas(view) && (
-                    <Legend
-                        view={
-                            view.kind === 'contextMap'
-                                ? 'contextMap'
-                                : view.kind === 'storming'
-                                  ? 'storming'
-                                  : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`
-                        }
-                        open={legendOpen}
-                        onToggle={onLegendToggle}
+                {isCanvas(view) && (
+                    <CanvasControls
+                        editor={editor}
+                        fitAll={fitView}
+                        legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
+                        keys
                     />
                 )}
+                <EdgeHint editor={editor} view={legendView} />
                 {current && !graph && isCanvas(view) && (
                     <div className="empty">
                         {current.status === 'empty'
