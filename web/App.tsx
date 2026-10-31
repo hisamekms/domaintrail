@@ -7,7 +7,7 @@ import type { BaseView } from '../src/server/protocol';
 import { BaselineButton, BaselineMenu, baselineName } from './baseline-picker';
 import { BottomPanel, type BottomTab } from './bottom';
 import { Catalog } from './catalog';
-import { fitReadable, highlightElement, usePointerCursor } from './canvas';
+import { cameraMove, fitAll, fitReadable, highlightElement, usePointerCursor } from './canvas';
 import { Explorer } from './explorer';
 import { Legend } from './legend';
 import { backIndex, popHistory, pushHistory, type History } from './history';
@@ -177,7 +177,7 @@ export function App() {
         if (current.stormings.length && !current.focusContexts.length) setView({ kind: 'storming' });
     }, [current]);
 
-    // Draw the current graph; keep the camera of each view, fit only the first time a view is shown.
+    // Draw the current graph; keep the camera of each view, fit only the first time a view is shown (a storming view: each time).
     useEffect(() => {
         if (!editor || !current || !isCanvas(view)) return;
         const key = cameraKey(view);
@@ -191,12 +191,12 @@ export function App() {
         // ghosts of removed elements need the baseline's version of the same graph; focused graphs are not kept
         const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(base, view) ?? undefined);
         renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
-        if (switched) {
-            const saved = cameras.current.get(key);
-            if (saved) editor.setCamera(saved);
-            // larger text (overview) allows zooming further out while staying readable
-            else fitReadable(editor, graph.textScale ?? 1);
-        }
+        const saved = cameras.current.get(key);
+        const move = cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
+        if (move === 'restore' && saved) editor.setCamera(saved);
+        else if (move === 'fitAll') fitAll(editor, graph);
+        // larger text (overview) allows zooming further out while staying readable
+        else if (move === 'fitReadable') fitReadable(editor, graph.textScale ?? 1);
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editor, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang, stormingShown]);
@@ -427,7 +427,18 @@ export function App() {
                                 {view.kind === 'storming' && (
                                     <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />
                                 )}
-                                {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
+                                {isCanvas(view) && (
+                                    <button
+                                        onClick={() => {
+                                            // a storming view is fitted like when it is shown: its graph, never zoomed in past normal size
+                                            if (!editor) return;
+                                            if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
+                                            else editor.zoomToFit({ animation: { duration: 200 } });
+                                        }}
+                                    >
+                                        {t.zoomToFit}
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div className="view-area">

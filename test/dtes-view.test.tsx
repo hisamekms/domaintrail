@@ -12,6 +12,7 @@ import { ElkLayoutEngine } from '../src/layout/elk.js';
 import type { ViewPayload } from '../src/server/protocol.js';
 import { startViewServer, type ViewServer } from '../src/server/server.js';
 import { ViewSession } from '../src/server/session.js';
+import { cameraMove } from '../web/canvas.js';
 import { I18nProvider } from '../web/i18n.js';
 import { StormingDetails } from '../web/storming.js';
 
@@ -279,5 +280,23 @@ describe('the inspector of a storming element', () => {
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
+    });
+});
+
+describe('the camera of the Event Storming view', () => {
+    test('fits the whole graph whenever another storming, level or timeline is shown, even one shown before', () => {
+        expect(cameraMove({ switched: true, storming: true, saved: false })).toBe('fitAll');
+        expect(cameraMove({ switched: true, storming: true, saved: true })).toBe('fitAll');
+    });
+
+    test('keeps the camera when a live reload redraws the same graph', () => {
+        expect(cameraMove({ switched: false, storming: true, saved: true })).toBe('keep');
+        expect(cameraMove({ switched: false, storming: true, saved: false })).toBe('keep');
+    });
+
+    test('leaves the other canvases as they were: their own camera back, fitted readably the first time', () => {
+        expect(cameraMove({ switched: true, storming: false, saved: true })).toBe('restore');
+        expect(cameraMove({ switched: true, storming: false, saved: false })).toBe('fitReadable');
+        expect(cameraMove({ switched: false, storming: false, saved: true })).toBe('keep');
     });
 });
