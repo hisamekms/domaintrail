@@ -5,6 +5,11 @@
       "id": "domain",
       "grammar": "src/language/domain.langium",
       "fileExtensions": [".dt"]
+    },
+    {
+      "id": "dtes",
+      "grammar": "src/dtes/storming.langium",
+      "fileExtensions": [".dtes"]
     }
   ],
   "out": "src/language/generated"
