@@ -48,6 +48,17 @@ type FrozenRequest = Extract<StreamItem, { kind: 'queued' }>['requests'][number]
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+/**
+ * Scrolls `list` (the scrolling box) so that `item` is wholly in it, as little as needed (`block: 'nearest'`), without
+ * scrolling anything around the list.
+ */
+function keepInView(list: HTMLElement, item: HTMLElement): void {
+    const top = item.offsetTop;
+    const bottom = top + item.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+}
+
 /** The current time, ticking every second while `active`. */
 function useNow(active: boolean): number {
     const [now, setNow] = useState(Date.now);
@@ -598,6 +609,16 @@ function Composer(props: {
     };
 
     useEffect(() => setActive(0), [query?.start, query?.query]);
+    // the active candidate stays in view when the keys move it (wrapping too); a hover moves it where the pointer
+    // already is, so it never scrolls the list under the pointer
+    const list = useRef<HTMLUListElement | null>(null);
+    const hovered = useRef(false);
+    useLayoutEffect(() => {
+        const ul = list.current;
+        if (!ul || hovered.current) return;
+        const item = ul.querySelector<HTMLElement>(`[data-index="${active}"]`);
+        if (item) keepInView(ul, item);
+    }, [active, open, matches.length]);
     const track = (): void => setCaret(input.current?.selectionStart ?? 0);
     // the caret after a pick: placed as soon as the picked text is rendered, before the next key is handled
     const pendingCaret = useRef<number | undefined>(undefined);
@@ -646,11 +667,12 @@ function Composer(props: {
         <div className="chat-composer">
             <div className="chat-composer-input">
                 {open && (
-                    <ul className="chat-mentions" role="listbox" aria-label={tx.chat.mentionHint}>
+                    <ul className="chat-mentions" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
                         {matches.length === 0 && <li className="chat-mention-none muted">{tx.chat.mentionNoMatch}</li>}
                         {matches.map((c, i) => (
                             <li
                                 key={c.key}
+                                data-index={i}
                                 role="option"
                                 aria-selected={i === active}
                                 className={`chat-mention-option${i === active ? ' active' : ''}`}
@@ -659,7 +681,10 @@ function Composer(props: {
                                     e.preventDefault();
                                     pick(c);
                                 }}
-                                onMouseEnter={() => setActive(i)}
+                                onMouseEnter={() => {
+                                    hovered.current = true;
+                                    setActive(i);
+                                }}
                             >
                                 <span className="chat-mention-name">{c.name}</span>
                                 <span className={`chat-mention-kind lang-${c.kind.language}`}>{kindOf(c)}</span>
@@ -692,6 +717,7 @@ function Composer(props: {
                             return;
                         }
                         e.preventDefault();
+                        hovered.current = false;
                         if (action === 'next') setActive((a) => (a + 1) % matches.length);
                         else if (action === 'previous') setActive((a) => (a - 1 + matches.length) % matches.length);
                         else if (action === 'pick') pick(matches[active]);

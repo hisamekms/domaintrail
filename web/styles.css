@@ -3507,8 +3507,10 @@ del.was.block {
     right: 0;
     bottom: calc(100% + 2px);
     z-index: 30;
-    max-height: 260px;
-    overflow: auto;
+    /* scrolls within itself, never taller than a good part of the window */
+    max-height: min(260px, 45vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     margin: 0;
     padding: 4px;
     list-style: none;
