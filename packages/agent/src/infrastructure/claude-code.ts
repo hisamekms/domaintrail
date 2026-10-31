@@ -82,8 +82,10 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
     try {
         process.kill(process.platform === 'win32' ? pid : -pid, signal);
     } catch (e) {
-        // ESRCH: the group is already gone
-        if (!(e instanceof Error && 'code' in e && e.code === 'ESRCH')) throw e;
+        // ESRCH: the group is gone. EPERM: on macOS, what is left of it are zombies (the leader was reaped), or a process
+        // that changed its user, which no signal of ours reaches. Either way there is nothing more to kill, and this
+        // runs in event handlers, where a throw would end the subscriber in the middle of a run.
+        if (!(e instanceof Error && 'code' in e && (e.code === 'ESRCH' || e.code === 'EPERM'))) throw e;
     }
 }
 
