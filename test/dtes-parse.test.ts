@@ -7,6 +7,7 @@ import { DomainGrammar, EventStormingGrammar } from '../src/language/generated/g
 import { declarations, type Clause, type NodeElement, type Storming, type Timeline } from '../src/dtes/ir.js';
 import { createStormingServices } from '../src/dtes/language/module.js';
 import { parseStormings, toStormingIr } from '../src/dtes/parse.js';
+import { validateStormings } from '../src/dtes/validate.js';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
@@ -45,6 +46,8 @@ const shape = (c: Clause): unknown => {
     if (c.type === 'status') return { status: c.value };
     return { resolution: c.text };
 };
+
+const lines = (...ls: string[]) => `${ls.join('\n')}\n`;
 
 const wrap = (body: string) => `storming S {\n${body}\n}\n`;
 
@@ -123,6 +126,43 @@ describe('ES01: parsing the spec sample (docs/dtes-v0.1.md §4)', () => {
         expect(first.range).toEqual({ file, start: { line: 51, column: 5 }, end: { line: 51, column: 22 } });
         expect(group.type === 'group' && group.nameRange).toEqual({ file, start: { line: 52, column: 11 }, end: { line: 52, column: 25 } });
         expect(group.type === 'group' && group.events[1].range).toEqual({ file, start: { line: 54, column: 7 }, end: { line: 54, column: 19 } });
+    });
+});
+
+describe('end to end with the validator (T3)', () => {
+    test('the spec sample parses and validates with no diagnostics', async () => {
+        expect(validateStormings(await parseOne(SAMPLE))).toEqual([]);
+    });
+
+    test('what the grammar accepts permissively is reported with the spec’s rule IDs at the clause', async () => {
+        const text = lines(
+            'storming S {',
+            '  event E',
+            '  aggregate G',
+            '  command C {',
+            '    target G',
+            '    target G',
+            '  }',
+            '  policy P {',
+            '    ref A.P',
+            '    on E',
+            '    issues C',
+            '  }',
+            '  timeline T {',
+            '    C',
+            '  }',
+            '  hotspot H {',
+            '    status maybe',
+            '  }',
+            '}',
+        );
+        const ds = validateStormings(await parseOne(text));
+        expect(ds.map((d) => [d.code, d.start.line, d.start.column])).toEqual([
+            ['S004', 6, 5],
+            ['S005', 9, 5],
+            ['S003', 14, 5],
+            ['S009', 17, 5],
+        ]);
     });
 });
 
@@ -255,6 +295,13 @@ describe('syntax errors (spec §11 Syntax: 不正なブロック, 未知の関�
         await syntaxErrors(wrap('timeline T { event E }'));
         await syntaxErrors(wrap('timeline T { group G { group H { E } } }'));
         await syntaxErrors(wrap('timeline T { group G { emits E } }'));
+    });
+
+    test('ES13: a `ref` in a timeline or a group is a syntax error (the IR has no place for it)', async () => {
+        const [inTimeline] = await syntaxErrors(wrap('event E\ntimeline T {\n  ref Delivery.ShipmentCancelled\n  E\n}'));
+        expect(inTimeline.start).toEqual({ line: 4, column: 3 });
+        const [inGroup] = await syntaxErrors(wrap('event E\ntimeline T {\n  group G {\n    E\n    ref Delivery.ShipmentCancelled\n  }\n}'));
+        expect(inGroup.start).toEqual({ line: 6, column: 5 });
     });
 
     test('an empty group, a clause outside a body, a declaration outside a storming, a nested storming', async () => {
