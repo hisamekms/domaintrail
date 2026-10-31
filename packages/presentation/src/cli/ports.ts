@@ -1,5 +1,5 @@
 import type { SourceFile } from '@domaintrail/modeling/core/analyze';
-import type { ResolvedConfig } from '@domaintrail/modeling/core/config';
+import type { ResolvedConfig, ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**
@@ -19,6 +19,14 @@ export interface CliDeps {
     generatedOutput: GeneratedOutput;
     /** Starts the Live View; rejects with `UnknownRevisionError` for an unknown `base`, or a system error (`EADDRINUSE`). */
     startViewServer(options: ViewServerOptions): Promise<{ url: string }>;
+    /**
+     * Starts the session server (`dt session start`): resumes the workspace's open session or starts one. Rejects with
+     * `SessionError` when the configuration cannot start it, `UnknownRevisionError` for an unknown `base`, or a
+     * system error (`EADDRINUSE`).
+     */
+    startSessionServer(options: SessionServerOptions): Promise<StartedSession>;
+    /** Another facilitator link for the session server running on the workspace; rejects with `SessionError` when none runs. */
+    issueFacilitatorLink(root: string): Promise<{ link: string; expiresAt: Date }>;
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
 }
@@ -33,6 +41,32 @@ export interface ViewServerOptions {
     base?: string;
     log: (line: string) => void;
 }
+
+/** What `dt session start` asks of the session server. */
+export interface SessionServerOptions {
+    root: string;
+    sources: readonly string[];
+    respectGitignore: boolean;
+    base?: string;
+    /** The `session` section, with `--port` and `--host` applied. */
+    session: ResolvedSessionConfig;
+    log: (line: string) => void;
+}
+
+/** A running session server, as the CLI reports it. */
+export interface StartedSession {
+    url: string;
+    agentUrl: string;
+    session: string;
+    resumed: boolean;
+    facilitatorLink: string;
+    /** Resolves when the facilitator closes the session. */
+    closed: Promise<void>;
+    stop(): Promise<void>;
+}
+
+/** A session cannot be started, or no session server runs (`dt session …`): printed as one line. */
+export class SessionError extends Error {}
 
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {

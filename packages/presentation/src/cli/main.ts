@@ -8,7 +8,7 @@ import { formatStorming } from '@domaintrail/modeling/storming/format';
 import { formatDomain } from '@domaintrail/modeling/format/format';
 import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
-import type { CliDeps } from './ports.js';
+import { SessionError, type CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 
@@ -323,6 +323,79 @@ Examples:
             if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
             io.out(`Live View: ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
+        });
+
+    const session = program.command('session').description('Collaboration sessions: participants, requests, agent runs and revisions over the Live View.');
+    session
+        .command('start')
+        .description("Start the session server: the Live View plus the workspace's collaboration session (runs until Ctrl+C or the session closes).")
+        .option('-p, --port <port>', 'port to listen on (default: session.port, else 4321)', parsePort)
+        .option('--host <host>', 'host to bind (default: session.host, else 127.0.0.1; the dev identity mode allows loopback only)')
+        .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
+        .addHelpText(
+            'after',
+            `
+Serves the Live View as \`dt view\` does, and a collaboration session: participants sign in (identity mode
+session.identity: dev, a name picked in the browser on loopback; access, Cloudflare Access), send requests about
+elements of the model, and the facilitator bundles them into agent runs. One session per workspace: an open session
+is resumed. Prints a one-time facilitator link: open it in your browser to become the facilitator (\`dt session link\`
+prints another). The agent API listens on 127.0.0.1 only; its address and credential are in
+.domaintrail/session/agent.json.
+
+Examples:
+  dt session start
+  dt session start --port 8080
+  dt -r examples/shop session start`,
+        )
+        .action(async (opts: { port?: number; host?: string; base?: string }) => {
+            const cfg = await config();
+            const { UnknownRevisionError } = await import('@domaintrail/visualization/application/ports');
+            const settings = { ...cfg.session, port: opts.port ?? cfg.session.port, host: opts.host ?? cfg.session.host };
+            const server = await deps
+                .startSessionServer({
+                    root: cfg.root,
+                    sources: cfg.sources,
+                    respectGitignore: cfg.respectGitignore,
+                    base: opts.base,
+                    session: settings,
+                    log: io.out,
+                })
+                .catch((e: unknown) => {
+                    if (e instanceof SessionError) throw new CliError(e.message);
+                    if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
+                    if (errorCode(e) === 'EADDRINUSE')
+                        throw new CliError(`Port ${settings.port} on ${settings.host} (or the agent port) is already in use; pick another with --port.`);
+                    throw e;
+                });
+            if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+            io.out(`Session: ${server.session} (${server.resumed ? 'resumed' : 'started'}, identity ${settings.identity})`);
+            io.out(`Live View: ${server.url}`);
+            io.out(`Facilitator link (single use, expires in 10 minutes): ${server.facilitatorLink}`);
+            io.out(`Agent API: ${server.agentUrl} (credential in .domaintrail/session/agent.json)`);
+            await server.closed;
+            await server.stop();
+            io.out('Session closed.');
+        });
+    session
+        .command('link')
+        .description('Print another one-time facilitator link for the session server running on the workspace.')
+        .addHelpText(
+            'after',
+            `
+The link makes whoever opens it while signed in the facilitator (the previous facilitator loses the role). It works
+once, for 10 minutes.
+
+Examples:
+  dt session link
+  dt -r examples/shop session link`,
+        )
+        .action(async () => {
+            const cfg = await config();
+            const { link } = await deps.issueFacilitatorLink(cfg.root).catch((e: unknown) => {
+                if (e instanceof SessionError) throw new CliError(e.message);
+                throw e;
+            });
+            io.out(`Facilitator link (single use, expires in 10 minutes): ${link}`);
         });
 
     program
