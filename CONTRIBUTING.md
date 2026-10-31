@@ -5,7 +5,7 @@ This page is about working on DomainTrail itself. To use it, start with the [REA
 
 ## Setup
 
-Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.12 or later. `bun run dt` runs the
+Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.13 or later. `bun run dt` runs the
 CLI from source.
 
 The repository is a Bun workspace: the root package (the published CLI, `test/`) and the private packages

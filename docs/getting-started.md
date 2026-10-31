@@ -116,7 +116,7 @@ This part builds a small model by hand, as the agent would: one bounded context 
 
 ### Install
 
-DomainTrail needs Node.js 22.12 or later. Install it into your project:
+DomainTrail needs Node.js 22.13 or later. Install it into your project:
 
 ```bash
 npm i -D domaintrail

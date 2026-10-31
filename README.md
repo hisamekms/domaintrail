@@ -11,7 +11,7 @@ generated types and held to the model by the compiler and the tests.
 
 ## Quick start
 
-Requires Node.js 22.12 or later.
+Requires Node.js 22.13 or later.
 
 ```bash
 npm i -D domaintrail
