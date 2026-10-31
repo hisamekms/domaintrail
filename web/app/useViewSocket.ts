@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ClientMessage, SessionServerMessage } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 export type Connection = 'connecting' | 'open' | 'closed';
@@ -8,10 +9,22 @@ export interface ViewState {
     connection: Connection;
 }
 
+/** The socket of the page: the view, and in a session its other messages (not rendered yet; the session panel's). */
+export interface ViewSocket extends ViewState {
+    /** Listens to the session's messages (`session.*`, `request.*`, `run.*`, `revision.*`, `presence.*`); returns the unsubscribe. */
+    subscribe(listener: (message: SessionServerMessage) => void): () => void;
+    /** Sends a message to the server (presence); false when the socket is not open. */
+    send(message: ClientMessage): boolean;
+}
+
+type ServerMessage = ViewPayload | SessionServerMessage;
+
 /** Subscribes to model updates from the view server, reconnecting when the server restarts. */
-export function useViewSocket(): ViewState {
+export function useViewSocket(): ViewSocket {
     const [state, setState] = useState<ViewState>({ current: null, connection: 'connecting' });
     const retry = useRef(0);
+    const socket = useRef<WebSocket | undefined>(undefined);
+    const listeners = useRef(new Set<(message: SessionServerMessage) => void>());
 
     useEffect(() => {
         let ws: WebSocket | undefined;
@@ -20,14 +33,17 @@ export function useViewSocket(): ViewState {
 
         const connect = () => {
             ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+            socket.current = ws;
             ws.onopen = () => {
                 retry.current = 0;
                 setState((s) => ({ ...s, connection: 'open' }));
             };
             ws.onmessage = (ev) => {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the messages of our own server
-                const payload = JSON.parse(String(ev.data)) as ViewPayload;
-                setState({ current: payload, connection: 'open' });
+                const message = JSON.parse(String(ev.data)) as ServerMessage;
+                // the view, as always; anything else belongs to a session and never replaces the view
+                if (message.type === 'update') setState({ current: message, connection: 'open' });
+                else for (const listener of listeners.current) listener(message);
             };
             ws.onclose = () => {
                 if (disposed) return;
@@ -43,5 +59,16 @@ export function useViewSocket(): ViewState {
         };
     }, []);
 
-    return state;
+    const subscribe = useCallback((listener: (message: SessionServerMessage) => void) => {
+        listeners.current.add(listener);
+        return () => void listeners.current.delete(listener);
+    }, []);
+    const send = useCallback((message: ClientMessage) => {
+        const ws = socket.current;
+        if (ws?.readyState !== WebSocket.OPEN) return false;
+        ws.send(JSON.stringify(message));
+        return true;
+    }, []);
+
+    return { ...state, subscribe, send };
 }
