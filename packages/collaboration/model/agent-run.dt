@@ -23,7 +23,7 @@ context Collaboration {
   value FrozenRequest "凍結した依頼" {
     request: RequestId
     author: ParticipantId "依頼者"
-    target: TargetSnapshot "対象"
+    targets: TargetSnapshot[0..20] "対象"
     body: Text "本文"
   }
 

@@ -327,6 +327,7 @@ describe('a session in dev mode', () => {
                 },
                 'target.range',
             ],
+            [{ targets: [{ target: { kind: 'Nope' }, sourceRevision: revision }], body: 'x' }, 'targets[0].target.kind'],
         ];
         for (const [body, field] of cases) {
             const res = await api(server, bob, 'requests', body);
@@ -342,13 +343,46 @@ describe('a session in dev mode', () => {
         });
         expect(first.status).toBe(201);
         const sentId = ((await first.json()) as { request: { id: string } }).request.id;
-        const targets = (await (await api(server, bob, 'targets')).json()) as { statuses: Record<string, string> };
-        expect(targets.statuses[sentId]).toBe('current');
+        const targets = (await (await api(server, bob, 'targets')).json()) as { statuses: Record<string, string[]> };
+        expect(targets.statuses[sentId]).toEqual(['current']);
         const unknownRevision = await api(server, bob, 'requests', {
-            target: { target: { kind: 'Workspace' }, sourceRevision: crypto.randomUUID() },
+            target: { target: { kind: 'DtElement', element: 'Shop.Order' }, sourceRevision: crypto.randomUUID() },
             body: 'x',
         });
         expect(unknownRevision.status).toBe(400);
+        // several targets (the body since requests have several): 0 to 20, each once, none the whole workspace
+        const element = (element: string, sourceRevision = revision): unknown => ({ target: { kind: 'DtElement', element }, sourceRevision });
+        const listCases: [unknown, number, string, string?][] = [
+            [{ targets: Array.from({ length: 21 }, (_, i) => element(`Shop.E${i}`)), body: 'x' }, 400, 'InvalidInput', 'targets'],
+            [{ targets: [element('Shop.Order'), element('Shop.Order')], body: 'x' }, 400, 'InvalidInput', 'targets[1].target'],
+            [{ targets: [{ target: { kind: 'Workspace' }, sourceRevision: revision }], body: 'x' }, 400, 'InvalidInput', 'targets[0].target.kind'],
+            [
+                { targets: [element('Shop.Order'), { target: { kind: 'DtElement', element: '' }, sourceRevision: revision }], body: 'x' },
+                400,
+                'InvalidInput',
+                'targets[1].target.element',
+            ],
+            [{ targets: 'Shop.Order', body: 'x' }, 400, 'InvalidInput', 'targets'],
+            [{ targets: [], target: element('Shop.Order'), body: 'x' }, 400, 'InvalidInput', 'target'],
+            [
+                { targets: [element('Shop.Order'), element('Shop.Customer', crypto.randomUUID())], body: 'x' },
+                400,
+                'UnknownRevision',
+                'targets[1].sourceRevision',
+            ],
+        ];
+        for (const [body, status, type, field] of listCases) {
+            const res = await api(server, bob, 'requests', body);
+            expect([field, res.status, await res.json()]).toEqual([field, status, { error: expect.objectContaining({ type, field }) }]);
+        }
+        const several = await api(server, bob, 'requests', { targets: [element('Shop.Order'), element('Shop.Customer')], body: '@Order[1] と @Customer[2]' });
+        expect(several.status).toBe(201);
+        expect(((await several.json()) as { request: { targets: unknown[] } }).request.targets).toHaveLength(2);
+        const none = await api(server, bob, 'requests', { targets: [], body: 'about everything' });
+        expect(((await none.json()) as { request: { targets: unknown[] } }).request.targets).toEqual([]);
+        // the former body: a target of the whole workspace is no target
+        const former = await api(server, bob, 'requests', { target: { target: { kind: 'Workspace' }, sourceRevision: revision }, body: 'x' });
+        expect(((await former.json()) as { request: { targets: unknown[] } }).request.targets).toEqual([]);
         const large = await fetch(`${server.url}api/session/requests`, { method: 'POST', headers: { cookie: bob, ...json }, body: 'x'.repeat(70_000) });
         expect(large.status).toBe(413);
         const form = await fetch(`${server.url}api/session/requests`, { method: 'POST', headers: { cookie: bob, 'content-type': 'text/plain' }, body: '{}' });

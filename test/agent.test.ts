@@ -26,7 +26,7 @@ const frozen = (
 ): Json<Collaboration.FrozenRequest> => ({
     request: crypto.randomUUID(),
     author,
-    target: { target, sourceRevision: REVISION, ...extra },
+    targets: target.kind === 'Workspace' ? [] : [{ target, sourceRevision: REVISION, ...extra }],
     body,
 });
 
@@ -57,7 +57,17 @@ describe('the prompt', () => {
                 {
                     request: expect.any(String),
                     author: 'Bob',
-                    target: { kind: '.dtes storming element', storming: 'Returns', element: 'ReturnRequested', label: '返品', file: 'r.dtes', lines: '3-5' },
+                    targets: [
+                        {
+                            number: 1,
+                            kind: '.dtes storming element',
+                            storming: 'Returns',
+                            element: 'ReturnRequested',
+                            label: '返品',
+                            file: 'r.dtes',
+                            lines: '3-5',
+                        },
+                    ],
                     body: hostile,
                 },
             ],
@@ -75,11 +85,12 @@ describe('the prompt', () => {
         );
         expect((block(dtes, 'n') as { requests: { author: string }[] }).requests[0].author).toBe('a participant');
         expect(dtes).toContain('only about `.dtes` stormings: change no `.dt` file');
-        expect(buildPrompt(input([frozen({ kind: 'Workspace', scope: 'Dtes' }, 'x')]), names, 'n')).toContain('change no `.dt` file');
         expect(buildPrompt(input([frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x')]), names, 'n')).toContain('about the `.dt` model');
         const both = buildPrompt(input([frozen({ kind: 'Workspace' }, 'x')]), names, 'n');
         expect(both).toContain('Change the `.dt` model only where a request asks for it');
+        expect((block(both, 'n') as { requests: { targets: unknown }[] }).requests[0].targets).toBe('the whole workspace');
         for (const rule of [
+            'a mention `@name[n]` in its body means its target number n',
             'Edit only `.dt` and `.dtes` source files',
             'Never copy or sync `.dtes` content into `.dt`',
             'Run no command except `dt fmt` and `dt check`',
@@ -87,6 +98,33 @@ describe('the prompt', () => {
         ]) {
             expect(both).toContain(rule);
         }
+    });
+});
+
+describe('the prompt with several targets', () => {
+    test('each request numbers its own targets from 1, and its body mentions them by that number', () => {
+        const order = { target: { kind: 'DtElement', element: 'Sales.Order' }, sourceRevision: REVISION, label: '注文 (Sales.Order)' } as const;
+        const customer = { target: { kind: 'DtElement', element: 'Sales.Customer' }, sourceRevision: REVISION } as const;
+        const event = { target: { kind: 'DtesElement', storming: 'Returns', local: 'Received' }, sourceRevision: REVISION } as const;
+        const prompt = buildPrompt(
+            input([
+                { request: crypto.randomUUID(), author: 'dev:bob', targets: [order, customer], body: '@注文[1] に @顧客[2] を持たせる' },
+                { request: crypto.randomUUID(), author: 'dev:bob', targets: [event], body: '@受領[1] の前に検品を入れる' },
+            ]),
+            new Map([['dev:bob', 'Bob']]),
+            'n',
+        );
+        const requests = (block(prompt, 'n') as { requests: { targets: { number: number; element: string }[]; body: string }[] }).requests;
+        expect(requests.map((r) => r.targets.map((t) => [t.number, t.element]))).toEqual([
+            [
+                [1, 'Sales.Order'],
+                [2, 'Sales.Customer'],
+            ],
+            [[1, 'Received']],
+        ]);
+        expect(requests[0].body).toBe('@注文[1] に @顧客[2] を持たせる');
+        // both DSLs: one request is about the model, the other about a storming
+        expect(prompt).toContain('Change the `.dt` model only where a request asks for it');
     });
 });
 

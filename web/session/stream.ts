@@ -158,6 +158,14 @@ export function targetText(target: Pick<TargetDraft, 'target' | 'label'>, worksp
     return (naming && targetName(target.target, naming)) ?? target.label ?? targetKey(target.target);
 }
 
+/** A request's targets on one line: the first one's name and how many more (`注文 +2`); none: the whole workspace. */
+export function targetsSummary(targets: readonly Pick<TargetDraft, 'target' | 'label'>[], workspace: string, naming?: NamingContext): string {
+    const [first, ...rest] = targets;
+    if (!first) return workspace;
+    const name = targetText(first, workspace, naming);
+    return rest.length ? `${name} +${rest.length}` : name;
+}
+
 /**
  * The names participants are known by now: the ones they joined with, the facilitator's after its holder, then the
  * names their pages (and this page) are signed in with.

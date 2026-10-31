@@ -3498,30 +3498,176 @@ del.was.block {
     padding: 8px 10px 10px;
     border-top: 1px solid var(--border);
 }
-.chat-composer-target {
+.chat-composer-input {
+    position: relative;
+}
+/* the @ candidates open above the text, over the pending requests and the stream */
+.chat-mentions {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 2px);
+    z-index: 30;
+    max-height: 260px;
+    overflow: auto;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px var(--shadow);
+}
+.chat-mention-option {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.chat-mention-option.active {
+    background: var(--hover);
+}
+.chat-mention-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.chat-mention-kind {
+    align-self: center;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--violet-tint);
+    color: var(--violet-text);
+}
+.chat-mention-kind.lang-dtes {
+    background: var(--amber-tint);
+    color: var(--amber-text);
+}
+.chat-mention-where {
+    grid-column: 1 / -1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+}
+.chat-mention-none {
+    padding: 4px 6px;
+    font-size: 12px;
+}
+/* a mention in a sent body: a link to its target while it is in the sources */
+.chat-mention {
+    font-weight: 600;
+}
+.pane a.chat-mention {
+    color: var(--accent);
+    text-decoration: none;
+}
+.pane a.chat-mention:hover {
+    text-decoration: underline;
+}
+.chat-mention.stale {
+    color: var(--muted);
+}
+.chat-targets {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    max-width: 100%;
+}
+.chat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    min-width: 0;
+}
+.chat-chips-label {
+    font-size: 12px;
+}
+.chat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0 2px 0 3px;
+    border: 1px solid var(--violet-border);
+    border-radius: 10px;
+    background: var(--violet-wash);
+    font-size: 12px;
+}
+.chat-chip-number {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+}
+.chat-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.session-chat button.chat-chip-remove {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+}
+.session-chat button.chat-chip-remove:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+.chat-selection {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
-}
-.chat-composer-target .chat-target {
-    flex: 0 1 auto;
-    min-width: 0;
-}
-.session-chat button.chat-link {
-    flex: none;
-    margin-left: auto;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--accent);
+    margin-top: 4px;
     font-size: 12px;
 }
-.session-chat button.chat-link:hover {
-    text-decoration: underline;
+.chat-selection-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+.session-chat button.chat-add {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    background: var(--panel);
+    color: var(--accent);
+}
+.session-chat button.chat-add:disabled {
+    opacity: 0.4;
+    cursor: default;
 }
 .chat-input {
-    margin-top: 6px;
+    margin-top: 0;
     resize: none;
 }
 .chat-input:focus {

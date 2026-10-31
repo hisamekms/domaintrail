@@ -18,6 +18,7 @@ import {
     type DraftScope,
     type DraftStorage,
 } from './drafts';
+import { EMPTY_COMPOSER, type ComposerValue } from './mentions';
 import { WORKSPACE_TARGET } from './targets';
 import { hasCanvas } from './location';
 import { NO_PEERS, receivePresence, throttle, type Peers } from './presence';
@@ -296,18 +297,20 @@ export function useDrafts(storage: DraftStorage, scope: DraftScope | undefined):
 }
 
 export interface ComposerDraft {
-    /** The unsent text ('' while there is none, and until it is loaded). */
-    readonly body: string;
+    /** The unsent request: its text and targets (empty while there is none, and until it is loaded). */
+    readonly value: ComposerValue;
     readonly error: string | undefined;
-    /** Changes the text; it is saved shortly after typing stops. */
-    setBody(body: string): void;
-    /** Forgets the text (once it was sent). */
+    /** Changes it; it is saved shortly after typing stops. */
+    setValue(value: ComposerValue): void;
+    /** Forgets it (once it was sent). */
     clear(): Promise<void>;
 }
 
-/** The chat composer's one unsent text of a participant in a session, kept in the drafts' storage until it is sent. */
+const isEmpty = (v: ComposerValue): boolean => v.text === '' && v.chips.length === 0;
+
+/** The chat composer's one unsent request of a participant in a session, kept in the drafts' storage until it is sent. */
 export function useComposerDraft(storage: DraftStorage, scope: DraftScope | undefined): ComposerDraft {
-    const [body, setBodyState] = useState('');
+    const [value, setValueState] = useState<ComposerValue>(EMPTY_COMPOSER);
     const [error, setError] = useState<string | undefined>();
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const session = scope?.session;
@@ -315,14 +318,14 @@ export function useComposerDraft(storage: DraftStorage, scope: DraftScope | unde
     const key = useMemo(() => (session && participant ? composerScope({ session, participant }) : undefined), [session, participant]);
 
     useEffect(() => {
-        setBodyState('');
+        setValueState(EMPTY_COMPOSER);
         if (!key) return;
         let cancelled = false;
         storage.load(key).then(
             (loaded) => {
                 const draft = loaded.find((d) => d.id === COMPOSER_DRAFT);
-                // typing before the load finished wins
-                if (!cancelled && draft) setBodyState((b) => (b === '' ? draft.body : b));
+                // typing before the load finished wins; a draft saved before there were chips has none
+                if (!cancelled && draft) setValueState((v) => (isEmpty(v) ? { text: draft.body, chips: draft.chips ?? [] } : v));
             },
             (e: unknown) => setError(message(e)),
         );
@@ -332,15 +335,16 @@ export function useComposerDraft(storage: DraftStorage, scope: DraftScope | unde
         };
     }, [storage, key]);
 
-    const setBody = useCallback(
-        (next: string) => {
-            setBodyState(next);
+    const setValue = useCallback(
+        (next: ComposerValue) => {
+            setValueState(next);
             clearTimeout(timer.current);
             if (!key) return;
             timer.current = setTimeout(() => {
                 const now = Date.now();
-                const write =
-                    next === '' ? storage.remove(key, COMPOSER_DRAFT) : storage.save(key, { ...newDraft(COMPOSER_DRAFT, WORKSPACE_TARGET, now), body: next });
+                const write = isEmpty(next)
+                    ? storage.remove(key, COMPOSER_DRAFT)
+                    : storage.save(key, { ...newDraft(COMPOSER_DRAFT, WORKSPACE_TARGET, now), body: next.text, chips: next.chips });
                 write.then(
                     () => setError(undefined),
                     (e: unknown) => setError(message(e)),
@@ -352,9 +356,9 @@ export function useComposerDraft(storage: DraftStorage, scope: DraftScope | unde
 
     const clear = useCallback(async () => {
         clearTimeout(timer.current);
-        setBodyState('');
+        setValueState(EMPTY_COMPOSER);
         if (key) await storage.remove(key, COMPOSER_DRAFT);
     }, [storage, key]);
 
-    return { body, error, setBody, clear };
+    return { value, error, setValue, clear };
 }

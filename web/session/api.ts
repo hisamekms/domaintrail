@@ -54,8 +54,8 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
 
 export interface TargetStatuses {
     readonly contentHash: string;
-    /** By request ID. */
-    readonly statuses: Readonly<Record<string, TargetStatus>>;
+    /** By request ID: one per target, in the request's order. */
+    readonly statuses: Readonly<Record<string, readonly TargetStatus[]>>;
 }
 
 export const sessionApi = {

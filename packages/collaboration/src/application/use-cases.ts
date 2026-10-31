@@ -135,11 +135,11 @@ export interface SessionState {
     readonly revisions: readonly Collaboration.Revision[];
 }
 
-/** Whether each request's target still resolves in the workspace as it is now. */
+/** Whether each target of each request still resolves in the workspace as it is now (in the request's order of targets). */
 export interface TargetStatuses {
     /** The content hash of the workspace the targets were resolved in. */
     readonly contentHash: Collaboration.ContentHash;
-    readonly statuses: ReadonlyMap<Collaboration.RequestId, TargetStatus>;
+    readonly statuses: ReadonlyMap<Collaboration.RequestId, readonly TargetStatus[]>;
 }
 
 export type RestoreError =
@@ -171,9 +171,21 @@ export interface CollaborationUseCases {
     sendRequest(input: {
         readonly session: SessionId;
         readonly author: ParticipantId;
-        readonly target: Collaboration.TargetSnapshot;
+        /** What the request is about: none for the whole workspace. */
+        readonly targets: readonly Collaboration.TargetSnapshot[];
         readonly body: Collaboration.Text;
-    }): Promise<Result<Collaboration.SentRequest, Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | NotAParticipant | InvalidTarget>>;
+    }): Promise<
+        Result<
+            Collaboration.SentRequest,
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | NotAParticipant
+            | InvalidTarget
+            | Collaboration.TooManyTargets
+            | Collaboration.DuplicateTarget
+            | Collaboration.WorkspaceTarget
+        >
+    >;
     dismissRequest(input: {
         readonly request: Collaboration.RequestId;
         readonly by: ParticipantId;
@@ -433,15 +445,20 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async sendRequest({ session, author, target, body }) {
-            const violated = [...Collaboration.checkTargetSnapshot(target), ...(target.range ? Collaboration.checkSourceRange(target.range) : [])];
+        async sendRequest({ session, author, targets, body }) {
+            const violated = targets.flatMap((target) => [
+                ...Collaboration.checkTargetSnapshot(target),
+                ...(target.range ? Collaboration.checkSourceRange(target.range) : []),
+            ]);
             if (violated.length) return err({ type: 'InvalidTarget', violated });
             return uow.transaction(async (stores) => {
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === author)) return err({ type: 'NotAParticipant', participant: author });
                 const at = clock.now();
-                const { Sent } = decided(requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, target, body, at));
+                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at);
+                if (!sent.ok) return sent;
+                const { Sent } = sent.value;
                 stores.requests.save(Sent.aggregate);
                 publish(stores, session, Sent.events, at);
                 return ok(Sent.aggregate);
@@ -474,7 +491,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     pending.push(p.value);
                     const r = stores.requests.load(id);
                     // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
-                    if (r && !frozen.some((f) => f.request === id)) frozen.push({ request: id, author: r.author, target: r.target, body: r.body });
+                    if (r && !frozen.some((f) => f.request === id)) frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body });
                 }
                 const bundled = nonEmpty(pending);
                 const input = nonEmpty(frozen);
@@ -871,7 +888,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             const scope = captured.value.analysis;
             return ok({
                 contentHash: captured.value.contentHash,
-                statuses: new Map(requests.map((r) => [r.id, targetStatus(r.target.target, scope)])),
+                statuses: new Map(requests.map((r) => [r.id, r.targets.map((t) => targetStatus(t.target, scope))])),
             });
         },
 

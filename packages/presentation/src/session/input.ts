@@ -1,5 +1,6 @@
 // The inputs of the session APIs, checked at the boundary before any use case sees them: IDs, targets, text lengths.
 // A failure names the field and why, and is answered 400 (`InvalidInput`).
+import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
 /** Why an input was refused. */
@@ -176,6 +177,31 @@ export function targetSnapshot(v: unknown, field = 'target'): Result<Collaborati
         ...(range && { range }),
     };
     return Collaboration.checkTargetSnapshot(snapshot).length ? invalid(`${field}.range`, 'A workspace target has no range.') : ok(snapshot);
+}
+
+/**
+ * What a request is about: 0 to 20 targets, each once, none of them the whole workspace (no target is the whole
+ * workspace). The body `{ targets }` is checked; the former `{ target }` (one target, the workspace's when it was
+ * about the whole workspace) is still taken, as a list of one or none.
+ */
+export function requestTargets(raw: Raw): Result<Collaboration.TargetSnapshot[], InvalidInput> {
+    if (raw.targets !== undefined && raw.target !== undefined) return invalid('target', "Give 'targets' only.");
+    if (raw.target !== undefined) {
+        const one = targetSnapshot(raw.target, 'target');
+        if (!one.ok) return one;
+        return ok(one.value.target.kind === 'Workspace' ? [] : [one.value]);
+    }
+    const v = raw.targets ?? [];
+    if (!Array.isArray(v) || v.length > MAX_REQUEST_TARGETS) return invalid('targets', `Expected 0 to ${MAX_REQUEST_TARGETS} targets.`);
+    const targets: Collaboration.TargetSnapshot[] = [];
+    for (const [i, item] of v.entries()) {
+        const t = targetSnapshot(item, `targets[${i}]`);
+        if (!t.ok) return t;
+        if (t.value.target.kind === 'Workspace') return invalid(`targets[${i}].target.kind`, 'No target is the whole workspace: leave the targets out.');
+        if (targets.some((o) => Collaboration.equalModelTarget(o.target, t.value.target))) return invalid(`targets[${i}].target`, 'Each target once.');
+        targets.push(t.value);
+    }
+    return ok(targets);
 }
 
 /** The requests a run bundles: 1 to `MAX_RUN_REQUESTS` request IDs, in order. */

@@ -3,11 +3,10 @@
 // for approval, and the composer of a request about the selection. People talk in their meeting; nothing here is a
 // chat between them: what they send are requests.
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Bot, ChevronDown, ChevronRight, LogOut, PanelLeftClose } from 'lucide-react';
-import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
+import { Bot, ChevronDown, ChevronRight, LogOut, PanelLeftClose, Plus, X } from 'lucide-react';
 import { useT, type Messages } from '../i18n';
 import { sessionApi } from './api';
-import { Avatar, failure } from './panel';
+import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { latestRevision } from './state';
 import {
     agentStatus,
@@ -17,6 +16,7 @@ import {
     participantNames,
     pendingRequests,
     streamItems,
+    targetsSummary,
     targetText,
     type AgentMessage,
     type AgentStatus,
@@ -24,7 +24,19 @@ import {
     type StreamItem,
 } from './stream';
 import { useTargetNaming } from './naming';
-import { targetKey, WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
+import {
+    addChips,
+    bodyText,
+    composerKey,
+    editText,
+    insertMention,
+    matchCandidates,
+    MAX_REQUEST_TARGETS,
+    mentionQuery,
+    removeChip,
+    type MentionCandidate,
+} from './mentions';
+import { targetKey, type ModelTarget, type TargetDraft } from './targets';
 import type { ComposerDraft, SessionData } from './useSession';
 
 type Tx = Messages['session'];
@@ -50,12 +62,14 @@ function useNow(active: boolean): number {
 export function SessionChat(props: {
     session: SessionData;
     composer: ComposerDraft;
-    /** What the selection can be a request about, if anything. */
-    selectionTarget: TargetDraft | undefined;
+    /** What the selection can be a request about: one target, or several for a selection of several shapes. */
+    selectionTargets: readonly TargetDraft[];
+    /** What `@` offers. */
+    candidates: readonly MentionCandidate[];
     onNavigate: (target: ModelTarget) => void;
     onClose: () => void;
 }) {
-    const { session, composer, selectionTarget } = props;
+    const { session, composer } = props;
     const { state, me } = session;
     const t = useT();
     const tx = t.session;
@@ -86,7 +100,7 @@ export function SessionChat(props: {
             {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
             <Stream session={session} items={items} now={now} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
             <Pending session={session} live={live} nameOf={nameOf} tx={tx} />
-            {live && <Composer session={session} composer={composer} selectionTarget={selectionTarget} tx={tx} />}
+            {live && <Composer session={session} composer={composer} selectionTargets={props.selectionTargets} candidates={props.candidates} tx={tx} />}
         </div>
     );
 }
@@ -229,7 +243,7 @@ function Item(props: {
                     className="chat-bubble-facilitator"
                 >
                     <span className="chat-label">{tx.chat.note}</span>
-                    <Clamped text={item.text} tx={tx} />
+                    <Clamped tx={tx}>{item.text}</Clamped>
                 </Bubble>
             );
         case 'agent':
@@ -278,18 +292,18 @@ function Bubble(props: {
 }
 
 /** A text clamped to a few lines, with a link to show the rest when it is longer. */
-function Clamped({ text, tx }: { text: string; tx: Tx }) {
+function Clamped({ children, tx }: { children: ReactNode; tx: Tx }) {
     const [open, setOpen] = useState(false);
     const [clamped, setClamped] = useState(false);
     const ref = useRef<HTMLParagraphElement | null>(null);
     useLayoutEffect(() => {
         const el = ref.current;
         if (el && !open) setClamped(el.scrollHeight > el.clientHeight + 1);
-    }, [text, open]);
+    }, [children, open]);
     return (
         <>
             <p ref={ref} className={`chat-text${open ? '' : ' clamped'}`}>
-                {text}
+                {children}
             </p>
             {clamped && !open && (
                 <a className="chat-more" onClick={() => setOpen(true)}>
@@ -300,41 +314,12 @@ function Clamped({ text, tx }: { text: string; tx: Tx }) {
     );
 }
 
-function TargetChip({
-    target,
-    status,
-    onNavigate,
-    tx,
-}: {
-    target: FrozenRequest['target'];
-    status: TargetStatus | undefined;
-    onNavigate: (t: ModelTarget) => void;
-    tx: Tx;
-}) {
-    const naming = useTargetNaming();
-    const text = targetText(target, tx.workspace, naming);
-    const kind = `chat-target kind-${target.target.kind}`;
-    if (status === 'current' && target.target.kind !== 'Workspace')
-        return (
-            <a className={kind} onClick={() => onNavigate(target.target)} data-tooltip={tx.targetStatusHint.current}>
-                {text}
-            </a>
-        );
-    return (
-        <span
-            className={`${kind}${status === 'stale' ? ' stale' : ''}`}
-            {...(status && status !== 'current' && { 'data-tooltip': tx.targetStatusHint[status] })}
-        >
-            {text}
-        </span>
-    );
-}
-
 function RequestBubble(props: { request: FrozenRequest; session: SessionData; nameOf: (id: string) => string; onNavigate: (t: ModelTarget) => void; tx: Tx }) {
     const { request: r, session, tx } = props;
     const author = props.nameOf(r.author);
     const mine = r.author === session.me.participant.id;
     const sentAt = session.state.requests.find((q) => q.id === r.request)?.sentAt;
+    const statuses = session.targets?.statuses[r.request];
     return (
         <Bubble
             avatar={<Avatar id={r.author} name={author} />}
@@ -343,8 +328,10 @@ function RequestBubble(props: { request: FrozenRequest; session: SessionData; na
             at={sentAt}
             className={`chat-bubble-request${mine ? ' mine' : ''}`}
         >
-            <TargetChip target={r.target} status={session.targets?.statuses[r.request]} onNavigate={props.onNavigate} tx={tx} />
-            <Clamped text={r.body} tx={tx} />
+            <TargetChips targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
+            <Clamped tx={tx}>
+                <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
+            </Clamped>
         </Bubble>
     );
 }
@@ -415,8 +402,8 @@ function PendingRow({
 }) {
     const r = p.request;
     const naming = useTargetNaming();
-    const target = targetText(r.target, tx.workspace, naming);
-    const body = oneLine(r.body);
+    const target = targetsSummary(r.targets, tx.workspace, naming);
+    const body = oneLine(bodyText(r.body, r.targets.length));
     return (
         <li className={`chat-pending-row${p.mine ? ' mine' : ''}`} data-request={r.id} title={`${nameOf(r.author)} · ${target}\n${r.body}`}>
             {p.mine && <span className="chat-mine">{tx.chat.mine}</span>}
@@ -473,27 +460,69 @@ function Pending({ session, live, nameOf, tx }: { session: SessionData; live: bo
     );
 }
 
-function Composer(props: { session: SessionData; composer: ComposerDraft; selectionTarget: TargetDraft | undefined; tx: Tx }) {
-    const { session, composer, selectionTarget, tx } = props;
+function Composer(props: {
+    session: SessionData;
+    composer: ComposerDraft;
+    selectionTargets: readonly TargetDraft[];
+    candidates: readonly MentionCandidate[];
+    tx: Tx;
+}) {
+    const { session, composer, selectionTargets, tx } = props;
+    const t = useT();
     const naming = useTargetNaming();
-    // the selection is the target, unless the whole workspace was chosen for it; choosing something else selects it again
-    const selectionKey = selectionTarget ? targetKey(selectionTarget.target) : undefined;
-    const [wholeWorkspace, setWholeWorkspace] = useState(false);
-    useEffect(() => setWholeWorkspace(false), [selectionKey]);
-    const target = !wholeWorkspace && selectionTarget ? selectionTarget : WORKSPACE_TARGET;
+    const value = composer.value;
+    const input = useRef<HTMLTextAreaElement | null>(null);
+    const [caret, setCaret] = useState(0);
+    const [active, setActive] = useState(0);
+    // the `@` whose candidates were closed with Esc: they stay closed until another `@`
+    const [dismissed, setDismissed] = useState<number | undefined>();
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
-    const body = composer.body;
-    const canSend = !sending && body.trim() !== '';
+    const [notice, setNotice] = useState<string | undefined>();
+    const query = mentionQuery(value.text, caret);
+    const open = query !== undefined && query.start !== dismissed;
+    const matches = open ? matchCandidates(props.candidates, query.query) : [];
+    const canSend = !sending && value.text.trim() !== '';
+    const nameOf = (target: TargetDraft): string => targetText(target, tx.workspace, naming);
+    const kindOf = (c: MentionCandidate): string => {
+        const names: Readonly<Record<string, string>> = c.kind.language === 'dt' ? t.kinds : t.esKinds;
+        return names[c.kind.kind] ?? c.kind.kind;
+    };
+
+    useEffect(() => setActive(0), [query?.start, query?.query]);
+    const track = (): void => setCaret(input.current?.selectionStart ?? 0);
+    // the caret after a pick: placed as soon as the picked text is rendered, before the next key is handled
+    const pendingCaret = useRef<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        const to = pendingCaret.current;
+        if (to === undefined || !input.current) return;
+        pendingCaret.current = undefined;
+        input.current.focus();
+        input.current.setSelectionRange(to, to);
+        setCaret(to);
+    });
+    const moveCaret = (to: number): void => {
+        pendingCaret.current = to;
+    };
+
+    const pick = (c: MentionCandidate | undefined): void => {
+        if (!c || !query) return;
+        const picked = insertMention(value, { start: query.start, end: caret }, c.target, c.mention);
+        if (!picked) return setNotice(tx.chat.targetsLimit(MAX_REQUEST_TARGETS));
+        setNotice(undefined);
+        composer.setValue(picked.value);
+        moveCaret(picked.caret);
+    };
 
     const send = async (): Promise<void> => {
         const revision = latestRevision(session.state);
         if (!revision || !canSend) return;
         setSending(true);
         try {
-            await sessionApi.sendRequest({ target: { ...target, sourceRevision: revision.id }, body });
+            await sessionApi.sendRequest({ targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })), body: value.text });
             await composer.clear();
             setError(undefined);
+            setNotice(undefined);
         } catch (e) {
             setError(failure(e));
         } finally {
@@ -501,44 +530,117 @@ function Composer(props: { session: SessionData; composer: ComposerDraft; select
         }
     };
 
+    const inChips = new Set(value.chips.map((c) => targetKey(c.target.target)));
+    const addable = selectionTargets.filter((s) => !inChips.has(targetKey(s.target)));
+    const [onlySelected] = selectionTargets;
+
     return (
         <div className="chat-composer">
-            <div className="chat-composer-target">
-                <span className="muted">{tx.chat.target}:</span>
-                <span className={`chat-target kind-${target.target.kind}`} {...(!selectionTarget && { 'data-tooltip': tx.chat.noSelection })}>
-                    {targetText(target, tx.workspace, naming)}
-                </span>
-                {selectionTarget &&
-                    (wholeWorkspace ? (
-                        <button className="chat-link" onClick={() => setWholeWorkspace(false)}>
-                            {tx.chat.toSelection}
-                        </button>
-                    ) : (
-                        <button className="chat-link" onClick={() => setWholeWorkspace(true)}>
-                            {tx.chat.toWorkspace}
-                        </button>
-                    ))}
-            </div>
-            <textarea
-                className="session-text chat-input"
-                rows={3}
-                maxLength={10_000}
-                placeholder={tx.chat.placeholder}
-                value={body}
-                onChange={(e) => composer.setBody(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            <div className="chat-composer-input">
+                {open && (
+                    <ul className="chat-mentions" role="listbox" aria-label={tx.chat.mentionHint}>
+                        {matches.length === 0 && <li className="chat-mention-none muted">{tx.chat.mentionNoMatch}</li>}
+                        {matches.map((c, i) => (
+                            <li
+                                key={c.key}
+                                role="option"
+                                aria-selected={i === active}
+                                className={`chat-mention-option${i === active ? ' active' : ''}`}
+                                onMouseDown={(e) => {
+                                    // keeps the focus (and the caret) in the text
+                                    e.preventDefault();
+                                    pick(c);
+                                }}
+                                onMouseEnter={() => setActive(i)}
+                            >
+                                <span className="chat-mention-name">{c.name}</span>
+                                <span className={`chat-mention-kind lang-${c.kind.language}`}>{kindOf(c)}</span>
+                                <span className="chat-mention-where muted">
+                                    {c.where} · {c.qualified}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+                <textarea
+                    ref={input}
+                    className="session-text chat-input"
+                    rows={3}
+                    maxLength={10_000}
+                    placeholder={tx.chat.placeholder}
+                    value={value.text}
+                    onChange={(e) => {
+                        composer.setValue(editText(value, e.target.value));
+                        setCaret(e.target.selectionStart);
+                    }}
+                    onSelect={track}
+                    onClick={track}
+                    onBlur={() => setDismissed(query?.start)}
+                    onFocus={() => setDismissed(undefined)}
+                    onKeyDown={(e) => {
+                        const action = composerKey(e.nativeEvent, open && matches.length > 0);
+                        if (action === 'none') {
+                            if (e.key === 'Escape' && open) setDismissed(query.start);
+                            return;
+                        }
                         e.preventDefault();
-                        void send();
-                    }
-                }}
-            />
+                        if (action === 'next') setActive((a) => (a + 1) % matches.length);
+                        else if (action === 'previous') setActive((a) => (a - 1 + matches.length) % matches.length);
+                        else if (action === 'pick') pick(matches[active]);
+                        else if (action === 'close') setDismissed(query?.start);
+                        else void send();
+                    }}
+                />
+            </div>
+            <div className="chat-chips" aria-label={tx.chat.target}>
+                <span className="muted chat-chips-label">{tx.chat.target}:</span>
+                {value.chips.length === 0 ? (
+                    <span className="chat-target kind-Workspace" data-tooltip={tx.chat.noTargets}>
+                        {tx.workspace}
+                    </span>
+                ) : (
+                    value.chips.map((c, i) => (
+                        <span key={targetKey(c.target.target)} className={`chat-chip kind-${c.target.target.kind}`} data-tooltip={targetKey(c.target.target)}>
+                            <span className="chat-chip-number">{i + 1}</span>
+                            <span className="chat-chip-name">{nameOf(c.target)}</span>
+                            <button
+                                className="chat-chip-remove"
+                                aria-label={tx.chat.removeTarget(nameOf(c.target))}
+                                onClick={() => composer.setValue(removeChip(value, i))}
+                            >
+                                <X size={12} aria-hidden />
+                            </button>
+                        </span>
+                    ))
+                )}
+                {value.chips.length > 0 && <span className="muted small">{tx.chat.targetCount(value.chips.length, MAX_REQUEST_TARGETS)}</span>}
+            </div>
+            {onlySelected && (
+                <div className="chat-selection">
+                    <span className="muted">{selectionTargets.length > 1 ? tx.chat.selectedMany(selectionTargets.length) : tx.chat.selected}</span>
+                    {selectionTargets.length === 1 && <span className="chat-selection-name">{nameOf(onlySelected)}</span>}
+                    <button
+                        className="chat-add"
+                        disabled={addable.length === 0 || value.chips.length >= MAX_REQUEST_TARGETS}
+                        aria-label={tx.chat.addSelection}
+                        data-tooltip={addable.length === 0 ? tx.chat.alreadyAdded : tx.chat.addSelection}
+                        onClick={() => {
+                            const added = addChips(value, addable);
+                            composer.setValue(added.value);
+                            setNotice(added.skipped ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : undefined);
+                        }}
+                    >
+                        <Plus size={13} aria-hidden />
+                    </button>
+                </div>
+            )}
             <div className="chat-composer-actions">
-                <span className="chat-kept muted small">{body !== '' ? tx.chat.draftKept : ''}</span>
+                <span className="chat-kept muted small">{value.text !== '' || value.chips.length ? tx.chat.draftKept : ''}</span>
                 <button className="chat-send" disabled={!canSend} onClick={() => void send()}>
                     {sending ? tx.chat.sending : tx.chat.send}
                 </button>
             </div>
+            {notice && <p className="session-note">{notice}</p>}
             {(error ?? composer.error) && <p className="session-note session-error">{tx.error(error ?? composer.error ?? '')}</p>}
         </div>
     );

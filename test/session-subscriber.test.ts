@@ -329,10 +329,12 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             const nonce = /<requests-([0-9a-f]{32})>/.exec(prompt)?.[1];
             expect(nonce).toBeDefined();
             const block = prompt.slice(prompt.indexOf(`<requests-${nonce}>`) + `<requests-${nonce}>`.length, prompt.indexOf(`</requests-${nonce}>`));
-            const data = JSON.parse(block) as { requests: { author: string; target: Record<string, unknown>; body: string }[]; facilitatorNote: string };
+            const data = JSON.parse(block) as { requests: { author: string; targets: Record<string, unknown>[]; body: string }[]; facilitatorNote: string };
             // Ada holds the facilitator's participant (S4: `local:facilitator`, named Facilitator)
             expect(data.requests.map((r) => r.author)).toEqual(['Bob', 'Facilitator']);
-            expect(data.requests[0].target).toEqual({
+            expect(data.requests[0].targets).toHaveLength(1);
+            expect(data.requests[0].targets[0]).toEqual({
+                number: 1,
                 kind: '.dtes storming element',
                 storming: 'Returns',
                 element: 'ReturnRequested',

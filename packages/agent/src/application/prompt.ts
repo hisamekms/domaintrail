@@ -14,7 +14,8 @@ export const MAX_QUESTION = 4000;
 interface PromptRequest {
     readonly request: string;
     readonly author: string;
-    readonly target: Record<string, unknown>;
+    /** Its targets, numbered from 1 (`@name[n]` in the body mentions target n); none: the whole workspace. */
+    readonly targets: readonly Record<string, unknown>[] | 'the whole workspace';
     readonly body: string;
 }
 
@@ -52,17 +53,19 @@ function targetOf(snapshot: Json<Collaboration.TargetSnapshot>): Record<string, 
     }
 }
 
-/** The DSLs a run's requests are about: a request on the workspace as a whole may be about either. */
+/** The DSLs a run's requests are about: a request on the workspace as a whole (no target) may be about either. */
 function languagesOf(input: Json<Collaboration.RunInput>): { dt: boolean; dtes: boolean } {
     let dt = false;
     let dtes = false;
-    for (const { target } of input.requests) {
-        const t = target.target;
-        if (t.kind === 'DtElement') dt = true;
-        else if (t.kind === 'DtesElement' || t.kind === 'DtesOccurrence') dtes = true;
-        else if (t.scope === 'Dt') dt = true;
-        else if (t.scope === 'Dtes') dtes = true;
-        else dt = dtes = true;
+    for (const { targets } of input.requests) {
+        if (targets.length === 0) dt = dtes = true;
+        for (const { target: t } of targets) {
+            if (t.kind === 'DtElement') dt = true;
+            else if (t.kind === 'DtesElement' || t.kind === 'DtesOccurrence') dtes = true;
+            else if (t.scope === 'Dt') dt = true;
+            else if (t.scope === 'Dtes') dtes = true;
+            else dt = dtes = true;
+        }
     }
     return { dt, dtes };
 }
@@ -71,15 +74,15 @@ function languagesOf(input: Json<Collaboration.RunInput>): { dt: boolean; dtes: 
 const blockJson = (value: unknown): string => JSON.stringify(value, null, 2).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
 /**
- * The prompt of a run: the rules, then the requests (author's display name, target with its label and source range at
- * the time of the request, body) and the facilitator's note as JSON between `<requests-NONCE>` and
+ * The prompt of a run: the rules, then the requests (author's display name, targets numbered from 1 with their label
+ * and source range at the time of the request, or the whole workspace; body, whose `@name[n]` mention target n) and the facilitator's note as JSON between `<requests-NONCE>` and
  * `</requests-NONCE>`. `names` maps participant IDs to display names; `nonce` is random per run.
  */
 export function buildPrompt(input: Json<Collaboration.RunInput>, names: ReadonlyMap<string, string>, nonce: string): string {
     const requests: PromptRequest[] = input.requests.map((r) => ({
         request: r.request,
         author: names.get(r.author) ?? 'a participant',
-        target: targetOf(r.target),
+        targets: r.targets.length === 0 ? 'the whole workspace' : r.targets.map((t, i) => ({ number: i + 1, ...targetOf(t) })),
         body: r.body,
     }));
     const data = { requests, ...(input.note === undefined ? {} : { facilitatorNote: input.note }) };
@@ -95,9 +98,11 @@ requests below about the workspace's domain model: the \`.dt\` files (DomainTrai
 (Event Storming in DomainTrail). Carry them out by editing those files.
 
 Rules:
-1. First read the \`.dt\` and \`.dtes\` files each request is about (its target names the element and, when known, the
-   file and lines as they were when the request was sent; the files may have changed since), and the files they refer
-   to. Follow the syntax of the existing files.
+1. First read the \`.dt\` and \`.dtes\` files each request is about (each of its targets names an element and, when
+   known, the file and lines as they were when the request was sent; the files may have changed since), and the files
+   they refer to. Follow the syntax of the existing files. A request's targets are numbered from 1 within that
+   request: a mention \`@name[n]\` in its body means its target number n (not a target of another request), whatever
+   the name says. A request without targets is about the workspace as a whole.
 2. Edit only \`.dt\` and \`.dtes\` source files of this workspace. Create, change or delete no other file.
 3. \`.dtes\` stormings are exploratory: keep them so (open questions, hotspots and events without a model counterpart
    are fine). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.

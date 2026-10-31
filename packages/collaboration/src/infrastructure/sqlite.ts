@@ -22,6 +22,7 @@ import type {
     Stores,
     UnitOfWork,
 } from '../application/ports.js';
+import { upgradeEvent, upgradeRequest, upgradeRun } from './legacy.js';
 import { DATABASE_FILE, checkPlain, sessionDirectory } from './session-dir.js';
 
 /**
@@ -244,9 +245,9 @@ export function decodeJson(json: string): unknown {
     });
 }
 
-/** An aggregate or event of our own rows: written by `encodeJson` from a value of that type. */
+/** An aggregate or event of our own rows: written by `encodeJson` from a value of that type (or its former shape, `upgrade`d). */
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- our own rows, written from values of the type by the stores below
-const decoded = <T>(json: string): T => decodeJson(json) as T;
+const decoded = <T>(json: string, upgrade: (v: unknown) => unknown = (v) => v): T => upgrade(decodeJson(json)) as T;
 
 const params = (values: Record<string, SQLInputValue>): Record<string, SQLInputValue> => values;
 
@@ -283,13 +284,13 @@ function requests(db: DatabaseSync): RequestRepository {
     return {
         load(id) {
             const r = load.get(params({ id }));
-            return r ? decoded<Collaboration.Request>(text(r, 'data')) : undefined;
+            return r ? decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest) : undefined;
         },
         save(request) {
             save.run(params({ id: request.id, session: request.session, state: request.state, data: encodeJson(request) }));
         },
         listBySession(session) {
-            return list.all(params({ session })).map((r) => decoded<Collaboration.Request>(text(r, 'data')));
+            return list.all(params({ session })).map((r) => decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest));
         },
     };
 }
@@ -298,7 +299,7 @@ function storedRun(r: Row): StoredRun {
     const token = optionalText(r, 'lease_token');
     const lease: Lease | undefined =
         token === undefined ? undefined : { owner: text(r, 'lease_owner'), token, expiresAt: new Date(integer(r, 'lease_expires_at')) };
-    return { run: decoded<Collaboration.AgentRun>(text(r, 'data')), lease, completedWith: optionalText(r, 'completed_with') };
+    return { run: decoded<Collaboration.AgentRun>(text(r, 'data'), upgradeRun), lease, completedWith: optionalText(r, 'completed_with') };
 }
 
 function runs(db: DatabaseSync): RunQueue {
@@ -350,7 +351,7 @@ function runs(db: DatabaseSync): RunQueue {
             if (save.run(params({ id: run.id, state: run.state, data: encodeJson(run) })).changes !== 1) throw new Error(`Run ${run.id} was never queued`);
         },
         listBySession(session) {
-            return list.all(params({ session })).map((r) => decoded<Collaboration.AgentRun>(text(r, 'data')));
+            return list.all(params({ session })).map((r) => decoded<Collaboration.AgentRun>(text(r, 'data'), upgradeRun));
         },
         active(session, now) {
             const r = active.get(params({ session, now: now.getTime() }));
@@ -423,7 +424,7 @@ function outbox(db: DatabaseSync): EventOutbox {
         seq: integer(r, 'seq'),
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the session of an outbox row, written from a SessionId
         session: text(r, 'session_id') as Collaboration.SessionId,
-        event: decoded<Collaboration.PersistentEvent>(text(r, 'payload')),
+        event: decoded<Collaboration.PersistentEvent>(text(r, 'payload'), upgradeEvent),
         recordedAt: new Date(text(r, 'recorded_at')),
     });
     return {

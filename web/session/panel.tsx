@@ -5,11 +5,13 @@
 import { useState, type ReactNode } from 'react';
 import { PanelRightClose, Trash2 } from 'lucide-react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
 import { useT, type Messages } from '../i18n';
-import { sessionApi, SessionApiError } from './api';
+import { sessionApi } from './api';
 import { sendable } from './drafts';
 import { Revisions } from './revisions';
-import { initials, listedParticipants, participantColor, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
+import { Avatar, failure, MentionedText, TargetChips } from './parts';
+import { listedParticipants, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
 import { latestRevision } from './state';
 import { useTargetNaming } from './naming';
 import { participantNames, targetText } from './stream';
@@ -21,9 +23,6 @@ type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 type Validation = RevisionJson['validation'];
-
-export const failure = (e: unknown): string =>
-    e instanceof SessionApiError ? (e.message && e.message !== e.type ? `${e.type}: ${e.message}` : e.type) : String(e);
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -86,7 +85,17 @@ export function SessionPanel(props: {
                 <Participants session={session} location={props.location} nameOf={nameOf} tx={tx} />
                 {live && <Composer drafts={drafts} selectionTarget={selectionTarget} state={state} tx={tx} />}
                 <Requests session={session} facilitator={facilitator} live={live} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
-                <Runs runs={state.runs} requests={state.requests} revisions={state.revisions} facilitator={facilitator} live={live} nameOf={nameOf} tx={tx} />
+                <Runs
+                    runs={state.runs}
+                    requests={state.requests}
+                    revisions={state.revisions}
+                    facilitator={facilitator}
+                    live={live}
+                    nameOf={nameOf}
+                    statuses={session.targets?.statuses}
+                    onNavigate={props.onNavigate}
+                    tx={tx}
+                />
                 <Revisions state={state} facilitator={facilitator} live={live} nameOf={nameOf} tx={tx} />
             </div>
         </div>
@@ -101,16 +110,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
             <h3>{title}</h3>
             {children}
         </section>
-    );
-}
-
-export function Avatar({ id, name, url }: { id: string; name: string; url?: string }) {
-    // only an https avatar is shown; anything else gets the initials
-    if (url?.startsWith('https://')) return <img className="session-avatar" src={url} alt="" referrerPolicy="no-referrer" />;
-    return (
-        <span className="session-avatar" style={{ background: participantColor(id) }} aria-hidden>
-            {initials(name)}
-        </span>
     );
 }
 
@@ -165,7 +164,9 @@ function Composer({ drafts, selectionTarget, state, tx }: { drafts: Drafts; sele
         // each draft is its own request; a draft is removed only once the server took it
         for (const draft of toSend) {
             try {
-                await sessionApi.sendRequest({ target: { ...draft.target, sourceRevision: revision.id }, body: draft.body });
+                // a draft has one target; the whole workspace is no target
+                const targets = draft.target.target.kind === 'Workspace' ? [] : [{ ...draft.target, sourceRevision: revision.id }];
+                await sessionApi.sendRequest({ targets, body: draft.body });
                 await drafts.remove(draft.id);
             } catch (e) {
                 failed.push(failure(e));
@@ -291,7 +292,7 @@ function Requests(props: {
                         key={r.id}
                         request={r}
                         author={nameOf(r.author)}
-                        status={targets?.statuses[r.id]}
+                        statuses={targets?.statuses[r.id]}
                         selectable={facilitator && live && r.state === 'Sent'}
                         selected={chosen.includes(r.id)}
                         onSelect={(on) => setSelected((s) => (on ? [...s, r.id] : s.filter((id) => id !== r.id)))}
@@ -325,7 +326,7 @@ function Requests(props: {
 function RequestItem(props: {
     request: RequestJson;
     author: string;
-    status: 'current' | 'stale' | 'unknown' | undefined;
+    statuses: readonly TargetStatus[] | undefined;
     selectable: boolean;
     selected: boolean;
     onSelect: (on: boolean) => void;
@@ -334,29 +335,18 @@ function RequestItem(props: {
     onNavigate: (target: ModelTarget) => void;
     tx: Tx;
 }) {
-    const { request: r, status, tx } = props;
-    const target = r.target.target;
-    const navigable = status === 'current' && target.kind !== 'Workspace';
+    const { request: r, statuses, tx } = props;
     return (
         <li className={`session-request state-${r.state}`} data-request={r.id}>
             <div className="session-row">
                 {props.selectable && (
                     <input type="checkbox" aria-label={tx.selectRequest} checked={props.selected} onChange={(e) => props.onSelect(e.target.checked)} />
                 )}
-                {navigable ? (
-                    <a className="session-target-link" onClick={() => props.onNavigate(target)} data-tooltip={tx.targetStatusHint.current}>
-                        <TargetLabel target={r.target} tx={tx} />
-                    </a>
-                ) : (
-                    <TargetLabel target={r.target} tx={tx} />
-                )}
-                {status && (
-                    <span className={`session-status status-${status}`} data-tooltip={tx.targetStatusHint[status]}>
-                        {tx.targetStatus[status]}
-                    </span>
-                )}
+                <TargetChips targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
             </div>
-            <p className="session-body-text">{r.body}</p>
+            <p className="session-body-text">
+                <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={props.onNavigate} tx={tx} />
+            </p>
             <div className="session-row muted small">
                 <span>
                     {props.author} · {time(r.sentAt)}
@@ -379,6 +369,8 @@ function Runs(props: {
     facilitator: boolean;
     live: boolean;
     nameOf: (id: string) => string;
+    statuses: Readonly<Record<string, readonly TargetStatus[]>> | undefined;
+    onNavigate: (target: ModelTarget) => void;
     tx: Tx;
 }) {
     const { runs, facilitator, live, nameOf, tx } = props;
@@ -404,6 +396,8 @@ function Runs(props: {
                         canCancel={facilitator && live && (run.state === 'Queued' || run.state === 'Running')}
                         onCancel={() => cancel(run.id)}
                         nameOf={nameOf}
+                        statuses={props.statuses}
+                        onNavigate={props.onNavigate}
                         tx={tx}
                     />
                 ))}
@@ -420,6 +414,8 @@ function RunItem(props: {
     canCancel: boolean;
     onCancel: () => void;
     nameOf: (id: string) => string;
+    statuses: Readonly<Record<string, readonly TargetStatus[]>> | undefined;
+    onNavigate: (target: ModelTarget) => void;
     tx: Tx;
 }) {
     const { run, tx } = props;
@@ -439,7 +435,10 @@ function RunItem(props: {
             <ol className="session-run-requests">
                 {run.input.requests.map((r) => (
                     <li key={r.request}>
-                        <TargetLabel target={r.target} tx={tx} />: <span className="session-body-text">{r.body}</span>
+                        <TargetChips targets={r.targets} statuses={props.statuses?.[r.request]} onNavigate={props.onNavigate} tx={tx} />{' '}
+                        <span className="session-body-text">
+                            <MentionedText body={r.body} targets={r.targets} statuses={props.statuses?.[r.request]} onNavigate={props.onNavigate} tx={tx} />
+                        </span>
                     </li>
                 ))}
             </ol>

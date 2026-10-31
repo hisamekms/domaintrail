@@ -110,7 +110,7 @@ async function started(s: Session): Promise<{ id: C.SessionId; start: C.Recorded
 
 async function queuedRun(s: Session, id: C.SessionId, start: C.RecordedRevision): Promise<C.QueuedAgentRun> {
     const target: C.TargetSnapshot = { target: { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }, sourceRevision: start.id };
-    const request = value(await s.use.sendRequest({ session: id, author: guest, target, body: text('Add a cancel command.') }));
+    const request = value(await s.use.sendRequest({ session: id, author: guest, targets: [target], body: text('Add a cancel command.') }));
     return value(await s.use.queueRun({ session: id, requests: [request.id], queuedBy: facilitator }));
 }
 
@@ -132,27 +132,49 @@ describe('sessions and requests', () => {
     test('requests need an open session and a participant; a dismissed request cannot be bundled', async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const target: C.TargetSnapshot = { target: { kind: 'Workspace' }, sourceRevision: start.id };
+        const element = (name: string): C.TargetSnapshot => ({
+            target: { kind: 'DtElement', element: value(C.makeElementName(name)) },
+            sourceRevision: start.id,
+        });
         const stranger = value(C.makeParticipantId('stranger'));
-        expect(error(await s.use.sendRequest({ session: id, author: stranger, target, body: text('x') }))).toEqual({
+        expect(error(await s.use.sendRequest({ session: id, author: stranger, targets: [], body: text('x') }))).toEqual({
             type: 'NotAParticipant',
             participant: stranger,
         });
-        const ranged: C.TargetSnapshot = {
-            ...target,
+        const backwards: C.TargetSnapshot = {
+            ...element('Sales.Order'),
             range: {
                 path: value(C.makeWorkspacePath('sales/sales.dt')),
-                startLine: value(C.makeLineNumber(1)),
+                startLine: value(C.makeLineNumber(2)),
                 startColumn: value(C.makeColumnNumber(1)),
                 endLine: value(C.makeLineNumber(1)),
                 endColumn: value(C.makeColumnNumber(2)),
             },
         };
-        expect(error(await s.use.sendRequest({ session: id, author: guest, target: ranged, body: text('x') }))).toEqual({
+        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: [element('Sales.Customer'), backwards], body: text('x') }))).toEqual({
             type: 'InvalidTarget',
-            violated: ['workspaceHasNoRange'],
+            violated: ['ordered'],
         });
-        const sent = value(await s.use.sendRequest({ session: id, author: guest, target, body: text('x') }));
+        // several targets: at most 20, each once, and never the whole workspace (which is no target at all)
+        const many = Array.from({ length: 21 }, (_, i) => element(`Sales.E${i}`));
+        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: many, body: text('x') }))).toEqual({ type: 'TooManyTargets' });
+        expect(
+            error(await s.use.sendRequest({ session: id, author: guest, targets: [element('Sales.Order'), element('Sales.Order')], body: text('x') })),
+        ).toEqual({ type: 'DuplicateTarget' });
+        expect(
+            error(
+                await s.use.sendRequest({
+                    session: id,
+                    author: guest,
+                    targets: [{ target: { kind: 'Workspace' }, sourceRevision: start.id }],
+                    body: text('x'),
+                }),
+            ),
+        ).toEqual({ type: 'WorkspaceTarget' });
+        const two = value(await s.use.sendRequest({ session: id, author: guest, targets: many.slice(0, 20), body: text('x') }));
+        expect(two.targets).toHaveLength(20);
+        const target: readonly C.TargetSnapshot[] = [];
+        const sent = value(await s.use.sendRequest({ session: id, author: guest, targets: target, body: text('x') }));
         value(await s.use.dismissRequest({ request: sent.id, by: facilitator }));
         expect(error(await s.use.dismissRequest({ request: sent.id, by: facilitator }))).toEqual({
             type: 'NotAllowed',
@@ -165,7 +187,7 @@ describe('sessions and requests', () => {
         });
         expect(error(await s.use.queueRun({ session: id, requests: [], queuedBy: facilitator }))).toEqual({ type: 'NoRequests' });
         value(await s.use.closeSession({ session: id }));
-        expect(error(await s.use.sendRequest({ session: id, author: guest, target, body: text('x') }))).toEqual({ type: 'SessionAlreadyClosed' });
+        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: target, body: text('x') }))).toEqual({ type: 'SessionAlreadyClosed' });
     });
 
     test('a run freezes its requests at queueing, and a request bundled twice is refused', async () => {
@@ -179,7 +201,7 @@ describe('sessions and requests', () => {
         const state = value(await s.use.sessionState({ session: id }));
         expect(state.runs[0]).toEqual(run);
         expect(error(await s.use.queueRun({ session: id, requests: [request], queuedBy: facilitator }))).toMatchObject({ type: 'RequestAlreadyDismissed' });
-        const again = value(await s.use.sendRequest({ session: id, author: guest, target: run.input.requests[0].target, body: text('y') }));
+        const again = value(await s.use.sendRequest({ session: id, author: guest, targets: run.input.requests[0].targets, body: text('y') }));
         expect(error(await s.use.queueRun({ session: id, requests: [again.id, again.id], queuedBy: facilitator }))).toEqual({ type: 'DuplicateRequest' });
     });
 });
@@ -633,20 +655,37 @@ describe('revisions', () => {
     test("targets of requests are current, stale or unknown in the workspace now; they're never re-bound", async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const send = async (target: C.ModelTarget): Promise<C.RequestId> =>
-            value(await s.use.sendRequest({ session: id, author: guest, target: { target, sourceRevision: start.id }, body: text('x') })).id;
-        const order = await send({ kind: 'DtElement', element: value(C.makeElementName('Sales.Order#Confirmed')) });
-        const received = await send({
+        const send = async (...targets: C.ModelTarget[]): Promise<C.RequestId> =>
+            value(
+                await s.use.sendRequest({
+                    session: id,
+                    author: guest,
+                    targets: targets.map((target) => ({ target, sourceRevision: start.id })),
+                    body: text('x'),
+                }),
+            ).id;
+        const confirmed: C.ModelTarget = { kind: 'DtElement', element: value(C.makeElementName('Sales.Order#Confirmed')) };
+        const order = await send(confirmed);
+        const received: C.ModelTarget = {
             kind: 'DtesOccurrence',
             storming: value(C.makeStormingName('Returns')),
             timeline: value(C.makeTimelineName('Normal')),
             eventName: value(C.makeStormingEventName('Received')),
             occurrence: value(C.makeOccurrencePath(encodeOccurrencePath([1]))),
-        });
-        expect([...value(await s.use.targetStatuses({ session: id })).statuses.values()]).toEqual(['current', 'current']);
+        };
+        const occurrence = await send(received);
+        // one status per target, in the request's order; none for the whole workspace
+        const both = await send({ kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }, confirmed);
+        const workspace = await send();
+        expect([...value(await s.use.targetStatuses({ session: id })).statuses.values()]).toEqual([['current'], ['current'], ['current', 'current'], []]);
         await s.write('sales/sales.dt', SALES.replace('    state Confirmed\n', '').replace('Draft -> Confirmed', 'Draft -> Draft'));
         await s.write('stormings/returns.dtes', RETURNS.replace('    Requested\n', '    Requested\n    Requested\n'));
         const statuses = value(await s.use.targetStatuses({ session: id })).statuses;
-        expect([statuses.get(order), statuses.get(received)]).toEqual(['stale', 'stale']);
+        expect([statuses.get(order), statuses.get(occurrence), statuses.get(both), statuses.get(workspace)]).toEqual([
+            ['stale'],
+            ['stale'],
+            ['current', 'stale'],
+            [],
+        ]);
     });
 });

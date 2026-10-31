@@ -6,13 +6,21 @@ context Collaboration {
   verified PendingRequest "未処理の依頼" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestAlreadyDismissed
 
   /// 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の言及（`@注文[1]`）は対象の番号で指す。
   aggregate Request "依頼" {
     id: RequestId
     references session: SessionId -> Session
     author: ParticipantId "依頼者"
-    owns target: TargetSnapshot "対象"
+    owns targets: TargetSnapshot[0..20] "対象"
     body: Text "本文"
     sentAt: Timestamp "送信日時"
+
+    invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
+    invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
+    /// ワークスペース全体は、対象を挙げないことで表す。
+    invariant noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
+      all(targets, t => t.target.kind != ModelTarget.Workspace)
+    }
 
     state Sent "送信済み"
     /// 見送りは印で、依頼そのものは残る。
@@ -21,8 +29,13 @@ context Collaboration {
       dismissedAt: Timestamp "見送り日時"
     }
 
-    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, target: TargetSnapshot, body: Text, sentAt: Timestamp) "依頼を送る"
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp) "依頼を送る"
       -> Sent
+      requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
+      requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
+      requires noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
+        all(targets, t => t.target.kind != ModelTarget.Workspace)
+      } else WorkspaceTarget
       emits RequestSent
 
     command dismiss(dismissedBy: ParticipantId, dismissedAt: Timestamp) "依頼を見送る"
@@ -34,7 +47,7 @@ context Collaboration {
     requestId: RequestId
     session: SessionId
     author: ParticipantId
-    target: TargetSnapshot
+    targets: TargetSnapshot[0..20]
     body: Text
     sentAt: Timestamp
   }
@@ -59,4 +72,13 @@ context Collaboration {
   error RequestAlreadyDismissed "見送り済みの依頼" {
     request: RequestId
   }
+
+  /// 依頼の対象が20件を超える。
+  error TooManyTargets "対象が多すぎる"
+
+  /// 依頼の対象に同じものが2回ある。
+  error DuplicateTarget "対象の重複"
+
+  /// 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
+  error WorkspaceTarget "対象にワークスペース全体"
 }

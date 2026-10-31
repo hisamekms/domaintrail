@@ -13,6 +13,7 @@ import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
 import { Resizer, usePersistentState } from '../shared/layout';
 import { stormingGraph, type StormingChoice } from '../storming';
+import { shapeElementId } from '../render';
 import { highlightElement } from '../view/canvas';
 import type { Workspace } from '../view/workspace';
 import { SessionChat } from './chat';
@@ -21,7 +22,8 @@ import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
 import { SessionPanel } from './panel';
 import { cursorsOn } from './presence';
-import { occurrenceNode, targetOfSelection, type ModelTarget, type NamingContext } from './targets';
+import { mentionCandidates } from './mentions';
+import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
 import { defaultDraftStorage, useComposerDraft, useDrafts, usePresence, useSession } from './useSession';
 
 /** Width of a closed side pane's rail (RAIL_WIDTH of app/shell.tsx). */
@@ -80,6 +82,48 @@ export function useSessionPage(input: {
         ...(selectedNode && { selectedNode }),
     });
     usePresence(socket, session, editor, location, selectionTarget?.target);
+
+    // a selection of several shapes on the canvas: each targetable element once (the composer's `+` adds them all)
+    const selectedKey = useValue(
+        'selected shapes',
+        () => {
+            if (!editor) return '';
+            const shapes = editor.getSelectedShapeIds();
+            if (shapes.length < 2) return '';
+            return JSON.stringify(
+                shapes.flatMap((id) => {
+                    const element = shapeElementId(editor, id);
+                    return element ? [[element, id.startsWith(NODE_SHAPE) ? id.slice(NODE_SHAPE.length) : '']] : [];
+                }),
+            );
+        },
+        [editor],
+    );
+    const sources = current?.sources;
+    const selectionTargets = useMemo((): TargetDraft[] => {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- written just above from [element, node] pairs
+        const picked = selectedKey ? (JSON.parse(selectedKey) as [string, string][]) : [];
+        if (picked.length === 0) return selectionTarget ? [selectionTarget] : [];
+        const out: TargetDraft[] = [];
+        for (const [selected, node] of picked) {
+            const target = targetOfSelection({
+                selected,
+                model,
+                stormings,
+                sources: sources ?? [],
+                ...(timelineView && { timelineView }),
+                ...(node && { selectedNode: node }),
+            });
+            if (target && !out.some((o) => targetKey(o.target) === targetKey(target.target))) out.push(target);
+        }
+        return out;
+        // the selection target and the timeline view are covered by their keys
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedKey, model, stormings, sources, selectionTarget && targetKey(selectionTarget.target), timelineView?.timelineId, timelineView?.render]);
+    const candidates = useMemo(
+        () => (session ? mentionCandidates({ mode: input.mode, model, stormings, sources: sources ?? [] }) : []),
+        [session !== undefined, input.mode, model, stormings, sources],
+    );
 
     const storage = useMemo(defaultDraftStorage, []);
     const scope = session && { session: session.me.session, participant: session.me.participant.id };
@@ -176,7 +220,8 @@ export function useSessionPage(input: {
                     <SessionChat
                         session={session}
                         composer={composer}
-                        selectionTarget={selectionTarget}
+                        selectionTargets={selectionTargets}
+                        candidates={candidates}
                         onNavigate={navigate}
                         onClose={() => setExplorerOpen(false)}
                     />

@@ -69,7 +69,7 @@ const validation: C.ValidationSummary = { dtErrors: tally(0), dtesErrors: tally(
 const frozen: C.FrozenRequest = {
     request,
     author: facilitator,
-    target: { target: { kind: 'Workspace' }, sourceRevision: revision },
+    targets: [],
     body: value(C.makeText('Add a cancel command to the order.')),
 };
 const running: C.RunningAgentRun = {

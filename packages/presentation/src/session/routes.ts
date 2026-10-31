@@ -12,7 +12,7 @@ import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
-import { body, displayName, MAX_NOTE, MAX_REQUEST_TEXT, requestIds, targetSnapshot, text, uuid, type InvalidInput } from './input.js';
+import { body, displayName, MAX_NOTE, MAX_REQUEST_TEXT, requestIds, requestTargets, text, uuid, type InvalidInput } from './input.js';
 import { joinPage, messagePage, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
 
@@ -59,6 +59,9 @@ export function statusOf(type: string): number {
     switch (type) {
         case 'InvalidInput':
         case 'InvalidTarget':
+        case 'TooManyTargets':
+        case 'DuplicateTarget':
+        case 'WorkspaceTarget':
         case 'NoRequests':
         case 'UnknownRevision':
             return 400;
@@ -257,15 +260,22 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/requests$/,
             role: 'participant',
             handle: async ({ req, res, auth }) => {
-                const raw = await input(req, res, ['target', 'body']);
+                // `target` (one) is the former body, still taken
+                const raw = await input(req, res, ['targets', 'target', 'body']);
                 if (!raw) return;
-                const target = checked(res, targetSnapshot(raw.target));
-                if (!target) return;
+                const targets = checked(res, requestTargets(raw));
+                if (!targets) return;
                 const t = checked(res, text(raw.body, 'body', MAX_REQUEST_TEXT));
                 if (!t) return;
-                if (!(await state()).revisions.some((r) => r.id === target.sourceRevision))
-                    return fail(res, { type: 'UnknownRevision', field: 'target.sourceRevision', message: 'Not a revision of this session.' });
-                const sent = await use.sendRequest({ session, author: who(auth).participant.id, target, body: t });
+                const revisions = (await state()).revisions;
+                const unknown = targets.findIndex((target) => !revisions.some((r) => r.id === target.sourceRevision));
+                if (unknown >= 0)
+                    return fail(res, {
+                        type: 'UnknownRevision',
+                        field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
+                        message: 'Not a revision of this session.',
+                    });
+                const sent = await use.sendRequest({ session, author: who(auth).participant.id, targets, body: t });
                 await answer(res, sent, 201, (request) => ({ request }));
             },
         },

@@ -10,7 +10,17 @@ import type { DomainModel } from '@domaintrail/modeling/model/model';
 import { parseStormings } from '@domaintrail/modeling/storming/parse';
 import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { EXAMPLES } from './helpers.js';
-import { agentStatus, elapsed, headerParticipants, oneLine, participantNames, pendingRequests, streamItems, targetText } from '@domaintrail/web/session/stream';
+import {
+    agentStatus,
+    elapsed,
+    headerParticipants,
+    oneLine,
+    participantNames,
+    pendingRequests,
+    streamItems,
+    targetsSummary,
+    targetText,
+} from '@domaintrail/web/session/stream';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
@@ -25,13 +35,13 @@ const request = (id: string, author: string, minute: number, extra: object = {})
         id,
         session: 's',
         author,
-        target: { target: { kind: 'DtElement', element: `Sales.${id}` }, label: `Sales.${id}`, sourceRevision: 'r1' },
+        targets: [{ target: { kind: 'DtElement', element: `Sales.${id}` }, label: `Sales.${id}`, sourceRevision: 'r1' }],
         body: `body of ${id}`,
         sentAt: at(minute),
         state: 'Sent',
         ...extra,
     }) as unknown as RequestJson;
-const frozen = (r: RequestJson): RunJson['input']['requests'][number] => ({ request: r.id, author: r.author, target: r.target, body: r.body });
+const frozen = (r: RequestJson): RunJson['input']['requests'][number] => ({ request: r.id, author: r.author, targets: r.targets, body: r.body });
 const run = (id: string, minute: number, requests: RequestJson[], state: object, note?: string): RunJson =>
     ({
         id,
@@ -260,6 +270,13 @@ describe('targets named in the display setting', () => {
         expect(targetName(occurrence, naming('both'))).toBe(
             '配送キャンセル (DeliveryCancellation) / 配送がキャンセルされた (ShipmentCancelled) @ 通常キャンセル (Normal) #1',
         );
+    });
+
+    test("a request's targets on one line: the first one and how many more; none is the whole workspace", () => {
+        const customer = { target: { kind: 'DtElement', element: 'Sales.Customer' } } as const;
+        expect(targetsSummary([order, customer, customer], 'All', naming('label'))).toBe('注文 +2');
+        expect(targetsSummary([order], 'All', naming('name'))).toBe('Order');
+        expect(targetsSummary([], 'All', naming('label'))).toBe('All');
     });
 
     test('a target no longer in the sources keeps the label it was taken with; the workspace its word', () => {

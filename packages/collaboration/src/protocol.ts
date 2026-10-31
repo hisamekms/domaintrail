@@ -134,9 +134,12 @@ export interface ClaimBody {
     readonly code: string;
 }
 
-/** `POST /api/session/requests`. */
+/**
+ * `POST /api/session/requests`: 0 to 20 targets, each once, none of them the whole workspace (no target: the whole
+ * workspace); `@name[n]` in the body mentions target n. The former body with one `target` is still taken.
+ */
 export interface SendRequestBody {
-    readonly target: Json<Collaboration.TargetSnapshot>;
+    readonly targets: readonly Json<Collaboration.TargetSnapshot>[];
     readonly body: string;
 }
 

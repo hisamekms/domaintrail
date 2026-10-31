@@ -86,7 +86,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 id: e.requestId,
                 session: e.session,
                 author: e.author,
-                target: e.target,
+                targets: e.targets,
                 body: e.body,
                 sentAt: e.sentAt,
                 state: 'Sent',

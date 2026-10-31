@@ -37,14 +37,22 @@ export const sessionCommands: Collaboration.SessionCommands = {
 };
 
 export const requestCommands: Collaboration.RequestCommands = {
-    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, target, body, sentAt) =>
-        ok({
+    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, targets, body, sentAt) => {
+        switch (Collaboration.checkSendRequestRequires(id, session, author, targets, body, sentAt)) {
+            case 'atMostTwentyTargets':
+                return err({ type: 'TooManyTargets' });
+            case 'distinctTargets':
+                return err({ type: 'DuplicateTarget' });
+            case 'noWorkspaceTarget':
+                return err({ type: 'WorkspaceTarget' });
+        }
+        return ok({
             Sent: {
-                set: { id, session, author, target, body, sentAt },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, target, body, sentAt } },
+                set: { id, session, author, targets, body, sentAt },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt } },
             },
-        }),
-    ),
+        });
+    }),
 
     dismiss: decide<Collaboration.DismissRequestDecision>(Collaboration.RequestShape, {
         Sent: (request, dismissedBy, dismissedAt) =>
