@@ -40,10 +40,18 @@ it, the items added, changed and removed since then. A removed item opens in the
 
 ## Main (center)
 
-Views of the whole model, in tabs with a view-specific toolbar; the toolbar's 凡例 button shows the legend over the
-canvas. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+Views of the whole model, in tabs with a toolbar of what to show (view-specific: the BCs, the level…) ending with the
+canvas's menu ⋯. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
+
+The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
+a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
+nothing is selected) and 凡例 opens the legend upward. Hovering an edge (its line or arrowhead) tells what it means, in
+the legend's words for that view (「参照（ID で別の集約へ）」…). The menu ⋯ at the right end of the toolbar shows or hides
+ズーム操作 and 凡例 separately (remembered per browser; both off leaves nothing at the bottom-left), and `U` hides both
+for now and brings them back on the next press (`H` stays tldraw's hand tool). The keys do nothing while typing. The
+inspector's 状態遷移 diagram has the same controls.
 
 - **Context Map**: one node per bounded context and one edge per dependency between contexts, labeled with the number
   of ID references and borrowed types (solid when types are borrowed). Shared contexts and contexts that only declare
