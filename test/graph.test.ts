@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { analyze } from '../src/core/analyze.js';
+import { analyze } from '../src/modeling/core/analyze.js';
 import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '../src/visualization/domain/graph/build.js';
 import { diffModels } from '../src/visualization/domain/graph/diff.js';

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import type { Diagnostic } from '../src/core/diagnostics.js';
-import type { Clause, Group, NodeElement, NodeElementKind, RelationKeyword, SourceRange, Storming, Timeline } from '../src/dtes/ir.js';
-import { validateStormings } from '../src/dtes/validate.js';
+import type { Diagnostic } from '../src/modeling/core/diagnostics.js';
+import type { Clause, Group, NodeElement, NodeElementKind, RelationKeyword, SourceRange, Storming, Timeline } from '../src/modeling/storming/ir.js';
+import { validateStormings } from '../src/modeling/storming/validate.js';
 
 /**
  * Builds the storming IR of `.dtes` text written one clause per line, as the parser (T2) would, so that the validator is

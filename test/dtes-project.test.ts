@@ -9,7 +9,7 @@ import {
     type Storming,
     type StormingElement,
     type Timeline,
-} from '../src/dtes/ir.js';
+} from '../src/modeling/storming/ir.js';
 import { VIEW_LEVELS, semanticEdgeKey, type RenderEventNode, type RenderGraph, type ViewOptions } from '../src/visualization/domain/storming/ir.js';
 import { matchRenderNodes, projectView } from '../src/visualization/domain/storming/render.js';
 import { buildSemanticGraph } from '../src/visualization/domain/storming/semantic.js';

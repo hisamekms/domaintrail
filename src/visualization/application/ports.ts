@@ -1,4 +1,4 @@
-import type { SourceFile } from '../../core/analyze.js';
+import type { SourceFile } from '../../modeling/core/analyze.js';
 import type { LaidOutGraph } from '../domain/graph/ir.js';
 import type { LayoutEngine } from './layout-engine.js';
 

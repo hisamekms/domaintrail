@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
-import { DEFAULT_SOURCES } from '../core/config.js';
+import { DEFAULT_SOURCES } from '../modeling/core/config.js';
 import { createApiRoutes } from '../presentation/http/routes.js';
 import { defaultWebDir, loadAssets } from '../presentation/http/assets.js';
 import { createViewHttpServer } from '../presentation/http/server.js';

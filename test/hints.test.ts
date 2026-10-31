@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { formatDiagnostic, jsonDiagnostic } from '../src/core/diagnostics.js';
-import { closest, distance } from '../src/core/suggest.js';
+import { formatDiagnostic, jsonDiagnostic } from '../src/modeling/core/diagnostics.js';
+import { closest, distance } from '../src/modeling/core/suggest.js';
 import { check, checkSales, only } from './helpers.js';
 
 const hints = (a: Awaited<ReturnType<typeof check>>, code: string): (string | undefined)[] => only(a, code).map((d) => d.hint);

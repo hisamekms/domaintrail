@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../src/core/analyze.js';
+import { analyze } from '../src/modeling/core/analyze.js';
 import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { InvariantModel } from '../src/model/model.js';
+import type { InvariantModel } from '../src/modeling/model/model.js';
 import { CardHead, Invariants as CardInvariants } from '../web/catalog.js';
 import { MESSAGES } from '../web/i18n.js';
 import { Invariants as InspectorInvariants } from '../web/inspector.js';

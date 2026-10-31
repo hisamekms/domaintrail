@@ -1,5 +1,5 @@
 import { createShapeId, type Editor, type TLShapeId, type TLShapePartial } from 'tldraw';
-import type { Diagnostic } from '../src/core/diagnostics';
+import type { Diagnostic } from '../src/modeling/core/diagnostics';
 import type { ModelDiff } from '../src/visualization/domain/graph/diff';
 import {
     INTERNAL_PADDING,

@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
+import { runCli } from '../src/presentation/cli/main.js';
 import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import { FormatError, formatDomain } from '../src/format/format.js';
+import { FormatError, formatDomain } from '../src/modeling/format/format.js';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

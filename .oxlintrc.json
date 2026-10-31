@@ -19,7 +19,7 @@
   ],
   "ignorePatterns": [
     "dist/**",
-    "src/language/generated/**",
+    "src/modeling/language/generated/**",
     "**/generated/**",
     "tree-sitter-domaintrail/src/**",
     "tree-sitter-domaintrail/bindings/**",

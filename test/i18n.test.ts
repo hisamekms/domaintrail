@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { analyze } from '../src/core/analyze.js';
+import { analyze } from '../src/modeling/core/analyze.js';
 import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
 import { buildStateGraph, buildStructureGraph } from '../src/visualization/domain/graph/build.js';
 import { buildContextMapGraph } from '../src/visualization/domain/graph/context-map.js';

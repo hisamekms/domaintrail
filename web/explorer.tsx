@@ -1,9 +1,9 @@
 import { ChevronRight, Database, Diff, Folder, FolderOpen, PanelLeftClose, Search, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { Diagnostic } from '../src/core/diagnostics';
+import type { Diagnostic } from '../src/modeling/core/diagnostics';
 import type { ModelDiff } from '../src/visualization/domain/graph/diff';
 import type { DisplayMode } from '../src/visualization/domain/graph/ir';
-import type { DomainModel, ElementModel } from '../src/model/model';
+import type { DomainModel, ElementModel } from '../src/modeling/model/model';
 import { buildFileTree, filesIn, type FileTreeNode } from './file-tree';
 import { usePersistentState } from './shared/layout';
 import { useT } from './i18n';

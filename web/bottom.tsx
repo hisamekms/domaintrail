@@ -1,8 +1,8 @@
 import { GitCompare, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
-import type { Diagnostic } from '../src/core/diagnostics';
+import type { Diagnostic } from '../src/modeling/core/diagnostics';
 import { useT } from './i18n';
 import type { ModelDiff } from '../src/visualization/domain/graph/diff';
-import type { DomainModel } from '../src/model/model';
+import type { DomainModel } from '../src/modeling/model/model';
 import type { DisplayMode } from '../src/visualization/domain/graph/ir';
 import { namer, type Select } from './model-utils';
 

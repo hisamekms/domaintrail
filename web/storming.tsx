@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
-import type { Diagnostic } from '../src/core/diagnostics';
-import { declarations, type AnyDeclaration, type NodeElement, type Storming } from '../src/dtes/ir';
+import type { Diagnostic } from '../src/modeling/core/diagnostics';
+import { declarations, type AnyDeclaration, type NodeElement, type Storming } from '../src/modeling/storming/ir';
 import { VIEW_LEVELS, type EventOccurrence, type RenderGraph, type ViewLevel, type ViewOptions } from '../src/visualization/domain/storming/ir';
 import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '../src/visualization/domain/storming/semantic';
 import { timelineOccurrences } from '../src/visualization/domain/storming/trie';
 import { stormingViewKey } from '../src/visualization/domain/storming/graph';
 import type { DisplayMode, LaidOutGraph } from '../src/visualization/domain/graph/ir';
-import type { DomainModel } from '../src/model/model';
+import type { DomainModel } from '../src/modeling/model/model';
 import type { StormingView } from '../src/visualization/protocol';
 import { useT } from './i18n';
 import { fileSelection, nameIn, type Select } from './model-utils';

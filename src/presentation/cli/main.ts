@@ -1,18 +1,18 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { analyze, isStormingFile, type Analysis } from '../core/analyze.js';
-import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
-import { loadConfig } from '../workspace/infrastructure/config.js';
-import { LINT_HINT, hasCastLintRule } from '../workspace/infrastructure/lint-hint.js';
-import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
-import { findDomainFiles, loadWorkspace } from '../workspace/infrastructure/files.js';
-import { formatStorming } from '../dtes/format.js';
-import { formatDomain } from '../format/format.js';
-import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
+import { analyze, isStormingFile, type Analysis } from '../../modeling/core/analyze.js';
+import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '../../modeling/core/config.js';
+import { loadConfig } from '../../workspace/infrastructure/config.js';
+import { LINT_HINT, hasCastLintRule } from '../../workspace/infrastructure/lint-hint.js';
+import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../../modeling/core/diagnostics.js';
+import { findDomainFiles, loadWorkspace } from '../../workspace/infrastructure/files.js';
+import { formatStorming } from '../../modeling/storming/format.js';
+import { formatDomain } from '../../modeling/format/format.js';
+import { GENERATED_MARKER, generateTypeScript } from '../../modeling/generator/typescript.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
 import { lookup, showJson, showText } from './show.js';
-import guide from '../../docs/guide.md' with { type: 'text' };
+import guide from '../../../docs/guide.md' with { type: 'text' };
 
 export interface CliIO {
     out: (line: string) => void;
@@ -309,8 +309,8 @@ Examples:
         )
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
-            const { startViewServer } = await import('../composition/view.js');
-            const { UnknownRevisionError } = await import('../visualization/application/ports.js');
+            const { startViewServer } = await import('../../composition/view.js');
+            const { UnknownRevisionError } = await import('../../visualization/application/ports.js');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
             const server = await startViewServer({

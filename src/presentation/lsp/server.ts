@@ -63,20 +63,20 @@ import {
     type WorkspaceEdit,
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
-import { analyze } from '../core/analyze.js';
-import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '../core/config.js';
-import { loadConfig } from '../workspace/infrastructure/config.js';
-import type { Diagnostic } from '../core/diagnostics.js';
-import { SourceScope, findDomainFiles } from '../workspace/infrastructure/files.js';
-import { LabelResolver, docComment } from '../core/labels.js';
-import { ModelIndex, commandsOf } from '../core/model-index.js';
-import * as ast from '../language/generated/ast.js';
-import { DomainGeneratedModule, DomainGeneratedSharedModule, EventStormingGeneratedModule } from '../language/generated/module.js';
-import { DomainModule } from '../language/domain-module.js';
-import { EventStormingModule } from '../dtes/language/module.js';
-import { formatStorming } from '../dtes/format.js';
-import { formatDomain } from '../format/format.js';
-import { elementIdOf } from '../model/ids.js';
+import { analyze } from '../../modeling/core/analyze.js';
+import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '../../modeling/core/config.js';
+import { loadConfig } from '../../workspace/infrastructure/config.js';
+import type { Diagnostic } from '../../modeling/core/diagnostics.js';
+import { SourceScope, findDomainFiles } from '../../workspace/infrastructure/files.js';
+import { LabelResolver, docComment } from '../../modeling/core/labels.js';
+import { ModelIndex, commandsOf } from '../../modeling/core/model-index.js';
+import * as ast from '../../modeling/language/generated/ast.js';
+import { DomainGeneratedModule, DomainGeneratedSharedModule, EventStormingGeneratedModule } from '../../modeling/language/generated/module.js';
+import { DomainModule } from '../../modeling/language/domain-module.js';
+import { EventStormingModule } from '../../modeling/storming/language/module.js';
+import { formatStorming } from '../../modeling/storming/format.js';
+import { formatDomain } from '../../modeling/format/format.js';
+import { elementIdOf } from '../../modeling/model/ids.js';
 
 export interface LanguageServerOptions {
     /** Explicit `--root`: where to look for the config, instead of the client's workspace folder. */

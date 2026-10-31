@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
-import { ConfigError, checkTsContexts, parseJsonc, policyModes } from '../src/core/config.js';
+import { runCli } from '../src/presentation/cli/main.js';
+import { ConfigError, checkTsContexts, parseJsonc, policyModes } from '../src/modeling/core/config.js';
 import { findConfigFile, loadConfig } from '../src/workspace/infrastructure/config.js';
 import { findDomainFiles } from '../src/workspace/infrastructure/files.js';
 
@@ -335,7 +335,7 @@ describe('output directories per context', () => {
 describe('generated output safety', () => {
     test('labels cannot break out of comments in generated code', async () => {
         const { check } = await import('./helpers.js');
-        const { generateTypeScript } = await import('../src/generator/typescript.js');
+        const { generateTypeScript } = await import('../src/modeling/generator/typescript.js');
         const evil = 'x\\nexport const injected = 1;';
         const a = await check({
             'a.dt': `context S {

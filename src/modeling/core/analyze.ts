@@ -18,7 +18,7 @@ import {
     type Model,
     type Policy,
 } from '../language/generated/ast.js';
-import { analyzeStormings, type StormingAnalysis } from '../dtes/analyze.js';
+import { analyzeStormings, type StormingAnalysis } from '../storming/analyze.js';
 import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';

@@ -1,4 +1,4 @@
-import { didYouMean } from '../core/suggest.js';
+import { didYouMean } from '../../modeling/core/suggest.js';
 
 /** A section of the guide, named by the `<!-- topic: name -->` line above its heading. */
 export interface GuideTopic {

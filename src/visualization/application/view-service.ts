@@ -1,6 +1,6 @@
-import { analyze } from '../../core/analyze.js';
-import { DEFAULT_SOURCES } from '../../core/config.js';
-import type { Storming, StormingAnalysis } from '../../dtes/ir.js';
+import { analyze } from '../../modeling/core/analyze.js';
+import { DEFAULT_SOURCES } from '../../modeling/core/config.js';
+import type { Storming, StormingAnalysis } from '../../modeling/storming/ir.js';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../domain/storming/ir.js';
 import { matchRenderNodes, projectView } from '../domain/storming/render.js';
 import { stormingTimelines } from '../domain/storming/semantic.js';
@@ -18,8 +18,8 @@ import {
     type TransitionLabels,
 } from '../domain/graph/ir.js';
 import type { LayoutEngine, LayoutOptions } from './layout-engine.js';
-import { supportingContexts } from '../../model/dependencies.js';
-import type { DomainModel } from '../../model/model.js';
+import { supportingContexts } from '../../modeling/model/dependencies.js';
+import type { DomainModel } from '../../modeling/model/model.js';
 import type { GitCommit, GitRevisions, LayoutCache, LayoutStore, WorkspaceReader } from './ports.js';
 import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from '../protocol.js';
 

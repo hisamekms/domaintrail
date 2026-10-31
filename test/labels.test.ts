@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../src/core/analyze.js';
+import { analyze } from '../src/modeling/core/analyze.js';
 import { loadWorkspace } from '../src/workspace/infrastructure/files.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
+import { generateTypeScript } from '../src/modeling/generator/typescript.js';
 import { buildStateGraph, buildStructureGraph } from '../src/visualization/domain/graph/build.js';
 import { anyLang, perLang } from '../src/visualization/domain/graph/ir.js';
 import { EXAMPLES, check, codes, only } from './helpers.js';

@@ -2,9 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
-import { formatStorming } from '../src/dtes/format.js';
-import { formatDomain } from '../src/format/format.js';
+import { runCli } from '../src/presentation/cli/main.js';
+import { formatStorming } from '../src/modeling/storming/format.js';
+import { formatDomain } from '../src/modeling/format/format.js';
 import { check } from './helpers.js';
 
 const DT = `context Delivery {

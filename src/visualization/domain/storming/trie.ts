@@ -3,7 +3,7 @@
  * timelines, compared by `stepKey` (a group is the set of its events), and never depends on the order of the timelines:
  * its node IDs are derived from the keys of their path, and every list it gives is sorted.
  */
-import type { Timeline } from '../../../dtes/ir.js';
+import type { Timeline } from '../../../modeling/storming/ir.js';
 import { stepKey, type EventOccurrence, type Step, type StepKey } from './ir.js';
 
 export function timelineOccurrences(timeline: Timeline): EventOccurrence[] {

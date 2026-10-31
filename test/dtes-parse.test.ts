@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { GrammarAST, GrammarUtils, URI } from 'langium';
-import { Domain, EventStorming, isEsCommand, isEsRelationClause, isEsStorming, type EsFile } from '../src/language/generated/ast.js';
-import { DomainGrammar, EventStormingGrammar } from '../src/language/generated/grammar.js';
-import { declarations, type Clause, type NodeElement, type Storming, type Timeline } from '../src/dtes/ir.js';
-import { createStormingServices } from '../src/dtes/language/module.js';
-import { parseStormings, toStormingIr } from '../src/dtes/parse.js';
-import { validateStormings } from '../src/dtes/validate.js';
+import { Domain, EventStorming, isEsCommand, isEsRelationClause, isEsStorming, type EsFile } from '../src/modeling/language/generated/ast.js';
+import { DomainGrammar, EventStormingGrammar } from '../src/modeling/language/generated/grammar.js';
+import { declarations, type Clause, type NodeElement, type Storming, type Timeline } from '../src/modeling/storming/ir.js';
+import { createStormingServices } from '../src/modeling/storming/language/module.js';
+import { parseStormings, toStormingIr } from '../src/modeling/storming/parse.js';
+import { validateStormings } from '../src/modeling/storming/validate.js';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 

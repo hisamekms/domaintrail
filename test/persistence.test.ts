@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../src/generator/typescript.js';
+import { generateTypeScript } from '../src/modeling/generator/typescript.js';
 import { checkSales, codes, only } from './helpers.js';
 
 const SALES = `

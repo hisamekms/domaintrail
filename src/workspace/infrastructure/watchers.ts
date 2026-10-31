@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { watch, type FSWatcher } from 'chokidar';
-import { DEFAULT_SOURCES, IGNORED_DIRS } from '../../core/config.js';
+import { DEFAULT_SOURCES, IGNORED_DIRS } from '../../modeling/core/config.js';
 import type { GitRefWatcher, SourceEvent, Unsubscribe, WorkspaceWatcher } from '../ports.js';
 import { SourceScope } from './files.js';
 
