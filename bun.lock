@@ -11,7 +11,7 @@
         "ignore": "7.0.5",
         "langium": "4.4.0",
         "picomatch": "4.0.7",
-        "vscode-languageserver": "10.1.2",
+        "vscode-languageserver": "11.0.0",
         "ws": "8.22.0",
       },
       "devDependencies": {
@@ -542,7 +542,7 @@
 
     "vscode-jsonrpc": ["vscode-jsonrpc@10.0.0", "", {}, "sha512-USSfxg0vDIpTQqlQBGxF3mBARyoS8cU7LHLpbYNh6dOJt32dlskxPWB0Irrh5TllTmyf7oNLAvqDqzklbwwnpA=="],
 
-    "vscode-languageserver": ["vscode-languageserver@10.1.2", "", { "dependencies": { "vscode-languageserver-protocol": "3.18.4" }, "bin": { "installServerIntoExtension": "bin/installServerIntoExtension" } }, "sha512-pXPWde3RytdeBVEs6PulOOT5OpeXC5GkWRpcT11f5rNn41jviQsAYPyAqJ/0oVGETQLKPJtYbHNiMPlfLb0NTQ=="],
+    "vscode-languageserver": ["vscode-languageserver@11.0.0", "", { "dependencies": { "vscode-languageserver-protocol": "3.18.5" }, "bin": { "installServerIntoExtension": "bin/installServerIntoExtension" } }, "sha512-dOyMIyq0PNVJhTkj+FZoi3H8N3WffNSZEepfbQT+x2E16x1ONPacSx00DoVRqyVKO7PN35ixj/l2RQwQmStkNg=="],
 
     "vscode-languageserver-protocol": ["vscode-languageserver-protocol@3.18.4", "", { "dependencies": { "vscode-jsonrpc": "9.0.3", "vscode-languageserver-types": "3.18.4" } }, "sha512-CCXbyr99dafRJzJH/0Ryk7ly5T8XPmSR0//OuF2w4m+9JiOin7zcAT5iET8GRE7Z9taFBejb3GbM0a0mbjdbrg=="],
 
@@ -560,6 +560,12 @@
 
     "@types/node/undici-types": ["undici-types@8.9.0", "", {}, "sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg=="],
 
+    "langium/vscode-languageserver": ["vscode-languageserver@10.1.2", "", { "dependencies": { "vscode-languageserver-protocol": "3.18.4" }, "bin": { "installServerIntoExtension": "bin/installServerIntoExtension" } }, "sha512-pXPWde3RytdeBVEs6PulOOT5OpeXC5GkWRpcT11f5rNn41jviQsAYPyAqJ/0oVGETQLKPJtYbHNiMPlfLb0NTQ=="],
+
+    "vscode-languageserver/vscode-languageserver-protocol": ["vscode-languageserver-protocol@3.18.5", "", { "dependencies": { "vscode-jsonrpc": "10.0.0", "vscode-languageserver-types": "3.18.5" } }, "sha512-FW4fBMzZ99N8xeob4py0l050wgCoRgTpEq5Xcsb9lM1bc29UKGR/wSV+4knaqFxssFHajy7OzNiKP/m3U1ZEuA=="],
+
     "vscode-languageserver-protocol/vscode-jsonrpc": ["vscode-jsonrpc@9.0.3", "", {}, "sha512-qETYf9PCl1lVfwR+oBmMfc4vP2nqLNA35ABxorw3j06+xlKRgDVxbLgKm4Y/xPL0YWdeDjLoI4ImICIT3nB0zQ=="],
+
+    "vscode-languageserver/vscode-languageserver-protocol/vscode-languageserver-types": ["vscode-languageserver-types@3.18.5", "", {}, "sha512-kPd6+JQNz3HMJvjKlqUxERSlZHAntl/aGpsk7ImwIh0ewDKDcjgAEyVSYciPiOJD3ftbK9IrfiqUeTZLSbCizw=="],
   }
 }
