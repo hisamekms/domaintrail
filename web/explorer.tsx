@@ -5,7 +5,7 @@ import type { ModelDiff } from '../src/graph/diff';
 import type { DisplayMode } from '../src/graph/ir';
 import type { DomainModel, ElementModel } from '../src/model/model';
 import { buildFileTree, filesIn, type FileTreeNode } from './file-tree';
-import { usePersistentState } from './layout';
+import { usePersistentState } from './shared/layout';
 import { useT } from './i18n';
 import { KIND_ORDER, fileSelection, nameIn, orderedContexts, type Select } from './model-utils';
 import { ownerElement } from './render';

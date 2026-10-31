@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { dragPane } from '../web/layout.js';
+import { dragPane } from '../web/shared/layout.js';
 
 describe('dragging a pane edge', () => {
     test('follows the pointer within the limits', () => {

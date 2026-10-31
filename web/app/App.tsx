@@ -1,25 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, LayoutGrid, LayoutList, PanelLeftOpen, PanelRightOpen, type LucideIcon } from 'lucide-react';
 import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
-import type { Diagnostic } from '../src/core/diagnostics';
-import { STRUCTURE_LEVELS, type DisplayMode, type LaidOutGraph, type StructureLevel } from '../src/graph/ir';
-import type { BaseView } from '../src/server/protocol';
-import { BaselineButton, BaselineMenu, baselineName } from './baseline-picker';
-import { BottomPanel, type BottomTab } from './bottom';
-import { Catalog } from './catalog';
-import { cameraMove, fitAll, fitReadable, highlightElement, usePointerCursor } from './canvas';
-import { Explorer } from './explorer';
-import { Legend } from './legend';
-import { backIndex, popHistory, pushHistory, type History } from './history';
-import { Inspector, type InspectorTab, type RevealTarget } from './inspector';
-import { Resizer, usePersistentState } from './layout';
-import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from './model-utils';
-import { renderGraph, shapeElementId, withWriteAccess } from './render';
-import { shapeUtils } from './shapes';
-import { locationOf, type SourceFocus } from './source';
-import { ContextPicker } from './context-picker';
-import { SettingsDialog } from './settings-dialog';
-import { StatesCanvas } from './states-canvas';
+import type { Diagnostic } from '../../src/core/diagnostics';
+import { STRUCTURE_LEVELS, type DisplayMode, type LaidOutGraph, type StructureLevel } from '../../src/graph/ir';
+import type { BaseView } from '../../src/server/protocol';
+import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
+import { BottomPanel, type BottomTab } from '../bottom';
+import { Catalog } from '../catalog';
+import { cameraMove, fitAll, fitReadable, highlightElement, usePointerCursor } from '../view/canvas';
+import { Explorer } from '../explorer';
+import { Legend } from '../legend';
+import { backIndex, popHistory, pushHistory, type History } from '../view/history';
+import { Inspector, type InspectorTab, type RevealTarget } from '../inspector';
+import { Resizer, usePersistentState } from '../shared/layout';
+import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
+import { renderGraph, shapeElementId, withWriteAccess } from '../render';
+import { shapeUtils } from '../shapes';
+import { locationOf, type SourceFocus } from '../source';
+import { ContextPicker } from '../context-picker';
+import { SettingsDialog } from '../settings-dialog';
+import { StatesCanvas } from '../states-canvas';
 import {
     StormingDetails,
     StormingToolbar,
@@ -29,10 +29,10 @@ import {
     stormingGraph,
     stormingLocation,
     type StormingChoice,
-} from './storming';
-import { Tooltips } from './tooltip';
-import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
-import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
+} from '../storming';
+import { Tooltips } from '../tooltip';
+import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from '../theme';
+import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from '../i18n';
 import { useViewSocket } from './useViewSocket';
 
 type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' } | { kind: 'storming' };

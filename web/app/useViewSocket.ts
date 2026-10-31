@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ViewPayload } from '../src/server/protocol';
+import type { ViewPayload } from '../../src/server/protocol';
 
 export type Connection = 'connecting' | 'open' | 'closed';
 

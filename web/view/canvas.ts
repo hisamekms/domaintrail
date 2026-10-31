@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Box, react, type Editor } from 'tldraw';
-import type { LaidOutGraph } from '../src/graph/ir';
-import { findShapeForElement } from './render';
+import type { LaidOutGraph } from '../../src/graph/ir';
+import { findShapeForElement } from '../render';
 
 /**
  * Initial zoom never goes below this (in units of normal-size text), so text stays readable;

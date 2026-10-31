@@ -13,7 +13,7 @@ import type { ViewPayload } from '../src/server/protocol.js';
 import { startViewServer, type ViewServer } from '../src/server/server.js';
 import { ViewSession } from '../src/server/session.js';
 import { createWorkspaceReader } from '../src/workspace/infrastructure/files.js';
-import { cameraMove } from '../web/canvas.js';
+import { cameraMove } from '../web/view/canvas.js';
 import { I18nProvider } from '../web/i18n.js';
 import { StormingDetails } from '../web/storming.js';
 
