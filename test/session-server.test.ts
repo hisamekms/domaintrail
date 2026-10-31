@@ -220,6 +220,18 @@ describe('a session in dev mode', () => {
         expect(await (await fetch(server.url, { headers: { cookie: bob } })).text()).toContain('<div id="root"></div>');
     });
 
+    test('the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant', async () => {
+        for (const p of ['api/state', 'api/focus?contexts=Shop', 'api/git/refs']) {
+            expect([p, (await fetch(server.url + p, { headers: { cookie: bob } })).status]).toEqual([p, 200]);
+        }
+        const baseline = (cookie: string): Promise<Response> =>
+            fetch(`${server.url}api/baseline`, { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ kind: 'previous' }) });
+        const refusedBaseline = await baseline(bob);
+        expect(refusedBaseline.status).toBe(403);
+        expect(((await refusedBaseline.json()) as { error: { type: string } }).error.type).toBe('FacilitatorOnly');
+        expect((await baseline(ada)).status).toBe(200);
+    });
+
     test('refuses another Host or Origin, even with an identity', async () => {
         for (const p of ['', 'api/state', 'api/session/me', 'session/join']) {
             expect((await fetch(server.url + p, { headers: { cookie: bob, Host: 'attacker.example' } })).status).toBe(403);

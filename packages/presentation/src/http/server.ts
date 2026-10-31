@@ -46,6 +46,9 @@ export interface ViewHttpServerOptions {
 const isApi = (pathname: string): boolean => pathname === '/api' || pathname.startsWith('/api/');
 const isSessionApi = (pathname: string): boolean => pathname === SESSION_API || pathname.startsWith(`${SESSION_API}/`);
 
+/** The view API's requests that change what every page sees: in a session only the facilitator makes them. */
+const FACILITATOR_VIEW_API: ReadonlySet<string> = new Set(['/api/baseline']);
+
 /**
  * The Live View's HTTP server (not yet listening): the API, the WebSocket upgrade and the page. Every request and upgrade
  * enters through `checkAccess`. For `dt view` it guards the API's requests and the WebSocket's upgrade, and the page
@@ -77,6 +80,10 @@ export function createViewHttpServer({ host, api, assets, upgrade, session }: Vi
         if (url.pathname.startsWith(SESSION_PAGES)) return session.pages(req, url, res, auth);
         if (auth.kind === 'anonymous') {
             return isApi(url.pathname) ? sendError(res, 401, 'Unauthenticated', 'Sign in to the session first.') : session.signIn(req, url, res);
+        }
+        // the baseline is shared by every page: reading the view is for anyone, changing it for the facilitator
+        if (FACILITATOR_VIEW_API.has(url.pathname) && req.method !== 'GET' && req.method !== 'HEAD' && auth.role !== 'facilitator') {
+            return sendError(res, 403, 'FacilitatorOnly', 'Only the facilitator may do this.');
         }
         return serveView(req, url, res);
     };
