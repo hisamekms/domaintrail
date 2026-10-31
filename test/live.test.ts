@@ -194,6 +194,7 @@ describe('layout persistence', () => {
         const { mkdtemp, symlink, writeFile: write, readFile: read, mkdir: mk, readlink, rm: remove } = await import('node:fs/promises');
         const { tmpdir } = await import('node:os');
         const { ViewSession } = await import('../src/server/session.js');
+        const { createWorkspaceReader } = await import('../src/workspace/infrastructure/files.js');
         const { ElkLayoutEngine } = await import('../src/layout/elk.js');
         const base = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
         const outside = path.join(base, 'outside');
@@ -206,7 +207,7 @@ describe('layout persistence', () => {
             await mk(a);
             await write(path.join(a, 'm.dt'), 'context S { id AId: UUID aggregate A { id: AId } }');
             await symlink(outside, path.join(a, '.domaintrail'));
-            await new ViewSession(a, engine).refresh();
+            await new ViewSession(a, engine, createWorkspaceReader(a)).refresh();
             expect((await import('node:fs')).existsSync(path.join(outside, 'layout.json'))).toBe(false);
 
             // 2. layout.json is a symlink -> it is replaced, the target is untouched
@@ -214,7 +215,7 @@ describe('layout persistence', () => {
             await mk(path.join(b, '.domaintrail'), { recursive: true });
             await write(path.join(b, 'm.dt'), 'context S { id AId: UUID aggregate A { id: AId } }');
             await symlink(path.join(outside, 'victim.txt'), path.join(b, '.domaintrail', 'layout.json'));
-            await new ViewSession(b, engine).refresh();
+            await new ViewSession(b, engine, createWorkspaceReader(b)).refresh();
             expect(await read(path.join(outside, 'victim.txt'), 'utf8')).toBe('keep me');
             expect(await readlink(path.join(b, '.domaintrail', 'layout.json')).catch(() => 'replaced')).toBe('replaced');
         } finally {

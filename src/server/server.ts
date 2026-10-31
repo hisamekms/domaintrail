@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { DEFAULT_SOURCES } from '../core/config.js';
+import { createWorkspaceReader } from '../workspace/infrastructure/files.js';
 import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
@@ -158,7 +159,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     const respectGitignore = options.respectGitignore ?? true;
     // an unknown revision stops the server from starting, rather than showing nothing as changed
     if (options.base) await resolveCommit(options.root, options.base);
-    const session = new ViewSession(options.root, engine, sources, respectGitignore, options.base);
+    const session = new ViewSession(options.root, engine, createWorkspaceReader(options.root, sources, respectGitignore), sources, options.base);
     await session.refresh();
 
     const assets = await loadAssets(options.webDir ?? defaultWebDir());

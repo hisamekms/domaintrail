@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { SourceFile } from '../../core/analyze.js';
 import { DEFAULT_SOURCES, IGNORED_DIRS, sourceMatcher } from '../../core/config.js';
+import type { WorkspaceReader } from '../ports.js';
 import { GitIgnore } from './gitignore.js';
 
 /**
@@ -61,4 +62,9 @@ export async function readSources(root: string, files: readonly string[]): Promi
 
 export async function loadWorkspace(root: string, sources: readonly string[] = DEFAULT_SOURCES, respectGitignore = true): Promise<SourceFile[]> {
     return readSources(root, await findDomainFiles(root, sources, respectGitignore));
+}
+
+/** The `WorkspaceReader` of the sources below `root` (see `loadWorkspace`). */
+export function createWorkspaceReader(root: string, sources: readonly string[] = DEFAULT_SOURCES, respectGitignore = true): WorkspaceReader {
+    return { readSources: () => loadWorkspace(root, sources, respectGitignore) };
 }

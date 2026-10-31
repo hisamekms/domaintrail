@@ -2,7 +2,6 @@ import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyze } from '../core/analyze.js';
 import { DEFAULT_SOURCES } from '../core/config.js';
-import { loadWorkspace } from '../workspace/infrastructure/files.js';
 import { VIEW_LEVELS, type RenderGraph, type Storming, type StormingAnalysis, type ViewOptions } from '../dtes/ir.js';
 import { matchRenderNodes, projectView } from '../dtes/project/render.js';
 import { stormingTimelines } from '../dtes/project/semantic.js';
@@ -16,6 +15,7 @@ import { supportingContexts } from '../model/dependencies.js';
 import type { DomainModel } from '../model/model.js';
 import { resolveCommit, sourcesAt, type GitCommit } from './git.js';
 import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from './protocol.js';
+import type { WorkspaceReader } from '../workspace/ports.js';
 
 export const LAYOUT_FILE = path.join('.domaintrail', 'layout.json');
 
@@ -93,8 +93,10 @@ export class ViewSession {
     constructor(
         readonly root: string,
         private readonly engine: LayoutEngine,
+        /** The current sources. */
+        private readonly workspace: WorkspaceReader,
+        /** Globs of the sources, for those of a git baseline. */
         private readonly sources: readonly string[] = DEFAULT_SOURCES,
-        private readonly respectGitignore = true,
         /** A git revision to compare with from the start (default: the previously shown model). */
         baseRef?: string,
     ) {
@@ -210,7 +212,7 @@ export class ViewSession {
 
     private async doRefresh(): Promise<ViewPayload> {
         await this.loadLayouts();
-        const sources = await loadWorkspace(this.root, this.sources, this.respectGitignore);
+        const sources = [...(await this.workspace.readSources())];
         const analysis = await analyze(sources);
         const files = sources.map((s) => s.path);
         const stormings = await this.stormingViews(analysis.stormings);

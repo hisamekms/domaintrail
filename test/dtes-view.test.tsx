@@ -12,6 +12,7 @@ import { ElkLayoutEngine } from '../src/layout/elk.js';
 import type { ViewPayload } from '../src/server/protocol.js';
 import { startViewServer, type ViewServer } from '../src/server/server.js';
 import { ViewSession } from '../src/server/session.js';
+import { createWorkspaceReader } from '../src/workspace/infrastructure/files.js';
 import { cameraMove } from '../web/canvas.js';
 import { I18nProvider } from '../web/i18n.js';
 import { StormingDetails } from '../web/storming.js';
@@ -193,7 +194,7 @@ describe('the Live View of a workspace with stormings', () => {
 
     test('pushes every view of every storming; switching level or timeline is the page’s and never touches the .dtes (R11, R12)', async () => {
         const before = await stat(file());
-        const session = new ViewSession(dir, engine);
+        const session = new ViewSession(dir, engine, createWorkspaceReader(dir));
         const state = await session.refresh();
         expect(state.status).not.toBe('empty');
         expect(state.files).toEqual(['delivery.dtes']);
@@ -223,7 +224,7 @@ describe('the Live View of a workspace with stormings', () => {
     });
 
     test('shows external systems at the Design Level only, and every event at both levels (R14, R17)', async () => {
-        const [view] = (await new ViewSession(dir, engine).refresh()).stormings;
+        const [view] = (await new ViewSession(dir, engine, createWorkspaceReader(dir)).refresh()).stormings;
         const ids = (key: string) => view.views[key].graph.nodes.map((n) => n.id);
         expect(ids('design-level|')).toContain('n:PaymentGateway');
         expect(ids('big-picture|')).not.toContain('n:PaymentGateway');
@@ -233,7 +234,7 @@ describe('the Live View of a workspace with stormings', () => {
     });
 
     test('keeps a storming whose file stops parsing, as stale, and lays out an edit incrementally', async () => {
-        const session = new ViewSession(dir, engine);
+        const session = new ViewSession(dir, engine, createWorkspaceReader(dir));
         await session.refresh();
         await writeFile(file(), SAMPLE.replace('timeline Failure', 'timeline Failure {'));
         const broken = await session.refresh();
@@ -273,7 +274,7 @@ describe('the inspector of a storming element', () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-dtes-'));
         try {
             await writeFile(path.join(dir, 'delivery.dtes'), SAMPLE);
-            const { stormings, diagnostics } = await new ViewSession(dir, engine).refresh();
+            const { stormings, diagnostics } = await new ViewSession(dir, engine, createWorkspaceReader(dir)).refresh();
             const html = (id: string, key = 'design-level|') =>
                 renderToStaticMarkup(
                     <I18nProvider lang="en">
