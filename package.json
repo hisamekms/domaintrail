@@ -61,6 +61,7 @@
     "ws": "8.22.0"
   },
   "devDependencies": {
+    "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/composition": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/presentation": "workspace:*",

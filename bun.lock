@@ -15,6 +15,7 @@
         "ws": "8.22.0",
       },
       "devDependencies": {
+        "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/composition": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/presentation": "workspace:*",
@@ -34,6 +35,12 @@
         "typescript": "7.0.2",
         "vscode-jsonrpc": "10.0.0",
         "web-tree-sitter": "0.27.1",
+      },
+    },
+    "packages/collaboration": {
+      "name": "@domaintrail/collaboration",
+      "devDependencies": {
+        "fast-check": "4.10.2",
       },
     },
     "packages/composition": {
@@ -112,6 +119,8 @@
     "@chevrotain/types": ["@chevrotain/types@13.2.0", "", {}, "sha512-7qrYHRlKfWf2AvBfJi5eVOrKAkbxvMFsy/iIHTGIiApNcEecCaVIdR+mIQhyCBsTDJxBz4JWXHMo6krbhR9hVg=="],
 
     "@chevrotain/utils": ["@chevrotain/utils@13.2.0", "", {}, "sha512-SzKYY68rseOrb9KILVzPsl6SjkQtdWw01SRGB5aCVI5kFcHltQsOYV3JB0Ffst72DgkvHCyDQ0NLwxtmCCf97Q=="],
+
+    "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:packages/collaboration"],
 
     "@domaintrail/composition": ["@domaintrail/composition@workspace:packages/composition"],
 

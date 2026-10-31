@@ -1,0 +1,36 @@
+/// ファシリテーターが開く共同編集のセッション。参加者が `.dt` モデルと `.dtes` ストーミングの要素について依頼を送り、
+/// ファシリテーターが依頼をまとめてエージェントに実行させ、実行ごとにワークスペースのリビジョンが残る。
+/// 在席・通信・認証・ファイル監視は技術の関心事で、このモデルには含めない。
+context Collaboration "コラボレーション" {
+  terms {
+    session: "セッション"
+    participant: "参加者"
+    facilitator: "ファシリテーター"
+    restoredFrom: "復元元"
+    preRestore: "復元前のリビジョン"
+  }
+
+  /// 本文や問いかけのように、人が書く空でない文章。
+  primitive Text "文章": String { length(value) >= 1 and length(value) <= 20000 }
+
+  /// 1 始まりの行番号。
+  primitive LineNumber "行番号": Int { value >= 1 }
+
+  /// 1 始まりの列番号。
+  primitive ColumnNumber "列番号": Int { value >= 1 }
+
+  /// 0 以上の件数。
+  primitive Tally "件数": Int { value >= 0 }
+
+  /// SHA-256 の16進表記（小文字64桁）。ファイルやスナップショットの内容を識別する。
+  primitive ContentHash "内容ハッシュ": String { matches(value, "^[0-9a-f]{64}$") }
+
+  /// ワークスペースのルートからの相対パス（`/` 区切り）。絶対パス、`.` と `..` の区間、バックスラッシュを含まない。
+  primitive WorkspacePath "ワークスペース内パス": String {
+    invariant relative "ルートからの相対パス" { matches(value, "^[^/\\]+(/[^/\\]+)*$") }
+    invariant noDotSegment "`.` と `..` を含まない" { not matches(value, "(^|/)\.\.?(/|$)") }
+  }
+
+  /// ソースの言語。
+  enum SourceLanguage "ソースの言語" { Dt "ドメインモデル（.dt）" Dtes "イベントストーミング（.dtes）" }
+}

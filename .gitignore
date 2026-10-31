@@ -1,6 +1,8 @@
 node_modules/
 .domaintrail/
 generated/
+# the collaboration contracts are generated and committed (ADR 0026; test/collaboration-contracts.test.ts)
+!packages/collaboration/src/generated/
 *.log
 .DS_Store
 dist/

@@ -1,0 +1,66 @@
+context Collaboration {
+  /// `.dt` モデルの要素の名前（`Sales.Order`、`Sales.Order.confirm` など）。
+  primitive ElementName "要素名": String { length(value) >= 1 }
+
+  /// ストーミングの名前。
+  primitive StormingName "ストーミング名": String { length(value) >= 1 }
+
+  /// ストーミングの中で要素を指す名前。
+  primitive StormingLocalName "ストーミング内の要素名": String { length(value) >= 1 }
+
+  /// ストーミングのタイムラインの名前。
+  primitive TimelineName "タイムライン名": String { length(value) >= 1 }
+
+  /// ストーミングのイベントの名前。
+  primitive StormingEventName "ストーミングのイベント名": String { length(value) >= 1 }
+
+  /// タイムラインの中でイベントの出現を指す道筋。
+  primitive OccurrencePath "出現の道筋": String { length(value) >= 1 }
+
+  /// 依頼が指すもの。描画ノードの ID は保存しない。
+  union ModelTarget "依頼の対象" {
+    /// ワークスペース全体。
+    Workspace "ワークスペース" {
+      scope: SourceLanguage?
+    }
+    /// `.dt` モデルの要素。
+    DtElement "モデルの要素" {
+      element: ElementName
+    }
+    /// `.dtes` ストーミングの要素（統合キャンバスでイベントを選ぶと、イベントの定義を指す）。
+    DtesElement "ストーミングの要素" {
+      storming: StormingName
+      local: StormingLocalName
+    }
+    /// タイムラインでのイベントの出現。タイムラインのビューからだけ指せる。
+    DtesOccurrence "イベントの出現" {
+      storming: StormingName
+      timeline: TimelineName
+      eventName: StormingEventName
+      occurrence: OccurrencePath
+    }
+  }
+
+  /// ソースの範囲（両端を含む）。
+  value SourceRange "ソースの範囲" {
+    path: WorkspacePath
+    startLine: LineNumber "開始行"
+    startColumn: ColumnNumber "開始列"
+    endLine: LineNumber "終了行"
+    endColumn: ColumnNumber "終了列"
+
+    invariant ordered "開始が終了より前" { startLine < endLine or (startLine == endLine and startColumn <= endColumn) }
+  }
+
+  /// 依頼を作ったときの対象。対象の道筋がもう合わなくなっても付け替えず、古くなったと示す。
+  value TargetSnapshot "依頼時の対象" {
+    target: ModelTarget
+    sourceRevision: RevisionId "依頼時のリビジョン"
+    label: String? "依頼時の表示名"
+    range: SourceRange? "依頼時の範囲"
+
+    invariant workspaceHasNoRange "ワークスペース全体には範囲がない" {
+      target.kind == ModelTarget.Workspace implies not exists(range)
+    }
+  }
+}
