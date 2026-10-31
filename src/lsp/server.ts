@@ -8,13 +8,16 @@ import {
     DocumentState,
     URI,
     inject,
+    GrammarUtils,
     type AstNode,
+    type CstNode,
     type FileSystemNode,
     type LangiumDocument,
     type LangiumSharedCoreServices,
 } from 'langium';
 import {
     AstNodeHoverProvider,
+    DefaultDefinitionProvider,
     DefaultDocumentSymbolProvider,
     DefaultNodeKindProvider,
     DefaultRenameProvider,
@@ -36,6 +39,7 @@ import {
     createDefaultModule,
     createDefaultSharedModule,
     type Formatter,
+    type GoToLink,
     type LangiumServices,
     type LangiumSharedServices,
 } from 'langium/lsp';
@@ -64,10 +68,12 @@ import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, loadConfig, type ResolvedCo
 import type { Diagnostic } from '../core/diagnostics.js';
 import { SourceScope, findDomainFiles } from '../core/files.js';
 import { LabelResolver, docComment } from '../core/labels.js';
-import { ModelIndex } from '../core/model-index.js';
+import { ModelIndex, commandsOf } from '../core/model-index.js';
 import * as ast from '../language/generated/ast.js';
-import { DomainGeneratedModule, DomainGeneratedSharedModule } from '../language/generated/module.js';
+import { DomainGeneratedModule, DomainGeneratedSharedModule, EventStormingGeneratedModule } from '../language/generated/module.js';
 import { DomainModule } from '../language/domain-module.js';
+import { EventStormingModule } from '../dtes/language/module.js';
+import { formatStorming } from '../dtes/format.js';
 import { formatDomain } from '../format/format.js';
 import { elementIdOf } from '../model/ids.js';
 
@@ -436,9 +442,14 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isIdType(node) || ast.isPrimitiveDecl(node) || ast.isVerifiedDecl(node) || ast.isUnionDecl(node)) return SymbolKind.TypeParameter;
         if (ast.isEnumDecl(node)) return SymbolKind.Enum;
         if (ast.isEnumValue(node) || ast.isState(node)) return SymbolKind.EnumMember;
-        if (ast.isEventDecl(node)) return SymbolKind.Event;
-        if (ast.isPolicy(node)) return SymbolKind.Interface;
-        if (ast.isCommand(node)) return SymbolKind.Method;
+        if (ast.isEventDecl(node) || ast.isEsEvent(node)) return SymbolKind.Event;
+        if (ast.isPolicy(node) || ast.isEsPolicy(node)) return SymbolKind.Interface;
+        if (ast.isCommand(node) || ast.isEsCommand(node)) return SymbolKind.Method;
+        if (ast.isEsStorming(node)) return SymbolKind.Namespace;
+        if (ast.isEsAggregate(node)) return SymbolKind.Class;
+        if (ast.isEsTimeline(node) || ast.isEsGroup(node)) return SymbolKind.Array;
+        if (ast.isEsActor(node) || ast.isEsExternal(node) || ast.isEsReadModel(node)) return SymbolKind.Object;
+        if (ast.isEsHotspot(node)) return SymbolKind.Key;
         if (ast.isParameter(node)) return SymbolKind.Variable;
         if (ast.isInvariant(node) || ast.isRequirement(node)) return SymbolKind.Boolean;
         return SymbolKind.Field;
@@ -449,7 +460,8 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isValueObject(node) || ast.isFieldSet(node) || ast.isErrorDecl(node)) return CompletionItemKind.Struct;
         if (ast.isEnumDecl(node)) return CompletionItemKind.Enum;
         if (ast.isState(node)) return CompletionItemKind.EnumMember;
-        if (ast.isEventDecl(node)) return CompletionItemKind.Event;
+        if (ast.isEventDecl(node) || ast.isEsEvent(node)) return CompletionItemKind.Event;
+        if (ast.isEsDeclaration(node)) return CompletionItemKind.Reference;
         return CompletionItemKind.TypeParameter;
     }
 }
@@ -507,11 +519,13 @@ class DomainRenameProvider extends DefaultRenameProvider {
  * is formatted as the whole file, since the layout of a line depends on its block; there is no on-type formatting.
  */
 class DomainFormatter implements Formatter {
+    constructor(private readonly format: (text: string) => string) {}
+
     formatDocument(document: LangiumDocument): TextEdit[] {
         const { lexerErrors, parserErrors } = document.parseResult;
         if (lexerErrors.length || parserErrors.length) return [];
         const text = document.textDocument.getText();
-        const formatted = formatDomain(text);
+        const formatted = this.format(text);
         if (formatted === text) return [];
         return [{ range: { start: { line: 0, character: 0 }, end: document.textDocument.positionAt(text.length) }, newText: formatted }];
     }
@@ -526,6 +540,75 @@ class DomainFormatter implements Formatter {
 
     get formatOnTypeOptions(): undefined {
         return undefined;
+    }
+}
+
+/** What a `.dtes` declaration is called in hovers. */
+function stormingKindOf(node: AstNode): string | undefined {
+    if (ast.isEsStorming(node)) return 'storming';
+    if (ast.isEsEvent(node)) return 'event';
+    if (ast.isEsActor(node)) return 'actor';
+    if (ast.isEsExternal(node)) return 'external';
+    if (ast.isEsCommand(node)) return 'command';
+    if (ast.isEsPolicy(node)) return 'policy';
+    if (ast.isEsAggregate(node)) return 'aggregate';
+    if (ast.isEsReadModel(node)) return 'read model';
+    if (ast.isEsHotspot(node)) return 'hotspot';
+    if (ast.isEsTimeline(node)) return 'timeline';
+    if (ast.isEsGroup(node)) return 'group';
+    return undefined;
+}
+
+/** Hover in a `.dtes` file: kind, ID, label, `///` description, the storming, and the `.dt` `ref` as written. */
+class StormingHoverProvider extends AstNodeHoverProvider {
+    protected override getAstNodeHoverContent(node: AstNode): string | undefined {
+        const kind = stormingKindOf(node);
+        if (!kind || !(ast.isEsDeclaration(node) || ast.isEsStorming(node))) return undefined;
+        const storming = ast.isEsStorming(node) ? undefined : AstUtils.getContainerOfType(node, ast.isEsStorming);
+        const lines = [`**${kind} \`${node.name}\`**${node.label ? ` ${node.label}` : ''}${storming ? ` — storming \`${storming.name}\`` : ''}`];
+        const doc = docComment(node);
+        if (doc) lines.push(doc);
+        const refs = ast.isEsNode(node) ? node.clauses.filter(ast.isEsRefClause) : [];
+        if (refs.length) lines.push(`\`\`\`dtes\n${refs.map((r) => `ref ${r.path}`).join('\n')}\n\`\`\``);
+        return lines.join('\n\n');
+    }
+}
+
+/**
+ * Go to definition in a `.dtes` file: local references through Langium's linking, and each segment of a `.dt` `ref`
+ * (`Sales.Order.place`) to what it names in the `.dt` files: the context, the element, the command of the aggregate.
+ */
+class StormingDefinitionProvider extends DefaultDefinitionProvider {
+    constructor(private readonly services: LangiumServices) {
+        super(services);
+    }
+
+    protected override findLinks(source: CstNode): GoToLink[] {
+        const clause = source.astNode;
+        if (!ast.isEsRefClause(clause)) return super.findLinks(source);
+        const path = clause.$cstNode && GrammarUtils.findNodeForProperty(clause.$cstNode, 'path');
+        const names = path
+            ? CstUtils.flattenCst(path)
+                  .filter((n) => !n.hidden && n.text !== '.')
+                  .toArray()
+            : [];
+        const segment = names.findIndex((n) => n.offset === source.offset);
+        if (segment < 0) return [];
+        const models = this.services.shared.workspace.LangiumDocuments.all
+            .map((d) => d.parseResult.value)
+            .filter(ast.isModel)
+            .toArray();
+        const index = new ModelIndex(models);
+        const [ctx, element, command] = names.map((n) => n.text);
+        let target: AstNode | undefined;
+        if (segment === 0) target = index.fragments.find((c) => c.name === ctx);
+        else {
+            const el = index.lookup(`${ctx}.${element}`);
+            target = segment === 1 ? el : el && ast.isAggregate(el) ? commandsOf(el).find((c) => c.name === command) : undefined;
+        }
+        const targetName = target?.$cstNode && GrammarUtils.findNodeForProperty(target.$cstNode, 'name');
+        const targetDocument = target && AstUtils.getDocument(target);
+        return targetName && targetDocument ? [{ source, target: targetName, targetDocument }] : [];
     }
 }
 
@@ -550,11 +633,19 @@ export function createDomainLspServices(connection: Connection, options: Languag
             HoverProvider: (s: LangiumServices) => new DomainHoverProvider(s),
             DocumentSymbolProvider: (s: LangiumServices) => new DomainDocumentSymbolProvider(s),
             RenameProvider: (s: LangiumServices) => new DomainRenameProvider(s),
-            Formatter: () => new DomainFormatter(),
+            Formatter: () => new DomainFormatter(formatDomain),
         },
     });
     shared.ServiceRegistry.register(Domain);
-    return { shared, Domain, workspace, warn };
+    const EventStorming = inject(createDefaultModule({ shared }), EventStormingGeneratedModule, EventStormingModule, {
+        lsp: {
+            HoverProvider: (s: LangiumServices) => new StormingHoverProvider(s),
+            DefinitionProvider: (s: LangiumServices) => new StormingDefinitionProvider(s),
+            Formatter: () => new DomainFormatter(formatStorming),
+        },
+    });
+    shared.ServiceRegistry.register(EventStorming);
+    return { shared, Domain, EventStorming, workspace, warn };
 }
 
 /**

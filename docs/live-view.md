@@ -11,7 +11,7 @@ pane leaves a narrow rail with the button that opens it) and resized by dragging
 ## Explorer (left)
 
 The model tree — shared contexts first, then each context grouped by kind; aggregates expand to their states and
-commands — and the `.dt` files with error/warning counts. Click selects (a file too); double-click opens the item in
+commands — and the `.dt` and `.dtes` files with error/warning counts. Click selects (a file too); double-click opens the item in
 the view or inspector tab that suits it.
 
 ## Main (center)
@@ -33,6 +33,17 @@ See [ADR 0007](adr/0007-pane-roles.md).
   aggregates stays as a frame with its description).
 - **Catalog**: cards to look over the model, one section per kind; for now the domain primitives per context (shared
   first) with base type, invariants and usages.
+- **Event Storming** (イベントストーミング, shown when the workspace has a `.dtes` storming; a workspace of `.dtes` files only
+  opens on it): one storming as sticky notes, laid out left to right (`dt guide storming-views`). The toolbar picks
+  the storming (表示するストーミング, when there are several), the タイムライン — すべて（統合） for the integrated canvas,
+  or one timeline with its one-hop causal paths — and the level: ビッグピクチャー (events, timelines and hotspots only)
+  or デザインレベル (also commands, policies, actors, external systems, aggregates and read models). The choices are
+  remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
+  frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
+  timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes
+  (possible, not "happened"), dashed orange arrows the order of a timeline, dotted lines the other relations (without
+  an arrowhead for a hotspot's event); the colours of the notes are defaults with no
+  meaning (see the legend). A storming whose file stops parsing stays as it last parsed, with a banner.
 
 ## Inspector (right)
 
@@ -44,6 +55,11 @@ explorer.
 - **状態遷移**: states and command transitions of the aggregate (`new` marks factory commands), for the aggregate and
   its states and commands; it pans and zooms like the main canvas and shows the selected state or command.
 - **振る舞い**: what a command takes, requires, changes, emits and returns, and the policies that trigger it.
+- **A storming's element** (selected in the Event Storming view): its kind, label, ID, `///` description, file and
+  line (ファイルを開く), and diagnostics; for an event, aggregate or command, its `.dt` との対応 (the `ref`, a link to the
+  `.dt` element, or 「.dt にありません」 when it does not resolve); for a hotspot, its 状態 and 結論; its 関係 (きっかけ,
+  発行, 発生, 対象, 実行者, 参照, 論点), as links; for an event, where it appears in the timelines (タイムラインでの出現)
+  and which notes of the view draw it; for a timeline or group, its events.
 - **ソース**: the whole file, read-only, syntax-coloured, diagnostics in the gutter, scrolled to the declaration, which
   is highlighted with a button that copies its code (to paste into feedback for an AI agent); clicking a declaration
   selects it. A selected file shows here the same way.
@@ -71,7 +87,8 @@ With either baseline:
   removed (struck through), and strikes through the former value of a changed one (a field's type, an expression, a
   transition, a description).
 
-A revision whose sources do not parse is reported in a banner, and nothing is marked then.
+A revision whose sources do not parse is reported in a banner, and nothing is marked then. Stormings are compared with
+neither baseline: their views are not marked.
 
 ## Behaviour and settings
 

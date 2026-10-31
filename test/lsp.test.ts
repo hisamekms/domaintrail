@@ -536,3 +536,75 @@ describe('dt lsp', () => {
         expect(client.diagnostics.get(path.join('b', 'sales.dt'))).toEqual([]);
     });
 });
+
+const STORMING = `storming Checkout "注文" {
+  /// The customer places an order.
+  event OrderPlaced "注文確定" { ref Sales.OrderPlaced }
+  aggregate Order { ref Sales.Order }
+  command Place {
+    ref Sales.Order.place
+    target Order
+    emits OrderPlaced
+  }
+  event Lost { ref Sales.Missing }
+  timeline Main { OrderPlaced }
+}
+`;
+
+describe('dt lsp with .dtes files', () => {
+    test('publishes the diagnostics of dt check for .dtes files, S rules and the .dt refs included', async () => {
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'checkout.dtes': STORMING.replace('target Order', 'target OrderPlaced') });
+        const diagnostics = await client.until('checkout.dtes', (d) => d.length > 0);
+        expect(diagnostics.map((d) => d.code)).toEqual(['S003', 'S010']);
+        expect(asCheckLines(diagnostics)).toEqual(await checkOutput(client.root, 'checkout.dtes'));
+        expect(await client.until('sales.dt', () => true)).toEqual([]);
+
+        await client.open('checkout.dtes', 'storming Checkout {\n  event\n');
+        expect((await client.until('checkout.dtes', (d) => d[0]?.code === 'SYNTAX')).map((d) => d.code)).toEqual(['SYNTAX']);
+    });
+
+    test('formats a .dtes document as dt fmt does', async () => {
+        const unformatted = 'storming Checkout {\n    event OrderPlaced {}\n}\n';
+        const client = await start({ 'checkout.dtes': unformatted });
+        await client.until('checkout.dtes', () => true);
+        const edits = await client.connection.sendRequest<{ newText: string }[]>('textDocument/formatting', {
+            textDocument: { uri: client.uri('checkout.dtes') },
+            options: { tabSize: 2, insertSpaces: true },
+        });
+        expect(edits.map((e) => e.newText)).toEqual(['storming Checkout {\n  event OrderPlaced\n}\n']);
+    });
+
+    test('goes to local declarations and, segment by segment, to the .dt symbols of a ref', async () => {
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'checkout.dtes': STORMING });
+        await client.until('checkout.dtes', () => true);
+        type Link = { targetUri: string; targetSelectionRange: { start: { line: number; character: number } } };
+        const definition = (pos: { line: number; character: number }) =>
+            client
+                .request<Link[] | null>('textDocument/definition', 'checkout.dtes', pos)
+                .then((links) => (links ?? []).map((l) => [path.basename(URI.parse(l.targetUri).fsPath), l.targetSelectionRange.start]));
+
+        expect(await definition(at(STORMING, 'target Order', 'target '.length))).toEqual([['checkout.dtes', at(STORMING, 'Order {', 0)]]);
+        expect(await definition(at(STORMING, 'Main { OrderPlaced', 'Main { '.length))).toEqual([['checkout.dtes', at(STORMING, 'OrderPlaced "', 0)]]);
+        expect(await definition(at(STORMING, 'ref Sales.Order.place', 'ref Sales.Order.'.length))).toEqual([['sales.dt', at(SALES, 'place()')]]);
+        expect(await definition(at(STORMING, 'ref Sales.Order.place', 'ref Sales.'.length))).toEqual([['sales.dt', at(SALES, 'Order "', 0)]]);
+        expect(await definition(at(STORMING, 'ref Sales.OrderPlaced', 'ref '.length))).toEqual([['sales.dt', at(SALES, 'Sales')]]);
+        expect(await definition(at(STORMING, 'ref Sales.OrderPlaced', 'ref Sales.'.length))).toEqual([['sales.dt', at(SALES, 'OrderPlaced {')]]);
+        expect(await definition(at(STORMING, 'ref Sales.Missing', 'ref Sales.'.length))).toEqual([]);
+    });
+
+    test('hovers show kind, label, description, storming and ref; the outline lists the declarations', async () => {
+        const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'checkout.dtes': STORMING });
+        await client.until('checkout.dtes', () => true);
+        const hover = (pos: { line: number; character: number }) =>
+            client.request<{ contents: { value: string } } | null>('textDocument/hover', 'checkout.dtes', pos).then((h) => h?.contents.value);
+        const event = '**event `OrderPlaced`** 注文確定 — storming `Checkout`\n\nThe customer places an order.\n\n```dtes\nref Sales.OrderPlaced\n```';
+        expect(await hover(at(STORMING, 'OrderPlaced "'))).toBe(event);
+        expect(await hover(at(STORMING, 'emits OrderPlaced', 'emits '.length))).toBe(event);
+        expect(await hover(at(STORMING, 'Checkout'))).toBe('**storming `Checkout`** 注文');
+
+        type Symbol = { name: string; children?: Symbol[] };
+        const symbols = await client.connection.sendRequest<Symbol[]>('textDocument/documentSymbol', { textDocument: { uri: client.uri('checkout.dtes') } });
+        const names = (s: Symbol[]): unknown[] => s.map((x) => (x.children?.length ? [x.name, names(x.children)] : x.name));
+        expect(names(symbols)).toEqual([['Checkout', ['OrderPlaced', 'Order', 'Place', 'Lost', 'Main']]]);
+    });
+});

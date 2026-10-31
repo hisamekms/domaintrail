@@ -7,6 +7,7 @@ import { runCli } from '../src/cli/main.js';
 import { analyze } from '../src/core/analyze.js';
 import { parseJsonc } from '../src/core/config.js';
 import { loadWorkspace } from '../src/core/files.js';
+import { formatStorming } from '../src/dtes/format.js';
 import { formatDomain } from '../src/format/format.js';
 import { generateTypeScript } from '../src/generator/typescript.js';
 import { EXAMPLES, check } from './helpers.js';
@@ -127,6 +128,45 @@ describe('dt guide', () => {
             .replace(/\/\*[\s\S]*?\*\//g, '');
         const missing = [...keywords].filter((k) => !new RegExp(`\\b${k}\\b`).test(examples));
         expect(missing).toEqual([]);
+    });
+
+    test('its storming examples are files of the workspace that check without any diagnostic, and are formatted', async () => {
+        const stormings = blocks('dtes').filter((b) => /^\/\/ \S+\.dtes\n/.test(b));
+        expect(stormings.length).toBeGreaterThan(0);
+        const files = { ...workspace() };
+        for (const block of stormings) {
+            expect(formatStorming(block)).toBe(block);
+            files[/^\/\/ (\S+\.dtes)\n/.exec(block)![1]!] = block;
+        }
+        const a = await check(files);
+        expect(a.diagnostics).toEqual([]);
+        expect(a.stormings.stormings.length).toBe(stormings.length);
+    });
+
+    test('its storming examples use every keyword of the .dtes grammar', async () => {
+        const grammar = await readFile(path.join(ROOT, 'src', 'dtes', 'storming.langium'), 'utf8');
+        const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
+        const examples = blocks('dtes')
+            .filter((b) => /^\/\/ \S+\.dtes\n/.test(b))
+            .join('\n')
+            .replace(/\/\/.*$/gm, '');
+        expect([...keywords].filter((k) => !new RegExp(`\\b${k}\\b`).test(examples))).toEqual([]);
+    });
+
+    test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
+        const source = await readFile(path.join(ROOT, 'src', 'core', 'diagnostics.ts'), 'utf8');
+        const union = /export type RuleId =([^;]*);/.exec(source)![1];
+        const rules = [...union.matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
+        const examples = blocks('dtes').flatMap((b) => {
+            const code = /^\/\/ (S\d{3})\n/.exec(b)?.[1];
+            return code ? [[code, b] as const] : [];
+        });
+        expect(examples.map(([code]) => code)).toEqual(rules);
+        for (const [code, block] of examples) {
+            expect(formatStorming(block)).toBe(block);
+            const a = await check({ ...workspace(), 'example.dtes': block });
+            expect({ code, found: [...new Set(a.diagnostics.map((d): string => d.code))] }).toEqual({ code, found: [code] });
+        }
     });
 
     test('its rules table lists every diagnostic code', async () => {

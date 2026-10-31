@@ -33,7 +33,7 @@ export interface RenderOptions {
 type Variant = Pick<RenderOptions, 'mode' | 'lang' | 'transitionLabels'>;
 const textOf = (t: Texts, v: Variant): string => t[v.lang][v.mode];
 
-const GROUP_KINDS = new Set(['context', 'sharedContext', 'aggregateBoundary']);
+const GROUP_KINDS = new Set(['context', 'sharedContext', 'aggregateBoundary', 'esGroup']);
 const nodeShapeId = (id: string): TLShapeId => createShapeId(`n:${id}`);
 const edgeShapeId = (id: string): TLShapeId => createShapeId(`e:${id}`);
 const ghostShapeId = (id: string): TLShapeId => createShapeId(`ghost:${id}`);
@@ -118,10 +118,13 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         }
     }
 
+    // an Event Storming edge belongs to the element it starts from (its IDs name render nodes, not elements)
+    const storming = graph.id.startsWith('storming');
+    const elementOf = new Map(graph.nodes.map((n) => [n.id, n.elementId]));
     const edges: TLShapePartial[] = [];
     for (const e of graph.edges) {
-        const owner = edgeOwner(e, structure);
-        const shape = edgeShape(graph, e, opts, severity.get(owner) === 'error' && !structure ? 'error' : toneOf(change(owner)));
+        const owner = storming ? (elementOf.get(e.source) ?? e.source) : edgeOwner(e, structure);
+        const shape = edgeShape(graph, e, opts, owner, severity.get(owner) === 'error' && !structure && !storming ? 'error' : toneOf(change(owner)));
         if (shape) edges.push(shape);
     }
 
@@ -224,7 +227,7 @@ function edgeOwner(e: GraphEdge, structure: boolean): string {
 
 const toneOf = (c: ChangeMark): EdgeTone => (c === 'added' ? 'added' : c === 'changed' ? 'changed' : 'normal');
 
-function edgeShape(graph: LaidOutGraph, e: GraphEdge, v: Variant, tone: EdgeTone): TLShapePartial | undefined {
+function edgeShape(graph: LaidOutGraph, e: GraphEdge, v: Variant, owner: string, tone: EdgeTone): TLShapePartial | undefined {
     const route = graph.edgeLayout[e.id];
     if (!route || route.points.length < 2) return undefined;
     const xs = route.points.map((p) => p.x);
@@ -242,7 +245,7 @@ function edgeShape(graph: LaidOutGraph, e: GraphEdge, v: Variant, tone: EdgeTone
         type: 'domain-edge',
         x: ox,
         y: oy,
-        meta: { elementId: edgeOwner(e, graph.id.startsWith('structure')), edge: e.id },
+        meta: { elementId: owner, edge: e.id },
         props: {
             points: route.points.map((p) => ({ x: p.x - ox, y: p.y - oy })),
             kind: e.kind,

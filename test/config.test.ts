@@ -46,7 +46,7 @@ describe('config file', () => {
         expect(c).toMatchObject({
             root: dir,
             file: path.join(dir, 'domaintrail.json'),
-            sources: ['**/*.dt'],
+            sources: ['**/*.dt', '**/*.dtes'],
             tsOut: 'src/gen',
             tsContexts: {},
             view: { port: 4321, host: '127.0.0.1' },

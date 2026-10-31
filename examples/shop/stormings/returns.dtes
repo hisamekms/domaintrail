@@ -1,0 +1,30 @@
+/// Returns, at Big Picture only (UC1 starts here): events, timelines and questions, before any .dt model of them.
+storming Returns "返品" {
+  event ReturnRequested "返品が依頼された"
+  event ItemReceived "返品の商品が届いた"
+  event ItemInspected "商品を検品した"
+  event RefundPaid "返金した"
+  event ReturnRejected "返品を断った"
+  event ItemDisposed "商品を廃棄した"
+
+  timeline Accepted "受け付けた返品" {
+    ReturnRequested
+    ItemReceived
+    ItemInspected
+    RefundPaid
+  }
+  timeline Rejected "断った返品" {
+    ReturnRequested
+    ItemReceived
+    ItemInspected
+    group Closing "締め" {
+      ReturnRejected
+      ItemDisposed
+    }
+  }
+
+  hotspot Deadline "返品は注文から何日まで？" {
+    on ReturnRequested
+  }
+  hotspot RefundAndOrder "返金は Sales の返金依頼（RefundRequested）と同じもの？"
+}

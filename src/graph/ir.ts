@@ -16,10 +16,24 @@ export type NodeKind =
     /** A bounded context as one node (Context Map). */
     | 'boundedContext'
     | 'state'
-    | 'initial';
+    | 'initial'
+    /** The sticky notes of an Event Storming (`.dtes`, ADR 0024). */
+    | 'esEvent'
+    | 'esCommand'
+    | 'esPolicy'
+    | 'esActor'
+    | 'esExternal'
+    | 'esAggregate'
+    | 'esReadModel'
+    | 'esHotspot'
+    /** A group step of a timeline: a container of its event notes, without an order among them. */
+    | 'esGroup';
 
-/** `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). */
-export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn';
+/**
+ * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming: `esCausal` (a policy's
+ * `on`, `issues`, `emits`), `esRelated` (`actor`, `reads`, `target`), `esHotspot` (a hotspot's `on`, undirected) and `esSequence` (timeline order).
+ */
+export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'dependsOn' | 'esCausal' | 'esRelated' | 'esHotspot' | 'esSequence';
 
 /** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
 export type DisplayMode = 'label' | 'name' | 'both';

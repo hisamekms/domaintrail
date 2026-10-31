@@ -16,6 +16,7 @@ import {
 } from 'langium';
 import { Command, Context, State, isContext, isPolicy, type Model } from './generated/ast.js';
 import { DomainGeneratedModule, DomainGeneratedSharedModule } from './generated/module.js';
+import { DomainParserErrorMessageProvider } from './parser-messages.js';
 
 /** Export prefix for elements of shared contexts, which are visible by simple name everywhere. */
 export const SHARED_PREFIX = '$shared.';
@@ -80,6 +81,9 @@ export class DomainScopeProvider extends DefaultScopeProvider {
 export type DomainServices = LangiumCoreServices;
 
 export const DomainModule = {
+    parser: {
+        ParserErrorMessageProvider: () => new DomainParserErrorMessageProvider(),
+    },
     references: {
         ScopeComputation: (services: LangiumCoreServices) => new DomainScopeComputation(services),
         ScopeProvider: (services: LangiumCoreServices) => new DomainScopeProvider(services),

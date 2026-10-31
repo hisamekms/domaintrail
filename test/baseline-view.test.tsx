@@ -52,6 +52,7 @@ function inspect(after: DomainModel, before: DomainModel | null, selected: strin
         sources: [],
         sourceFocus: undefined,
         statesView: () => null,
+        stormingView: () => null,
         tab,
         onTab: () => {},
         onSelect: () => {},

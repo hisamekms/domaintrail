@@ -1,4 +1,5 @@
 import type { Diagnostic } from '../core/diagnostics.js';
+import type { RenderGraph, Storming } from '../dtes/ir.js';
 import type { ModelDiff } from '../graph/diff.js';
 import type { LaidOutGraph, TransitionLabels } from '../graph/ir.js';
 import type { DomainModel } from '../model/model.js';
@@ -25,6 +26,26 @@ export type Baseline =
 /** The baseline's model and its graphs as laid out for it (ghosts of removed elements are drawn where they were). */
 export type BaseView = Pick<ViewPayload, 'model' | 'structure' | 'overview' | 'aggregates' | 'contextMap' | 'contextMapAll' | 'states'>;
 
+/**
+ * A storming of the workspace with every view of it laid out (ADR 0024): the level and the timeline filter are the page's
+ * state, so switching between them needs no request and never touches the `.dtes` (spec §6, R11, R12).
+ */
+export interface StormingView {
+    id: string;
+    label?: string;
+    file: string;
+    timelines: { id: string; label?: string }[];
+    /** The storming as written, for the inspector (`ref`s, clauses, timelines). */
+    storming: Storming;
+    /**
+     * Keyed by `stormingViewKey` (`<level>|<timelineId or empty>`): the render graph (the occurrences each event node
+     * stands for) and its drawing.
+     */
+    views: Record<string, { render: RenderGraph; graph: LaidOutGraph }>;
+    /** True when its file no longer parses and this is the storming as it last did. */
+    stale: boolean;
+}
+
 /** Message pushed from the view server to the browser over WebSocket (and served at /api/state). */
 export interface ViewPayload {
     type: 'update';
@@ -34,7 +55,7 @@ export interface ViewPayload {
     files: string[];
     /**
      * ok: no errors; invalid: parses but has semantic errors (still drawn);
-     * syntax-error: the last drawable model is kept; empty: no .dt files.
+     * syntax-error: the last drawable model is kept; empty: no .dt or .dtes files.
      */
     status: ViewStatus;
     /** True when the diagram shows an older model because the current sources do not parse. */
@@ -52,8 +73,10 @@ export interface ViewPayload {
     /** Context Map without shared / ID-only contexts, and with every context. */
     contextMap: LaidOutGraph | null;
     contextMapAll: LaidOutGraph | null;
+    /** The Event Storming views, in file order, then source order (a storming whose ID is taken is left out, S001). */
+    stormings: StormingView[];
     diagnostics: Diagnostic[];
-    /** Current text of every .dt file (even when it does not parse). */
+    /** Current text of every .dt and .dtes file (even when it does not parse). */
     sources: { path: string; text: string }[];
     /** Incremented whenever the shown model changes (not on diagnostics-only updates). */
     modelVersion: number;

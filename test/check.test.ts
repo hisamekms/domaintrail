@@ -17,9 +17,18 @@ const ORDER = `
 `;
 
 describe('examples', () => {
-    test('the shop example is valid across multiple files and contexts', async () => {
+    test('the shop example is valid across multiple files and contexts, with its stormings', async () => {
         const a = await analyze(await loadWorkspace(EXAMPLES));
-        expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
+        expect(a.files).toEqual([
+            'billing/context.dt',
+            'billing/invoice.dt',
+            'common/context.dt',
+            'sales/context.dt',
+            'sales/customer.dt',
+            'sales/order.dt',
+            'stormings/order-to-cash.dtes',
+            'stormings/returns.dtes',
+        ]);
         expect(a.diagnostics).toEqual([]);
         expect(a.ok).toBe(true);
     });
@@ -42,6 +51,13 @@ describe('diagnostics carry file position and rule ID', () => {
         const a = await checkSales('aggregate Order { id: }');
         expect(a.syntaxOk).toBe(false);
         expect(a.diagnostics[0]).toMatchObject({ file: 'sales.dt', code: 'SYNTAX', severity: 'error', start: { line: 2 } });
+    });
+
+    test('an unexpected end of file is named as such, not as an empty token', async () => {
+        const unclosed = await analyze([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {' }]);
+        expect(unclosed.diagnostics.map((d) => d.message)).toEqual(["Expecting token of type '}' but found end of file."]);
+        const noAlternative = await analyze([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {\n    command' }]);
+        expect(noAlternative.diagnostics.map((d) => d.message)).toEqual([expect.stringMatching(/\nbut found end of file$/)]);
     });
 
     test('M001 unresolved type reference', async () => {

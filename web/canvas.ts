@@ -39,6 +39,19 @@ export function fitAll(editor: Editor, graph: LaidOutGraph, animate = false): vo
     if (bounds) editor.zoomToBounds(bounds, { targetZoom: 1, inset: 16, animation: animate ? { duration: 200 } : undefined });
 }
 
+/** What the camera does when a view's graph is drawn. */
+export type CameraMove = 'keep' | 'restore' | 'fitAll' | 'fitReadable';
+
+/**
+ * A redraw of the shown graph (a live reload) keeps the camera. A newly shown graph gets its own camera back, fitted
+ * readably the first time; a storming view, read as a whole timeline, is fitted whole every time its graph is shown.
+ */
+export function cameraMove(opts: { switched: boolean; storming: boolean; saved: boolean }): CameraMove {
+    if (!opts.switched) return 'keep';
+    if (opts.storming) return 'fitAll';
+    return opts.saved ? 'restore' : 'fitReadable';
+}
+
 /** Selects the shape of `id` if it is drawn, and brings it into view; otherwise clears the selection. */
 export function highlightElement(editor: Editor, id: string): void {
     const shape = findShapeForElement(editor, id);

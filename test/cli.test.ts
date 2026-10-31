@@ -24,7 +24,7 @@ describe('dt check', () => {
         dirs.push(dir);
         const r = await run('-r', dir, 'check');
         expect(r.code).toBe(0);
-        expect(r.out).toEqual(['6 file(s) checked: 0 error(s), 0 warning(s).']);
+        expect(r.out).toEqual(['8 file(s) checked: 0 error(s), 0 warning(s).']);
     });
 
     test('exits non-zero with file position and rule ID for each problem', async () => {
@@ -130,7 +130,7 @@ describe('--format json', () => {
         dirs.push(dir);
         const r = await run('-r', dir, 'check', '--format', 'json');
         expect(r.code).toBe(0);
-        expect(json(r)).toEqual({ diagnostics: [], summary: { files: 6, errors: 0, warnings: 0 } });
+        expect(json(r)).toEqual({ diagnostics: [], summary: { files: 8, errors: 0, warnings: 0 } });
     });
 
     test('failures are an error message in the document, with the exit codes of text', async () => {
@@ -142,7 +142,7 @@ describe('--format json', () => {
 
         const empty = await run('-r', dir, 'check', '--format', 'json');
         expect(empty.code).toBe(1);
-        expect(json(empty)).toMatchObject({ diagnostics: [], summary: { files: 0 }, error: expect.stringContaining('No .dt files found') });
+        expect(json(empty)).toMatchObject({ diagnostics: [], summary: { files: 0 }, error: expect.stringContaining('No .dt or .dtes files found') });
 
         await writeFile(path.join(dir, 'domaintrail.json'), '{ "sources": 1 }');
         const config = await run('-r', dir, 'check', '--format', 'json');
@@ -157,7 +157,7 @@ describe('--format json', () => {
         expect(ok.code).toBe(0);
         expect(json(ok)).toEqual({
             diagnostics: [],
-            summary: { files: 6, errors: 0, warnings: 0 },
+            summary: { files: 8, errors: 0, warnings: 0 },
             written: [path.relative(process.cwd(), path.join(dir, 'gen')), path.relative(process.cwd(), path.join(dir, 'gen', 'tests'))],
         });
 

@@ -1,0 +1,122 @@
+/// From a customer's order to its payment, across Sales and Billing (UC2: stormed from the existing model). Elements
+/// with a counterpart in the .dt files refer to it; the others are what the storming found.
+storming OrderToCash "注文から入金まで" {
+  event OrderPlaced "注文を受け付けた" {
+    ref Sales.OrderPlaced
+  }
+  event ItemAdded "明細が追加された" // Order.addItem emits no event in the .dt model
+  event OrderConfirmed "注文が確定した" {
+    ref Sales.OrderConfirmed
+  }
+  event OrderCancelled "注文が取り消された" {
+    ref Sales.OrderCancelled
+  }
+  event RefundRequested "返金が依頼された" {
+    ref Sales.RefundRequested
+  }
+  event InvoiceIssued "請求書が発行された" // Invoice.issue emits no event: see the hotspot IssuedEvent
+  event InvoicePaid "請求書が支払われた" {
+    ref Billing.InvoicePaid
+  }
+  event PaymentFailed "支払に失敗した" // an exception the .dt model does not have yet
+
+  actor Customer "顧客"
+  external PaymentService "決済サービス"
+  readmodel Cart "カート"
+  readmodel OrderTotal "注文金額"
+
+  aggregate Order "注文" {
+    ref Sales.Order
+  }
+  aggregate Invoice "請求書" {
+    ref Billing.Invoice
+  }
+
+  command PlaceOrder "注文する" {
+    ref Sales.Order.place
+    actor Customer
+    target Order
+    emits OrderPlaced
+  }
+  command AddItem "明細を追加する" {
+    ref Sales.Order.addItem
+    actor Customer
+    reads Cart
+    target Order
+    emits ItemAdded
+  }
+  command ConfirmOrder "注文を確定する" {
+    ref Sales.Order.confirm
+    actor Customer
+    reads Cart
+    target Order
+    emits OrderConfirmed
+  }
+  command CancelOrder "注文を取り消す" {
+    ref Sales.Order.cancel
+    actor Customer
+    target Order
+    emits OrderCancelled
+    emits RefundRequested
+  }
+  command IssueInvoice "請求書を発行する" {
+    ref Billing.Invoice.issue
+    reads OrderTotal
+    target Invoice
+    emits InvoiceIssued
+  }
+  command RecordPayment "入金を記録する" {
+    ref Billing.Invoice.pay
+    actor PaymentService
+    target Invoice
+    emits InvoicePaid
+    emits PaymentFailed
+  }
+
+  // From Sales to Billing, as the .dt policy Billing.BillConfirmedOrder
+  policy BillConfirmedOrder "確定した注文に請求する" {
+    on OrderConfirmed
+    issues IssueInvoice
+  }
+
+  timeline Normal "通常の注文" {
+    OrderPlaced
+    ItemAdded
+    OrderConfirmed
+    InvoiceIssued
+    InvoicePaid
+  }
+  timeline PaymentRetry "支払の再試行" {
+    OrderPlaced
+    ItemAdded
+    OrderConfirmed
+    InvoiceIssued
+    PaymentFailed
+    InvoicePaid
+  }
+  timeline CancelAfterConfirm "確定後の取消" {
+    OrderPlaced
+    ItemAdded
+    OrderConfirmed
+    group Cancelled "取消の結果" {
+      OrderCancelled
+      RefundRequested
+    }
+  }
+
+  hotspot IssuedEvent "請求書の発行を Billing の .dt でイベントにする？" {
+    on InvoiceIssued
+  }
+  hotspot InvoiceOfCancelledOrder "請求済みの注文を取り消したら、請求書はどうなる？" {
+    on RefundRequested
+    status open
+  }
+  hotspot PaymentFailure "支払の失敗をどこまでモデルにする？" {
+    on PaymentFailed
+  }
+  hotspot MixedCurrencies "明細の通貨が混在したら？" {
+    on ItemAdded
+    status resolved
+    resolution "一つの注文は一つの通貨に限る（Sales.Order の singleCurrency と requires sameCurrency）"
+  }
+}

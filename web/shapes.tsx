@@ -306,7 +306,7 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
                 <path d={d} className="de-line" />
                 {kind === 'owns' ? <path d={diamond(s0, s1)} className="de-head de-diamond" /> : null}
                 {/* every edge points from the dependent to its dependency */}
-                <path d={arrowHead(a, b)} className="de-head" />
+                {kind === 'esHotspot' ? null : <path d={arrowHead(a, b)} className="de-head" />}
                 {label && lw > 0 && <EdgeLabel {...{ label, sub, faded, lx, ly, lw, lh, scale }} />}
             </SVGContainer>
         );

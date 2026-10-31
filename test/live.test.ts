@@ -53,6 +53,8 @@ describe('Live View', () => {
             'sales/context.dt',
             'sales/customer.dt',
             'sales/order.dt',
+            'stormings/order-to-cash.dtes',
+            'stormings/returns.dtes',
         ]);
         expect(state.structure?.nodes.length).toBeGreaterThan(0);
         expect(state.aggregates?.nodes.filter((n) => n.kind === 'aggregate').map((n) => n.id)).toEqual(['Billing.Invoice', 'Sales.Customer', 'Sales.Order']);

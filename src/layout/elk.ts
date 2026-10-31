@@ -16,7 +16,7 @@ import {
     type Point,
     type Texts,
 } from '../graph/ir.js';
-import type { LayoutEngine } from './engine.js';
+import type { LayoutEngine, LayoutOptions } from './engine.js';
 
 const ROOT = '__root__';
 const IS_BUN = 'Bun' in globalThis;
@@ -60,6 +60,16 @@ const DIRECTION: Record<string, string> = {
     'structure-aggregates': 'DOWN',
     // shown in the inspector, which is tall and narrow
     states: 'DOWN',
+    // Event Storming reads left to right, along its timelines (spec §10.1)
+    storming: 'RIGHT',
+};
+
+/**
+ * Edge options by kind. ELK reverses some edges of a cycle to lay it out; a timeline's order goes first (spec §10.2), so a
+ * causal cycle back to an earlier event never turns a timeline around.
+ */
+const EDGE_OPTIONS: Partial<Record<GraphEdge['kind'], Record<string, string>>> = {
+    esSequence: { 'elk.layered.priority.direction': '10' },
 };
 
 /** An edge's label box; a transition's is sized for the texts the graph shows (a second, smaller line for its events). */
@@ -72,7 +82,7 @@ function labelOf(e: GraphEdge, label: Texts, graph: Graph, scale: number): { tex
 
 export class ElkLayoutEngine implements LayoutEngine {
     readonly name = 'elk';
-    readonly version = 10;
+    readonly version = 11;
     private readonly elk = new ELK({ workerFactory: createWorker });
 
     /** Stops the layout worker so the process can exit (the in-process fake Worker has nothing to stop). */
@@ -80,7 +90,7 @@ export class ElkLayoutEngine implements LayoutEngine {
         if (IS_BUN) this.elk.terminateWorker();
     }
 
-    async layout(graph: Graph): Promise<LaidOutGraph> {
+    async layout(graph: Graph, options: LayoutOptions = {}): Promise<LaidOutGraph> {
         const scale = graph.textScale ?? 1;
         const children = new Map<string, ElkNode[]>();
         const elkNodes = new Map<string, ElkNode>();
@@ -103,6 +113,8 @@ export class ElkLayoutEngine implements LayoutEngine {
                 node.width = n.width;
                 node.height = n.height;
             }
+            const at = options.positions?.[n.id];
+            if (at) node.layoutOptions = { ...node.layoutOptions, 'elk.position': `(${at.x},${at.y})` };
             elkNodes.set(n.id, node);
             const parent = n.parent && graph.nodes.some((p) => p.id === n.parent) ? n.parent : ROOT;
             children.set(parent, [...(children.get(parent) ?? []), node]);
@@ -118,11 +130,18 @@ export class ElkLayoutEngine implements LayoutEngine {
                 sources: [e.source],
                 targets: [e.target],
                 labels: e.label ? [labelOf(e, e.label, graph, scale)] : [],
+                ...(EDGE_OPTIONS[e.kind] && { layoutOptions: EDGE_OPTIONS[e.kind] }),
             }));
 
         const root: ElkNode = {
             id: ROOT,
-            layoutOptions: { ...BASE_OPTIONS, 'elk.direction': direction },
+            layoutOptions: {
+                ...BASE_OPTIONS,
+                'elk.direction': direction,
+                // An incremental layout orders the nodes within each layer by their previous positions instead of the model
+                // order. It never changes their layers, so the order along edges (a timeline's) is the canonical one's.
+                ...(options.positions && { 'elk.layered.crossingMinimization.semiInteractive': 'true', 'elk.layered.considerModelOrder.strategy': 'NONE' }),
+            },
             children: children.get(ROOT) ?? [],
             edges,
         };

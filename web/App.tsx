@@ -7,7 +7,7 @@ import type { BaseView } from '../src/server/protocol';
 import { BaselineButton, BaselineMenu, baselineName } from './baseline-picker';
 import { BottomPanel, type BottomTab } from './bottom';
 import { Catalog } from './catalog';
-import { fitReadable, highlightElement, usePointerCursor } from './canvas';
+import { cameraMove, fitAll, fitReadable, highlightElement, usePointerCursor } from './canvas';
 import { Explorer } from './explorer';
 import { Legend } from './legend';
 import { backIndex, popHistory, pushHistory, type History } from './history';
@@ -20,12 +20,22 @@ import { locationOf, type SourceFocus } from './source';
 import { ContextPicker } from './context-picker';
 import { SettingsDialog } from './settings-dialog';
 import { StatesCanvas } from './states-canvas';
+import {
+    StormingDetails,
+    StormingToolbar,
+    isStormingSelection,
+    shownStorming,
+    stormingExists,
+    stormingGraph,
+    stormingLocation,
+    type StormingChoice,
+} from './storming';
 import { Tooltips } from './tooltip';
 import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from './theme';
 import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from './i18n';
 import { useViewSocket } from './useViewSocket';
 
-type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' };
+type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' } | { kind: 'storming' };
 
 /** Width of the rail a closed side pane leaves, and height of the bottom pane's tab bar (with its border); see styles.css. */
 const RAIL_WIDTH = 28;
@@ -42,7 +52,7 @@ function savedDisplayMode(): DisplayMode {
         return 'both';
     }
 }
-const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure';
+const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'storming';
 
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
 /** The pushed graph of each Structure View level (focused views are fetched instead). */
@@ -70,6 +80,15 @@ export function App() {
     const [hiddenContexts, setHiddenContexts] = usePersistentState<string[]>('domaintrail.structureHiddenContexts', []);
     /** Context Map: also show shared and ID-only contexts. */
     const [mapAll, setMapAll] = usePersistentState('domaintrail.contextMapAll', false);
+    /** Event Storming: the storming, its level and its timeline filter (the page's state, never written to a .dtes file). */
+    const [stormingChoice, setStormingChoice] = usePersistentState<StormingChoice>('domaintrail.storming', {
+        stormingId: undefined,
+        level: 'big-picture',
+        timelines: {},
+    });
+    const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
+    const shown = shownStorming(stormings, stormingChoice);
+    const stormingShown = view.kind === 'storming' ? stormingGraph(stormings, stormingChoice) : undefined;
 
     // Layout (remembered per browser)
     const [explorerOpen, setExplorerOpen] = usePersistentState('domaintrail.layout.explorer', true);
@@ -139,12 +158,26 @@ export function App() {
         }
         return null;
     };
-    /** Camera key: each view (and each Structure mode and focus) keeps its own camera. */
+    /** Camera key: each view (and each Structure mode and focus, each storming view) keeps its own camera. */
     const cameraKey = (v: View): string =>
-        v.kind === 'structure' ? (focusKey ? `structure:focus:${focusKey}` : `structure:${structureLevel}`) : `${v.kind}:${mapAll}`;
-    const graph = graphFor(current, view);
+        v.kind === 'structure'
+            ? focusKey
+                ? `structure:focus:${focusKey}`
+                : `structure:${structureLevel}`
+            : v.kind === 'storming'
+              ? (stormingShown?.graph.id ?? 'storming')
+              : `${v.kind}:${mapAll}`;
+    const graph = view.kind === 'storming' ? stormingShown?.graph : graphFor(current, view);
 
-    // Draw the current graph; keep the camera of each view, fit only the first time a view is shown.
+    // a workspace of .dtes files only opens on its stormings
+    const openedOnStormings = useRef(false);
+    useEffect(() => {
+        if (openedOnStormings.current || !current || current.status === 'empty') return;
+        openedOnStormings.current = true;
+        if (current.stormings.length && !current.focusContexts.length) setView({ kind: 'storming' });
+    }, [current]);
+
+    // Draw the current graph; keep the camera of each view, fit only the first time a view is shown (a storming view: each time).
     useEffect(() => {
         if (!editor || !current || !isCanvas(view)) return;
         const key = cameraKey(view);
@@ -158,15 +191,15 @@ export function App() {
         // ghosts of removed elements need the baseline's version of the same graph; focused graphs are not kept
         const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(base, view) ?? undefined);
         renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
-        if (switched) {
-            const saved = cameras.current.get(key);
-            if (saved) editor.setCamera(saved);
-            // larger text (overview) allows zooming further out while staying readable
-            else fitReadable(editor, graph.textScale ?? 1);
-        }
+        const saved = cameras.current.get(key);
+        const move = cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
+        if (move === 'restore' && saved) editor.setCamera(saved);
+        else if (move === 'fitAll') fitAll(editor, graph);
+        // larger text (overview) allows zooming further out while staying readable
+        else if (move === 'fitReadable') fitReadable(editor, graph.textScale ?? 1);
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang]);
+    }, [editor, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang, stormingShown]);
 
     useEffect(() => {
         applyTheme(theme, editor);
@@ -180,7 +213,10 @@ export function App() {
         [editor, view],
     );
 
-    const focusSource = useCallback((id: string) => setSourceFocus(locationOf(model, id)), [model]);
+    const focusSource = useCallback(
+        (id: string) => setSourceFocus(isStormingSelection(id) ? stormingLocation(stormings, id) : locationOf(model, id)),
+        [model, stormings],
+    );
 
     /** Selects an item: updates the inspector, the history and the highlight in the current view. */
     const select = useCallback(
@@ -196,6 +232,7 @@ export function App() {
     const exists = (id: string): boolean => {
         const file = selectedFile(id);
         if (file) return (current?.sources ?? []).some((s) => s.path === file);
+        if (isStormingSelection(id)) return stormingExists(stormings, id);
         // a removed item can still be shown from the baseline
         return !model || !!resolve(model, id) || (!!base?.model && !!resolve(base.model, id));
     };
@@ -296,6 +333,7 @@ export function App() {
                 {current?.baseline.kind === 'git' && current.baseline.error && (
                     <div className="banner">{t.baselineError(current.baseline.ref, current.baseline.error)}</div>
                 )}
+                {view.kind === 'storming' && shown?.storming.stale && <div className="banner">{t.staleStorming(shown.storming.file)}</div>}
                 {current?.stale && <div className="banner">{t.stale(<a onClick={() => setBottomOpen(true)}>{t.problems}</a>)}</div>}
                 <div className="workspace">
                     {/* side panes stay mounted so that opening and closing can be animated; a closed one shows its rail */}
@@ -335,17 +373,19 @@ export function App() {
                     <section className="center">
                         <div className="view-tabs">
                             <div className="view-tab-list" role="tablist">
-                                {(['contextMap', 'structure', 'catalog'] as const).map((k) => (
-                                    <button
-                                        key={k}
-                                        role="tab"
-                                        aria-selected={view.kind === k}
-                                        className={view.kind === k ? 'active' : ''}
-                                        onClick={() => setView({ kind: k })}
-                                    >
-                                        {t.views[k]}
-                                    </button>
-                                ))}
+                                {(['contextMap', 'structure', 'catalog', 'storming'] as const)
+                                    .filter((k) => k !== 'storming' || stormings.length > 0 || view.kind === 'storming')
+                                    .map((k) => (
+                                        <button
+                                            key={k}
+                                            role="tab"
+                                            aria-selected={view.kind === k}
+                                            className={view.kind === k ? 'active' : ''}
+                                            onClick={() => setView({ kind: k })}
+                                        >
+                                            {t.views[k]}
+                                        </button>
+                                    ))}
                             </div>
                             <div className="view-toolbar">
                                 {view.kind === 'contextMap' && (
@@ -384,7 +424,21 @@ export function App() {
                                         })}
                                     </div>
                                 )}
-                                {isCanvas(view) && <button onClick={() => editor?.zoomToFit({ animation: { duration: 200 } })}>{t.zoomToFit}</button>}
+                                {view.kind === 'storming' && (
+                                    <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />
+                                )}
+                                {isCanvas(view) && (
+                                    <button
+                                        onClick={() => {
+                                            // a storming view is fitted like when it is shown: its graph, never zoomed in past normal size
+                                            if (!editor) return;
+                                            if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
+                                            else editor.zoomToFit({ animation: { duration: 200 } });
+                                        }}
+                                    >
+                                        {t.zoomToFit}
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div className="view-area">
@@ -394,7 +448,9 @@ export function App() {
                                     view={
                                         view.kind === 'contextMap'
                                             ? 'contextMap'
-                                            : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`
+                                            : view.kind === 'storming'
+                                              ? 'storming'
+                                              : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`
                                     }
                                     open={legendOpen}
                                     onToggle={() => setLegendOpen(!legendOpen)}
@@ -404,11 +460,13 @@ export function App() {
                                 <div className="empty">
                                     {current.status === 'empty'
                                         ? t.noDtFiles
-                                        : noneChecked && view.kind === 'structure'
-                                          ? t.pickContexts
-                                          : focusKey && view.kind === 'structure'
-                                            ? t.loading
-                                            : t.noDiagram}
+                                        : view.kind === 'storming'
+                                          ? t.noStormings
+                                          : noneChecked && view.kind === 'structure'
+                                            ? t.pickContexts
+                                            : focusKey && view.kind === 'structure'
+                                              ? t.loading
+                                              : t.noDiagram}
                                 </div>
                             )}
                             {view.kind === 'catalog' && model && (
@@ -464,6 +522,20 @@ export function App() {
                                         onSelect={(id) => select(id)}
                                         legendOpen={legendOpen}
                                         onLegendToggle={() => setLegendOpen(!legendOpen)}
+                                    />
+                                )}
+                                stormingView={(id, history) => (
+                                    <StormingDetails
+                                        stormings={stormings}
+                                        selected={id}
+                                        render={
+                                            view.kind === 'storming' && shown && id.startsWith(`es/${shown.storming.id}/`) ? stormingShown?.render : undefined
+                                        }
+                                        model={model}
+                                        mode={mode}
+                                        diagnostics={current?.diagnostics ?? []}
+                                        history={history}
+                                        onSelect={(x) => select(x)}
                                     />
                                 )}
                                 tab={inspectorTab}

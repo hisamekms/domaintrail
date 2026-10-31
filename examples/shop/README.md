@@ -8,6 +8,7 @@ A small shop in three bounded contexts — **Sales** (customers, orders), **Bill
 | The model: structure and contracts | `common/`, `sales/`, `billing/` (`*.dt`) | people and AI agents, together |
 | Types, command contracts, checks, contract tests | `generated/domain/` (gitignored) | `dt generate ts` |
 | Behaviour: the commands, the application around them | `src/` | an AI agent following `dt guide` |
+| Event Storming: what happens, beside the model | `stormings/` (`*.dtes`) | people and AI agents, together |
 
 ## The loop
 
@@ -27,6 +28,19 @@ did that twice: an order's items had no rule about currencies, so its total coul
 (`singleCurrency` and `requires sameCurrency … else CurrencyMismatch` in `sales/order.dt`); and `Invoice.pay` declared
 an error `AlreadyPaid` it could never return, since it accepts only open invoices (removed; paying a paid invoice is
 rejected by the application, as `NotAllowed`). `InvoicePaid` became `persistent`: a payment is a record to keep.
+
+## The stormings
+
+`stormings/` holds two Event Stormings (`dt guide storming`), checked by `dt check` with the model:
+
+- `order-to-cash.dtes` (UC2: stormed from the model) — from an order to its payment, at Design Level, with a `ref` from
+  every event, aggregate and command that the model has. Its policy `BillConfirmedOrder` crosses from Sales to Billing
+  like the `.dt` one. Its three timelines share their start (the Live View draws `OrderPlaced → ItemAdded → OrderConfirmed`
+  once), and a group holds the two results of cancelling a confirmed order. What the model lacks is
+  left without `ref` and asked in hotspots: `Invoice.issue` emits no event (`InvoiceIssued`), a payment may fail
+  (`PaymentFailed`, reported by the external `PaymentService`), and the invoice of a cancelled order is open. The
+  hotspot on mixed currencies is resolved: the model's `singleCurrency` answers it.
+- `returns.dtes` (UC1: before any model) — returns at Big Picture only: events, two timelines and open questions.
 
 ## What the agent wrote, and why
 

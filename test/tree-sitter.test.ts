@@ -45,8 +45,8 @@ describe('tree-sitter grammar', () => {
         expect(JSON.parse(await readFile(STAMP, 'utf8'))).toEqual(await hashes());
     });
 
-    test('parses every file of examples/shop', async () => {
-        const sources = await loadWorkspace(EXAMPLES);
+    test('parses every .dt file of examples/shop', async () => {
+        const sources = (await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt'));
         expect(sources.length).toBeGreaterThan(0);
         for (const s of sources) expect({ file: s.path, problems: problems(s.text) }).toEqual({ file: s.path, problems: [] });
     });
