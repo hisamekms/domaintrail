@@ -14,7 +14,9 @@ const guide = await readFile(path.join(ROOT, 'docs', 'guide.md'), 'utf8');
 const guideFiles = (): Record<string, string> =>
     Object.fromEntries([...guide.matchAll(/^```dt\n([\s\S]*?)^```/gm)].map((m) => [/^\/\/ (\S+\.dt)\n/.exec(m[1])![1], m[1]]));
 
-const shopFiles = async (): Promise<Record<string, string>> => Object.fromEntries((await loadWorkspace(EXAMPLES)).map((s) => [s.path, s.text]));
+const shopFiles = async (): Promise<Record<string, string>> => Object.fromEntries(
+        (await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt')).map((s) => [s.path, s.text]),
+    );
 
 /** The Typed Model without the source locations, which formatting moves. */
 async function modelOf(files: Record<string, string>): Promise<unknown> {
@@ -250,7 +252,7 @@ describe('dt fmt', () => {
 
     test('examples/shop is formatted', async () => {
         const r = await run('-r', EXAMPLES, 'fmt', '--check');
-        expect(r).toEqual({ code: 0, out: ['6 file(s) checked: 0 not formatted.'], err: [] });
+        expect(r).toEqual({ code: 0, out: ['8 file(s) checked: 0 not formatted.'], err: [] });
     });
 
     test('--check lists the files to format and writes nothing; fmt writes them', async () => {
@@ -260,9 +262,9 @@ describe('dt fmt', () => {
         const original = await readFile(file, 'utf8');
         await writeFile(file, scramble(original));
         const checked = await run('-r', dir, 'fmt', '--check');
-        expect(checked).toEqual({ code: 1, out: ['billing/invoice.dt'], err: ['6 file(s) checked: 1 not formatted. Run `dt fmt` to format them.'] });
+        expect(checked).toEqual({ code: 1, out: ['billing/invoice.dt'], err: ['8 file(s) checked: 1 not formatted. Run `dt fmt` to format them.'] });
         expect(await readFile(file, 'utf8')).toBe(scramble(original));
-        expect(await run('-r', dir, 'fmt')).toEqual({ code: 0, out: ['billing/invoice.dt', '6 file(s): 1 formatted.'], err: [] });
+        expect(await run('-r', dir, 'fmt')).toEqual({ code: 0, out: ['billing/invoice.dt', '8 file(s): 1 formatted.'], err: [] });
         expect(await readFile(file, 'utf8')).toBe(original);
     });
 

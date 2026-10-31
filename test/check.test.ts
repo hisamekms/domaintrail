@@ -17,9 +17,9 @@ const ORDER = `
 `;
 
 describe('examples', () => {
-    test('the shop example is valid across multiple files and contexts', async () => {
+    test('the shop example is valid across multiple files and contexts, with its stormings', async () => {
         const a = await analyze(await loadWorkspace(EXAMPLES));
-        expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
+        expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt', 'stormings/order-to-cash.dtes', 'stormings/returns.dtes']);
         expect(a.diagnostics).toEqual([]);
         expect(a.ok).toBe(true);
     });

@@ -1,7 +1,7 @@
 {
   "$schema": "../../schema/domaintrail.schema.json",
   // DSL files of this example (paths are relative to this file)
-  "sources": ["**/*.dt"],
+  "sources": ["**/*.dt", "**/*.dtes"],
   "generate": {
     // src/ imports the generated contracts from here; the contract tests go to generated/domain/tests,
     // with an adapter for bun:test (src/contract.test.ts)
