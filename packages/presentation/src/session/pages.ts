@@ -22,7 +22,8 @@ export function sendPage(res: ServerResponse, status: number, title: string, bod
         'content-type': 'text/html;charset=utf-8',
         'x-content-type-options': 'nosniff',
         'cache-control': 'no-store',
-        'referrer-policy': 'no-referrer',
+        // not `no-referrer`: under it a browser posts the join form with `Origin: null`, which the Origin check refuses
+        'referrer-policy': 'same-origin',
         'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
         ...headers,
     });

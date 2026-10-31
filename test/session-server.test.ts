@@ -202,6 +202,8 @@ describe('a session in dev mode', () => {
         const html = await page.text();
         expect(html).toContain('action="/session/join"');
         expect(html).not.toContain('<div id="root">');
+        // a browser posts the form with its Origin (under `no-referrer` it would send `Origin: null`, which is refused)
+        expect(page.headers.get('referrer-policy')).toBe('same-origin');
         for (const asset of ['index.html', 'index.js', 'nope']) expect((await fetch(server.url + asset)).status).toBe(401);
         for (const [method, p] of [
             ['GET', 'api/state'],
