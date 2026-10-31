@@ -5,7 +5,7 @@ import { createStormingServices } from './language/module.js';
 
 /**
  * `dt fmt` for `.dtes`: the one canonical layout of a storming file, in the spirit of the `.dt` formatter
- * (src/format/format.ts). The printer keeps every token and comment in order and only decides the whitespace between
+ * (`../format/format.ts`). The printer keeps every token and comment in order and only decides the whitespace between
  * them, except that an empty `{}` of an element is dropped (it means the same as no body).
  *
  * The rules:
@@ -178,7 +178,7 @@ class Layout {
         this.block(el, el.clauses, indent);
     }
 
-    // ---- printing (as in src/format/format.ts) ----
+    // ---- printing (as in ../format/format.ts) ----
 
     print(): string {
         type Item = { offset: number; end: number; token?: number; comment?: Comment };

@@ -15,7 +15,7 @@ export const MANIFEST_FILE = path.join('.domaintrail', 'generated.json');
 
 /**
  * The output of `dt generate ts` on disk: the safety checks before writing and the writing itself (a `GeneratedOutput`
- * of the CLI, `src/presentation/cli/ports.ts`).
+ * of the CLI, `@domaintrail/presentation/cli/ports`).
  */
 export function createGeneratedOutput(): {
     manifestFile: string;

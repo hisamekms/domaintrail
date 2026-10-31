@@ -75,7 +75,7 @@ async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report
     return analysis;
 }
 
-/** Runs the CLI and returns the process exit code; `deps` are wired by `src/composition/cli.ts` (`cliDeps`). */
+/** Runs the CLI and returns the process exit code; `deps` are wired by `packages/composition/src/cli.ts` (`cliDeps`). */
 export async function runCli(argv: readonly string[], io: CliIO, deps: CliDeps): Promise<number> {
     let exitCode = 0;
     /** Set by commands run with `--format json`; printed once at the end, failures included. */

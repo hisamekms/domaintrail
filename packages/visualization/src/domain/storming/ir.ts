@@ -1,6 +1,6 @@
 /**
  * The views of a storming (docs/dtes-v0.1.md, ADR 0024): the types the projection produces from the storming IR
- * (`Storming`, in `src/dtes/ir.ts`) and the Live View draws (spec §7):
+ * (`Storming`, in `@domaintrail/modeling/storming/ir`) and the Live View draws (spec §7):
  *
  * - the **semantic graph** (`SemanticGraph`): the valid elements and relations only, independent of timelines;
  * - the **render graph** (`RenderGraph`): the nodes and edges of one view (`ViewOptions`), where one event node may stand

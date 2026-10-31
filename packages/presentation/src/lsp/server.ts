@@ -84,8 +84,8 @@ export interface LanguageServerOptions {
 }
 
 /**
- * What the language server reads from the workspace, defined here on its side (ADR 0025): `src/composition/cli.ts`
- * wires the adapters of `src/workspace` in.
+ * What the language server reads from the workspace, defined here on its side (ADR 0025): `cliDeps`
+ * (`@domaintrail/composition/cli`) wires the adapters of `@domaintrail/workspace` in.
  */
 export interface LanguageServerFiles {
     /** Resolves the configuration from `start` upwards, or from the explicit `configPath`; rejects with `ConfigError`. */

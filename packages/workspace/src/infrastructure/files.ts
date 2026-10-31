@@ -63,7 +63,7 @@ export async function loadWorkspace(root: string, sources: readonly string[] = D
     return readSources(root, await findDomainFiles(root, sources, respectGitignore));
 }
 
-/** The sources below `root` (see `loadWorkspace`): a `WorkspaceReader` of the Live View (`src/visualization`). */
+/** The sources below `root` (see `loadWorkspace`): a `WorkspaceReader` of the Live View (`@domaintrail/visualization`). */
 export function createWorkspaceReader(
     root: string,
     sources: readonly string[] = DEFAULT_SOURCES,

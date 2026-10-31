@@ -3,8 +3,9 @@ import type { ResolvedConfig } from '@domaintrail/modeling/core/config';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**
- * What the CLI needs from outside, defined here on its side (ADR 0025): `src/composition/cli.ts` wires the workspace's
- * adapters, the Live View and the language server into `runCli`, so that presentation depends on none of them.
+ * What the CLI needs from outside, defined here on its side (ADR 0025): `cliDeps` (`@domaintrail/composition/cli`)
+ * wires the workspace's adapters, the Live View and the language server into `runCli`, so that presentation depends on
+ * none of them.
  */
 export interface CliDeps {
     /** Resolves the configuration from `start` upwards, or from the explicit `configPath`; rejects with `ConfigError`. */

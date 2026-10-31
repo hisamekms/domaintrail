@@ -4,8 +4,8 @@
  *
  * - the **storming IR** (`Storming`, here): what a file says, as written — every clause in source order with its range,
  *   also the invalid ones, so that the validator reports from it and the formatter-independent tools need no AST;
- * - the **semantic graph** and the **render graph** (`src/visualization/domain/storming/ir.ts`): what the projection
- *   makes of it for the Live View.
+ * - the **semantic graph** and the **render graph** (`@domaintrail/visualization/domain/storming/ir`): what the
+ *   projection makes of it for the Live View.
  */
 import type { Diagnostic, Position, RuleId, Severity } from '../core/diagnostics.js';
 
