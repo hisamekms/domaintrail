@@ -3,8 +3,8 @@
 // syntax errors untouched and exits 1; `dt check` exits 1 on errors: both still ran. Exit 2 (an invalid config), a
 // signal or a failure to start means it did not. Their output is not kept: the server analyzes the result itself.
 import { spawn } from 'node:child_process';
-import { tmpdir } from 'node:os';
 import type { DslTools } from '../application/ports.js';
+import { privateDir } from './dt-shim.js';
 
 /** How `dt` is started: the runtime and the CLI's entry (e.g. `process.execPath` and `dist/dt.js`). */
 export interface DtCommand {
@@ -23,12 +23,21 @@ export interface DtToolsOptions {
 /** How long one command may take. */
 const TIMEOUT_MS = 5 * 60_000;
 
-function run(options: DtToolsOptions, command: string): Promise<number | null> {
+async function run(options: DtToolsOptions, command: string): Promise<number | null> {
     const args = [...options.dt.args, '-r', options.root, ...(options.configPath ? ['-c', options.configPath] : []), command];
+    // a fresh private working directory outside the workspace, so that no runtime picks a config of it up; `-r` names it
+    const cwd = await privateDir(options.root, 'domaintrail-dt-run-');
+    try {
+        return await spawned(options, args, cwd.dir);
+    } finally {
+        await cwd.dispose();
+    }
+}
+
+function spawned(options: DtToolsOptions, args: readonly string[], cwd: string): Promise<number | null> {
     return new Promise((resolve, reject) => {
-        // outside the workspace, so that no runtime picks a config file of it up; `-r` names the workspace
         const child = spawn(options.dt.command, args, {
-            cwd: tmpdir(),
+            cwd,
             shell: false,
             stdio: ['ignore', 'ignore', 'ignore'],
             timeout: TIMEOUT_MS,

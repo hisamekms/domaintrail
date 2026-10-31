@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
@@ -84,8 +84,8 @@ export interface SessionConfigFile {
         /** The tools the agent may use, as Claude Code permission rules. Default: `DEFAULT_AGENT_TOOLS`. */
         allowedTools?: string[];
         /**
-         * The command the agent's `dt` runs, as an argument array (e.g. `["node", "../clone/dist/dt.js"]`); an element
-         * with a path separator that is not absolute is relative to the config file. Default: the running `dt` itself.
+         * The `dt` the agent and the pipeline run: `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`,
+         * paths relative to the config file, outside the workspace. Default: the running `dt` itself.
          */
         dt?: string[];
     };
@@ -197,24 +197,57 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
     };
 }
 
-/** Refuses an agent's `dt` that runs a file of the workspace (see `commandPathsInside`). */
+/**
+ * Refuses an agent's `dt` that runs a file of the workspace (the config file's directory), symbolic links followed and
+ * compared by path segments: the agent writes there during a run. (The subscriber checks again when it starts, with
+ * the runtime found on the PATH.)
+ */
 function checkAgentDt(config: DomainTrailConfigFile, file: string): void {
     const dt = config.session?.agent?.dt;
-    if (dt && isPackageRunner(dt))
-        throw new ConfigError(`${file}: 'session.agent.dt' may not go through a package runner (${dt[0]}): it resolves code from the workspace.`);
-    const inside = dt ? commandPathsInside(dt, path.dirname(file)) : [];
+    if (!dt) return;
+    const dir = path.dirname(file);
+    const root = realPath(dir);
+    const within = (p: string): boolean => {
+        const rel = path.relative(root, realPath(p));
+        return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+    };
+    const inside = resolveCommand(dt, dir).filter((p) => path.isAbsolute(p) && within(p));
     if (inside.length)
         throw new ConfigError(
             `${file}: 'session.agent.dt' may not run anything inside the workspace (${inside.join(', ')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
         );
 }
 
+/** The runtimes the agent's `dt` may be started with, as `[<runtime>, <script>]`. */
+export const DT_RUNTIMES = ['node', 'bun', 'deno'] as const;
+
+const isRuntime = (word: string): boolean =>
+    (DT_RUNTIMES as readonly string[]).includes(
+        path
+            .basename(word)
+            .toLowerCase()
+            .replace(/\.exe$/, ''),
+    );
+const hasSeparator = (word: string): boolean => /[\\/]/.test(word);
+
 /**
- * A command of the config as it runs: each element with a path separator that is not absolute is resolved against the
- * config file's directory (`./dist/dt.js`, `../clone/bin/dt.ts`); bare names (`node`) and options stay as written.
+ * The agent's `dt` as it runs: `[<runtime>, <script>]` (a runtime named bare stays for the PATH) or `[<dt
+ * executable>]`, every path resolved against the config file's directory.
  */
 export function resolveCommand(command: readonly string[], dir: string): string[] {
-    return command.map((part) => (/[\\/]/.test(part) && !part.startsWith('-') && !path.isAbsolute(part) ? path.resolve(dir, part) : part));
+    return command.map((part, i) => (i === 0 && command.length === 2 && !hasSeparator(part) ? part : path.resolve(dir, part)));
+}
+
+/** Why the agent's `dt` has not one of its two shapes, if it has not. */
+function dtShapeError(dt: readonly string[]): string | undefined {
+    const shape = 'must be ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], with no other word';
+    if (dt.length === 2) {
+        if (!isRuntime(dt[0])) return `${shape}: ${dt[0]} is not one of the runtimes`;
+        if (dt[1].startsWith('-')) return `${shape}: ${dt[1]} is an option`;
+        return undefined;
+    }
+    if (dt.length === 1) return hasSeparator(dt[0]) && !dt[0].startsWith('-') ? undefined : `${shape}: a dt executable is given by its path`;
+    return shape;
 }
 
 /** A path as it really is: symbolic links followed up to its deepest existing directory, the rest as written. */
@@ -226,46 +259,6 @@ function realPath(p: string): string {
         const parent = path.dirname(abs);
         return parent === abs ? abs : path.join(realPath(parent), path.basename(abs));
     }
-}
-
-/**
- * The words of the agent's `dt` command that name something inside the workspace (`dir`, the config file's
- * directory), symbolic links followed and compared by path segments: the program when it is a path, and every argument
- * that is a path or an existing file (also the value of `--opt=value`), relative ones from `dir`. The agent writes
- * there during a run, so `dt` may run nothing of it. (The subscriber checks again, with the program found on the PATH.)
- */
-export function commandPathsInside(command: readonly string[], dir: string): string[] {
-    const root = realPath(dir);
-    const within = (p: string): boolean => {
-        const rel = path.relative(root, realPath(path.resolve(dir, p)));
-        return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
-    };
-    const [program, ...args] = command;
-    const words = [
-        ...(program !== undefined && /[\\/]/.test(program) ? [program] : []),
-        ...args.flatMap((a) => (!a.startsWith('-') ? [a] : a.indexOf('=') > 0 ? [a.slice(a.indexOf('=') + 1)] : [])),
-    ];
-    return words.filter((w) => (/[\\/]/.test(w) || existsSync(path.resolve(dir, w))) && within(w));
-}
-
-/** Package runners, which resolve code from the workspace: never the agent's `dt`. */
-const PACKAGE_RUNNERS = new Set(['npx', 'pnpx', 'bunx']);
-const RUNNER_VERBS: Record<string, readonly string[]> = {
-    npm: ['exec', 'x', 'run', 'run-script'],
-    pnpm: ['dlx', 'exec', 'run'],
-    yarn: ['dlx', 'exec', 'run'],
-    bun: ['run', 'x'],
-};
-
-/** Whether a command goes through a package runner (`npx`, `bunx`, `pnpm dlx`, `bun run`, …). */
-export function isPackageRunner(command: readonly string[]): boolean {
-    const [program = '', ...args] = command;
-    const name = path
-        .basename(program)
-        .toLowerCase()
-        .replace(/\.(exe|cmd|bat|com|js|cjs|mjs)$/, '');
-    const verb = args.find((a) => !a.startsWith('-'));
-    return PACKAGE_RUNNERS.has(name) || (verb !== undefined && (RUNNER_VERBS[name]?.includes(verb) ?? false));
 }
 
 function resolveSession(session: SessionConfigFile | undefined, dir?: string): ResolvedSessionConfig {
@@ -466,8 +459,12 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
         for (const key of Object.keys(agent)) if (!['port', 'allowedTools', 'dt'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
         if (agent.port !== undefined && !isPort(agent.port)) fail("'session.agent.port' must be a port number");
         if (agent.allowedTools !== undefined && !isStringList(agent.allowedTools)) fail("'session.agent.allowedTools' must be an array of tool rules");
-        if (agent.dt !== undefined && !(isStringList(agent.dt) && agent.dt.length > 0 && agent.dt.every((a) => !/[\0\r\n]/.test(a))))
-            fail('\'session.agent.dt\' must be a command as a non-empty array of non-empty strings (e.g. ["node", "dist/dt.js"])');
+        if (agent.dt !== undefined) {
+            if (!(isStringList(agent.dt) && agent.dt.length > 0 && agent.dt.every((a) => !/[\0\r\n]/.test(a))))
+                fail('\'session.agent.dt\' must be a command as a non-empty array of non-empty strings (e.g. ["node", "../clone/dist/dt.js"])');
+            const wrong = dtShapeError(agent.dt);
+            if (wrong) fail(`'session.agent.dt' ${wrong}`);
+        }
     }
     const classifier = session.classifier;
     if (classifier !== undefined) {

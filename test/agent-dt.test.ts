@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createClaudeCodeRunner } from '@domaintrail/agent/infrastructure/claude-code';
-import { dtShim, findProgram, inside, launcherScript, pinDtCommand, withPathFirst, writeDtShim } from '@domaintrail/agent/infrastructure/dt-shim';
+import { agentDtArguments, dtShim, findProgram, inside, launcherScript, pinDt, withPathFirst, writeDtShim } from '@domaintrail/agent/infrastructure/dt-shim';
 import { createDtTools } from '@domaintrail/agent/infrastructure/dt-tools';
 import { ConfigError } from '@domaintrail/modeling/core/config';
 import { loadConfig } from '@domaintrail/workspace/infrastructure/config';
@@ -20,7 +20,7 @@ const gone = (p: string): Promise<boolean> =>
         () => true,
     );
 const scratch = async (): Promise<string> => {
-    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-agent-dt-'));
+    const dir = realpathSync(await mkdtemp(path.join(tmpdir(), 'domaintrail-agent-dt-')));
     dirs.push(dir);
     return dir;
 };
@@ -29,10 +29,19 @@ const failure = (p: Promise<unknown>): Promise<string> =>
         () => 'succeeded',
         (e: unknown) => String(e),
     );
+const thrown = (f: () => unknown): string => {
+    try {
+        f();
+        return 'succeeded';
+    } catch (e) {
+        return String(e);
+    }
+};
 const run = { prompt: 'p', allowedTools: ['Bash(dt fmt:*)'], requests: 1 };
+const node = realpathSync(findProgram('node') ?? process.execPath);
 
 describe("the agent's dt (session.agent.dt)", () => {
-    test("the shim only starts the runtime on the launcher; the command's words are JSON in the launcher, spawned without a shell", () => {
+    test('the shim only starts the runtime on the launcher; the pinned dt is JSON in the launcher, spawned without a shell in a private directory', () => {
         expect(dtShim('/usr/bin/node', "/tmp/it's/launcher.mjs", 'darwin')).toEqual({
             file: 'dt',
             text: `#!/bin/sh\nexec '/usr/bin/node' '/tmp/it'\\''s/launcher.mjs' "$@"\n`,
@@ -44,11 +53,10 @@ describe("the agent's dt (session.agent.dt)", () => {
         // what cmd.exe interprets never reaches a .cmd file
         for (const bad of ['C:\\a&b\\node.exe', 'C:\\%PATH%\\node.exe', 'C:\\a"b\\node.exe', 'C:\\a|b\\node.exe'])
             expect(() => dtShim(bad, 'C:\\Temp\\launcher.mjs', 'win32')).toThrow();
-        const launcher = launcherScript({ command: 'node', args: ['C:\\a&b %x%\\dt.js', '"quoted"'] }, '/tmp/shim');
-        expect(launcher).toContain(JSON.stringify(['node', 'C:\\a&b %x%\\dt.js', '"quoted"']));
+        const launcher = launcherScript({ runtime: '/usr/bin/node', script: '/opt/a&b %x%/dt.js' }, '/ws', '/tmp/shim');
+        expect(launcher).toContain(JSON.stringify(['/usr/bin/node', '/opt/a&b %x%/dt.js']));
         expect(launcher).toContain('shell: false');
         expect(launcher).toContain('cwd: "/tmp/shim"');
-        expect(() => launcherScript({ command: 'node', args: ['a\nb'] }, '/tmp/shim')).toThrow();
     });
 
     test('first on the PATH, keeping the rest; a program found on the PATH (with PATHEXT on Windows)', async () => {
@@ -57,13 +65,10 @@ describe("the agent's dt (session.agent.dt)", () => {
             HOME: '/h',
         });
         expect(withPathFirst({ Path: 'C:\\bin' }, 'D:\\shim')).toEqual({ Path: `D:\\shim${path.delimiter}C:\\bin` });
-        expect(withPathFirst({}, '/shim')).toEqual({ PATH: '/shim' });
         const bin = await scratch();
         await writeFile(path.join(bin, 'node.EXE'), '');
         expect(findProgram('node', { PATH: bin, PATHEXT: '.EXE' }, 'win32')).toBe(path.join(bin, 'node.EXE'));
         expect(findProgram('node', { PATH: bin }, 'linux')).toBeUndefined();
-        await writeFile(path.join(bin, 'dtx'), '');
-        expect(findProgram('dtx', { PATH: bin }, 'linux')).toBe(path.join(bin, 'dtx'));
     });
 
     test('inside the workspace by path segments: `<root>/..evil` is inside, a sibling `<root>-other` is not', async () => {
@@ -77,83 +82,100 @@ describe("the agent's dt (session.agent.dt)", () => {
         expect(inside(root, base)).toBe(false);
     });
 
-    test('pinned: nothing it runs may be inside the workspace — the program, a script, an option value, through a link — nor a package runner', async () => {
+    test('only two shapes: [node|bun|deno, script] or [dt executable], as absolute real paths outside the workspace', async () => {
         const root = await scratch();
         const outside = await scratch();
         await writeFile(path.join(outside, 'dt.js'), '');
+        await writeFile(path.join(outside, 'dt'), '');
         await mkdir(path.join(root, 'tools'));
         await writeFile(path.join(root, 'tools', 'dt.js'), '');
-        await writeFile(path.join(root, 'x.js'), '');
         await mkdir(path.join(root, '..evil'));
-        await writeFile(path.join(root, '..evil', 'x.js'), '');
+        await writeFile(path.join(root, '..evil', 'dt.js'), '');
         await symlink(path.join(root, 'tools'), path.join(outside, 'link'));
-        const ok = pinDtCommand({ command: 'node', args: [path.join(outside, 'dt.js')] }, root);
-        expect(path.isAbsolute(ok.program)).toBe(true);
-        expect(ok.files).toContain(path.join(realpathSync(outside), 'dt.js'));
-        for (const dt of [
-            { command: 'node', args: [path.join(root, 'tools', 'dt.js')] },
-            { command: 'node', args: ['tools/dt.js'] },
-            { command: 'node', args: ['x.js'] },
-            { command: 'node', args: [path.join(root, '..evil', 'x.js')] },
-            { command: 'node', args: [`--require=${path.join(root, 'x.js')}`, path.join(outside, 'dt.js')] },
-            { command: 'node', args: ['--import=./x.js', path.join(outside, 'dt.js')] },
-            { command: 'node', args: ['-r', path.join(root, 'x.js'), path.join(outside, 'dt.js')] },
-            { command: path.join(outside, 'link', 'dt.js'), args: [] },
-        ])
-            expect(() => pinDtCommand(dt, root)).toThrow(/inside the workspace/);
-        for (const dt of [
-            { command: 'npx', args: ['domaintrail'] },
-            { command: 'bunx', args: ['domaintrail'] },
-            { command: 'bun', args: ['run', 'dt'] },
-            { command: 'npm', args: ['exec', 'dt'] },
-        ])
-            expect(() => pinDtCommand(dt, root)).toThrow(/package runner|not found/);
-        expect(() => pinDtCommand({ command: 'no-such-dt-program', args: [] }, root)).toThrow(/not found/);
-        // in the config: refused when it is read
-        for (const dt of [
-            ['node', './tools/dt.js'],
-            ['node', `${path.join(outside, 'link')}/dt.js`],
-            ['node', '--require=./x.js', path.join(outside, 'dt.js')],
-            ['node', '..evil/x.js'],
-        ]) {
+        expect(pinDt({ command: 'node', args: [path.join(outside, 'dt.js')] }, root)).toEqual({ runtime: node, script: path.join(outside, 'dt.js') });
+        expect(pinDt({ command: path.join(outside, 'dt'), args: [] }, root)).toEqual({ script: path.join(outside, 'dt') });
+        const refused: [{ command: string; args: string[] }, RegExp][] = [
+            [{ command: 'npx', args: ['domaintrail'] }, /not one of the runtimes/],
+            [{ command: 'bunx', args: ['domaintrail'] }, /not one of the runtimes/],
+            [{ command: 'bun', args: ['x'] }, /absolute path/],
+            [{ command: 'npm', args: ['exec', 'dt'] }, /no other word/],
+            [{ command: 'node', args: ['--require=/x.js', path.join(outside, 'dt.js')] }, /no other word/],
+            [{ command: 'node', args: ['-r', '/x.js', path.join(outside, 'dt.js')] }, /no other word/],
+            [{ command: 'node', args: [path.join(root, 'tools', 'dt.js')] }, /inside the workspace/],
+            [{ command: 'node', args: [path.join(root, '..evil', 'dt.js')] }, /inside the workspace/],
+            [{ command: 'node', args: [path.join(outside, 'link', 'dt.js')] }, /inside the workspace/],
+            [{ command: 'node', args: ['dt.js'] }, /absolute path/],
+            [{ command: 'dt', args: [] }, /by its path/],
+        ];
+        for (const [dt, why] of refused) expect(thrown(() => pinDt(dt, root))).toMatch(why);
+        // in the config: the shapes, the script relative to the config file, nothing inside the workspace
+        const configured = async (dt: unknown): Promise<string> => {
             await writeFile(path.join(root, 'domaintrail.json'), JSON.stringify({ session: { agent: { dt } } }));
-            const e = await loadConfig({ start: root }).then(
-                () => undefined,
-                (x: unknown) => x,
+            return loadConfig({ start: root }).then(
+                (c) => JSON.stringify(c.session.agent.dt),
+                (e: unknown) => (e instanceof ConfigError ? `ConfigError ${String(e)}` : String(e)),
             );
-            expect(e).toBeInstanceOf(ConfigError);
-            expect(String(e)).toContain("'session.agent.dt' may not run anything inside the workspace");
-        }
-        await writeFile(path.join(root, 'domaintrail.json'), JSON.stringify({ session: { agent: { dt: ['npx', 'domaintrail'] } } }));
-        expect(await failure(loadConfig({ start: root }))).toContain('package runner');
-        await writeFile(path.join(root, 'domaintrail.json'), JSON.stringify({ session: { agent: { dt: ['node', path.join(outside, 'dt.js')] } } }));
-        expect((await loadConfig({ start: root })).session.agent.dt).toEqual(['node', path.join(outside, 'dt.js')]);
-        // nor may the shim be written there (here: a workspace holding the temporary directory)
-        expect(await failure(writeDtShim(ok, path.dirname(tmpdir())))).toContain('inside the workspace');
+        };
+        expect(await configured(['node', `../${path.basename(outside)}/dt.js`])).toBe(JSON.stringify(['node', path.join(outside, 'dt.js')]));
+        expect(await configured([path.join(outside, 'dt')])).toBe(JSON.stringify([path.join(outside, 'dt')]));
+        for (const dt of [['npx', 'domaintrail'], ['bun', 'x', 'dt'], ['node', '--require=./x.js', 'dt.js'], ['node', '-r'], ['dt'], ['corepack', 'dt']])
+            expect(await configured(dt)).toContain('ConfigError Error: ');
+        for (const dt of [['node', './tools/dt.js'], ['node', `${path.join(outside, 'link')}/dt.js`], ['node', '..evil/dt.js'], ['./tools/dt.js']])
+            expect(await configured(dt)).toContain("'session.agent.dt' may not run anything inside the workspace");
     });
 
-    test.skipIf(process.platform === 'win32')('`dt …` on that PATH runs the command outside the workspace, on it, from a private directory', async () => {
-        const dir = await scratch();
-        const echo = path.join(dir, 'echo dt.mjs');
-        await writeFile(echo, 'console.log(JSON.stringify(process.argv.slice(2)));\n');
+    test("the agent's arguments: fmt or check, then .dt / .dtes files of the workspace; no option; -r is the launcher's", async () => {
         const root = await scratch();
-        await writeFile(path.join(root, 'a.dt'), '');
-        const shim = await writeDtShim(pinDtCommand({ command: 'node', args: [echo] }, root), root);
-        try {
-            expect((await stat(shim.dir)).mode & 0o777).toBe(0o700);
-            expect((await stat(path.join(shim.dir, 'dt'))).mode & 0o777).toBe(0o700);
-            // called in the workspace: -r names it, and a file of it is made absolute
-            const out = spawnSync('dt', ['check', 'a b; $(x)', 'a.dt'], { cwd: root, env: withPathFirst(process.env, shim.dir), encoding: 'utf8' });
-            const realRoot = realpathSync(root);
-            expect(JSON.parse(out.stdout)).toEqual(['-r', realRoot, 'check', 'a b; $(x)', path.join(realRoot, 'a.dt')]);
-        } finally {
-            await shim.dispose();
-        }
-        expect(await gone(shim.dir)).toBe(true);
+        expect(agentDtArguments(['fmt'], root, root)).toEqual({ ok: true, args: ['-r', root, 'fmt'] });
+        expect(agentDtArguments(['check', 'sales/order.dt', 'es.dtes'], path.join(root, 'x'), root)).toEqual({
+            ok: true,
+            args: ['-r', root, 'check', path.join(root, 'x', 'sales', 'order.dt'), path.join(root, 'x', 'es.dtes')],
+        });
+        for (const given of [
+            ['generate', 'ts'],
+            [],
+            ['fmt', '--prefix', '/'],
+            ['fmt', '-r', '/'],
+            ['fmt', '--config=/x'],
+            ['fmt', '-C', '/'],
+            ['fmt', 'x.ts'],
+            ['fmt', '../out.dt'],
+            ['fmt', '/etc/x.dt'],
+        ])
+            expect(agentDtArguments(given, root, root).ok).toBe(false);
     });
 
     test.skipIf(process.platform === 'win32')(
-        'the agent runs `dt` from its PATH: the shim, removed once the run ends; refused once a file of it changed',
+        '`dt …` on that PATH runs the pinned dt on the workspace from a private directory, or refuses what the agent may not ask',
+        async () => {
+            const tools = await scratch();
+            const echo = path.join(tools, 'echo dt.mjs');
+            await writeFile(echo, 'console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));\n');
+            const root = await scratch();
+            const shim = await writeDtShim(pinDt({ command: 'node', args: [echo] }, root), root);
+            const dt = (args: string[]): ReturnType<typeof spawnSync> =>
+                spawnSync('dt', args, { cwd: root, env: withPathFirst(process.env, shim.dir), encoding: 'utf8' });
+            try {
+                expect((await stat(shim.dir)).mode & 0o777).toBe(0o700);
+                expect((await stat(path.join(shim.dir, 'dt'))).mode & 0o777).toBe(0o700);
+                const ran = JSON.parse(String(dt(['check', 'a.dt']).stdout)) as { cwd: string; args: string[] };
+                expect(ran.args).toEqual(['-r', root, 'check', path.join(root, 'a.dt')]);
+                expect(realpathSync(ran.cwd)).toBe(realpathSync(shim.dir));
+                for (const bad of [['fmt', '--cwd', '/'], ['generate'], ['fmt', '../x.dt']]) {
+                    const r = dt(bad);
+                    expect(r.status).toBe(2);
+                    expect(String(r.stdout)).toBe('');
+                    expect(String(r.stderr)).toContain('Use `dt fmt` or `dt check`');
+                }
+            } finally {
+                await shim.dispose();
+            }
+            expect(await gone(shim.dir)).toBe(true);
+        },
+    );
+
+    test.skipIf(process.platform === 'win32')(
+        'the agent runs `dt` from its PATH: the shim, removed once the run ends; refused once what it runs changed',
         async () => {
             const root = await scratch();
             const tools = await scratch();
@@ -174,38 +196,37 @@ describe("the agent's dt (session.agent.dt)", () => {
             const runner = await createClaudeCodeRunner({
                 root,
                 command: { command: 'node', args: [agent] },
-                dt: pinDtCommand({ command: 'node', args: [echo] }, root),
+                dt: pinDt({ command: 'node', args: [echo] }, root),
             });
             const outcome = await runner.run({ ...run, signal: new AbortController().signal });
             expect(outcome.exitCode).toBe(0);
             const [line, shimDir] = (await readFile(path.join(root, 'ran.txt'), 'utf8')).split('\n');
-            expect(line).toBe(`dt -r ${realpathSync(root)} fmt`);
+            expect(line).toBe(`dt -r ${root} fmt`);
             expect(path.basename(shimDir)).toStartWith('domaintrail-dt-');
             expect(await gone(shimDir)).toBe(true);
-            // the script changed after the runner pinned it: the next run does not start
             await writeFile(echo, 'console.log("something else");\n');
             expect(await failure(runner.run({ ...run, signal: new AbortController().signal }))).toContain('changed since the subscriber started');
-            // a command inside the workspace is refused when the runner is made
             await writeFile(path.join(root, 'dt.js'), '');
-            expect(await failure(createClaudeCodeRunner({ root, dt: { program: process.execPath, args: [path.join(root, 'dt.js')], files: [] } }))).toContain(
-                'inside the workspace',
-            );
+            expect(await failure(createClaudeCodeRunner({ root, dt: { runtime: node, script: path.join(root, 'dt.js') } }))).toContain('inside the workspace');
         },
     );
 
-    test('dt fmt / dt check after the agent run outside the workspace, on it', async () => {
+    test('dt fmt / dt check after the agent run on the workspace from a fresh private directory, removed afterwards', async () => {
         const root = await scratch();
         const tools = await scratch();
         const record = path.join(tools, 'record.mjs');
         const out = path.join(tools, 'out.json');
         await writeFile(
             record,
-            `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));\n`,
+            `import { statSync, writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, JSON.stringify({ cwd: process.cwd(), mode: statSync('.').mode & 0o777, args: process.argv.slice(2) }));\n`,
         );
-        const dtTools = createDtTools({ dt: { command: process.execPath, args: [record] }, root, log: () => {} });
+        const dtTools = createDtTools({ dt: { command: node, args: [record] }, root, log: () => {} });
         expect(await dtTools.check()).toBe(true);
-        const ran = JSON.parse(await readFile(out, 'utf8')) as { cwd: string; args: string[] };
+        const ran = JSON.parse(await readFile(out, 'utf8')) as { cwd: string; mode: number; args: string[] };
         expect(inside(root, ran.cwd)).toBe(false);
+        expect(path.basename(ran.cwd)).toStartWith('domaintrail-dt-run-');
+        expect(ran.mode).toBe(0o700);
+        expect(await gone(ran.cwd)).toBe(true);
         expect(ran.args).toEqual(['-r', root, 'check']);
     });
 });

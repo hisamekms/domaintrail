@@ -1,19 +1,25 @@
 // The agent's `dt` (ADR 0026): a private directory outside the workspace holding an executable `dt` that runs the
-// configured command (by default this very CLI: its runtime and its entry), put first on the agent's PATH. The prompt
-// and the allowed tools stay `dt fmt` / `dt check`, whatever `dt` is (or is not) installed on the facilitator's machine.
+// configured `dt` (by default this very CLI: its runtime and its entry), put first on the agent's PATH, so that the
+// prompt and the allowed tools stay `dt fmt` / `dt check` whatever is installed on the facilitator's machine.
 //
-// The command's words are never re-parsed by a shell: the `dt` script (or `dt.cmd` on Windows) only starts this
-// runtime on a launcher, which holds the command as JSON and spawns it with the agent's arguments and `shell: false`.
-// The agent can write in the workspace while it runs, so nothing `dt` runs may be there: the command is pinned when the
-// subscriber starts (`pinDtCommand`: its program resolved to its real file; refused through a package runner, or with
-// the program or an argument inside the workspace), its files are fingerprinted then and checked before each run
-// (`fingerprintDt`), the shim's directory is refused inside the workspace, and the command runs outside it (`-r`).
+// The agent can write in the workspace while it runs, so the rules are positive and few:
+// - what runs has one of two shapes: `[<node|bun|deno>, <script>]` or `[<dt executable>]`, pinned once when the
+//   subscriber starts to absolute real paths (the runtime found on the PATH), the script or executable outside the
+//   workspace; both are fingerprinted then and checked again before each run (`pinDt`, `fingerprintDt`);
+// - the agent's `dt` takes `fmt` or `check` and, after it, `.dt` / `.dtes` files of the workspace only: no option of
+//   the agent ever reaches `dt`, and `-r <workspace>` is always the launcher's own;
+// - `dt` runs with a private working directory (the shim's), never the workspace: no runtime picks a config of it up;
+// - the shim's words are never parsed by a shell: `dt` (or `dt.cmd`) only starts this runtime on a launcher holding
+//   the command as JSON, which spawns it with `shell: false`.
 import { createHash } from 'node:crypto';
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { DtCommand } from './dt-tools.js';
+
+/** The runtimes the agent's `dt` may be started with, as `[<runtime>, <script>]`. */
+export const DT_RUNTIMES = ['node', 'bun', 'deno'] as const;
 
 /** A word quoted for `sh`: inside single quotes, a quote closed, escaped and reopened. */
 const shQuote = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -23,47 +29,6 @@ const CMD_SPECIAL = /["%!^&|<>\r\n\0]/;
 const checkWord = (w: string): void => {
     if (w === '' || /[\0\r\n]/.test(w)) throw new Error(`Not a command word: ${JSON.stringify(w)}`);
 };
-
-/**
- * The launcher: runs the command outside the workspace (`cwd`: the shim's own directory, so that no runtime picks a
- * config file of the workspace up), on the workspace it was called from (`-r`, the caller's directory), with the
- * caller's arguments — those naming an existing file there made absolute — without a shell; it exits as the command did.
- */
-export function launcherScript(dt: DtCommand, cwd: string): string {
-    [dt.command, ...dt.args, cwd].forEach(checkWord);
-    return [
-        "import { spawnSync } from 'node:child_process';",
-        "import { existsSync } from 'node:fs';",
-        "import { resolve } from 'node:path';",
-        `const [command, ...args] = ${JSON.stringify([dt.command, ...dt.args])};`,
-        'const here = process.cwd();',
-        'const given = process.argv.slice(2).map((a) => (!a.startsWith("-") && existsSync(resolve(here, a)) ? resolve(here, a) : a));',
-        `const r = spawnSync(command, [...args, '-r', here, ...given], { cwd: ${JSON.stringify(cwd)}, stdio: 'inherit', shell: false, windowsHide: true });`,
-        'if (r.error) { console.error(`dt could not start: ${r.error.message}`); process.exit(127); }',
-        'process.exit(r.status ?? 1);',
-        '',
-    ].join('\n');
-}
-
-/**
- * The `dt` that starts `runtime` on `launcher`: a `sh` script, or a `.cmd` file on Windows (whose two paths may hold
- * none of the characters `cmd.exe` interprets; the configured words are in the launcher, never here).
- */
-export function dtShim(runtime: string, launcher: string, platform: NodeJS.Platform = process.platform): { readonly file: string; readonly text: string } {
-    [runtime, launcher].forEach(checkWord);
-    if (platform === 'win32') {
-        for (const w of [runtime, launcher]) if (CMD_SPECIAL.test(w)) throw new Error(`A path the dt shim cannot hold on Windows: ${JSON.stringify(w)}`);
-        return { file: 'dt.cmd', text: `@echo off\r\n"${runtime}" "${launcher}" %*\r\n` };
-    }
-    return { file: 'dt', text: `#!/bin/sh\nexec ${shQuote(runtime)} ${shQuote(launcher)} "$@"\n` };
-}
-
-/** The environment with `dir` first on its PATH (the key keeps its case, `Path` on Windows). */
-export function withPathFirst(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
-    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
-    const rest = env[key];
-    return { ...env, [key]: rest ? `${dir}${path.delimiter}${rest}` : dir };
-}
 
 /** A path as it really is: symbolic links followed up to its deepest existing directory, the rest as written. */
 const real = (p: string): string => {
@@ -99,96 +64,173 @@ export function findProgram(command: string, env: NodeJS.ProcessEnv = process.en
     return undefined;
 }
 
-/** Package runners: they fetch or resolve code from the workspace (`node_modules`, `package.json` scripts). */
-const RUNNERS = new Set(['npx', 'pnpx', 'bunx']);
-const RUNNER_VERBS: Record<string, readonly string[]> = {
-    npm: ['exec', 'x', 'run', 'run-script'],
-    pnpm: ['dlx', 'exec', 'run'],
-    yarn: ['dlx', 'exec', 'run'],
-    bun: ['run', 'x'],
-};
+/** The runtime a program is (`node`, `bun`, `deno`, also as `node.exe`), or undefined. */
+export const runtimeOf = (program: string): (typeof DT_RUNTIMES)[number] | undefined =>
+    DT_RUNTIMES.find(
+        (r) =>
+            path
+                .basename(program)
+                .toLowerCase()
+                .replace(/\.exe$/, '') === r,
+    );
 
-/** The words of a command that may name files: every argument that is not a bare flag, and the value of `--opt=value`. */
-const candidates = (args: readonly string[]): string[] =>
-    args.flatMap((a) => {
-        if (!a.startsWith('-')) return [a];
-        const eq = a.indexOf('=');
-        return eq > 0 ? [a.slice(eq + 1)] : [];
-    });
-
-/** The command as `dt` runs it: the program resolved on the PATH to its real file, the arguments as given. */
+/** The `dt` that runs: absolute real paths only, exactly what was checked and fingerprinted. */
 export interface PinnedDt {
-    readonly program: string;
-    readonly args: readonly string[];
-    /** The files it names (the program, and the arguments that are files), as they really are. */
-    readonly files: readonly string[];
+    /** `node`, `bun` or `deno`, found on the PATH; absent for a `dt` executable. */
+    readonly runtime?: string;
+    /** The script the runtime runs, or the `dt` executable. */
+    readonly script: string;
 }
+
+/** The pinned `dt` as a command: `[runtime, script]` or `[script]`. */
+export const dtCommandOf = (dt: PinnedDt): DtCommand => (dt.runtime ? { command: dt.runtime, args: [dt.script] } : { command: dt.script, args: [] });
 
 /**
- * Pins the `dt` command for a workspace: its program resolved on the PATH to its real file. Refused (with the reason)
- * when the program cannot be found, is a package runner, or when the program or any argument that is a file or a path
- * (also as `--opt=value`, relative ones taken from `root`) is inside the workspace, directly or through a symbolic
- * link: the agent writes there during a run, and could make `dt` run anything.
+ * Pins the agent's `dt` for a workspace: `[<node|bun|deno>, <script>]` (the runtime found on the PATH) or
+ * `[<dt executable>]`, as absolute real paths, the script or executable an existing file outside the workspace (symbolic
+ * links followed). Anything else is refused with the reason.
  */
-export function pinDtCommand(dt: DtCommand, root: string, env: NodeJS.ProcessEnv = process.env): PinnedDt {
-    const found = findProgram(dt.command, env);
-    if (!found) throw new Error(`The agent's dt cannot run: ${dt.command} is not found.`);
-    const program = real(found);
-    // by the name given and by the file it is (npm is npm-cli.js)
-    const names = [dt.command, program].map((p) =>
-        path
-            .basename(p)
-            .toLowerCase()
-            .replace(/\.(exe|cmd|bat|com|js|cjs|mjs)$/, '')
-            .replace(/-cli$/, ''),
-    );
-    const verb = dt.args.find((a) => !a.startsWith('-'));
-    if (names.some((name) => RUNNERS.has(name) || (verb !== undefined && RUNNER_VERBS[name]?.includes(verb))))
-        throw new Error(`The agent's dt may not go through a package runner (${dt.command}): it resolves code from the workspace.`);
-    if (inside(root, program)) throw new Error(`The agent's dt may not run anything inside the workspace (${dt.command}): the agent can write there.`);
-    const files = [program];
-    for (const word of candidates(dt.args)) {
-        const resolved = path.resolve(root, word);
-        if (!/[\\/]/.test(word) && !existsSync(resolved)) continue;
-        if (inside(root, resolved)) throw new Error(`The agent's dt may not run anything inside the workspace (${word}): the agent can write there.`);
-        if (isFile(resolved)) files.push(real(resolved));
+export function pinDt(dt: DtCommand, root: string, env: NodeJS.ProcessEnv = process.env): PinnedDt {
+    const words = [dt.command, ...dt.args];
+    words.forEach(checkWord);
+    const shape = 'The agent\'s dt must be ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"]';
+    if (words.length > 2) throw new Error(`${shape}, with no other word: ${JSON.stringify(words)}`);
+    const [first, second] = words;
+    let runtime: string | undefined;
+    let script: string;
+    if (second !== undefined) {
+        if (!runtimeOf(first)) throw new Error(`${shape}: ${first} is not one of the runtimes.`);
+        const found = findProgram(first, env);
+        if (!found) throw new Error(`The agent's dt cannot run: ${first} is not found.`);
+        runtime = real(found);
+        if (!runtimeOf(runtime)) throw new Error(`${shape}: ${first} is ${runtime}, not one of the runtimes.`);
+        script = second;
+    } else {
+        if (!/[\\/]/.test(first)) throw new Error(`${shape}: a dt executable is given by its path, not ${first}.`);
+        script = first;
     }
-    return { program, args: dt.args, files };
+    if (!path.isAbsolute(script)) throw new Error(`The agent's dt must name its script by an absolute path: ${script}`);
+    script = real(script);
+    if (!isFile(script)) throw new Error(`The agent's dt cannot run: ${script} is not a file.`);
+    for (const p of [script, ...(runtime ? [runtime] : [])])
+        if (inside(root, p)) throw new Error(`The agent's dt may not run anything inside the workspace (${p}): the agent can write there.`);
+    return { ...(runtime && { runtime }), script };
 }
 
-/** A fingerprint of the files the pinned command names (SHA-256 of each), to tell that none changed since. */
-export async function fingerprintDt(pinned: PinnedDt): Promise<string> {
+/** A fingerprint of what the pinned `dt` runs (SHA-256 of the runtime and of the script), to tell that none changed since. */
+export async function fingerprintDt(dt: PinnedDt): Promise<string> {
     const hash = createHash('sha256');
-    for (const file of pinned.files) {
+    for (const file of [dt.runtime ?? '', dt.script]) {
         hash.update(file).update('\0');
-        if (isFile(file)) hash.update(await readFile(file));
+        if (file && isFile(file)) hash.update(await readFile(file));
         hash.update('\0');
     }
     return hash.digest('hex');
 }
 
+/** What the agent may ask of its `dt`: `fmt` or `check`, then `.dt` / `.dtes` files of the workspace, nothing else. */
+export const AGENT_SUBCOMMANDS = ['fmt', 'check'] as const;
+
 /**
- * Writes the shim and its launcher in a new private directory (0700) outside `root`; `dispose` removes it. `runtime`
- * runs the launcher (default: this process's runtime).
+ * The arguments `dt` gets for what the agent typed in `cwd`: `-r <root>`, the subcommand, and the files made absolute;
+ * or why it is refused (said to the agent). Pure: the launcher runs the same rule.
  */
-export async function writeDtShim(
-    pinned: PinnedDt,
-    root: string,
-    runtime: string = process.execPath,
-): Promise<{ readonly dir: string; dispose(): Promise<void> }> {
-    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-dt-'));
+export function agentDtArguments(given: readonly string[], cwd: string, root: string): { ok: true; args: string[] } | { ok: false; error: string } {
+    const [sub, ...files] = given;
+    const usage = 'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace; no options.';
+    if (!sub || !(AGENT_SUBCOMMANDS as readonly string[]).includes(sub)) return { ok: false, error: `dt: only fmt and check are available. ${usage}` };
+    const out: string[] = [];
+    for (const f of files) {
+        if (f.startsWith('-')) return { ok: false, error: `dt: options are not accepted (${f}). ${usage}` };
+        if (!/\.dt(es)?$/.test(f)) return { ok: false, error: `dt: not a .dt or .dtes file (${f}). ${usage}` };
+        const abs = path.resolve(cwd, f);
+        if (!inside(root, abs)) return { ok: false, error: `dt: ${f} is not in the workspace. ${usage}` };
+        out.push(abs);
+    }
+    return { ok: true, args: ['-r', root, sub, ...out] };
+}
+
+/**
+ * The launcher: checks the agent's arguments (`agentDtArguments`, inlined: the launcher stands alone), then runs the
+ * pinned `dt` on the workspace with the shim's directory as its working directory, without a shell, and exits as it did.
+ */
+export function launcherScript(dt: PinnedDt, root: string, cwd: string): string {
+    const command = dtCommandOf(dt);
+    [command.command, ...command.args, root, cwd].forEach(checkWord);
+    return [
+        "import { spawnSync } from 'node:child_process';",
+        "import { realpathSync } from 'node:fs';",
+        "import { dirname, basename, join, relative, resolve, isAbsolute, sep } from 'node:path';",
+        `const [command, ...pinned] = ${JSON.stringify([command.command, ...command.args])};`,
+        `const root = ${JSON.stringify(real(root))};`,
+        'const real = (p) => { try { return realpathSync(p); } catch { const d = dirname(p); return d === p ? p : join(real(d), basename(p)); } };',
+        "const inside = (p) => { const r = relative(root, real(p)); return r === '' || (r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r)); };",
+        "const usage = 'Use `dt fmt` or `dt check`, optionally followed by .dt / .dtes files of the workspace; no options.';",
+        'const refuse = (m) => { console.error(`dt: ${m} ${usage}`); process.exit(2); };',
+        'const [sub, ...files] = process.argv.slice(2);',
+        "if (sub !== 'fmt' && sub !== 'check') refuse('only fmt and check are available.');",
+        'const abs = files.map((f) => {',
+        "    if (f.startsWith('-')) refuse(`options are not accepted (${f}).`);",
+        '    if (!/\\.dt(es)?$/.test(f)) refuse(`not a .dt or .dtes file (${f}).`);',
+        '    const a = resolve(process.cwd(), f);',
+        '    if (!inside(a)) refuse(`${f} is not in the workspace.`);',
+        '    return a;',
+        '});',
+        `const r = spawnSync(command, [...pinned, '-r', root, sub, ...abs], { cwd: ${JSON.stringify(cwd)}, stdio: 'inherit', shell: false, windowsHide: true });`,
+        'if (r.error) { console.error(`dt could not start: ${r.error.message}`); process.exit(127); }',
+        'process.exit(r.status ?? 1);',
+        '',
+    ].join('\n');
+}
+
+/**
+ * The `dt` that starts `runtime` on `launcher`: a `sh` script, or a `.cmd` file on Windows (whose two paths may hold
+ * none of the characters `cmd.exe` interprets; the configured words are in the launcher, never here).
+ */
+export function dtShim(runtime: string, launcher: string, platform: NodeJS.Platform = process.platform): { readonly file: string; readonly text: string } {
+    [runtime, launcher].forEach(checkWord);
+    if (platform === 'win32') {
+        for (const w of [runtime, launcher]) if (CMD_SPECIAL.test(w)) throw new Error(`A path the dt shim cannot hold on Windows: ${JSON.stringify(w)}`);
+        return { file: 'dt.cmd', text: `@echo off\r\n"${runtime}" "${launcher}" %*\r\n` };
+    }
+    return { file: 'dt', text: `#!/bin/sh\nexec ${shQuote(runtime)} ${shQuote(launcher)} "$@"\n` };
+}
+
+/** The environment with `dir` first on its PATH (the key keeps its case, `Path` on Windows). */
+export function withPathFirst(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
+    const key = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH';
+    const rest = env[key];
+    return { ...env, [key]: rest ? `${dir}${path.delimiter}${rest}` : dir };
+}
+
+/** A new private directory (0700) outside `root`; `dispose` removes it. */
+export async function privateDir(root: string, prefix = 'domaintrail-dt-'): Promise<{ readonly dir: string; dispose(): Promise<void> }> {
+    const dir = await mkdtemp(path.join(tmpdir(), prefix));
+    const dispose = (): Promise<void> => rm(dir, { recursive: true, force: true });
+    if (inside(root, dir)) {
+        await dispose();
+        throw new Error(`The temporary directory is inside the workspace (${dir}): refusing to run the agent's dt there.`);
+    }
+    await chmod(dir, 0o700);
+    return { dir, dispose };
+}
+
+/**
+ * Writes the shim and its launcher in a new private directory outside `root` (also `dt`'s working directory);
+ * `dispose` removes it. `runtime` runs the launcher (default: this process's runtime).
+ */
+export async function writeDtShim(dt: PinnedDt, root: string, runtime: string = process.execPath): Promise<{ readonly dir: string; dispose(): Promise<void> }> {
+    const shimDir = await privateDir(root);
     try {
-        if (inside(root, dir)) throw new Error(`The temporary directory is inside the workspace (${dir}): refusing to put the agent's dt there.`);
-        await chmod(dir, 0o700);
-        const launcher = path.join(dir, 'launcher.mjs');
-        await writeFile(launcher, launcherScript({ command: pinned.program, args: pinned.args }, dir), { mode: 0o600 });
+        const launcher = path.join(shimDir.dir, 'launcher.mjs');
+        await writeFile(launcher, launcherScript(dt, root, shimDir.dir), { mode: 0o600 });
         const shim = dtShim(runtime, launcher);
-        const file = path.join(dir, shim.file);
+        const file = path.join(shimDir.dir, shim.file);
         await writeFile(file, shim.text, { mode: 0o700 });
         await chmod(file, 0o700);
     } catch (e) {
-        await rm(dir, { recursive: true, force: true });
+        await shimDir.dispose();
         throw e;
     }
-    return { dir, dispose: () => rm(dir, { recursive: true, force: true }) };
+    return shimDir;
 }

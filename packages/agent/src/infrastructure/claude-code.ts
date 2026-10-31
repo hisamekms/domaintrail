@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../application/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration/domain/reply';
 import { parseReply } from '../application/prompt.js';
-import { fingerprintDt, pinDtCommand, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
+import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */
 export interface AgentCommand {
@@ -111,12 +111,12 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
 
 export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promise<AgentRunner> {
     const command = options.command ?? CLAUDE;
-    const dt = options.dt && pinDtCommand({ command: options.dt.program, args: options.dt.args }, options.root);
+    const dt = options.dt && pinDt(dtCommandOf(options.dt), options.root);
     const fingerprint = dt && (await fingerprintDt(dt));
     /** The shim of a run, once the command is checked again (a file of it changed: the run fails to start). */
     const shimFor = async (): Promise<Awaited<ReturnType<typeof writeDtShim>> | undefined> => {
         if (!dt) return undefined;
-        const now = pinDtCommand({ command: dt.program, args: dt.args }, options.root);
+        const now = pinDt(dtCommandOf(dt), options.root);
         if ((await fingerprintDt(now)) !== fingerprint) throw new Error("A file of the agent's dt changed since the subscriber started: refusing to run it.");
         return writeDtShim(now, options.root);
     };

@@ -467,12 +467,11 @@ describe('session section (ADR 0026)', () => {
         });
     });
 
-    test("the agent's dt: relative paths against the config file, bare names and options as written", async () => {
-        const dir = await project({
-            'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['bun', '../clone/bin/dt.ts', '--smol', '/abs/dt.js'] } } }),
-        });
-        const c = await loadConfig({ start: dir });
-        expect(c.session.agent.dt).toEqual(['bun', path.resolve(dir, '../clone/bin/dt.ts'), '--smol', '/abs/dt.js']);
+    test("the agent's dt: a runtime and a script relative to the config file, or one executable", async () => {
+        const dir = await project({ 'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['bun', '../clone/bin/dt.ts'] } } }) });
+        expect((await loadConfig({ start: dir })).session.agent.dt).toEqual(['bun', path.resolve(dir, '../clone/bin/dt.ts')]);
+        const exe = await project({ 'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['../bin/dt'] } } }) });
+        expect((await loadConfig({ start: exe })).session.agent.dt).toEqual([path.resolve(exe, '../bin/dt')]);
     });
 
     test('the classifier: opt-in, Clef Flash, the token by the name of its variable', async () => {
