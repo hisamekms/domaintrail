@@ -9,6 +9,11 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # Langium 4.4 needs vscode-languageserver ~10.1: a newer major gives the language server a second, incompatible
+      # LSP stack (#9). Bump it together with a Langium release that depends on it (eclipse-langium/langium#2249).
+      - dependency-name: vscode-languageserver
+        update-types: ['version-update:semver-major']
   - package-ecosystem: cargo
     directory: /editors/zed
     schedule:
