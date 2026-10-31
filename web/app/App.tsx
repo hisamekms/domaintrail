@@ -2,16 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, LayoutGrid, LayoutList, PanelLeftOpen, PanelRightOpen, type LucideIcon } from 'lucide-react';
 import { Tldraw, useValue, type Editor, type TLCamera } from 'tldraw';
 import type { Diagnostic } from '../../src/core/diagnostics';
-import { STRUCTURE_LEVELS, type DisplayMode, type LaidOutGraph, type StructureLevel } from '../../src/graph/ir';
+import { STRUCTURE_LEVELS, type LaidOutGraph, type StructureLevel } from '../../src/graph/ir';
 import type { BaseView } from '../../src/server/protocol';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
-import { BottomPanel, type BottomTab } from '../bottom';
+import { BottomPanel } from '../bottom';
 import { Catalog } from '../catalog';
 import { cameraMove, fitAll, fitReadable, highlightElement, usePointerCursor } from '../view/canvas';
 import { Explorer } from '../explorer';
 import { Legend } from '../legend';
 import { backIndex, popHistory, pushHistory, type History } from '../view/history';
-import { Inspector, type InspectorTab, type RevealTarget } from '../inspector';
+import { Inspector, type RevealTarget } from '../inspector';
 import { Resizer, usePersistentState } from '../shared/layout';
 import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '../model-utils';
 import { renderGraph, shapeElementId, withWriteAccess } from '../render';
@@ -31,8 +31,10 @@ import {
     type StormingChoice,
 } from '../storming';
 import { Tooltips } from '../tooltip';
-import { THEME_KEY, applyTheme, useResolvedTheme, type ThemePreference } from '../theme';
-import { I18nProvider, LANG_KEY, MESSAGES, useResolvedLang, type LangPreference } from '../i18n';
+import { applyTheme } from '../theme';
+import { I18nProvider, MESSAGES } from '../i18n';
+import { usePanes } from './panes';
+import { usePreferences } from './preferences';
 import { useViewSocket } from './useViewSocket';
 
 type View = { kind: 'contextMap' } | { kind: 'structure' } | { kind: 'catalog' } | { kind: 'storming' };
@@ -43,15 +45,6 @@ const BOTTOM_BAR_HEIGHT = 33;
 /** The inspector can be widened until the canvas is this narrow. */
 const MIN_CANVAS_WIDTH = 320;
 
-/** The display mode saved under its former key and values (日本語 / English / 両方), if any. */
-function savedDisplayMode(): DisplayMode {
-    try {
-        const old: unknown = JSON.parse(localStorage.getItem('domaintrail.displayMode') ?? 'null');
-        return old === 'ja' ? 'label' : old === 'en' ? 'name' : 'both';
-    } catch {
-        return 'both';
-    }
-}
 const isCanvas = (v: View): boolean => v.kind === 'contextMap' || v.kind === 'structure' || v.kind === 'storming';
 
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
@@ -65,11 +58,7 @@ export function App() {
     const base = current?.base ?? null;
     const [editor, setEditor] = useState<Editor | null>(null);
     const [view, setView] = useState<View>({ kind: 'structure' });
-    const [mode, setMode] = usePersistentState<DisplayMode>('domaintrail.nameDisplay', savedDisplayMode());
-    const [themePreference, setThemePreference] = usePersistentState<ThemePreference>(THEME_KEY, 'auto');
-    const theme = useResolvedTheme(themePreference);
-    const [langPreference, setLangPreference] = usePersistentState<LangPreference>(LANG_KEY, 'auto');
-    const lang = useResolvedLang(langPreference);
+    const { mode, setMode, themePreference, setThemePreference, theme, langPreference, setLangPreference, lang } = usePreferences();
     const t = MESSAGES[lang];
     /** Structure View: all fields (detail), names only in larger text (overview), or aggregates only (aggregates). */
     const [savedLevel, setStructureLevel] = usePersistentState<StructureLevel>('domaintrail.structureMode', 'detail');
@@ -90,16 +79,27 @@ export function App() {
     const shown = shownStorming(stormings, stormingChoice);
     const stormingShown = view.kind === 'storming' ? stormingGraph(stormings, stormingChoice) : undefined;
 
-    // Layout (remembered per browser)
-    const [explorerOpen, setExplorerOpen] = usePersistentState('domaintrail.layout.explorer', true);
-    const [inspectorOpen, setInspectorOpen] = usePersistentState('domaintrail.layout.inspector', true);
-    const [bottomOpen, setBottomOpen] = usePersistentState('domaintrail.layout.bottom', false);
-    const [explorerWidth, setExplorerWidth] = usePersistentState('domaintrail.layout.explorerWidth', 260);
-    const [inspectorWidth, setInspectorWidth] = usePersistentState('domaintrail.layout.inspectorWidth', 420);
-    const [bottomHeight, setBottomHeight] = usePersistentState('domaintrail.layout.bottomHeight', 220);
-    const [bottomTab, setBottomTab] = usePersistentState<BottomTab>('domaintrail.layout.bottomTab', 'problems');
-    const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
-    const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
+    const {
+        explorerOpen,
+        setExplorerOpen,
+        inspectorOpen,
+        setInspectorOpen,
+        bottomOpen,
+        setBottomOpen,
+        explorerWidth,
+        setExplorerWidth,
+        inspectorWidth,
+        setInspectorWidth,
+        bottomHeight,
+        setBottomHeight,
+        bottomTab,
+        setBottomTab,
+        legendOpen,
+        setLegendOpen,
+        inspectorTab,
+        setInspectorTab,
+        openInspector,
+    } = usePanes();
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
     const toggleBaselineMenu = (anchor: HTMLElement) => setBaselineAnchor((a) => (a === anchor ? null : anchor));
@@ -253,11 +253,6 @@ export function App() {
         },
         [highlight],
     );
-
-    const openInspector = (tab: InspectorTab) => {
-        setInspectorTab(tab);
-        setInspectorOpen(true);
-    };
 
     /** Double-click in the explorer: the view that suits the item best. */
     const openBest = (id: string) => {
