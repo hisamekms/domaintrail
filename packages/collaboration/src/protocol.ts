@@ -167,6 +167,11 @@ export interface AgentSessionBody {
     readonly leaseMs: number;
 }
 
+/** `GET /agent/participants`: who is in the session, by ID and display name (for the prompt's request authors; no e-mail). */
+export interface AgentParticipantsBody {
+    readonly participants: readonly { readonly id: string; readonly name: string }[];
+}
+
 /** `POST /agent/runs/claim`. */
 export interface AgentClaimBody {
     /** Who claims (shown to the facilitator): e.g. `claude@host`. */

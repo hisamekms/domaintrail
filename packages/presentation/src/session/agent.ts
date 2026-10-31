@@ -1,14 +1,15 @@
 // The agent API of a session (ADR 0026, S4): a listener of its own, bound to 127.0.0.1 only, never routed through the
 // public listener, and requiring the bearer token of `.domaintrail/session/agent.json` on every request. Browsers are
 // refused (any `Origin`). The subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed
-// with `Last-Event-ID`), claims the next run with a lease, starts it, heartbeats, and ends it (finish with its facts
-// only, ask for clarification, fail) or releases it. The server computes the rest (S3's use cases).
+// with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
+// starts it, heartbeats, and ends it (finish with its facts only, ask for clarification, fail) or releases it. The
+// server computes the rest (S3's use cases).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import type { OutboxEntry } from '@domaintrail/collaboration/application/ports';
 import type { CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
 import { Collaboration } from '@domaintrail/collaboration/generated/index';
-import { AGENT_EVENT_TYPES, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
+import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
 import { body, text, uuid, MAX_NOTE } from './input.js';
@@ -248,6 +249,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             const state = await use.sessionState({ session });
             if (!state.ok) return sendError(res, 404, 'NotFound', 'The session is gone.');
             const answer: AgentSessionBody = { session, state: state.value.session.state, allowedTools: deps.allowedTools, leaseMs: deps.leaseMs };
+            return sendJson(res, 200, answer);
+        }
+        if (path === '/agent/participants' && req.method === 'GET') {
+            const state = await use.sessionState({ session });
+            if (!state.ok) return sendError(res, 404, 'NotFound', 'The session is gone.');
+            const answer: AgentParticipantsBody = { participants: state.value.session.participants.map((p) => ({ id: p.id, name: p.name })) };
             return sendJson(res, 200, answer);
         }
         if (path === '/agent/events' && req.method === 'GET') return events(req, url, res);
