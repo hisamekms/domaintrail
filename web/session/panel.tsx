@@ -1,13 +1,14 @@
 // The session panel (ADR 0026): the participants and where they are, the request composer and my drafts, the queue of
-// sent requests with their targets' status, the runs, and the revisions (read-only here). The facilitator's controls
-// (bundling requests into a run, cancelling one, dismissing others' requests) are shown to the facilitator only; the
-// server checks the role anyway.
+// sent requests with their targets' status, the runs, and the revision timeline (`revisions.tsx`). The facilitator's
+// controls (bundling requests into a run, cancelling one, dismissing others' requests, confirming and restoring
+// revisions) are shown to the facilitator only; the server checks the role anyway.
 import { useState, type ReactNode } from 'react';
 import { PanelRightClose, Trash2 } from 'lucide-react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
 import { sendable } from './drafts';
+import { Revisions } from './revisions';
 import { initials, participantColor, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
 import { latestRevision } from './state';
 import { targetKey, WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
@@ -84,7 +85,7 @@ export function SessionPanel(props: {
                 {live && <Composer drafts={drafts} selectionTarget={selectionTarget} state={state} tx={tx} />}
                 <Requests session={session} facilitator={facilitator} live={live} nameOf={nameOf} onNavigate={props.onNavigate} tx={tx} />
                 <Runs runs={state.runs} requests={state.requests} revisions={state.revisions} facilitator={facilitator} live={live} nameOf={nameOf} tx={tx} />
-                <Revisions revisions={state.revisions} nameOf={nameOf} tx={tx} />
+                <Revisions state={state} facilitator={facilitator} live={live} nameOf={nameOf} tx={tx} />
             </div>
         </div>
     );
@@ -510,32 +511,5 @@ function ValidationDiff({ before, after, tx }: { before: Validation; after: Vali
                 ))}
             </tbody>
         </table>
-    );
-}
-
-function Revisions({ revisions, nameOf, tx }: { revisions: SessionStateBody['revisions']; nameOf: (id: string) => string; tx: Tx }) {
-    const sorted = [...revisions].sort((a, b) => b.takenAt.localeCompare(a.takenAt));
-    return (
-        <Section title={tx.revisions(revisions.length)}>
-            <ol className="session-list session-revisions">
-                {sorted.map((r) => (
-                    <li key={r.id} className={`session-revision state-${r.state}`} data-revision={r.id}>
-                        <div className="session-row">
-                            <span>{tx.origins[r.origin.kind]}</span>
-                            <span className="muted small">{time(r.takenAt)}</span>
-                            {r.state === 'Confirmed' && (
-                                <span className="session-status status-current">
-                                    {tx.confirmed} · {nameOf(r.confirmedBy)}
-                                </span>
-                            )}
-                        </div>
-                        <div className="muted small">
-                            {VALIDATION_ROWS.map((k) => `${tx.validationRows[k]} ${r.validation[k]}`).join(' · ')}
-                            {r.validation.stale && ` · ${tx.staleValidation}`}
-                        </div>
-                    </li>
-                ))}
-            </ol>
-        </Section>
     );
 }

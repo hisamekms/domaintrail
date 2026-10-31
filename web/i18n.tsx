@@ -419,6 +419,56 @@ const ja = {
         } as Record<RevisionOriginKind, string>,
         confirmed: '確認済み',
         staleValidation: '検証が古い',
+        latest: '最新',
+        originDetails: {
+            run: (n: number | undefined) => (n === undefined ? '実行' : `実行 ${n}`),
+            by: (name: string) => `${name} が記録`,
+            restoring: (n: number | undefined) => `#${n ?? '?'} の復元の前`,
+            restoredFrom: (from: number | undefined, pre: number | undefined) => `#${from ?? '?'} から（復元前は #${pre ?? '?'}）`,
+        },
+        validationByDsl: (dtErrors: number, dtesErrors: number, dtesWarnings: number, links: number) =>
+            `.dt エラー ${dtErrors} · .dtes エラー ${dtesErrors}・警告 ${dtesWarnings} · 参照の警告 ${links}`,
+        chooseForComparison: (n: number) => `#${n} を比較に選ぶ`,
+        chooseTwo: '比較するリビジョンを2つ選んでください',
+        compare: (a: string, b: string) => `#${a} と #${b} を比較`,
+        takeRevision: 'いまの状態を記録',
+        confirm: '確認済みにする',
+        confirmHint: '確認は印です。ほかの操作を止めません',
+        restore: '復元…',
+        restoreFlow: {
+            confirm: (n: string) =>
+                `#${n} を復元しますか？ ワークスペースの .dt と .dtes がすべてこのリビジョンの内容になり、全員の画面が切り替わります。いまの状態は先に「復元前」のリビジョンとして残ります。`,
+            restore: (n: string) => `#${n} を復元する`,
+            cancel: 'やめる',
+            close: '閉じる',
+            external: (paths: readonly string[]) =>
+                `最後のリビジョンのあとで、ワークスペースが外部で変わっています（${paths.join(', ')}）。上書きせずに止めました。いまの状態をリビジョンとして記録してから復元できます。`,
+            recordThenRestore: 'いまの状態を記録してから復元する',
+            run: (n: number | undefined) =>
+                `実行${n === undefined ? '' : ` ${n}`}が進行中のため復元できません。実行が終わるのを待つか、取り消してから復元してください。`,
+            cancelRun: '実行を取り消す',
+            cancelled:
+                '実行を取り消しました。エージェントが止まってから復元してください（エージェントが変えたファイルがあれば外部の変更として扱われ、記録してから復元します）。',
+            retry: 'もう一度復元する',
+            manual: (cause: string, message: string, pre: string) =>
+                `書き込みの途中で失敗しました（${cause}: ${message}）。ワークスペースは書きかけかもしれません。手動での復旧が必要です。復元前の状態はリビジョン #${pre} に残っています。ファイルを確かめてから、それを復元してください。`,
+            restorePre: (n: string) => `#${n} を復元する…`,
+            done: (n: string, m: string) => `#${n} を復元しました（新しいリビジョン #${m}）。`,
+            failed: (m: string) => `復元できませんでした: ${m}`,
+        },
+        comparison: {
+            title: (a: string, b: string) => `リビジョンの比較 #${a} → #${b}`,
+            close: '閉じる',
+            loading: '読み込み中…',
+            validation: '検証',
+            languages: { Dt: '.dt', Dtes: '.dtes' },
+            statuses: { added: '追加', removed: '削除', changed: '変更', unchanged: '変更なし' },
+            noChanges: '変わったファイルはありません。',
+            tooLarge: '大きすぎるため差分を表示しません。',
+            truncated: '差分は途中までです。',
+            omittedFile: '比較の上限に達したため、このファイルの差分は省きました。',
+            omitted: '比較の差分が上限に達したため、一部のファイルの差分を省きました。',
+        },
     },
 };
 
@@ -799,6 +849,55 @@ const en: Messages = {
         },
         confirmed: 'Confirmed',
         staleValidation: 'validation out of date',
+        latest: 'latest',
+        originDetails: {
+            run: (n) => (n === undefined ? 'a run' : `run ${n}`),
+            by: (name) => `by ${name}`,
+            restoring: (n) => `before restoring #${n ?? '?'}`,
+            restoredFrom: (from, pre) => `from #${from ?? '?'} (before: #${pre ?? '?'})`,
+        },
+        validationByDsl: (dtErrors, dtesErrors, dtesWarnings, links) =>
+            `.dt errors ${dtErrors} · .dtes errors ${dtesErrors}, warnings ${dtesWarnings} · reference warnings ${links}`,
+        chooseForComparison: (n) => `Choose #${n} for a comparison`,
+        chooseTwo: 'Choose two revisions to compare',
+        compare: (a, b) => `Compare #${a} and #${b}`,
+        takeRevision: 'Record the current state',
+        confirm: 'Mark as confirmed',
+        confirmHint: 'A mark only: it blocks nothing',
+        restore: 'Restore…',
+        restoreFlow: {
+            confirm: (n) =>
+                `Restore #${n}? Every .dt and .dtes of the workspace becomes that revision's, on everyone's page. The current state is kept first as a "before a restore" revision.`,
+            restore: (n) => `Restore #${n}`,
+            cancel: 'Cancel',
+            close: 'Close',
+            external: (paths) =>
+                `The workspace changed outside the session since the last revision (${paths.join(', ')}). Nothing was overwritten. You can record the current state as a revision, then restore.`,
+            recordThenRestore: 'Record the current state, then restore',
+            run: (n) => `A run${n === undefined ? '' : ` (run ${n})`} is in progress: wait for it to end, or cancel it first, then restore.`,
+            cancelRun: 'Cancel the run',
+            cancelled:
+                'The run was cancelled. Restore once its agent has stopped (files the agent changed count as external changes: they are recorded before the restore).',
+            retry: 'Restore again',
+            manual: (cause, message, pre) =>
+                `The restore failed while writing (${cause}: ${message}). The workspace may be half written: manual recovery needed. The state before the restore is revision #${pre}; check the files, then restore it.`,
+            restorePre: (n) => `Restore #${n}…`,
+            done: (n, m) => `Restored #${n} (new revision #${m}).`,
+            failed: (m) => `Not restored: ${m}`,
+        },
+        comparison: {
+            title: (a, b) => `Compare revisions #${a} → #${b}`,
+            close: 'Close',
+            loading: 'Loading…',
+            validation: 'Validation',
+            languages: { Dt: '.dt', Dtes: '.dtes' },
+            statuses: { added: 'added', removed: 'removed', changed: 'changed', unchanged: 'unchanged' },
+            noChanges: 'No file changed.',
+            tooLarge: 'Too large to show a diff.',
+            truncated: 'The diff is cut here.',
+            omittedFile: 'The comparison reached its limit: no diff for this file.',
+            omitted: "The comparison's diffs reached their limit: some files have no diff.",
+        },
     },
 };
 

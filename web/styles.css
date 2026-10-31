@@ -3000,3 +3000,116 @@ del.was.block {
     font-size: 12px;
     white-space: nowrap;
 }
+
+/* ---------- the revision timeline, its comparison and the restore (dt session start only) ---------- */
+
+.session-revision-number {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.session-revision.latest .session-revision-number {
+    color: var(--accent);
+}
+.session-revision-origin {
+    flex: 1;
+    min-width: 0;
+}
+.session-revision-actions {
+    margin-top: 4px;
+}
+.session-panel button.small {
+    font-size: 12px;
+    padding: 1px 6px;
+}
+.session-restore p {
+    margin: 0 0 6px;
+}
+.session-restore .session-buttons button.primary {
+    margin-top: 0;
+}
+.session-dialog {
+    width: min(1100px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px var(--shadow);
+    font-size: 14px;
+}
+.session-dialog[open] {
+    display: flex;
+    flex-direction: column;
+}
+.session-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+}
+.session-comparison-body h3 {
+    margin: 16px 0 6px;
+}
+.session-validation-sides td {
+    padding: 0 12px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.session-file {
+    margin: 6px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+.session-file > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    cursor: pointer;
+    background: var(--bg);
+    border-radius: 6px 6px 0 0;
+}
+.session-file-path {
+    font-family: var(--mono, ui-monospace, monospace);
+    font-weight: 600;
+    word-break: break-all;
+}
+.session-status.file-added {
+    background: var(--added);
+    color: #fff;
+}
+.session-status.file-removed {
+    background: var(--removed);
+    color: #fff;
+}
+.session-status.file-changed {
+    background: var(--accent);
+    color: #fff;
+}
+.diff-count-add {
+    color: var(--added);
+}
+.diff-count-remove {
+    color: var(--removed);
+}
+.session-diff {
+    margin: 0;
+    padding: 6px 0;
+    overflow-x: auto;
+    font-family: var(--mono, ui-monospace, monospace);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.diff-line {
+    display: block;
+    padding: 0 10px;
+    white-space: pre;
+}
+.diff-add {
+    background: color-mix(in srgb, var(--added) 16%, transparent);
+}
+.diff-remove {
+    background: color-mix(in srgb, var(--removed) 16%, transparent);
+}
+.diff-hunk,
+.diff-note {
+    color: var(--muted);
+}

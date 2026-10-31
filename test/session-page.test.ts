@@ -13,6 +13,8 @@ import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from '@
 import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from '@domaintrail/web/session/location';
 import { cursorsOn, initials, NO_PEERS, receivePresence, throttle, whereabouts } from '@domaintrail/web/session/presence';
 import { adopt, applyEvent, disconnected, INITIAL_SESSION, latestRevision, receive } from '@domaintrail/web/session/state';
+import { SessionApiError } from '@domaintrail/web/session/api';
+import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timeline } from '@domaintrail/web/session/timeline';
 import { occurrenceNode, selectionOf, targetKey, targetOfSelection, WORKSPACE_TARGET } from '@domaintrail/web/session/targets';
 import { EXAMPLES } from './helpers.js';
 
@@ -363,5 +365,80 @@ describe('presence', () => {
         } finally {
             globalThis.setTimeout = real;
         }
+    });
+});
+
+describe('the revision timeline (S7)', () => {
+    const v = { dtErrors: 0, dtesErrors: 0, dtesWarnings: 0, linkWarnings: 0, stale: false };
+    const rev = (id: string, minute: number, origin: Record<string, string>, hash = id): SessionStateBody['revisions'][number] =>
+        ({
+            id,
+            session: 's',
+            origin,
+            contentHash: hash,
+            files: [],
+            validation: v,
+            takenAt: `2026-10-31T09:${String(minute).padStart(2, '0')}:00.000Z`,
+            state: 'Recorded',
+        }) as unknown as SessionStateBody['revisions'][number];
+    const runs = [
+        { id: 'run-b', queuedAt: '2026-10-31T09:05:00.000Z' },
+        { id: 'run-a', queuedAt: '2026-10-31T09:01:00.000Z' },
+    ] as unknown as SessionStateBody['runs'];
+    const revisions = [
+        rev('r1', 0, { kind: 'SessionStart', session: 's' }, 'h1'),
+        rev('r2', 2, { kind: 'RunBase', run: 'run-a' }, 'h1'),
+        rev('r3', 3, { kind: 'RunResult', run: 'run-a' }, 'h3'),
+        rev('r4', 4, { kind: 'Manual', takenBy: 'p' }, 'h4'),
+        rev('r5', 6, { kind: 'PreRestore', restoring: 'r1' }, 'h4'),
+        rev('r6', 7, { kind: 'Restored', restoredFrom: 'r1', preRestore: 'r5' }, 'h1'),
+    ];
+
+    test('newest first, numbered in the order taken, with the runs and revisions an origin refers to', () => {
+        const t = timeline({ revisions: [...revisions].reverse(), runs });
+        expect(t.map((e) => [e.number, e.origin, e.latest, e.sameAsLatest])).toEqual([
+            [6, { kind: 'Restored', from: 1, preRestore: 5 }, true, true],
+            [5, { kind: 'PreRestore', restoring: 1 }, false, false],
+            [4, { kind: 'Manual', by: 'p' }, false, false],
+            [3, { kind: 'RunResult', run: 1 }, false, false],
+            [2, { kind: 'RunBase', run: 1 }, false, true],
+            [1, { kind: 'SessionStart' }, false, true],
+        ]);
+    });
+
+    test('two revisions are chosen for a comparison, the earlier taken first; a third replaces the first chosen', () => {
+        let chosen = chooseForComparison([], 'r4', true);
+        expect(comparisonPair(chosen, revisions)).toBeUndefined();
+        chosen = chooseForComparison(chosen, 'r2', true);
+        expect(comparisonPair(chosen, revisions)).toEqual(['r2', 'r4']);
+        chosen = chooseForComparison(chosen, 'r6', true);
+        expect([chosen, comparisonPair(chosen, revisions)]).toEqual([
+            ['r2', 'r6'],
+            ['r2', 'r6'],
+        ]);
+        expect(chooseForComparison(chosen, 'r2', false)).toEqual(['r6']);
+    });
+
+    test('what a restore that did not go through asks next', () => {
+        expect(restoreProblem(new SessionApiError('ExternalChangesSinceSnapshot', 409, undefined, { paths: ['a.dt', 1] }))).toEqual({
+            kind: 'external',
+            paths: ['a.dt'],
+        });
+        expect(restoreProblem(new SessionApiError('RunInProgress', 409, undefined, { run: 'run-a' }))).toEqual({ kind: 'run', run: 'run-a' });
+        expect(restoreProblem(new SessionApiError('ManualRecoveryNeeded', 500, 'EIO', { preRestore: 'r5', cause: 'WriteFailed' }))).toEqual({
+            kind: 'manual',
+            preRestore: 'r5',
+            cause: 'WriteFailed',
+            message: 'EIO',
+        });
+        expect(restoreProblem(new SessionApiError('FacilitatorOnly', 403, 'Only the facilitator may do this.'))).toEqual({
+            kind: 'other',
+            message: 'FacilitatorOnly: Only the facilitator may do this.',
+        });
+    });
+
+    test('the lines of a unified diff by kind', () => {
+        expect(diffLines('@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b').map((l) => l.kind)).toEqual(['hunk', 'context', 'remove', 'note', 'add']);
+        expect(diffLines('')).toEqual([]);
     });
 });
