@@ -40,8 +40,13 @@ it, the items added, changed and removed since then. A removed item opens in the
 
 ## Main (center)
 
-Views of the whole model, in tabs with a toolbar of what to show (view-specific: the BCs, the level…) ending with the
-canvas's menu ⋯; on a narrow canvas the toolbar goes below the tabs and onto more rows (its pickers shortened). Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+Views of the whole model, in tabs. Under the tabs, every view's toolbar puts the same kinds of controls in the same
+places, leaving out what the view does not have: at the left the subject (what is looked at: the storming and its
+timeline) and then the level (how much of it is drawn: icons, named in their tooltips); at the right
+「⏷ 絞り込み」 (what is hidden: the BCs, the kinds…, in a popover; while anything is narrowed the button shows how many
+narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除) and the canvas's menu ⋯ (canvas
+views only). On a narrow canvas the subject's names are cut short first (the whole name in a tooltip); 絞り込み and ⋯
+stay, and go onto a second row only when even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
@@ -55,23 +60,28 @@ inspector's 状態遷移 diagram has the same controls.
 
 - **Context Map**: one node per bounded context and one edge per dependency between contexts, labeled with the number
   of ID references and borrowed types (solid when types are borrowed). Shared contexts and contexts that only declare
-  IDs are hidden unless 「共有・外部の BC も表示」 is checked. Selecting a context lists every use in the inspector
+  IDs are hidden unless 「共有・外部の BC も表示」 is checked (in 絞り込み; checking it counts as a narrowing, being
+  the view's non-default choice). Selecting a context lists every use in the inspector
   (依存先 / 依存元). See [ADR 0006](adr/0006-context-map.md).
 - **Structure**: contexts, aggregate boundaries, entities, value objects, unions, `owns` / `references`. Pick bounded
-  contexts in the toolbar (any number) to draw only them, with the elements they use and the elements that use them as
-  stubs; the eye next to each other context hides its stubs and the edges to and from them (the toolbar shows how many
-  are hidden). The first row, 「すべての BC」, checks or unchecks every context and shows or hides every stub. Three
+  contexts in 絞り込み (any number) to draw only them, with the elements they use and the elements that use them as
+  stubs; the eye next to each other context hides its stubs and the edges to and from them (the BCs picked and the hidden stubs
+  count as one narrowing each). The first row, 「すべての BC」, checks or unchecks every context and shows or hides every stub. Three
   levels work in both, switched by the icons in the toolbar: 詳細 (every field), 概観 (the elements' names only) and
   集約 (only the aggregates with their descriptions, and one edge per pair of aggregates that depend on each other,
   also through the entities, value objects and IDs they hold; shared contexts are left out, and a context without
   aggregates stays as a frame with its description).
 - **Catalog**: cards to look over the model, one section per kind; for now the domain primitives per context (shared
-  first) with base type, invariants and usages.
+  first) with base type, invariants and usages. The text filter is at the left of the toolbar (the catalog has no
+  subject or level); 絞り込み picks the BCs and the kinds (checkboxes with each kind's colour). The catalog's filter is
+  not remembered across reloads, so that a reload never hides elements without saying so.
 - **Event Storming** (イベントストーミング, shown when the workspace has a `.dtes` storming; a workspace of `.dtes` files only
-  opens on it): one storming as sticky notes, laid out left to right (`dt guide storming-views`). The toolbar picks
-  the storming (表示するストーミング, when there are several), the タイムライン — すべて（統合） for the integrated canvas,
-  or one timeline with its one-hop causal paths — and the level: ビッグピクチャー (events, timelines and hotspots only)
-  or デザインレベル (also commands, policies, actors, external systems, aggregates and read models). The choices are
+  opens on it): one storming as sticky notes, laid out left to right (`dt guide storming-views`). The toolbar's
+  subject is a breadcrumb of two pickers: the storming (表示するストーミング; its name alone when there is only one) ▸ the
+  タイムライン — すべて（統合） for the integrated canvas, or one timeline with its one-hop causal paths (a subject, not
+  a filter: the two draw different things). The level icons are ビッグピクチャー (the telescope: events, timelines
+  and hotspots only) and デザインレベル (the microscope: also commands, policies, actors, external systems, aggregates
+  and read models). The choices are
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
   timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes

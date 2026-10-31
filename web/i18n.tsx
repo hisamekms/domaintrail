@@ -126,12 +126,17 @@ const ja = {
     allTimelines: 'すべて（統合）',
     staleStorming: (file: string) => `${file} に構文エラーがあるため、最後に解析できた内容を表示しています`,
 
-    // BC picker
+    // the toolbar's 絞り込み (what each view hides)
+    filters: {
+        label: '絞り込み',
+        active: (n: number) => `絞り込み（${n} 件適用中）`,
+        clear: 'すべて解除',
+        contexts: 'BC',
+        kinds: '種類',
+        allKinds: 'すべての種類',
+    },
     contextsToShow: '表示する BC',
     allContexts: 'すべての BC',
-    moreContexts: (first: string, n: number) => `${first} ほか ${n} BC`,
-    listSeparator: '、',
-    hiddenContexts: (n: number) => ` · ${n} BC 非表示`,
     allStubs: 'スタブをまとめて表示',
     showAllStubs: 'すべてスタブとして表示する',
     hideAllStubs: 'すべてのスタブを表示しない',
@@ -747,11 +752,16 @@ const en: Messages = {
     allTimelines: 'All (integrated)',
     staleStorming: (file) => `${file} has syntax errors: showing what it was when it last parsed`,
 
+    filters: {
+        label: 'Filter',
+        active: (n) => `Filter (${n} active)`,
+        clear: 'Clear all',
+        contexts: 'BCs',
+        kinds: 'Kinds',
+        allKinds: 'All kinds',
+    },
     contextsToShow: 'BCs to show',
     allContexts: 'All BCs',
-    moreContexts: (first, n) => `${first} and ${n} more`,
-    listSeparator: ', ',
-    hiddenContexts: (n) => ` · ${n} hidden`,
     allStubs: 'Show all stubs',
     showAllStubs: 'Show all as stubs',
     hideAllStubs: 'Hide all stubs',

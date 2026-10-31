@@ -1873,8 +1873,8 @@ make two occurrences the same happening, so read a path along one timeline's nam
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
-`dt view`, the イベントストーミング tab shows one storming at a time, with the timeline and the level picked in its
-toolbar; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
+`dt view`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
+its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming

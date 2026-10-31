@@ -1291,96 +1291,6 @@ select,
     background: var(--warning);
 }
 
-/* the filter, kept at the top while the catalog scrolls */
-.catalog-top {
-    position: sticky;
-    top: -20px;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin: -20px -24px 20px;
-    padding: 12px 24px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-}
-.catalog-filter-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.catalog-filter-row .catalog-filter {
-    flex: 0 1 360px;
-    min-width: 7.5rem;
-    height: 1.75rem;
-    margin-right: 0;
-    background: var(--panel);
-}
-.catalog-filter .icon-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    border: none;
-    border-radius: 4px;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-}
-.catalog-filter .icon-button:hover {
-    background: var(--hover);
-    color: inherit;
-}
-/* the filter gives way first, down to its least width; then the contexts' summary ends in an ellipsis */
-.catalog-filter-row .context-picker {
-    flex-shrink: 0;
-    max-width: calc(100% - 128px);
-}
-.catalog-filter-row .context-picker > button {
-    height: 1.75rem;
-    padding: 0 10px;
-    font: inherit;
-    font-size: 0.8125rem;
-    color: var(--text);
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    cursor: pointer;
-}
-.catalog-filter-row .context-picker-menu {
-    right: auto;
-    left: 0;
-    font-size: 0.8125rem;
-}
-/* kinds to show: none pressed means all, so the others fade only once one is */
-.catalog-kinds {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-}
-/* kinds without colours of their own (zero specificity, so that `.kind-*` wins) */
-:where(.catalog-kind) {
-    color: var(--text);
-    background: var(--neutral-tint);
-}
-.catalog-kind {
-    padding: 2px 10px;
-    font: inherit;
-    font-size: 0.75rem;
-    font-weight: 600;
-    border: 1.5px solid transparent;
-    border-radius: 999px;
-    cursor: pointer;
-}
-.catalog-kind[aria-pressed='true'] {
-    border-color: currentColor;
-}
-.catalog-kind.off {
-    opacity: 0.4;
-}
-.catalog-kind:hover {
-    opacity: 1;
-}
 .catalog-count {
     font-size: 0.6875rem;
     color: var(--muted);
@@ -2198,35 +2108,243 @@ svg.chat-launcher-mark {
     opacity: 0.4;
     cursor: default;
 }
+/*
+ * the view toolbar, its own row under the tabs and the same in every view: the subject and the level at the left, the
+ * 絞り込み button and the menu ⋯ at the right end. A narrow pane cuts the subject's names short first; only when even
+ * that is not enough does the right end go onto a second row.
+ */
 .view-toolbar {
-    margin-left: auto;
-    max-width: 100%;
+    flex-basis: 100%;
     min-width: 0;
     padding: 4px 0;
     display: flex;
-    /* a pane too narrow for the controls puts them on more rows (each control stays whole), right-aligned */
     flex-wrap: wrap;
-    justify-content: flex-end;
-    white-space: nowrap;
     align-items: center;
     gap: 4px 8px;
+    white-space: nowrap;
     font-size: 0.8125rem;
 }
-.view-toolbar button,
-.view-toolbar select {
+.toolbar-subject {
+    flex: 1 1 12rem;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.toolbar-subject > .level-switch {
+    flex: none;
+}
+.toolbar-end {
+    flex: none;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.toolbar-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    height: 1.625rem;
+    padding: 0 8px;
     font: inherit;
-    padding: 3px 10px;
+    color: var(--text);
+    background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 6px;
+    white-space: nowrap;
+}
+.toolbar-button:hover {
+    background: var(--hover);
+}
+.toolbar-button-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.toolbar-caret {
+    flex: none;
+    font-size: 0.6875rem;
+    color: var(--muted);
+}
+/* the subject: pickers in a breadcrumb, each cut short with an ellipsis when narrow */
+.subject-crumbs {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.subject-sep {
+    flex: none;
+    color: var(--muted);
+}
+.subject-picker {
+    position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 16rem;
+    display: flex;
+}
+.subject-picker.subject-name {
+    display: block;
+    padding: 0 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
+}
+/* the subject's list and the 絞り込み popover */
+.toolbar-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    z-index: 20;
+    max-width: min(24rem, calc(100vw - 2rem));
+    max-height: 60vh;
+    overflow: auto;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    white-space: nowrap;
     background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+}
+.subject-menu {
+    left: 0;
+    min-width: 100%;
+}
+.subject-menu > button {
+    padding: 5px 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+    background: none;
+    border: none;
+    border-radius: 5px;
+}
+.subject-menu > button:hover,
+.subject-menu > button:focus-visible {
+    background: var(--hover);
+    outline: none;
+}
+.subject-menu > button[aria-selected='true'] {
+    color: var(--accent);
+    font-weight: 600;
+}
+.filter-popover {
+    position: relative;
+}
+.filter-button.active {
+    color: var(--accent);
+    background: var(--violet-tint);
+    border-color: var(--accent);
+}
+.filter-count {
+    min-width: 1.125rem;
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+    text-align: center;
+    color: #fff;
+    background: var(--accent);
+}
+.filter-menu {
+    right: 0;
+    min-width: 15rem;
+    padding: 8px;
+    gap: 8px;
+}
+.filter-menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-weight: 600;
+}
+.filter-clear {
+    padding: 2px 6px;
+    font: inherit;
+    font-weight: normal;
+    color: var(--accent);
+    background: none;
+    border: none;
+    border-radius: 4px;
+}
+.filter-clear:hover:not(:disabled) {
+    background: var(--hover);
+}
+.filter-clear:disabled {
+    color: var(--muted);
+    opacity: 0.6;
+    cursor: default;
+}
+.filter-section {
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+}
+.filter-section h3 {
+    margin: 0 0 4px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--muted);
+}
+.filter-section > .check {
+    padding: 2px 4px;
+}
+/* the catalog's kinds: a checkbox and the kind's colour */
+.kind-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.kind-list .check {
+    padding: 2px 4px;
+}
+.kind-list-all {
+    margin-bottom: 2px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+:where(.kind-dot) {
+    color: var(--muted);
+}
+.kind-list .kind-dot {
+    flex: none;
+    width: 0.625rem;
+    height: 0.625rem;
+    margin-right: 2px;
+    border: none;
+    border-radius: 50%;
+    background: currentColor;
+}
+/* the catalog's text filter, at the subject's place */
+.view-toolbar .view-search {
+    flex: 0 1 22.5rem;
+    min-width: 7.5rem;
+    height: 1.625rem;
+    margin-right: 0;
+    background: var(--panel);
+}
+.view-search .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
     cursor: pointer;
 }
-.view-toolbar select.view-select {
-    /* on a narrow pane the pickers share a row, shortened (their names cut short) */
-    flex: 1 1 8rem;
-    min-width: 0;
-    max-width: 13.75rem;
-    text-overflow: ellipsis;
+.view-search .icon-button:hover {
+    background: var(--hover);
+    color: inherit;
 }
 .view-area {
     flex: 1;
@@ -2868,41 +2986,12 @@ details.deps > .sub {
     color: var(--violet-text);
 }
 
-.context-picker {
-    position: relative;
-    /* when narrow the summary shrinks to an ellipsis, down to this width */
-    min-width: 6rem;
-}
-.context-picker-button {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    max-width: 100%;
-    white-space: nowrap;
-}
-.context-picker-summary {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.context-picker-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    z-index: 20;
-    min-width: 15rem;
-    max-height: 60vh;
-    overflow: auto;
-    padding: 8px;
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px var(--shadow);
+.context-list {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
-.context-picker-menu .check {
+.context-list .check {
     flex: 1;
     padding: 2px 4px;
     white-space: nowrap;
@@ -2916,7 +3005,7 @@ details.deps > .sub {
     color: var(--muted);
 }
 /* icon-only buttons (outweighing the toolbar's and the bottom bar's button styles) */
-.context-picker-menu .icon-button,
+.context-list .icon-button,
 .settings .icon-button,
 .legend .icon-button,
 .pane .icon-button,
@@ -2932,7 +3021,7 @@ details.deps > .sub {
     background: none;
     color: var(--muted);
 }
-.context-picker-menu .icon-button:hover:not(:disabled),
+.context-list .icon-button:hover:not(:disabled),
 .settings .icon-button:hover:not(:disabled),
 .legend .icon-button:hover:not(:disabled),
 .pane .icon-button:hover:not(:disabled),
@@ -2940,7 +3029,7 @@ details.deps > .sub {
     background: var(--hover);
     color: inherit;
 }
-.context-picker-menu .icon-button:disabled,
+.context-list .icon-button:disabled,
 .settings .icon-button:disabled,
 .legend .icon-button:disabled,
 .pane .icon-button:disabled,
