@@ -66,6 +66,41 @@ that build it in parallel (T2–T8). The shared types are in `src/dtes/ir.ts`.
 - **The storming IR** (`Storming` in `src/dtes/ir.ts`) is built from the AST after parsing. It holds every clause as
   written, invalid ones included, with source ranges. The validator, the linker and the projection work on it alone,
   never on the AST, so they can be built and tested apart from the parser.
+- **The grammar** (spec §14 item 1), as an EBNF summary of `src/dtes/storming.langium`. Whitespace and comments
+  (`WS`, `ML_COMMENT`, `SL_COMMENT`) may appear between any two tokens. Keywords are reserved: they are not IDs.
+
+  ```ebnf
+  file        = { storming } ;
+  storming    = "storming" ID [ STRING ] "{" { element } "}" ;
+  element     = node | timeline ;
+  node        = node-kind ID [ STRING ] [ "{" { clause } "}" ] ;
+  node-kind   = "event" | "actor" | "external" | "command" | "policy" | "aggregate" | "readmodel" | "hotspot" ;
+  clause      = "ref" path
+              | relation ID                         (* a local reference: any declaration of the storming *)
+              | "status" name
+              | "resolution" STRING ;
+  relation    = "actor" | "reads" | "target" | "emits" | "on" | "issues" ;
+  timeline    = "timeline" ID [ STRING ] "{" { ID | group } "}" ;
+  group       = "group" ID [ STRING ] "{" ID { ID } "}" ;
+  path        = ID { "." name } ;
+  name        = ID | keyword ;                       (* any of the keywords above *)
+
+  ID          = /[_a-zA-Z][\w_]*/ ;
+  STRING      = /"(\\.|[^"\\])*"/ ;                  (* escapes resolved as in .dt *)
+  WS          = /\s+/ ;
+  ML_COMMENT  = /\/\*[\s\S]*?\*\// ;
+  SL_COMMENT  = /\/\/[^\n\r]*/ ;                     (* `///` lines directly above a declaration are its doc *)
+  ```
+
+  The parser's diagnostics are `SYNTAX` only: an unknown keyword or clause word, a `ref` or a clause in a timeline or
+  group, a declaration outside a storming or inside a body, a nested storming or group, an empty group, a keyword as an
+  ID, an unclosed block or string. Everything else that the grammar accepts is the validator's (S001–S009, S014) or
+  the linker's (S010–S013): a clause of the wrong element or repeated, an unknown or wrong-kind local reference
+  (timeline steps included), duplicate IDs, a `status` other than `open`/`resolved`.
+- **`dt fmt` for `.dtes`** (`formatStorming`, `src/dtes/format.ts`): 2 spaces per level; every element, clause, timeline
+  step and group event on its own line; an element without clauses on one line (an empty `{}` is dropped, unless it
+  holds a comment); up to one blank line the author wrote between members, none after `{` or before `}`, exactly one
+  between stormings; no spaces around the dots of a `ref`; comments kept where they are, like the `.dt` formatter.
 - **tree-sitter and Zed are out of v0.1.** The Langium grammar is the reference (CONTRIBUTING). A second
   tree-sitter grammar needs the wasm build, a new build stamp and a new Zed `rev`. Highlighting is the only thing it
   would add, while `dt lsp` already gives editors diagnostics, navigation and formatting for `.dtes`. It is a
