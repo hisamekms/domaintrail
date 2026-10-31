@@ -142,7 +142,7 @@ describe('--format json', () => {
 
         const empty = await run('-r', dir, 'check', '--format', 'json');
         expect(empty.code).toBe(1);
-        expect(json(empty)).toMatchObject({ diagnostics: [], summary: { files: 0 }, error: expect.stringContaining('No .dt files found') });
+        expect(json(empty)).toMatchObject({ diagnostics: [], summary: { files: 0 }, error: expect.stringContaining('No .dt or .dtes files found') });
 
         await writeFile(path.join(dir, 'domaintrail.json'), '{ "sources": 1 }');
         const config = await run('-r', dir, 'check', '--format', 'json');

@@ -5,7 +5,8 @@ import { analyze, type Analysis } from '../core/analyze.js';
 import { ConfigError, checkTsContexts, loadConfig, policyModes, staysInside, type ResolvedConfig } from '../core/config.js';
 import { LINT_HINT, hasCastLintRule } from '../core/lint-hint.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../core/diagnostics.js';
-import { findDomainFiles, loadWorkspace } from '../core/files.js';
+import { findDomainFiles, isStormingFile, loadWorkspace } from '../core/files.js';
+import { formatStorming } from '../dtes/format.js';
 import { formatDomain } from '../format/format.js';
 import { GENERATED_MARKER, generateTypeScript } from '../generator/typescript.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
@@ -58,7 +59,7 @@ async function runCheck(config: ResolvedConfig, io: CliIO, report?: JsonReport):
     const analysis = await analyze(sources);
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
-    const noFiles = `No .dt files found under ${root} (sources: ${config.sources.join(', ')}).`;
+    const noFiles = noSourcesMessage(config);
     if (report) {
         report.diagnostics = analysis.diagnostics.map(jsonDiagnostic);
         report.summary = { files: sources.length, errors, warnings };
@@ -95,9 +96,9 @@ export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Pr
             'after',
             `
 Examples:
-  dt check                      validate every .dt file below the current directory
+  dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
-  dt fmt                        rewrite every .dt file in the canonical layout (run it after editing)
+  dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
   dt view                       serve the Live View at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
@@ -115,7 +116,8 @@ of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when yo
 Prints \`file:line:col - error CODE: message\` per problem (errors on stderr, warnings on stdout), followed by an
 indented \`hint:\` line when there is a suggested fix, then a summary line. With --format json, prints one JSON document
 on stdout instead: {"diagnostics": [...], "summary": {...}}, or {"error": "..."} when the check could not run.
-Exits 0 when there are no errors, 1 on errors or when no .dt file is found, 2 on an invalid config.
+Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt model; their rules start with S.
+Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:
   dt check
@@ -139,7 +141,8 @@ Examples:
         .addHelpText(
             'after',
             `
-Runs check first and writes nothing if the model has errors (exit 1). Files generated before are replaced, and those
+Runs check first and writes nothing if the model has errors (exit 1). Errors in .dtes files are reported but do not
+block generation, which reads the .dt files only. Files generated before are replaced, and those
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
 directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
@@ -170,7 +173,13 @@ Examples:
                 exitCode = 1; // reported by runCheck
                 return;
             }
-            if (!a.ok || !a.model) {
+            if (a.documents.length === 0) {
+                fail(`Generation skipped: no .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`, 1);
+                return;
+            }
+            // a storming is exploration: its errors are reported but never block generation (ADR 0024)
+            const modelErrors = a.diagnostics.some((d) => d.severity === 'error' && !isStormingFile(d.file));
+            if (modelErrors || !a.model) {
                 fail('Generation skipped because the model has errors.', 1);
                 return;
             }
@@ -227,7 +236,7 @@ Examples:
 
     program
         .command('fmt')
-        .description('Format .dt files in place: one canonical layout, keeping every comment.')
+        .description('Format .dt and .dtes files in place: one canonical layout, keeping every comment.')
         .argument('[files...]', 'files to format, relative to the current directory (default: the sources of the workspace)')
         .option('--check', 'write nothing; list the files that are not formatted and exit 1 if there are any')
         .addHelpText(
@@ -236,15 +245,18 @@ Examples:
 Rewrites each file in the layout described in \`dt guide fmt\`: 2-space indentation, one member per line,
 a command's clauses on lines of their own unless it is short, and \`[0..1]\` written as \`?\`. Only whitespace and
 these spellings change, never the model; comments stay where they are. Run it after editing .dt files.
+.dtes files get their own layout: 2-space indentation, one element, clause or timeline step per line, an element
+without clauses on one line.
 A file with syntax errors is reported like \`dt check\` does and left untouched (exit 1).
 Prints the files it changed (with --check, those it would change), then a summary. Exits 0 when every file is
 formatted (or, without --check, was formatted), 1 on syntax errors, with --check on a file to change, or when no
-.dt file is found, 2 on an invalid config.
+.dt or .dtes file is found, 2 on an invalid config.
 
 Examples:
   dt fmt
   dt fmt --check
   dt fmt sales/order.dt
+  dt fmt storming/checkout.dtes
   dt -r domain fmt`,
         )
         .action(async (files: string[], opts: { check?: boolean }) => {
@@ -253,7 +265,7 @@ Examples:
             else {
                 const cfg = await config();
                 entries = (await findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
-                if (!entries.length) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
+                if (!entries.length) throw new CliError(noSourcesMessage(cfg));
             }
             const sources = await Promise.all(entries.map(async (e) => ({ path: e.path, text: await readFile(e.file, 'utf8') })));
             const syntax = (await analyze(sources)).diagnostics.filter((d) => d.code === 'SYNTAX');
@@ -262,7 +274,7 @@ Examples:
             let changed = 0;
             for (const [i, source] of sources.entries()) {
                 if (broken.has(source.path)) continue;
-                const formatted = formatDomain(source.text);
+                const formatted = isStormingFile(source.path) ? formatStorming(source.text) : formatDomain(source.text);
                 if (formatted === source.text) continue;
                 changed++;
                 io.out(source.path);
@@ -278,7 +290,7 @@ Examples:
 
     program
         .command('view')
-        .description('Start the Live View server and watch .dt files (runs until Ctrl+C).')
+        .description('Start the Live View server and watch .dt and .dtes files (runs until Ctrl+C).')
         .option('-p, --port <port>', 'port to listen on (default: view.port, else 4321)', parsePort)
         .option('--host <host>', 'host to bind (default: view.host, else 127.0.0.1)')
         .option('--base <ref>', 'compare the model with this git revision (e.g. main, HEAD~3) instead of the previous save')
@@ -325,7 +337,7 @@ Examples:
         .addHelpText(
             'after',
             `
-Speaks the Language Server Protocol on stdin/stdout for .dt files: the diagnostics of \`dt check\` (same rules, codes
+Speaks the Language Server Protocol on stdin/stdout for .dt and .dtes files: the diagnostics of \`dt check\` (same rules, codes
 and messages, over the whole workspace and the unsaved text of open files), go to definition, find references, hover,
 outline, rename of declarations, completion and formatting (as \`dt fmt\`). The workspace is the config found from
 --root or --config, else from the client's workspace folder, else from the current directory; when none is found
@@ -368,7 +380,8 @@ Examples:
         .action(async (name: string | undefined, opts: { format: Format }) => {
             const json = opts.format === 'json';
             const cfg = await config();
-            const sources = await loadWorkspace(cfg.root, cfg.sources, cfg.respectGitignore);
+            // .dt only: stormings are not shown in v0.1 (ADR 0024)
+            const sources = (await loadWorkspace(cfg.root, cfg.sources, cfg.respectGitignore)).filter((s) => !isStormingFile(s.path));
             if (sources.length === 0) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
             const a = await analyze(sources);
             if (!a.model) throw new CliError('The model has syntax errors; run `dt check` and fix them first.');
@@ -449,6 +462,10 @@ Examples:
     }
     if (report) io.out(JSON.stringify(report, null, 2));
     return exitCode;
+}
+
+function noSourcesMessage(cfg: ResolvedConfig): string {
+    return `No .dt or .dtes files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`;
 }
 
 function parsePort(value: string): number {
