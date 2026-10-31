@@ -42,6 +42,8 @@ export interface SessionHttpDeps {
     readonly holdWatcher: <T>(work: () => Promise<T>, wrote: (result: T) => boolean) => Promise<T>;
     /** An identity's sign-in ended or its role changed: its pages are disconnected (they reconnect as what they are now). */
     readonly disconnect: (identity: IdentityKey, reason: string) => void;
+    /** Another identity holds the facilitator's role: every page still connected gets the session's state again. */
+    readonly facilitatorChanged: () => void;
     /** The facilitator closed the session (after the use case): revoke, disconnect, stop. */
     readonly closed: () => Promise<void>;
     /** The cookie is `Secure` (the session is served over https). */
@@ -98,9 +100,10 @@ export function meOf(session: Collaboration.SessionId, who: Identified): Me {
     };
 }
 
-export function stateBody(state: SessionState, seq: number): SessionStateBody {
+/** The state for the pages: the session's aggregates at `seq`, and the participant holding the facilitator's role, if any. */
+export function stateBody(state: SessionState, seq: number, facilitatorHolder?: Collaboration.ParticipantId): SessionStateBody {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded (dates as ISO strings)
-    return { ...state, seq } as unknown as SessionStateBody;
+    return { ...state, seq, ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
 }
 
 /** The cookie that signs a browser in (dev), or out (`secret` undefined). */
@@ -228,6 +231,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!claimed.ok) return fail(res, claimed.error);
                 if (claimed.value.previous) deps.disconnect(claimed.value.previous, 'facilitator changed');
                 deps.disconnect(me.participant.identity, 'facilitator changed');
+                deps.facilitatorChanged();
                 deps.log('facilitator claimed');
                 const now = await identities.identify(req.headers);
                 sendJson(res, 200, now ? meOf(session, now) : meOf(session, me));
@@ -239,7 +243,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ res }) => {
                 const seq = deps.cursor();
-                sendJson(res, 200, stateBody(await state(), seq));
+                sendJson(res, 200, stateBody(await state(), seq, await identities.facilitatorParticipant()));
             },
         },
         {
@@ -476,6 +480,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 return messagePage(res, 409, 'Link not valid', 'This facilitator link was used already or has expired. Ask for a new one (dt session link).');
             if (claimed.value.previous) deps.disconnect(claimed.value.previous, 'facilitator changed');
             deps.disconnect(auth.participant.identity, 'facilitator changed');
+            deps.facilitatorChanged();
             deps.log('facilitator claimed');
             return redirect(res, '/');
         }

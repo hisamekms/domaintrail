@@ -9,7 +9,7 @@ import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
 import { sendable } from './drafts';
 import { Revisions } from './revisions';
-import { initials, participantColor, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
+import { initials, listedParticipants, participantColor, whereabouts as whereaboutsOf, type Whereabouts } from './presence';
 import { latestRevision } from './state';
 import { targetKey, WORKSPACE_TARGET, type ModelTarget, type TargetDraft } from './targets';
 import type { Drafts, SessionData } from './useSession';
@@ -40,8 +40,10 @@ export function SessionPanel(props: {
     const t = useT();
     const tx = t.session;
     const facilitator = me.participant.role === 'facilitator';
-    // the names the participants are signed in with now (the facilitator's participant is named after the role)
+    // the names the participants are signed in with now (the facilitator's participant is named after the role, or
+    // after the person holding it)
     const names = new Map<string, string>(state.session.participants.map((p) => [p.id, p.name]));
+    for (const p of listedParticipants(state)) names.set(p.id, p.name);
     for (const p of session.peers.values()) names.set(p.participant.id, p.participant.name);
     names.set(me.participant.id, me.participant.name);
     const nameOf = (id: string): string => names.get(id) ?? id;
@@ -117,10 +119,10 @@ function Participants({ session, location, nameOf, tx }: { session: SessionData;
     const where = whereaboutsOf(peers, location);
     const avatars = new Map<string, string>();
     for (const p of peers.values()) if (p.participant.avatarUrl) avatars.set(p.participant.id, p.participant.avatarUrl);
-    const roleOf = (id: string): 'facilitator' | 'participant' => (id === state.session.facilitator ? 'facilitator' : 'participant');
-    const rows = state.session.participants.map((p) => {
+    // one row per person: the facilitator's holder is listed as the facilitator only
+    const rows = listedParticipants(state).map((p) => {
         const w: Whereabouts = p.id === me.participant.id ? 'here' : (where.get(p.id) ?? 'away');
-        return { id: p.id, name: nameOf(p.id), role: roleOf(p.id), where: w };
+        return { id: p.id, name: nameOf(p.id), role: p.role, where: w };
     });
     const order: Record<Whereabouts, number> = { here: 0, 'same-view': 1, 'another-view': 2, away: 3 };
     rows.sort((a, b) => order[a.where] - order[b.where] || a.name.localeCompare(b.name));

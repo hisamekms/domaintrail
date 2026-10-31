@@ -1,7 +1,7 @@
 // The others' presence as the page holds it (ADR 0026, Presence): ephemeral, one entry per page of a participant
 // (`connection`), replaced by each update and dropped when the page leaves. Cursors are drawn only for a page whose
 // location equals this page's; the others are listed as on another view. Presence never starts anything.
-import type { Cursor, Presence, SessionServerMessage, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { Cursor, Presence, SessionServerMessage, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { hasCanvas, sameLocation } from './location';
 
 /** The others' pages by connection. */
@@ -101,4 +101,26 @@ export function throttle<T>(interval: number, send: (value: T) => void, now: () 
             pending = undefined;
         },
     };
+}
+
+/** A participant as the panel lists them. */
+export interface ListedParticipant {
+    readonly id: string;
+    readonly name: string;
+    readonly role: 'facilitator' | 'participant';
+}
+
+/**
+ * The session's participants, one entry per person: the identity holding the facilitator's role joined as a
+ * participant of its own before it claimed the role (`facilitatorHolder`), and acts as the facilitator's participant
+ * now, so that participant is folded into the facilitator's entry, which takes its name.
+ */
+export function listedParticipants(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>): ListedParticipant[] {
+    const { participants, facilitator } = state.session;
+    const holder = state.facilitatorHolder === facilitator ? undefined : participants.find((p) => p.id === state.facilitatorHolder);
+    return participants.flatMap((p): ListedParticipant[] => {
+        if (p.id === holder?.id) return [];
+        if (p.id === facilitator) return [{ id: p.id, name: holder?.name ?? p.name, role: 'facilitator' }];
+        return [{ id: p.id, name: p.name, role: 'participant' }];
+    });
 }

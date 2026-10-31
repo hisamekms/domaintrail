@@ -36,6 +36,11 @@ export interface SessionStateBody {
     readonly revisions: Json<readonly Collaboration.Revision[]>;
     /** The outbox position the state includes: event messages with a `seq` up to it are already in it. */
     readonly seq: number;
+    /**
+     * The participant that the identity holding the facilitator's role joined as (`dev:…`, `access:…`), once someone
+     * claimed the role: that person acts as the facilitator now, so a page lists them once, as the facilitator.
+     */
+    readonly facilitatorHolder?: string;
 }
 
 /**

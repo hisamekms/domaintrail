@@ -20,6 +20,7 @@ import {
     type SessionServerOptions,
 } from '@domaintrail/composition/session';
 import { createWatcherHold, ECHO_MS } from '@domaintrail/composition/watcher-hold';
+import { listedParticipants } from '@domaintrail/web/session/presence';
 import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
 import { cliDeps } from '@domaintrail/composition/cli';
 import { runCli } from '@domaintrail/presentation/cli/main';
@@ -1032,6 +1033,57 @@ describe('the join form (dev)', () => {
                 redirect: 'manual',
             });
             expect(blank.status).toBe(400);
+        } finally {
+            await server.stop();
+        }
+    });
+});
+
+describe('the facilitator’s holder', () => {
+    test('the state names the participant holding the role, and every page still connected is sent it when the role changes hands', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            const ada = await join(server, 'Ada');
+            const bob = await join(server, 'Bob');
+            const carol = await join(server, 'Carol');
+            const before = (await (await api(server, bob, 'state')).json()) as SessionStateBody;
+            expect(before.facilitatorHolder).toBeUndefined();
+            const adaId = before.session.participants.find((p) => p.name === 'Ada')!.id;
+            const bobId = before.session.participants.find((p) => p.name === 'Bob')!.id;
+            expect(adaId).toMatch(/^dev:/);
+            expect(listedParticipants(before).map((p) => [p.name, p.role])).toEqual([
+                ['Facilitator', 'facilitator'],
+                ['Ada', 'participant'],
+                ['Bob', 'participant'],
+                ['Carol', 'participant'],
+            ]);
+
+            // Carol's page stays connected through both claims: it is sent the state again each time
+            const page = await socket(server, carol);
+            await page.next('session.state');
+            await claim(server, ada);
+            const afterAda = ((await page.next('session.state')) as unknown as { state: SessionStateBody }).state;
+            expect(afterAda.facilitatorHolder).toBe(adaId);
+            expect(((await (await api(server, bob, 'state')).json()) as SessionStateBody).facilitatorHolder).toBe(adaId);
+            // Ada is listed once, as the facilitator, under her name
+            expect(listedParticipants(afterAda).map((p) => [p.name, p.role])).toEqual([
+                ['Ada', 'facilitator'],
+                ['Bob', 'participant'],
+                ['Carol', 'participant'],
+            ]);
+
+            // the role moves to Bob: Ada is a participant again
+            const link = await server.issueFacilitatorLink();
+            expect((await fetch(link, { headers: { cookie: bob }, redirect: 'manual' })).status).toBe(303);
+            const afterBob = ((await page.next('session.state')) as unknown as { state: SessionStateBody }).state;
+            expect(afterBob.facilitatorHolder).toBe(bobId);
+            expect(listedParticipants(afterBob).map((p) => [p.name, p.role])).toEqual([
+                ['Bob', 'facilitator'],
+                ['Ada', 'participant'],
+                ['Carol', 'participant'],
+            ]);
+            page.ws.close();
         } finally {
             await server.stop();
         }

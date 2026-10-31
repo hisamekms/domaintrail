@@ -52,6 +52,8 @@ export interface SessionIdentities {
     signOut(headers: IncomingHttpHeaders): Promise<IdentityKey | undefined>;
     /** Uses a facilitator link: the identity holds the facilitator role from now on; the previous holder, if any. */
     claimFacilitator(code: string, identity: IdentityKey): Promise<Result<{ readonly previous: IdentityKey | undefined }, LinkInvalid>>;
+    /** The participant the identity holding the facilitator role is outside the role (`dev:…`, `access:…`), if one claimed it. */
+    facilitatorParticipant(): Promise<Collaboration.ParticipantId | undefined>;
     /** The session closed: every sign-in is revoked, and from now on no one is identified; the identities that were signed in. */
     closeAll(): Promise<IdentityKey[]>;
 }
@@ -181,6 +183,12 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
             const claimed = await access.claimFacilitator({ session, code, identity: keyOf(identity) });
             if (claimed.ok) facilitator = Promise.resolve(keyOf(identity));
             return claimed;
+        },
+
+        async facilitatorParticipant() {
+            if (closed) return undefined;
+            const holder = await facilitatorKey();
+            return holder && participantOf(holder);
         },
 
         async closeAll() {

@@ -30,7 +30,7 @@ import { createSessionIdentities } from '@domaintrail/presentation/session/ident
 import { createPresenceRelay, type SessionConnection } from '@domaintrail/presentation/session/presence';
 import { createEventRelay, lastSeq } from '@domaintrail/presentation/session/relay';
 import { createSessionHttp, meOf, stateBody } from '@domaintrail/presentation/session/routes';
-import { createWebSocketHub } from '@domaintrail/presentation/websocket/hub';
+import { createWebSocketHub, type Connection } from '@domaintrail/presentation/websocket/hub';
 import type { ViewService } from '@domaintrail/visualization/application/view-service';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
 import { processAlive } from './process.js';
@@ -214,6 +214,15 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         let cursor = (): number => 0;
         // a page of an identity that expires (an Access token) is closed then; it reconnects with a fresh token
         const expiries = new Map<string, ReturnType<typeof setTimeout>>();
+        /** The pages connected, by connection: each is sent the state again when the facilitator's role changes hands. */
+        const pages = new Map<string, Connection<SessionConnection>>();
+        /** Sends a page the session's state as of now (with who holds the facilitator's role). */
+        const sendState = async (connection: Connection<SessionConnection>): Promise<void> => {
+            const seq = cursor();
+            const [state, holder] = await Promise.all([collaboration.sessionState({ session }), identities.facilitatorParticipant()]);
+            if (state.ok) connection.send({ type: 'session.state', state: stateBody(state.value, seq, holder), me: meOf(session, connection.data) });
+        };
+        const stateFailed = (e: unknown): void => log(`session state failed: ${e instanceof Error ? e.message : String(e)}`);
         const hub = createWebSocketHub<SessionConnection>(() => view.state, {
             maxPayload: MAX_WS_PAYLOAD,
             onConnect(connection) {
@@ -224,22 +233,22 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     timer.unref();
                     expiries.set(connection.id, timer);
                 }
-                const seq = cursor();
-                void collaboration.sessionState({ session }).then(
-                    (state) => {
-                        if (state.ok) connection.send({ type: 'session.state', state: stateBody(state.value, seq), me: meOf(session, connection.data) });
-                        presence.connected(connection);
-                    },
-                    (e: unknown) => log(`session state failed: ${e instanceof Error ? e.message : String(e)}`),
-                );
+                pages.set(connection.id, connection);
+                void sendState(connection).then(() => presence.connected(connection), stateFailed);
             },
             onMessage: (connection, message) => presence.received(connection, message),
             onClose: (connection) => {
                 clearTimeout(expiries.get(connection.id));
                 expiries.delete(connection.id);
+                pages.delete(connection.id);
                 presence.left(connection);
             },
         });
+        // the claiming and the previous holder's pages are disconnected (they reconnect in their new role); the others
+        // learn who holds the role from a new state
+        const facilitatorChanged = (): void => {
+            for (const connection of pages.values()) void sendState(connection).catch(stateFailed);
+        };
         const disconnect = (identity: IdentityKey, reason: string): void =>
             hub.closeWhere((c) => sameIdentity(c.data.participant.identity, identity), WS_REVOKED, reason);
 
@@ -300,6 +309,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             cursor,
             holdWatcher: (work, wrote) => watcherHold.aroundWrite(work, wrote),
             disconnect,
+            facilitatorChanged,
             closed: onClosed,
             secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,
             log,

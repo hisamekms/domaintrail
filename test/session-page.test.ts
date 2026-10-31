@@ -11,7 +11,7 @@ import type { StormingView } from '@domaintrail/visualization/protocol';
 import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from '@domaintrail/web/session/drafts';
 import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from '@domaintrail/web/session/location';
-import { cursorsOn, initials, NO_PEERS, receivePresence, throttle, whereabouts } from '@domaintrail/web/session/presence';
+import { cursorsOn, initials, listedParticipants, NO_PEERS, receivePresence, throttle, whereabouts } from '@domaintrail/web/session/presence';
 import { adopt, applyEvent, disconnected, INITIAL_SESSION, latestRevision, receive } from '@domaintrail/web/session/state';
 import { SessionApiError } from '@domaintrail/web/session/api';
 import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timeline } from '@domaintrail/web/session/timeline';
@@ -339,6 +339,25 @@ describe('presence', () => {
         const seen = whereabouts(peers, where('T'));
         expect(seen.get('a')).toBe('same-view');
         expect(seen.get('b')).toBe('another-view');
+    });
+
+    test('the participants once each: the facilitator’s holder is folded into the facilitator, under its name', () => {
+        const at = '2026-10-31T00:00:00.000Z';
+        const session = {
+            facilitator: 'local:facilitator',
+            participants: [
+                { id: 'local:facilitator', name: 'Facilitator', role: 'Facilitator', joinedAt: at },
+                { id: 'dev:ada', name: 'Ada', role: 'Participant', joinedAt: at },
+                { id: 'dev:bob', name: 'Bob', role: 'Participant', joinedAt: at },
+            ],
+        } as unknown as SessionStateBody['session'];
+        const rows = (holder?: string) =>
+            listedParticipants({ session, ...(holder && { facilitatorHolder: holder }) }).map((p) => `${p.id} ${p.name} ${p.role}`);
+        expect(rows()).toEqual(['local:facilitator Facilitator facilitator', 'dev:ada Ada participant', 'dev:bob Bob participant']);
+        expect(rows('dev:ada')).toEqual(['local:facilitator Ada facilitator', 'dev:bob Bob participant']);
+        // a holder that is not a listed participant changes nothing
+        expect(rows('dev:nobody')).toEqual(rows());
+        expect(rows('local:facilitator')).toEqual(rows());
     });
 
     test('initials, and updates throttled to the latest value', () => {
