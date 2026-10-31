@@ -53,6 +53,7 @@
       },
       "devDependencies": {
         "@types/picomatch": "4.0.3",
+        "fast-check": "4.10.2",
       },
     },
     "packages/presentation": {
