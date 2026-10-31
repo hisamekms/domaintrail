@@ -47,6 +47,8 @@ export interface SessionHttpDeps {
     readonly facilitatorChanged: () => void;
     /** The facilitator closed the session (after the use case): revoke, disconnect, stop. */
     readonly closed: () => Promise<void>;
+    /** Another one-time facilitator link (`POST /api/session/facilitator/link`). */
+    readonly issueFacilitatorLink: () => Promise<{ readonly link: string; readonly expiresAt: string }>;
     /** The cookie is `Secure` (the session is served over https). */
     readonly secureCookie: boolean;
     readonly log: (line: string) => void;
@@ -125,6 +127,20 @@ interface Route {
     /** Who may call it: anyone admitted (sign-in), any participant, or the facilitator only. */
     readonly role: 'anyone' | 'participant' | 'facilitator';
     readonly handle: (ctx: { req: IncomingMessage; res: ServerResponse; auth: Admitted; params: string[] }) => Promise<void>;
+}
+
+/**
+ * `apply` of a sent message: absent or false (only sent), true, or `{ note }` (queued at once as a run of its own, with
+ * the facilitator's note). `false` here is "do not apply", `undefined` an invalid input already answered.
+ */
+function applyInput(raw: unknown): { ok: true; value: false | { note?: Collaboration.Text } } | { ok: false; error: InvalidInput } {
+    if (raw === undefined || raw === false) return { ok: true, value: false };
+    if (raw === true) return { ok: true, value: {} };
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || Object.keys(raw).some((k) => k !== 'note'))
+        return { ok: false, error: { type: 'InvalidInput', field: 'apply', message: 'Expected true, or { "note": … }.' } };
+    if (!('note' in raw) || raw.note === undefined) return { ok: true, value: {} };
+    const note = text(raw.note, 'apply.note', MAX_NOTE);
+    return note.ok ? { ok: true, value: { note: note.value } } : note;
 }
 
 /** The participant of a route that needs one (checked before the route is called). */
@@ -263,9 +279,13 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/requests$/,
             role: 'participant',
             handle: async ({ req, res, auth }) => {
-                // `target` (one) is the former body, still taken
-                const raw = await input(req, res, ['targets', 'target', 'body']);
+                // `target` (one) is the former body, still taken; `apply` (the facilitator's): queued as a run at once
+                const raw = await input(req, res, ['targets', 'target', 'body', 'apply']);
                 if (!raw) return;
+                const me = who(auth);
+                const apply = checked(res, applyInput(raw.apply));
+                if (apply === undefined) return;
+                if (apply && me.role !== 'facilitator') return fail(res, { type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' });
                 const targets = checked(res, requestTargets(raw));
                 if (!targets) return;
                 const t = checked(res, text(raw.body, 'body', MAX_REQUEST_TEXT));
@@ -278,23 +298,11 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
                         message: 'Not a revision of this session.',
                     });
-                const sent = await use.sendRequest({ session, author: who(auth).participant.id, targets, body: t });
-                await answer(res, sent, 201, (request) => ({ request }));
-            },
-        },
-        {
-            method: 'POST',
-            path: /^\/api\/session\/requests\/([^/]+)\/dismiss$/,
-            role: 'participant',
-            handle: async ({ res, auth, params }) => {
-                const id = checked(res, uuid(params[0], 'id'));
-                if (!id) return;
-                const request = (await state()).requests.find((r) => r.id === id);
-                if (!request) return fail(res, { type: 'NotFound', aggregate: 'Request', id });
-                const me = who(auth);
-                if (me.role !== 'facilitator' && request.author !== me.participant.id)
-                    return fail(res, { type: 'NotYourRequest', message: "Only the facilitator dismisses others' requests." });
-                await answer(res, await use.dismissRequest({ request: request.id, by: me.participant.id }), 200, (r) => ({ request: r }));
+                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t });
+                if (!sent.ok || !apply) return answer(res, sent, 201, (request) => ({ request }));
+                // sent and applied: the message is in the stream whatever the run's fate
+                const queued = await use.queueRun({ session, requests: [sent.value.id], queuedBy: me.participant.id, ...(apply.note && { note: apply.note }) });
+                await answer(res, queued, 201, (run) => ({ request: sent.value, run }));
             },
         },
         {
@@ -439,6 +447,16 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const t = await use.targetStatuses({ session });
                 if (!t.ok) return fail(res, t.error);
                 sendJson(res, 200, { contentHash: t.value.contentHash, statuses: Object.fromEntries(t.value.statuses) });
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/facilitator\/link$/,
+            role: 'facilitator',
+            handle: async ({ req, res }) => {
+                if (!(await input(req, res, []))) return;
+                // another one-time link, to hand the role over (as `dt session link`)
+                sendJson(res, 201, await deps.issueFacilitatorLink());
             },
         },
         {

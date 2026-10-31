@@ -4,6 +4,7 @@
 // (S5) and the subscriber (S6); what goes over the wire is JSON, so a `Date` arrives as an ISO string (`Json<T>`).
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { Collaboration } from './generated/index.js';
+import type { Classification } from './application/classifier.js';
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -113,7 +114,10 @@ export type SessionServerMessage =
     | { readonly type: 'session.state'; readonly state: SessionStateBody; readonly me: Me }
     | { readonly type: 'presence.snapshot'; readonly peers: readonly Presence[] }
     | { readonly type: 'presence.update'; readonly presence: Presence }
-    | { readonly type: 'presence.leave'; readonly connection: string };
+    | { readonly type: 'presence.leave'; readonly connection: string }
+    // the facilitator's only (ADR 0026, amendment): how the chat's messages read, when a classifier is configured
+    | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
+    | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification };
 
 /** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];

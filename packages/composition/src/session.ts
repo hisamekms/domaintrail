@@ -11,10 +11,12 @@ import {
     type IdentityKey,
     type IdentityProvider,
 } from '@domaintrail/collaboration/application/identity';
+import { createClassifications, type Classifications, type MessageClassifier } from '@domaintrail/collaboration/application/classifier';
 import type { Clock } from '@domaintrail/collaboration/application/ports';
 import { createCollaboration, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
 import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
+import { createClefClassifier } from '@domaintrail/collaboration/infrastructure/clef';
 import { createCloudflareAccess, type AccessAdapterOptions, type AccessTokenVerifier } from '@domaintrail/collaboration/infrastructure/identity';
 import { readServerAddress, removeSessionFiles, writeAgentCredential, writeServerAddress } from '@domaintrail/collaboration/infrastructure/session-files';
 import { createUnitOfWork, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
@@ -52,6 +54,10 @@ export const WS_SESSION_CLOSED = 4000;
 export const WS_REVOKED = 4001;
 /** The WebSocket close code of a page whose Access token expired: it reconnects with the token Access gives it now. */
 export const WS_EXPIRED = 4002;
+/** How long the classifier of a message may take. */
+const CLASSIFY_TIMEOUT_MS = 8_000;
+/** Where the Clef classifier is asked instead of Cloudflare's API (a local mock, for tests and demos). */
+export const CLASSIFIER_URL_ENV = 'DOMAINTRAIL_CLASSIFIER_URL';
 /** Longest delay `setTimeout` keeps (about 24.8 days). */
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -67,6 +73,8 @@ export interface SessionServerOptions extends ViewServerOptions {
     leaseMs?: number;
     /** How often expired leases are applied (default 5 s). */
     expireEveryMs?: number;
+    /** A classifier instead of the configured one (tests). */
+    classifier?: MessageClassifier;
 }
 
 export interface SessionServer {
@@ -147,6 +155,24 @@ function identityProvider(options: SessionServerOptions, clock: Clock, log: (lin
         if (!fetched) log('Cloudflare Access keys are not fetched yet: no participant can sign in until they are.');
     });
     return cloudflare.provider;
+}
+
+/**
+ * The classifier of the chat's messages, when `session.classifier` is enabled and its token is in the environment;
+ * otherwise none (every message is applicable).
+ */
+function messageClassifier(options: SessionServerOptions, log: (line: string) => void): MessageClassifier | undefined {
+    if (options.classifier) return options.classifier;
+    const c = options.session.classifier;
+    if (!c.enabled || !c.accountId) return undefined;
+    const token = process.env[c.apiTokenEnv];
+    if (!token) {
+        log(`session.classifier is enabled but ${c.apiTokenEnv} is not set: every message can be applied.`);
+        return undefined;
+    }
+    const baseUrl = process.env[CLASSIFIER_URL_ENV];
+    log(`Classifying the chat's messages with Cloudflare Workers AI (${c.model}): their text is sent to Cloudflare.`);
+    return createClefClassifier({ accountId: c.accountId, model: c.model, token, ...(baseUrl && { baseUrl }) });
 }
 
 /**
@@ -234,7 +260,12 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     expiries.set(connection.id, timer);
                 }
                 pages.set(connection.id, connection);
-                void sendState(connection).then(() => presence.connected(connection), stateFailed);
+                void sendState(connection).then(() => {
+                    // the facilitator's: whether messages are classified, and how those so far were
+                    if (classifications && connection.data.role === 'facilitator')
+                        connection.send({ type: 'session.classifications', classifications: classifications.all() });
+                    presence.connected(connection);
+                }, stateFailed);
             },
             onMessage: (connection, message) => presence.received(connection, message),
             onClose: (connection) => {
@@ -261,6 +292,19 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             resolveClosed();
         };
 
+        // the chat's messages classified for the facilitator, as they are sent (opt-in)
+        const classifier = messageClassifier(options, log);
+        const classifications: Classifications | undefined =
+            classifier &&
+            createClassifications({
+                classifier,
+                threshold: config.classifier.threshold,
+                timeoutMs: CLASSIFY_TIMEOUT_MS,
+                log,
+                onClassified: (request, classification) =>
+                    hub.publishWhere((c) => c.data.role === 'facilitator', { type: 'session.classification', request, classification }),
+            });
+
         const agentToken = randomSecrets.newSecret();
         const relay = createEventRelay({
             collaboration,
@@ -269,6 +313,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             publish: (message) => hub.publish(message),
             after: (entries) => {
                 agent.wake();
+                for (const e of entries) if (e.event.type === 'RequestSent') classifications?.classify(e.event.requestId, e.event.body);
                 if (entries.some((e) => e.event.type === 'SessionClosed')) void onClosed();
             },
         });
@@ -311,6 +356,11 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             disconnect,
             facilitatorChanged,
             closed: onClosed,
+            issueFacilitatorLink: async () => {
+                const link = await access.issueFacilitatorLink({ session, ttlMs: FACILITATOR_LINK_TTL_MS });
+                if (!link.ok) throw new Error('The session is not open');
+                return { link: linkOf(url, link.value.code), expiresAt: link.value.expiresAt.toISOString() };
+            },
             secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,
             log,
         });
@@ -370,6 +420,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     expiries.clear();
                     presence.dispose();
                     agent.close();
+                    await classifications?.settled();
                     await watch?.stop();
                     hub.close();
                     await Promise.all([close(http), close(agent.server)]);

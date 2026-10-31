@@ -184,6 +184,54 @@ async function refused(server: SessionServer, headers: Record<string, string>): 
     return result;
 }
 
+describe('messages applied, and classified for the facilitator', () => {
+    let root: string;
+    let server: SessionServer;
+    let ada: string;
+    let bob: string;
+    const classifier = { classify: async (text: string) => (text.startsWith('Add') ? 0.9 : 0.1) };
+
+    beforeAll(async () => {
+        root = await workspace();
+        server = await start(root, { classifier });
+        await server.ready;
+        ada = await join(server, 'Ada');
+        bob = await join(server, 'Bob');
+        await claim(server, ada);
+    });
+    afterAll(() => server?.stop());
+
+    test("the facilitator's pages learn how each message reads; the participants' never do", async () => {
+        const a = await socket(server, ada);
+        const b = await socket(server, bob);
+        try {
+            expect(await a.next('session.classifications')).toMatchObject({ classifications: {} });
+            const sent = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command.' })).json()) as { request: { id: string } };
+            await api(server, bob, 'requests', { targets: [], body: 'nice!' });
+            const first = await a.next('session.classification');
+            const second = await a.next('session.classification');
+            expect([first, second].map((m) => (m.classification as { kind: string }).kind).sort()).toEqual(['chat', 'request']);
+            expect([first, second].find((m) => m.request === sent.request.id)).toMatchObject({ classification: { kind: 'request', probability: 0.9 } });
+            await Bun.sleep(100);
+            expect(b.received.some((m) => m.type.startsWith('session.classification'))).toBe(false);
+        } finally {
+            a.ws.close();
+            b.ws.close();
+        }
+    });
+
+    test('the facilitator sends and applies at once, with a note; a new facilitator link to hand the role over', async () => {
+        const res = await api(server, ada, 'requests', { targets: [], body: 'Add a total.', apply: { note: 'Keep it short.' } });
+        expect(res.status).toBe(201);
+        const body = (await res.json()) as { request: { id: string }; run: { state: string; input: { requests: { request: string }[]; note: string } } };
+        expect(body.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: body.request.id }], note: 'Keep it short.' } });
+        expect((await api(server, ada, 'requests', { targets: [], body: 'x', apply: { other: 1 } })).status).toBe(400);
+        const link = await api(server, ada, 'facilitator/link', {});
+        expect(link.status).toBe(201);
+        expect(((await link.json()) as { link: string }).link).toContain('/session/facilitator?code=');
+    });
+});
+
 describe('a session in dev mode', () => {
     let root: string;
     let server: SessionServer;
@@ -270,7 +318,7 @@ describe('a session in dev mode', () => {
         expect(await bad.json()).toEqual({ error: { type: 'LinkInvalid' } });
     });
 
-    test('a participant cannot reach the facilitator routes; dismisses only their own requests', async () => {
+    test('a participant cannot reach the facilitator routes, nor apply a message', async () => {
         const state = (await (await api(server, bob, 'state')).json()) as SessionStateBody;
         const revision = state.revisions[0].id;
         const target = { target: { kind: 'DtElement', element: 'Shop.Order' }, sourceRevision: revision, label: 'Order' };
@@ -286,16 +334,16 @@ describe('a session in dev mode', () => {
             ['revisions', {}],
             [`revisions/${revision}/confirm`, {}],
             [`revisions/${revision}/restore`, {}],
+            ['facilitator/link', {}],
             ['close', {}],
         ] as const) {
             const res = await api(server, bob, p, body);
             expect([p, res.status, ((await res.json()) as { error: { type: string } }).error.type]).toEqual([p, 403, 'FacilitatorOnly']);
         }
-        const others = await api(server, bob, `requests/${adas.request.id}/dismiss`, {});
-        expect([others.status, ((await others.json()) as { error: { type: string } }).error.type]).toEqual([403, 'NotYourRequest']);
-        expect((await api(server, bob, `requests/${mine.request.id}/dismiss`, {})).status).toBe(200);
-        const dismissed = await api(server, bob, `requests/${mine.request.id}/dismiss`, {});
-        expect([dismissed.status, ((await dismissed.json()) as { error: { type: string } }).error.type]).toEqual([409, 'NotAllowed']);
+        // applying a message on sending it is the facilitator's; dismissing is gone (messages are chat)
+        const applied = await api(server, bob, 'requests', { targets: [], body: 'Do it now.', apply: true });
+        expect([applied.status, ((await applied.json()) as { error: { type: string } }).error.type]).toEqual([403, 'FacilitatorOnly']);
+        expect((await api(server, bob, `requests/${adas.request.id}/dismiss`, {})).status).toBe(404);
     });
 
     test('checks every input at the boundary, with typed errors and body limits', async () => {
@@ -389,7 +437,6 @@ describe('a session in dev mode', () => {
         expect(large.status).toBe(413);
         const form = await fetch(`${server.url}api/session/requests`, { method: 'POST', headers: { cookie: bob, 'content-type': 'text/plain' }, body: '{}' });
         expect(form.status).toBe(415);
-        expect((await api(server, bob, 'requests/not-an-id/dismiss', {})).status).toBe(400);
         expect((await api(server, bob, 'nope')).status).toBe(404);
         expect((await fetch(`${server.url}api/session/runs`, { method: 'DELETE', headers: { cookie: bob } })).status).toBe(405);
     });
