@@ -118,7 +118,8 @@ format check, tests and build pass.
 
 - Node 22.12 users must upgrade to 22.13 to run any `dt` command (engines).
 - Two new packages and their dependencies join the bundle; `dt view` gains nothing at runtime.
-- The real Cloudflare Access check is manual until a test environment exists.
+- The real Cloudflare Access check is manual until a test environment exists: a person runs
+  [the runbook](../session-access.md).
 
 ## Appendix: code map (S1)
 
@@ -201,8 +202,8 @@ details S4–S7 need that neither states. `test/session-baseline.test.ts` pins d
   HttpOnly, SameSite=Strict, Secure when `publicUrl` is https) mapped to the identity `dev:<uuid>`. `access` takes the
   token from `Cf-Access-Jwt-Assertion` or `CF_Authorization` and asks the `IdentityProvider`
   (`application/identity.ts`); the adapter (`infrastructure/identity.ts`) checks issuer, audience and expiry of the
-  claims an `AccessTokenVerifier` returns. Until S8 the only verifier is `createMockAccessVerifier`, and
-  `dt session start` refuses the access mode without a verifier. An Access identity joins on first sight
+  claims an `AccessTokenVerifier` returns. Until S8 the only verifier was `createMockAccessVerifier`, and
+  `dt session start` refused the access mode without a verifier (S8 lifts it; see below). An Access identity joins on first sight
   (`access:<sub>`); the e-mail is never sent to pages. Host and Origin: loopback names plus `allowedHosts`; an Origin
   of the same host when it is loopback, else one of `allowedOrigins` (nothing external without them).
 - **Persistence**: migration 2 adds `facilitator_links`, `facilitators` and `sign_ins` (secrets only as SHA-256),
@@ -225,3 +226,45 @@ details S4–S7 need that neither states. `test/session-baseline.test.ts` pins d
   text 10,000 characters, note and question 4,000, names 60, 100 requests per run, WS messages from a page 16 KiB
   (checked in the hub as well as by `ws`), presence 20 Hz per participant (a newer update replaces the waiting one),
   `session.maxParticipants` (default 50). Logs carry no token, cookie, code or e-mail.
+
+## Appendix: Cloudflare Access (S8)
+
+*Decided by the supervisor* for S8, and built so (`infrastructure/identity.ts`, `node:crypto` and `fetch` only). The
+real Tunnel/Access check is a person's, with [the runbook](../session-access.md).
+
+- **The token.** The `Cf-Access-Jwt-Assertion` header; the `CF_Authorization` cookie only with
+  `session.access.acceptCookie: true` (default false; Cloudflare recommends the header), and never over a header that
+  is present. A JWT of three base64url parts, at most 8 kB; the header is `alg: RS256` with a `kid` (`none`, `HS*`,
+  `RS512`, a missing `kid` and a `crit` header are refused; `jku`/`x5u` are never followed). The claims: `iss` equal to
+  `https://<teamDomain>`, `aud` (a string or a list) holding the AUD tag, `exp` after now and `nbf`/`iat` not after
+  now, each within 30 s of skew, `sub` and `email` present. The claims are checked before the key is looked up, so a
+  token of another team or application never makes the keys be fetched.
+- **The keys.** The JWKS at `https://<teamDomain>/cdn-cgi/access/certs`, fetched at start (a failure is logged, not
+  fatal), cached, fetched again after an hour, and on an unknown `kid` (rotation) at most every 30 s; one fetch at a
+  time; 5 s timeout; RSA keys of 2048 bits or more, `use: sig` and `alg: RS256` when stated. A failed fetch keeps the
+  keys known.
+- **The identity.** `access:<sub>`. The display name is the Identity API's `name`
+  (`https://<teamDomain>/cdn-cgi/access/get-identity`, asked server-side with the token as the `CF_Authorization`
+  cookie, 5 s timeout, cached per subject for 5 minutes, a failure for 1 minute), else the e-mail's local part; at most
+  60 characters. An avatar only when the identity's `picture` (or `oidc_fields.picture`) is an `https` URL without
+  credentials or port on a host of `session.access.avatarHosts` (default none): else the page shows initials. The
+  server never fetches the picture.
+- **Privacy.** The e-mail stays on the server (`Identity.email`): it is sent to no page, not even the person's own
+  `/api/session/me`, and never logged; presence and the session state carry the participant ID, the name, the role
+  and the avatar URL.
+- **Revocation.** Every HTTP request and every WebSocket upgrade verifies the token again (the profile is cached, the
+  signature is not). A page's WebSocket is closed at the token's expiry (plus the skew), close code 4002; it
+  reconnects with the token Access gives it then. `POST /api/session/leave` in access mode closes the person's pages
+  (4001) and answers `{ left: true, logout: "/cdn-cgi/access/logout" }` for the page to end the Access session; the
+  server cannot see an Access logout otherwise, so other pages of that person stay until their token expires. Closing
+  the session revokes everyone: a closed session identifies no one, whatever is cached (a fix of S4's code).
+- **Roles.** An Access identity is a participant; the facilitator only through the local link, as in S4. In a session
+  `POST /api/baseline` (the view's baseline, shared by every page) is the facilitator's (403 `FacilitatorOnly`
+  otherwise; a fix of S4's code); `dt view` is unchanged.
+- **Start.** `dt session start` runs the access mode with `teamDomain` and `audience` (the team domain a host name,
+  optionally with `https://`). A `publicUrl` must be https, with its host in `allowedHosts` and its origin in
+  `allowedOrigins` (the tunnel's requests would all be refused otherwise); without `publicUrl` only the configured
+  hosts and origins are allowed, as in S4. The bind stays `127.0.0.1` by default; another bind is allowed and logged.
+  The agent API stays on 127.0.0.1.
+- **Tests.** `test/session-access.test.ts`: RSA keys from `node:crypto`, a JWKS and `get-identity` on a local HTTP
+  server, tokens signed in the test; `startSessionServer` takes `accessAdapter` (the endpoints and timings) for it.
