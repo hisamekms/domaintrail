@@ -47,14 +47,15 @@ export function TargetChip({
     const kind = `chat-target kind-${target.target.kind}`;
     if (status === 'current' && target.target.kind !== 'Workspace')
         return (
-            <a className={kind} onClick={() => onNavigate(target.target)} data-tooltip={tx.targetStatusHint.current}>
+            <a className={kind} onClick={() => onNavigate(target.target)} data-tooltip={`${text}\n${tx.targetStatusHint.current}`}>
                 {text}
             </a>
         );
     return (
         <span
             className={`${kind}${status === 'stale' ? ' stale' : ''}`}
-            {...(status && status !== 'current' && { 'data-tooltip': tx.targetStatusHint[status] })}
+            // the full name too: a long one is cut short in the chip
+            data-tooltip={status && status !== 'current' ? `${text}\n${tx.targetStatusHint[status]}` : text}
         >
             {text}
         </span>

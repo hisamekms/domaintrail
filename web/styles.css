@@ -2959,6 +2959,9 @@ details.deps > .sub {
     background: var(--text);
     color: var(--panel);
     font: 0.75rem/1.4 var(--sans);
+    /* a line break in the text starts a new line (e.g. a chip's full name, then its hint) */
+    white-space: pre-line;
+    overflow-wrap: anywhere;
     box-shadow: 0 2px 8px var(--shadow);
     pointer-events: none;
     overflow: visible;
@@ -3834,6 +3837,9 @@ del.was.block {
     gap: 3px;
     max-width: 100%;
 }
+.chat-targets > .chat-target {
+    min-width: 0;
+}
 .chat-chips {
     display: flex;
     flex-wrap: wrap;
@@ -4426,6 +4432,8 @@ del.was.block {
 }
 .chat-row {
     position: relative;
+    /* within the item's width, so that long chips are cut short instead of widening the bubble */
+    min-width: 0;
     display: flex;
     align-items: flex-start;
     gap: 6px;

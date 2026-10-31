@@ -1110,7 +1110,7 @@ function Composer(props: {
                             <span
                                 key={targetKey(c.target.target)}
                                 className={`chat-chip kind-${c.target.target.kind}`}
-                                data-tooltip={targetKey(c.target.target)}
+                                data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
                             >
                                 <span className="chat-chip-number">{i + 1}</span>
                                 <span className="chat-chip-name">{nameOf(c.target)}</span>
