@@ -1,7 +1,7 @@
 # ADR 0024: The Event Storming DSL (`.dtes`) — architecture of v0.1
 
-- Status: accepted. Three choices are marked *pending confirmation*: they follow the recommendation until the
-  maintainer confirms or changes them.
+- Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
+  workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -73,7 +73,7 @@ that build it in parallel (T2–T8). The shared types are in `src/dtes/ir.ts`.
 
 ### Workspace and CLI: the same `dt`, the same sources
 
-- *Pending confirmation:* `DEFAULT_SOURCES` becomes `['**/*.dt', '**/*.dtes']`. A config that sets `sources` lists a
+- *Decided by the maintainer:* `DEFAULT_SOURCES` becomes `['**/*.dt', '**/*.dtes']`. A config that sets `sources` lists a
   `.dtes` glob itself (`"sources": ["domain/**/*.dt", "domain/**/*.dtes"]`); the guide says so. `findDomainFiles`,
   `SourceScope`, the watcher, the LSP's `DomainWorkspaceManager` and the git baseline's `sourcesAt` then find `.dtes`
   files with no change of their own. The extension decides the language (`isStormingFile(path)`: `.dtes`).
@@ -104,7 +104,7 @@ it; `dt guide S001` works). T6 changes the schema's `code` pattern to
 
 | Rule | Spec §11 row | Condition | Severity | Owner |
 |---|---|---|---|---|
-| S001 | Symbol | Two declarations of a storming with the same ID, of any kinds (groups and timelines included). *Pending confirmation:* two stormings with the same ID in the workspace. | error | T3 |
+| S001 | Symbol | Two declarations of a storming with the same ID, of any kinds (groups and timelines included). *Decided by the maintainer:* two stormings with the same ID in the workspace. | error | T3 |
 | S002 | Symbol | A local reference (relation target, timeline/group step) names no declaration of its storming | error | T3 |
 | S003 | Kind | A reference to a declaration of the wrong kind: `target` not an aggregate, `reads` not a read model, `actor` not an actor/external, `emits`/`on` not an event, `issues` not a command, a timeline or group step not an event (ES02, ES14) | error | T3 |
 | S004 | Cardinality | More than one `target`, `ref`, hotspot `on`, `status` or `resolution` on one element (ES03) | error | T3 |
@@ -187,7 +187,7 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
 - **Timeline filter** (§9.3): the selected timeline's trie path, which is a chain, plus each 1-hop path
   `Event → Policy → Command → Event` whose two events occur in that timeline, with the actors, read models and target
   of those commands. There are no multi-hop paths and nothing outside the timeline (R16).
-- *Pending confirmation:* with a filter, a hotspot is shown when its `on` event occurs in the selected timeline, at
+- *Decided by the maintainer:* with a filter, a hotspot is shown when its `on` event occurs in the selected timeline, at
   both levels. A hotspot without `on` is shown only on the integrated canvas. This includes everything §9.3 lists,
   keeps hotspots visible in Big Picture (§6) and adds no causal edge.
 - **Levels**: `LEVEL_KINDS`. Big Picture keeps events, timeline order, groups, hotspots and `hotspot-on` edges.
