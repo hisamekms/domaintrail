@@ -13,7 +13,10 @@ export interface Identity {
     readonly subject: string;
     readonly displayName: string;
     readonly email?: string;
+    /** An `https` image of an allowed host (`session.access.avatarHosts`); absent, the page shows initials. */
     readonly avatarUrl?: string;
+    /** When the proof stops holding (an Access token's expiry, with the clock skew allowed): the pages of the identity close then. */
+    readonly expiresAt?: Date;
 }
 
 /** The part of an identity that names the person: the provider and the subject. */
