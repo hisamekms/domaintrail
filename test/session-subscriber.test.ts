@@ -11,7 +11,7 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } fro
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { startSubscriber as startApplicationSubscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
-import type { AgentApi, StreamItem } from '@domaintrail/agent/application/ports';
+import type { AgentApi, StreamItem, WorkspaceFiles } from '@domaintrail/agent/application/ports';
 import { createClaudeCodeRunner } from '@domaintrail/agent/infrastructure/claude-code';
 import { createDtTools } from '@domaintrail/agent/infrastructure/dt-tools';
 import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
@@ -417,7 +417,7 @@ describe('the pipeline', () => {
         const { log } = await subscribe(ctx, await ctx.plan([{ edits: [...(ADD_RETURN_CANCELLED ?? []), { path: 'src/notes.txt', write: 'hello' }] }]));
         const failed = await until(ctx, run, ['Completed', 'Failed']);
         expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
-        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources: src/notes.txt'))).toBe(true);
+        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources: "src/notes.txt"'))).toBe(true);
     });
 
     test('an agent that writes the workspace’s .claude/ settings: its run fails, and no further run is claimed until a restart', async () => {
@@ -428,7 +428,7 @@ describe('the pipeline', () => {
         const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: settings }] }, {}]));
         const failed = await until(ctx, run, ['Completed', 'Failed']);
         expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
-        expect(log.some((l) => l.includes('not claiming further runs: review .claude/settings.local.json'))).toBe(true);
+        expect(log.some((l) => l.includes('not claiming further runs: review ".claude/settings.local.json"'))).toBe(true);
         const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
         await waitFor('the refusal to claim', () => (log.some((l) => l.includes('no run is claimed until the subscriber is restarted')) ? true : undefined));
         await Bun.sleep(300);
@@ -439,6 +439,39 @@ describe('the pipeline', () => {
         expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
         const args = (await ctx.invocations()).at(-1)?.args ?? [];
         expect(args[args.indexOf('--setting-sources') + 1]).toBe('user');
+    });
+
+    test('an agent that writes .claude/ settings and is cancelled: the run is cancelled, and no further run is claimed', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
+        await mkdir(path.join(ctx.root, '.claude'));
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: '{}' }], hang: true }, {}]));
+        await waitFor('the agent', async () => (await ctx.invocations())[0]);
+        await until(ctx, run, ['Running']);
+        expect((await api(ctx.server, ctx.ada, `runs/${run}/cancel`, {})).status).toBe(200);
+        expect((await until(ctx, run, ['Cancelled'])).state).toBe('Cancelled');
+        await waitFor('the halt', () => (log.some((l) => l.includes('not claiming further runs: review ".claude/settings.local.json"')) ? true : undefined));
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        await waitFor('the refusal to claim', () => (log.some((l) => l.includes('no run is claimed until the subscriber is restarted')) ? true : undefined));
+        await Bun.sleep(300);
+        expect((await state(ctx)).runs.find((r) => r.id === next)?.state).toBe('Queued');
+        expect(await ctx.invocations()).toHaveLength(1);
+    });
+
+    test('paths an agent chose are escaped and cut in the log lines', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const evil = 'evil\n\u001b[2K\u202enotes.txt';
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: evil, write: 'x' }] }, {}]));
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Failed');
+        await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        const queuedLine = await waitFor('the refusal to claim', () => log.find((l) => l.includes('no run is claimed until the subscriber is restarted')));
+        const shown = '"evil\\n\\u001b[2K\\u202enotes.txt"';
+        const haltLine = log.find((l) => l.startsWith('not claiming further runs'));
+        expect(haltLine).toContain(`review ${shown} (left by run`);
+        expect(queuedLine).toContain(`(review ${shown})`);
+        // oxlint-disable-next-line no-control-regex -- the control characters a log line must not carry
+        for (const line of log) expect(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/.test(line)).toBe(false);
     });
 
     test('a cancel mid-run stops the agent and the processes it started; the next queued run is taken', async () => {
@@ -485,6 +518,7 @@ describe('the stream and the completions', () => {
         ctx: Context,
         planFile: string,
         wrap: (api: AgentApi) => AgentApi,
+        wrapWorkspace: (workspace: WorkspaceFiles) => WorkspaceFiles = (w) => w,
     ): Promise<{ done: Promise<SubscriberEnd>; log: string[] }> {
         const credential = await readCredential(ctx.root);
         const real = createHttpAgentApi({ url: credential.url, token: credential.token });
@@ -494,7 +528,7 @@ describe('the stream and the completions', () => {
                 api: wrap(real),
                 runner: createClaudeCodeRunner({ root: ctx.root, command: { command: process.execPath, args: [FAKE, planFile] } }),
                 tools: createDtTools({ dt: DT, root: ctx.root, log: (l) => log.push(l) }),
-                workspace: { scan: () => scanWorkspace(ctx.root), sources: async () => new Set(await findDomainFiles(ctx.root)) },
+                workspace: wrapWorkspace({ scan: () => scanWorkspace(ctx.root), sources: async () => new Set(await findDomainFiles(ctx.root)) }),
                 clock: systemClock,
                 owner: 'test@host',
                 nonce: () => 'n'.repeat(32),
@@ -538,6 +572,33 @@ describe('the stream and the completions', () => {
         const completedSeq = (await state(ctx)).seq;
         expect(Number(resumedFrom[1])).toBeGreaterThan(0);
         expect(Number(resumedFrom[1])).toBeLessThanOrEqual(completedSeq);
+    });
+
+    test('a scan that fails after the agent fails closed: the run fails and no further run is claimed', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        let scans = 0;
+        const { log } = await applicationSubscriber(
+            ctx,
+            await ctx.plan([{ edits: ADD_RETURN_CANCELLED }, {}]),
+            (real) => real,
+            (w) => ({
+                ...w,
+                async scan() {
+                    if (++scans === 2) throw new Error('EACCES: permission denied');
+                    return w.scan();
+                },
+            }),
+        );
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
+        expect(log).toContain('not claiming further runs: review <scan failed> (left by run ' + run + '), then restart the subscriber');
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        await waitFor('the refusal to claim', () =>
+            log.some((l) => l.includes('no run is claimed until the subscriber is restarted (review <scan failed>)')) ? true : undefined,
+        );
+        await Bun.sleep(300);
+        expect((await state(ctx)).runs.find((r) => r.id === next)?.state).toBe('Queued');
     });
 
     test('a finish whose answer is lost is sent again and replayed by the server: the run completes once', async () => {

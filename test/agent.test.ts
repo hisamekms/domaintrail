@@ -4,7 +4,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_QUESTION, OUTCOME_MARKER, parseOutcome } from '@domaintrail/agent/application/prompt';
-import { changedPaths, changesOutsideSources } from '@domaintrail/agent/application/subscriber';
+import { changedPaths, changesOutsideSources, showPaths } from '@domaintrail/agent/application/subscriber';
 import { claudeArguments, replyOf, toolNames } from '@domaintrail/agent/infrastructure/claude-code';
 import { parseSse } from '@domaintrail/agent/infrastructure/http-agent-api';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
@@ -193,5 +193,16 @@ describe('what the agent changed', () => {
         const changed = changedPaths(before, after);
         expect(changed).toEqual(['README.md', 'a.dt', 'gone.dt', 'ignored/x.dt', 'new.dtes']);
         expect(changesOutsideSources(changed, new Set(['a.dt', 'b.dtes', 'gone.dt', 'new.dtes']))).toEqual(['README.md', 'ignored/x.dt']);
+    });
+});
+
+describe('paths in the log', () => {
+    test('quoted, with control and bidi characters escaped, cut to 200 characters and 20 paths', () => {
+        expect(showPaths(['a\nb\u001b[2K\u202ec\u2066\u0085.dt', '.claude/settings.local.json'])).toBe(
+            '"a\\nb\\u001b[2K\\u202ec\\u2066\\u0085.dt", ".claude/settings.local.json"',
+        );
+        expect(showPaths(['x'.repeat(300)])).toBe(`"${'x'.repeat(200)}…"`);
+        const many = Array.from({ length: 25 }, (_, i) => `f${i}`);
+        expect(showPaths(many)).toEndWith('"f19", and 5 more');
     });
 });

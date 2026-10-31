@@ -81,6 +81,26 @@ export function changesOutsideSources(changed: readonly string[], sources: Reado
     return changed.filter((p) => !sources.has(p) || !(p.endsWith('.dt') || p.endsWith('.dtes')));
 }
 
+/** Most paths a log line names. */
+const SHOWN_PATHS = 20;
+/** Longest path a log line shows. */
+const SHOWN_PATH_LENGTH = 200;
+
+/**
+ * Paths an agent chose, safe for a log line: each one quoted as JSON with every control character (C0, DEL, C1) and
+ * bidirectional control escaped, cut to 200 characters, at most 20 of them.
+ */
+export function showPaths(paths: readonly string[]): string {
+    const quoted = paths.slice(0, SHOWN_PATHS).map((p) =>
+        JSON.stringify(p.length > SHOWN_PATH_LENGTH ? `${p.slice(0, SHOWN_PATH_LENGTH)}…` : p).replace(
+            // oxlint-disable-next-line no-control-regex -- escaping the control characters is the point
+            /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+            (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`,
+        ),
+    );
+    return quoted.join(', ') + (paths.length > SHOWN_PATHS ? `, and ${paths.length - SHOWN_PATHS} more` : '');
+}
+
 export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions): Subscriber {
     const { api, clock, log } = deps;
     const reconnect = options.reconnect ?? DEFAULT_RECONNECT;
@@ -91,8 +111,17 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
     const done = new Promise<SubscriberEnd>((resolve) => (resolveDone = resolve));
     /** The run in hand, and how to stop its agent when the facilitator cancels it. */
     let current: { readonly run: string; readonly cancel: AbortController } | undefined;
-    /** The non-DSL paths an agent changed: set, the subscriber claims no more runs (a person reviews them first). */
-    let halted: readonly string[] | undefined;
+    /**
+     * The non-DSL paths an agent changed, shown for the log (`showPaths`), or `<scan failed>`: once set, the subscriber
+     * claims no more runs (a person reviews them and restarts it).
+     */
+    let halted: string | undefined;
+
+    /** Stops claiming because of what the run `id` left (`shown`: escaped paths, or why they are unknown). */
+    const halt = (id: string, shown: string): void => {
+        halted ??= shown;
+        log(`not claiming further runs: review ${shown} (left by run ${id}), then restart the subscriber`);
+    };
 
     // the worker sleeps until something may be queued: an event, a reconnection, a failure to retry
     let woken = true;
@@ -181,43 +210,66 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         );
         const sourcesBefore = await deps.workspace.sources();
         const before = await deps.workspace.scan();
-        const signal = AbortSignal.any([cancelled, stopping.signal]);
-        let outcome: AgentOutcome;
+
+        /**
+         * What the agent changed outside the DSL sources, scanned once after it, on every way out: found or unknown (the
+         * scan failed), the subscriber stops claiming. `undefined` until scanned.
+         */
+        let inspected: { changed: number; outside: boolean } | undefined;
+        const inspect = async (): Promise<{ changed: number; outside: boolean }> => {
+            if (inspected) return inspected;
+            try {
+                const changed = changedPaths(before, await deps.workspace.scan());
+                const sources = new Set([...sourcesBefore, ...(await deps.workspace.sources())]);
+                const outside = changesOutsideSources(changed, sources);
+                if (outside.length) {
+                    const shown = showPaths(outside);
+                    log(`run ${id}: the agent changed files other than .dt/.dtes sources: ${shown}`);
+                    // they stay on disk and may change how the next agent runs (e.g. `.claude/` settings)
+                    halt(id, shown);
+                }
+                inspected = { changed: changed.length, outside: outside.length > 0 };
+            } catch (e) {
+                // what the agent left is unknown: fail closed
+                log(`run ${id}: the workspace could not be scanned after the agent: ${message(e)}`);
+                halt(id, '<scan failed>');
+                inspected = { changed: 0, outside: true };
+            }
+            return inspected;
+        };
+
         try {
-            outcome = await deps.runner.run({ prompt: buildPrompt(input, names, deps.nonce()), allowedTools: options.allowedTools, signal });
-        } catch (e) {
+            const signal = AbortSignal.any([cancelled, stopping.signal]);
+            let outcome: AgentOutcome;
+            try {
+                outcome = await deps.runner.run({ prompt: buildPrompt(input, names, deps.nonce()), allowedTools: options.allowedTools, signal });
+            } catch (e) {
+                await inspect();
+                if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
+                if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
+                log(`run ${id}: the agent could not run: ${message(e)}`);
+                return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
+            }
+            const { changed, outside } = await inspect();
             if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
             if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
-            log(`run ${id}: the agent could not run: ${message(e)}`);
-            return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
+            log(`run ${id}: the agent exited with ${outcome.exitCode}`);
+            if (outside) return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
+            if (outcome.question !== undefined && outcome.exitCode === 0) {
+                return complete(`asks for clarification (${changed} file(s) changed)`, id, () => api.clarification(id, token, outcome.question ?? ''));
+            }
+            const formatted = await deps.tools.format();
+            const checked = await deps.tools.check();
+            if (cancelled.aborted) return log(`run ${id}: cancelled`);
+            await complete(
+                `finished (${changed} file(s) changed; dt fmt ${formatted ? 'ran' : 'did not run'}, dt check ${checked ? 'ran' : 'did not run'})`,
+                id,
+                () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked }),
+            );
+        } finally {
+            // any other way out (an exception) still looks at what the agent left
+            await inspect();
         }
-        if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
-        if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
-        log(`run ${id}: the agent exited with ${outcome.exitCode}`);
-
-        const changed = changedPaths(before, await deps.workspace.scan());
-        const sources = new Set([...sourcesBefore, ...(await deps.workspace.sources())]);
-        const outside = changesOutsideSources(changed, sources);
-        if (outside.length) {
-            const shown = outside.slice(0, 20).join(', ') + (outside.length > 20 ? `, and ${outside.length - 20} more` : '');
-            log(`run ${id}: the agent changed files other than .dt/.dtes sources: ${shown}`);
-            // they stay on disk and may change how the next agent runs (e.g. `.claude/` settings): no more runs until a
-            // person has reviewed them and restarted the subscriber
-            halted = outside;
-            log(`not claiming further runs: review ${shown}, then restart the subscriber`);
-            return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
-        }
-        if (outcome.question !== undefined && outcome.exitCode === 0) {
-            return complete(`asks for clarification (${changed.length} file(s) changed)`, id, () => api.clarification(id, token, outcome.question ?? ''));
-        }
-        const formatted = await deps.tools.format();
-        const checked = await deps.tools.check();
-        if (cancelled.aborted) return log(`run ${id}: cancelled`);
-        await complete(
-            `finished (${changed.length} file(s) changed; dt fmt ${formatted ? 'ran' : 'did not run'}, dt check ${checked ? 'ran' : 'did not run'})`,
-            id,
-            () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked }),
-        );
     };
 
     /** Claims and runs queued runs until none is left (or, with `once`, after one); never again once halted. */
@@ -226,7 +278,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             if (!woken || halted) {
                 if (woken && halted) {
                     woken = false;
-                    log(`a run is queued, but no run is claimed until the subscriber is restarted (review ${halted.join(', ')})`);
+                    log(`a run is queued, but no run is claimed until the subscriber is restarted (review ${halted})`);
                 }
                 await new Promise<void>((resolve) => (wakeWorker = resolve));
                 wakeWorker = () => {};

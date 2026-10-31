@@ -292,7 +292,11 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   lease) → a second scan → `fail AgentError` if anything other than a `.dt`/`.dtes` source (before or after, by the
   configured `sources` and `.gitignore`) was added, changed or removed, the paths in the log; the subscriber then
   claims no further run until it is restarted (the files stay on disk and a person reviews them first; a queued run is
-  logged as not claimed) → `clarification` if the
+  logged as not claimed). Once the agent was started, the second scan runs on every way out — cancel, lost lease,
+  runner error, `Interrupted`, clarification, finish, an exception — and halts the subscriber whenever it finds such a
+  change, whatever the run's outcome (a cancelled run still sends nothing); a scan that fails halts it too (`<scan
+  failed>`, fail closed). The paths are the agent's choice: the log quotes each as JSON with control (C0, DEL, C1) and
+  bidirectional characters escaped, cut to 200 characters and 20 paths, the same text in both log lines → `clarification` if the
   agent exited 0 with a question (no `dt fmt`/`dt check`: the files stay as the agent left them) → `dt fmt`, then `dt
   check` → `finish {exitCode, formatted, checked}`. "Ran" is exit 0 or 1 (`dt fmt` exits 1 when it skipped a file with
   syntax errors, `dt check` on errors), not 2 (configuration), a signal or a failure to start. An exception of the
