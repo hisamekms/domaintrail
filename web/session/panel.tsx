@@ -137,7 +137,7 @@ function Participants({ session, location, nameOf, tx }: { session: SessionData;
                             {r.where === 'here' && <span className="muted small"> ({tx.you})</span>}
                         </span>
                         <span className={`session-role role-${r.role}`}>{tx.roles[r.role]}</span>
-                        <span className="session-where muted small">{tx.whereabouts[r.where]}</span>
+                        {r.where !== 'here' && <span className="session-where muted small">{tx.whereabouts[r.where]}</span>}
                     </li>
                 ))}
             </ul>

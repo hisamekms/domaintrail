@@ -52,7 +52,12 @@ export function ParticipantsButton(props: { session: SessionData; location: View
                         {r.me && <span className="muted"> ({tx.you})</span>}
                         {r.role === 'facilitator' && <span className="chat-role"> {tx.roles.facilitator}</span>}
                     </span>
-                    <span className="chat-person-where muted">{r.where === 'another-view' && name ? tx.chat.anotherView(name) : tx.whereabouts[r.where]}</span>
+                    {/* your own row says nothing of where you are */}
+                    {r.where !== 'here' && (
+                        <span className="chat-person-where muted">
+                            {r.where === 'another-view' && name ? tx.chat.anotherView(name) : tx.whereabouts[r.where]}
+                        </span>
+                    )}
                 </span>
                 {r.where === 'another-view' && (
                     <button

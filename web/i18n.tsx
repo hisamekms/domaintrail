@@ -349,7 +349,8 @@ const ja = {
         participants: (n: number) => `参加者（${n}）`,
         you: '自分',
         roles: { facilitator: 'ファシリテーター', participant: '参加者' } as Record<Role, string>,
-        whereabouts: { here: 'このページ', 'same-view': '同じビュー', 'another-view': '別のビュー', away: 'オフライン' } as Record<Whereabouts, string>,
+        // your own row ('here') shows no whereabouts
+        whereabouts: { 'same-view': '同じビュー', 'another-view': '別のビュー', away: 'オフライン' } as Record<Exclude<Whereabouts, 'here'>, string>,
         compose: '依頼を書く',
         selection: (label: string) => `選択中: ${label}`,
         nothingSelected: '依頼の対象にできる要素が選ばれていません',
@@ -858,7 +859,7 @@ const en: Messages = {
         participants: (n) => `Participants (${n})`,
         you: 'you',
         roles: { facilitator: 'Facilitator', participant: 'Participant' },
-        whereabouts: { here: 'this page', 'same-view': 'same view', 'another-view': 'another view', away: 'offline' },
+        whereabouts: { 'same-view': 'same view', 'another-view': 'another view', away: 'offline' },
         compose: 'Write a request',
         selection: (label) => `Selected: ${label}`,
         nothingSelected: 'Nothing a request can be about is selected',
