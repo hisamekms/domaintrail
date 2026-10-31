@@ -52,7 +52,7 @@ export interface SessionIdentities {
     signOut(headers: IncomingHttpHeaders): Promise<IdentityKey | undefined>;
     /** Uses a facilitator link: the identity holds the facilitator role from now on; the previous holder, if any. */
     claimFacilitator(code: string, identity: IdentityKey): Promise<Result<{ readonly previous: IdentityKey | undefined }, LinkInvalid>>;
-    /** The session closed: every sign-in is revoked; the identities that were signed in. */
+    /** The session closed: every sign-in is revoked, and from now on no one is identified; the identities that were signed in. */
     closeAll(): Promise<IdentityKey[]>;
 }
 
@@ -102,6 +102,10 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
     /** The participants known to have joined. */
     const joined = new Set<string>();
     let facilitator: Promise<IdentityKey | undefined> | undefined;
+    /** Set when the session closed: no one is identified any more, whatever is cached. */
+    let closed = false;
+    /** Whether the session is still the workspace's open one (asked on every identification, not cached). */
+    const isOpen = async (): Promise<boolean> => !closed && (await collaboration.currentSession())?.id === session;
     const facilitatorKey = (): Promise<IdentityKey | undefined> => (facilitator ??= access.facilitator(session));
 
     const identified = async (identity: Identity): Promise<Identified> => {
@@ -112,6 +116,7 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
 
     /** Joins `identity` unless it did; refused when the session is full or not open. */
     const join = async (identity: Identity): Promise<Result<Collaboration.ParticipantId, SignInError>> => {
+        if (closed) return err({ type: 'SessionAlreadyClosed' });
         const id = participantOf(identity);
         if (joined.has(id)) return ok(id);
         const state = await collaboration.sessionState({ session });
@@ -130,6 +135,8 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
         mode,
 
         async identify(headers) {
+            // a closed session identifies no one: neither a cached sign-in, nor the facilitator, nor a joined identity
+            if (!(await isOpen())) return undefined;
             if (mode === 'dev') {
                 const secret = devSecret(headers);
                 if (!secret) return undefined;
@@ -149,6 +156,7 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
 
         async signIn(name) {
             if (mode !== 'dev') throw new Error('Only the dev identity mode signs in with a name');
+            if (!(await isOpen())) return err({ type: 'SessionAlreadyClosed' });
             const identity: Identity = { provider: 'dev', subject: randomUUID(), displayName: name };
             const joinedAs = await join(identity);
             if (!joinedAs.ok) return joinedAs;
@@ -174,7 +182,10 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
         },
 
         async closeAll() {
+            closed = true;
             signIns.clear();
+            joined.clear();
+            facilitator = undefined;
             return access.signOutAll(session);
         },
     };

@@ -128,8 +128,9 @@ interface Socket {
     next(type: string, timeoutMs?: number): Promise<{ type: string; [k: string]: unknown }>;
 }
 
-async function socket(server: SessionServer, cookie: string): Promise<Socket> {
-    const ws = new WebSocket(server.url.replace('http', 'ws') + 'ws', { headers: { cookie } } as never);
+async function socket(server: SessionServer, cookie: string | Record<string, string>): Promise<Socket> {
+    const headers = typeof cookie === 'string' ? { cookie } : cookie;
+    const ws = new WebSocket(server.url.replace('http', 'ws') + 'ws', { headers } as never);
     const received: Socket['received'] = [];
     ws.onmessage = (ev) => received.push(JSON.parse(ev.data as string));
     const closed = new Promise<number>((resolve) => (ws.onclose = (ev) => resolve(ev.code)));
@@ -653,6 +654,42 @@ describe('closing and resuming', () => {
         expect(third.resumed).toBe(false);
         expect(third.session).not.toBe(id);
         await third.stop();
+    });
+
+    test('a closed session identifies no one, while the process is still up: Access tokens and the facilitator get 401', async () => {
+        const root = await workspace();
+        const now = Math.floor(Date.now() / 1000);
+        const claims = (sub: string): AccessClaims => ({ iss: 'https://team.cloudflareaccess.com', aud: 'aud-tag', sub, exp: now + 600, name: sub });
+        const verifier = createMockAccessVerifier(
+            new Map([
+                ['ada', claims('ada')],
+                ['bob', claims('bob')],
+            ]),
+        );
+        const server = await start(root, {
+            session: sessionConfig({
+                identity: 'access',
+                access: { teamDomain: 'team.cloudflareaccess.com', audience: 'aud-tag', allowedHosts: [], allowedOrigins: [] },
+            }),
+            accessVerifier: verifier,
+        });
+        try {
+            const ada = { 'Cf-Access-Jwt-Assertion': 'ada' };
+            const bob = { 'Cf-Access-Jwt-Assertion': 'bob' };
+            expect((await fetch(server.facilitatorLink, { headers: ada, redirect: 'manual' })).status).toBe(303);
+            expect((await fetch(`${server.url}api/state`, { headers: bob })).status).toBe(200);
+            const s = await socket(server, bob);
+            const closed = await fetch(`${server.url}api/session/close`, { method: 'POST', headers: { ...ada, ...json }, body: '{}' });
+            expect(closed.status).toBe(200);
+            await server.closed;
+            expect(await s.closed).toBe(WS_SESSION_CLOSED);
+            for (const who of [ada, bob]) {
+                for (const p of ['api/state', 'api/session/me']) expect([p, (await fetch(server.url + p, { headers: who })).status]).toEqual([p, 401]);
+                expect(await refused(server, who)).toBe(true);
+            }
+        } finally {
+            await server.stop();
+        }
     });
 });
 
