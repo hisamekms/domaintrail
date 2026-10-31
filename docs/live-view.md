@@ -110,9 +110,9 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 Under `dt session start` (not `dt view`) the left pane gets a switch (エクスプローラー / セッション) and opens on the
 session's chat, the same for everyone: the participants online and the agent's status at a glance, one stream of the
 requests the facilitator queued and what followed (the facilitator's note, the agent's progress, question, result or
-failure, revisions confirmed or restored), the requests awaiting approval, and a composer for a request about the
-selection (or the whole workspace) whose unsent text stays in the browser. The others' cursors are drawn on the same
-view. The facilitator also has the session panel on the right, switchable with the inspector: requests to queue as
+failure, revisions confirmed or restored), the requests awaiting approval, and a composer for a request about up to
+20 targets (none: the whole workspace), picked with `@` or added from the selection, whose unsent text and targets
+stay in the browser. The others' cursors are drawn on the same view. The facilitator also has the session panel on the right, switchable with the inspector: requests to queue as
 runs, the runs, and the revision timeline with comparison, confirm and restore. `dt view` serves the same page without
 any of it. See
 [`dt guide session`](guide.md#collaboration-sessions).

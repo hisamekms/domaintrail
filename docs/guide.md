@@ -2426,14 +2426,20 @@ and closes the session (`POST /api/session/close`, e.g. with `fetch` from the br
 for it). The server checks every role; the page only hides what is not yours. The facilitator is listed once in the
 panel, under their own name.
 
-**Requests and targets.** A request is a text (up to 10,000 characters) about a **target**: the whole workspace, a
-`.dt` element (a context's element, a state or a command, by its model ID), a `.dtes` element (by storming and local
-ID), or one **occurrence** of an event in a timeline. The selection gives the target: selecting a note in one
-timeline's view of a storming targets that occurrence (the timeline and the step), while the integrated canvas, which
-draws each event once, targets the event's definition. The text you are writing stays in your browser (IndexedDB, per
-session and participant) until you send it, as one request. A sent request never changes; dismissing it is a mark.
-Each target shows whether it is still in the sources (`current`), no longer found (`stale`: a target is never re-bound
-to something else), or `unknown` while the file it would be in does not parse.
+**Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
+whole workspace. A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
+element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `@`
+to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
+Enter or Tab, Esc; Japanese input works: a candidate is never picked while the IME converts): it becomes a chip under
+the text and `@name[n]` in the text, n its number. The chips are the request's targets: delete every mention of one to
+drop it, or remove it with ×, which leaves its mentions as plain text. `選択中: … [+]` adds the selection: selecting a
+note in one timeline's view of a storming targets that occurrence (the timeline and the step), the integrated canvas,
+which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
+text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
+sent request never changes; dismissing it is a mark. Each target shows whether it is still in the sources
+(`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
+would be in does not parse. The agent sees each request's targets numbered from 1, so `@注文[1]` in one request never
+means another request's target.
 
 **Runs.** The facilitator selects requests (up to 100), adds a note if needed (up to 4,000 characters) and queues a
 run; its input is frozen then, and a request stays as it was, so it can go into another run later. A run is `Queued`,

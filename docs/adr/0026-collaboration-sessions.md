@@ -468,3 +468,43 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   a paragraph in `docs/live-view.md`, and `docs/session-first-run.md` for a first run with the real Claude Code. The
   guide's list of topics grows by four lines, so its test allows `dt guide` 160 lines instead of 150. The changelogs
   record released versions only, so they are left for the release.
+
+## Appendix: requests with several targets (amendment)
+
+A request was about one target (the whole workspace, a `.dt` element, a `.dtes` element or an occurrence). People in
+a meeting talk about several things at once ("give 注文 the 顧客's address"), so a request now has **0 to 20 targets**.
+
+- **Model** (`model/request.dt`, `agent-run.dt`). `Request.targets: TargetSnapshot[0..20]`; the frozen copy in a run's
+  input (`FrozenRequest.targets`) and `RequestSent.targets` carry the list too. **No target means the whole
+  workspace**: the `Workspace` kind of `ModelTarget` is no longer used in a request's list (`noWorkspaceTarget`), so
+  "the workspace" has one spelling and a list never mixes it with elements. `Workspace` stays in the union, for the
+  presence's selected target and for rows written before. Invariants of Request: `atMostTwentyTargets`
+  (`count(targets) <= 20`; the multiplicity's bounds are JSDoc only), `distinctTargets` (`unique(targets, t =>
+  t.target)`, by union value), `noWorkspaceTarget`; `send` requires the same, else `TooManyTargets`,
+  `DuplicateTarget`, `WorkspaceTarget`. `TargetSnapshot`'s `workspaceHasNoRange` is kept (it still holds for every
+  snapshot) though a request's snapshots are never the workspace's now.
+- **Persistence.** No migration: rows are stored whole as JSON, and a row written before (a request, a run's frozen
+  request, a `RequestSent` in the outbox with one `target`) is read as the list it stands for — none when the target
+  was the whole workspace, else that one target (`infrastructure/legacy.ts`). Nothing is rewritten; a row saved again is
+  written with `targets`. A running session's database keeps working after the upgrade (tested on a fixture of former
+  rows, and by hand on a copy of a live session).
+- **API.** `POST /api/session/requests` takes `{ targets, body }`: 0–20 targets, each a target snapshot as before, each
+  once (`targets[i].target`), none the whole workspace (`targets[i].target.kind`), every `sourceRevision` a revision of
+  the session (`UnknownRevision` names `targets[i].sourceRevision`). The former `{ target, body }` is still taken as a
+  list of one, or none for the workspace's target; both at once is refused. `GET /api/session/targets` answers a status
+  per target, in the request's order: `statuses: { [request]: TargetStatus[] }` (empty for the whole workspace).
+- **Mentions.** The body stays plain text. A mention is `@name[n]`: `n` is the number of one of *that request's*
+  targets, from 1; the name has no spaces, brackets or `@` and is only what the writer saw (the target's label or
+  name). A mention of a number the request does not have is text. The page renders mentions as links to their target
+  (named in the current display setting), never as markup; the agent's prompt lists each request's targets numbered
+  from 1 (`targets: [{ number, kind, … }]`, or `"the whole workspace"`) and its rules say that `@name[n]` means target
+  n of the same request, whatever the name says.
+- **The composer** (`web/session/mentions.ts`): the chips under the text are the targets (none: the whole workspace).
+  Typing `@` (or the IME's `＠`) offers every element, state and command of the model and every note of the stormings
+  (not timelines or groups; occurrences only through the selection), matched loosely on the label, the name and the
+  qualified name, shown with their kind and context or storming; ↑↓, Enter/Tab, Esc; while an IME composes
+  (`isComposing` or key code 229) no key picks or sends. Picking writes `@name[n] ` and adds chip n (or reuses it);
+  deleting every mention of a chip that came from a mention removes it (a chip added otherwise stays); removing a chip
+  turns its mentions into plain text; numbers follow the chips. The selection is offered as `選択中: … [+]`; a selection
+  of several shapes adds each targetable element, and an occurrence is added from a timeline's view. The unsent text
+  and chips stay in the browser (the composer's draft, IndexedDB).
