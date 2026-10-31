@@ -256,7 +256,7 @@ Examples:
   dt fmt
   dt fmt --check
   dt fmt sales/order.dt
-  dt fmt storming/checkout.dtes
+  dt fmt stormings/checkout.dtes
   dt -r domain fmt`,
         )
         .action(async (files: string[], opts: { check?: boolean }) => {

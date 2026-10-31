@@ -25,7 +25,6 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
   value Period { // a value object
     days: Int
   }
-
   aggregate Loan "貸出" {
     id: LoanId // identity (required)
     book: BookId
@@ -33,13 +32,11 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
     renewals: Int
     note: String? // ? = optional
     invariant renewalsLimited { renewals >= 0 and renewals <= 2 } // holds in every state
-
     state Lent
     state Overdue
     state Returned {
       returnedAt: Timestamp // only in this state
     }
-
     create command lend(id: LoanId, book: BookId, period: Period) "貸し出す"
       -> Lent
       emits BookLent
@@ -55,7 +52,6 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
             FeeCharged? when Overdue ->
       errors BookDamaged
   }
-
   event BookLent {
     loanId: LoanId
     book: BookId
@@ -95,8 +91,8 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 **The commands:**
 
 - `dt guide [topic]` — this reference, one section, or `--all`.
-- `dt fmt` — format the `.dt` files in place (`--check` for CI).
-- `dt check` — check the model; exit 0 when there are no errors (`--format json` for one JSON document).
+- `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
+- `dt check` — check the model and its stormings (`.dtes`); exit 0 when there are no errors (`--format json` for JSON).
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
@@ -126,11 +122,14 @@ change the DSL, not the implementation: never emit an event or set a field only 
 that keeps running and never exits by itself (stop it with Ctrl+C), so do not wait for it to finish: run it in the
 background, or use `dt check` for a result.
 
+Event Storming files (`.dtes`) go through the same loop: `dt fmt`, then `dt check` until it exits 0 (see [Event
+Storming](#event-storming-dtes)). They are not generated: `dt generate ts` writes the `.dt` model only.
+
 `dt --help` and `dt <command> --help` list the options with examples.
 
 ```bash
-dt fmt                          # format every *.dt file below the current directory in place
-dt check                        # every *.dt file below the current directory
+dt fmt                          # format every *.dt and *.dtes file below the current directory in place
+dt check                        # every *.dt and *.dtes file below the current directory
 dt -r domain check              # below domain/ (or as configured by a domaintrail.jsonc found there or above)
 dt generate ts                  # into <root>/generated/domain
 dt generate ts --out src/domain/generated
@@ -150,6 +149,7 @@ sales/order.dt         context Sales { id OrderId ...  aggregate Order { ... }  
 sales/customer.dt      context Sales { id CustomerId ...  aggregate Customer { ... } }
 billing/context.dt     /// 説明  context Billing "請求" { terms { ... } }
 billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { ... } }
+stormings/order-to-cash.dtes   storming OrderToCash "注文から入金まで" { ... }   // one storming per file
 ```
 
 - `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
@@ -158,6 +158,7 @@ billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { .
   its aggregates or by none (field sets, for example). The other files open the context without a name: `context Sales {
   ... }`.
 - An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
+- A storming goes to `stormings/<storming>.dtes`, apart from the contexts: it may span several of them.
 - Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
   `order-fulfillment/`.
 
@@ -1672,15 +1673,422 @@ Each run replaces the files generated before (recognized by their header). The f
 directory moved, a context removed) are deleted, along with a directory left empty. Only recorded paths inside the root
 and not reached through a symlink are deleted; other entries in that file are ignored. Other files are never deleted —
 neither hand-written files nor generated files you edited — and generation stops instead of overwriting one.
+<!-- topic: storming -->
+## Event Storming (`.dtes`)
+
+`.dtes` files hold **stormings**: Event Storming as text, next to the `.dt` files of the same workspace. A storming is
+exploration, not a contract: which events happen and in which partial orders, then — at Design Level — who issues which
+command on which aggregate, from which information, and which policy reacts to which event. Nothing is generated from
+it, and no tool changes a `.dt` file because of it, or a `.dtes` file because of the model.
+
+- **From a storming to a model (UC1).** Write events, timelines and hotspots only (Big Picture), and ask about what is
+  unclear. Add actors, external systems, read models, commands, policies and aggregates as they are agreed (Design
+  Level). Then propose the `.dt` model ([From a storming to `.dt`](#references-to-the-model-ref)), and add to the
+  storming only the `ref`s that resolve. Never change existing `.dt` files without confirmation.
+- **From a model to a storming (UC2).** Write a storming of the existing model, with `ref`s to its events, aggregates
+  and commands, and walk concrete scenarios as timelines: the normal one, exceptions, retries, other contexts. Record
+  what is unclear as hotspots. Report the diagnostics (mechanical inconsistencies between the two files) apart from the
+  business findings (improvements of the model, made only when people decide them).
+
+`dt check`, `dt fmt`, `dt view` and `dt lsp` take the `.dtes` files with the `.dt` files: the default `sources` find
+both, and a config that sets `sources` lists a `.dtes` glob itself (see [Configuration](#configuration)). `dt check`
+fails on a `.dtes` error as on a `.dt` one. `dt generate ts` reads the `.dt` files only, and `.dtes` errors do not block
+it. `dt show` shows the `.dt` model only. Keep the stormings in a directory of their own, `stormings/<name>.dtes`.
+
+```dtes
+// stormings/order-to-cash.dtes
+/// From an order to its payment, across Sales and Billing.
+storming OrderToCash "注文から入金まで" { // an ID, unique in the workspace, and an optional label
+  event OrderPlaced "注文を受け付けた" {
+    ref Sales.OrderPlaced // the .dt event it is (optional, fully qualified)
+  }
+  event OrderConfirmed "注文が確定した" {
+    ref Sales.OrderConfirmed
+  }
+  event OrderCancelled "注文が取り消された" {
+    ref Sales.OrderCancelled
+  }
+  event RefundRequested "返金が依頼された" {
+    ref Sales.RefundRequested
+  }
+  event InvoiceIssued "請求書が発行された" // no counterpart in the model: no ref
+  event InvoicePaid "請求書が支払われた" {
+    ref Billing.InvoicePaid
+  }
+  event PaymentFailed "支払に失敗した"
+
+  actor Customer "顧客"
+  external PaymentService "決済サービス" // an external system that issues a command, not one that is called
+  readmodel OrderTotal "注文金額"
+
+  aggregate Order "注文" {
+    ref Sales.Order
+  }
+  aggregate Invoice "請求書" {
+    ref Billing.Invoice
+  }
+
+  command ConfirmOrder "注文を確定する" {
+    ref Sales.Order.confirm // Context.Aggregate.command
+    actor Customer
+    target Order // at most one
+    emits OrderConfirmed
+  }
+  command IssueInvoice "請求書を発行する" {
+    ref Billing.Invoice.issue
+    reads OrderTotal
+    target Invoice
+    emits InvoiceIssued
+  }
+  command RecordPayment "入金を記録する" {
+    ref Billing.Invoice.pay
+    actor PaymentService
+    target Invoice
+    emits InvoicePaid // possible outcomes: neither all of them nor exclusive
+    emits PaymentFailed
+  }
+
+  policy BillConfirmedOrder "確定した注文に請求する" { // from Sales to Billing: a policy may cross contexts
+    on OrderConfirmed
+    issues IssueInvoice
+  }
+
+  timeline Normal "通常の注文" {
+    OrderPlaced
+    OrderConfirmed
+    InvoiceIssued
+    InvoicePaid
+  }
+  timeline PaymentRetry "支払の再試行" {
+    OrderPlaced
+    OrderConfirmed
+    InvoiceIssued
+    PaymentFailed
+    PaymentFailed // again: another occurrence
+    InvoicePaid
+  }
+  timeline CancelAfterConfirm "確定後の取消" {
+    OrderPlaced
+    OrderConfirmed
+    group Cancelled "取消の結果" { // one stage, no order inside
+      OrderCancelled
+      RefundRequested
+    }
+  }
+
+  hotspot RetryLimit "支払は何回まで再試行する？" {
+    on PaymentFailed
+  }
+  hotspot IssuedEvent "請求書の発行をイベントにする？" {
+    on InvoiceIssued
+    status resolved
+    resolution "する。Billing に InvoiceIssued を追加する"
+  }
+}
+```
+
+| Element | What it is | Its clauses |
+|---|---|---|
+| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event` |
+| `actor` | a person or role that may issue commands | none |
+| `external` | an external system that may issue commands | none |
+| `command` | an operation someone attempts | `ref Context.Aggregate.command`, `actor`, `reads`, `target` (at most one), `emits` |
+| `policy` | a business rule: when one of its events happens, it may issue its commands | `on` and `issues`, one or more each |
+| `aggregate` | a candidate consistency boundary that commands work on | `ref Context.Aggregate` |
+| `readmodel` | information that a command is decided on | none |
+| `hotspot` | a question or an important point, open or resolved | `on` (one event at most), `status`, `resolution` |
+| `timeline` | a partial time order of events | event IDs and groups |
+| `group` | events of one stage of a timeline, without an order among them | event IDs, each once |
+
+- `kind ID "label"`, with a `{ … }` body for clauses, one per line. `///` lines above a declaration are its
+  description. The IDs of a storming are one namespace across kinds, timelines and groups included; a clause or a
+  timeline names an element of the same storming by its ID (never one of another storming).
+- **Relations are possibilities**, never execution: several `actor`s are alternatives; `emits` lists outcomes that may
+  happen, neither required, exclusive nor complete; a policy is evaluated when any of its `on` events happens and may
+  issue its commands, with no order and no guarantee that all run. A policy with several `on` and several `issues` does
+  not mean that every event starts every command: when the conditions differ, split it into policies. A policy needs no
+  context of its own and may cross contexts. `reads` says that the information is used to decide the command, not who
+  reads it or how.
+- **Timelines** hold event IDs and groups only. A timeline is partial and proves no causality; an event may appear in
+  several timelines and several times in one, each an occurrence of its own; timelines are never merged into one global
+  order. A group is a set: its order and ID carry no meaning. An event in no timeline is fine.
+- **Hotspots** are `open` unless `status resolved`, which needs a `resolution "…"`. Resolved means the business agreed,
+  not that the `.dt` model has it. Keep the resolved hotspots that matter (an exception, a boundary, an invariant) and
+  delete the trivial ones: git keeps the history.
+- Not in the DSL: positions and layout, conditions, guards, compensation, ordering or transactions. Not diagnosed:
+  completeness (events in no timeline or not referenced, commands without `emits`, elements without `ref`), timeline
+  order against the causal relations, and policies across contexts.
+- `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step and group event on its own line,
+  an element without clauses on one line, comments kept.
+
+<!-- topic: storming-refs -->
+### References to the model (`ref`)
+
+An event, an aggregate or a command may have one `ref`: the `.dt` symbol it is (the same concept, not a loose
+relation). It is always fully qualified, and never resolved by a simple name or a guessed context:
+
+| Element | `ref` | Names |
+|---|---|---|
+| `event` | `Context.Event` | an event of the model |
+| `aggregate` | `Context.Aggregate` | an aggregate |
+| `command` | `Context.Aggregate.command` | a command of that aggregate |
+
+- A `ref` is optional: leave it out while the model has no such symbol, and nothing warns about an element without one,
+  or about a model element that no storming mentions. Policies, actors, externals, read models, hotspots, timelines
+  and groups have no `ref`: a `.dt` policy is not the counterpart of a storming's policy (below).
+- S010 / S011 report a `ref` that is not fully qualified, names nothing or names another kind. When the `.dt` files do
+  not parse, the `ref`s are not checked.
+- **Contract warnings**, only for what is provable: S012 when a command's `ref` is a command of another aggregate than
+  the `ref` of its `target`; S013 when a command `emits` an event whose `ref` the `.dt` command never emits (a `.dt`
+  command emits exactly the events of its `emits`, and none on an error). An event that the `.dt` command emits but the
+  storming does not list, an `emits` of an event without `ref`, and a different multiplicity are not diagnosed.
+- No tool rewrites either side: after a change of the model, the broken `ref`s are reported and fixed by hand (the
+  language server goes to the `.dt` declaration of each part of a `ref`).
+
+**From a storming to `.dt`.** An event becomes an event of the context that owns it, an aggregate an aggregate, a
+command a command of its target's aggregate (lower camel case: `ConfirmOrder` → `Order.confirm`), with its `emits`
+decided as a contract (exact, unlike the storming's). A storming's policy becomes, where it is a reaction the business
+relies on, one `.dt` policy per event and command, `policy P when Event -> Aggregate.command` in the context of the
+command ([Reactions to events](#reactions-to-events-policies)): deciding which pairs those are is modeling, not an
+expansion of its `on` and `issues`. Actors, external systems and read models have no `.dt` counterpart; a resolved
+hotspot is a decision to model (an error, a requirement, an invariant). Then add the `ref`s that resolve.
+
+<!-- topic: storming-views -->
+### Views of a storming
+
+A storming is viewed along two independent axes, neither of which changes the `.dtes`:
+
+- **Level.** *Big Picture* shows the events, the timelines' order, groups and hotspots. *Design Level* adds actors,
+  external systems, commands, policies, aggregates, read models and the relations. Big Picture hides the details of
+  the same file; it is not an earlier version, and the events are all there.
+- **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. *One timeline*
+  shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
+  (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
+  and a hotspot without `on` is shown on the integrated canvas only.
+
+Timelines that start with the same steps (the same event, or a group of the same events) are drawn sharing those steps,
+until they differ; later common steps are not merged. Sharing is only drawing: it does not make two occurrences the
+same happening. Solid arrows are type-level causal relations (`on`, `issues`, `emits`: possible, not "happened"),
+dotted lines the other relations (`actor`, `reads`, `target`, a hotspot's `on`), dashed arrows the order of a timeline.
+The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.
+
+<!-- topic: storming-rules -->
+### Diagnostics of a storming
+
+S001–S009 and S014 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
+group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
+
+**S001**: two declarations with one ID, of any kinds; also two stormings with one ID in the workspace. Rename one, and
+the references to it.
+
+```dtes
+// S001
+storming Checkout {
+  event OrderPlaced
+  command OrderPlaced
+}
+```
+
+**S002**: a relation or a timeline step names no declaration of the storming. Declare it, or correct the name (the hint
+gives the closest one).
+
+```dtes
+// S002
+storming Checkout {
+  event OrderConfirmed
+  command ConfirmOrder {
+    emits OrderConfirmd
+  }
+}
+```
+
+**S003**: a reference to a declaration of the wrong kind: `target` names an aggregate, `reads` a read model, `actor` an
+actor or external, `emits`, `on` and timeline steps an event, `issues` a command. A command is never a step: put its
+events in the timeline.
+
+```dtes
+// S003
+storming Checkout {
+  event OrderConfirmed
+  command ConfirmOrder {
+    emits OrderConfirmed
+  }
+  timeline Main {
+    ConfirmOrder
+    OrderConfirmed
+  }
+}
+```
+
+**S004**: more than one `target`, `ref`, hotspot `on`, `status` or `resolution`. Keep one; a command with two main
+aggregates is two commands, or a hotspot.
+
+```dtes
+// S004
+storming Checkout {
+  aggregate Order
+  aggregate Invoice
+  command ConfirmOrder {
+    target Order
+    target Invoice
+  }
+}
+```
+
+**S005**: a `ref` on a policy, actor, external, read model or hotspot. Remove it: only events, aggregates and commands
+correspond to `.dt` symbols.
+
+```dtes
+// S005
+storming Checkout {
+  event OrderConfirmed
+  command IssueInvoice
+  policy BillConfirmedOrder {
+    ref Billing.BillConfirmedOrder
+    on OrderConfirmed
+    issues IssueInvoice
+  }
+}
+```
+
+**S006**: a clause the element does not take: relations belong to commands (`actor`, `reads`, `target`, `emits`),
+policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots. Move it to the element it
+belongs to (an event's outcome is the command's `emits`).
+
+```dtes
+// S006
+storming Checkout {
+  event OrderConfirmed {
+    emits OrderPlaced
+  }
+  event OrderPlaced
+}
+```
+
+**S007**: an event twice in one group. Remove one: a group is a set; to show the event again, put it in another step.
+
+```dtes
+// S007
+storming Checkout {
+  event OrderCancelled
+  timeline Main {
+    group Cancelled {
+      OrderCancelled
+      OrderCancelled
+    }
+  }
+}
+```
+
+**S008**: a policy without `on` or without `issues`. Add the missing one; while it is unknown, write a hotspot instead.
+
+```dtes
+// S008
+storming Checkout {
+  event OrderConfirmed
+  policy BillConfirmedOrder {
+    on OrderConfirmed
+  }
+}
+```
+
+**S009**: a `status` other than `open` or `resolved`, `resolved` without `resolution`, or a `resolution` while open.
+Write what was agreed in `resolution`, or keep it open without one.
+
+```dtes
+// S009
+storming Checkout {
+  hotspot RetryLimit "支払は何回まで再試行する？" {
+    status resolved
+  }
+}
+```
+
+**S010**: a `ref` that is not fully qualified, or names nothing in the model. Write the whole path (the hint gives the
+closest one); while the model has no such symbol, leave the `ref` out.
+
+```dtes
+// S010
+storming Checkout {
+  event OrderConfirmed {
+    ref OrderConfirmed
+  }
+}
+```
+
+**S011**: a `ref` to a symbol of another kind, or to a command the aggregate does not have. Name a symbol of the
+element's kind.
+
+```dtes
+// S011
+storming Checkout {
+  event OrderConfirmed {
+    ref Sales.Order
+  }
+}
+```
+
+**S012** (warning): a command's `ref` is a command of another aggregate than its `target`'s `ref`. Correct one of the
+`ref`s or the `target`.
+
+```dtes
+// S012
+storming Checkout {
+  aggregate Invoice {
+    ref Billing.Invoice
+  }
+  command ConfirmOrder {
+    ref Sales.Order.confirm
+    target Invoice
+  }
+}
+```
+
+**S013** (warning): a command `emits` an event whose `ref` its `.dt` command never emits. If it can happen, add it to
+the `.dt` command's `emits` (or, for a failure, an error of it); otherwise correct the `ref` or the `emits`.
+
+```dtes
+// S013
+storming Checkout {
+  event OrderCancelled {
+    ref Sales.OrderCancelled
+  }
+  command ConfirmOrder {
+    ref Sales.Order.confirm
+    emits OrderCancelled
+  }
+}
+```
+
+**S014** (warning): policies, commands and events form a cycle (policy → command → event → policy). It is a cycle of
+possibilities, not an infinite loop: nothing to change when the repetition is intended (a retry); otherwise check the
+relations along it, or record the stop condition in a hotspot.
+
+```dtes
+// S014
+storming Checkout {
+  event PaymentFailed
+  command RetryPayment {
+    emits PaymentFailed
+  }
+  policy RetryFailedPayment {
+    on PaymentFailed
+    issues RetryPayment
+  }
+}
+```
+
 <!-- topic: rules -->
 ## Rules
 
 Each diagnostic names its rule. A `hint` says what to change when the message does not; unresolved names get
-`did you mean …?` instead.
+`did you mean …?` instead. The S rules check `.dtes` files, with an example and a fix each in [Diagnostics of a
+storming](#diagnostics-of-a-storming).
 
 | Code | Check |
 |---|---|
-| SYNTAX | lexer / parser errors |
+| SYNTAX | lexer / parser errors (in `.dt` and `.dtes` files) |
 | M001 | types, aggregates and names in invariants and requirements resolve |
 | M002 | names are unique in their scope (also across files of one context) |
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
@@ -1713,14 +2121,14 @@ Each diagnostic names its rule. A `hint` says what to change when the message do
 | S003 | `.dtes`: a reference names a declaration of the right kind (`target` an aggregate, `reads` a read model, `actor` an actor or external, `emits` / `on` and timeline steps an event, `issues` a command) |
 | S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status` and `resolution` per element |
 | S005 | `.dtes`: only events, aggregates and commands have a `ref` |
-| S006 | `.dtes`: an element has only the clauses of its kind |
+| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots |
 | S007 | `.dtes`: an event appears at most once in a group |
 | S008 | `.dtes`: a policy has at least one `on` and one `issues` |
 | S009 | `.dtes`: a hotspot's `status` is `open` or `resolved`; `resolved` needs a `resolution`, `open` has none |
 | S010 | `.dtes`: a `ref` is fully qualified (`Context.Event`, `Context.Aggregate`, `Context.Aggregate.command`) and resolves in the `.dt` model |
-| S011 | `.dtes`: a `ref` names a `.dt` symbol of its element's kind |
-| S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate its `target` refers to |
-| S013 | (warning) `.dtes`: a command does not emit an event that its `.dt` command never emits |
+| S011 | `.dtes`: a `ref` names a `.dt` symbol of its element's kind (a command `ref`, a command the aggregate has) |
+| S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that its `target`'s `ref` names |
+| S013 | (warning) `.dtes`: a command `emits` no event whose `ref` its `.dt` command never emits (`.dt` `emits` is exhaustive) |
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
 
 <!-- topic: show -->
@@ -1802,6 +2210,10 @@ own. The layout:
   `=>` and operators; none inside `( )`, `[ ]`, around `.` and `..`, or before `?`. One space before a comment at the
   end of a line.
 
+A `.dtes` file has its own layout, in the same spirit: 2 spaces per level; every element, clause, timeline step and group
+event on its own line; an element without clauses on one line (an empty `{}` is dropped unless it holds a comment); one
+blank line kept where the author wrote some, one between stormings; no spaces around the dots of a `ref`.
+
 <!-- topic: output -->
 ## Output and exit codes
 
@@ -1836,14 +2248,14 @@ order and exit codes (JSON Schema: `schema/diagnostics.schema.json` in the packa
 ```
 
 `endLine` / `endColumn` point just past the problem; `hint` is present only when there is one. `generate ts` adds
-`written` (the output directories). A failure other than the diagnostics (missing root, invalid config, no `.dt` file,
+`written` (the output directories). A failure other than the diagnostics (missing root, invalid config, no `.dt` or `.dtes` file,
 generation refused) is an `error` message in the document, e.g. `{ "error": "Root directory not found: domain" }`;
 `diagnostics` and `summary` are there whenever the check ran.
 
 | Exit code | Meaning |
 |---|---|
 | 0 | success (`check`: no errors; warnings are allowed) |
-| 1 | the model has errors, no `.dt` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, or the root / a file could not be read |
+| 1 | the model or a storming has errors, no `.dt` or `.dtes` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, or the root / a file could not be read |
 | 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
 
 <!-- topic: config -->
@@ -1858,7 +2270,7 @@ relative to the config file, and its directory becomes the root. Without a confi
 {
   "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
   // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
-  "sources": ["domain/**/*.dt", "!domain/drafts/**"],      // default: ["**/*.dt"]
+  "sources": ["domain/**/*.dt", "domain/**/*.dtes", "!domain/drafts/**"], // default: ["**/*.dt", "**/*.dtes"]
   // skip what .gitignore ignores when finding sources
   "respectGitignore": true,                                 // default: true
   // print a hint on generate when no lint rule against casts to domain types is found (dt guide lint)
@@ -1902,7 +2314,7 @@ line (`dt fmt <files>`) are never skipped.
 <!-- topic: lsp -->
 ## Language server
 
-`dt lsp` is a language server (LSP) for `.dt` files, speaking over stdin/stdout. Editors and AI agents start it; it
+`dt lsp` is a language server (LSP) for `.dt` and `.dtes` files, speaking over stdin/stdout. Editors and AI agents start it; it
 runs until the client shuts it down. It offers:
 
 - **Diagnostics equal to `dt check`**: the same rules, severities, codes (the rule ID, e.g. `M009`) and messages,
@@ -1918,10 +2330,14 @@ runs until the client shuts it down. It offers:
   (a command is referenced by policies), which updates every reference (a qualified `Sales.Order` keeps its context).
   Contexts, fields and parameters are not renamed, since their names also appear outside references (in qualified
   names, expressions and terms).
+- **In `.dtes` files**: the diagnostics (S rules, the `ref`s checked against the model), formatting as `dt fmt`, hover
+  (kind, ID, label, `///` description, storming and `ref`), the outline of each storming, and go to definition of a
+  local reference (a relation's target, a timeline step) and of each part of a `ref` (`Sales`, `Sales.Order`, its
+  command), into the `.dt` files.
 
 The workspace is the config found from `--root` or `--config` when given, else from the client's (first) workspace
 folder, else from the current directory, exactly as `dt check` would find it there (with the same sources, `.gitignore`
-included). When that search finds no config file, the first `.dt` file opened below that directory whose directory or
+included). When that search finds no config file, the first `.dt` or `.dtes` file opened below that directory whose directory or
 a parent (up to it) has a `domaintrail.jsonc` / `domaintrail.json` makes that config the workspace: its directory is
 the root, its `sources` are loaded, and the files no longer in the workspace lose their diagnostics. So opening a
 repository with the model in `examples/shop/` checks that model as `dt -r examples/shop check` does. A session has one
@@ -1929,15 +2345,15 @@ workspace: a file opened later under another config file gets no diagnostics, an
 directory as its own project to check it). An open file outside the workspace's sources gets no diagnostics either.
 
 A client needs only: command `dt lsp` (with `dt` on the `PATH`, or e.g. `npx dt lsp`), transport stdio, file
-extension `.dt`. For Claude Code, a plugin declares it in an `.lsp.json` at the plugin root (load it with
-`claude --plugin-dir <plugin directory>`); Claude then sees the diagnostics after each edit of a `.dt` file:
+extensions `.dt` and `.dtes`. For Claude Code, a plugin declares it in an `.lsp.json` at the plugin root (load it with
+`claude --plugin-dir <plugin directory>`); Claude then sees the diagnostics after each edit of a `.dt` or `.dtes` file:
 
 ```json
 {
   "domaintrail": {
     "command": "dt",
     "args": ["lsp"],
-    "extensionToLanguage": { ".dt": "domaintrail" }
+    "extensionToLanguage": { ".dt": "domaintrail", ".dtes": "dtes" }
   }
 }
 ```
@@ -1965,6 +2381,9 @@ opened picks the nearest config (see [Language server](#language-server)), provi
 project directory itself. Directories that `.gitignore` ignores, such as the grammar checkout Zed keeps in
 `editors/zed/grammars` when the extension is installed from a clone, are not part of the workspace.
 
-**Other editors.** Any LSP client works with command `dt lsp`, transport stdio, file extension `.dt` (see
-[Language server](#language-server)). Editors that highlight with tree-sitter (Neovim, Helix, Emacs) can use the
+**Other editors.** Any LSP client works with command `dt lsp`, transport stdio, file extensions `.dt` and `.dtes`
+(see [Language server](#language-server)). Editors that highlight with tree-sitter (Neovim, Helix, Emacs) can use the
 grammar in `tree-sitter-domaintrail`.
+
+**`.dtes` files** have no tree-sitter grammar and are not highlighted, in Zed either; `dt lsp` gives them diagnostics,
+formatting, hover, an outline and go to definition.
