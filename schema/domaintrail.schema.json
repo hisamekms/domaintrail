@@ -108,9 +108,17 @@
           "additionalProperties": false,
           "required": ["teamDomain", "audience"],
           "properties": {
-            "teamDomain": { "description": "<team>.cloudflareaccess.com: the issuer of the tokens.", "type": "string", "minLength": 1 },
+            "teamDomain": {
+              "description": "<team>.cloudflareaccess.com: the issuer of the tokens.",
+              "type": "string",
+              "pattern": "^(https://)?[A-Za-z0-9.-]+/?$"
+            },
             "audience": { "description": "The Access application's audience tag (AUD).", "type": "string", "minLength": 1 },
-            "publicUrl": { "description": "The public URL of the session (shown, not used to allow anything).", "type": "string", "format": "uri" },
+            "publicUrl": {
+              "description": "The public URL of the session (the tunnel's, https). Not used to allow anything: dt session start refuses it unless its host is in allowedHosts and its origin in allowedOrigins.",
+              "type": "string",
+              "format": "uri"
+            },
             "allowedHosts": {
               "description": "Host names the server answers to besides loopback (nothing external is allowed without them).",
               "type": "array",
@@ -121,6 +129,17 @@
               "description": "Origins (https://host[:port]) whose pages may call the server besides loopback.",
               "type": "array",
               "items": { "type": "string", "format": "uri" },
+              "default": []
+            },
+            "acceptCookie": {
+              "description": "Accept the CF_Authorization cookie when the Cf-Access-Jwt-Assertion header is absent (Cloudflare recommends the header).",
+              "type": "boolean",
+              "default": false
+            },
+            "avatarHosts": {
+              "description": "Hosts an avatar (the identity's https picture) may come from; without them the page shows initials.",
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
               "default": []
             }
           }

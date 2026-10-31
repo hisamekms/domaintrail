@@ -60,12 +60,16 @@ export interface SessionConfigFile {
         teamDomain: string;
         /** The Access application's audience tag (AUD). */
         audience: string;
-        /** The public URL of the session (shown, not used to allow anything). */
+        /** The public URL of the session (the tunnel's). Not used to allow anything: its host and origin must also be in `allowedHosts` and `allowedOrigins`. */
         publicUrl?: string;
         /** Host names the server answers to besides loopback. Default: none. */
         allowedHosts?: string[];
         /** Origins (`https://host[:port]`) whose pages may call the server besides loopback. Default: none. */
         allowedOrigins?: string[];
+        /** Whether the `CF_Authorization` cookie is accepted when the `Cf-Access-Jwt-Assertion` header is absent. Default: false. */
+        acceptCookie?: boolean;
+        /** Hosts an avatar (the identity's `https` picture) may come from. Default: none, the page shows initials. */
+        avatarHosts?: string[];
     };
     agent?: {
         /** Port of the agent API, on 127.0.0.1 only. Default: 0 (any free port, written to `.domaintrail/session/agent.json`). */
@@ -82,7 +86,15 @@ export interface ResolvedSessionConfig {
     port: number;
     host: string;
     identity: SessionIdentity;
-    access?: { teamDomain: string; audience: string; publicUrl?: string; allowedHosts: string[]; allowedOrigins: string[] };
+    access?: {
+        teamDomain: string;
+        audience: string;
+        publicUrl?: string;
+        allowedHosts: string[];
+        allowedOrigins: string[];
+        acceptCookie: boolean;
+        avatarHosts: string[];
+    };
     agent: { port: number; allowedTools: string[] };
     maxParticipants: number;
 }
@@ -158,6 +170,8 @@ function resolveSession(session: SessionConfigFile | undefined): ResolvedSession
                 ...(access.publicUrl !== undefined && { publicUrl: access.publicUrl }),
                 allowedHosts: access.allowedHosts ?? [],
                 allowedOrigins: access.allowedOrigins ?? [],
+                acceptCookie: access.acceptCookie ?? false,
+                avatarHosts: access.avatarHosts ?? [],
             },
         }),
         agent: { port: session?.agent?.port ?? 0, allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS] },
@@ -295,15 +309,23 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
     if (access !== undefined) {
         if (!isObject(access)) return fail("'session.access' must be an object");
         for (const key of Object.keys(access)) {
-            if (!['teamDomain', 'audience', 'publicUrl', 'allowedHosts', 'allowedOrigins'].includes(key)) fail(`unknown key 'session.access.${key}'`);
+            if (!['teamDomain', 'audience', 'publicUrl', 'allowedHosts', 'allowedOrigins', 'acceptCookie', 'avatarHosts'].includes(key))
+                fail(`unknown key 'session.access.${key}'`);
         }
         if (typeof access.teamDomain !== 'string' || !access.teamDomain.trim()) fail("'session.access.teamDomain' must be a non-empty string");
+        if (!/^(https:\/\/)?[a-z0-9.-]+\/?$/i.test(access.teamDomain))
+            fail(`'session.access.teamDomain' must be a host name like '<team>.cloudflareaccess.com': '${access.teamDomain}'`);
         if (typeof access.audience !== 'string' || !access.audience.trim()) fail("'session.access.audience' must be a non-empty string");
         if (access.publicUrl !== undefined && (typeof access.publicUrl !== 'string' || !URL.canParse(access.publicUrl)))
             fail("'session.access.publicUrl' must be a URL");
         if (access.allowedHosts !== undefined) {
             if (!isStringList(access.allowedHosts)) return fail("'session.access.allowedHosts' must be an array of host names");
             for (const h of access.allowedHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.allowedHosts' must hold host names only: '${h}'`);
+        }
+        if (access.acceptCookie !== undefined && typeof access.acceptCookie !== 'boolean') fail("'session.access.acceptCookie' must be a boolean");
+        if (access.avatarHosts !== undefined) {
+            if (!isStringList(access.avatarHosts)) return fail("'session.access.avatarHosts' must be an array of host names");
+            for (const h of access.avatarHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.avatarHosts' must hold host names only: '${h}'`);
         }
         if (access.allowedOrigins !== undefined) {
             if (!isStringList(access.allowedOrigins)) return fail("'session.access.allowedOrigins' must be an array of origins");
