@@ -4,16 +4,15 @@ import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Serv
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { watch, type FSWatcher } from 'chokidar';
 import { WebSocket, WebSocketServer } from 'ws';
-import { DEFAULT_SOURCES, IGNORED_DIRS } from '../core/config.js';
-import { SourceScope } from '../workspace/infrastructure/files.js';
+import { DEFAULT_SOURCES } from '../core/config.js';
 import { STRUCTURE_LEVELS, type StructureLevel } from '../graph/ir.js';
 import { ElkLayoutEngine } from '../layout/elk.js';
 import type { LayoutEngine } from '../layout/engine.js';
 import { gitDirs, listRefs, resolveCommit, UnknownRevisionError } from './git.js';
 import type { BaselineSpec } from './protocol.js';
 import { ViewSession } from './session.js';
+import { createGitRefWatcher, createWorkspaceWatcher } from '../workspace/infrastructure/watchers.js';
 
 export interface ViewServerOptions {
     root: string;
@@ -228,63 +227,42 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- listening on TCP, so the address is an AddressInfo
     const { port } = http.address() as AddressInfo;
 
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const onChange = (event: string, file: string): void => {
-        log(`${event} ${path.relative(options.root, file)}`);
-        clearTimeout(timer);
-        timer = setTimeout(async () => {
-            const payload = await session.refresh();
-            publish(JSON.stringify(payload));
-            const errors = payload.diagnostics.filter((d) => d.severity === 'error').length;
-            const d = payload.diff;
-            log(`v${payload.version} ${payload.status}: ${errors} error(s); +${d.added.length} ~${d.changed.length} -${d.removed.length}`);
-        }, options.debounceMs ?? 80);
+    const refreshSources = async (): Promise<void> => {
+        const payload = await session.refresh();
+        publish(JSON.stringify(payload));
+        const errors = payload.diagnostics.filter((d) => d.severity === 'error').length;
+        const d = payload.diff;
+        log(`v${payload.version} ${payload.status}: ${errors} error(s); +${d.added.length} ~${d.changed.length} -${d.removed.length}`);
     };
-
-    const scope = new SourceScope(options.root, sources, respectGitignore);
-    const watcher: FSWatcher = watch(options.root, {
-        ignoreInitial: true,
-        ignored: (p, stats) => {
-            if (stats?.isDirectory()) return p !== scope.root && !scope.includesDirectory(p);
-            return IGNORED_DIRS.has(path.basename(p)) || (!!stats?.isFile() && scope.sourcePath(p) === undefined);
-        },
+    const sourcesWatch = createWorkspaceWatcher(options.root, { sources, respectGitignore, debounceMs: options.debounceMs }).subscribe((event) => {
+        if (event.kind === 'settled') void refreshSources();
+        else log(`${event.kind} ${path.relative(options.root, event.file)}`);
     });
-    for (const event of ['add', 'change', 'unlink'] as const) {
-        watcher.on(event, (file: string) => onChange(event, file));
-    }
-    const ready = new Promise<void>((resolve) => watcher.once('ready', () => resolve()));
+    const ready = sourcesWatch.then(() => undefined);
 
     // a git baseline moves with its branch (a commit, a checkout): watch the refs, not the objects
-    let gitWatcher: FSWatcher | undefined;
+    const refreshGitBaseline = async (): Promise<void> => {
+        const before = session.state.baseline;
+        const payload = await session.refresh();
+        const after = payload.baseline;
+        if (after.kind === 'git' && before.kind === 'git' && after.commit?.hash === before.commit?.hash) return;
+        publish(JSON.stringify(payload));
+        if (after.kind === 'git') log(`baseline ${after.ref} is now ${after.commit?.hash.slice(0, 7) ?? '(unknown)'}`);
+    };
     const dirs = await gitDirs(options.root);
-    if (dirs) {
-        gitWatcher = watch(
-            dirs.flatMap((d) => ['HEAD', 'refs', 'packed-refs'].map((f) => path.join(d, f))),
-            { ignoreInitial: true },
-        );
-        let gitTimer: ReturnType<typeof setTimeout> | undefined;
-        gitWatcher.on('all', () => {
-            if (session.state.baseline.kind !== 'git') return;
-            clearTimeout(gitTimer);
-            gitTimer = setTimeout(async () => {
-                const before = session.state.baseline;
-                const payload = await session.refresh();
-                const after = payload.baseline;
-                if (after.kind === 'git' && before.kind === 'git' && after.commit?.hash === before.commit?.hash) return;
-                publish(JSON.stringify(payload));
-                if (after.kind === 'git') log(`baseline ${after.ref} is now ${after.commit?.hash.slice(0, 7) ?? '(unknown)'}`);
-            }, 200);
-        });
-    }
+    const gitRefsWatch = dirs
+        ? createGitRefWatcher(dirs).subscribe(
+              () => void refreshGitBaseline(),
+              () => session.state.baseline.kind === 'git',
+          )
+        : undefined;
 
     return {
         url: `http://${host.includes(':') ? `[${host}]` : host}:${port}/`,
         session,
         ready,
         async stop() {
-            clearTimeout(timer);
-            await watcher.close();
-            await gitWatcher?.close();
+            for (const unsubscribe of await Promise.all([sourcesWatch, gitRefsWatch])) await unsubscribe?.();
             for (const ws of wss.clients) ws.terminate();
             wss.close();
             http.closeAllConnections();
