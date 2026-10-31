@@ -14,9 +14,8 @@ const guide = await readFile(path.join(ROOT, 'docs', 'guide.md'), 'utf8');
 const guideFiles = (): Record<string, string> =>
     Object.fromEntries([...guide.matchAll(/^```dt\n([\s\S]*?)^```/gm)].map((m) => [/^\/\/ (\S+\.dt)\n/.exec(m[1])![1], m[1]]));
 
-const shopFiles = async (): Promise<Record<string, string>> => Object.fromEntries(
-        (await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt')).map((s) => [s.path, s.text]),
-    );
+const shopFiles = async (): Promise<Record<string, string>> =>
+    Object.fromEntries((await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt')).map((s) => [s.path, s.text]));
 
 /** The Typed Model without the source locations, which formatting moves. */
 async function modelOf(files: Record<string, string>): Promise<unknown> {
