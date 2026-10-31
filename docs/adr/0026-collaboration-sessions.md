@@ -112,3 +112,47 @@ format check, tests and build pass.
 - Node 22.12 users must upgrade to 22.13 to run any `dt` command (engines).
 - Two new packages and their dependencies join the bundle; `dt view` gains nothing at runtime.
 - The real Cloudflare Access check is manual until a test environment exists.
+
+## Appendix: code map (S1)
+
+Checked against `feat/session` at the start of M1. The table above and ADR 0025's extension points hold; these are the
+details S4–S7 need that neither states. `test/session-baseline.test.ts` pins down the payload facts.
+
+- **Access is applied only to known API paths.** `createViewHttpServer` (`packages/presentation/src/http/server.ts`)
+  guards a request when `api.has(pathname)` (the `ApiRoutes` map of `createApiRoutes`, `http/routes.ts`) and the `/ws`
+  upgrade; any other path, `/api/session/*` included, is answered 404 without the check, and the page's assets are
+  served to anyone. Session routes must be entries of the routes map (or the guard widened to their prefix), and the
+  widened `checkAccess` result has one caller, `admitted` in `server.ts`, next to `hostAllowList(bind)`.
+- **No seam inside `startViewServer`** (`packages/composition/src/view.ts`): it builds the routes, the hub, the HTTP
+  server and both watcher subscriptions inline and returns only `{ url, view, ready, stop }`. `startSessionServer`
+  composes the same parts (`createApiRoutes`, `createViewHttpServer`, `createWebSocketHub`, the watchers) itself, and
+  holding watcher notifications during a restore (S7) needs a hook that does not exist yet.
+- **The WebSocket reads nothing from the page.** `createWebSocketHub(current)` (`websocket/hub.ts`) sends `current()`
+  on connect and never listens for messages; `ServerMessage = ViewPayload`. The page's `useViewSocket`
+  (`web/app/useViewSocket.ts`) casts every message to `ViewPayload` without looking at `type`: it must switch on `type`
+  before the server sends anything else, or a session message replaces the view.
+- **CLI.** `dt view` is `program.command('view')` in `packages/presentation/src/cli/main.ts`; it calls
+  `CliDeps.startViewServer(options): Promise<{ url }>` with the CLI's own `ViewServerOptions` (`cli/ports.ts`, distinct
+  from composition's `ViewServerOptions` in `view.ts`).
+- **Payload status by sources** (`createViewService`, `application/view-service.ts`): `.dtes` only is `status: 'ok'`
+  with an empty `DomainModel` (`elements: {}`), not `null`; `'empty'` means no source at all. A `.dt` syntax error is
+  `syntax-error` with the payload `stale` (the last model kept). A `.dtes` syntax error leaves the payload `stale: false`
+  (`invalid`), and only that file's stormings are kept as last parsed with `StormingView.stale: true`. Diagnostics are
+  one list; a per-DSL summary splits them by `file` with `isStormingFile` (`packages/modeling/src/core/analyze.ts`).
+- **Selection IDs** (what the page selects and a `ModelTarget` can name): `.dt` elements by model ID
+  (`elementId`/`stateId`/`commandId`, `packages/modeling/src/model/ids.ts`: `Sales.Order`, `Sales.Order#Shipped`,
+  `Sales.Order:confirm`); storming elements `es/<Storming>/<Local>` and the storming `es/<Storming>` (`esElementId`,
+  `packages/modeling/src/storming/ir.ts`), carried by graph nodes as `elementId`; files `file:<path>` (`fileSelection`,
+  `web/model-utils.ts`). Selecting a note selects its element, never an occurrence.
+- **Render node IDs and occurrences** (`packages/visualization/src/domain/storming/ir.ts`): `t:<step keys joined by
+  '>'>` (step key `e:<eventId>` or `g:<sorted eventIds>`; `…/<eventId>` for an event inside a group), `e:<eventId>` for
+  an event in no timeline, `n:<local ID>` for other elements. `RenderEventNode.occurrences` are `EventOccurrence {
+  timelineId, eventId, stepPath }`: a target's `occurrencePath` is `stepPath`. In a timeline's view the laid-out graph
+  keeps the render node IDs; on the integrated canvas (`stormingViewKey` `<level>|`) the laid-out `graph` has one
+  `e:<eventId>` note per event while its `render` still has the `t:` nodes, so a note's occurrences are the render event
+  nodes with that `eventId` (`renderToGraph`, `domain/storming/graph.ts`). The page's tldraw shape IDs
+  (`web/render.ts`: `n:<graph node ID>`, `e:<graph edge ID>`) are another namespace.
+- **ViewLocation sources.** The page's canvas is `View` (`web/view/navigation.ts`: `contextMap`, `structure`,
+  `catalog`, `storming`); the storming, level and timeline are `StormingChoice` and `shownStorming`
+  (`web/storming.tsx`). `layoutKey` is `LaidOutGraph.id` plus `signature` (`domain/graph/ir.ts`); storming graph IDs are
+  `storming:<Storming>:<level>:<timelineId or *>` (`stormingGraphId`).
