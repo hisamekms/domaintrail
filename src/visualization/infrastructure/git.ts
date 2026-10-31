@@ -2,31 +2,13 @@ import { execFile, spawn } from 'node:child_process';
 import * as path from 'node:path';
 import type { SourceFile } from '../../core/analyze.js';
 import { sourceMatcher } from '../../core/config.js';
+import { UnknownRevisionError, type GitCommit, type GitRefs, type GitRevisions } from '../application/ports.js';
 
 /**
  * Read-only access to the git repository around a Live View workspace, for comparing the model with a revision. Every
  * call runs `git` without a shell, and a ref given by the user is resolved with `--end-of-options`, so that it is never
  * read as an option.
  */
-
-/** A resolved revision. */
-export interface GitCommit {
-    /** Full object name. */
-    hash: string;
-    subject: string;
-    /** Committer date (ISO 8601). */
-    date: string;
-}
-
-/** Revisions offered as baselines: branches, tags and the latest commits of HEAD. */
-export interface GitRefs {
-    branches: string[];
-    tags: string[];
-    commits: (GitCommit & { short: string })[];
-}
-
-/** A ref the repository does not have (or that does not name a commit). */
-export class UnknownRevisionError extends Error {}
 
 const MAX_BUFFER = 64 * 1024 * 1024;
 
@@ -123,4 +105,14 @@ function catBlobs(cwd: string, oids: string[]): Promise<string[]> {
         });
         child.stdin.end(oids.map((o) => `${o}\n`).join(''));
     });
+}
+
+/** The `GitRevisions` of the repository around `root` (see the functions above). */
+export function createGitRevisions(root: string): GitRevisions {
+    return {
+        resolveCommit: (ref) => resolveCommit(root, ref),
+        sourcesAt: (commit, sources) => sourcesAt(root, commit, sources),
+        listRefs: () => listRefs(root),
+        gitDirs: () => gitDirs(root),
+    };
 }

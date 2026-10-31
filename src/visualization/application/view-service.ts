@@ -22,9 +22,9 @@ import {
 import type { LayoutEngine, LayoutOptions } from './layout-engine.js';
 import { supportingContexts } from '../../model/dependencies.js';
 import type { DomainModel } from '../../model/model.js';
-import { resolveCommit, sourcesAt, type GitCommit } from '../infrastructure/git.js';
+import { resolveCommit, sourcesAt } from '../infrastructure/git.js';
+import type { GitCommit, WorkspaceReader } from './ports.js';
 import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from '../protocol.js';
-import type { WorkspaceReader } from '../../workspace/ports.js';
 
 export const LAYOUT_FILE = path.join('.domaintrail', 'layout.json');
 

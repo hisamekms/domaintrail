@@ -4,7 +4,7 @@ import type { RenderGraph } from './domain/storming/ir.js';
 import type { ModelDiff } from './domain/graph/diff.js';
 import type { LaidOutGraph, TransitionLabels } from './domain/graph/ir.js';
 import type { DomainModel } from '../model/model.js';
-import type { GitCommit } from './infrastructure/git.js';
+import type { GitCommit } from './application/ports.js';
 
 export type ViewStatus = 'ok' | 'invalid' | 'syntax-error' | 'empty';
 

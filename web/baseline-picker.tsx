@@ -1,6 +1,6 @@
 import { GitCompare } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { GitRefs } from '../src/visualization/infrastructure/git';
+import type { GitRefs } from '../src/visualization/application/ports';
 import type { Baseline, BaselineSpec } from '../src/visualization/protocol';
 import { useT } from './i18n';
 

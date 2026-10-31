@@ -1,12 +1,5 @@
-import type { SourceFile } from '../core/analyze.js';
-
 /** Ends a subscription; resolves once what it held (a watcher, its timers) is released. */
 export type Unsubscribe = () => Promise<void>;
-
-/** The sources of a workspace: those its scope selects (`sources`, `.gitignore`, never outside the root). */
-export interface WorkspaceReader {
-    readSources(): Promise<readonly SourceFile[]>;
-}
 
 /**
  * What a `WorkspaceWatcher` reports: each `add`, `change` or `unlink` of a source as it happens (`file` as watched,
