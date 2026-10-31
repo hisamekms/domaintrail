@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
-import type { Analysis } from '../src/core/analyze.js';
-import { formatStorming } from '../src/dtes/format.js';
-import type { ViewOptions } from '../src/dtes/ir.js';
-import { projectView } from '../src/dtes/project/render.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import type { Analysis } from '@domaintrail/modeling/core/analyze';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import type { ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
+import { projectView } from '@domaintrail/visualization/domain/storming/render';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
 /**
@@ -22,7 +23,7 @@ afterEach(async () => {
 async function run(...args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) });
+    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
     return { code, out, err };
 }
 

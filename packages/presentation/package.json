@@ -1,0 +1,19 @@
+{
+  "name": "@domaintrail/presentation",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/visualization": "workspace:*",
+    "commander": "15.0.0",
+    "langium": "4.4.0",
+    "vscode-languageserver": "10.1.2",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  }
+}

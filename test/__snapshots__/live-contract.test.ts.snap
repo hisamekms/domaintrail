@@ -1,0 +1,74 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the Live View server pushes the same payload shape as /api/state, with the stormings 1`] = `
+[
+  "aggregates",
+  "base",
+  "baseline",
+  "contextMap",
+  "contextMapAll",
+  "diagnostics",
+  "diff",
+  "files",
+  "focusContexts",
+  "layoutEngine",
+  "model",
+  "modelVersion",
+  "overview",
+  "root",
+  "sources",
+  "stale",
+  "states",
+  "status",
+  "stormings",
+  "structure",
+  "type",
+  "updatedAt",
+  "version",
+]
+`;
+
+exports[`the Live View server pushes the same payload shape as /api/state, with the stormings 2`] = `
+[
+  [
+    "OrderToCash",
+    [
+      "big-picture|",
+      "big-picture|CancelAfterConfirm",
+      "big-picture|Normal",
+      "big-picture|PaymentRetry",
+      "design-level|",
+      "design-level|CancelAfterConfirm",
+      "design-level|Normal",
+      "design-level|PaymentRetry",
+    ],
+  ],
+  [
+    "Returns",
+    [
+      "big-picture|",
+      "big-picture|Accepted",
+      "big-picture|Rejected",
+      "design-level|",
+      "design-level|Accepted",
+      "design-level|Rejected",
+    ],
+  ],
+]
+`;
+
+exports[`dt generate ts writes the same files with the same contents for the example 1`] = `
+{
+  "Billing.ts": "f20fa0bbc11264b6112d5dbbc6679953d62a766a2c852b91b36fc2871f8cfebf",
+  "Common.ts": "7e4b90353da9def38dbaf660b919d1f01db701f8a0a74336b8f7aada9399380a",
+  "Sales.ts": "f112ac5dd8097fdfd442cb0c9a682f8554b05e0ae0fc11bed33698b49e82f8d0",
+  "_runtime.ts": "9d4b0588f6d9977ad9bcd860f2e1c05fcb631b065a52dd746e40b63e4f93fe6a",
+  "index.ts": "4d3e88b042004cc4639047a0b4d04eef324ade013e3303a74d8497a3049c2baa",
+  "tests/Billing.ts": "824d4e0d4c5e268fceaf8958257e25c44c5e36f6ea899855a9c5db35813ac0ea",
+  "tests/Common.ts": "cbf72b9910b727b33c27ae95dbe95752f2cc70d96876239c3786416f15fa0e4a",
+  "tests/Sales.ts": "95d09a5ffcaabd0d91fee0a3784f04469f5c7fbe2ca6a02f9dceba01ac91580c",
+  "tests/_register.ts": "5f285c2d2a92025b098e9161e91601531ba126bfbaf8841ea52fc159b71076a1",
+  "tests/_testing.ts": "f9d76194e7a9f2cd87316c544f3697e3f9d2a548e0b00672eca3fdc3c86d1dd7",
+  "tests/index.ts": "081a46db2c44a6e933fcc73873e7b8d3be8a56da89c81354000411fed7ffdd60",
+}
+`;

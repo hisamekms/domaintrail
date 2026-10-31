@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../src/generator/typescript.js';
-import { diffModels } from '../src/graph/diff.js';
-import { highlight } from '../web/highlight.js';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
+import { highlight } from '@domaintrail/web/highlight';
 import { check, checkSales, codes, only } from './helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */

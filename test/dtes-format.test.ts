@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { formatStorming } from '../src/dtes/format.js';
-import { parseStormings } from '../src/dtes/parse.js';
-import { FormatError } from '../src/format/format.js';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { parseStormings } from '@domaintrail/modeling/storming/parse';
+import { FormatError } from '@domaintrail/modeling/format/format';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 

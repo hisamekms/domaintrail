@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '../src/generator/typescript.js';
-import { VARIANT_INDENT, buildStructureGraph } from '../src/graph/build.js';
-import { perLang } from '../src/graph/ir.js';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { VARIANT_INDENT, buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
+import { perLang } from '@domaintrail/visualization/domain/graph/ir';
 import { check, checkSales, codes, only } from './helpers.js';
 
 const SALES = `context Sales "販売" {

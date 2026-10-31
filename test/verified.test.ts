@@ -2,11 +2,11 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { showJson, showText, lookup } from '../src/cli/show.js';
-import { formatDomain } from '../src/format/format.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
-import { contextDependencies } from '../src/model/dependencies.js';
-import { highlight } from '../web/highlight.js';
+import { showJson, showText, lookup } from '@domaintrail/presentation/cli/show';
+import { formatDomain } from '@domaintrail/modeling/format/format';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { contextDependencies } from '@domaintrail/modeling/model/dependencies';
+import { highlight } from '@domaintrail/web/highlight';
 import { check, codes, only } from './helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */

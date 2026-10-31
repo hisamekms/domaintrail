@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { placeTooltip } from '../web/tooltip.js';
+import { placeTooltip } from '@domaintrail/web/tooltip';
 
 const WEB = join(import.meta.dir, '..', 'web');
 const viewport = { width: 1000, height: 800 };

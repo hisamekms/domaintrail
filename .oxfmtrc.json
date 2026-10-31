@@ -17,7 +17,7 @@
   "ignorePatterns": [
     // the guide, the ADRs and the READMEs are wrapped by hand, and the guide quotes files verbatim
     "**/*.md",
-    "src/language/generated/**",
+    "packages/modeling/src/language/generated/**",
     "**/generated/**",
     // build-stamp.json records the hash of grammar.js: formatting it needs `bun run tree-sitter`
     "tree-sitter-domaintrail/**",

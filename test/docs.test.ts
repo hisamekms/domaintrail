@@ -2,10 +2,11 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
-import { parseJsonc } from '../src/core/config.js';
-import { formatStorming } from '../src/dtes/format.js';
-import { formatDomain } from '../src/format/format.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { parseJsonc } from '@domaintrail/modeling/core/config';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { formatDomain } from '@domaintrail/modeling/format/format';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -135,7 +136,7 @@ describe('getting started', () => {
             blocksOf(page, 'jsonc').find((b) => b.startsWith('// .oxlintrc.json'))!,
         );
         const out: string[] = [];
-        expect(await runCli(['-r', dir, 'generate', 'ts'], { out: (l) => out.push(l), err: (l) => out.push(l) })).toBe(0);
+        expect(await runCli(['-r', dir, 'generate', 'ts'], { out: (l) => out.push(l), err: (l) => out.push(l) }, cliDeps())).toBe(0);
         // the page's lint config takes away the hint
         expect(out).toEqual(['1 file(s) checked: 0 error(s), 0 warning(s).', expect.stringMatching(/^TypeScript written to .*generated\/domain\/tests$/)]);
 

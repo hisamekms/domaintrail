@@ -2,14 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { parseGuide } from '../src/cli/guide.js';
-import { runCli } from '../src/cli/main.js';
-import { analyze } from '../src/core/analyze.js';
-import { parseJsonc } from '../src/core/config.js';
-import { loadWorkspace } from '../src/core/files.js';
-import { formatStorming } from '../src/dtes/format.js';
-import { formatDomain } from '../src/format/format.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
+import { parseGuide } from '@domaintrail/presentation/cli/guide';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { parseJsonc } from '@domaintrail/modeling/core/config';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { formatStorming } from '@domaintrail/modeling/storming/format';
+import { formatDomain } from '@domaintrail/modeling/format/format';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { EXAMPLES, check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -35,7 +36,7 @@ function workspace(): Record<string, string> {
 async function runGuide(...args: string[]): Promise<{ code: number; out: string; err: string }> {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(['guide', ...args], { out: (l) => out.push(l), err: (l) => err.push(l) });
+    const code = await runCli(['guide', ...args], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
     return { code, out: out.join('\n'), err: err.join('\n') };
 }
 
@@ -120,7 +121,7 @@ describe('dt guide', () => {
     });
 
     test('its DSL examples use every keyword of the grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'src', 'language', 'domain.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dt')
             .join('\n')
@@ -144,7 +145,7 @@ describe('dt guide', () => {
     });
 
     test('its storming examples use every keyword of the .dtes grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'src', 'dtes', 'storming.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'storming', 'storming.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dtes')
             .filter((b) => /^\/\/ \S+\.dtes\n/.test(b))
@@ -154,7 +155,7 @@ describe('dt guide', () => {
     });
 
     test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
-        const source = await readFile(path.join(ROOT, 'src', 'core', 'diagnostics.ts'), 'utf8');
+        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
         const union = /export type RuleId =([^;]*);/.exec(source)![1];
         const rules = [...union.matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
         const examples = blocks('dtes').flatMap((b) => {
@@ -170,7 +171,7 @@ describe('dt guide', () => {
     });
 
     test('its rules table lists every diagnostic code', async () => {
-        const source = await readFile(path.join(ROOT, 'src', 'core', 'diagnostics.ts'), 'utf8');
+        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
         const union = /export type RuleId =([^;]*);/.exec(source)![1];
         const codes = [...union.matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]);
         expect(codes.length).toBeGreaterThan(10);

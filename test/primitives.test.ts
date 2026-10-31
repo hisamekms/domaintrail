@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { EXAMPLES, checkSales, codes, only } from './helpers.js';
 
 const DECLS = `

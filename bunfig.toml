@@ -5,3 +5,5 @@ root = "./test"
 [install]
 # install only versions published at least 3 days ago, matching the cooldown of Dependabot (.github/dependabot.yml)
 minimumReleaseAge = 259200
+# each workspace package (packages/*, web) resolves only the dependencies its own package.json declares (ADR 0025)
+linker = "isolated"

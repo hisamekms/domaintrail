@@ -1,22 +1,13 @@
 import type { ReactNode } from 'react';
-import type { Diagnostic } from '../src/core/diagnostics';
-import {
-    VIEW_LEVELS,
-    declarations,
-    type AnyDeclaration,
-    type EventOccurrence,
-    type NodeElement,
-    type RenderGraph,
-    type Storming,
-    type ViewLevel,
-    type ViewOptions,
-} from '../src/dtes/ir';
-import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '../src/dtes/project/semantic';
-import { timelineOccurrences } from '../src/dtes/project/trie';
-import { stormingViewKey } from '../src/dtes/view/graph';
-import type { DisplayMode, LaidOutGraph } from '../src/graph/ir';
-import type { DomainModel } from '../src/model/model';
-import type { StormingView } from '../src/server/protocol';
+import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
+import { declarations, type AnyDeclaration, type NodeElement, type Storming } from '@domaintrail/modeling/storming/ir';
+import { VIEW_LEVELS, type EventOccurrence, type RenderGraph, type ViewLevel, type ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
+import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '@domaintrail/visualization/domain/storming/semantic';
+import { timelineOccurrences } from '@domaintrail/visualization/domain/storming/trie';
+import { stormingViewKey } from '@domaintrail/visualization/domain/storming/graph';
+import type { DisplayMode, LaidOutGraph } from '@domaintrail/visualization/domain/graph/ir';
+import type { DomainModel } from '@domaintrail/modeling/model/model';
+import type { StormingView } from '@domaintrail/visualization/protocol';
 import { useT } from './i18n';
 import { fileSelection, nameIn, type Select } from './model-utils';
 import type { SourceFocus } from './source';

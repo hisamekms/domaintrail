@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import type { DisplayMode, Lang } from '../src/graph/ir';
-import type { ElementKind as EsElementKind, SemanticEdgeKind, ViewLevel } from '../src/dtes/ir';
-import type { ElementKind } from '../src/model/model';
-import type { Connection } from './useViewSocket';
+import type { DisplayMode, Lang } from '@domaintrail/visualization/domain/graph/ir';
+import type { ElementKind as EsElementKind } from '@domaintrail/modeling/storming/ir';
+import type { SemanticEdgeKind, ViewLevel } from '@domaintrail/visualization/domain/storming/ir';
+import type { ElementKind } from '@domaintrail/modeling/model/model';
+import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 
 /** The user's choice: follow the browser, or force a language. */

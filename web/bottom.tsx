@@ -1,9 +1,9 @@
 import { GitCompare, PanelBottomClose, PanelBottomOpen } from 'lucide-react';
-import type { Diagnostic } from '../src/core/diagnostics';
+import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import { useT } from './i18n';
-import type { ModelDiff } from '../src/graph/diff';
-import type { DomainModel } from '../src/model/model';
-import type { DisplayMode } from '../src/graph/ir';
+import type { ModelDiff } from '@domaintrail/visualization/domain/graph/diff';
+import type { DomainModel } from '@domaintrail/modeling/model/model';
+import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import { namer, type Select } from './model-utils';
 
 export type BottomTab = 'problems' | 'changes';

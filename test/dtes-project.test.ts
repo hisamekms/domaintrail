@@ -1,23 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 import {
-    VIEW_LEVELS,
-    semanticEdgeKey,
     type Clause,
     type NodeElement,
     type NodeElementKind,
     type RelationKeyword,
-    type RenderEventNode,
-    type RenderGraph,
     type SourceRange,
     type Storming,
     type StormingElement,
     type Timeline,
-    type ViewOptions,
-} from '../src/dtes/ir.js';
-import { matchRenderNodes, projectView } from '../src/dtes/project/render.js';
-import { buildSemanticGraph } from '../src/dtes/project/semantic.js';
-import { timelineOccurrences } from '../src/dtes/project/trie.js';
+} from '@domaintrail/modeling/storming/ir';
+import { VIEW_LEVELS, semanticEdgeKey, type RenderEventNode, type RenderGraph, type ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
+import { matchRenderNodes, projectView } from '@domaintrail/visualization/domain/storming/render';
+import { buildSemanticGraph } from '@domaintrail/visualization/domain/storming/semantic';
+import { timelineOccurrences } from '@domaintrail/visualization/domain/storming/trie';
 
 // ---- IR built by hand (the parser is not needed) ----
 

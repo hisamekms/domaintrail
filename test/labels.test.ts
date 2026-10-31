@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
-import { buildStateGraph, buildStructureGraph } from '../src/graph/build.js';
-import { anyLang, perLang } from '../src/graph/ir.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { buildStateGraph, buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
+import { anyLang, perLang } from '@domaintrail/visualization/domain/graph/ir';
 import { EXAMPLES, check, codes, only } from './helpers.js';
 
 const SALES = `context Sales "販売" {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../src/core/analyze.js';
-import { loadWorkspace } from '../src/core/files.js';
+import { analyze } from '@domaintrail/modeling/core/analyze';
+import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import { EXAMPLES, check, checkSales, codes, only } from './helpers.js';
 
 const ORDER = `

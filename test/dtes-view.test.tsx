@@ -3,20 +3,28 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { Storming, ViewOptions } from '../src/dtes/ir.js';
-import { parseStormings } from '../src/dtes/parse.js';
-import { matchRenderNodes, projectView } from '../src/dtes/project/render.js';
-import { renderToGraph, stormingGraphId, stormingViewKey } from '../src/dtes/view/graph.js';
-import type { LaidOutGraph, NodeLayout } from '../src/graph/ir.js';
-import { ElkLayoutEngine } from '../src/layout/elk.js';
-import type { ViewPayload } from '../src/server/protocol.js';
-import { startViewServer, type ViewServer } from '../src/server/server.js';
-import { ViewSession } from '../src/server/session.js';
-import { cameraMove } from '../web/canvas.js';
-import { I18nProvider } from '../web/i18n.js';
-import { StormingDetails } from '../web/storming.js';
+import type { Storming } from '@domaintrail/modeling/storming/ir';
+import type { ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
+import { parseStormings } from '@domaintrail/modeling/storming/parse';
+import { matchRenderNodes, projectView } from '@domaintrail/visualization/domain/storming/render';
+import { renderToGraph, stormingGraphId, stormingViewKey } from '@domaintrail/visualization/domain/storming/graph';
+import type { LaidOutGraph, NodeLayout } from '@domaintrail/visualization/domain/graph/ir';
+import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
+import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
+import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
+import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
+import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
+import { cameraMove } from '@domaintrail/web/view/canvas';
+import { I18nProvider } from '@domaintrail/web/i18n';
+import { StormingDetails } from '@domaintrail/web/storming';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+
+/** The view service of the workspace at `dir`, with the real adapters. */
+const viewService = (dir: string): ViewService =>
+    createViewService({ root: dir, engine, workspace: createWorkspaceReader(dir), layoutStore: createFileLayoutStore(dir), git: createGitRevisions(dir) });
 
 async function parse(text: string): Promise<Storming> {
     const { stormings, diagnostics } = await parseStormings([{ path: 'es.dtes', text }]);
@@ -193,7 +201,7 @@ describe('the Live View of a workspace with stormings', () => {
 
     test('pushes every view of every storming; switching level or timeline is the page’s and never touches the .dtes (R11, R12)', async () => {
         const before = await stat(file());
-        const session = new ViewSession(dir, engine);
+        const session = viewService(dir);
         const state = await session.refresh();
         expect(state.status).not.toBe('empty');
         expect(state.files).toEqual(['delivery.dtes']);
@@ -223,7 +231,7 @@ describe('the Live View of a workspace with stormings', () => {
     });
 
     test('shows external systems at the Design Level only, and every event at both levels (R14, R17)', async () => {
-        const [view] = (await new ViewSession(dir, engine).refresh()).stormings;
+        const [view] = (await viewService(dir).refresh()).stormings;
         const ids = (key: string) => view.views[key].graph.nodes.map((n) => n.id);
         expect(ids('design-level|')).toContain('n:PaymentGateway');
         expect(ids('big-picture|')).not.toContain('n:PaymentGateway');
@@ -233,7 +241,7 @@ describe('the Live View of a workspace with stormings', () => {
     });
 
     test('keeps a storming whose file stops parsing, as stale, and lays out an edit incrementally', async () => {
-        const session = new ViewSession(dir, engine);
+        const session = viewService(dir);
         await session.refresh();
         await writeFile(file(), SAMPLE.replace('timeline Failure', 'timeline Failure {'));
         const broken = await session.refresh();
@@ -273,7 +281,7 @@ describe('the inspector of a storming element', () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-dtes-'));
         try {
             await writeFile(path.join(dir, 'delivery.dtes'), SAMPLE);
-            const { stormings, diagnostics } = await new ViewSession(dir, engine).refresh();
+            const { stormings, diagnostics } = await viewService(dir).refresh();
             const html = (id: string, key = 'design-level|') =>
                 renderToStaticMarkup(
                     <I18nProvider lang="en">

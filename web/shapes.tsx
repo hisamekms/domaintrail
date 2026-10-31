@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '../src/graph/ir';
+import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization/domain/graph/ir';
 import {
     BaseBoxShapeUtil,
     HTMLContainer,

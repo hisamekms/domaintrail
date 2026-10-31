@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
-import type { Diagnostic } from '../src/core/diagnostics';
-import type { ModelDiff } from '../src/graph/diff';
-import { TRANSITION_LABELS, type DisplayMode, type Lang, type LaidOutGraph, type TransitionLabels } from '../src/graph/ir';
-import { fitAll, highlightElement, usePointerCursor } from './canvas';
+import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
+import type { ModelDiff } from '@domaintrail/visualization/domain/graph/diff';
+import { TRANSITION_LABELS, type DisplayMode, type Lang, type LaidOutGraph, type TransitionLabels } from '@domaintrail/visualization/domain/graph/ir';
+import { fitAll, highlightElement, usePointerCursor } from './view/canvas';
 import { useT } from './i18n';
-import { usePersistentState } from './layout';
+import { usePersistentState } from './shared/layout';
 import { Legend } from './legend';
 import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';

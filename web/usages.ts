@@ -1,5 +1,5 @@
-import type { DomainModel } from '../src/model/model';
-import { fieldUses, fieldUseText, type Named } from '../src/model/usages';
+import type { DomainModel } from '@domaintrail/modeling/model/model';
+import { fieldUses, fieldUseText, type Named } from '@domaintrail/modeling/model/usages';
 
 export interface Usage {
     key: string;

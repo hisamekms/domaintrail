@@ -2,8 +2,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
 import { check, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -348,7 +349,7 @@ describe('the shop example', () => {
         const shop = await tempCopyOfExamples();
         dirs.push(shop);
         await symlink(path.join(ROOT, 'node_modules'), path.join(shop, 'node_modules'));
-        expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} })).toBe(0);
+        expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} }, cliDeps())).toBe(0);
         const manifest = JSON.parse(await readFile(path.join(shop, '.domaintrail', 'generated.json'), 'utf8'));
         expect(manifest.files).toEqual(
             expect.arrayContaining([

@@ -1,0 +1,16 @@
+{
+  "name": "@domaintrail/modeling",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "langium": "4.4.0",
+    "picomatch": "4.0.7"
+  },
+  "devDependencies": {
+    "@types/picomatch": "4.0.3",
+    "fast-check": "4.10.2"
+  }
+}

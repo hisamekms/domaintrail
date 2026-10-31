@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { runCli } from '../src/cli/main.js';
-import { ConfigError, checkTsContexts, findConfigFile, loadConfig, parseJsonc, policyModes } from '../src/core/config.js';
-import { findDomainFiles } from '../src/core/files.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { ConfigError, checkTsContexts, parseJsonc, policyModes } from '@domaintrail/modeling/core/config';
+import { findConfigFile, loadConfig } from '@domaintrail/workspace/infrastructure/config';
+import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -26,7 +28,7 @@ const MODEL = 'context S { id AId: UUID aggregate A { id: AId } }';
 async function run(...args: string[]) {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) });
+    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
     return { code, out, err };
 }
 
@@ -334,7 +336,7 @@ describe('output directories per context', () => {
 describe('generated output safety', () => {
     test('labels cannot break out of comments in generated code', async () => {
         const { check } = await import('./helpers.js');
-        const { generateTypeScript } = await import('../src/generator/typescript.js');
+        const { generateTypeScript } = await import('@domaintrail/modeling/generator/typescript');
         const evil = 'x\\nexport const injected = 1;';
         const a = await check({
             'a.dt': `context S {

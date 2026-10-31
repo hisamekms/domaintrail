@@ -1,8 +1,8 @@
 import { Eye, EyeDashed, EyeOff } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { DisplayMode } from '../src/graph/ir';
+import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import { useT } from './i18n';
-import { useDismiss } from './layout';
+import { useDismiss } from './shared/layout';
 import { nameIn } from './model-utils';
 
 /**

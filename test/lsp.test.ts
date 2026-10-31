@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { URI } from 'langium';
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from 'vscode-jsonrpc/node';
-import { runCli } from '../src/cli/main.js';
-import { formatDomain } from '../src/format/format.js';
+import { cliDeps } from '@domaintrail/composition/cli';
+import { runCli } from '@domaintrail/presentation/cli/main';
+import { formatDomain } from '@domaintrail/modeling/format/format';
 
 const BIN = path.join(import.meta.dir, '..', 'bin', 'dt.ts');
 
@@ -157,7 +158,7 @@ async function start(files: Record<string, string>, args: string[] = []): Promis
 /** The diagnostics of `dt check --format json` for one file of the same workspace, as `line:col severity code message`. */
 async function checkOutput(root: string, file: string): Promise<string[]> {
     const lines: string[] = [];
-    await runCli(['-r', root, 'check', '--format', 'json'], { out: (l) => lines.push(l), err: (l) => lines.push(l) });
+    await runCli(['-r', root, 'check', '--format', 'json'], { out: (l) => lines.push(l), err: (l) => lines.push(l) }, cliDeps());
     const { diagnostics } = JSON.parse(lines.join('\n')) as {
         diagnostics: { file: string; line: number; column: number; severity: string; code: string; message: string; hint?: string }[];
     };

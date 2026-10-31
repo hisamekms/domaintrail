@@ -1,0 +1,16 @@
+{
+  "projectName": "Domain",
+  "languages": [
+    {
+      "id": "domain",
+      "grammar": "src/language/domain.langium",
+      "fileExtensions": [".dt"]
+    },
+    {
+      "id": "dtes",
+      "grammar": "src/storming/storming.langium",
+      "fileExtensions": [".dtes"]
+    }
+  ],
+  "out": "src/language/generated"
+}

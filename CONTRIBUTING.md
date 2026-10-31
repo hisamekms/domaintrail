@@ -8,9 +8,13 @@ This page is about working on DomainTrail itself. To use it, start with the [REA
 Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.12 or later. `bun run dt` runs the
 CLI from source.
 
+The repository is a Bun workspace: the root package (the published CLI, `test/`) and the private packages
+`packages/*` and `web` (see [Repository layout](#repository-layout)). `bun install` at the root installs all of them
+with the isolated linker (`bunfig.toml`), so each package resolves the dependencies its own `package.json` declares.
+
 ```bash
 bun install
-bun run langium:generate   # after editing src/language/domain.langium (and once after cloning)
+bun run langium:generate   # after editing a .langium grammar (and once after cloning); packages/modeling/langium-config.json
 bun run typecheck
 bun run lint               # oxlint --type-aware, no narrowing casts without a reason (after `bun run dt -r examples/shop generate ts`)
 bun run fmt                # oxfmt (`fmt:check` in CI); the .dt files are formatted by `dt fmt`, the Markdown by hand
@@ -35,19 +39,27 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `src/language` | Langium grammar, generated parser/AST, scoping |
-| `src/core` | analyzer, diagnostics, validation rules (`checker/`) |
-| `src/model` | Typed Model (serializable, resolved) |
-| `src/generator` | TypeScript generator and naming, generated checks (`checks.ts`) and contract tests (`tests.ts`, `testing/`) |
-| `src/format` | `dt fmt` |
-| `src/graph`, `src/layout` | Graph IR, diff, ELK layout |
-| `src/server`, `web` | Live View server and React + tldraw client |
-| `src/lsp` | `dt lsp`, the language server |
-| `src/cli` | the commands, `dt guide`, `dt show` |
+| `packages/modeling/src` | `language` (Langium grammars, generated parser/AST, scoping), `core` (analyzer, diagnostics, validation rules in `checker/`, the config's types and validation), `model` (the Typed Model), `generator` (TypeScript generator, generated checks and contract tests), `format` (`dt fmt`), `storming` (the Event Storming DSL) |
+| `packages/workspace/src` | the workspace on disk: sources and `.gitignore`, config loading, the output of `dt generate ts`, the file and git ref watchers |
+| `packages/visualization/src` | the Live View's model: graph IR and diff, the storming views, the view service and its ports, the ELK layout, the layout file and git adapters, `protocol.ts` |
+| `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check) |
+| `packages/composition/src` | the wiring: `cli.ts` (`runDt`, called by `bin/dt.ts`), `view.ts` (`startViewServer`) |
+| `web` | the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `shared` |
 | `docs` | the guide (`dt guide`), Getting started, the Live View, the ADRs, releasing |
 | `examples/shop` | the complete example, also run by the tests |
 | `tree-sitter-domaintrail` | the tree-sitter grammar |
 | `editors/zed` | the Zed extension |
+
+Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, the layers and the ports are in
+[ADR 0025](docs/adr/0025-m0-refactoring.md). Its rules:
+
+- A package declares in its `package.json` every package it imports, `@domaintrail/*` and third-party alike. A
+  third-party dependency the CLI needs at run time is also in the root's `dependencies` (the bundle keeps those
+  external), at the same version: a dependency declared in several manifests must have the same version everywhere.
+- Across packages, import by package name without an extension (`@domaintrail/modeling/core/analyze`, served by
+  `"exports": { "./*": "./src/*.ts" }`); inside a package, import relatively with `.js`.
+- `test/architecture.test.ts` enforces the package graph, the declared dependencies, the versions and the layers
+  (`domain/`, `application/`, `infrastructure/`). A new package gets an entry in its `PACKAGES`.
 
 ## Tests
 
@@ -65,7 +77,7 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 ## The tree-sitter grammar
 
 `tree-sitter-domaintrail/grammar.js` is a second grammar of the DSL, for editors that highlight with tree-sitter; the
-Langium grammar in `src/language` stays the reference. After changing it, run:
+Langium grammar in `packages/modeling/src/language` stays the reference. After changing it, run:
 
 ```bash
 bun run tree-sitter

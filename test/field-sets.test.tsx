@@ -3,13 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { buildStructureGraph } from '../src/graph/build.js';
-import { generateTypeScript } from '../src/generator/typescript.js';
-import { contextDependencies } from '../src/model/dependencies.js';
-import { OutcomeCard } from '../web/behavior.js';
-import { MESSAGES } from '../web/i18n.js';
-import { catalogSections, fieldSetUsers, namer } from '../web/model-utils.js';
-import { usagesOf } from '../web/usages.js';
+import { buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
+import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { contextDependencies } from '@domaintrail/modeling/model/dependencies';
+import { OutcomeCard } from '@domaintrail/web/behavior';
+import { MESSAGES } from '@domaintrail/web/i18n';
+import { catalogSections, fieldSetUsers, namer } from '@domaintrail/web/model-utils';
+import { usagesOf } from '@domaintrail/web/usages';
 import { check, checkSales, codes, only } from './helpers.js';
 
 const FILES = {
