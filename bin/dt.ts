@@ -1,3 +1,3 @@
-import { runCli } from '../src/presentation/cli/main.js';
+import { runDt } from '../src/composition/cli.js';
 
-process.exitCode = await runCli(process.argv.slice(2));
+process.exitCode = await runDt(process.argv.slice(2));

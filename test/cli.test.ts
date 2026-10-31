@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { cliDeps } from '../src/composition/cli.js';
 import { runCli } from '../src/presentation/cli/main.js';
 import { tempCopyOfExamples } from './helpers.js';
 
@@ -14,7 +15,7 @@ afterEach(async () => {
 async function run(...args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) });
+    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
     return { code, out, err };
 }
 

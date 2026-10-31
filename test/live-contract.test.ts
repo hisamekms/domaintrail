@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as path from 'node:path';
+import { cliDeps } from '../src/composition/cli.js';
 import { runCli } from '../src/presentation/cli/main.js';
 import type { ViewPayload } from '../src/visualization/protocol.js';
 import { startViewServer, type ViewServer } from '../src/composition/view.js';
@@ -122,7 +123,7 @@ describe('the Live View server', () => {
 describe('dt generate ts', () => {
     test('writes the same files with the same contents for the example', async () => {
         const out = path.join(dir, 'generated-snapshot');
-        expect(await runCli(['-r', dir, 'generate', 'ts', '--out', 'generated-snapshot'], { out: () => {}, err: () => {} })).toBe(0);
+        expect(await runCli(['-r', dir, 'generate', 'ts', '--out', 'generated-snapshot'], { out: () => {}, err: () => {} }, cliDeps())).toBe(0);
         const files = (await readdir(out, { recursive: true, withFileTypes: true })).filter((e) => e.isFile());
         const hashes: Record<string, string> = {};
         for (const f of files) {

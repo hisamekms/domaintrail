@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { parseGuide } from '../src/presentation/cli/guide.js';
+import { cliDeps } from '../src/composition/cli.js';
 import { runCli } from '../src/presentation/cli/main.js';
 import { analyze } from '../src/modeling/core/analyze.js';
 import { parseJsonc } from '../src/modeling/core/config.js';
@@ -35,7 +36,7 @@ function workspace(): Record<string, string> {
 async function runGuide(...args: string[]): Promise<{ code: number; out: string; err: string }> {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(['guide', ...args], { out: (l) => out.push(l), err: (l) => err.push(l) });
+    const code = await runCli(['guide', ...args], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
     return { code, out: out.join('\n'), err: err.join('\n') };
 }
 

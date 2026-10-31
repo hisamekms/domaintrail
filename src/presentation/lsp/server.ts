@@ -65,9 +65,7 @@ import {
 } from 'vscode-languageserver/node';
 import { analyze } from '../../modeling/core/analyze.js';
 import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, type ResolvedConfig } from '../../modeling/core/config.js';
-import { loadConfig } from '../../workspace/infrastructure/config.js';
 import type { Diagnostic } from '../../modeling/core/diagnostics.js';
-import { SourceScope, findDomainFiles } from '../../workspace/infrastructure/files.js';
 import { LabelResolver, docComment } from '../../modeling/core/labels.js';
 import { ModelIndex, commandsOf } from '../../modeling/core/model-index.js';
 import * as ast from '../../modeling/language/generated/ast.js';
@@ -83,6 +81,27 @@ export interface LanguageServerOptions {
     root?: string;
     /** Explicit `--config` file. */
     configPath?: string;
+}
+
+/**
+ * What the language server reads from the workspace, defined here on its side (ADR 0025): `src/composition/cli.ts`
+ * wires the adapters of `src/workspace` in.
+ */
+export interface LanguageServerFiles {
+    /** Resolves the configuration from `start` upwards, or from the explicit `configPath`; rejects with `ConfigError`. */
+    loadConfig(opts: { start: string; configPath?: string }): Promise<ResolvedConfig>;
+    /** Which files below `root` are sources, as `dt check` decides. */
+    sourceScope(root: string, sources?: readonly string[], respectGitignore?: boolean): SourceScope;
+    /** The sources below `root` (paths relative to it, sorted), as `dt check` finds them. */
+    findDomainFiles(root: string, sources: readonly string[], respectGitignore: boolean): Promise<string[]>;
+}
+
+/** Which files below a root are the workspace's sources. */
+export interface SourceScope {
+    /** Whether the directory `dir` (absolute, below the root) is walked. */
+    includesDirectory(dir: string): boolean;
+    /** Path of `file` (absolute) relative to the root, when it is one of the sources. */
+    sourcePath(file: string): string | undefined;
 }
 
 /**
@@ -107,34 +126,39 @@ export class DomainWorkspace {
     start = process.cwd();
     /** Whether the search found no config file, so that the nearest config of an opened document may replace it. */
     adoptable = false;
-    private scope = new SourceScope(this.config.root);
+    private scope: SourceScope;
 
-    constructor(private readonly options: LanguageServerOptions) {}
+    constructor(
+        private readonly options: LanguageServerOptions,
+        private readonly deps: LanguageServerFiles,
+    ) {
+        this.scope = deps.sourceScope(this.config.root);
+    }
 
     async resolve(folder: string | undefined, warn: (message: string) => void): Promise<void> {
         this.start = path.resolve(this.options.root ?? folder ?? process.cwd());
         try {
-            this.config = await loadConfig({ start: this.start, configPath: this.options.configPath });
+            this.config = await this.deps.loadConfig({ start: this.start, configPath: this.options.configPath });
             this.adoptable = !this.config.file;
         } catch (e) {
             if (!(e instanceof ConfigError)) throw e;
             warn(`${e.message} (using the default sources ${DEFAULT_SOURCES.join(', ')} under ${this.start})`);
             this.config = { ...this.config, root: this.start };
         }
-        this.scope = new SourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
+        this.scope = this.deps.sourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
     }
 
     /** Makes the config file `file` the workspace's. Returns false, after warning, when it is invalid. */
     async adopt(file: string, warn: (message: string) => void): Promise<boolean> {
         try {
-            this.config = await loadConfig({ start: this.start, configPath: file });
+            this.config = await this.deps.loadConfig({ start: this.start, configPath: file });
         } catch (e) {
             if (!(e instanceof ConfigError)) throw e;
             warn(e.message);
             return false;
         }
         this.adoptable = false;
-        this.scope = new SourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
+        this.scope = this.deps.sourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
         return true;
     }
 
@@ -164,7 +188,7 @@ export class DomainWorkspace {
     /** The sources of the workspace, as `dt check` finds them. */
     async files(): Promise<URI[]> {
         const { root, sources, respectGitignore } = this.config;
-        return (await findDomainFiles(root, sources, respectGitignore)).map((f) => URI.file(path.join(root, f)));
+        return (await this.deps.findDomainFiles(root, sources, respectGitignore)).map((f) => URI.file(path.join(root, f)));
     }
 }
 
@@ -622,8 +646,8 @@ function lastSegment(document: LangiumDocument, range: Range): Range {
     return { start, end: range.end };
 }
 
-export function createDomainLspServices(connection: Connection, options: LanguageServerOptions = {}) {
-    const workspace = new DomainWorkspace(options);
+export function createDomainLspServices(connection: Connection, options: LanguageServerOptions, files: LanguageServerFiles) {
+    const workspace = new DomainWorkspace(options, files);
     const warn = (message: string) => void connection.sendNotification(ShowMessageNotification.type, { type: MessageType.Warning, message });
     const shared = inject(createDefaultSharedModule({ connection, ...NodeFileSystem }), DomainGeneratedSharedModule, {
         workspace: { WorkspaceManager: (s: LangiumSharedServices) => new DomainWorkspaceManager(s, workspace, warn) },
@@ -653,10 +677,14 @@ export function createDomainLspServices(connection: Connection, options: Languag
  * Starts the language server on `connection` (stdio by default). Like Langium's `startLanguageServer`, but with the
  * diagnostics of `dt check` instead of Langium's validation, and without the features the language does not provide.
  */
-export function startLanguageServer(options: LanguageServerOptions = {}, connection: Connection = createConnection(process.stdin, process.stdout)) {
+export function startLanguageServer(
+    options: LanguageServerOptions,
+    files: LanguageServerFiles,
+    connection: Connection = createConnection(process.stdin, process.stdout),
+) {
     // stdout carries the protocol: anything logged goes to the client instead.
     console.log = console.info = (...args: unknown[]) => connection.console.log(format(...args));
-    const { shared, workspace, warn } = createDomainLspServices(connection, options);
+    const { shared, workspace, warn } = createDomainLspServices(connection, options, files);
     const diagnostics = new DiagnosticsPublisher(shared, workspace, connection);
     shared.workspace.DocumentBuilder.onBuildPhase(DocumentState.IndexedReferences, () => diagnostics.schedule());
     const nearest = new NearestConfig(shared, workspace, diagnostics, warn);

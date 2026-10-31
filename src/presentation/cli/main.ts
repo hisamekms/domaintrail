@@ -1,16 +1,14 @@
-import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { analyze, isStormingFile, type Analysis } from '../../modeling/core/analyze.js';
 import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '../../modeling/core/config.js';
-import { loadConfig } from '../../workspace/infrastructure/config.js';
-import { LINT_HINT, hasCastLintRule } from '../../workspace/infrastructure/lint-hint.js';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '../../modeling/core/diagnostics.js';
-import { findDomainFiles, loadWorkspace } from '../../workspace/infrastructure/files.js';
 import { formatStorming } from '../../modeling/storming/format.js';
 import { formatDomain } from '../../modeling/format/format.js';
-import { GENERATED_MARKER, generateTypeScript } from '../../modeling/generator/typescript.js';
+import { generateTypeScript } from '../../modeling/generator/typescript.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
+import type { CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
 import guide from '../../../docs/guide.md' with { type: 'text' };
 
@@ -19,7 +17,8 @@ export interface CliIO {
     err: (line: string) => void;
 }
 
-const defaultIO: CliIO = {
+/** Lines to stdout and stderr. */
+export const consoleIO: CliIO = {
     out: (l) => console.log(l),
     err: (l) => console.error(l),
 };
@@ -54,9 +53,9 @@ interface JsonReport {
  * Checks the workspace. In text mode the diagnostics and the summary are printed; in JSON mode they are put into
  * `report`, printed by the caller.
  */
-async function runCheck(config: ResolvedConfig, io: CliIO, report?: JsonReport): Promise<Analysis> {
+async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
     const root = config.root;
-    const sources = await loadWorkspace(root, config.sources, config.respectGitignore);
+    const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
     const analysis = await analyze(sources);
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.length - errors;
@@ -76,8 +75,8 @@ async function runCheck(config: ResolvedConfig, io: CliIO, report?: JsonReport):
     return analysis;
 }
 
-/** Runs the CLI and returns the process exit code. */
-export async function runCli(argv: readonly string[], io: CliIO = defaultIO): Promise<number> {
+/** Runs the CLI and returns the process exit code; `deps` are wired by `src/composition/cli.ts` (`cliDeps`). */
+export async function runCli(argv: readonly string[], io: CliIO, deps: CliDeps): Promise<number> {
     let exitCode = 0;
     /** Set by commands run with `--format json`; printed once at the end, failures included. */
     let report: JsonReport | undefined;
@@ -129,7 +128,7 @@ Examples:
         .addOption(formatOption())
         .action(async (opts: { format: Format }) => {
             if (opts.format === 'json') report = {};
-            const a = await runCheck(await config(), io, report);
+            const a = await runCheck(await config(), io, deps, report);
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
         });
 
@@ -169,7 +168,7 @@ Examples:
             if (opts.out !== undefined && !staysInside(opts.out)) {
                 throw new ConfigError(`--out must stay inside ${cfg.root} (the directory of the config file, else the root): '${opts.out}'`);
             }
-            const a = await runCheck(cfg, io, report);
+            const a = await runCheck(cfg, io, deps, report);
             if (a.files.length === 0) {
                 exitCode = 1; // reported by runCheck
                 return;
@@ -191,7 +190,7 @@ Examples:
             const testsOut = cfg.tsTests && path.resolve(cfg.root, cfg.tsTests.out ?? path.join(opts.out ?? cfg.tsOut, 'tests'));
             // No output directory may leave the project through a symlink, --out included.
             for (const dir of new Set([defaultOut, ...Object.values(cfg.tsContexts).map((d) => path.resolve(cfg.root, d)), ...(testsOut ? [testsOut] : [])])) {
-                const linked = await symlinkOnPath(cfg.root, dir);
+                const linked = await deps.generatedOutput.symlinkOnPath(cfg.root, dir);
                 if (linked) {
                     fail(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`, 1);
                     return;
@@ -205,27 +204,21 @@ Examples:
                 ...f,
                 file: path.resolve(cfg.root, f.path),
             }));
-            const foreign = await foreignFiles(files.map((f) => f.file));
+            const foreign = await deps.generatedOutput.foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);
                 fail(`Generation skipped: ${names.join(', ')} ${foreign.length > 1 ? 'are' : 'is'} not generated by domaintrail and would be overwritten.`, 1);
                 return;
             }
             const outDirs = [...new Set(files.map((f) => path.dirname(f.file)))];
-            const previous = await readManifest(cfg.root);
-            await removeStale(cfg.root, previous, new Set(files.map((f) => f.file)));
-            for (const dir of outDirs) await cleanGenerated(dir);
-            for (const f of files) await writeNew(f.file, f.content);
-            const recorded = await writeManifest(
-                cfg.root,
-                files.map((f) => f.path),
-            );
+            const { recorded } = await deps.generatedOutput.replace(cfg.root, files);
             if (!recorded)
                 io.err(
-                    `Warning: generated files not recorded in ${MANIFEST_FILE}, which is not a plain file in a plain directory; they will not be removed automatically.`,
+                    `Warning: generated files not recorded in ${deps.generatedOutput.manifestFile}, which is not a plain file in a plain directory; they will not be removed automatically.`,
                 );
             const written = outDirs.map((d) => path.relative(process.cwd(), d) || '.');
-            const hints = cfg.lintHint && !(await hasCastLintRule(cfg.root)) ? [LINT_HINT] : [];
+            const hint = cfg.lintHint ? await deps.castLintHint(cfg.root) : undefined;
+            const hints = hint ? [hint] : [];
             if (report) {
                 report.written = written;
                 if (hints.length) report.hints = hints;
@@ -265,7 +258,7 @@ Examples:
             if (files.length) entries = files.map((f) => ({ path: f, file: path.resolve(f) }));
             else {
                 const cfg = await config();
-                entries = (await findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
+                entries = (await deps.findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
                 if (!entries.length) throw new CliError(noSourcesMessage(cfg));
             }
             const sources = await Promise.all(entries.map(async (e) => ({ path: e.path, text: await readFile(e.file, 'utf8') })));
@@ -309,23 +302,24 @@ Examples:
         )
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
-            const { startViewServer } = await import('../../composition/view.js');
             const { UnknownRevisionError } = await import('../../visualization/application/ports.js');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
-            const server = await startViewServer({
-                root: cfg.root,
-                sources: cfg.sources,
-                respectGitignore: cfg.respectGitignore,
-                port,
-                host,
-                base: opts.base,
-                log: io.out,
-            }).catch((e: unknown) => {
-                if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
-                if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
-                throw e;
-            });
+            const server = await deps
+                .startViewServer({
+                    root: cfg.root,
+                    sources: cfg.sources,
+                    respectGitignore: cfg.respectGitignore,
+                    port,
+                    host,
+                    base: opts.base,
+                    log: io.out,
+                })
+                .catch((e: unknown) => {
+                    if (e instanceof UnknownRevisionError) throw new CliError(`${e.message}: pass a branch, tag or commit to --base.`);
+                    if (errorCode(e) === 'EADDRINUSE') throw new CliError(`Port ${port} on ${host} is already in use; pick another with --port.`);
+                    throw e;
+                });
             if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
             io.out(`Live View: ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
@@ -351,8 +345,7 @@ Examples:
         .action(async () => {
             const root = program.getOptionValueSource('root') === 'default' ? undefined : path.resolve(program.opts().root);
             if (root !== undefined || program.opts().config) await config(); // fail early on a bad --root or --config
-            const { startLanguageServer } = await import('../lsp/server.js');
-            startLanguageServer({ root, configPath: program.opts().config });
+            await deps.startLanguageServer({ root, configPath: program.opts().config });
             await new Promise<void>(() => {}); // the server exits the process when the client says so
         });
 
@@ -382,7 +375,7 @@ Examples:
             const json = opts.format === 'json';
             const cfg = await config();
             // .dt only: stormings are not shown in v0.1 (ADR 0024)
-            const sources = (await loadWorkspace(cfg.root, cfg.sources, cfg.respectGitignore)).filter((s) => !isStormingFile(s.path));
+            const sources = (await deps.loadWorkspace(cfg.root, cfg.sources, cfg.respectGitignore)).filter((s) => !isStormingFile(s.path));
             if (sources.length === 0) throw new CliError(`No .dt files found under ${cfg.root} (sources: ${cfg.sources.join(', ')}).`);
             const a = await analyze(sources);
             if (!a.model) throw new CliError('The model has syntax errors; run `dt check` and fix them first.');
@@ -445,7 +438,7 @@ Examples:
         const info = await stat(start).catch(() => undefined);
         if (!info) throw new CliError(`Root directory not found: ${program.opts().root}`);
         if (!info.isDirectory()) throw new CliError(`Root is not a directory: ${program.opts().root}`);
-        return loadConfig({ start, configPath: program.opts().config });
+        return deps.loadConfig({ start, configPath: program.opts().config });
     };
 
     try {
@@ -480,111 +473,5 @@ function errorCode(e: unknown): string | undefined {
     const code = typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
     return typeof code === 'string' && /^E[A-Z]+$/.test(code) ? code : undefined;
 }
-
-/**
- * Existing entries at the paths about to be written that the generator may not replace:
- * anything that is not a regular file written by the generator (symlinks included, even dangling ones).
- */
-async function foreignFiles(files: string[]): Promise<string[]> {
-    const out: string[] = [];
-    for (const file of files) {
-        if (!(await isGeneratedOrMissing(file))) out.push(file);
-    }
-    return out;
-}
-
-async function isGeneratedOrMissing(file: string): Promise<boolean> {
-    const stat = await lstat(file).catch(() => undefined);
-    return !stat || (stat.isFile() && (await readFile(file, 'utf8')).startsWith(GENERATED_MARKER));
-}
-
-/** The first existing path component between `root` (exclusive) and `target` that is a symlink, if any. */
-async function symlinkOnPath(root: string, target: string): Promise<string | undefined> {
-    const rel = path.relative(root, target);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) return target;
-    let current = root;
-    for (const part of rel.split(path.sep).filter(Boolean)) {
-        current = path.join(current, part);
-        const stat = await lstat(current).catch(() => undefined);
-        if (!stat) return undefined;
-        if (stat.isSymbolicLink()) return current;
-    }
-    return undefined;
-}
-
-/** Writes via a fresh temp file and rename, so an existing symlink is replaced rather than followed. */
-async function writeNew(file: string, content: string): Promise<void> {
-    const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
-    await writeFile(temp, content, { flag: 'wx' });
-    await rename(temp, file);
-}
-
-/**
- * Removes previous output. Only files written by the generator (recognized by their header) are deleted,
- * so pointing the output at a directory with hand-written code never destroys it. `outDir` must already be checked
- * to be inside the root and free of symlinks.
- */
-async function cleanGenerated(outDir: string): Promise<void> {
-    await mkdir(outDir, { recursive: true });
-    for (const entry of await readdir(outDir, { withFileTypes: true })) {
-        if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
-        const file = path.join(outDir, entry.name);
-        if ((await readFile(file, 'utf8')).startsWith(GENERATED_MARKER)) await rm(file);
-    }
-}
-
-/** Files written by the last `generate ts`, relative to the root, so that a later run can remove those it no longer writes. */
-const MANIFEST_FILE = path.join('.domaintrail', 'generated.json');
-
-interface Manifest {
-    version: 1;
-    /** Root-relative, `/`-separated paths. */
-    files: string[];
-}
-
-async function readManifest(root: string): Promise<string[]> {
-    try {
-        const m: { version?: unknown; files?: unknown } = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), 'utf8'));
-        // the file may have been crafted: entries that would leave the root are dropped
-        return m.version === 1 && Array.isArray(m.files) ? m.files.filter((f) => typeof f === 'string' && f !== '' && staysInside(f)) : [];
-    } catch {
-        return [];
-    }
-}
-
-/** Records the generated files; false when `.domaintrail` is not a plain directory (never written through a symlink). */
-async function writeManifest(root: string, files: string[]): Promise<boolean> {
-    const target = path.join(root, MANIFEST_FILE);
-    const dir = path.dirname(target);
-    const existing = await lstat(dir).catch(() => undefined);
-    if (existing && (existing.isSymbolicLink() || !existing.isDirectory())) return false;
-    await mkdir(dir, { recursive: true });
-    const manifest: Manifest = { version: 1, files: [...files].sort() };
-    await writeNew(target, `${JSON.stringify(manifest, null, 2)}\n`);
-    return true;
-}
-
-/**
- * Deletes files of the previous run that this run does not write. Like cleanGenerated, only files with the generator's
- * header are deleted, only inside the root and never through a symlinked directory; a directory left empty is removed
- * too (never the root itself).
- */
-async function removeStale(root: string, previous: string[], written: Set<string>): Promise<void> {
-    for (const rel of previous) {
-        const file = path.resolve(root, rel);
-        if (written.has(file) || !file.endsWith('.ts') || !staysInside(rel) || !isInside(root, file)) continue;
-        const dir = path.dirname(file);
-        if (await symlinkOnPath(root, dir)) continue;
-        const stat = await lstat(file).catch(() => undefined);
-        if (!stat?.isFile() || !(await isGeneratedOrMissing(file))) continue;
-        await rm(file);
-        if (dir !== root) await rmdir(dir).catch(() => {}); // fails unless empty
-    }
-}
-
-const isInside = (root: string, p: string): boolean => {
-    const rel = path.relative(root, p);
-    return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
-};
 
 const toPosix = (p: string): string => p.split(path.sep).join('/');

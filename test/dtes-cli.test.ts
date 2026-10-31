@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { cliDeps } from '../src/composition/cli.js';
 import { runCli } from '../src/presentation/cli/main.js';
 import { formatStorming } from '../src/modeling/storming/format.js';
 import { formatDomain } from '../src/modeling/format/format.js';
@@ -82,7 +83,7 @@ async function workspace(files: Record<string, string>): Promise<string> {
 async function run(...args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) });
+    const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
     return { code, out, err };
 }
 
