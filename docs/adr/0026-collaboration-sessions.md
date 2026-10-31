@@ -396,7 +396,8 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
 - **Clarification signal.** The agent ends its reply with one line `DT-OUTCOME: {"outcome":"done","summary":"…"}` or
   `DT-OUTCOME: {"outcome":"clarification","question":"…"}`; the adapter takes the last such line of the JSON result's
   `result`. A missing or invalid line is a plain `done` (the facts decide); a question is trimmed and cut to 4,000
-  characters. `--json-schema` was not used: its output field could not be checked without a real run.
+  characters. `--json-schema` was not used: its output field could not be checked without a real run. *Superseded by
+  the appendix "Structured replies": the reply is now Claude Code's structured output; this line is still read.*
 - **dt fmt / dt check** run with this CLI itself: `process.execPath` and `process.argv[1]` (e.g. `node dist/dt.js`),
   `-r <root>` and the `-c` the subscriber was given, never a `dt` on the PATH; output discarded, 5 minutes each.
 - **Tests** use a fake agent (`test/fixtures/agent/fake-claude.mjs`, a plan per invocation) through composition's
@@ -508,3 +509,77 @@ a meeting talk about several things at once ("give 注文 the 顧客's address")
   turns its mentions into plain text; numbers follow the chips. The selection is offered as `選択中: … [+]`; a selection
   of several shapes adds each targetable element, and an occurrence is added from a timeline's view. The unsent text
   and chips stay in the browser (the composer's draft, IndexedDB).
+
+## Appendix: structured replies (amendment)
+
+The agent's reply was one `DT-OUTCOME:` line, and the session kept only a clarification's question as text (the
+summary of a done run was dropped). People in a meeting want to see, per request, what the AI says it did, what it
+assumed, and to answer its questions by choosing. The reply is now structured data; the facts stay measured.
+
+- **Principles.** Facts are never the AI's: success or failure, the files changed, `dt fmt`/`dt check` and the
+  diagnostics are measured by the pipeline and the server as before. The reply is untrusted input: validated against
+  its shape and limits on the subscriber and again on the server, stored only when valid, and shown as plain text (no
+  HTML, no markdown). A reply that is missing or invalid never fails a run: what can be read is kept (the outcome, a
+  summary within the limit, a clarification's question text), else nothing.
+- **Shape** (what the AI returns): `{ outcome: done | clarification | declined, summary, requests: [{ request,
+  status: done | partial | skipped | question, note? }], questions?: [{ id, text, requests?, options: [{ id, label,
+  detail? }], multiple }], assumptions?: [{ text, requests?, alternatives?: [{ id, label }] }] }`. `request` is the
+  request's number in the prompt (the prompt now numbers requests from 1, `number`, instead of showing their IDs); the
+  subscriber maps the numbers back to the frozen input's request IDs. A note is required for partial and skipped; a
+  clarification asks 1–3 questions, the other outcomes none; the AI never offers "other" (the page always adds it).
+  Unknown fields are refused. Keys (`id`) are letters, digits, `_` and `-`.
+- **Limits in one module**: `packages/collaboration/src/domain/reply.ts` (`REPLY_LIMITS`: summary 300, request note
+  200, questions 3, question 500, options 5, label 80, detail 300, assumptions 5, assumption 300 (not given by the brief;
+  chosen here), alternatives 3, alternative label 80, key 40, the facilitator's own words in an answer 500). The JSON
+  schema given to the agent (`replyJsonSchema(requests)`), the prompt's description of the reply, the validation of
+  both sides (`readReply`, `readAnswer`), and the page all take them from it; the model holds what is not a number
+  (`noteExplains`, the questions of each ending, keys unique, the requests named are the run's). The module is pure (it
+  imports only the generated model), so `@domaintrail/agent` may import it as values — the one exception to "only types
+  from collaboration", allowed by name in the architecture test.
+- **Claude Code** 2.1.316, checked with real calls (a tiny schema, `--tools ''` and `--tools Read,Glob` with
+  `--permission-mode dontAsk`): `claude --print --output-format json --json-schema '<schema>'` answers
+  `{"type":"result", "result":"<the object as JSON>", "structured_output":{…}, …}` (the structured output is a tool of
+  Claude Code's own: `stop_reason` is `tool_use`, one turn more, no permission prompt or denial under `dontAsk`). The
+  adapter passes `--json-schema` (the schema is ours, no person's text) and reads `structured_output`, else `result` as
+  JSON, else the last `DT-OUTCOME:` line of `result` (the former protocol, still read; the fake agent of the tests uses
+  both). The prompt describes the reply in a few lines (limits interpolated) to keep the Q&A loop fast.
+- **Declined is a state of its own**, `Declined "辞退"` (`baseRevision`, `startedAt`, `reply`, `resultRevision`,
+  `finishedAt`), reached by `decline(reply, resultRevision, finishedAt)` from `Running`, emitting `RunDeclined`
+  (`run.declined` for pages and the agent stream). Not `Completed`: completing runs `dt fmt`/`dt check` and the success
+  rule, and `dt fmt` alone may change files, while a declined run, like a clarification, ends with the files as the
+  agent left them; and it is not waiting for an answer, so it is not `NeedsClarification`. Its reason is the reply's
+  summary. If the agent changed files anyway, the result revision records it and the page shows the measured count. A
+  decline without a readable reason is read as `done` (the facts decide).
+- **Model** (`model/agent-run.dt`, generated code regenerated). Values `AgentReply` (`summary`, `requests:
+  RequestReply[]`, `questions: ReplyQuestion[]`, `assumptions: ReplyAssumption[]`), `RequestReply` (`request:
+  RequestId`, `status: RequestProgress`, `note?`), `ReplyQuestion`, `ReplyOption`, `ReplyAssumption`,
+  `ReplyAlternative`, the primitive `ReplyKey`. `Completed.reply?` (no questions), `NeedsClarification.reply?` (at least
+  one question; `question: Text` stays, the plain text: the questions one per line, or the former question),
+  `Declined.reply`; each holds that the requests its reply names are the run's. `finish` and `askClarification` take an
+  optional reply and refuse one that breaks those (`InvalidReply`, checked before a result revision is recorded); a
+  failed run keeps no reply (the facts decide). `RunInput.answer?: Answer` — the facilitator's answer, frozen.
+- **The answer** (API, model and prompt now; the panel's controls later). `POST /api/session/runs` takes `answerTo` (a
+  run of the session) and `answer: { answers: [{ question, options, text? }] }` together. The use case checks the
+  answered run is `NeedsClarification` with a structured reply (else `NothingToAnswer`, 409), every question and
+  option ID is its (single choice: at most one option), each question once, an option or own words for each
+  (`InvalidAnswer` with the field, 400), and freezes `Answer { answerTo, answers: [AnsweredQuestion { question, text,
+  chosen: ReplyOption[], freeText? }] }` into the new run's input, so the prompt is still built from the frozen input
+  only: the block gains `answersToYourQuestions: [{ question, chosen: ["label (detail)"], inTheirOwnWords }]`, and rule
+  6 says to follow it.
+- **Agent API.** `finish` takes `reply?` (outcome `done`), `clarification` `question` and `reply?` (outcome
+  `clarification`), and the new `POST /agent/runs/:id/decline` takes `reply` (outcome `declined`); each validates with
+  `readReply` (requests by UUID, the outcome matching the route; `InvalidInput` with the field) and the model checks the
+  requests are the run's (`InvalidReply`, 400). The agent API's body limit grows from 16 KiB to 256 KiB (a reply at its
+  limits in Japanese). The subscriber sends a clarification or a decline only when the agent exited 0, otherwise runs
+  the checks and finishes, dropping a reply that is not `done`.
+- **Persistence.** No migration: a run is stored whole as JSON and the new fields are optional, so rows written before
+  (a clarification with only its question, a completed run with no reply, an input with no answer) load as they are and
+  keep their invariants (tested on a fixture copied in shape from a real database, and by starting this build on a copy
+  of a live session's directory). `Declined` is a new value of the `state` column, which has no constraint.
+- **Pages.** `RunNeedsClarification` and `RunDeclined` do not carry the reply: a page fetches the state again. The chat
+  (`web/session/reply.tsx`, shared with the panel): a completed run shows `反映しました (n ファイル)` small (n counted
+  from the base and result revisions' files), the summary, a line per request (✓ ◐ – ? with the author, the head of its
+  body and the note) and the assumptions with their alternatives as read-only chips; a clarification shows the summary
+  and each question with the requests it is about and its options as disabled radio buttons or checkboxes, plus
+  "その他…"; a declined run a neutral bubble with its reason. A run without a structured reply is shown as before.
+

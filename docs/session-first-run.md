@@ -42,8 +42,8 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    second draft about the whole workspace; select both and send them. Ada's panel lists both requests, the first with
    its occurrence (the timeline and the step).
 6. **A run** (as Ada): include both requests, add a note if you like, and queue the run. Terminal 2 logs the run's
-   progress; within a few minutes the run is *Completed* (or *Needs clarification* with the agent's question, or
-   *Failed* with its report). Both pages show the storming as the agent left it, without a reload.
+   progress; within a few minutes the run is *Completed* (or *Needs clarification* with the agent's questions and
+   their options, *Declined* with its reason, or *Failed* with its report). Both pages show the storming as the agent left it, without a reload.
 7. **Check the files**: `git -C /tmp/dt-session status --short` lists only `.dt` and `.dtes` files, and
    `git -C /tmp/dt-session diff` is what the requests asked for. `--once` has ended the subscriber.
 8. **Revisions** (as Ada): the timeline has *Before a run* and *Run result*; compare the two (the diff matches `git

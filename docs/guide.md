@@ -2443,11 +2443,23 @@ means another request's target.
 
 **Runs.** The facilitator selects requests (up to 100), adds a note if needed (up to 4,000 characters) and queues a
 run; its input is frozen then, and a request stays as it was, so it can go into another run later. A run is `Queued`,
-`Running`, then `Completed`, `NeedsClarification` (the agent asked a question, shown in the chat; queue the requests
-again with the answer in the note), `Failed` or `Cancelled`; the facilitator can cancel a queued or running one. A run
-**succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new `.dt` error compared with the run's
-base revision, and every `.dtes` file still parses; diagnostics that were there before and `.dtes` warnings are shown
-(before → after), not a failure. A run that changes nothing completes with its base revision as its result.
+`Running`, then `Completed`, `NeedsClarification` (the agent asked questions, shown in the chat; queue the requests
+again with the answer in the note), `Declined` (the agent would not do the requests: they break its rules or are not
+about the model; the chat shows why, and no `dt fmt`/`dt check` runs), `Failed` or `Cancelled`; the facilitator can
+cancel a queued or running one. A run **succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new
+`.dt` error compared with the run's base revision, and every `.dtes` file still parses; diagnostics that were there
+before and `.dtes` warnings are shown (before → after), not a failure. A run that changes nothing completes with its
+base revision as its result.
+
+**The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
+request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
+request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
+options (the page always adds "other"). The chat shows the measured facts first and small — `反映しました (2 ファイル)`,
+counted from the revisions before and after the run — then what the AI says, as plain text. Whether a run succeeded is
+never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
+summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). The API already takes
+the facilitator's answer by choosing (`answerTo` and `answer` when queueing the requests again); the panel's controls
+for it come later.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
