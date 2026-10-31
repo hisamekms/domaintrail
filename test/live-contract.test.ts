@@ -9,7 +9,7 @@ import { connect } from 'node:net';
 import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
 import type { ViewPayload } from '../src/visualization/protocol.js';
-import { startViewServer, type ViewServer } from '../src/server/server.js';
+import { startViewServer, type ViewServer } from '../src/composition/view.js';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

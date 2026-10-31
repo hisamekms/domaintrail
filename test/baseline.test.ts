@@ -5,7 +5,7 @@ import { buildStructureGraph } from '../src/visualization/domain/graph/build.js'
 import { markLineChanges } from '../src/visualization/domain/graph/diff.js';
 import { listRefs, sourcesAt } from '../src/visualization/infrastructure/git.js';
 import type { Baseline, ViewPayload } from '../src/visualization/protocol.js';
-import { startViewServer, type ViewServer } from '../src/server/server.js';
+import { startViewServer, type ViewServer } from '../src/composition/view.js';
 import { check, tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

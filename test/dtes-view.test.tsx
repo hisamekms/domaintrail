@@ -11,7 +11,7 @@ import { renderToGraph, stormingGraphId, stormingViewKey } from '../src/visualiz
 import type { LaidOutGraph, NodeLayout } from '../src/visualization/domain/graph/ir.js';
 import { ElkLayoutEngine } from '../src/visualization/infrastructure/elk.js';
 import type { ViewPayload } from '../src/visualization/protocol.js';
-import { startViewServer, type ViewServer } from '../src/server/server.js';
+import { startViewServer, type ViewServer } from '../src/composition/view.js';
 import { createViewService, type ViewService } from '../src/visualization/application/view-service.js';
 import { createFileLayoutStore } from '../src/visualization/infrastructure/file-layout-store.js';
 import { createGitRevisions } from '../src/visualization/infrastructure/git.js';
