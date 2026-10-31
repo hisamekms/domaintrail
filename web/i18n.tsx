@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { DisplayMode, Lang } from '../src/visualization/domain/graph/ir';
-import type { ElementKind as EsElementKind, SemanticEdgeKind, ViewLevel } from '../src/dtes/ir';
+import type { ElementKind as EsElementKind } from '../src/dtes/ir';
+import type { SemanticEdgeKind, ViewLevel } from '../src/visualization/domain/storming/ir';
 import type { ElementKind } from '../src/model/model';
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';

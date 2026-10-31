@@ -3,18 +3,8 @@
  * Invalid input (reported by the validator) is left out rather than guessed: of two declarations with one ID only the
  * first counts, and a relation to a missing element or one of the wrong kind is dropped.
  */
-import {
-    RELATION_RULES,
-    declarations,
-    semanticEdgeKey,
-    type AnyDeclaration,
-    type NodeElement,
-    type SemanticEdge,
-    type SemanticEdgeKind,
-    type SemanticGraph,
-    type Storming,
-    type Timeline,
-} from '../../../dtes/ir.js';
+import { RELATION_RULES, declarations, type AnyDeclaration, type NodeElement, type Storming, type Timeline } from '../../../dtes/ir.js';
+import { semanticEdgeKey, type SemanticEdge, type SemanticEdgeKind, type SemanticGraph } from './ir.js';
 
 /** The declaration that owns each ID: the first one, as the validator reports the others (S001). */
 export function firstDeclarations(storming: Storming): Map<string, AnyDeclaration> {

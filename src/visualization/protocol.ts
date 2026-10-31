@@ -1,5 +1,6 @@
 import type { Diagnostic } from '../core/diagnostics.js';
-import type { RenderGraph, Storming } from '../dtes/ir.js';
+import type { Storming } from '../dtes/ir.js';
+import type { RenderGraph } from './domain/storming/ir.js';
 import type { ModelDiff } from './domain/graph/diff.js';
 import type { LaidOutGraph, TransitionLabels } from './domain/graph/ir.js';
 import type { DomainModel } from '../model/model.js';

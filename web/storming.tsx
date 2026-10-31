@@ -1,16 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Diagnostic } from '../src/core/diagnostics';
-import {
-    VIEW_LEVELS,
-    declarations,
-    type AnyDeclaration,
-    type EventOccurrence,
-    type NodeElement,
-    type RenderGraph,
-    type Storming,
-    type ViewLevel,
-    type ViewOptions,
-} from '../src/dtes/ir';
+import { declarations, type AnyDeclaration, type NodeElement, type Storming } from '../src/dtes/ir';
+import { VIEW_LEVELS, type EventOccurrence, type RenderGraph, type ViewLevel, type ViewOptions } from '../src/visualization/domain/storming/ir';
 import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '../src/visualization/domain/storming/semantic';
 import { timelineOccurrences } from '../src/visualization/domain/storming/trie';
 import { stormingViewKey } from '../src/visualization/domain/storming/graph';

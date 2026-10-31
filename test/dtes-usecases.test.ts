@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { runCli } from '../src/cli/main.js';
 import type { Analysis } from '../src/core/analyze.js';
 import { formatStorming } from '../src/dtes/format.js';
-import type { ViewOptions } from '../src/dtes/ir.js';
+import type { ViewOptions } from '../src/visualization/domain/storming/ir.js';
 import { projectView } from '../src/visualization/domain/storming/render.js';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
