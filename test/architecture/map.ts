@@ -142,17 +142,6 @@ export const MAP: Record<string, Module> = {
         // the TypeScript generator, its sections of the configuration (T6) and its name check (M011), which the project
         // analysis runs (T5)
         upstream: ['kernel', 'modeling'],
-        exceptions: {
-            // T10: the name check (`core/tsnames.ts`) and `core/naming.ts`'s generated names read Modeling's AST, its
-            // index and its diagnostic sink, which modeling's `.` exports for them; on the typed model they need none
-            'foreign-infrastructure': [
-                '@domaintrail/modeling/infrastructure/syntax/generated/ast',
-                '@domaintrail/modeling/infrastructure/syntax/model-index',
-                '@domaintrail/modeling/infrastructure/syntax/diagnostic-sink',
-            ],
-            // T10: `core/naming.ts` names the AST node a generated name comes from (Langium's `AstNode`)
-            syntax: ['core/naming.ts'],
-        },
     },
     visualization: {
         kind: 'capability',
