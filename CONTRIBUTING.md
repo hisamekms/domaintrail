@@ -65,7 +65,36 @@ Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, 
 
 ## Tests
 
-`bun test` runs everything in `test/`, including:
+Three kinds of test, by what a test crosses:
+
+| Kind | What it tests | Where | Imports |
+|---|---|---|---|
+| **Unit test (UT)** | one package through that package's code only, in one process | next to the code: `packages/<pkg>/src/**/<module>.test.ts` (`web/**/<module>.test.ts` for the page) | its own package by relative paths; another package only through its entries (`.` / `./protocol`) |
+| **Integration test (IT)** | across packages or the process boundary: the composition's wiring, the HTTP and WebSocket servers on a port, the CLI as a child process (`node dist/dt.js`), the agent pipeline with a fake agent, the session seed, the baseline contract tests (generated output, `dt check`, Live View payloads, session error bodies), the architecture test | `test/` | the packages only through their entries (and `dist/`), plus the helpers in `test/` |
+| **End-to-end test (E2E)** | `dt view` and `dt session` in a browser, as a user | `e2e/` (none yet) | |
+
+A unit test may use its package's own technology: temporary directories, fixture files, a file or in-memory SQLite
+database (collaboration's store test is a unit test). It does not open ports, spawn child processes (`tsc`, `dt`,
+`git`) or reach the network; a test that does is an integration test. To decide, ask whether the test still makes sense
+with that package alone: if it does, it is a unit test; if it needs another package's internals, split it, or make it
+an integration test that goes through the entries.
+
+- Snapshots live in `__snapshots__/` next to their test (`bun test` puts them there), so a colocated test's snapshots
+  move with it. The baseline snapshots (see `docs/plans/0027-boundaries.md`, Baseline) are in `test/__snapshots__/`.
+- Fixtures used by several tests or packages stay in `test/fixtures/`; a fixture only one package's unit tests read
+  lives in `packages/<pkg>/test-fixtures/`, outside its sources. Helpers shared by a package's unit tests are in
+  `packages/<pkg>/src/test-helpers.ts` (counted as test code: the bundle and the layer rules ignore it).
+- `test/architecture.test.ts` checks the imports of the tests too: a unit test imports other packages only through
+  their entries, and so does an integration test (or `dist/`). A package declares the test-only dependencies its unit
+  tests import (`fast-check`, `react-dom/server`) in its own `devDependencies`.
+
+```bash
+bun test               # all of them (CI)
+bun run test:unit      # the unit tests: packages/*/src and web
+bun run test:it        # the integration tests: test/
+```
+
+`bun test` runs, among others:
 
 - **examples/shop**: generated into a temporary copy, type-checked with its own `tsconfig.json`, its contract tests and
   application tests run with `bun test`, and its demo run (`test/contract-tests.test.ts`).
