@@ -4,14 +4,23 @@
 import { lstat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
-import { startSubscriber as subscribe, type Subscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
-import { createClaudeCodeRunner, type AgentCommand } from '@domaintrail/agent/infrastructure/claude-code';
-import { dtCommandOf, pinDt, type PinnedDt } from '@domaintrail/agent/infrastructure/dt-shim';
-import { createDtTools, type DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
-import type { AgentRunner } from '@domaintrail/agent/application/ports';
-import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
-import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
-import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/system';
+import {
+    type AgentCommand,
+    type AgentRunner,
+    createClaudeCodeRunner,
+    createDtTools,
+    createHttpAgentApi,
+    type DtCommand,
+    dtCommandOf,
+    pinDt,
+    type PinnedDt,
+    randomNonce,
+    scanWorkspace,
+    startSubscriber as subscribe,
+    type Subscriber,
+    type SubscriberEnd,
+    systemClock,
+} from '@domaintrail/agent';
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import { SessionError } from '@domaintrail/presentation/cli/ports';

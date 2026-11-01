@@ -6,7 +6,7 @@
 import { plainBody } from '@domaintrail/collaboration';
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
-import type { DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
+import type { DtCommand } from '@domaintrail/agent';
 import type { AnswerBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { startMockClassifier, type MockClassifier, type ReadsAs } from './classifier.js';
 import { sessionClient, type Participant, type SessionClient } from './client.js';
