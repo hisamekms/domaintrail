@@ -2,7 +2,7 @@
 // factories' names (M011) (the DSL and its checks: core/checker/verified.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
-import { check, only } from './test-helpers.js';
+import { check, only } from '../test-helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {

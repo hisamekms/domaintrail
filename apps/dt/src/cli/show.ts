@@ -1,5 +1,4 @@
 import {
-    aggregateParamName,
     type CommandModel,
     commandsWithOutcome,
     type DomainModel,
@@ -22,6 +21,7 @@ import {
     type TermModel,
     type TypeExpr,
 } from '@domaintrail/modeling';
+import { aggregateParamName } from '@domaintrail/generation';
 import { type Candidate, closest, didYouMean, type Location } from '@domaintrail/kernel';
 
 /**

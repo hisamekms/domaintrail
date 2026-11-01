@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
-import { check } from './test-helpers.js';
+import { check } from '../test-helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {

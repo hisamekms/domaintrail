@@ -1,6 +1,6 @@
 // The generator's check of the `.dt` sources (M011), as the project analysis runs it.
 import { describe, expect, test } from 'bun:test';
-import { checkSales, only } from './test-helpers.js';
+import { checkSales, only } from '../test-helpers.js';
 
 const ORDER = `
   id OrderId: UUID

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
-import { check } from './test-helpers.js';
+import { check } from '../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {

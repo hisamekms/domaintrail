@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript, type PolicyMode } from './typescript.js';
-import { check } from './test-helpers.js';
+import { check } from '../test-helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
 

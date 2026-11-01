@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
 
-import { analyzeForGeneration, check, EXAMPLES, exampleSources } from './test-helpers.js';
+import { analyzeForGeneration, check, EXAMPLES, exampleSources } from '../test-helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
 let dir: string;

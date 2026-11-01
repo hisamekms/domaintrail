@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
-import { check } from './test-helpers.js';
+import { check } from '../test-helpers.js';
 
 /**
  * Work moves Draft -> Review -> Done -> Archived. `draftNo` is in Draft and Review (carried over between them),

@@ -2,7 +2,7 @@
 // checks: core/checker/field-sets.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
-import { check, checkSales, only } from './test-helpers.js';
+import { check, checkSales, only } from '../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {

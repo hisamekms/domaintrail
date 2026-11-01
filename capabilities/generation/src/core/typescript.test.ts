@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import { generateTypeScript } from './typescript.js';
-import { analyzeForGeneration, check, exampleSources } from './test-helpers.js';
+import { analyzeForGeneration, check, exampleSources } from '../test-helpers.js';
 
 let dir: string;
 

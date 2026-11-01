@@ -1,7 +1,7 @@
 import * as posix from 'node:path/posix';
 import * as testingSource from './testing/_testing.js' with { type: 'text' };
-import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel } from '../model/model.js';
-import { elementsIn } from '../model/model.js';
+import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel } from '@domaintrail/modeling';
+import { elementsIn } from '@domaintrail/modeling';
 import {
     aggregateInvariants,
     checkName,

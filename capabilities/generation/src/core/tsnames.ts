@@ -1,10 +1,8 @@
 // The generator's check of the `.dt` sources (ADR 0027, Modeling: the TypeScript name check is generation's, and the
 // project analysis runs it): what `generateTypeScript` would write must not collide. It reads the AST index and
 // reports through the diagnostic sink, Modeling's syntax side (`core/`), until T10 puts the checks onto the typed model.
-import { isAggregate } from '../language/generated/ast.js';
+import { ast, DiagnosticSink, type FileResolver, commandsOf, includedFields, type ModelIndex } from '@domaintrail/modeling';
 import type { Diagnostic } from '@domaintrail/kernel';
-import { DiagnosticSink, type FileResolver } from '../core/diagnostic-sink.js';
-import { commandsOf, includedFields, type ModelIndex } from '../core/model-index.js';
 import { EVENT_TAG, RUNTIME_NAMES, TS_RESERVED, aggregateParamName, commandTypeName, generatedNames } from './naming.js';
 
 /**
@@ -60,7 +58,7 @@ export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {
         }
     }
 
-    for (const agg of index.elements.filter(isAggregate)) {
+    for (const agg of index.elements.filter(ast.isAggregate)) {
         const self = aggregateParamName(agg);
         for (const cmd of commandsOf(agg)) {
             for (const p of cmd.params) {

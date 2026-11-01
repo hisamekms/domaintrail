@@ -19,6 +19,7 @@
         "@domaintrail/analysis": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/dt": "workspace:*",
+        "@domaintrail/generation": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
@@ -45,6 +46,7 @@
         "@domaintrail/agent": "workspace:*",
         "@domaintrail/analysis": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/generation": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
@@ -86,12 +88,24 @@
     "capabilities/analysis": {
       "name": "@domaintrail/analysis",
       "dependencies": {
+        "@domaintrail/generation": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "picomatch": "4.0.7",
       },
       "devDependencies": {
         "@types/picomatch": "4.0.3",
+      },
+    },
+    "capabilities/generation": {
+      "name": "@domaintrail/generation",
+      "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
+        "@domaintrail/modeling": "workspace:*",
+        "langium": "4.4.0",
+      },
+      "devDependencies": {
+        "fast-check": "4.10.2",
       },
     },
     "capabilities/visualization": {
@@ -121,9 +135,6 @@
       "dependencies": {
         "@domaintrail/kernel": "workspace:*",
         "langium": "4.4.0",
-      },
-      "devDependencies": {
-        "fast-check": "4.10.2",
       },
     },
     "platform/workspace": {
@@ -156,6 +167,8 @@
     "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:contexts/collaboration"],
 
     "@domaintrail/dt": ["@domaintrail/dt@workspace:apps/dt"],
+
+    "@domaintrail/generation": ["@domaintrail/generation@workspace:capabilities/generation"],
 
     "@domaintrail/kernel": ["@domaintrail/kernel@workspace:shared/kernel"],
 

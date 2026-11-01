@@ -1,7 +1,7 @@
 // What requirements make of the generated TypeScript (the DSL and its checks: core/checker/requires.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
-import { check } from './test-helpers.js';
+import { check } from '../test-helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
 const review = (commands: string, extra = '') =>

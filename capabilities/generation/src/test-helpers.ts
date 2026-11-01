@@ -2,12 +2,12 @@
 // the generator's own check (M011) added, as the project analysis does.
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyzeDomain, type DomainAnalysis } from '../core/analyze.js';
+import { analyzeDomain, type DomainAnalysis } from '@domaintrail/modeling';
 import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
-import { checkGeneratedNames } from './tsnames.js';
+import { checkGeneratedNames } from './core/tsnames.js';
 
-export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', '..', 'examples', 'shop');
+export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
 
 /** Modeling's analysis with the generator's check, and whether it found no error. */
 export type Checked = DomainAnalysis & { ok: boolean };

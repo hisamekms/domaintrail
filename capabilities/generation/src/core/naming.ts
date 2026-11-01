@@ -1,18 +1,6 @@
 import type { AstNode } from 'langium';
-import {
-    isAggregate,
-    isEntity,
-    isEventDecl,
-    isIdType,
-    isPolicy,
-    isPrimitiveDecl,
-    isUnionDecl,
-    isValueObject,
-    isVerifiedDecl,
-} from '../language/generated/ast.js';
-import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
+import { ast, commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex, emitApplies, type OutcomePatternModel } from '@domaintrail/modeling';
 import { camel } from '@domaintrail/kernel';
-import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
 export const RUNTIME_NAMES = [
@@ -131,7 +119,7 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
         // Duplicate declarations are reported by M002 and generated once.
         if (seen.has(el.name)) continue;
         seen.add(el.name);
-        if (isPolicy(el)) {
+        if (ast.isPolicy(el)) {
             out.push({ name: policyTypeName(el), origin: `the handler of policy '${el.name}'`, node: el });
             const agg = el.aggregate.ref;
             const cmd = el.command.ref;
@@ -141,20 +129,20 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
             }
             continue;
         }
-        if (!isAggregate(el)) {
+        if (!ast.isAggregate(el)) {
             out.push({ name: el.name, origin: `${KIND_LABELS[el.$type]} '${el.name}'`, node: el });
-            if (isIdType(el) || isPrimitiveDecl(el)) {
+            if (ast.isIdType(el) || ast.isPrimitiveDecl(el)) {
                 out.push({ name: makeTypeName(el), origin: `the constructor of '${el.name}'`, node: el });
                 const invs = primitiveInvariants(el);
                 if (invs.length) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, node: el });
                 const declared = invs.some((i) => !i.expr);
                 out.push({ name: `make${el.name}${declared ? 'With' : ''}`, origin: `the generated constructor of '${el.name}'`, node: el });
                 if (invs.length) out.push(...checkNames(el.name, declared, el));
-            } else if (isVerifiedDecl(el)) {
+            } else if (ast.isVerifiedDecl(el)) {
                 out.push({ name: makeTypeName(el), origin: `the factory of '${el.name}'`, node: el });
-            } else if (isValueObject(el) || isEntity(el) || isUnionDecl(el)) {
+            } else if (ast.isValueObject(el) || ast.isEntity(el) || ast.isUnionDecl(el)) {
                 out.push({ name: `equal${el.name}`, origin: `the equality of '${el.name}'`, node: el });
-                const invs = isUnionDecl(el) ? el.variants.flatMap((v) => invariantsOf(v.members)) : invariantsOf(el.members);
+                const invs = ast.isUnionDecl(el) ? el.variants.flatMap((v) => invariantsOf(v.members)) : invariantsOf(el.members);
                 if (invs.length)
                     out.push(
                         ...checkNames(
@@ -201,13 +189,13 @@ export function generatedNames(index: ModelIndex, ctx: string): GeneratedName[] 
             out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, node: el });
         }
     }
-    const persistent = index.elementsOf(ctx).find((el) => isEventDecl(el) && el.persistent);
+    const persistent = index.elementsOf(ctx).find((el) => ast.isEventDecl(el) && el.persistent);
     if (persistent) out.push({ name: PERSISTENT_EVENT_TYPE, origin: 'the union of persistent events', node: persistent });
-    const event = index.elementsOf(ctx).find(isEventDecl);
+    const event = index.elementsOf(ctx).find(ast.isEventDecl);
     if (event) out.push({ name: DOMAIN_EVENT_TYPE, origin: 'the union of the events', node: event });
-    const aggregate = index.elementsOf(ctx).find(isAggregate);
+    const aggregate = index.elementsOf(ctx).find(ast.isAggregate);
     if (aggregate) out.push({ name: AGGREGATE_TYPE, origin: 'the union of the aggregates', node: aggregate });
-    const policy = index.elementsOf(ctx).find(isPolicy);
+    const policy = index.elementsOf(ctx).find(ast.isPolicy);
     if (policy) out.push({ name: policyHandlersName(ctx), origin: 'the handlers of the policies', node: policy });
     return out;
 }

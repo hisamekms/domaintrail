@@ -13,7 +13,7 @@ import {
     resolveGenerationConfig,
     unknownTsContexts,
     validateGenerationConfig,
-} from '@domaintrail/modeling';
+} from '@domaintrail/generation';
 import { type ResolvedSourcesConfig, resolveSourcesConfig, type SourcesConfigFile, SOURCES_CONFIG_KEYS, validateSourcesConfig } from '@domaintrail/analysis';
 import { resolveViewConfig, SERVER_CONFIG_KEYS, validateViewConfig, type ViewConfigFile } from './server.js';
 import { checkSession, type ResolvedSessionConfig, resolveSession, SESSION_CONFIG_KEYS, type SessionConfigFile, validateSession } from './session.js';

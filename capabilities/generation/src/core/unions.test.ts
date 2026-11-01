@@ -1,7 +1,7 @@
 // What unions make of the generated TypeScript (the DSL and its checks: core/checker/unions.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
-import { check } from './test-helpers.js';
+import { check } from '../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   id UserId: UUID

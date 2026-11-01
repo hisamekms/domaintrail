@@ -1,7 +1,7 @@
 // Labels and descriptions in the generated TypeScript (the DSL's labels and their checks: core/labels.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
-import { analyzeForGeneration, exampleSources } from './test-helpers.js';
+import { analyzeForGeneration, exampleSources } from '../test-helpers.js';
 
 describe('labels in generated code', () => {
     test('generated TypeScript carries labels and descriptions as JSDoc', async () => {

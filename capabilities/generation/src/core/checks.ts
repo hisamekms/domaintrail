@@ -1,4 +1,4 @@
-import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PrimitiveName } from '../model/model.js';
+import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PrimitiveName } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import { invalidTypeName, makeTypeName, stateTypeName } from './naming.js';

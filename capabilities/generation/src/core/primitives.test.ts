@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
-import { analyzeForGeneration, checkSales, exampleSources, only } from './test-helpers.js';
+import { analyzeForGeneration, checkSales, exampleSources, only } from '../test-helpers.js';
 
 const DECLS = `
   id OrderId: UUID

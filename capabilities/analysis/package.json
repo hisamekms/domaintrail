@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@domaintrail/generation": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "picomatch": "4.0.7"

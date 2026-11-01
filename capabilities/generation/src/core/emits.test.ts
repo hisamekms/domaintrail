@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
-import { check, only } from './test-helpers.js';
+import { check, only } from '../test-helpers.js';
 
 const WORK = `context Tasks {
   id WorkId: UUID

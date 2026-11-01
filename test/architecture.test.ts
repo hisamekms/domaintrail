@@ -141,7 +141,7 @@ const packageName = (specifier: string): string =>
         .join('/');
 const isBuiltin = (specifier: string): boolean => specifier.startsWith('node:') || specifier === 'bun' || specifier.startsWith('bun:');
 /** Builtins that do no I/O: paths and URLs are computed, not read. */
-const PURE_BUILTINS = ['node:path', 'node:url'];
+const PURE_BUILTINS = ['node:path', 'node:path/posix', 'node:url'];
 const isIO = (specifier: string): boolean => (isBuiltin(specifier) && !PURE_BUILTINS.includes(specifier)) || IO_PACKAGES.includes(packageName(specifier));
 /** The directory segments of a path (without the file name). */
 const segments = (file: string): string[] => file.split('/').slice(0, -1);

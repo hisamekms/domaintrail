@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
 
-import { analyzeForGeneration, EXAMPLES, exampleSources } from './test-helpers.js';
+import { analyzeForGeneration, EXAMPLES, exampleSources } from '../test-helpers.js';
 
 describe('generated TypeScript for domain primitives', () => {
     let dir: string;

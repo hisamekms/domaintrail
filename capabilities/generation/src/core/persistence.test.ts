@@ -2,7 +2,7 @@
 // DSL: core/checker/persistence.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
-import { checkSales, only } from './test-helpers.js';
+import { checkSales, only } from '../test-helpers.js';
 
 const SALES = `
   id OrderId: UUID

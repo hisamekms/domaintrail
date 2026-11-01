@@ -72,6 +72,7 @@
     "@domaintrail/analysis": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/dt": "workspace:*",
+    "@domaintrail/generation": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/visualization": "workspace:*",

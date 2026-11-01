@@ -1,7 +1,6 @@
 // The public surface of @domaintrail/modeling (the `.` export; ADR 0027, Dependency rules): Modeling's and Storming's
 // published language, then the use cases the apps and capabilities call. Storming is part of this package until T8
-// (contexts/storming), the project analysis (`analysis/`) until T8 (capabilities/analysis), the generator until T8
-// (capabilities/generation). The kernel is @domaintrail/kernel.
+// (contexts/storming). The kernel is @domaintrail/kernel.
 //
 // A downstream context takes only the published language (the sections marked so; `published` in
 // test/architecture/map.ts). The other sections are for the apps and capabilities; what is not Modeling's
@@ -100,22 +99,9 @@ export { analyzeStormings } from './storming/analyze.js';
 export { formatDomain, FormatError } from './format/format.js';
 export { formatStorming } from './storming/format.js';
 
-// ---- use cases: the TypeScript generator (T8: capabilities/generation) ------------------------------------------
-export { GENERATED_MARKER, generateTypeScript, type GeneratedFile, type PolicyMode } from './generator/typescript.js';
-export { aggregateParamName } from './generator/naming.js';
-// its check of the `.dt` sources (M011), which the project analysis runs
-export { checkGeneratedNames } from './generator/tsnames.js';
-// its sections of domaintrail.jsonc, `generate` and `lintHint` (T6), composed by the app
-export {
-    GENERATION_CONFIG_KEYS,
-    policyModes,
-    resolveGenerationConfig,
-    staysInside,
-    unknownTsContexts,
-    validateGenerationConfig,
-    type GenerationConfigFile,
-    type ResolvedGenerationConfig,
-} from './generator/config.js';
+// ---- the syntax, for the TypeScript generator's name check and naming until T10 (they read the AST index) --------
+export { DiagnosticSink, type FileResolver } from './core/diagnostic-sink.js';
+export { includedFields, invariantsOf, primitiveInvariants, statesOf } from './core/model-index.js';
 
 // ---- the syntax, for the language server (T8: Modeling's and Storming's infrastructure/syntax) -----------------
 export * as ast from './language/generated/ast.js';

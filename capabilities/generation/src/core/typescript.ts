@@ -11,9 +11,9 @@ import type {
     PrimitiveName,
     RequirementModel,
     TypeExpr,
-} from '../model/model.js';
+} from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
-import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
+import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
 import { CheckWriter } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
 import {
