@@ -23,6 +23,7 @@ import type { AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -86,7 +87,7 @@ async function fixture(): Promise<Fixture> {
     let n = 0;
     const deps: CollaborationDeps = {
         uow: createUnitOfWork(await openSessionDatabase(root)),
-        workspace: createWorkspaceSnapshot(root),
+        workspace: createWorkspaceSnapshot(root, sourceSelection()),
         blobs: await openSessionBlobs(root),
         validator: createModelValidator(),
         clock: { now: () => new Date('2026-11-01T09:00:00Z') },

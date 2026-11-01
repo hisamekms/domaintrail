@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import { analyze, formatDomain, formatStorming, generateTypeScript } from '@domaintrail/modeling';
+import { analyze, formatDomain, formatStorming, generateTypeScript, sourceSelection } from '@domaintrail/modeling';
 import { resolveConfig } from '@domaintrail/presentation';
 import { loadWorkspace } from '@domaintrail/workspace';
 import { EXAMPLES, check } from './helpers.js';
@@ -107,7 +107,7 @@ describe('dt guide', () => {
         expect(files.map(([n]) => n)).toEqual(expect.arrayContaining(['src/stored.ts', 'src/meta-by-event.ts']));
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-guide-'));
         try {
-            const a = await analyze(await loadWorkspace(EXAMPLES));
+            const a = await analyze(await loadWorkspace(EXAMPLES, sourceSelection()));
             await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
             for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
             await mkdir(path.join(dir, 'src'));

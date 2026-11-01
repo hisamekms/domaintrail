@@ -1,3 +1,4 @@
+import { GENERATED_MARKER, sourceSelection } from '@domaintrail/modeling';
 import {
     type CliDeps,
     type CliIO,
@@ -10,21 +11,27 @@ import {
 } from '@domaintrail/presentation';
 import {
     createGeneratedOutput,
-    findDomainFiles,
+    findDomainFiles as findSources,
     hasCastLintRule,
     LINT_HINT,
     loadConfig as readConfig,
-    loadWorkspace,
+    loadWorkspace as readWorkspace,
     SourceScope,
 } from '@domaintrail/workspace';
 
 /** domaintrail.jsonc, read by the workspace and resolved by the sections' owners as the app composes them. */
 const loadConfig = (opts: { start: string; configPath?: string }): Promise<ResolvedConfig> => readConfig(opts, CONFIG_FILE_FORMAT);
 
+/** The sources the configuration names (the analysis's `sources`), found and read by the workspace. */
+const findDomainFiles = (root: string, sources: readonly string[], respectGitignore: boolean): Promise<string[]> =>
+    findSources(root, sourceSelection(sources, respectGitignore));
+const loadWorkspace = (root: string, sources: readonly string[], respectGitignore: boolean): ReturnType<typeof readWorkspace> =>
+    readWorkspace(root, sourceSelection(sources, respectGitignore));
+
 /** The language server's view of the workspace: the config and the sources, as `dt check` finds them. */
 const languageServerFiles: LanguageServerFiles = {
     loadConfig,
-    sourceScope: (root, sources, respectGitignore) => new SourceScope(root, sources, respectGitignore),
+    sourceScope: (root, sources, respectGitignore) => new SourceScope(root, sourceSelection(sources, respectGitignore)),
     findDomainFiles,
 };
 
@@ -38,7 +45,7 @@ export function cliDeps(): CliDeps {
         findDomainFiles,
         loadWorkspace,
         castLintHint: async (root) => ((await hasCastLintRule(root)) ? undefined : LINT_HINT),
-        generatedOutput: createGeneratedOutput(),
+        generatedOutput: createGeneratedOutput(GENERATED_MARKER),
         startViewServer: async (options) => (await import('./view.js')).startViewServer(options),
         startSessionServer: async (options) => {
             const server = await (await import('./session.js')).startSessionServer(options);

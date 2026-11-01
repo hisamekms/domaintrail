@@ -32,6 +32,7 @@ import {
     systemClock,
 } from '@domaintrail/collaboration';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const [root, step] = process.argv.slice(2);
 const must = (r) => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value; };
@@ -39,7 +40,7 @@ const open = async () => {
     const db = await openSessionDatabase(root);
     return { db, use: createCollaboration({
         uow: createUnitOfWork(db),
-        workspace: createWorkspaceSnapshot(root),
+        workspace: createWorkspaceSnapshot(root, sourceSelection()),
         blobs: await openSessionBlobs(root),
         validator: createModelValidator(),
         clock: systemClock,

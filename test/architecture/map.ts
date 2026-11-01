@@ -166,10 +166,10 @@ export const MAP: Record<string, Module> = {
         sources: 'packages/workspace/src',
         upstream: ['modeling'],
         exceptions: {
-            // the platform knows no context: it still takes the configuration (`DEFAULT_SOURCES`, `IGNORED_DIRS`,
-            // `sourceMatcher`, `resolveConfig`, `staysInside`, ...) and the generator's `GENERATED_MARKER` from
-            // modeling; their owners pass the values in (T6). Its `SourceFile` is the kernel's since T3, which the
-            // platform may take, but the kernel lies inside modeling until T8 makes it shared/kernel
+            // the platform knows no context: since T6 it receives the configuration's values (the sources, the
+            // directories never scanned, the config file's format, the generator's marker) and takes from modeling only
+            // the kernel's `SourceFile` (a type), which a platform may take, but the kernel lies inside modeling until T8
+            // makes it shared/kernel
             kinds: ['modeling'],
         },
     },

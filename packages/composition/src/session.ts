@@ -35,7 +35,7 @@ import {
 } from '@domaintrail/collaboration';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
 import {
     type Connection,
     createAgentApi,
@@ -220,7 +220,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
     const opened: { http?: Server; agent?: Server } = {};
     try {
         const uow = createUnitOfWork(db);
-        const snapshot = createWorkspaceSnapshot(options.root, sources, respectGitignore);
+        const snapshot = createWorkspaceSnapshot(options.root, sourceSelection(sources, respectGitignore));
         const collaboration = createCollaboration({
             uow,
             workspace: snapshot,

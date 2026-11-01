@@ -11,6 +11,7 @@ import { startViewServer, type ViewServer } from '@domaintrail/composition';
 import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const DT = `context Shop {
   id OrderId: UUID
@@ -66,7 +67,13 @@ async function workspace(files: Record<string, string>): Promise<string> {
 
 /** The view service of the workspace at `dir`, with the real adapters. */
 const viewService = (dir: string): ViewService =>
-    createViewService({ root: dir, engine, workspace: createWorkspaceReader(dir), layoutStore: createFileLayoutStore(dir), git: createGitRevisions(dir) });
+    createViewService({
+        root: dir,
+        engine,
+        workspace: createWorkspaceReader(dir, sourceSelection()),
+        layoutStore: createFileLayoutStore(dir),
+        git: createGitRevisions(dir),
+    });
 
 const errors = (p: ViewPayload): string[] => p.diagnostics.filter((d) => d.severity === 'error').map((d) => `${d.file} ${d.code}`);
 

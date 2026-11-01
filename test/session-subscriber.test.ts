@@ -37,6 +37,7 @@ import { SessionError } from '@domaintrail/presentation';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const ROOT = path.join(import.meta.dir, '..');
 const FAKE = path.join(import.meta.dir, 'fixtures', 'agent', 'fake-claude.mjs');
@@ -698,7 +699,10 @@ describe('the stream and the completions', () => {
                 api: wrap(real),
                 runner: await createClaudeCodeRunner({ root: ctx.root, command: { command: process.execPath, args: [FAKE, planFile] } }),
                 tools: createDtTools({ dt: DT, root: ctx.root, log: (l) => log.push(l) }),
-                workspace: wrapWorkspace({ scan: () => scanWorkspace(ctx.root), sources: async () => new Set(await findDomainFiles(ctx.root)) }),
+                workspace: wrapWorkspace({
+                    scan: () => scanWorkspace(ctx.root),
+                    sources: async () => new Set(await findDomainFiles(ctx.root, sourceSelection())),
+                }),
                 clock: systemClock,
                 owner: 'test@host',
                 nonce: () => 'n'.repeat(32),

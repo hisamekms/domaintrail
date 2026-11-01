@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { startViewServer, type ViewServer } from '@domaintrail/composition';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
+import { sourceSelection } from '@domaintrail/modeling';
 
 let dir: string;
 let server: ViewServer;
@@ -212,7 +213,7 @@ describe('layout persistence', () => {
             await createViewService({
                 root: a,
                 engine,
-                workspace: createWorkspaceReader(a),
+                workspace: createWorkspaceReader(a, sourceSelection()),
                 layoutStore: createFileLayoutStore(a),
                 git: createGitRevisions(a),
             }).refresh();
@@ -226,7 +227,7 @@ describe('layout persistence', () => {
             await createViewService({
                 root: b,
                 engine,
-                workspace: createWorkspaceReader(b),
+                workspace: createWorkspaceReader(b, sourceSelection()),
                 layoutStore: createFileLayoutStore(b),
                 git: createGitRevisions(b),
             }).refresh();

@@ -5,6 +5,7 @@ import { Language, Parser, Query, type Node } from 'web-tree-sitter';
 import { loadWorkspace } from '@domaintrail/workspace';
 import { GRAMMAR_DIR, STAMP, hashes } from '../scripts/tree-sitter.js';
 import { EXAMPLES } from './helpers.js';
+import { sourceSelection } from '@domaintrail/modeling';
 
 // The tree-sitter grammar (tree-sitter-domaintrail, for editors) must parse what the Langium grammar parses. It is
 // checked with the committed wasm; `bun run tree-sitter` rebuilds it after a change of grammar.js.
@@ -46,7 +47,7 @@ describe('tree-sitter grammar', () => {
     });
 
     test('parses every .dt file of examples/shop', async () => {
-        const sources = (await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt'));
+        const sources = (await loadWorkspace(EXAMPLES, sourceSelection())).filter((s) => s.path.endsWith('.dt'));
         expect(sources.length).toBeGreaterThan(0);
         for (const s of sources) expect({ file: s.path, problems: problems(s.text) }).toEqual({ file: s.path, problems: [] });
     });

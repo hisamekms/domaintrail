@@ -18,7 +18,7 @@ import {
 } from '@domaintrail/agent';
 import { readCredential } from '@domaintrail/composition';
 import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/modeling';
 import { findDomainFiles } from '@domaintrail/workspace';
 
 /** A reply as a scenario writes it: requests by their number in the run (from 1); `questions` and `assumptions` optional. */
@@ -99,7 +99,7 @@ export async function startFakeAgent(options: FakeAgentOptions): Promise<FakeAge
             tools: createDtTools({ dt: options.dt, root: options.root, log: options.log }),
             workspace: {
                 scan: () => scanWorkspace(options.root),
-                sources: async () => new Set(await findDomainFiles(options.root, DEFAULT_SOURCES, true)),
+                sources: async () => new Set(await findDomainFiles(options.root, sourceSelection())),
             },
             clock: systemClock,
             owner: 'seed-fake-agent',

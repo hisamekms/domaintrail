@@ -22,7 +22,7 @@ import {
     systemClock,
 } from '@domaintrail/agent';
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
 import { SessionError } from '@domaintrail/presentation';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
@@ -114,7 +114,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             tools: createDtTools({ dt: dtCommandOf(dt), root, configPath: options.configPath, log }),
             workspace: {
                 scan: () => scanWorkspace(root),
-                sources: async () => new Set(await findDomainFiles(root, sources, respectGitignore)),
+                sources: async () => new Set(await findDomainFiles(root, sourceSelection(sources, respectGitignore))),
             },
             clock: systemClock,
             owner: `${options.agent}@${

@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { cliDeps } from '@domaintrail/composition';
 import { runCli } from '@domaintrail/presentation';
 import { findDomainFiles } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -246,13 +247,13 @@ describe('.gitignore', () => {
             'editors/zed/.gitignore': '/target/\n/grammars/\n*.wasm\n',
             'editors/zed/grammars/domaintrail/examples/shop/s.dt': MODEL,
         });
-        expect(await findDomainFiles(dir)).toEqual(['examples/shop/s.dt']);
+        expect(await findDomainFiles(dir, sourceSelection())).toEqual(['examples/shop/s.dt']);
         expect(await run('-r', dir, 'check')).toMatchObject({ code: 0, out: ['1 file(s) checked: 0 error(s), 0 warning(s).'] });
     });
 
     test('"respectGitignore": false loads the ignored files too; explicit files are formatted whatever .gitignore says', async () => {
         const dir = await project({ '.gitignore': 'copy/\n', 's.dt': MODEL, 'copy/s.dt': MODEL, 't.dt': OTHER });
-        expect(await findDomainFiles(dir, undefined, false)).toEqual(['copy/s.dt', 's.dt', 't.dt']);
+        expect(await findDomainFiles(dir, sourceSelection(undefined, false))).toEqual(['copy/s.dt', 's.dt', 't.dt']);
         expect((await run('-r', dir, 'check')).code).toBe(0);
         await writeFile(path.join(dir, 'domaintrail.jsonc'), '{ "respectGitignore": false }');
         const off = await run('-r', dir, 'check', '--format', 'json');

@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
 import { type Assets, createApiRoutes, createViewHttpServer, createWebSocketHub, defaultWebDir, loadAssets } from '@domaintrail/presentation';
 import {
     createFileLayoutStore,
@@ -63,7 +63,7 @@ export async function prepareLiveView(options: ViewServerOptions): Promise<LiveV
     const view = createViewService({
         root: options.root,
         engine,
-        workspace: createWorkspaceReader(options.root, sources, respectGitignore),
+        workspace: createWorkspaceReader(options.root, sourceSelection(sources, respectGitignore)),
         layoutStore: createFileLayoutStore(options.root),
         git,
         sources,
@@ -118,7 +118,10 @@ export async function watchLiveView(
         }
         await refreshSources();
     };
-    const sourcesWatch = createWorkspaceWatcher(options.root, { sources, respectGitignore, debounceMs: options.debounceMs }).subscribe((event) => {
+    const sourcesWatch = createWorkspaceWatcher(options.root, {
+        selection: sourceSelection(sources, respectGitignore),
+        debounceMs: options.debounceMs,
+    }).subscribe((event) => {
         if (event.kind === 'settled') void settled();
         else log(`${event.kind} ${path.relative(options.root, event.file)}`);
     });

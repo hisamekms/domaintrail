@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import type { SourceSelection } from '../ports.js';
 import { SourceScope } from './files.js';
 
 export interface SnapshotScan {
@@ -39,9 +39,9 @@ async function lstatOrAbsent(p: string): Promise<Awaited<ReturnType<typeof lstat
     });
 }
 
-/** The snapshots of the sources below `root`, as `loadWorkspace` finds them (`sources`, `.gitignore`). */
-export function createWorkspaceSnapshot(root: string, sources: readonly string[] = DEFAULT_SOURCES, respectGitignore = true): WorkspaceSnapshotFiles {
-    const scope = new SourceScope(root, sources, respectGitignore);
+/** The snapshots of the sources below `root`, as `loadWorkspace` finds them (the selection, `.gitignore`). */
+export function createWorkspaceSnapshot(root: string, selection: SourceSelection): WorkspaceSnapshotFiles {
+    const scope = new SourceScope(root, selection);
 
     async function read(): Promise<SnapshotScan> {
         const files: { path: string; bytes: Uint8Array; hash: string }[] = [];

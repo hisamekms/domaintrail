@@ -16,7 +16,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type LaidOutGraph, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
 import { createWorkspaceReader } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers.js';
 
@@ -33,7 +33,7 @@ async function shop(stormings: boolean): Promise<{ dir: string; view: ViewServic
     const view = createViewService({
         root: dir,
         engine: new ElkLayoutEngine(),
-        workspace: createWorkspaceReader(dir, DEFAULT_SOURCES, true),
+        workspace: createWorkspaceReader(dir, sourceSelection()),
         layoutStore: createFileLayoutStore(dir),
         git: createGitRevisions(dir),
         sources: DEFAULT_SOURCES,

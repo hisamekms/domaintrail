@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { selection } from '../test-helpers.js';
 import { createWorkspaceSnapshot } from './snapshot.js';
 
 const dirs: string[] = [];
@@ -38,7 +39,7 @@ describe('workspace snapshots', () => {
         });
         await symlink(path.join(root, 'a.dt'), path.join(root, 'link.dt'));
         await symlink(path.join(root, 'es'), path.join(root, 'linked-dir'));
-        const scan = await createWorkspaceSnapshot(root).read();
+        const scan = await createWorkspaceSnapshot(root, selection()).read();
         expect(scan.files.map((f) => [f.path, f.hash])).toEqual([
             ['a.dt', sha('context A {}')],
             ['es/b.dtes', sha('storming B {}')],
@@ -48,7 +49,7 @@ describe('workspace snapshots', () => {
 
     test('write makes the sources exactly the snapshot, through temporary files, over the expected sources only', async () => {
         const root = await workspace({ 'a.dt': 'context A {}', 'gone.dt': 'context Gone {}' });
-        const snapshots = createWorkspaceSnapshot(root);
+        const snapshots = createWorkspaceSnapshot(root, selection());
         const expected = (await snapshots.read()).files.map((f) => ({ path: f.path, hash: f.hash }));
         const r = await snapshots.write(
             [
@@ -73,7 +74,7 @@ describe('workspace snapshots', () => {
     test('write refuses paths outside the root or not sources, and symbolic links on the way', async () => {
         const outside = await workspace({});
         const root = await workspace({ 'a.dt': 'context A {}' });
-        const snapshots = createWorkspaceSnapshot(root);
+        const snapshots = createWorkspaceSnapshot(root, selection());
         const expected = (await snapshots.read()).files.map((f) => ({ path: f.path, hash: f.hash }));
         for (const p of ['../x.dt', '/etc/x.dt', 'a/../../x.dt', 'notes.md', '.domaintrail/x.dt', 'a\\b.dt', '']) {
             expect(await snapshots.write([{ path: p, bytes: bytes('x') }], expected)).toEqual({ ok: false, error: { type: 'PathOutsideRoot', path: p } });

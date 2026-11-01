@@ -1,6 +1,5 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { GENERATED_MARKER, staysInside } from '@domaintrail/modeling';
 
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {
@@ -14,15 +13,21 @@ export const MANIFEST_FILE = path.join('.domaintrail', 'generated.json');
 
 /**
  * The output of `dt generate ts` on disk: the safety checks before writing and the writing itself (a `GeneratedOutput`
- * of the CLI, `@domaintrail/presentation/cli/ports`).
+ * of the CLI, `@domaintrail/presentation/cli/ports`). `marker` starts every file the generator writes (the generator's
+ * `GENERATED_MARKER`, given by the app): only such files are ever replaced or removed.
  */
-export function createGeneratedOutput(): {
+export function createGeneratedOutput(marker: string): {
     manifestFile: string;
     symlinkOnPath(root: string, target: string): Promise<string | undefined>;
     foreignFiles(files: readonly string[]): Promise<string[]>;
     replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean }>;
 } {
-    return { manifestFile: MANIFEST_FILE, symlinkOnPath, foreignFiles, replace };
+    return {
+        manifestFile: MANIFEST_FILE,
+        symlinkOnPath,
+        foreignFiles: (files) => foreignFiles(files, marker),
+        replace: (root, files) => replace(root, files, marker),
+    };
 }
 
 /**
@@ -31,11 +36,11 @@ export function createGeneratedOutput(): {
  * is false when the manifest could not be written (see `writeManifest`). The output directories must already be
  * checked to be inside the root and free of symlinks, and `files` to be generated or missing (see `foreignFiles`).
  */
-async function replace(root: string, files: readonly GeneratedFile[]): Promise<{ recorded: boolean }> {
+async function replace(root: string, files: readonly GeneratedFile[], marker: string): Promise<{ recorded: boolean }> {
     const outDirs = [...new Set(files.map((f) => path.dirname(f.file)))];
     const previous = await readManifest(root);
-    await removeStale(root, previous, new Set(files.map((f) => f.file)));
-    for (const dir of outDirs) await cleanGenerated(dir);
+    await removeStale(root, previous, new Set(files.map((f) => f.file)), marker);
+    for (const dir of outDirs) await cleanGenerated(dir, marker);
     for (const f of files) await writeNew(f.file, f.content);
     const recorded = await writeManifest(
         root,
@@ -48,17 +53,17 @@ async function replace(root: string, files: readonly GeneratedFile[]): Promise<{
  * Existing entries at the paths about to be written that the generator may not replace:
  * anything that is not a regular file written by the generator (symlinks included, even dangling ones).
  */
-async function foreignFiles(files: readonly string[]): Promise<string[]> {
+async function foreignFiles(files: readonly string[], marker: string): Promise<string[]> {
     const out: string[] = [];
     for (const file of files) {
-        if (!(await isGeneratedOrMissing(file))) out.push(file);
+        if (!(await isGeneratedOrMissing(file, marker))) out.push(file);
     }
     return out;
 }
 
-async function isGeneratedOrMissing(file: string): Promise<boolean> {
+async function isGeneratedOrMissing(file: string, marker: string): Promise<boolean> {
     const stat = await lstat(file).catch(() => undefined);
-    return !stat || (stat.isFile() && (await readFile(file, 'utf8')).startsWith(GENERATED_MARKER));
+    return !stat || (stat.isFile() && (await readFile(file, 'utf8')).startsWith(marker));
 }
 
 /** The first existing path component between `root` (exclusive) and `target` that is a symlink, if any. */
@@ -87,12 +92,12 @@ async function writeNew(file: string, content: string): Promise<void> {
  * so pointing the output at a directory with hand-written code never destroys it. `outDir` must already be checked
  * to be inside the root and free of symlinks.
  */
-async function cleanGenerated(outDir: string): Promise<void> {
+async function cleanGenerated(outDir: string, marker: string): Promise<void> {
     await mkdir(outDir, { recursive: true });
     for (const entry of await readdir(outDir, { withFileTypes: true })) {
         if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
         const file = path.join(outDir, entry.name);
-        if ((await readFile(file, 'utf8')).startsWith(GENERATED_MARKER)) await rm(file);
+        if ((await readFile(file, 'utf8')).startsWith(marker)) await rm(file);
     }
 }
 
@@ -129,14 +134,14 @@ async function writeManifest(root: string, files: string[]): Promise<boolean> {
  * header are deleted, only inside the root and never through a symlinked directory; a directory left empty is removed
  * too (never the root itself).
  */
-async function removeStale(root: string, previous: string[], written: Set<string>): Promise<void> {
+async function removeStale(root: string, previous: string[], written: Set<string>, marker: string): Promise<void> {
     for (const rel of previous) {
         const file = path.resolve(root, rel);
         if (written.has(file) || !file.endsWith('.ts') || !staysInside(rel) || !isInside(root, file)) continue;
         const dir = path.dirname(file);
         if (await symlinkOnPath(root, dir)) continue;
         const stat = await lstat(file).catch(() => undefined);
-        if (!stat?.isFile() || !(await isGeneratedOrMissing(file))) continue;
+        if (!stat?.isFile() || !(await isGeneratedOrMissing(file, marker))) continue;
         await rm(file);
         if (dir !== root) await rmdir(dir).catch(() => {}); // fails unless empty
     }
@@ -146,3 +151,8 @@ const isInside = (root: string, p: string): boolean => {
     const rel = path.relative(root, p);
     return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
 };
+
+/** Whether a path relative to the root stays inside it: not absolute and without a `..` segment (a manifest's entry). */
+function staysInside(rel: string): boolean {
+    return !path.isAbsolute(rel) && !path.win32.isAbsolute(rel) && !rel.split(/[\\/]/).includes('..');
+}

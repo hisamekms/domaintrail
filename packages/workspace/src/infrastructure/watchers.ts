@@ -1,7 +1,6 @@
 import * as path from 'node:path';
 import { watch, type FSWatcher } from 'chokidar';
-import { DEFAULT_SOURCES, IGNORED_DIRS } from '@domaintrail/modeling';
-import type { GitRefWatcher, SourceEvent, Unsubscribe, WorkspaceWatcher } from '../ports.js';
+import type { GitRefWatcher, SourceEvent, SourceSelection, Unsubscribe, WorkspaceWatcher } from '../ports.js';
 import { SourceScope } from './files.js';
 
 /** Resolves once `watcher` is ready, with what closes it and clears the debounce timer. */
@@ -23,18 +22,15 @@ function whenReady(watcher: FSWatcher, timer: () => ReturnType<typeof setTimeout
  * scanned and those ignored by `.gitignore` are not walked. A burst of events settles after `debounceMs` (default 80)
  * without one (e.g. an AI saving several files).
  */
-export function createWorkspaceWatcher(
-    root: string,
-    options: { sources?: readonly string[]; respectGitignore?: boolean; debounceMs?: number } = {},
-): WorkspaceWatcher {
+export function createWorkspaceWatcher(root: string, options: { selection: SourceSelection; debounceMs?: number }): WorkspaceWatcher {
     return {
         subscribe(onChanged: (event: SourceEvent) => void): Promise<Unsubscribe> {
-            const scope = new SourceScope(root, options.sources ?? DEFAULT_SOURCES, options.respectGitignore ?? true);
+            const scope = new SourceScope(root, options.selection);
             const watcher = watch(root, {
                 ignoreInitial: true,
                 ignored: (p, stats) => {
                     if (stats?.isDirectory()) return p !== scope.root && !scope.includesDirectory(p);
-                    return IGNORED_DIRS.has(path.basename(p)) || (!!stats?.isFile() && scope.sourcePath(p) === undefined);
+                    return scope.ignoresName(p) || (!!stats?.isFile() && scope.sourcePath(p) === undefined);
                 },
             });
             let timer: ReturnType<typeof setTimeout> | undefined;

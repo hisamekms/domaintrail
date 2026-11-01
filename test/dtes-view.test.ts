@@ -6,12 +6,19 @@ import { startViewServer, type ViewServer } from '@domaintrail/composition';
 import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, stormingViewKey, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
 /** The view service of the workspace at `dir`, with the real adapters. */
 const viewService = (dir: string): ViewService =>
-    createViewService({ root: dir, engine, workspace: createWorkspaceReader(dir), layoutStore: createFileLayoutStore(dir), git: createGitRevisions(dir) });
+    createViewService({
+        root: dir,
+        engine,
+        workspace: createWorkspaceReader(dir, sourceSelection()),
+        layoutStore: createFileLayoutStore(dir),
+        git: createGitRevisions(dir),
+    });
 
 const engine = new ElkLayoutEngine();
 afterAll(() => engine.dispose());

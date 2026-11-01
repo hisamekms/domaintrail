@@ -20,6 +20,7 @@ import {
     toAgentReply,
 } from '@domaintrail/collaboration';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/modeling';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -87,7 +88,7 @@ async function session(root?: string, database: 'memory' | 'file' = 'memory', cl
     const deps: CollaborationDeps = {
         // 'memory': a database of its own, apart from the workspace; 'file': the workspace's session database
         uow: createUnitOfWork(await openSessionDatabase(database === 'memory' ? await workspace({}) : dir)),
-        workspace: createWorkspaceSnapshot(dir),
+        workspace: createWorkspaceSnapshot(dir, sourceSelection()),
         blobs: await openSessionBlobs(dir),
         validator: createModelValidator(),
         clock: { now: () => new Date(clock.t) },
@@ -725,7 +726,7 @@ describe('revisions', () => {
         const s = await session(root, 'file');
         const { id, start } = await started(s);
         // the same workspace with narrower sources: the revision's .dtes is not a source there
-        const narrow: CollaborationDeps = { ...s.deps, workspace: createWorkspaceSnapshot(root, ['sales/**/*.dt']) };
+        const narrow: CollaborationDeps = { ...s.deps, workspace: createWorkspaceSnapshot(root, sourceSelection(['sales/**/*.dt'])) };
         const use = createCollaboration(narrow);
         value(await use.takeRevision({ session: id, actor: actor(facilitator) }));
         const refused = error(await use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
