@@ -25,7 +25,7 @@ import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
 import type { ViewScope, ViewTarget } from './views';
 import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
-import { agentStatus, latestAt, streamItems, unreadCount } from './stream';
+import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
 import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
 
 /** The graph node of a shape on the canvas (`render.ts`: `n:<graph node ID>`). */
@@ -285,6 +285,7 @@ export function useSessionPage(input: {
                 <ChatLauncher
                     status={agentStatus(session.state.runs)}
                     unread={conversationOpen ? 0 : unreadCount(items, seen)}
+                    mentions={conversationOpen ? 0 : unreadMentions(items, seen, session.state, session.me.participant.id)}
                     onOpen={() => setConversationOpen(true)}
                 />
             ),

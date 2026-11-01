@@ -6,6 +6,7 @@ import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
+import type { PersonCandidate } from './mentions';
 import { targetKey, targetName, type NamingContext, type TargetDraft } from './targets';
 
 type RequestJson = SessionStateBody['requests'][number];
@@ -301,6 +302,44 @@ export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'fa
 export function unreadCount(items: readonly StreamItem[], seen: string | undefined): number {
     if (seen === undefined) return 0;
     return items.filter((i) => (i.kind === 'message' || i.kind === 'card') && changedAt(i) > seen).length;
+}
+
+/**
+ * Whether a message mentions me: it names me among its people, or names the facilitator while I hold that role. My
+ * own messages never do (I know what I wrote).
+ */
+export function mentionsMe(
+    request: Pick<RequestJson, 'author' | 'mentions'>,
+    state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>,
+    me: string,
+): boolean {
+    if (request.author === me) return false;
+    return request.mentions.includes(me) || (me === state.facilitatorHolder && request.mentions.includes(state.session.facilitator));
+}
+
+/** How many of the messages sent after `seen` mention me (`unreadCount`'s messages that ask for my attention). */
+export function unreadMentions(
+    items: readonly StreamItem[],
+    seen: string | undefined,
+    state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>,
+    me: string,
+): number {
+    if (seen === undefined) return 0;
+    return items.filter((i) => i.kind === 'message' && i.at > seen && mentionsMe(i.request, state, me)).length;
+}
+
+/**
+ * The people `@` offers: everyone in the session but me, online first then away, by name within each (the order of
+ * the header). The facilitator is one of them; no one else in the session: none.
+ */
+export function mentionablePeople(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): PersonCandidate[] {
+    // holding the facilitator's role, I am the facilitator's row too
+    const holding = me.participant.id === state.facilitatorHolder;
+    return headerParticipants(state, peers, me).flatMap((p): PersonCandidate[] =>
+        p.me || (holding && p.id === state.session.facilitator)
+            ? []
+            : [{ id: p.id, name: p.name, role: p.role, online: p.online, ...(p.avatarUrl && { avatarUrl: p.avatarUrl }) }],
+    );
 }
 
 /** When the stream last changed (its latest change), for `unreadCount`. */

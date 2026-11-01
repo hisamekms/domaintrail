@@ -40,11 +40,15 @@ import {
     composerKey,
     editText,
     insertMention,
+    insertPerson,
     matchCandidates,
+    matchPeople,
+    MAX_REQUEST_MENTIONS,
     MAX_REQUEST_TARGETS,
     mentionQuery,
     removeChip,
     type MentionCandidate,
+    type PersonCandidate,
 } from './mentions';
 import { useTargetNaming } from './naming';
 import { ParticipantsButton } from './participants';
@@ -54,7 +58,19 @@ import { parseReplyText, referenceText } from './references';
 import { isReplyable, replyReference, replyTargets, runNumber, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { latestRevision } from './state';
-import { agentStatus, elapsed, isFacilitator, participantNames, speakerName, streamItems, targetText, type AgentStatus, type StreamItem } from './stream';
+import {
+    agentStatus,
+    elapsed,
+    isFacilitator,
+    mentionablePeople,
+    mentionsMe,
+    participantNames,
+    speakerName,
+    streamItems,
+    targetText,
+    type AgentStatus,
+    type StreamItem,
+} from './stream';
 import { dismiss, NO_DISMISSALS, suggestions, targetsToSend, type Dismissals } from './suggestions';
 import { targetKey, type ModelTarget, type TargetDraft } from './targets';
 import { continued, isMac } from './views';
@@ -93,7 +109,7 @@ export function SessionChat(props: {
     composer: ComposerDraft;
     /** What the selection can be a request about: one target, or several for a selection of several shapes. */
     selectionTargets: readonly TargetDraft[];
-    /** What `@` offers. */
+    /** What `#` offers. */
     candidates: readonly MentionCandidate[];
     /** The composer is asked to take the focus (the selection was just confirmed with 💬 or `C`). */
     focusPending: boolean;
@@ -209,6 +225,10 @@ export function SessionChat(props: {
         });
     }, []);
 
+    // a person shown among the participants (a mention of them clicked): `n` changes on each click
+    const [personFocus, setPersonFocus] = useState<{ readonly id: string; readonly n: number } | undefined>();
+    const showPerson = useCallback((id: string): void => setPersonFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })), []);
+
     const context: ChatContextValue = {
         session,
         tx,
@@ -225,6 +245,7 @@ export function SessionChat(props: {
         hovered,
         hover,
         jump,
+        showPerson,
         replies,
     };
 
@@ -239,6 +260,7 @@ export function SessionChat(props: {
                     location={props.location}
                     viewScope={props.viewScope}
                     onOpenView={props.onOpenView}
+                    personFocus={personFocus}
                     onLeave={() => void leave()}
                     onClose={props.onClose}
                     tx={tx}
@@ -295,6 +317,7 @@ function ChatHeader(props: {
     location: ViewLocation;
     viewScope: ViewScope;
     onOpenView: (target: ViewTarget) => void;
+    personFocus: { readonly id: string; readonly n: number } | undefined;
     onLeave: () => void;
     onClose: () => void;
     tx: Tx;
@@ -305,7 +328,7 @@ function ChatHeader(props: {
     const runningRun = session.state.runs.find((r) => r.state === 'Running');
     return (
         <div className="chat-header">
-            <ParticipantsButton session={session} location={props.location} scope={props.viewScope} onOpenView={props.onOpenView} />
+            <ParticipantsButton session={session} location={props.location} scope={props.viewScope} onOpenView={props.onOpenView} focus={props.personFocus} />
             {/* idle says nothing: only running, a question or a queued run shows */}
             <span className="chat-status-slot" aria-live="polite">
                 {status.kind !== 'idle' && (
@@ -562,8 +585,10 @@ const MARK_GLYPH: Record<MarkState, string> = {
  * a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
-    const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump } = useChat();
+    const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
     const author = nameOf(r.author);
+    // it mentions me: a faint background in my stream only (it asks for my attention)
+    const toMe = mentionsMe(r, session.state, session.me.participant.id);
     const mine = r.author === session.me.participant.id;
     const facilitator = isFacilitator(session.state, r.author);
     const statuses = session.targets?.statuses[r.id];
@@ -621,7 +646,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     );
     return (
         <div
-            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${talk ? ' talk' : ''}`}
+            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${talk ? ' talk' : ''}${toMe ? ' mentions-me' : ''}`}
             onClickCapture={choose}
             // Shift / ⌘ chooses the message: no text selection
             onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}
@@ -643,7 +668,16 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 {r.replyTo !== undefined && <ReplyReferenceLine run={r.replyTo} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
                 <Clamped tx={tx}>
-                    <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
+                    <MentionedText
+                        body={r.body}
+                        targets={r.targets}
+                        statuses={statuses}
+                        onNavigate={onNavigate}
+                        mentions={r.mentions}
+                        nameOf={nameOf}
+                        onPerson={showPerson}
+                        tx={tx}
+                    />
                 </Clamped>
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
@@ -926,13 +960,14 @@ function fallbackSummary(run: ChangeUnit['runs'][number]['run'], nameOf: (id: st
 
 /**
  * The floating button opening the conversation while it is closed, with the agent's state as a mark (a spinner while
- * it runs, `?` while it waits for an answer) and how many messages and cards changed since the chat was last shown.
+ * it runs, `?` while it waits for an answer) and how many messages and cards changed since the chat was last shown —
+ * or, when some of those messages mention me, how many do (`@ 2`): the only sign that someone called me.
  */
-export function ChatLauncher(props: { status: AgentStatus; unread: number; onOpen: () => void }) {
+export function ChatLauncher(props: { status: AgentStatus; unread: number; mentions: number; onOpen: () => void }) {
     const t = useT();
     const tx = t.session;
-    const { status, unread } = props;
-    const label = tx.chat.launcher(unread);
+    const { status, unread, mentions } = props;
+    const label = tx.chat.launcher(unread, mentions);
     return (
         <button className={`chat-launcher status-${status.kind}`} onClick={props.onOpen} aria-label={label} data-tooltip={label}>
             <MessagesSquare size={20} aria-hidden />
@@ -942,10 +977,17 @@ export function ChatLauncher(props: { status: AgentStatus; unread: number; onOpe
                     ?
                 </span>
             )}
-            {unread > 0 && (
-                <span className="chat-launcher-count" aria-hidden>
-                    {unread}
+            {mentions > 0 ? (
+                <span className="chat-launcher-count mentions" aria-hidden>
+                    <span className="chat-launcher-at">@</span>
+                    {mentions}
                 </span>
+            ) : (
+                unread > 0 && (
+                    <span className="chat-launcher-count" aria-hidden>
+                        {unread}
+                    </span>
+                )
             )}
         </button>
     );
@@ -1029,6 +1071,25 @@ function Clamped({ children, tx }: { children: ReactNode; tx: Tx }) {
     );
 }
 
+/** A candidate of the composer's list: an element after `#`, a person after `@`. */
+type Suggestion =
+    | { readonly kind: 'element'; readonly key: string; readonly element: MentionCandidate }
+    | { readonly kind: 'person'; readonly key: string; readonly person: PersonCandidate };
+
+/** A person offered after `@`: their avatar and name, the facilitator marked, those away said so. */
+function PersonOption({ person, tx }: { person: PersonCandidate; tx: Tx }) {
+    return (
+        <>
+            <span className="chat-mention-person">
+                <Avatar id={person.id} name={person.name} {...(person.avatarUrl && { url: person.avatarUrl })} />
+                <span className="chat-mention-name">{person.name}</span>
+                {person.role === 'facilitator' && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
+            </span>
+            {!person.online && <span className="chat-mention-away muted">{tx.whereabouts.away}</span>}
+        </>
+    );
+}
+
 function Composer(props: {
     session: SessionData;
     composer: ComposerDraft;
@@ -1050,7 +1111,7 @@ function Composer(props: {
     const size = useComposerSize(input);
     const [caret, setCaret] = useState(0);
     const [active, setActive] = useState(0);
-    // the `@` whose candidates were closed with Esc: they stay closed until another `@`
+    // the `#` or `@` whose candidates were closed with Esc: they stay closed until another one
     const [dismissed, setDismissed] = useState<number | undefined>();
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
@@ -1059,8 +1120,14 @@ function Composer(props: {
     const [dismissals, setDismissals] = useState<Dismissals>(NO_DISMISSALS);
     const suggested = suggestions(value, selectionTargets, dismissals);
     const query = mentionQuery(value.text, caret);
-    const open = query !== undefined && query.start !== dismissed;
-    const matches = open ? matchCandidates(props.candidates, query.query) : [];
+    // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
+    const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
+    const open = query !== undefined && query.start !== dismissed && (query.sign === '#' || people.length > 0);
+    const matches: readonly Suggestion[] = !open
+        ? []
+        : query.sign === '#'
+          ? matchCandidates(props.candidates, query.query).map((c) => ({ kind: 'element', key: c.key, element: c }))
+          : matchPeople(people, query.query).map((p) => ({ kind: 'person', key: p.id, person: p }));
     const canSend = !sending && value.text.trim() !== '';
     const mac = isMac(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent);
     const nameOf = (target: TargetDraft): string => targetText(target, tx.workspace, naming);
@@ -1115,10 +1182,12 @@ function Composer(props: {
         setCaret(el.value.length);
     }, [replyFocus]);
 
-    const pick = (c: MentionCandidate | undefined): void => {
+    const pick = (c: Suggestion | undefined): void => {
         if (!c || !query) return;
-        const picked = insertMention(value, { start: query.start, end: caret }, c.target, c.mention);
-        if (!picked) return setNotice(tx.chat.targetsLimit(MAX_REQUEST_TARGETS));
+        const at = { start: query.start, end: caret };
+        const picked =
+            c.kind === 'element' ? insertMention(value, at, c.element.target, c.element.mention) : insertPerson(value, at, c.person.id, c.person.name);
+        if (!picked) return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
         setNotice(undefined);
         composer.setValue(picked.value);
         moveCaret(picked.caret);
@@ -1134,6 +1203,7 @@ function Composer(props: {
                 targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })),
                 body: value.text,
                 ...(reply && { replyTo: reply.run }),
+                ...(value.people.length > 0 && { mentions: value.people }),
             });
             await composer.clear();
             onReplyDone();
@@ -1164,14 +1234,16 @@ function Composer(props: {
             <div className="chat-composer-input">
                 {open && (
                     <ul className="chat-mentions motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
-                        {matches.length === 0 && <li className="chat-mention-none muted">{tx.chat.mentionNoMatch}</li>}
+                        {matches.length === 0 && (
+                            <li className="chat-mention-none muted">{query.sign === '#' ? tx.chat.mentionNoMatch : tx.chat.personNoMatch}</li>
+                        )}
                         {matches.map((c, i) => (
                             <li
                                 key={c.key}
                                 data-index={i}
                                 role="option"
                                 aria-selected={i === active}
-                                className={`chat-mention-option${i === active ? ' active' : ''}`}
+                                className={`chat-mention-option${c.kind === 'person' ? ' person' : ''}${i === active ? ' active' : ''}`}
                                 onMouseDown={(e) => {
                                     // keeps the focus (and the caret) in the text
                                     e.preventDefault();
@@ -1182,11 +1254,17 @@ function Composer(props: {
                                     setActive(i);
                                 }}
                             >
-                                <span className="chat-mention-name">{c.name}</span>
-                                <span className={`chat-mention-kind lang-${c.kind.language}`}>{kindOf(c)}</span>
-                                <span className="chat-mention-where muted">
-                                    {c.where} · {c.qualified}
-                                </span>
+                                {c.kind === 'element' ? (
+                                    <>
+                                        <span className="chat-mention-name">{c.element.name}</span>
+                                        <span className={`chat-mention-kind lang-${c.element.kind.language}`}>{kindOf(c.element)}</span>
+                                        <span className="chat-mention-where muted">
+                                            {c.element.where} · {c.element.qualified}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <PersonOption person={c.person} tx={tx} />
+                                )}
                             </li>
                         ))}
                     </ul>

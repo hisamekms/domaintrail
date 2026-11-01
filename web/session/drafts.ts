@@ -10,6 +10,8 @@ export interface Draft {
     readonly body: string;
     /** The composer's draft only: its targets (none: the whole workspace; absent in a draft saved before there were several). */
     readonly chips?: readonly ComposerChip[];
+    /** The composer's draft only: the people its text mentions (absent in a draft saved before people could be). */
+    readonly people?: readonly string[];
     /** Milliseconds since the epoch. */
     readonly createdAt: number;
     readonly updatedAt: number;

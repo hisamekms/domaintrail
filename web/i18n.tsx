@@ -491,7 +491,12 @@ const ja = {
         chat: {
             close: 'チャットを閉じる',
             open: 'チャットを開く',
-            launcher: (unread: number) => (unread > 0 ? `チャットを開く（新着 ${unread} 件）` : 'チャットを開く'),
+            launcher: (unread: number, mentions = 0) =>
+                mentions > 0
+                    ? `チャットを開く（あなた宛て ${mentions} 件、新着 ${unread} 件）`
+                    : unread > 0
+                      ? `チャットを開く（新着 ${unread} 件）`
+                      : 'チャットを開く',
             apply: 'アプライ（実行に入れる）',
             applyNow: 'アプライ',
             applyWithNote: '補足を付けてアプライ',
@@ -660,7 +665,9 @@ const ja = {
             addToRequest: (key: string) => `依頼に追加（${key}）`,
             mentionHint: '↑↓ で選び、Enter か Tab で決める（Esc で閉じる）',
             mentionNoMatch: '一致する要素がありません',
-            placeholder: '依頼の内容（@ で対象を挙げる）',
+            personNoMatch: '一致する参加者がいません',
+            mentionsLimit: (max: number) => `言及できるのは ${max} 人までです`,
+            placeholder: '依頼の内容（# で対象を挙げる、@ で人に声をかける）',
             sendHint: (keys: string) => `送る (${keys})`,
             participantsTitle: '参加者',
             offline: (n: number) => `オフライン (${n})`,
@@ -1133,7 +1140,8 @@ const en: Messages = {
         chat: {
             close: 'Close the chat',
             open: 'Open the chat',
-            launcher: (unread) => (unread > 0 ? `Open the chat (${unread} new)` : 'Open the chat'),
+            launcher: (unread, mentions = 0) =>
+                mentions > 0 ? `Open the chat (${mentions} for you, ${unread} new)` : unread > 0 ? `Open the chat (${unread} new)` : 'Open the chat',
             apply: 'Apply (queue a run)',
             applyNow: 'Apply',
             applyWithNote: 'Apply with a note',
@@ -1302,7 +1310,9 @@ const en: Messages = {
             addToRequest: (key) => `Add to the request (${key})`,
             mentionHint: '↑↓ to choose, Enter or Tab to pick (Esc closes)',
             mentionNoMatch: 'No matching element',
-            placeholder: 'What should change (@ names a target)',
+            personNoMatch: 'No matching participant',
+            mentionsLimit: (max) => `At most ${max} people`,
+            placeholder: 'What should change (# names a target, @ a person)',
             sendHint: (keys) => `Send (${keys})`,
             participantsTitle: 'Participants',
             offline: (n) => `Offline (${n})`,

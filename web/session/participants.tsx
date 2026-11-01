@@ -1,7 +1,8 @@
 // Who is in the session, behind one button of the chat's header (ADR 0026, Presence): the avatars and the count open a
 // list of everyone with where they are (this page, the same view, another view and which, offline), and a way to open
-// the view another participant is on (just the view: their camera and cursor are theirs).
-import { useRef, useState } from 'react';
+// the view another participant is on (just the view: their camera and cursor are theirs). A mention of a person clicked
+// in the chat opens the list at them, their row marked for a moment.
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useT } from '../i18n';
@@ -16,7 +17,14 @@ const AVATARS = 6;
 /** The first part of a label with a hint (`詳細 — すべての項目を表示` → `詳細`). */
 const short = (label: string): string => label.split(' — ')[0];
 
-export function ParticipantsButton(props: { session: SessionData; location: ViewLocation; scope: ViewScope; onOpenView: (target: ViewTarget) => void }) {
+export function ParticipantsButton(props: {
+    session: SessionData;
+    location: ViewLocation;
+    scope: ViewScope;
+    onOpenView: (target: ViewTarget) => void;
+    /** A person to show (a mention of them clicked): `n` changes on each click. */
+    focus?: { readonly id: string; readonly n: number };
+}) {
     const { session, scope } = props;
     const t = useT();
     const tx = t.session;
@@ -39,12 +47,31 @@ export function ParticipantsButton(props: { session: SessionData; location: View
     };
     const label = tx.chat.participantsOnline(online.length, rows.length);
 
+    // a mention clicked: the list opens (the offline part too, when they are away) at their row, marked for a moment
+    const { focus } = props;
+    const focusAway = focus !== undefined && offline.some((r) => r.id === focus.id);
+    useEffect(() => {
+        if (!focus) return;
+        setOpen(true);
+        if (focusAway) setOfflineOpen(true);
+        const frame = requestAnimationFrame(() => {
+            const el = root.current?.querySelector<HTMLElement>(`[data-participant-id="${CSS.escape(focus.id)}"]`);
+            if (!el) return;
+            el.scrollIntoView({ block: 'nearest' });
+            el.classList.add('chat-flash');
+            setTimeout(() => el.classList.remove('chat-flash'), 1600);
+        });
+        return () => cancelAnimationFrame(frame);
+        // each click once
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focus?.n]);
+
     const row = (r: ParticipantRow) => {
         const target = r.location && viewTargetOf(r.location);
         const name = target && viewName(target, words, scope);
         const openable = target !== undefined && canOpen(target, scope);
         return (
-            <li key={r.id} className={`chat-person where-${r.where}`} data-participant={r.name}>
+            <li key={r.id} className={`chat-person where-${r.where}`} data-participant={r.name} data-participant-id={r.id}>
                 <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} />
                 <span className="chat-person-main">
                     <span className="chat-person-name">

@@ -329,8 +329,8 @@ export function useComposerDraft(storage: DraftStorage, scope: DraftScope | unde
         storage.load(key).then(
             (loaded) => {
                 const draft = loaded.find((d) => d.id === COMPOSER_DRAFT);
-                // typing before the load finished wins; a draft saved before there were chips has none
-                if (!cancelled && draft) setValueState((v) => (isEmpty(v) ? { text: draft.body, chips: draft.chips ?? [] } : v));
+                // typing before the load finished wins; a draft saved before there were chips (or people) has none
+                if (!cancelled && draft) setValueState((v) => (isEmpty(v) ? { text: draft.body, chips: draft.chips ?? [], people: draft.people ?? [] } : v));
             },
             (e: unknown) => setError(message(e)),
         );
@@ -349,7 +349,7 @@ export function useComposerDraft(storage: DraftStorage, scope: DraftScope | unde
                 const now = Date.now();
                 const write = isEmpty(next)
                     ? storage.remove(key, COMPOSER_DRAFT)
-                    : storage.save(key, { ...newDraft(COMPOSER_DRAFT, WORKSPACE_TARGET, now), body: next.text, chips: next.chips });
+                    : storage.save(key, { ...newDraft(COMPOSER_DRAFT, WORKSPACE_TARGET, now), body: next.text, chips: next.chips, people: next.people });
                 write.then(
                     () => setError(undefined),
                     (e: unknown) => setError(message(e)),

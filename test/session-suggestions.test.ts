@@ -7,13 +7,13 @@ import type { TargetDraft } from '@domaintrail/web/session/targets';
 
 const dt = (element: string): TargetDraft => ({ target: { kind: 'DtElement', element }, label: element });
 const es = (local: string): TargetDraft => ({ target: { kind: 'DtesElement', storming: 'Returns', local } });
-const value = (chips: TargetDraft[], text = ''): ComposerValue => ({ text, chips: chips.map((target) => ({ target, mentioned: false })) });
+const value = (chips: TargetDraft[], text = ''): ComposerValue => ({ text, chips: chips.map((target) => ({ target, mentioned: false })), people: [] });
 const names = (ts: readonly TargetDraft[]): string[] =>
     ts.map((t) => (t.target.kind === 'DtElement' ? t.target.element : t.target.kind === 'DtesElement' ? t.target.local : ''));
 
 describe('suggested targets', () => {
     test('the selection not confirmed yet, each once, after the confirmed chips when sent', () => {
-        const v = value([dt('Sales.Order')], '@注文[1] を直す');
+        const v = value([dt('Sales.Order')], '#注文[1] を直す');
         const s = suggestions(v, [dt('Sales.Order'), es('ReturnRequested'), es('ReturnRequested'), dt('Sales.Customer')], NO_DISMISSALS);
         expect(names(s.targets)).toEqual(['ReturnRequested', 'Sales.Customer']);
         // the confirmed ones keep their numbers (the text's mentions), the suggestions follow

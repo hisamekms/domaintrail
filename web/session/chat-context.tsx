@@ -41,6 +41,8 @@ export interface ChatContextValue {
     readonly hover: (id: string | undefined) => void;
     /** Scrolls the stream to an item (`message:<id>`, `card:<key>`) and marks it for a moment. */
     readonly jump: (key: string) => void;
+    /** Opens the participants at a person (a mention of them was clicked), their row marked for a moment. */
+    readonly showPerson: (id: string) => void;
     /** Replies to runs: the reply being written, starting one (from an AI turn) and what a posted reply names. */
     readonly replies: {
         readonly draft: ReplyDraft | undefined;

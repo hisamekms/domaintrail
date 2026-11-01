@@ -1,5 +1,5 @@
 // Pieces the session's chat and the facilitator's panel share: avatars, errors, and a request's targets and body
-// (a line of its targets with each one's status, mentions as links).
+// (a line of its targets with each one's status, mentions of elements and people as links).
 import { Fragment } from 'react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
@@ -87,22 +87,46 @@ export function TargetChips(props: {
     );
 }
 
-/** A body with its mentions as links to their targets (named as the chips are); the rest stays text. */
+/**
+ * A body with its mentions as links: an element to its target (named as the chips are, `#注文`), a person to their row
+ * among the participants (`@佐藤`, by the name they have now); the rest stays text.
+ */
 export function MentionedText(props: {
     body: string;
     targets: readonly Snapshot[];
     statuses: readonly TargetStatus[] | undefined;
     onNavigate: (t: ModelTarget) => void;
+    /** The people the message mentions (`@name[pN]` is the N-th); none for a body that names no one. */
+    mentions?: readonly string[];
+    /** A person's name now. */
+    nameOf?: (id: string) => string;
+    /** Shows a mentioned person among the participants. */
+    onPerson?: (id: string) => void;
     tx: Tx;
 }) {
     const naming = useTargetNaming();
     const { targets, tx } = props;
+    const mentions = props.mentions ?? [];
     return (
         <>
-            {parseBody(props.body, targets.length).map((seg, i) => {
+            {parseBody(props.body, { targets: targets.length, people: mentions.length }).map((seg, i) => {
                 if (seg.kind === 'text') return <Fragment key={i}>{seg.text}</Fragment>;
+                if (seg.kind === 'person') {
+                    const id = mentions[seg.index];
+                    const name = `@${props.nameOf?.(id) ?? seg.name}`;
+                    const { onPerson } = props;
+                    return onPerson ? (
+                        <a key={i} className="chat-mention person" data-person={id} onClick={() => onPerson(id)}>
+                            {name}
+                        </a>
+                    ) : (
+                        <span key={i} className="chat-mention person">
+                            {name}
+                        </span>
+                    );
+                }
                 const target = targets[seg.index];
-                const name = `@${naming ? targetText(target, tx.workspace, naming) : seg.name}`;
+                const name = `#${naming ? targetText(target, tx.workspace, naming) : seg.name}`;
                 return props.statuses?.[seg.index] === 'current' ? (
                     <a key={i} className="chat-mention" onClick={() => props.onNavigate(target.target)}>
                         {name}

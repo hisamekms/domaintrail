@@ -1,18 +1,24 @@
-// The request composer's targets and mentions (ADR 0026, appendix "Requests with several targets"), without React.
+// The request composer's targets and mentions (ADR 0026, appendix "Requests with several targets", and amendment
+// "mentions of people"), without React.
 //
 // A request has 0 to 20 targets: the composer's chips, the single source of truth (no chip: the whole workspace). The
-// body can mention a target as `@name[n]`, n its number among the request's targets (from 1): picking a candidate after
-// `@` adds a chip and writes the mention; deleting every mention of a chip that came from a mention removes the chip;
-// removing a chip turns its mentions into plain text; the numbers follow the chips. The body stays plain text: the
-// stream reads the mentions back with `parseBody` and renders them as text and links, never as HTML.
+// body mentions a target as `#name[n]`, n its number among the request's targets (from 1): picking a candidate after
+// `#` adds a chip and writes the mention; deleting every mention of a chip that came from a mention removes the chip;
+// removing a chip turns its mentions into plain text; the numbers follow the chips. A body written before `#` named
+// elements has `@name[n]`: still read as a target. The body mentions a person as `@name[pN]`, the N-th of the people
+// it mentions (`people`, sent as `mentions`): picking one after `@` adds them, deleting their mentions removes them.
+// The body stays plain text: the stream reads the tokens back with `parseBody` (`domain/body.ts`) and renders them as
+// text and links, never as HTML.
 import { declarations } from '@domaintrail/modeling/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
+import { MAX_REQUEST_MENTIONS, plainBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration/domain/body';
 import { nameIn } from '../model-utils';
 import { targetKey, targetName, targetOfSelection, type NamingContext, type TargetDraft } from './targets';
 
-export { MAX_REQUEST_TARGETS };
+export { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS };
+export { parseBody, type BodySegment } from '@domaintrail/collaboration/domain/body';
 
 /** A target of the request being written: `mentioned` once the body mentioned it (then deleting its mentions removes it). */
 export interface ComposerChip {
@@ -20,74 +26,57 @@ export interface ComposerChip {
     readonly mentioned: boolean;
 }
 
-/** The request being written: its text and its targets. */
+/** The request being written: its text, its targets, and the people it mentions (participant IDs, `@name[pN]` the N-th). */
 export interface ComposerValue {
     readonly text: string;
     readonly chips: readonly ComposerChip[];
+    readonly people: readonly string[];
 }
 
-export const EMPTY_COMPOSER: ComposerValue = { text: '', chips: [] };
-
-/** `@name[n]` (or the full-width `＠` a Japanese IME types): a name without spaces, brackets or `@`, and a number 1–99. */
-const MENTION = /[@＠]([^\s@＠[\]]{1,80})\[([1-9]\d?)\]/gu;
-
-/** A piece of a body: text, or a mention of target `index` (0-based) written with `name`. */
-export type BodySegment = { readonly kind: 'text'; readonly text: string } | { readonly kind: 'mention'; readonly name: string; readonly index: number };
+export const EMPTY_COMPOSER: ComposerValue = { text: '', chips: [], people: [] };
 
 /**
- * A body as text and mentions. Only mentions of a target the request has (`index < count`) are mentions; anything
- * else stays text as it was written.
+ * A body as one reads it on one line: each element as `#name`, each person as `@name`, without their numbers. Only
+ * the targets the request has are elements; people are read whatever their number (a run's frozen request does not
+ * keep whom it mentioned).
  */
-export function parseBody(text: string, count: number): BodySegment[] {
-    const out: BodySegment[] = [];
-    let last = 0;
-    for (const m of text.matchAll(MENTION)) {
-        const index = Number(m[2]) - 1;
-        if (index >= count) continue;
-        if (m.index > last) out.push({ kind: 'text', text: text.slice(last, m.index) });
-        out.push({ kind: 'mention', name: m[1], index });
-        last = m.index + m[0].length;
-    }
-    if (last < text.length) out.push({ kind: 'text', text: text.slice(last) });
-    return out;
+export const bodyText = (text: string, targets: number, people = MAX_REQUEST_MENTIONS): string => plainBody(text, { targets, people });
+
+/** The numbers (0-based) of the targets, and of the people, a text mentions. */
+function mentionedIn(text: string): { readonly targets: Set<number>; readonly people: Set<number> } {
+    const targets = new Set<number>();
+    const people = new Set<number>();
+    for (const t of tokensIn(text)) (t.kind === 'element' ? targets : people).add(t.index);
+    return { targets, people };
 }
 
-/** A body as one reads it on one line: each mention as `@name`, without its number. */
-export const bodyText = (text: string, count: number): string =>
-    parseBody(text, count)
-        .map((seg) => (seg.kind === 'text' ? seg.text : `@${seg.name}`))
-        .join('');
+/** A name as a mention writes it: no spaces, brackets, `#` or `@`, at most 80 characters. */
+export const mentionName = tokenName;
 
-/** The numbers (0-based) of the targets a text mentions. */
-const mentionedIn = (text: string): Set<number> => new Set([...text.matchAll(MENTION)].map((m) => Number(m[2]) - 1));
-
-/** The text with each mention's number mapped: to another number, or (undefined) to its name as plain text. */
-function renumber(text: string, map: (index: number) => number | undefined): string {
-    return text.replace(MENTION, (_all, name: string, n: string) => {
-        const to = map(Number(n) - 1);
-        return to === undefined ? name : `@${name}[${to + 1}]`;
-    });
+/** What the caret is in: `#query` (an element) or `@query` (a person), from its sign to the caret. */
+export interface MentionQuery {
+    readonly sign: '#' | '@';
+    readonly start: number;
+    readonly query: string;
 }
 
-/** A name as a mention writes it: no spaces, brackets or `@`, at most 80 characters. */
-export const mentionName = (name: string): string => name.replace(/[\s@＠[\]]/gu, '').slice(0, 80) || '?';
-
-/** The `@query` the caret is in (from its `@` to the caret), if any: what the candidates are matched with. */
-export function mentionQuery(text: string, caret: number): { readonly start: number; readonly query: string } | undefined {
+/** The `#query` or `@query` the caret is in, if any: what the candidates are matched with. */
+export function mentionQuery(text: string, caret: number): MentionQuery | undefined {
     const before = text.slice(0, caret);
-    const at = Math.max(before.lastIndexOf('@'), before.lastIndexOf('＠'));
+    const at = Math.max(...['#', '＃', '@', '＠'].map((c) => before.lastIndexOf(c)));
     if (at < 0) return undefined;
     const query = before.slice(at + 1);
-    if (query.length > 40 || /[\s@＠[\]]/u.test(query)) return undefined;
-    // not inside a word such as an e-mail address
-    if (at > 0 && /[A-Za-z0-9._%+-]/.test(before[at - 1])) return undefined;
-    return { start: at, query };
+    if (query.length > 40 || /[\s#＃@＠[\]]/u.test(query)) return undefined;
+    // not inside a word such as an e-mail address or a URL's fragment
+    if (at > 0 && /[A-Za-z0-9._%+\-/]/.test(before[at - 1])) return undefined;
+    return { sign: before[at] === '#' || before[at] === '＃' ? '#' : '@', start: at, query };
 }
 
 /** Removes the chip at `index`: its mentions become plain text and the mentions after it are numbered down. */
 export function removeChip(value: ComposerValue, index: number): ComposerValue {
     return {
-        text: renumber(value.text, (n) => (n === index ? undefined : n > index ? n - 1 : n)),
+        ...value,
+        text: renumberTokens(value.text, 'element', (n) => (n === index ? undefined : n > index ? n - 1 : n)),
         chips: value.chips.filter((_, i) => i !== index),
     };
 }
@@ -97,17 +86,26 @@ function removeChips(value: ComposerValue, indexes: ReadonlySet<number>): Compos
     if (indexes.size === 0) return value;
     const kept = value.chips.map((_, i) => i).filter((i) => !indexes.has(i));
     const to = new Map(kept.map((old, i) => [old, i]));
-    return { text: renumber(value.text, (n) => to.get(n)), chips: kept.map((i) => value.chips[i]) };
+    return { ...value, text: renumberTokens(value.text, 'element', (n) => to.get(n)), chips: kept.map((i) => value.chips[i]) };
+}
+
+/** Forgets the people at `indexes` (their mentions are gone already); the mentions after them are numbered down. */
+function removePeople(value: ComposerValue, indexes: ReadonlySet<number>): ComposerValue {
+    if (indexes.size === 0) return value;
+    const kept = value.people.map((_, i) => i).filter((i) => !indexes.has(i));
+    const to = new Map(kept.map((old, i) => [old, i]));
+    return { ...value, text: renumberTokens(value.text, 'person', (n) => to.get(n)), people: kept.map((i) => value.people[i]) };
 }
 
 /**
  * The text edited: a chip that came from a mention goes once no mention of it is left (as if removed with ×, but its
- * mentions are gone already); chips added otherwise stay.
+ * mentions are gone already); chips added otherwise stay. A person goes once no mention of them is left.
  */
 export function editText(value: ComposerValue, text: string): ComposerValue {
     const mentioned = mentionedIn(text);
-    const gone = new Set(value.chips.flatMap((c, i) => (c.mentioned && !mentioned.has(i) ? [i] : [])));
-    return removeChips({ text, chips: value.chips }, gone);
+    const gone = new Set(value.chips.flatMap((c, i) => (c.mentioned && !mentioned.targets.has(i) ? [i] : [])));
+    const away = new Set(value.people.flatMap((_, i) => (mentioned.people.has(i) ? [] : [i])));
+    return removePeople(removeChips({ ...value, text }, gone), away);
 }
 
 /** The index of a target among the chips, if it is one. */
@@ -116,8 +114,13 @@ const indexOf = (chips: readonly ComposerChip[], target: TargetDraft): number =>
     return chips.findIndex((c) => targetKey(c.target.target) === key);
 };
 
+/** Writes `token` over the query from `start` to `end`, the caret after it. */
+function write(value: ComposerValue, at: { readonly start: number; readonly end: number }, token: string): { readonly text: string; readonly caret: number } {
+    return { text: value.text.slice(0, at.start) + token + value.text.slice(at.end), caret: at.start + token.length };
+}
+
 /**
- * Picks a candidate for the `@query` from `start` to `end`: writes `@name[n] ` there and makes the target chip n (the
+ * Picks a candidate for the `#query` from `start` to `end`: writes `#name[n] ` there and makes the target chip n (the
  * chip it already is, or a new one). Undefined when a new chip would pass the limit.
  */
 export function insertMention(
@@ -135,9 +138,29 @@ export function insertMention(
     } else if (!chips[index].mentioned) {
         chips = chips.map((c, i) => (i === index ? { ...c, mentioned: true } : c));
     }
-    const token = `@${mentionName(name)}[${index + 1}] `;
-    const text = value.text.slice(0, at.start) + token + value.text.slice(at.end);
-    return { value: { text, chips }, caret: at.start + token.length };
+    const { text, caret } = write(value, at, `#${mentionName(name)}[${index + 1}] `);
+    return { value: { ...value, text, chips }, caret };
+}
+
+/**
+ * Picks a person for the `@query` from `start` to `end`: writes `@name[pN] ` there, N their number among the people
+ * mentioned (the one they have, or the next). Undefined when one more would pass the limit.
+ */
+export function insertPerson(
+    value: ComposerValue,
+    at: { readonly start: number; readonly end: number },
+    person: string,
+    name: string,
+): { readonly value: ComposerValue; readonly caret: number } | undefined {
+    let index = value.people.indexOf(person);
+    let people = value.people;
+    if (index < 0) {
+        if (people.length >= MAX_REQUEST_MENTIONS) return undefined;
+        index = people.length;
+        people = [...people, person];
+    }
+    const { text, caret } = write(value, at, `@${mentionName(name)}[p${index + 1}] `);
+    return { value: { ...value, text, people }, caret };
 }
 
 /** Adds targets as chips (the selection's `+`): each once, up to the limit. `skipped`: how many did not fit. */
@@ -187,7 +210,7 @@ export function composerKey(e: KeyInput, menuOpen: boolean): ComposerKey {
     return 'none';
 }
 
-/** Something a request can be about, offered after `@`: a `.dt` element, state or command, or a storming's note. */
+/** Something a request can be about, offered after `#`: a `.dt` element, state or command, or a storming's note. */
 export interface MentionCandidate {
     readonly key: string;
     readonly target: TargetDraft;
@@ -209,7 +232,7 @@ export interface MentionCandidate {
 const NOT_NOTES = new Set(['timeline', 'group']);
 
 /**
- * Everything `@` offers: the model's elements with their states and commands, and the stormings' notes (not their
+ * Everything `#` offers: the model's elements with their states and commands, and the stormings' notes (not their
  * timelines or groups; an occurrence is added from a timeline's view with the selection's `+`).
  */
 export function mentionCandidates(
@@ -275,4 +298,29 @@ export function matchCandidates(candidates: readonly MentionCandidate[], query: 
     });
     scored.sort((a, b) => a.best - b.best || a.c.name.length - b.c.name.length || a.c.name.localeCompare(b.c.name));
     return scored.slice(0, limit).map(({ c }) => c);
+}
+
+/** Someone a message can mention, offered after `@`: a participant of the session but me. */
+export interface PersonCandidate {
+    readonly id: string;
+    readonly name: string;
+    readonly role: 'facilitator' | 'participant';
+    readonly online: boolean;
+    readonly avatarUrl?: string;
+}
+
+/**
+ * The people `@` offers, best first for a query: whose name starts with it, contains it, or has its letters in order;
+ * among equals, those online before those away (the order they are given in). None (no one else is in the session, or
+ * there is no session): `@` offers nothing.
+ */
+export function matchPeople(people: readonly PersonCandidate[], query: string, limit = 30): PersonCandidate[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return people.slice(0, limit);
+    const scored = people.flatMap((p, i) => {
+        const best = score(p.name, q);
+        return best === undefined ? [] : [{ p, best, i }];
+    });
+    scored.sort((a, b) => a.best - b.best || a.i - b.i);
+    return scored.slice(0, limit).map(({ p }) => p);
 }

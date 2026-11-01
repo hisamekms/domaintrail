@@ -5629,3 +5629,40 @@ del.was.block {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
+
+/* ---------- mentions of people and elements ---------- */
+/* a person offered after @: a small avatar, the name, the facilitator marked; those away say so at the right */
+.chat-mention-option.person {
+    align-items: center;
+}
+.chat-mention-person {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.chat-mention-person .session-avatar {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: 0.625rem;
+}
+.chat-mention-away {
+    align-self: center;
+    font-size: 0.6875rem;
+}
+/* a message that mentions me, in my stream only: a faint blue wash (it asks for my attention). Not violet, which is
+   what can be clicked, nor amber, which is a question waiting for an answer */
+.chat-row.mentions-me:not(.paired, .selected) {
+    background: var(--blue-wash);
+    box-shadow: inset 2px 0 0 var(--blue-tint);
+}
+/* the launcher's count when messages mention me: `@ 2`, in place of the count of new items */
+.chat-launcher-count.mentions {
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+}
+.chat-launcher-at {
+    font-weight: 600;
+    opacity: 0.85;
+}
