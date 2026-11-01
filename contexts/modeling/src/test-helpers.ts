@@ -73,9 +73,9 @@ export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
     const written = (rule: (model: SourceModel, rules: RuleSink) => void) => (): void => rule(model, rules);
     for (const run of [
         written(checkNames),
-        ast(checkShared),
-        ast(checkStructure),
-        ast(checkUnions),
+        written(checkShared),
+        written(checkStructure),
+        written(checkUnions),
         written(checkFieldSets),
         written(checkVerified),
         written(checkCommands),

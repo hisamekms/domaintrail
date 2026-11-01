@@ -112,7 +112,7 @@ export const MAP: Record<string, Module> = {
             // T10 (ADR 0027, Modeling: every checker moves onto the typed model): the checkers that still read the AST,
             // its index and the diagnostic sink from `infrastructure/syntax/` (and Langium), one entry per file; each
             // checker's task removes its entry
-            syntax: ['domain/rules/labels.ts', 'domain/rules/shared.ts', 'domain/rules/structure.ts', 'domain/rules/unions.ts'],
+            syntax: ['domain/rules/labels.ts'],
         },
     },
     storming: {

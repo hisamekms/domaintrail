@@ -26,7 +26,6 @@ import type { DomainModel } from '../domain/model.js';
 import type { SourceModel } from '../domain/source-model.js';
 import { RuleSink } from '../domain/diagnostics.js';
 import type { ModelingRuleId } from '../domain/rule-ids.js';
-import { RuleSink } from '../domain/diagnostics.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';
 import { checkEventIds } from '../domain/rules/events.js';
 import { checkFieldSets } from '../domain/rules/field-sets.js';
@@ -139,29 +138,16 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkNames(sourceModel, new RuleSink(sink.items));
         checkShared(sourceModel, new RuleSink(sink.items));
         checkStructure(sourceModel, new RuleSink(sink.items));
-<<<<<<< HEAD
-        checkUnions(index, sink);
-        checkFieldSets(sourceModel!, new RuleSink(sink.items));
-        checkVerified(sourceModel!, new RuleSink(sink.items));
-        checkCommands(sourceModel!, new RuleSink(sink.items));
-        checkFactoryIds(sourceModel!, new RuleSink(sink.items));
-        checkChanges(sourceModel!, new RuleSink(sink.items));
-        checkEventIds(sourceModel!, new RuleSink(sink.items));
-        checkPayloadNames(sourceModel!, new RuleSink(sink.items));
-        checkPolicies(sourceModel!, new RuleSink(sink.items));
-        checkInvariants(sourceModel!, new RuleSink(sink.items));
-=======
         checkUnions(sourceModel, new RuleSink(sink.items));
-        checkFieldSets(index, sink);
-        checkVerified(index, sink);
-        checkCommands(index, sink);
-        checkFactoryIds(index, sink);
-        checkChanges(index, sink);
-        checkEventIds(index, sink);
-        checkPayloadNames(index, sink);
-        checkPolicies(index, sink);
-        checkInvariants(index, sink);
->>>>>>> 2195985 (refactor(modeling): check unions on the model as written)
+        checkFieldSets(sourceModel, new RuleSink(sink.items));
+        checkVerified(sourceModel, new RuleSink(sink.items));
+        checkCommands(sourceModel, new RuleSink(sink.items));
+        checkFactoryIds(sourceModel, new RuleSink(sink.items));
+        checkChanges(sourceModel, new RuleSink(sink.items));
+        checkEventIds(sourceModel, new RuleSink(sink.items));
+        checkPayloadNames(sourceModel, new RuleSink(sink.items));
+        checkPolicies(sourceModel, new RuleSink(sink.items));
+        checkInvariants(sourceModel, new RuleSink(sink.items));
         checkLabels(index, sink);
         diagnostics.push(...sink.items);
     }
