@@ -2492,10 +2492,11 @@ gets every vote and reaction with the session's state.
 
 **Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
 whole workspace, and such a message shows no target line (nor the composer any chip). A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
-element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `@`
+element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `#`
 to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
-Enter or Tab, Esc; Japanese input works: a candidate is never picked while the IME converts): it becomes a chip under
-the text and `@name[n]` in the text, n its number. The chips are the request's targets: delete every mention of one to
+Enter or Tab, Esc; Japanese input works, `＃` too: a candidate is never picked while the IME converts): it becomes a
+chip under the text and `#name[n]` in the text, n its number. (Messages written before `#` named elements have
+`@name[n]`: they still read as elements.) The chips are the request's targets: delete every mention of one to
 drop it, or remove it with ×, which leaves its mentions as plain text. What you select (on the canvas or in the
 explorer) is suggested as dashed chips: sending makes them targets, × drops a suggestion until the selection changes;
 the 💬 button next to the selection on the canvas, or `C`, makes them chips and puts the caret in the text. Selecting a
@@ -2505,8 +2506,17 @@ text and chips you are writing stay in your browser (IndexedDB, per session and 
 sent message never changes. (Sessions from before kept a *dismissed* mark on some requests; they load and show as
 messages, and the page no longer dismisses.) Each target shows whether it is still in the sources
 (`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
-would be in does not parse. The agent sees each request's targets numbered from 1, so `@注文[1]` in one request never
+would be in does not parse. The agent sees each request's targets numbered from 1, so `#注文[1]` in one request never
 means another request's target.
+
+**Mentioning people.** Type `@` in the composer to mention someone in the session: the list offers the others —
+online first, then those away, the facilitator among them, never you — with their avatar and name; it does not open
+when no one else is in the session. Picking writes `@name[pN]` (shown as `@佐藤`, by the name they have now) and the
+message names them (up to 20 people; the server checks each is a participant of the session). In the stream a
+mentioned person is a link that opens the participants at them. The person mentioned sees that message with a faint
+blue background in their own stream, and while their chat is closed its floating button shows `@ 2` for the new
+messages that mention them instead of the count of new items. Nothing else notifies: no sound, no e-mail. The agent
+reads a person mentioned as a plain `@name`, never as a target.
 
 **Runs.** A run is up to 100 applied messages (requests) with the facilitator's note if any (up to 4,000
 characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.

@@ -494,7 +494,8 @@ a meeting talk about several things at once ("give 注文 the 顧客's address")
   the session (`UnknownRevision` names `targets[i].sourceRevision`). The former `{ target, body }` is still taken as a
   list of one, or none for the workspace's target; both at once is refused. `GET /api/session/targets` answers a status
   per target, in the request's order: `statuses: { [request]: TargetStatus[] }` (empty for the whole workspace).
-- **Mentions.** The body stays plain text. A mention is `@name[n]`: `n` is the number of one of *that request's*
+- **Mentions.** (Amended: elements are now written `#name[n]`, and `@` mentions people — see "mentions of people"
+  below.) The body stays plain text. A mention is `@name[n]`: `n` is the number of one of *that request's*
   targets, from 1; the name has no spaces, brackets or `@` and is only what the writer saw (the target's label or
   name). A mention of a number the request does not have is text. The page renders mentions as links to their target
   (named in the current display setting), never as markup; the agent's prompt lists each request's targets numbered
@@ -820,3 +821,40 @@ note is written by hand. The pick is now part of the frozen input.
   stored before loads unchanged (tested, and on a copy of a live session's database). Runs picked through the note
   only (between the messages appendix and this one, never released) show no ✓: their note line still says what was
   asked.
+
+## Appendix: mentions of people (amendment)
+
+*Decided by the maintainer*: in the composer `#` names elements (what `@` did) and `@` names people, so that a
+participant can call someone's attention to a message. Run references by `#3` were considered and dropped.
+
+- **Tokens** (`domain/body.ts`, pure, read the same way by the page, the prompt and the classifier). `#name[n]` is
+  target n of the request; `@name[n]`, as bodies were written before, still reads as target n — nothing stored is
+  rewritten, and a legacy body renders as the new one does. `@name[pN]` is the N-th person of the request's `mentions`.
+  The full-width `＃` and `＠` count; a name has no spaces, brackets, `#` or `@`; a token whose number the request does
+  not have is text. A person written with `#` is not a token.
+- **Model.** `Request.mentions: ParticipantId[0..20]` and `RequestSent.mentions`, invariants `atMostTwentyMentions`
+  and `distinctMentions`. `send` takes the verified `MentionableParticipant` (`MentionedNotAParticipant`): anyone who
+  joined the session, online or not, the facilitator too. Not frozen into the run's input: the agent only reads the
+  name. **No migration**: requests are stored as JSON; a request and its `RequestSent` written before read as
+  `mentions: []` (`infrastructure/legacy.ts`, tested on the fixture of former rows).
+- **API.** `POST /api/session/requests` takes `mentions` (participant IDs): 400 with the field when it is not a list
+  of at most 20 distinct IDs, 400 `MentionedNotAParticipant` (also `TooManyMentions`, `DuplicateMention` from the
+  command).
+- **Prompt and classifier.** Rule 1 says `#name[n]` (`@name[n]` in older requests) means target n and that a plain
+  `@name` is a person; the request's body is given with each person as `@name` (`peopleAsNames`), inside the JSON block
+  as before. The classifier is given the body with its mentions as names (`plainBody(…, true)`: `#注文[1]` → `注文`).
+- **Composer** (`web/session/mentions.ts`). `#` offers the elements as `@` did and writes `#name[n] `. `@` offers the
+  others in the session (`mentionablePeople`: online first, then away, by name; the facilitator included; never me,
+  nor the facilitator's row while I hold the role), with avatar and name; with no one else (or no session) it opens
+  nothing. Picking writes `@name[pN] ` and adds the person to the composer's `people` (kept in the draft); deleting
+  every mention of a person forgets them and renumbers the rest, as chips do. The list is capped to the room above the
+  text, so it never covers the chat's header however tall the composer is.
+- **Stream.** An element reads `#注文` (a link, as before); a person `@佐藤` by their name now, a violet link (it does
+  something: it opens the participants at their row, the offline part opened when they are away, the row flashed),
+  kept on one line. A message that mentions me (`mentionsMe`: it names me, or the facilitator while I hold the role;
+  never my own) has a faint `--blue-wash` background with a thin `--blue-tint` edge in my stream only — not violet,
+  which is what can be clicked, nor amber, which is a question waiting for an answer. While the chat is closed, its
+  launcher shows `@ n` (`unreadMentions`: messages since the chat was last shown that mention me) in place of the count
+  of new items, and its label says so. Nothing else notifies.
+- **Solo.** Without a session there is no chat; in a session alone, `@` offers no one.
+

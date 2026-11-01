@@ -171,7 +171,9 @@ The chat has two views:
   (an answer, an alternative) one under the other and a quote of each message it applied (with the reply's mark when
   it applied several) — the
   revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target line),
-  picked with `@` or added from the selection, whose unsent text and targets stay in the browser. An applied message
+  picked with `#` or added from the selection, whose unsent text and targets stay in the browser; `@` mentions a
+  participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
+  background in your stream, and the closed chat's button shows `@ n` for the new ones. An applied message
   shows its latest run's mark (`✓ #3`). The facilitator applies messages from the stream (⤓, ▾ with a note, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
   restore and comparison from a card's ⋯ and the session's actions from the head's ⋯.
