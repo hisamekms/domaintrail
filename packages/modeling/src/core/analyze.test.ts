@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from './analyze.js';
+import { analyzeDomain } from './analyze.js';
 import { check, checkSales, codes, exampleSources, only } from '../test-helpers.js';
 
 const ORDER = `
@@ -16,20 +16,14 @@ const ORDER = `
 `;
 
 describe('examples', () => {
-    test('the shop example is valid across multiple files and contexts, with its stormings', async () => {
-        const a = await analyze(await exampleSources());
-        expect(a.files).toEqual([
-            'billing/context.dt',
-            'billing/invoice.dt',
-            'common/context.dt',
-            'sales/context.dt',
-            'sales/customer.dt',
-            'sales/order.dt',
-            'stormings/order-to-cash.dtes',
-            'stormings/returns.dtes',
-        ]);
+    test("Modeling's analysis takes the .dt sources alone, and leaves the generation's checks to the project analysis", async () => {
+        const a = await analyzeDomain((await exampleSources()).filter((s) => s.path.endsWith('.dt')));
+        expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
         expect(a.diagnostics).toEqual([]);
-        expect(a.ok).toBe(true);
+        expect(a.syntaxOk).toBe(true);
+        expect(a.model?.elements['Sales.Order']).toBeDefined();
+        const clash = await analyzeDomain([{ path: 'sales.dt', text: `context Sales {\n${ORDER} value FinishOrder\n}\n` }]);
+        expect(clash.diagnostics.filter((d) => d.code === 'M011')).toEqual([]);
     });
 
     test('a context can be split across files; other contexts need qualified names', async () => {
@@ -53,9 +47,9 @@ describe('diagnostics carry file position and rule ID', () => {
     });
 
     test('an unexpected end of file is named as such, not as an empty token', async () => {
-        const unclosed = await analyze([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {' }]);
+        const unclosed = await analyzeDomain([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {' }]);
         expect(unclosed.diagnostics.map((d) => d.message)).toEqual(["Expecting token of type '}' but found end of file."]);
-        const noAlternative = await analyze([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {\n    command' }]);
+        const noAlternative = await analyzeDomain([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {\n    command' }]);
         expect(noAlternative.diagnostics.map((d) => d.message)).toEqual([expect.stringMatching(/\nbut found end of file$/)]);
     });
 
@@ -247,30 +241,6 @@ describe('commands (M006, M007)', () => {
             "Cannot resolve event 'Ghost' in this context (use Context.Name for other contexts).",
             "Cannot resolve event 'Oops' in this context (use Context.Name for other contexts).",
             "Cannot resolve error 'Done2' in this context (use Context.Name for other contexts).",
-        ]);
-    });
-});
-
-describe('generated TypeScript names (M011)', () => {
-    test('collision between a generated command type and a declared type', async () => {
-        const a = await checkSales(`${ORDER} value FinishOrder`);
-        expect(only(a, 'M011')[0].message).toBe("Generated TypeScript name 'FinishOrder' for value object 'FinishOrder' collides with command 'Order.finish'.");
-    });
-
-    test('collision with the decision of a command, and with the shape of an aggregate', async () => {
-        const a = await checkSales(`${ORDER} value FinishOrderDecision value OrderShape`);
-        expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Generated TypeScript name 'FinishOrderDecision' for value object 'FinishOrderDecision' collides with the decision of 'Order.finish'.",
-            "Generated TypeScript name 'OrderShape' for value object 'OrderShape' collides with the shape of 'Order'.",
-        ]);
-    });
-
-    test('reserved discriminant and parameter names', async () => {
-        const a = await checkSales(`${ORDER.replace('finish(at: Timestamp)', 'finish(order: Timestamp, default: Int)')} event E { type: String }`);
-        expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Parameter 'order' of FinishOrder collides with the aggregate parameter 'order'.",
-            "Parameter name 'default' is a reserved word in TypeScript.",
-            "Field 'type' is reserved for the discriminant of generated event types.",
         ]);
     });
 });

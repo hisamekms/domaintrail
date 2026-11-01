@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatDiagnostic, jsonDiagnostic } from './diagnostics.js';
+import { dedupeDiagnostics, formatDiagnostic, jsonDiagnostic } from './diagnostics.js';
 
 describe('output of a diagnostic', () => {
     const d = {
@@ -28,5 +28,22 @@ describe('output of a diagnostic', () => {
             message: "count() requires a collection, but got 'Money'.",
         });
         expect(jsonDiagnostic({ ...d, hint: 'x' }).hint).toBe('x');
+    });
+});
+
+describe('dedupeDiagnostics', () => {
+    const d = {
+        file: 'a.dt',
+        start: { line: 1, column: 1 },
+        end: { line: 1, column: 5 },
+        severity: 'error' as const,
+        code: 'M001' as const,
+        message: "Cannot resolve type 'X'.",
+    };
+
+    test('keeps the first of those at the same place with the same rule and message, in order', () => {
+        const other = { ...d, message: "Cannot resolve type 'Y'." };
+        const elsewhere = { ...d, start: { line: 2, column: 1 } };
+        expect(dedupeDiagnostics([d, other, { ...d, hint: 'z' }, elsewhere])).toEqual([d, other, elsewhere]);
     });
 });

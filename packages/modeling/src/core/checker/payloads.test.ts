@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../analyze.js';
+import { analyze } from '../../analysis/analyze.js';
 import { checkSales, exampleSources, only } from '../../test-helpers.js';
 
 /** The M022 messages of a context body, each with its hint. */

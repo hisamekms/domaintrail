@@ -1,7 +1,7 @@
 // Helpers of Modeling's unit tests: analyses of inline sources and of examples/shop.
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type Analysis } from './core/analyze.js';
+import { analyze, type Analysis } from './analysis/analyze.js';
 import type { Diagnostic } from './kernel/diagnostics.js';
 import type { SourceFile } from './kernel/source.js';
 

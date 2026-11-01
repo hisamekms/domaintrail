@@ -113,3 +113,14 @@ export function jsonDiagnostic(d: Diagnostic): JsonDiagnostic {
 export function compareDiagnostics(a: Diagnostic, b: Diagnostic): number {
     return a.file.localeCompare(b.file) || a.start.line - b.start.line || a.start.column - b.start.column || a.code.localeCompare(b.code);
 }
+
+/** The diagnostics without repeats: the first of those at the same place with the same rule and message. */
+export function dedupeDiagnostics(items: readonly Diagnostic[]): Diagnostic[] {
+    const seen = new Set<string>();
+    return items.filter((d) => {
+        const key = `${d.file}:${d.start.line}:${d.start.column}:${d.code}:${d.message}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from './analyze.js';
+import { analyze } from '../analysis/analyze.js';
 import { generateTypeScript } from '../generator/typescript.js';
 import { check, codes, exampleSources, only } from '../test-helpers.js';
 

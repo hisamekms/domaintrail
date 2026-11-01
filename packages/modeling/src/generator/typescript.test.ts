@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { analyze } from '../core/analyze.js';
+import { analyze } from '../analysis/analyze.js';
 import { generateTypeScript } from './typescript.js';
 import { check, exampleSources } from '../test-helpers.js';
 

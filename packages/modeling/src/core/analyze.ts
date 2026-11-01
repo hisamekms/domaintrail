@@ -18,7 +18,6 @@ import {
     type Model,
     type Policy,
 } from '../language/generated/ast.js';
-import { analyzeStormings, type StormingAnalysis } from '../storming/analyze.js';
 import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
@@ -33,36 +32,29 @@ import { checkPayloadNames } from './checker/payloads.js';
 import { checkPolicies } from './checker/policies.js';
 import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
-import { checkTsNames } from './checker/tsnames.js';
 import { checkUnions } from './checker/unions.js';
 import { checkVerified } from './checker/verified.js';
-import { compareDiagnostics, hasErrors, type Diagnostic, type RuleId } from '../kernel/diagnostics.js';
+import { compareDiagnostics, dedupeDiagnostics, type Diagnostic, type RuleId } from '../kernel/diagnostics.js';
 import type { SourceFile } from '../kernel/source.js';
 import { didYouMean, suggestFrom, type Candidate } from '../kernel/suggest.js';
-import { DiagnosticSink } from './diagnostic-sink.js';
+import { DiagnosticSink, type FileResolver } from './diagnostic-sink.js';
 import { ModelIndex, commandsOf, statesOf } from './model-index.js';
 
-/** Whether a source is an Event Storming file (`.dtes`, ADR 0024); every other source is a `.dt` file. */
-export function isStormingFile(file: string): boolean {
-    return file.endsWith('.dtes');
-}
-
-export interface Analysis {
-    /** Every source analyzed, `.dt` and `.dtes`. */
+/** Modeling's analysis of the `.dt` sources of a workspace: what the project analysis (`analysis/analyze.ts`) builds on. */
+export interface DomainAnalysis {
+    /** The `.dt` sources analyzed. */
     files: string[];
     /** The `.dt` documents. */
     documents: LangiumDocument<Model>[];
     index: ModelIndex;
-    /** The diagnostics of the `.dt` and the `.dtes` sources, sorted. */
+    /** The diagnostics of the `.dt` sources, sorted: syntax, linking and Modeling's rules. */
     diagnostics: Diagnostic[];
-    /** True when every `.dt` file parsed without lexer/parser errors (a `.dtes` syntax error does not count). */
+    /** True when every `.dt` file parsed without lexer/parser errors. */
     syntaxOk: boolean;
-    /** True when there are no error-level diagnostics at all, in `.dt` or `.dtes` files. */
-    ok: boolean;
     /** Typed Model; present whenever the `.dt` sources parse (semantic errors are tolerated). */
     model?: DomainModel;
-    /** The `.dtes` sources (ADR 0024), checked against `model`. */
-    stormings: StormingAnalysis;
+    /** The path handed in for a document's URI, for the checks that report on the documents afterwards. */
+    resolveFile: FileResolver;
 }
 
 /** Maps the property of an unresolved cross-reference to the rule that covers it. */
@@ -76,11 +68,10 @@ const LINK_RULES: Record<string, RuleId> = {
 };
 
 /**
- * Parses, links and validates a set of `.dt` and `.dtes` sources as one workspace. The `.dtes` sources (by extension) are
- * analyzed after the `.dt` ones, against their Typed Model.
+ * Parses, links and validates a set of `.dt` sources as one workspace with Modeling's rules. The rules of other
+ * modules (Storming's, the generated TypeScript names) are run by the project analysis.
  */
-export async function analyze(allSources: readonly SourceFile[]): Promise<Analysis> {
-    const sources = allSources.filter((s) => !isStormingFile(s.path));
+export async function analyzeDomain(sources: readonly SourceFile[]): Promise<DomainAnalysis> {
     const { shared } = createDomainServices();
     const factory = shared.workspace.LangiumDocumentFactory;
     const fileOf = new Map<string, string>();
@@ -145,27 +136,20 @@ export async function analyze(allSources: readonly SourceFile[]): Promise<Analys
         checkPayloadNames(index, sink);
         checkPolicies(index, sink);
         checkInvariants(index, sink);
-        checkTsNames(index, sink);
         checkLabels(index, sink);
         diagnostics.push(...sink.items);
     }
 
     const model = syntaxOk ? buildModel(index, resolveFile) : undefined;
-    const stormings = await analyzeStormings(
-        allSources.filter((s) => isStormingFile(s.path)),
-        model,
-    );
-    diagnostics.push(...stormings.diagnostics);
     diagnostics.sort(compareDiagnostics);
     return {
-        files: allSources.map((s) => s.path),
+        files: sources.map((s) => s.path),
         documents,
         index,
-        diagnostics: dedupe(diagnostics),
+        diagnostics: dedupeDiagnostics(diagnostics),
         syntaxOk,
-        ok: syntaxOk && !hasErrors(diagnostics),
         model,
-        stormings,
+        resolveFile,
     };
 }
 
@@ -284,14 +268,4 @@ function nodeAt(doc: LangiumDocument, line: number, character: number): AstNode 
         node = next;
     }
     return node.astNode;
-}
-
-function dedupe(items: Diagnostic[]): Diagnostic[] {
-    const seen = new Set<string>();
-    return items.filter((d) => {
-        const key = `${d.file}:${d.start.line}:${d.start.column}:${d.code}:${d.message}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
 }

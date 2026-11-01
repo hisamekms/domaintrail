@@ -126,10 +126,10 @@ export const MAP: Record<string, Module> = {
         upstream: ['modeling'],
         exceptions: {
             'public-surface': [
-                // the project analysis (`isStormingFile`, `analyze`): the capability `analysis` after T4, which a
-                // context may not import; the validator goes behind Collaboration's ModelValidator port, implemented in
-                // the app (T4, T8)
-                '@domaintrail/modeling/core/analyze',
+                // the project analysis (`isStormingFile`, `analyze`; modeling's `analysis/` since T4): the capability
+                // `analysis`, which a context may not import; the validator goes behind Collaboration's ModelValidator
+                // port, implemented in the app (T8)
+                '@domaintrail/modeling/analysis/analyze',
                 // not Modeling's language: the rule of Collaboration's `Emoji` primitive (`isNormalEmoji`) and the
                 // `session.classifier` setting (`ClefModel`) move to Collaboration (T6)
                 '@domaintrail/modeling/core/emoji',

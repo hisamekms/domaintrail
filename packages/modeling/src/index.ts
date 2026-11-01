@@ -1,7 +1,7 @@
 // The public surface of @domaintrail/modeling (the `.` export; ADR 0027, Dependency rules): Modeling's and Storming's
 // published language, the kernel, then the use cases the apps and capabilities call. Storming is part of this package
-// until T8 (contexts/storming), the kernel until T8 (shared/kernel), the analysis until T4 (capabilities/analysis), the
-// generator until T8 (capabilities/generation).
+// until T8 (contexts/storming), the kernel until T8 (shared/kernel), the project analysis (`analysis/`) until T8
+// (capabilities/analysis), the generator until T8 (capabilities/generation).
 //
 // A downstream context takes only the published language and the kernel (the sections marked so; `published` and
 // `kernel` in test/architecture/map.ts). The other sections are for the apps and capabilities; what is not Modeling's
@@ -91,8 +91,8 @@ export {
     type TimelineStep,
 } from './storming/ir.js';
 
-// ---- use cases: the project analysis (T4: capabilities/analysis) ------------------------------------------------
-export { analyze, isStormingFile, type Analysis } from './core/analyze.js';
+// ---- use cases: the project analysis (T8: capabilities/analysis) ------------------------------------------------
+export { analyze, isStormingFile, type Analysis } from './analysis/analyze.js';
 
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './format/format.js';
