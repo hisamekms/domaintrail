@@ -1,6 +1,7 @@
 // `dt session start` (ADR 0026, S4): the Live View exactly as `dt view` serves it, plus a collaboration session in the
 // same HTTP process (its REST API, its WebSocket messages, its identities), and the agent API on a listener of its
 // own bound to 127.0.0.1. One open session per workspace: an open session is resumed, else one is started.
+import { plainBody } from '@domaintrail/collaboration/domain/body';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createSessionAccess, type SessionAccess } from '@domaintrail/collaboration/application/access';
@@ -318,7 +319,13 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             publish: (message) => hub.publish(message),
             after: (entries) => {
                 agent.wake();
-                for (const e of entries) if (e.event.type === 'RequestSent') classifications?.classify(e.event.requestId, e.event.body);
+                // the classifier reads the body with its mentions as names (`#注文[1]` → `注文`, `@佐藤[p1]` → `佐藤`)
+                for (const e of entries)
+                    if (e.event.type === 'RequestSent')
+                        classifications?.classify(
+                            e.event.requestId,
+                            plainBody(e.event.body, { targets: e.event.targets.length, people: e.event.mentions.length }, true),
+                        );
                 if (entries.some((e) => e.event.type === 'SessionClosed')) void onClosed();
             },
         });

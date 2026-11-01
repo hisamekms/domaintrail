@@ -12,6 +12,7 @@ import {
 } from '@domaintrail/collaboration/domain/reply';
 import { makeEmoji, VOTE } from '@domaintrail/collaboration/domain/marks';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
+import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration/domain/body';
 import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling/core/emoji';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
@@ -214,6 +215,20 @@ export function requestTargets(raw: Raw): Result<Collaboration.TargetSnapshot[],
         targets.push(t.value);
     }
     return ok(targets);
+}
+
+/** The people a message mentions: 0 to `MAX_REQUEST_MENTIONS` participant IDs, each once (the session's: the use case checks). */
+export function mentionIds(v: unknown, field = 'mentions'): Result<Collaboration.ParticipantId[], InvalidInput> {
+    if (v === undefined) return ok([]);
+    if (!Array.isArray(v) || v.length > MAX_REQUEST_MENTIONS) return invalid(field, `Expected 0 to ${MAX_REQUEST_MENTIONS} participant IDs.`);
+    const ids: Collaboration.ParticipantId[] = [];
+    for (const [i, raw] of v.entries()) {
+        const id = typeof raw === 'string' && raw.length <= 200 && !hasControl(raw) ? Collaboration.makeParticipantId(raw) : undefined;
+        if (!id?.ok) return invalid(`${field}[${i}]`, 'Expected a participant ID.');
+        if (ids.includes(id.value)) return invalid(`${field}[${i}]`, 'Each person once.');
+        ids.push(id.value);
+    }
+    return ok(ids);
 }
 
 /** The requests a run bundles: 1 to `MAX_RUN_REQUESTS` request IDs, in order. */

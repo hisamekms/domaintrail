@@ -84,6 +84,7 @@ function sendRequest(stores: Stores, session: C.SessionId = sessionId): void {
         targets: [],
         body: value(C.makeText('x')),
         sentAt: at,
+        mentions: [],
     });
 }
 
@@ -344,7 +345,10 @@ describe('rows written before requests had several targets', () => {
         expect(JSON.stringify(db.prepare('SELECT data FROM requests').all())).toBe(stored);
         await uow.transaction((st) => st.requests.save(requests[0]));
         expect(JSON.parse((db.prepare('SELECT data FROM requests WHERE id = ?').get(requests[0].id) as { data: string }).data)).toMatchObject({ targets: [] });
-        expect(Object.keys(requests[1])).toEqual(['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'dismissedBy', 'dismissedAt']);
+        expect(Object.keys(requests[1])).toEqual(['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'dismissedBy', 'dismissedAt', 'mentions']);
+        // written before people could be mentioned: they mention no one, the event too
+        expect(requests.map((r) => r.mentions)).toEqual([[], []]);
+        expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.mentions : undefined))).toEqual([[], []]);
     });
 });
 

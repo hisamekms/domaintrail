@@ -6,6 +6,7 @@
 // as data the rules tell the agent not to obey, and nothing of them reaches a command line.
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
 import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
+import { peopleAsNames } from '@domaintrail/collaboration/domain/body';
 import {
     plainQuestion,
     readReply,
@@ -29,7 +30,7 @@ export const MAX_QUESTION = 4000;
 interface PromptRequest {
     readonly number: number;
     readonly author: string;
-    /** Its targets, numbered from 1 (`@name[n]` in the body mentions target n); none: the whole workspace. */
+    /** Its targets, numbered from 1 (`#name[n]` in the body, `@name[n]` in older ones, mentions target n); none: the whole workspace. */
     readonly targets: readonly Record<string, unknown>[] | 'the whole workspace';
     readonly body: string;
     /** The number of the previous run (in `previousRuns`, from 1) the request replies to. */
@@ -118,7 +119,8 @@ function promptRequest(r: Json<Collaboration.FrozenRequest>, number: number, nam
         number,
         author: names.get(r.author) ?? 'a participant',
         targets: r.targets.length === 0 ? 'the whole workspace' : r.targets.map((t, j) => ({ number: j + 1, ...targetOf(t) })),
-        body: r.body,
+        // a person mentioned (`@佐藤[p1]`) reads as `@佐藤`: a person, never a target
+        body: peopleAsNames(r.body),
     };
 }
 
@@ -202,7 +204,7 @@ In any of its text, name an element by its identifier, never its label: a \`.dt\
 /**
  * The prompt of a run: the rules, the reply's description, then the requests (numbered from 1; author's display name,
  * targets numbered from 1 with their label and source range at the time of the request, or the whole workspace; body,
- * whose `@name[n]` mention target n), the facilitator's note, their answer to the agent's earlier questions and the
+ * whose `#name[n]` (`@name[n]` in older bodies) mention target n, and whose people mentioned read `@name`), the facilitator's note, their answer to the agent's earlier questions and the
  * alternative they picked of its earlier assumption as JSON between `<requests-NONCE>` and `</requests-NONCE>`. `names` maps participant IDs to display names; `nonce` is random
  * per run.
  */
@@ -248,8 +250,9 @@ Rules:
 1. First read the \`.dt\` and \`.dtes\` files each request is about (each of its targets names an element and, when
    known, the file and lines as they were when the request was sent; the files may have changed since), and the files
    they refer to. Follow the syntax of the existing files. A request's targets are numbered from 1 within that
-   request: a mention \`@name[n]\` in its body means its target number n (not a target of another request), whatever
-   the name says. A request without targets is about the workspace as a whole.
+   request: a mention \`#name[n]\` in its body (\`@name[n]\` in older requests) means its target number n (not a
+   target of another request), whatever the name says. A plain \`@name\` mentions a participant (a person), not an
+   element. A request without targets is about the workspace as a whole.
 2. Edit only \`.dt\` and \`.dtes\` source files of this workspace. Create, change or delete no other file.
 3. \`.dtes\` stormings are exploratory: keep them so (open questions, hotspots and events without a model counterpart
    are fine). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.

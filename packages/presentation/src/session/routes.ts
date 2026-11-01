@@ -24,6 +24,7 @@ import {
     MAX_NOTE,
     MAX_REQUEST_TEXT,
     requestIds,
+    mentionIds,
     requestTargets,
     text,
     uuid,
@@ -82,6 +83,9 @@ export function statusOf(type: string): number {
         case 'TooManyTargets':
         case 'DuplicateTarget':
         case 'WorkspaceTarget':
+        case 'TooManyMentions':
+        case 'DuplicateMention':
+        case 'MentionedNotAParticipant':
         case 'NoRequests':
         case 'UnknownRevision':
         case 'InvalidReply':
@@ -309,7 +313,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ req, res, auth }) => {
                 // `target` (one) is the former body, still taken; `apply` (the facilitator's): queued as a run at once
-                const raw = await input(req, res, ['targets', 'target', 'body', 'apply', 'replyTo']);
+                const raw = await input(req, res, ['targets', 'target', 'body', 'apply', 'replyTo', 'mentions']);
                 if (!raw) return;
                 const me = who(auth);
                 const apply = checked(res, applyInput(raw.apply));
@@ -326,6 +330,9 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     if (!id) return;
                     replyTo = Collaboration.makeAgentRunId(id);
                 }
+                // the people `@name[pN]` mentions: participants of the session, each once (the use case checks who)
+                const mentions = checked(res, mentionIds(raw.mentions));
+                if (!mentions) return;
                 const revisions = (await state()).revisions;
                 const unknown = targets.findIndex((target) => !revisions.some((r) => r.id === target.sourceRevision));
                 if (unknown >= 0)
@@ -334,7 +341,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
                         message: 'Not a revision of this session.',
                     });
-                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t, ...(replyTo && { replyTo }) });
+                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t, ...(replyTo && { replyTo }), mentions });
                 if (!sent.ok || !apply) return answer(res, sent, 201, (request) => ({ request }));
                 // sent and applied: the message is in the stream whatever the run's fate
                 const queued = await use.queueRun({ session, requests: [sent.value.id], queuedBy: me.participant.id, ...(apply.note && { note: apply.note }) });

@@ -1,7 +1,8 @@
 // Rows written before a request could have several targets (ADR 0026, appendix "Requests with several targets"): a
 // request, the frozen copy of a request in a run's input, and the `RequestSent` event held one `target`. They are
 // read as the list of targets they stand for: none when the target was the whole workspace, else that one target.
-// Nothing is rewritten in the database; new rows are written with `targets`.
+// Nothing is rewritten in the database; new rows are written with `targets`. Likewise a request and its `RequestSent`
+// written before people could be mentioned are read as mentioning no one (`mentions: []`).
 
 type Raw = Record<string, unknown>;
 
@@ -18,8 +19,13 @@ export function withTargets(v: unknown): unknown {
     return Object.fromEntries(Object.entries(v).map(([k, x]) => (k === 'target' ? ['targets', targetsOf(x)] : [k, x])));
 }
 
-/** A request (stored, or frozen in a run's input). */
-export const upgradeRequest = withTargets;
+/** An object without `mentions` (written before people could be mentioned) as mentioning no one. */
+function withMentions(v: unknown): unknown {
+    return isObject(v) && !('mentions' in v) ? { ...v, mentions: [] } : v;
+}
+
+/** A request as stored. */
+export const upgradeRequest = (v: unknown): unknown => withMentions(withTargets(v));
 
 /** A run: the frozen requests of its input. */
 export function upgradeRun(v: unknown): unknown {
@@ -29,5 +35,5 @@ export function upgradeRun(v: unknown): unknown {
 
 /** An event of the outbox: a `RequestSent`. */
 export function upgradeEvent(v: unknown): unknown {
-    return isObject(v) && v.type === 'RequestSent' ? withTargets(v) : v;
+    return isObject(v) && v.type === 'RequestSent' ? withMentions(withTargets(v)) : v;
 }

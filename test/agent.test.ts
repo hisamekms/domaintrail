@@ -164,7 +164,8 @@ describe('the prompt', () => {
         expect(both).toContain('Change the `.dt` model only where a request asks for it');
         expect((block(both, 'n') as { requests: { targets: unknown }[] }).requests[0].targets).toBe('the whole workspace');
         for (const rule of [
-            'a mention `@name[n]` in its body means its target number n',
+            'a mention `#name[n]` in its body (`@name[n]` in older requests) means its target number n',
+            'A plain `@name` mentions a participant (a person), not an',
             'Edit only `.dt` and `.dtes` source files',
             'Never copy or sync `.dtes` content into `.dt`',
             'Run no command except `dt fmt` and `dt check`',
@@ -182,7 +183,8 @@ describe('the prompt with several targets', () => {
         const event = { target: { kind: 'DtesElement', storming: 'Returns', local: 'Received' }, sourceRevision: REVISION } as const;
         const prompt = buildPrompt(
             input([
-                { request: crypto.randomUUID(), author: 'dev:bob', targets: [order, customer], body: '@注文[1] に @顧客[2] を持たせる' },
+                { request: crypto.randomUUID(), author: 'dev:bob', targets: [order, customer], body: '#注文[1] に #顧客[2] を持たせる @佐藤[p1] 確認して' },
+                // written before `#`: the same mention of target 1
                 { request: crypto.randomUUID(), author: 'dev:bob', targets: [event], body: '@受領[1] の前に検品を入れる' },
             ]),
             new Map([['dev:bob', 'Bob']]),
@@ -196,7 +198,9 @@ describe('the prompt with several targets', () => {
             ],
             [[1, 'Received']],
         ]);
-        expect(requests[0].body).toBe('@注文[1] に @顧客[2] を持たせる');
+        // the elements keep their numbered tokens; a person mentioned reads as a plain `@name`, never a target
+        expect(requests[0].body).toBe('#注文[1] に #顧客[2] を持たせる @佐藤 確認して');
+        expect(requests[1].body).toBe('@受領[1] の前に検品を入れる');
         // both DSLs: one request is about the model, the other about a storming
         expect(prompt).toContain('Change the `.dt` model only where a request asks for it');
     });

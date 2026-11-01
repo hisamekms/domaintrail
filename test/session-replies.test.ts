@@ -362,6 +362,7 @@ describe('the reply_to column (migration 5)', () => {
             body: text('Why?'),
             sentAt: new Date('2026-11-01T09:00:00Z'),
             replyTo: C.makeAgentRunId(runId),
+            mentions: [],
         };
         await uow.transaction((s) => s.requests.save(reply));
         expect(db.prepare('SELECT reply_to FROM requests WHERE id = ?').get(reply.id)).toEqual({ reply_to: runId });

@@ -207,6 +207,8 @@ export interface CollaborationUseCases {
         readonly body: Collaboration.Text;
         /** The run of the session it replies to: ended (completed, failed, declined or cancelled), not waiting for an answer. */
         readonly replyTo?: AgentRunId;
+        /** The participants of the session the body mentions (`@name[pN]` names the N-th), each once, at most 20. */
+        readonly mentions?: readonly ParticipantId[];
     }): Promise<
         Result<
             Collaboration.SentRequest,
@@ -216,6 +218,9 @@ export interface CollaborationUseCases {
             | Collaboration.RunNotFound
             | Collaboration.RunOfAnotherSession
             | Collaboration.RunNotReplyable
+            | Collaboration.MentionedNotAParticipant
+            | Collaboration.TooManyMentions
+            | Collaboration.DuplicateMention
             | InvalidTarget
             | Collaboration.TooManyTargets
             | Collaboration.DuplicateTarget
@@ -586,7 +591,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async sendRequest({ session, author, targets, body, replyTo }) {
+        async sendRequest({ session, author, targets, body, replyTo, mentions = [] }) {
             const violated = targets.flatMap((target) => [
                 ...Collaboration.checkTargetSnapshot(target),
                 ...(target.range ? Collaboration.checkSourceRange(target.range) : []),
@@ -602,8 +607,14 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     if (!r.ok) return r;
                     replyable = r.value;
                 }
+                const mentioned: Collaboration.MentionableParticipant[] = [];
+                for (const m of mentions) {
+                    const p = await storeVerifications(stores).makeMentionableParticipant(m, session);
+                    if (!p.ok) return p;
+                    mentioned.push(p.value);
+                }
                 const at = clock.now();
-                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at, replyable);
+                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at, replyable, mentioned);
                 if (!sent.ok) return sent;
                 const { Sent } = sent.value;
                 stores.requests.save(Sent.aggregate);

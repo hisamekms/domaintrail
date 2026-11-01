@@ -2157,11 +2157,28 @@ export type ReplyableRun = AgentRunId & { readonly 'verified:Collaboration.Reply
 export type MakeReplyableRun = (value: AgentRunId, context: SessionId) => Promise<Result<ReplyableRun, RunNotFound | RunOfAnotherSession | RunNotReplyable>>;
 
 /**
+ * 言及できる参加者
+ * 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
+ * A value of ParticipantId for which MakeMentionableParticipant made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your `MakeMentionableParticipant` factory; never `as MentionableParticipant` outside it (see dt guide lint).
+ * @see model/request.dt:13
+ */
+export type MentionableParticipant = ParticipantId & { readonly 'verified:Collaboration.MentionableParticipant': true };
+
+/**
+ * Checks a value of ParticipantId, given the SessionId the check needs, and returns it as MentionableParticipant when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * @see model/request.dt:13
+ */
+export type MakeMentionableParticipant = (value: ParticipantId, context: SessionId) => Promise<Result<MentionableParticipant, MentionedNotAParticipant>>;
+
+/**
  * Fields shared by every state of 依頼 (Request).
  * @invariant atMostTwentyTargets (対象は20件まで): count(targets) <= 20
  * @invariant distinctTargets (同じ対象は1回): unique(targets, t => t.target)
+ * @invariant atMostTwentyMentions (言及する人は20人まで): count(mentions) <= 20
+ * @invariant distinctMentions (同じ人の言及は1回): unique(mentions)
  * @invariant noWorkspaceTarget (ワークスペース全体は対象に挙げない): all(targets, t => t.target.kind != ModelTarget.Workspace)
- * @see model/request.dt:14
+ * @see model/request.dt:18
  */
 export interface RequestCommon {
     /** 依頼ID */
@@ -2178,11 +2195,13 @@ export interface RequestCommon {
     readonly sentAt: Timestamp;
     /** 返信先 — AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。 */
     readonly replyTo?: AgentRunId; // -> Collaboration.AgentRun
+    /** 言及した人 — 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。 */
+    readonly mentions: readonly ParticipantId[];
 }
 
 /**
  * 送信済み
- * @see model/request.dt:31
+ * @see model/request.dt:39
  */
 export interface SentRequest extends RequestCommon {
     readonly state: 'Sent';
@@ -2191,7 +2210,7 @@ export interface SentRequest extends RequestCommon {
 /**
  * 見送り
  * 見送りは印で、依頼そのものは残る。
- * @see model/request.dt:33
+ * @see model/request.dt:41
  */
 export interface DismissedRequest extends RequestCommon {
     readonly state: 'Dismissed';
@@ -2204,49 +2223,54 @@ export interface DismissedRequest extends RequestCommon {
 /**
  * 依頼
  * 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
- * 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の言及（`@注文[1]`）は対象の番号で指す。
- * @see model/request.dt:14
+ * 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の要素の言及（`#注文[1]`、以前の `@注文[1]`）は
+ * 対象の番号で、人の言及（`@佐藤[p1]`）は言及した人の番号で指す。
+ * @see model/request.dt:18
  */
 export type Request = SentRequest | DismissedRequest;
 
 /**
  * The fields of Request as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see model/request.dt:14
+ * @see model/request.dt:18
  */
 export const RequestShape: Shape = {
-    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo'],
+    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo', 'mentions'],
     states: { Sent: [], Dismissed: ['dismissedBy', 'dismissedAt'] },
 };
 
 /**
  * The invariants of Request in state Sent (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/request.dt:31
+ * @see model/request.dt:39
  */
-export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] {
-    const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] = [];
+export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
+    const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] = [];
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) violated.push('distinctTargets');
+    if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
+    if (!(distinct(request.mentions, ($18: ParticipantId, $19: ParticipantId) => $18 === $19))) violated.push('distinctMentions');
     if (!(request.targets.every(($t) => !($t.target.kind === "Workspace")))) violated.push('noWorkspaceTarget');
     return violated;
 }
 
 /**
  * The invariants of Request in state Dismissed (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/request.dt:33
+ * @see model/request.dt:41
  */
-export function checkDismissedRequest(request: DismissedRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] {
-    const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] = [];
+export function checkDismissedRequest(request: DismissedRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
+    const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] = [];
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) violated.push('distinctTargets');
+    if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
+    if (!(distinct(request.mentions, ($20: ParticipantId, $21: ParticipantId) => $20 === $21))) violated.push('distinctMentions');
     if (!(request.targets.every(($t) => !($t.target.kind === "Workspace")))) violated.push('noWorkspaceTarget');
     return violated;
 }
 
 /**
  * The invariants of Request in the state it is in that an aggregate violates (see the check of each state).
- * @see model/request.dt:14
+ * @see model/request.dt:18
  */
-export function checkRequest(request: Request): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] {
+export function checkRequest(request: Request): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
     switch (request.state) {
         case 'Sent': return checkSentRequest(request);
         case 'Dismissed': return checkDismissedRequest(request);
@@ -2262,11 +2286,14 @@ export function checkRequest(request: Request): readonly ('atMostTwentyTargets' 
  * @param targets 依頼時の対象
  * @param body 文章
  * @param replyTo 返信できる実行
+ * @param mentions 言及できる参加者
  * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: count(targets) <= 20
  * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: unique(targets, t => t.target)
  * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
+ * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: count(mentions) <= 20
+ * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: unique(mentions)
  * @emits RequestSent — exactly once when the command succeeds
- * @see model/request.dt:38
+ * @see model/request.dt:46
  */
 export type SendRequest = (
     id: RequestId,
@@ -2276,12 +2303,13 @@ export type SendRequest = (
     body: Text,
     sentAt: Timestamp,
     replyTo: ReplyableRun | undefined,
+    mentions: readonly MentionableParticipant[],
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
         readonly events: { readonly RequestSent: RequestSent };
     };
-}, TooManyTargets | DuplicateTarget | WorkspaceTarget>;
+}, TooManyTargets | DuplicateTarget | WorkspaceTarget | TooManyMentions | DuplicateMention>;
 
 /**
  * Request.send, decided by one function; implement it with `decide(RequestShape, …)` from the runtime.
@@ -2289,9 +2317,11 @@ export type SendRequest = (
  * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: count(targets) <= 20
  * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: unique(targets, t => t.target)
  * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
+ * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: count(mentions) <= 20
+ * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: unique(mentions)
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see model/request.dt:38
+ * @see model/request.dt:46
  */
 export type SendRequestDecision = (
     id: RequestId,
@@ -2301,21 +2331,24 @@ export type SendRequestDecision = (
     body: Text,
     sentAt: Timestamp,
     replyTo: ReplyableRun | undefined,
+    mentions: readonly MentionableParticipant[],
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: AgentRunId | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: AgentRunId | undefined; readonly mentions: readonly ParticipantId[] };
         readonly events: { readonly RequestSent: RequestSent };
     };
-}, TooManyTargets | DuplicateTarget | WorkspaceTarget>;
+}, TooManyTargets | DuplicateTarget | WorkspaceTarget | TooManyMentions | DuplicateMention>;
 
 /**
  * The first requirement of Request.send that does not hold, in declaration order; `undefined` when all hold.
- * @see model/request.dt:38
+ * @see model/request.dt:46
  */
-export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession, _author: ParticipantId, targets: readonly TargetSnapshot[], _body: Text, _sentAt: Timestamp, _replyTo: ReplyableRun | undefined): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | undefined {
+export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession, _author: ParticipantId, targets: readonly TargetSnapshot[], _body: Text, _sentAt: Timestamp, _replyTo: ReplyableRun | undefined, mentions: readonly MentionableParticipant[]): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | 'atMostTwentyMentions' | 'distinctMentions' | undefined {
     if (!(targets.length <= 20)) return 'atMostTwentyTargets';
     if (!(distinct(targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) return 'distinctTargets';
     if (!(targets.every(($t) => !($t.target.kind === "Workspace")))) return 'noWorkspaceTarget';
+    if (!(mentions.length <= 20)) return 'atMostTwentyMentions';
+    if (!(distinct(mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) return 'distinctMentions';
     return undefined;
 }
 
@@ -2325,7 +2358,7 @@ export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession
  * @param dismissedBy 参加者ID
  * @changes none — the command changes no common field
  * @emits RequestDismissed — exactly once when the command succeeds
- * @see model/request.dt:47
+ * @see model/request.dt:57
  */
 export type DismissRequest = (
     request: SentRequest,
@@ -2342,8 +2375,8 @@ export type DismissRequest = (
  * Request.dismiss, decided per source state; implement it with `decide(RequestShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
- * Sent -> Dismissed — set: dismissedBy (new in Dismissed), dismissedAt (new in Dismissed); carried over: id, session, author, targets, body, sentAt, replyTo
- * @see model/request.dt:47
+ * Sent -> Dismissed — set: dismissedBy (new in Dismissed), dismissedAt (new in Dismissed); carried over: id, session, author, targets, body, sentAt, replyTo, mentions
+ * @see model/request.dt:57
  */
 export type DismissRequestDecision = {
     /** @emits RequestDismissed — exactly once when the command succeeds */
@@ -2358,7 +2391,7 @@ export type DismissRequestDecision = {
 /**
  * Command contracts of Request. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see model/request.dt:14
+ * @see model/request.dt:18
  */
 export interface RequestCommands {
     /** 依頼を送る */
@@ -2369,14 +2402,14 @@ export interface RequestCommands {
 
 /**
  * Events that the commands of Request may emit.
- * @see model/request.dt:14
+ * @see model/request.dt:18
  */
 export type RequestEvent = RequestSent | RequestDismissed;
 
 /**
  * 依頼送信
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/request.dt:52
+ * @see model/request.dt:62
  */
 export interface RequestSent {
     readonly type: 'RequestSent';
@@ -2393,12 +2426,14 @@ export interface RequestSent {
     readonly sentAt: Timestamp;
     /** エージェント実行ID */
     readonly replyTo?: AgentRunId;
+    /** 言及した人 */
+    readonly mentions: readonly ParticipantId[];
 }
 
 /**
  * 依頼見送り
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/request.dt:62
+ * @see model/request.dt:73
  */
 export interface RequestDismissed {
     readonly type: 'RequestDismissed';
@@ -2412,7 +2447,7 @@ export interface RequestDismissed {
 /**
  * 依頼なし
  * 指定した依頼がない。
- * @see model/request.dt:69
+ * @see model/request.dt:80
  */
 export interface RequestNotFound {
     readonly type: 'RequestNotFound';
@@ -2423,7 +2458,7 @@ export interface RequestNotFound {
 /**
  * 別のセッションの依頼
  * 依頼は別のセッションのもの。
- * @see model/request.dt:74
+ * @see model/request.dt:85
  */
 export interface RequestOfAnotherSession {
     readonly type: 'RequestOfAnotherSession';
@@ -2434,7 +2469,7 @@ export interface RequestOfAnotherSession {
 /**
  * 見送り済みの依頼
  * 依頼はすでに見送られている。
- * @see model/request.dt:79
+ * @see model/request.dt:90
  */
 export interface RequestAlreadyDismissed {
     readonly type: 'RequestAlreadyDismissed';
@@ -2443,9 +2478,20 @@ export interface RequestAlreadyDismissed {
 }
 
 /**
+ * 参加者でない人の言及
+ * 言及した人は、そのセッションの参加者ではない。
+ * @see model/request.dt:95
+ */
+export interface MentionedNotAParticipant {
+    readonly type: 'MentionedNotAParticipant';
+    /** 参加者 */
+    readonly participant: ParticipantId;
+}
+
+/**
  * 実行なし
  * 返信先の実行がない。
- * @see model/request.dt:84
+ * @see model/request.dt:100
  */
 export interface RunNotFound {
     readonly type: 'RunNotFound';
@@ -2456,7 +2502,7 @@ export interface RunNotFound {
 /**
  * 別のセッションの実行
  * 返信先の実行は別のセッションのもの。
- * @see model/request.dt:89
+ * @see model/request.dt:105
  */
 export interface RunOfAnotherSession {
     readonly type: 'RunOfAnotherSession';
@@ -2467,7 +2513,7 @@ export interface RunOfAnotherSession {
 /**
  * 返信できない実行
  * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・取消の実行）。
- * @see model/request.dt:94
+ * @see model/request.dt:110
  */
 export interface RunNotReplyable {
     readonly type: 'RunNotReplyable';
@@ -2476,9 +2522,27 @@ export interface RunNotReplyable {
 }
 
 /**
+ * 言及する人が多すぎる
+ * 本文で言及する人が20人を超える。
+ * @see model/request.dt:115
+ */
+export interface TooManyMentions {
+    readonly type: 'TooManyMentions';
+}
+
+/**
+ * 言及する人の重複
+ * 本文で同じ人を2回言及している。
+ * @see model/request.dt:118
+ */
+export interface DuplicateMention {
+    readonly type: 'DuplicateMention';
+}
+
+/**
  * 対象が多すぎる
  * 依頼の対象が20件を超える。
- * @see model/request.dt:99
+ * @see model/request.dt:121
  */
 export interface TooManyTargets {
     readonly type: 'TooManyTargets';
@@ -2487,7 +2551,7 @@ export interface TooManyTargets {
 /**
  * 対象の重複
  * 依頼の対象に同じものが2回ある。
- * @see model/request.dt:102
+ * @see model/request.dt:124
  */
 export interface DuplicateTarget {
     readonly type: 'DuplicateTarget';
@@ -2496,7 +2560,7 @@ export interface DuplicateTarget {
 /**
  * 対象にワークスペース全体
  * 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
- * @see model/request.dt:105
+ * @see model/request.dt:127
  */
 export interface WorkspaceTarget {
     readonly type: 'WorkspaceTarget';
@@ -3910,7 +3974,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($18: string, $19: string) => $18 === $19);
+        return sameOptional(a.scope, y.scope, ($24: string, $25: string) => $24 === $25);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -3986,7 +4050,7 @@ export interface TargetSnapshot {
  * @see model/target.dt:56
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($20: string, $21: string) => $20 === $21) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($26: string, $27: string) => $26 === $27) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**

@@ -91,6 +91,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 body: e.body,
                 sentAt: e.sentAt,
                 ...(e.replyTo !== undefined && { replyTo: e.replyTo }),
+                mentions: e.mentions,
                 state: 'Sent',
             };
             return { state: { ...at, requests: [...state.requests, request] }, refetch: false };

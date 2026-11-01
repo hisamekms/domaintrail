@@ -1,6 +1,6 @@
 // The commands of the collaboration aggregates, checked against the generated contracts (ADR 0026). Each is a pure
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
-// PendingRequest, ReplyableRun, RestorableRevision) are parameters that the application makes. The requirements are checked with the
+// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
 // what each outcome sets.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
@@ -37,20 +37,24 @@ export const sessionCommands: Collaboration.SessionCommands = {
 };
 
 export const requestCommands: Collaboration.RequestCommands = {
-    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, targets, body, sentAt, replyTo) => {
-        switch (Collaboration.checkSendRequestRequires(id, session, author, targets, body, sentAt, replyTo)) {
+    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, targets, body, sentAt, replyTo, mentions) => {
+        switch (Collaboration.checkSendRequestRequires(id, session, author, targets, body, sentAt, replyTo, mentions)) {
             case 'atMostTwentyTargets':
                 return err({ type: 'TooManyTargets' });
             case 'distinctTargets':
                 return err({ type: 'DuplicateTarget' });
             case 'noWorkspaceTarget':
                 return err({ type: 'WorkspaceTarget' });
+            case 'atMostTwentyMentions':
+                return err({ type: 'TooManyMentions' });
+            case 'distinctMentions':
+                return err({ type: 'DuplicateMention' });
         }
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }) } },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
             },
         });
     }),

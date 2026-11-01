@@ -248,7 +248,7 @@ describe('the session state from the socket', () => {
         ({
             type: 'request.sent',
             seq,
-            event: { type: 'RequestSent', requestId: id, session: 's1', author: 'dev:a', targets, body: 'b', sentAt: at },
+            event: { type: 'RequestSent', requestId: id, session: 's1', author: 'dev:a', targets, body: 'b', sentAt: at, mentions: [] },
         }) as EventMessage;
     const message = (seq: number, event: object): EventMessage => ({ type: 'x', seq, event }) as unknown as EventMessage;
 

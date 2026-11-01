@@ -11,6 +11,7 @@ export interface StoreVerifications {
     readonly makePendingRequest: Collaboration.MakePendingRequest;
     readonly makeOpenMarkTarget: Collaboration.MakeOpenMarkTarget;
     readonly makeReplyableRun: Collaboration.MakeReplyableRun;
+    readonly makeMentionableParticipant: Collaboration.MakeMentionableParticipant;
 }
 
 /** The states of a run that a message may reply to: it ended, and it does not wait for an answer (a clarification has its form). */
@@ -49,6 +50,12 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             if (!REPLYABLE_STATES.includes(run.state)) return err({ type: 'RunNotReplyable', run: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(id as Collaboration.ReplyableRun);
+        },
+        async makeMentionableParticipant(id, session) {
+            // anyone who joined the session, online or not (the facilitator too)
+            if (!stores.sessions.load(session)?.participants.some((p) => p.id === id)) return err({ type: 'MentionedNotAParticipant', participant: id });
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
+            return ok(id as Collaboration.MentionableParticipant);
         },
     };
 }
