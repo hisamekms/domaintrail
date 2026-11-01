@@ -145,7 +145,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkFactoryIds(sourceModel!, new RuleSink(sink.items));
         checkChanges(sourceModel!, new RuleSink(sink.items));
         checkEventIds(sourceModel!, new RuleSink(sink.items));
-        checkPayloadNames(index, sink);
+        checkPayloadNames(sourceModel!, new RuleSink(sink.items));
         checkPolicies(index, sink);
         checkInvariants(index, sink);
         checkLabels(index, sink);

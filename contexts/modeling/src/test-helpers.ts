@@ -9,7 +9,6 @@ import { DiagnosticSink } from './infrastructure/syntax/diagnostic-sink.js';
 import { checkInvariants } from './domain/rules/expressions.js';
 import { checkLabels } from './domain/rules/labels.js';
 import { checkNames } from './domain/rules/names.js';
-import { checkPayloadNames } from './domain/rules/payloads.js';
 import { checkPolicies } from './domain/rules/policies.js';
 import { checkShared } from './domain/rules/shared.js';
 import { checkStructure } from './domain/rules/structure.js';
@@ -60,7 +59,7 @@ export function sitesOf(model: SourceModel): Set<string> {
 export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
     if (!a.syntaxOk) return [];
     const sink = new DiagnosticSink(a.resolveFile);
-    for (const rule of [checkNames, checkShared, checkStructure, checkUnions, checkPayloadNames, checkPolicies, checkInvariants, checkLabels])
+    for (const rule of [checkNames, checkShared, checkStructure, checkUnions, checkPolicies, checkInvariants, checkLabels])
         rule(a.index, sink);
     return sink.items;
 }
