@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import { generateTypeScript } from '@domaintrail/modeling';
 import { check, tempCopyOfExamples } from './helpers.js';
 

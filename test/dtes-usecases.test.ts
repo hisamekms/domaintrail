@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import { type Analysis, formatStorming } from '@domaintrail/modeling';
 import { stormingViewKey, type ViewOptions } from '@domaintrail/visualization';
 import { EXAMPLES, check, tempCopyOfExamples, viewPayloads } from './helpers.js';

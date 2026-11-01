@@ -185,21 +185,21 @@ export const MAP: Record<string, Module> = {
             kinds: ['modeling'],
         },
     },
-    presentation: {
+    dt: {
         kind: 'app',
-        dir: 'packages/presentation',
-        sources: 'packages/presentation/src',
+        dir: 'apps/dt',
+        sources: 'apps/dt/src',
         upstream: ['agent', 'collaboration', 'modeling', 'visualization'],
     },
     composition: {
         kind: 'app',
         dir: 'packages/composition',
         sources: 'packages/composition/src',
-        // the wiring; presentation and composition merge into one app, apps/dt (T8)
-        upstream: ['agent', 'collaboration', 'modeling', 'presentation', 'visualization', 'workspace'],
+        // the wiring; it merges into apps/dt (T8)
+        upstream: ['agent', 'collaboration', 'dt', 'modeling', 'visualization', 'workspace'],
         exceptions: {
-            // an app depends on no other app: presentation and composition merge into apps/dt (T8)
-            kinds: ['presentation'],
+            // an app depends on no other app: composition merges into apps/dt (T8)
+            kinds: ['dt'],
         },
     },
     web: {

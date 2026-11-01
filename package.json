@@ -71,7 +71,7 @@
     "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/composition": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
-    "@domaintrail/presentation": "workspace:*",
+    "@domaintrail/dt": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/web": "workspace:*",
     "@domaintrail/workspace": "workspace:*",

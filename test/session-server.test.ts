@@ -22,8 +22,8 @@ import {
     WS_SESSION_CLOSED,
 } from '@domaintrail/composition';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/presentation';
-import { runCli, SessionError } from '@domaintrail/presentation';
+import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import { runCli, SessionError } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 const DT = `context Shop {

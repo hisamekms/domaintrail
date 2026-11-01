@@ -1,11 +1,11 @@
 // The configuration through the CLI: what check and generate read from it and write (loading it:
-// packages/presentation/src/config/config.test.ts, the sections by their owners).
+// apps/dt/src/config/config.test.ts, the sections by their owners).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/modeling';
 

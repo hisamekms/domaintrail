@@ -1,5 +1,5 @@
 // The generation's sections of domaintrail.jsonc, `generate.ts` and `lintHint` (composed with the others and read from a
-// file: packages/presentation/src/config/config.test.ts; through the CLI: test/config-cli.test.ts).
+// file: apps/dt/src/config/config.test.ts; through the CLI: test/config-cli.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { policyModes, resolveGenerationConfig, staysInside, unknownTsContexts, validateGenerationConfig } from './config.js';
 

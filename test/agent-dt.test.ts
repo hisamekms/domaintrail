@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { pinDt } from '@domaintrail/agent';
-import { CONFIG_FILE_FORMAT, ConfigError } from '@domaintrail/presentation';
+import { CONFIG_FILE_FORMAT, ConfigError } from '@domaintrail/dt';
 import { loadConfig } from '@domaintrail/workspace';
 
 const dirs: string[] = [];

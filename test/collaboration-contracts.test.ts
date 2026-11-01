@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Glob } from 'bun';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 
 const PACKAGE = path.join(import.meta.dir, '..', 'contexts', 'collaboration');
 const GENERATED = 'src/generated';

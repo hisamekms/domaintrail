@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { analyze, formatDomain, formatStorming, generateTypeScript, sourceSelection } from '@domaintrail/modeling';
-import { resolveConfig } from '@domaintrail/presentation';
+import { resolveConfig } from '@domaintrail/dt';
 import { loadWorkspace } from '@domaintrail/workspace';
 import { EXAMPLES, check } from './helpers.js';
 

@@ -1,5 +1,5 @@
 // Finding and reading the config file; the workspace knows none of its sections (the sections composed:
-// packages/presentation/src/config/config.test.ts).
+// apps/dt/src/config/config.test.ts).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

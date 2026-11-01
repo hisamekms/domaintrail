@@ -1,5 +1,5 @@
 // The analysis's section of domaintrail.jsonc, `sources` and `respectGitignore` (composed with the others and read
-// from a file: packages/presentation/src/config/config.test.ts).
+// from a file: apps/dt/src/config/config.test.ts).
 import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
 import { DEFAULT_SOURCES, resolveSourcesConfig, sourceMatcher, sourceSelection, validateSourcesConfig } from './sources.js';

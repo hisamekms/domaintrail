@@ -15,8 +15,8 @@ import { type AccessAdapterOptions } from '@domaintrail/collaboration';
 import type { Me } from '@domaintrail/collaboration/protocol';
 import { cliDeps, type SessionServer, type SessionServerOptions, startSessionServer, WS_EXPIRED, WS_REVOKED } from '@domaintrail/composition';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import type { ResolvedSessionConfig } from '@domaintrail/presentation';
-import { runCli, SessionError } from '@domaintrail/presentation';
+import type { ResolvedSessionConfig } from '@domaintrail/dt';
+import { runCli, SessionError } from '@domaintrail/dt';
 
 const TEAM = 'team.cloudflareaccess.com';
 const ISSUER = `https://${TEAM}`;

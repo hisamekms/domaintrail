@@ -8,7 +8,7 @@ import {
     type ResolvedConfig,
     runCli,
     startLanguageServer,
-} from '@domaintrail/presentation';
+} from '@domaintrail/dt';
 import {
     createGeneratedOutput,
     findDomainFiles as findSources,

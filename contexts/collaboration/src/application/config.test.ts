@@ -1,5 +1,5 @@
 // Collaboration's settings in the `session` section of domaintrail.jsonc (composed with the others and read from a
-// file: packages/presentation/src/config/config.test.ts).
+// file: apps/dt/src/config/config.test.ts).
 import { describe, expect, test } from 'bun:test';
 import {
     ACCESS_CHECKS,

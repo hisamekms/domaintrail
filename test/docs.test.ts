@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import { formatDomain, formatStorming } from '@domaintrail/modeling';
 import { check } from './helpers.js';
 

@@ -8,7 +8,7 @@ import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as path from 'node:path';
 import { cliDeps, startViewServer, type ViewServer } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
 

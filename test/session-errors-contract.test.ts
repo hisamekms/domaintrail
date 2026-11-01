@@ -11,7 +11,7 @@ import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import { statusOf } from '@domaintrail/presentation';
+import { statusOf } from '@domaintrail/dt';
 
 const DT = `context Shop {
   id OrderId: UUID

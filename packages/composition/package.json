@@ -9,7 +9,7 @@
     "@domaintrail/agent": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
-    "@domaintrail/presentation": "workspace:*",
+    "@domaintrail/dt": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/workspace": "workspace:*"
   }

@@ -10,7 +10,7 @@ import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Glob } from 'bun';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

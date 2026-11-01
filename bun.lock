@@ -18,8 +18,8 @@
         "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/composition": "workspace:*",
+        "@domaintrail/dt": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
-        "@domaintrail/presentation": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "@domaintrail/web": "workspace:*",
         "@domaintrail/workspace": "workspace:*",
@@ -36,6 +36,22 @@
         "typescript": "7.0.2",
         "vscode-jsonrpc": "10.0.0",
         "web-tree-sitter": "0.27.1",
+      },
+    },
+    "apps/dt": {
+      "name": "@domaintrail/dt",
+      "dependencies": {
+        "@domaintrail/agent": "workspace:*",
+        "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/visualization": "workspace:*",
+        "commander": "15.0.0",
+        "langium": "4.4.0",
+        "vscode-languageserver": "10.1.2",
+        "ws": "8.22.0",
+      },
+      "devDependencies": {
+        "@types/ws": "8.18.2",
       },
     },
     "apps/web": {
@@ -85,8 +101,8 @@
       "dependencies": {
         "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/dt": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
-        "@domaintrail/presentation": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "@domaintrail/workspace": "workspace:*",
       },
@@ -100,22 +116,6 @@
       "devDependencies": {
         "@types/picomatch": "4.0.3",
         "fast-check": "4.10.2",
-      },
-    },
-    "packages/presentation": {
-      "name": "@domaintrail/presentation",
-      "dependencies": {
-        "@domaintrail/agent": "workspace:*",
-        "@domaintrail/collaboration": "workspace:*",
-        "@domaintrail/modeling": "workspace:*",
-        "@domaintrail/visualization": "workspace:*",
-        "commander": "15.0.0",
-        "langium": "4.4.0",
-        "vscode-languageserver": "10.1.2",
-        "ws": "8.22.0",
-      },
-      "devDependencies": {
-        "@types/ws": "8.18.2",
       },
     },
     "platform/workspace": {
@@ -144,9 +144,9 @@
 
     "@domaintrail/composition": ["@domaintrail/composition@workspace:packages/composition"],
 
-    "@domaintrail/modeling": ["@domaintrail/modeling@workspace:packages/modeling"],
+    "@domaintrail/dt": ["@domaintrail/dt@workspace:apps/dt"],
 
-    "@domaintrail/presentation": ["@domaintrail/presentation@workspace:packages/presentation"],
+    "@domaintrail/modeling": ["@domaintrail/modeling@workspace:packages/modeling"],
 
     "@domaintrail/visualization": ["@domaintrail/visualization@workspace:capabilities/visualization"],
 

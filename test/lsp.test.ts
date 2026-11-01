@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { URI } from 'langium';
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter, type MessageConnection } from 'vscode-jsonrpc/node';
 import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/presentation';
+import { runCli } from '@domaintrail/dt';
 import { formatDomain } from '@domaintrail/modeling';
 
 const BIN = path.join(import.meta.dir, '..', 'bin', 'dt.ts');

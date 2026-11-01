@@ -13,7 +13,7 @@ export const MANIFEST_FILE = path.join('.domaintrail', 'generated.json');
 
 /**
  * The output of `dt generate ts` on disk: the safety checks before writing and the writing itself (a `GeneratedOutput`
- * of the CLI, `@domaintrail/presentation/cli/ports`). `marker` starts every file the generator writes (the generator's
+ * of the CLI, `@domaintrail/dt/cli/ports`). `marker` starts every file the generator writes (the generator's
  * `GENERATED_MARKER`, given by the app): only such files are ever replaced or removed.
  */
 export function createGeneratedOutput(marker: string): {

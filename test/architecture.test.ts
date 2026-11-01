@@ -18,7 +18,7 @@ const MAP_FILE = 'test/architecture/map.ts';
 
 /** Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js). */
 const OUTSIDE_PACKAGE: Record<string, string[]> = {
-    'packages/presentation/src/cli/main.ts': ['docs/guide.md'],
+    'apps/dt/src/cli/main.ts': ['docs/guide.md'],
 };
 
 /** What a file under `domain/`, `core/` or `application/` may not import besides builtins: the file system, the network, layout. */

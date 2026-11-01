@@ -1,5 +1,5 @@
 // The agent's settings in `session.agent` of domaintrail.jsonc (composed with the others and read from a file:
-// packages/presentation/src/config/config.test.ts; that `dt` lies outside the workspace: ./dt-shim.test.ts).
+// apps/dt/src/config/config.test.ts; that `dt` lies outside the workspace: ./dt-shim.test.ts).
 import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS, resolveAgentConfig, resolveCommand, validateAgentConfig } from './config.js';

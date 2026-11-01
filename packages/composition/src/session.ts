@@ -53,7 +53,7 @@ import {
     sessionHostPolicy,
     stateBody,
     type ResolvedSessionConfig,
-} from '@domaintrail/presentation';
+} from '@domaintrail/dt';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
