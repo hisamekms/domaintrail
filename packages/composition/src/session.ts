@@ -47,7 +47,7 @@ import { createEventRelay, lastSeq } from '@domaintrail/presentation/session/rel
 import { createSessionHttp, meOf, stateBody } from '@domaintrail/presentation/session/routes';
 import { createWebSocketHub, type Connection } from '@domaintrail/presentation/websocket/hub';
 import type { ViewService } from '@domaintrail/visualization';
-import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
+import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';

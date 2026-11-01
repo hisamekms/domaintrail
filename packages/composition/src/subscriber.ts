@@ -15,7 +15,7 @@ import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/syst
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import { SessionError } from '@domaintrail/presentation/cli/ports';
-import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
+import { findDomainFiles } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 
 export type { SubscriberEnd };

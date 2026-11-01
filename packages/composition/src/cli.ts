@@ -1,10 +1,7 @@
 import { consoleIO, runCli, type CliIO } from '@domaintrail/presentation/cli/main';
 import type { CliDeps } from '@domaintrail/presentation/cli/ports';
 import type { LanguageServerFiles } from '@domaintrail/presentation/lsp/server';
-import { loadConfig } from '@domaintrail/workspace/infrastructure/config';
-import { SourceScope, findDomainFiles, loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { createGeneratedOutput } from '@domaintrail/workspace/infrastructure/generated-output';
-import { LINT_HINT, hasCastLintRule } from '@domaintrail/workspace/infrastructure/lint-hint';
+import { createGeneratedOutput, findDomainFiles, hasCastLintRule, LINT_HINT, loadConfig, loadWorkspace, SourceScope } from '@domaintrail/workspace';
 
 /** The language server's view of the workspace: the config and the sources, as `dt check` finds them. */
 const languageServerFiles: LanguageServerFiles = {

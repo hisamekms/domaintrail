@@ -12,7 +12,7 @@ import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan'
 import { readCredential } from '@domaintrail/composition/subscriber';
 import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES } from '@domaintrail/modeling';
-import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
+import { findDomainFiles } from '@domaintrail/workspace';
 
 /** A reply as a scenario writes it: requests by their number in the run (from 1); `questions` and `assumptions` optional. */
 export type ScriptedReply = Omit<ReplyData<number>, 'questions' | 'assumptions'> & Partial<Pick<ReplyData<number>, 'questions' | 'assumptions'>>;

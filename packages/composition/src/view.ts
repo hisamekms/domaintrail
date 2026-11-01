@@ -15,8 +15,7 @@ import {
     type ViewService,
 } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
-import { createGitRefWatcher, createWorkspaceWatcher } from '@domaintrail/workspace/infrastructure/watchers';
+import { createGitRefWatcher, createWorkspaceReader, createWorkspaceWatcher } from '@domaintrail/workspace';
 import type { WatcherGate } from './watcher-hold.js';
 
 export interface ViewServerOptions {
