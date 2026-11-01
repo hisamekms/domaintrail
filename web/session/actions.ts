@@ -37,8 +37,11 @@ export interface ChatActions {
     apply(requests: readonly string[], note?: string): Promise<boolean>;
     /** Queues the run's requests again with the answer to its questions. */
     answer(run: RunJson, answer: AnswerBody): Promise<boolean>;
-    /** Queues the run's requests again, with a note asking for another alternative. */
-    requeue(run: RunJson, note: string): Promise<boolean>;
+    /**
+     * Queues the run's requests again with the alternative picked of one of its assumptions (by its number in the reply
+     * and the alternative's key), and the note asking for it (for the agent and the people reading the chat).
+     */
+    pick(run: RunJson, assumption: number, alternative: string, note: string): Promise<boolean>;
     cancel(run: string): Promise<boolean>;
     /** The run just queued, while its undo is offered. */
     readonly undo: { readonly run: string } | undefined;
@@ -83,7 +86,7 @@ export function useChatActions(): ChatActions {
     return {
         apply: (requests, note) => queue({ requests: [...requests], ...(note?.trim() && { note: note.trim() }) }),
         answer: (run, answer) => queue({ requests: requestsOf(run), answerTo: run.id, answer }),
-        requeue: (run, note) => queue({ requests: requestsOf(run), note }),
+        pick: (run, assumption, alternative, note) => queue({ requests: requestsOf(run), note, pick: { pickOf: run.id, assumption, alternative } }),
         cancel: (run) => act(() => sessionApi.cancelRun(run)),
         undo,
         undoNow: () => {

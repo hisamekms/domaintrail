@@ -6,7 +6,6 @@
 // menu confirms its result, restores the workspace as it was before it or compares the two.
 import { Fragment, useRef, useState, type ReactNode } from 'react';
 import { Bot, Reply, CircleX, Ellipsis, RotateCcw, X } from 'lucide-react';
-import { MESSAGES } from '../i18n';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
@@ -22,8 +21,6 @@ import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, ty
 type RunJson = CardRun['run'];
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-/** The notes a page writes to pick an alternative, in each of its languages: how a pick is recognized. */
-const ALTERNATIVE_NOTES = Object.values(MESSAGES).map((m) => m.session.chat.alternativeNote);
 /** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
 export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
 
@@ -175,7 +172,7 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
     const asked = run.answer && runs.find((r) => r.id === run.answer?.answerTo);
     const answerShown = asked !== undefined && answeredBy(asked, runs) === run.run.id;
     const done = run.message.kind === 'completed' ? run.message.reply : undefined;
-    const picked = done && done.assumptions.length > 0 ? pickedAlternative(run.run, runs, ALTERNATIVE_NOTES) : undefined;
+    const picked = done && done.assumptions.length > 0 ? pickedAlternative(run.run, runs) : undefined;
     return (
         <div className={`run-section${first ? '' : ' chained'}`} data-item={`run:${run.run.id}`}>
             {/* a run that continues the card: its number and time, quietly */}
@@ -458,7 +455,7 @@ function Assumptions({
                                             className="reply-alternative pickable"
                                             disabled={actions.busy}
                                             data-tooltip={tx.chat.pickAlternative}
-                                            onClick={() => void actions.requeue(run, tx.chat.alternativeNote(a.text, alt.label))}
+                                            onClick={() => void actions.pick(run, i, alt.id, tx.chat.alternativeNote(a.text, alt.label))}
                                         >
                                             <ReplyText text={alt.label} onNavigate={onNavigate} />
                                         </button>

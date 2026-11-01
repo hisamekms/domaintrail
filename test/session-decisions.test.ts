@@ -66,7 +66,6 @@ const done = run('d', 1, ['m1'], {
     report: {},
     reply: { outcome: 'done', summary: 'Done.', requests: [], questions: [], assumptions },
 });
-const notes = Object.values(MESSAGES).map((m) => m.session.chat.alternativeNote);
 
 describe('what became of a run’s questions', () => {
     test('open while no later run took over its requests', () => {
@@ -103,37 +102,46 @@ describe('what became of a run’s questions', () => {
 });
 
 describe('the alternative picked from a run’s assumptions', () => {
-    test('recognized by the note the page writes, in either language, with who, when and the run’s number', () => {
-        for (const note of notes) {
-            const pick = run('p', 5, ['m1'], { state: 'Queued' }, { note: note('The amount is fixed', 'Per category') });
-            expect(pickedAlternative(done, [done, pick], notes)).toEqual({
-                assumption: 1,
-                alternative: 'switch',
-                by: { run: 'p', number: 2, by: 'dev:f', at: at(5) },
-            });
+    const pickOf = (of: string, assumption: number, id: string, label: string): object => ({
+        note: 'redo it',
+        pick: { pickOf: of, assumption, text: assumptions[assumption].text, alternative: { id, label } },
+    });
+
+    test('the pick recorded in the input of the run that took over, with who, when and the run’s number', () => {
+        const pick = run('p', 5, ['m1'], { state: 'Queued' }, pickOf('d', 1, 'switch', 'Per category'));
+        expect(pickedAlternative(done, [done, pick])).toEqual({
+            assumption: 1,
+            alternative: 'switch',
+            by: { run: 'p', number: 2, by: 'dev:f', at: at(5) },
+        });
+    });
+
+    test('none while no later run took over, and when it was not a pick (applied again, or a note — even the page’s own words)', () => {
+        expect(pickedAlternative(done, [done])).toBeUndefined();
+        expect(pickedAlternative(done, [done, run('p', 5, ['m1'], { state: 'Queued' })])).toBeUndefined();
+        // a note is never read as a pick: only the input's `pick` is (runs before it was recorded show no pick)
+        for (const m of Object.values(MESSAGES)) {
+            const note = m.session.chat.alternativeNote('The amount is fixed', 'Per category');
+            expect(pickedAlternative(done, [done, run('p', 5, ['m1'], { state: 'Queued' }, { note })])).toBeUndefined();
         }
     });
 
-    test('none while no later run took over, and when it was not a pick (applied again, or a note of its own)', () => {
-        expect(pickedAlternative(done, [done], notes)).toBeUndefined();
-        expect(pickedAlternative(done, [done, run('p', 5, ['m1'], { state: 'Queued' })], notes)).toBeUndefined();
-        expect(pickedAlternative(done, [done, run('p', 5, ['m1'], { state: 'Queued' }, { note: 'Without tax, please.' })], notes)).toBeUndefined();
+    test('a run of a reply to it takes over without a pick: none', () => {
+        const replying = {
+            ...run('r', 5, [], { state: 'Queued' }),
+            input: { requests: [{ ...frozen('m7'), replyTo: 'd' }] },
+        } as unknown as RunJson;
+        expect(pickedAlternative(done, [done, replying])).toBeUndefined();
     });
 
-    test('a run of a reply to it takes over without a pick: none, unless its note is a pick', () => {
-        const replying = (note?: string): RunJson =>
-            ({
-                ...run('r', 5, [], { state: 'Queued' }, note === undefined ? {} : { note }),
-                input: { requests: [{ ...frozen('m7'), replyTo: 'd' }], ...(note !== undefined && { note }) },
-            }) as unknown as RunJson;
-        expect(pickedAlternative(done, [done, replying()], notes)).toBeUndefined();
-        expect(pickedAlternative(done, [done, replying(notes[0]('The amount is fixed', 'Without tax'))], notes)?.alternative).toBe('net');
+    test('a pick of another run does not count for this one', () => {
+        const other = run('p', 5, ['m1'], { state: 'Queued' }, pickOf('x', 1, 'net', 'Without tax'));
+        expect(pickedAlternative(done, [done, other])).toBeUndefined();
     });
 
     test('a pick cancelled before it started does not count', () => {
-        const note = notes[0]('The amount is fixed', 'Without tax');
-        const undone = run('p', 5, ['m1'], { state: 'Cancelled', cancelledAt: at(6), cancelledBy: 'dev:f' }, { note });
-        expect(pickedAlternative(done, [done, undone], notes)).toBeUndefined();
+        const undone = run('p', 5, ['m1'], { state: 'Cancelled', cancelledAt: at(6), cancelledBy: 'dev:f' }, pickOf('d', 1, 'net', 'Without tax'));
+        expect(pickedAlternative(done, [done, undone])).toBeUndefined();
     });
 
     test('a run’s number: by when it was queued, from 1', () => {

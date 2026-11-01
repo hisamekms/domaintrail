@@ -1,9 +1,8 @@
 // What became of a run's questions and assumptions (ADR 0026, appendix "Votes and reactions"), without React: the run
 // that took over its requests (`laterRunOf`, the rule that closes its votes) either answered its questions, picked an
 // alternative of one of its assumptions, or neither (they were left as they were). Who decided and when are that run's
-// `queuedBy` and `queuedAt`. An answer is recorded in the run's input (`answer`); a picked alternative only as the note
-// the facilitator's page wrote (`alternativeNote` of the page's language at the time), so it is recognized by that
-// note in any of the page's languages — a note written by hand does not count as a pick.
+// `queuedBy` and `queuedAt`. Both are recorded in that run's input: an answer as `answer`, a picked alternative as
+// `pick` (the note the page writes with it is for the agent and the people, never read back here).
 import { laterRunOf } from '@domaintrail/collaboration/domain/marks';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 
@@ -39,9 +38,6 @@ export interface PickedAlternative {
     readonly by: Decider;
 }
 
-/** The note asking for an alternative, as a page writes it (one per language). */
-export type AlternativeNote = (assumption: string, alternative: string) => string;
-
 /** A run's number in the session: as the chat numbers it, by when it was queued, from 1. */
 export function runNumber(runs: readonly RunJson[], id: string): number {
     const sorted = [...runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
@@ -74,17 +70,14 @@ export function questionsState(run: RunJson, runs: readonly RunJson[]): Question
 }
 
 /**
- * The alternative picked from the assumptions of `run` (a completed one): the run that took over its requests, when its
- * note is the one a page writes to ask for one of them (in any of `notes`). Undefined while none took over, and when it
- * was not a pick (the assumptions left as they were).
+ * The alternative picked from the assumptions of `run` (a completed one): the pick of the run that took over its
+ * requests, when that run's input picked one of `run`'s alternatives. Undefined while none took over, and when it was not
+ * a pick (the assumptions left as they were).
  */
-export function pickedAlternative(run: RunJson, runs: readonly RunJson[], notes: readonly AlternativeNote[]): PickedAlternative | undefined {
-    if (run.state !== 'Completed' || !run.reply) return undefined;
+export function pickedAlternative(run: RunJson, runs: readonly RunJson[]): PickedAlternative | undefined {
+    if (run.state !== 'Completed') return undefined;
     const later = takenOverBy(run, runs);
-    const note = later?.input.note;
-    if (!later || note === undefined) return undefined;
-    for (const [i, a] of run.reply.assumptions.entries())
-        for (const alt of a.alternatives)
-            if (notes.some((n) => n(a.text, alt.label) === note)) return { assumption: i, alternative: alt.id, by: deciderOf(later, runs) };
-    return undefined;
+    const pick = later?.input.pick;
+    if (!later || pick?.pickOf !== run.id) return undefined;
+    return { assumption: pick.assumption, alternative: pick.alternative.id, by: deciderOf(later, runs) };
 }

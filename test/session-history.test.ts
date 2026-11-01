@@ -141,6 +141,15 @@ describe('the history of changes', () => {
         const fewer = run('run3', 4, [qa], { state: 'Queued' });
         expect(changeUnits({ runs: [done, alternative, fewer], revisions }).map((u) => u.runs.map((r) => r.number))).toEqual([[3], [1, 2]]);
         expect(changeUnits({ runs: [done, alternative], revisions })[0].start).toBe(at(1));
+        // an alternative picked joins the card of the run it picked from (`pick.pickOf`)
+        const picked = run(
+            'run4',
+            5,
+            [qa, qb],
+            { state: 'Queued' },
+            { pick: { pickOf: 'run1', assumption: 0, text: 'x', alternative: { id: 'a', label: 'A' } } },
+        );
+        expect(changeUnits({ runs: [done, fewer, picked], revisions }).map((u) => u.runs.map((r) => r.number))).toEqual([[1, 3], [2]]);
     });
 });
 
