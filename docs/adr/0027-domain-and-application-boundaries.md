@@ -12,6 +12,9 @@
 - Input: the code on `main` at `8a77a8d` (M0, ADR 0025, and M1, ADR 0026, merged). The facts were checked again
   against `main` at `9f28344` (#23 merged) in T0 of [the plan](../plans/0027-boundaries.md); those that changed are
   marked *Since #23*. No decision changed.
+- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (generated code may import a context imported from another
+  package; values of recursive types in the contract tests and the kernel's `Location` imported, both left for later
+  here)
 
 ## Context
 

@@ -2,6 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-24
+- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (why the context parameter is required; a rejected promise of a
+  factory means the check could not be made)
 
 ## Context
 

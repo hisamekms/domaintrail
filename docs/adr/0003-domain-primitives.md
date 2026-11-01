@@ -2,6 +2,8 @@
 
 - Status: accepted
 - Date: 2026-10-17
+- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (an ID or domain primitive on `UUID` checks the form, so its
+  constructor can fail)
 
 ## Definition
 
