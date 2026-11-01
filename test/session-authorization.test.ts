@@ -8,7 +8,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { type SessionServer, startSessionServer } from '@domaintrail/composition';
+import { type SessionServer, startSessionServer } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { ResolvedSessionConfig } from '@domaintrail/dt';
 

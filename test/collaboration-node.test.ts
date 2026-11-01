@@ -21,7 +21,7 @@ const ENTRY = `
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { Collaboration as C, createCollaboration, createUnitOfWork, openSessionBlobs, openSessionDatabase, randomIds, systemClock } from '@domaintrail/collaboration';
-import { createModelValidator } from '@domaintrail/composition';
+import { createModelValidator } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/modeling';
 

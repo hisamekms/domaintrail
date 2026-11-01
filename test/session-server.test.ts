@@ -20,10 +20,11 @@ import {
     startSessionServer,
     WS_REVOKED,
     WS_SESSION_CLOSED,
-} from '@domaintrail/composition';
+    runCli,
+    SessionError,
+} from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { ResolvedSessionConfig } from '@domaintrail/dt';
-import { runCli, SessionError } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 const DT = `context Shop {

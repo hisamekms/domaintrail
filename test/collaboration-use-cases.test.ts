@@ -18,7 +18,7 @@ import {
     type ReplyData,
     toAgentReply,
 } from '@domaintrail/collaboration';
-import { createModelValidator } from '@domaintrail/composition';
+import { createModelValidator } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/modeling';
 

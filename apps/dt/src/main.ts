@@ -1,14 +1,9 @@
 import { GENERATED_MARKER, sourceSelection } from '@domaintrail/modeling';
-import {
-    type CliDeps,
-    type CliIO,
-    CONFIG_FILE_FORMAT,
-    consoleIO,
-    type LanguageServerFiles,
-    type ResolvedConfig,
-    runCli,
-    startLanguageServer,
-} from '@domaintrail/dt';
+import { type CliDeps } from './cli/ports.js';
+import { type CliIO, consoleIO, runCli } from './cli/main.js';
+import { CONFIG_FILE_FORMAT, type ResolvedConfig } from './config/config.js';
+import { type LanguageServerFiles } from './lsp/server.js';
+import { startLanguageServer } from './lsp/start.js';
 import {
     createGeneratedOutput,
     findDomainFiles as findSources,
@@ -46,9 +41,9 @@ export function cliDeps(): CliDeps {
         loadWorkspace,
         castLintHint: async (root) => ((await hasCastLintRule(root)) ? undefined : LINT_HINT),
         generatedOutput: createGeneratedOutput(GENERATED_MARKER),
-        startViewServer: async (options) => (await import('./view.js')).startViewServer(options),
+        startViewServer: async (options) => (await import('./wiring/view.js')).startViewServer(options),
         startSessionServer: async (options) => {
-            const server = await (await import('./session.js')).startSessionServer(options);
+            const server = await (await import('./wiring/session.js')).startSessionServer(options);
             // Ctrl+C stops the server cleanly: the agent's credential file is removed and the database closed
             const interrupted = (): void => {
                 void server.stop().finally(() => process.exit(130));
@@ -57,13 +52,13 @@ export function cliDeps(): CliDeps {
             process.once('SIGTERM', interrupted);
             return server;
         },
-        issueFacilitatorLink: async (root) => (await import('./session.js')).issueFacilitatorLink(root),
+        issueFacilitatorLink: async (root) => (await import('./wiring/session.js')).issueFacilitatorLink(root),
         startSubscriber: async (options) => {
             // the agent's `dt` and `dt fmt` / `dt check` after it: `session.agent.dt`, else this very CLI, with the runtime
             // and the entry running it now
             const [command, ...args] = options.dt ?? [];
             const dt = command ? { command, args } : { command: process.execPath, args: process.argv[1] ? [process.argv[1]] : [] };
-            const subscriber = await (await import('./subscriber.js')).startSubscriber({ ...options, dt });
+            const subscriber = await (await import('./wiring/subscriber.js')).startSubscriber({ ...options, dt });
             // Ctrl+C: the run in hand is released or failed as interrupted, and its agent stopped, before exiting
             const interrupted = (): void => {
                 void subscriber.stop().finally(() => process.exit(130));

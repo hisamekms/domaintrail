@@ -23,7 +23,7 @@ import {
 } from '@domaintrail/agent';
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
-import { SessionError } from '@domaintrail/dt';
+import { SessionError } from '../cli/ports.js';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
 

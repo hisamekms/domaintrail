@@ -1,6 +1,23 @@
-// The public surface of @domaintrail/dt (the `.` export; ADR 0027, Dependency rules): the entry points the
-// composition wires — the CLI, the language server, the Live View's HTTP and WebSocket servers, the session's routes.
-// Composition merges into it in T8.
+// The public surface of @domaintrail/dt (the `.` export; ADR 0027, Dependency rules): the entry points of `dt` with
+// every adapter wired — the CLI (`bin/dt.ts`), the Live View server, the session server, the subscriber — and the parts
+// they are built from that the integration tests and scripts reach: the CLI, the configuration, the language server, the
+// Live View's HTTP and WebSocket servers, the session's routes.
+
+// ---- the wiring: the entry points with every adapter wired (`main.ts`, `wiring/`) ------------------------------
+export { cliDeps, runDt } from './main.js';
+export { startViewServer, type ViewServer, type ViewServerOptions } from './wiring/view.js';
+export {
+    issueFacilitatorLink,
+    startSessionServer,
+    WS_EXPIRED,
+    WS_REVOKED,
+    WS_SESSION_CLOSED,
+    type SessionServer,
+    type SessionServerOptions,
+} from './wiring/session.js';
+export { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './wiring/subscriber.js';
+export { createWatcherHold, ECHO_MS, type WatcherHold } from './wiring/watcher-hold.js';
+export { createModelValidator } from './wiring/validator.js';
 
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';

@@ -30,10 +30,10 @@ import {
     startSessionServer,
     startSubscriber,
     type SubscriberOptions,
-} from '@domaintrail/composition';
+    SessionError,
+} from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { ResolvedSessionConfig } from '@domaintrail/dt';
-import { SessionError } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';

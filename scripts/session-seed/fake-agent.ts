@@ -16,7 +16,7 @@ import {
     type Subscriber,
     systemClock,
 } from '@domaintrail/agent';
-import { readCredential } from '@domaintrail/composition';
+import { readCredential } from '@domaintrail/dt';
 import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
 import { sourceSelection } from '@domaintrail/modeling';
 import { findDomainFiles } from '@domaintrail/workspace';

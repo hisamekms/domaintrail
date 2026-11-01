@@ -2,8 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/dt';
+import { cliDeps, runCli } from '@domaintrail/dt';
 import { formatDomain, formatStorming } from '@domaintrail/modeling';
 
 const DT = `context Delivery {

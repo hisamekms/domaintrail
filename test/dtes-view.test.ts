@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition';
+import { startViewServer, type ViewServer } from '@domaintrail/dt';
 import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, stormingViewKey, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';

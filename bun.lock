@@ -17,7 +17,6 @@
       "devDependencies": {
         "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
-        "@domaintrail/composition": "workspace:*",
         "@domaintrail/dt": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
@@ -45,6 +44,7 @@
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
+        "@domaintrail/workspace": "workspace:*",
         "commander": "15.0.0",
         "langium": "4.4.0",
         "vscode-languageserver": "10.1.2",
@@ -96,17 +96,6 @@
         "fast-check": "4.10.2",
       },
     },
-    "packages/composition": {
-      "name": "@domaintrail/composition",
-      "dependencies": {
-        "@domaintrail/agent": "workspace:*",
-        "@domaintrail/collaboration": "workspace:*",
-        "@domaintrail/dt": "workspace:*",
-        "@domaintrail/modeling": "workspace:*",
-        "@domaintrail/visualization": "workspace:*",
-        "@domaintrail/workspace": "workspace:*",
-      },
-    },
     "packages/modeling": {
       "name": "@domaintrail/modeling",
       "dependencies": {
@@ -141,8 +130,6 @@
     "@domaintrail/agent": ["@domaintrail/agent@workspace:capabilities/agent"],
 
     "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:contexts/collaboration"],
-
-    "@domaintrail/composition": ["@domaintrail/composition@workspace:packages/composition"],
 
     "@domaintrail/dt": ["@domaintrail/dt@workspace:apps/dt"],
 

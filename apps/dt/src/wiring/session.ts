@@ -35,25 +35,17 @@ import {
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
-import {
-    type Connection,
-    createAgentApi,
-    createApiRoutes,
-    createEventRelay,
-    createPresenceRelay,
-    createSessionHttp,
-    createSessionIdentities,
-    createViewHttpServer,
-    createWebSocketHub,
-    isLoopbackBind,
-    lastSeq,
-    meOf,
-    type SessionConnection,
-    SessionError,
-    sessionHostPolicy,
-    stateBody,
-    type ResolvedSessionConfig,
-} from '@domaintrail/dt';
+import { type Connection, createWebSocketHub } from '../server/websocket/hub.js';
+import { createAgentApi } from '../server/session/agent.js';
+import { createApiRoutes } from '../server/http/routes.js';
+import { createEventRelay, lastSeq } from '../server/session/relay.js';
+import { createPresenceRelay, type SessionConnection } from '../server/session/presence.js';
+import { createSessionHttp, meOf, stateBody } from '../server/session/routes.js';
+import { createSessionIdentities } from '../server/session/identities.js';
+import { createViewHttpServer } from '../server/http/server.js';
+import { isLoopbackBind, sessionHostPolicy } from '../server/http/access.js';
+import { SessionError } from '../cli/ports.js';
+import { type ResolvedSessionConfig } from '../config/config.js';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';

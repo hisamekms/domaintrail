@@ -3,8 +3,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition';
-import { runCli } from '@domaintrail/dt';
+import { cliDeps, runCli } from '@domaintrail/dt';
 import { EXAMPLES, tempCopyOfExamples } from './helpers.js';
 
 /**

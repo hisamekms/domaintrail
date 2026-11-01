@@ -24,7 +24,7 @@ import {
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
-import { type SessionServer, startSessionServer, createModelValidator } from '@domaintrail/composition';
+import { type SessionServer, startSessionServer, createModelValidator } from '@domaintrail/dt';
 import { sourceSelection } from '@domaintrail/modeling';
 
 const dirs: string[] = [];

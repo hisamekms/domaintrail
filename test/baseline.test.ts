@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { createGitRevisions } from '@domaintrail/visualization';
 import type { Baseline, ViewPayload } from '@domaintrail/visualization/protocol';
-import { startViewServer, type ViewServer } from '@domaintrail/composition';
+import { startViewServer, type ViewServer } from '@domaintrail/dt';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

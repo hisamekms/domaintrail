@@ -189,18 +189,9 @@ export const MAP: Record<string, Module> = {
         kind: 'app',
         dir: 'apps/dt',
         sources: 'apps/dt/src',
-        upstream: ['agent', 'collaboration', 'modeling', 'visualization'],
-    },
-    composition: {
-        kind: 'app',
-        dir: 'packages/composition',
-        sources: 'packages/composition/src',
-        // the wiring; it merges into apps/dt (T8)
-        upstream: ['agent', 'collaboration', 'dt', 'modeling', 'visualization', 'workspace'],
-        exceptions: {
-            // an app depends on no other app: composition merges into apps/dt (T8)
-            kinds: ['dt'],
-        },
+        // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (presentation and
+        // composition until T8)
+        upstream: ['agent', 'collaboration', 'modeling', 'visualization', 'workspace'],
     },
     web: {
         kind: 'app',

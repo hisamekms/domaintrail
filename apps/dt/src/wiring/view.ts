@@ -1,7 +1,10 @@
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
 import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
-import { type Assets, createApiRoutes, createViewHttpServer, createWebSocketHub, defaultWebDir, loadAssets } from '@domaintrail/dt';
+import { type Assets, defaultWebDir, loadAssets } from '../server/http/assets.js';
+import { createApiRoutes } from '../server/http/routes.js';
+import { createViewHttpServer } from '../server/http/server.js';
+import { createWebSocketHub } from '../server/websocket/hub.js';
 import {
     createFileLayoutStore,
     createGitRevisions,

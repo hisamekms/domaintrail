@@ -13,10 +13,9 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { type AccessAdapterOptions } from '@domaintrail/collaboration';
 import type { Me } from '@domaintrail/collaboration/protocol';
-import { cliDeps, type SessionServer, type SessionServerOptions, startSessionServer, WS_EXPIRED, WS_REVOKED } from '@domaintrail/composition';
+import { cliDeps, type SessionServer, type SessionServerOptions, startSessionServer, WS_EXPIRED, WS_REVOKED, runCli, SessionError } from '@domaintrail/dt';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import type { ResolvedSessionConfig } from '@domaintrail/dt';
-import { runCli, SessionError } from '@domaintrail/dt';
 
 const TEAM = 'team.cloudflareaccess.com';
 const ISSUER = `https://${TEAM}`;

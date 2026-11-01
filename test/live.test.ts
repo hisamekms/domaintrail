@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition';
+import { startViewServer, type ViewServer } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
 import { sourceSelection } from '@domaintrail/modeling';
