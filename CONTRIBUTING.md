@@ -73,13 +73,14 @@ Three kinds of test, by what a test crosses:
 
 | Kind | What it tests | Where | Imports |
 |---|---|---|---|
-| **Unit test (UT)** | one package through that package's code only, in one process | next to the code: `packages/<pkg>/src/**/<module>.test.ts` (`web/**/<module>.test.ts` for the page) | its own package by relative paths; another package only through its entries (`.` / `./protocol`) |
-| **Integration test (IT)** | across packages or the process boundary: the composition's wiring, the HTTP and WebSocket servers on a port, the CLI as a child process (`node dist/dt.js`), the agent pipeline with a fake agent, the session seed, the baseline contract tests (generated output, `dt check`, Live View payloads, session error bodies), the architecture test | `test/` | the packages only through their entries (and `dist/`), plus the helpers in `test/` |
+| **Unit test (UT)** | one package through that package's code only | next to the code: `packages/<pkg>/src/**/<module>.test.ts` (`web/**/<module>.test.ts` for the page) | its own package by relative paths; another package only through its entries (`.` / `./protocol`) |
+| **Integration test (IT)** | across packages: the composition's wiring, the app's HTTP and WebSocket servers on a port, the CLI as a child process (`node dist/dt.js`), the agent pipeline with a fake agent, the session seed, the baseline contract tests (generated output, `dt check`, Live View payloads, session error bodies), the architecture test | `test/` | the packages only through their entries (and `dist/`), plus the helpers in `test/` |
 | **End-to-end test (E2E)** | `dt view` and `dt session` in a browser, as a user | `e2e/` (none yet) | |
 
 A unit test may use its package's own technology: temporary directories, fixture files, a file or in-memory SQLite
-database (collaboration's store test is a unit test). It does not open ports, spawn child processes (`tsc`, `dt`,
-`git`) or reach the network; a test that does is an integration test. To decide, ask whether the test still makes sense
+database (collaboration's store test is a unit test). When it tests its package's own adapter or output, it may also
+spawn child processes and open ports on localhost (the agent's `dt` shim, the JWKS verifier against a local stand-in,
+`tsc` over the generated code); it never reaches the network beyond localhost. To decide, ask whether the test still makes sense
 with that package alone: if it does, it is a unit test; if it needs another package's internals, split it, or make it
 an integration test that goes through the entries.
 

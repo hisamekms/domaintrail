@@ -110,7 +110,9 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   importing a name that comes from `infrastructure/` or `adapters/` breaks `foreign-infrastructure` the same way.
   Exceptions: `exports` 7 → 0, `public-surface` 117 → 3 (collaboration → `core/analyze`, `core/emoji`, `core/config`),
   `kinds` 2 and `pure-core-io` 1 unchanged.
-  *Tests (decided by the maintainer: unit tests next to the code, integration tests in `test/`, CONTRIBUTING.md).*
+  *Tests (decided by the maintainer: unit tests next to the code, integration tests in `test/`, CONTRIBUTING.md; then
+  amended: a unit test may spawn processes and open localhost ports when it tests its package's own adapter or
+  output — the numbers below are before that amendment, see "T2 follow-up").*
   864 tests in 79 files are unit tests now (modeling 308, web 218, collaboration 165, visualization 78, workspace 67,
   agent 26, presentation 2); 385 in 47 files stay integration tests (the baselines, the architecture test, the CLI
   with the composition's adapters, the servers on a port, child processes — `tsc` in `test/typecheck/`, `dt`, `node`,
