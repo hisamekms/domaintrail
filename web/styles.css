@@ -5650,6 +5650,10 @@ del.was.block {
     align-self: center;
     font-size: 0.6875rem;
 }
+/* a person mentioned in a message: `@佐藤` kept on one line */
+.chat-mention.person {
+    white-space: nowrap;
+}
 /* a message that mentions me, in my stream only: a faint blue wash (it asks for my attention). Not violet, which is
    what can be clicked, nor amber, which is a question waiting for an answer */
 .chat-row.mentions-me:not(.paired, .selected) {

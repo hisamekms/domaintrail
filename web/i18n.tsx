@@ -492,11 +492,7 @@ const ja = {
             close: 'チャットを閉じる',
             open: 'チャットを開く',
             launcher: (unread: number, mentions: number) =>
-                mentions > 0
-                    ? `チャットを開く（あなた宛て ${mentions} 件、新着 ${unread} 件）`
-                    : unread > 0
-                      ? `チャットを開く（新着 ${unread} 件）`
-                      : 'チャットを開く',
+                mentions > 0 ? `チャットを開く（あなた宛て ${mentions} 件）` : unread > 0 ? `チャットを開く（新着 ${unread} 件）` : 'チャットを開く',
             apply: 'アプライ（実行に入れる）',
             applyNow: 'アプライ',
             applyWithNote: '補足を付けてアプライ',
@@ -1141,7 +1137,7 @@ const en: Messages = {
             close: 'Close the chat',
             open: 'Open the chat',
             launcher: (unread, mentions) =>
-                mentions > 0 ? `Open the chat (${mentions} for you, ${unread} new)` : unread > 0 ? `Open the chat (${unread} new)` : 'Open the chat',
+                mentions > 0 ? `Open the chat (${mentions} for you)` : unread > 0 ? `Open the chat (${unread} new)` : 'Open the chat',
             apply: 'Apply (queue a run)',
             applyNow: 'Apply',
             applyWithNote: 'Apply with a note',

@@ -54,12 +54,15 @@ export function ParticipantsButton(props: {
         if (!focus) return;
         setOpen(true);
         if (focusAway) setOfflineOpen(true);
-        const frame = requestAnimationFrame(() => {
-            const el = root.current?.querySelector<HTMLElement>(`[data-participant-id="${CSS.escape(focus.id)}"]`);
-            if (!el) return;
-            el.scrollIntoView({ block: 'nearest' });
-            el.classList.add('chat-flash');
-            setTimeout(() => el.classList.remove('chat-flash'), 1600);
+        // two frames: the list (and its offline part) is rendered by then
+        let frame = requestAnimationFrame(() => {
+            frame = requestAnimationFrame(() => {
+                const el = root.current?.querySelector<HTMLElement>(`[data-participant-id="${CSS.escape(focus.id)}"]`);
+                if (!el) return;
+                el.scrollIntoView({ block: 'nearest' });
+                el.classList.add('chat-flash');
+                setTimeout(() => el.classList.remove('chat-flash'), 1600);
+            });
         });
         return () => cancelAnimationFrame(frame);
         // each click once
