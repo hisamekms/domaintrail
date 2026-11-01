@@ -1,10 +1,10 @@
 // Helpers of the project analysis's unit tests: analyses of inline sources and of examples/shop.
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type Analysis } from './analyze.js';
+import { analyze, type Analysis } from './application/analyze.js';
 import type { Diagnostic, SourceFile } from '@domaintrail/kernel';
 
-export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', '..', 'examples', 'shop');
+export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
 
 /** Analyzes inline sources; keys are file names. */
 export function check(files: Record<string, string>): Promise<Analysis> {

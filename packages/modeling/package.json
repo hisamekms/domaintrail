@@ -8,11 +8,9 @@
   },
   "dependencies": {
     "@domaintrail/kernel": "workspace:*",
-    "langium": "4.4.0",
-    "picomatch": "4.0.7"
+    "langium": "4.4.0"
   },
   "devDependencies": {
-    "@types/picomatch": "4.0.3",
     "fast-check": "4.10.2"
   }
 }

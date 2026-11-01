@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from './build.js';
 import { ElkLayoutEngine } from '../../adapters/elk.js';
 import { INTERNAL_PADDING, LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, anyLang, sameText, transitionText, type TransitionLabels } from './ir.js';

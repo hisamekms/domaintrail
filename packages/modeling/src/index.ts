@@ -96,21 +96,6 @@ export { isStormingFile } from './storming/files.js';
 export { analyzeDomain, type DomainAnalysis } from './core/analyze.js';
 export { analyzeStormings } from './storming/analyze.js';
 
-// ---- use cases: the project analysis (T8: capabilities/analysis) ------------------------------------------------
-export { analyze, type Analysis } from './analysis/analyze.js';
-// its section of domaintrail.jsonc, `sources` (T6), composed by the app; the workspace receives `sourceSelection`
-export {
-    DEFAULT_SOURCES,
-    IGNORED_DIRS,
-    resolveSourcesConfig,
-    sourceMatcher,
-    sourceSelection,
-    SOURCES_CONFIG_KEYS,
-    validateSourcesConfig,
-    type ResolvedSourcesConfig,
-    type SourcesConfigFile,
-} from './analysis/sources.js';
-
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './format/format.js';
 export { formatStorming } from './storming/format.js';
@@ -118,6 +103,8 @@ export { formatStorming } from './storming/format.js';
 // ---- use cases: the TypeScript generator (T8: capabilities/generation) ------------------------------------------
 export { GENERATED_MARKER, generateTypeScript, type GeneratedFile, type PolicyMode } from './generator/typescript.js';
 export { aggregateParamName } from './generator/naming.js';
+// its check of the `.dt` sources (M011), which the project analysis runs
+export { checkGeneratedNames } from './generator/tsnames.js';
 // its sections of domaintrail.jsonc, `generate` and `lintHint` (T6), composed by the app
 export {
     GENERATION_CONFIG_KEYS,

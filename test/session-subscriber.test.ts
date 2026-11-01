@@ -37,7 +37,7 @@ import type { ResolvedSessionConfig } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 const ROOT = path.join(import.meta.dir, '..');
 const FAKE = path.join(import.meta.dir, 'fixtures', 'agent', 'fake-claude.mjs');

@@ -1,6 +1,4 @@
 import {
-    analyze,
-    DEFAULT_SOURCES,
     diffModels,
     type DomainModel,
     EMPTY_DIFF,
@@ -11,6 +9,7 @@ import {
     stormingTimelines,
     supportingContexts,
 } from '@domaintrail/modeling';
+import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../core/storming/ir.js';
 import { matchRenderNodes, projectView } from '../core/storming/render.js';
 import { renderToGraph, stormingViewKey } from '../core/storming/graph.js';

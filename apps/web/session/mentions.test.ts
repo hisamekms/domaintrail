@@ -4,7 +4,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type DomainModel } from '@domaintrail/modeling';
+import { type DomainModel } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import {
     addChips,

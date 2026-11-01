@@ -5,7 +5,7 @@ import { Language, Parser, Query, type Node } from 'web-tree-sitter';
 import { loadWorkspace } from '@domaintrail/workspace';
 import { GRAMMAR_DIR, STAMP, hashes } from '../scripts/tree-sitter.js';
 import { EXAMPLES } from './helpers.js';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 // The tree-sitter grammar (tree-sitter-domaintrail, for editors) must parse what the Langium grammar parses. It is
 // checked with the committed wasm; `bun run tree-sitter` rebuilds it after a change of grammar.js.

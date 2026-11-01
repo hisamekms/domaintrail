@@ -1,19 +1,17 @@
-// The project analysis (ADR 0027, Project analysis and configuration: the capability `analysis`, inside modeling until
-// T8 moves it to capabilities/analysis): the sources by language, Modeling's analysis of the `.dt` sources, Storming's
-// of the `.dtes` sources against the model, and the generation's checks, combined into one `Analysis`. `dt check`, the
-// language server, the view service, the git baseline and Collaboration's validator use it. Nothing else in the
-// package imports it (rule `inner-modules` of test/architecture.test.ts).
-import type { LangiumDocument } from 'langium';
-import type { Model } from '../language/generated/ast.js';
-import { analyzeDomain, type DomainAnalysis } from '../core/analyze.js';
-import { DiagnosticSink } from '../core/diagnostic-sink.js';
-import type { ModelIndex } from '../core/model-index.js';
-import { checkTsNames } from '../generator/tsnames.js';
-import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '@domaintrail/kernel';
-import type { SourceFile } from '@domaintrail/kernel';
-import type { DomainModel } from '../model/model.js';
-import { analyzeStormings, type StormingAnalysis } from '../storming/analyze.js';
-import { isStormingFile } from '../storming/files.js';
+// The project analysis (ADR 0027, Project analysis and configuration: the capability `analysis`): the sources by
+// language, Modeling's analysis of the `.dt` sources, Storming's of the `.dtes` sources against the model, and the
+// generation's checks, combined into one `Analysis`. `dt check`, the language server, the view service, the git
+// baseline and Collaboration's validator (implemented by the app) use it.
+import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic, type SourceFile } from '@domaintrail/kernel';
+import {
+    analyzeDomain,
+    analyzeStormings,
+    checkGeneratedNames,
+    isStormingFile,
+    type DomainAnalysis,
+    type DomainModel,
+    type StormingAnalysis,
+} from '@domaintrail/modeling';
 
 /** The sources by language, each in the order given: the `.dt` sources (Modeling's) and the `.dtes` sources (Storming's). */
 function byLanguage(sources: readonly SourceFile[]): { domain: SourceFile[]; storming: SourceFile[] } {
@@ -24,8 +22,8 @@ export interface Analysis {
     /** Every source analyzed, `.dt` and `.dtes`. */
     files: string[];
     /** The `.dt` documents. */
-    documents: LangiumDocument<Model>[];
-    index: ModelIndex;
+    documents: DomainAnalysis['documents'];
+    index: DomainAnalysis['index'];
     /** The diagnostics of the `.dt` and the `.dtes` sources, sorted. */
     diagnostics: Diagnostic[];
     /** True when every `.dt` file parsed without lexer/parser errors (a `.dtes` syntax error does not count). */
@@ -47,7 +45,7 @@ export async function analyze(allSources: readonly SourceFile[]): Promise<Analys
     const sources = byLanguage(allSources);
     const domain = await analyzeDomain(sources.domain);
     const stormings = await analyzeStormings(sources.storming, domain.model);
-    const diagnostics = [...domain.diagnostics, ...generationChecks(domain), ...stormings.diagnostics];
+    const diagnostics = [...domain.diagnostics, ...checkGeneratedNames(domain), ...stormings.diagnostics];
     diagnostics.sort(compareDiagnostics);
     return {
         files: allSources.map((s) => s.path),
@@ -59,12 +57,4 @@ export async function analyze(allSources: readonly SourceFile[]): Promise<Analys
         model: domain.model,
         stormings,
     };
-}
-
-/** The checks of the TypeScript generator over the `.dt` sources (M011, `generator/tsnames.ts`). */
-function generationChecks(domain: DomainAnalysis): Diagnostic[] {
-    if (!domain.syntaxOk) return [];
-    const sink = new DiagnosticSink(domain.resolveFile);
-    checkTsNames(domain.index, sink);
-    return sink.items;
 }

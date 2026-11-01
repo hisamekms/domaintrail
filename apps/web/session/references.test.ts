@@ -1,7 +1,7 @@
 // Element references in the agent's reply (apps/web/session/references.ts): the token grammar, both kinds, resolution in the
 // name display setting, and what is left as text.
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import { parseReplyText, referenceText, type ReplySegment } from './references';
 import type { NamingContext } from './targets';
 import { exampleSources } from '../test-helpers';

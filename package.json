@@ -69,6 +69,7 @@
   },
   "devDependencies": {
     "@domaintrail/agent": "workspace:*",
+    "@domaintrail/analysis": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/dt": "workspace:*",
     "@domaintrail/kernel": "workspace:*",

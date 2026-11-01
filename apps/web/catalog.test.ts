@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze, type InvariantModel } from '@domaintrail/modeling';
+import { type InvariantModel } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CardHead, Invariants as CardInvariants } from './catalog';

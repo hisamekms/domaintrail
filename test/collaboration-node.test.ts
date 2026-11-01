@@ -23,7 +23,7 @@ import * as path from 'node:path';
 import { Collaboration as C, createCollaboration, createUnitOfWork, openSessionBlobs, openSessionDatabase, randomIds, systemClock } from '@domaintrail/collaboration';
 import { createModelValidator } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 const [root, step] = process.argv.slice(2);
 const must = (r) => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value; };

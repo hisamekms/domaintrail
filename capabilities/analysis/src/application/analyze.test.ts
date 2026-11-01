@@ -2,7 +2,7 @@
 // (through the CLI: test/dtes-cli.test.ts), and the generation's checks.
 import { describe, expect, test } from 'bun:test';
 import { analyze } from './analyze.js';
-import { check, exampleSources, only } from './test-helpers.js';
+import { check, exampleSources, only } from '../test-helpers.js';
 
 const DT = `context Delivery {
   id ShipmentId: UUID

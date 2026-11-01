@@ -34,7 +34,7 @@ import {
 } from '@domaintrail/collaboration';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { type Connection, createWebSocketHub } from '../server/websocket/hub.js';
 import { createAgentApi } from '../server/session/agent.js';
 import { createApiRoutes } from '../server/http/routes.js';

@@ -1,4 +1,5 @@
-import { GENERATED_MARKER, sourceSelection } from '@domaintrail/modeling';
+import { GENERATED_MARKER } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 import { type CliDeps } from './cli/ports.js';
 import { type CliIO, consoleIO, runCli } from './cli/main.js';
 import { CONFIG_FILE_FORMAT, type ResolvedConfig } from './config/config.js';

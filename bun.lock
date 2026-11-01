@@ -16,6 +16,7 @@
       },
       "devDependencies": {
         "@domaintrail/agent": "workspace:*",
+        "@domaintrail/analysis": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/dt": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
@@ -42,6 +43,7 @@
       "name": "@domaintrail/dt",
       "dependencies": {
         "@domaintrail/agent": "workspace:*",
+        "@domaintrail/analysis": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
@@ -69,6 +71,7 @@
         "tldraw": "5.5.2",
       },
       "devDependencies": {
+        "@domaintrail/analysis": "workspace:*",
         "@tldraw/tlschema": "5.5.2",
         "@types/react": "19.3.0",
         "@types/react-dom": "19.3.0",
@@ -80,9 +83,21 @@
         "@domaintrail/collaboration": "workspace:*",
       },
     },
+    "capabilities/analysis": {
+      "name": "@domaintrail/analysis",
+      "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
+        "@domaintrail/modeling": "workspace:*",
+        "picomatch": "4.0.7",
+      },
+      "devDependencies": {
+        "@types/picomatch": "4.0.3",
+      },
+    },
     "capabilities/visualization": {
       "name": "@domaintrail/visualization",
       "dependencies": {
+        "@domaintrail/analysis": "workspace:*",
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "elkjs": "0.12.0",
@@ -106,10 +121,8 @@
       "dependencies": {
         "@domaintrail/kernel": "workspace:*",
         "langium": "4.4.0",
-        "picomatch": "4.0.7",
       },
       "devDependencies": {
-        "@types/picomatch": "4.0.3",
         "fast-check": "4.10.2",
       },
     },
@@ -137,6 +150,8 @@
     "@chevrotain/utils": ["@chevrotain/utils@13.2.0", "", {}, "sha512-SzKYY68rseOrb9KILVzPsl6SjkQtdWw01SRGB5aCVI5kFcHltQsOYV3JB0Ffst72DgkvHCyDQ0NLwxtmCCf97Q=="],
 
     "@domaintrail/agent": ["@domaintrail/agent@workspace:capabilities/agent"],
+
+    "@domaintrail/analysis": ["@domaintrail/analysis@workspace:capabilities/analysis"],
 
     "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:contexts/collaboration"],
 

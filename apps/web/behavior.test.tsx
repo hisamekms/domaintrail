@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { analyze, type DomainModel, type ElementModel } from '@domaintrail/modeling';
+import { type DomainModel, type ElementModel } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from './behavior';
 import { MESSAGES } from './i18n';
 import { tabsFor } from './inspector';

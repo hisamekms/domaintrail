@@ -1,7 +1,7 @@
 // Helpers of Visualization's unit tests: models analyzed from inline sources or from examples/shop, through Modeling's entry.
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type Analysis } from '@domaintrail/modeling';
+import { analyze, type Analysis } from '@domaintrail/analysis';
 import { type Diagnostic, type SourceFile } from '@domaintrail/kernel';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');

@@ -6,7 +6,7 @@ import { startViewServer, type ViewServer } from '@domaintrail/dt';
 import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, stormingViewKey, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 

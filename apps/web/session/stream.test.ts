@@ -5,7 +5,8 @@ import { NO_PEERS } from './presence';
 import { targetName, WORKSPACE_TARGET, type NamingContext } from './targets';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type DomainModel } from '@domaintrail/modeling';
+import { type DomainModel } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import { exampleSources } from '../test-helpers';
 import { applyEvent } from './state';
 import {

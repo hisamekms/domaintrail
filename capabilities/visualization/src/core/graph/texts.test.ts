@@ -1,6 +1,6 @@
 // The texts of the graphs in every language and display mode (the Live View's own words among them).
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 import { buildStateGraph, buildStructureGraph } from './build.js';
 import { buildContextMapGraph } from './context-map.js';
 import { anyLang, perLang, type Graph } from './ir.js';

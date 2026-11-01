@@ -1,5 +1,5 @@
 // Helpers of Presentation's unit tests: models analyzed from inline sources, through Modeling's entry.
-import { analyze, type Analysis } from '@domaintrail/modeling';
+import { analyze, type Analysis } from '@domaintrail/analysis';
 
 /** Analyzes inline sources; keys are file names. */
 export function check(files: Record<string, string>): Promise<Analysis> {

@@ -64,10 +64,8 @@ import {
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
 import {
-    analyze,
     ast,
     commandsOf,
-    DEFAULT_SOURCES,
     docComment,
     DomainGeneratedModule,
     DomainGeneratedSharedModule,
@@ -80,6 +78,7 @@ import {
     LabelResolver,
     ModelIndex,
 } from '@domaintrail/modeling';
+import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { type Diagnostic } from '@domaintrail/kernel';
 import { CONFIG_FILES, ConfigError, defaultConfig, type ResolvedConfig } from '../config/config.js';
 

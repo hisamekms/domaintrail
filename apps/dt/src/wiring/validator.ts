@@ -2,7 +2,7 @@
 // both DSLs). The app implements it, since a context does not depend on the project analysis (ADR 0027, Project
 // analysis and configuration).
 import type { ModelValidator } from '@domaintrail/collaboration';
-import { analyze } from '@domaintrail/modeling';
+import { analyze } from '@domaintrail/analysis';
 
 export function createModelValidator(): ModelValidator {
     return {

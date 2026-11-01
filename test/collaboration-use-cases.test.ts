@@ -20,7 +20,7 @@ import {
 } from '@domaintrail/collaboration';
 import { createModelValidator } from '@domaintrail/dt';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 const dirs: string[] = [];
 afterAll(async () => {

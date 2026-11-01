@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net';
 import * as path from 'node:path';
-import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { type Assets, defaultWebDir, loadAssets } from '../server/http/assets.js';
 import { createApiRoutes } from '../server/http/routes.js';
 import { createViewHttpServer } from '../server/http/server.js';

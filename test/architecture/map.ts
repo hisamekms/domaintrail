@@ -134,9 +134,6 @@ export const MAP: Record<string, Module> = {
             // Storming reads Modeling's typed model, which knows nothing of it; its analysis takes the model as its
             // input and does not run Modeling's analysis (T4)
             storming: { becomes: 'contexts/storming', upstream: [], never: ['core/analyze'] },
-            // the project analysis runs Modeling's analysis, then Storming's with the model, and the generation's
-            // checks (T4, T5)
-            analysis: { becomes: 'capabilities/analysis', upstream: ['storming', 'generator'] },
             // the TypeScript generator, its section of the configuration (`generator/config.ts`, T6) and its name check
             // (M011), which the project analysis runs; Modeling's own code (the checkers) does not import it (T5), and
             // it does not run Modeling's analysis. Until T10
@@ -154,11 +151,20 @@ export const MAP: Record<string, Module> = {
         // visualization's types; it imports none, and the map does not carry that edge over (ADR 0027).
         upstream: ['kernel', 'modeling'],
     },
+    analysis: {
+        kind: 'capability',
+        dir: 'capabilities/analysis',
+        sources: 'capabilities/analysis/src',
+        // the project analysis runs Modeling's analysis, then Storming's with the model, and the generation's checks
+        // (T4, T5); Storming and the generator are part of modeling until they move (T8)
+        upstream: ['kernel', 'modeling'],
+    },
     visualization: {
         kind: 'capability',
         dir: 'capabilities/visualization',
         sources: 'capabilities/visualization/src',
-        upstream: ['kernel', 'modeling'],
+        // the view service and the git baseline analyze the workspace through the project analysis
+        upstream: ['analysis', 'kernel', 'modeling'],
     },
     agent: {
         kind: 'capability',
@@ -187,12 +193,13 @@ export const MAP: Record<string, Module> = {
         sources: 'apps/dt/src',
         // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (presentation and
         // composition until T8)
-        upstream: ['agent', 'collaboration', 'kernel', 'modeling', 'visualization', 'workspace'],
+        upstream: ['agent', 'analysis', 'collaboration', 'kernel', 'modeling', 'visualization', 'workspace'],
     },
     web: {
         kind: 'app',
         dir: 'apps/web',
         sources: 'apps/web',
-        upstream: ['collaboration', 'kernel', 'modeling', 'visualization'],
+        // its unit tests analyze examples/shop through the project analysis (a devDependency)
+        upstream: ['analysis', 'collaboration', 'kernel', 'modeling', 'visualization'],
     },
 };

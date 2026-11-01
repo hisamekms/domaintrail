@@ -22,7 +22,7 @@ import {
     systemClock,
 } from '@domaintrail/agent';
 import { AGENT_FILE, type AgentCredential, readAgentCredential, SESSION_DIR } from '@domaintrail/collaboration';
-import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
 import { SessionError } from '../cli/ports.js';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { processAlive } from './process.js';

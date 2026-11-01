@@ -11,7 +11,7 @@ import { startViewServer, type ViewServer } from '@domaintrail/dt';
 import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 const DT = `context Shop {
   id OrderId: UUID

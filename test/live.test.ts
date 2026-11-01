@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { startViewServer, type ViewServer } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 
 let dir: string;
 let server: ViewServer;

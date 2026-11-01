@@ -1,7 +1,7 @@
 import { cp, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { type Analysis, analyze } from '@domaintrail/modeling';
+import { type Analysis, analyze } from '@domaintrail/analysis';
 import { type Diagnostic, type SourceFile } from '@domaintrail/kernel';
 import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';

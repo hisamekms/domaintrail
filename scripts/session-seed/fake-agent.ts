@@ -18,7 +18,7 @@ import {
 } from '@domaintrail/agent';
 import { readCredential } from '@domaintrail/dt';
 import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
-import { sourceSelection } from '@domaintrail/modeling';
+import { sourceSelection } from '@domaintrail/analysis';
 import { findDomainFiles } from '@domaintrail/workspace';
 
 /** A reply as a scenario writes it: requests by their number in the run (from 1); `questions` and `assumptions` optional. */
