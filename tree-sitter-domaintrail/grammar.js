@@ -1,9 +1,9 @@
 /**
  * Tree-sitter grammar of the DomainTrail DSL (`.dt` files), for highlighting and editor structure.
  *
- * It follows src/language/domain.langium, which stays the definition of the language; test/tree-sitter.test.ts
- * parses the shop example and the guide's examples with both. Where Langium decides with more lookahead (a field
- * after a command, a keyword used as a field name), the conflicts below let the parser try both.
+ * It follows contexts/modeling/src/infrastructure/syntax/domain.langium, which stays the definition of the language;
+ * test/tree-sitter.test.ts parses the shop example and the guide's examples with both. Where Langium decides with more
+ * lookahead (a field after a command, a keyword used as a field name), the conflicts below let the parser try both.
  *
  * @file DomainTrail grammar for tree-sitter
  * @license MIT

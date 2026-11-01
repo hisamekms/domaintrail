@@ -223,7 +223,7 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined> | T 
     }
 }
 
-/** The composition's subscriber on the context's workspace, with the fake agent following `plan`. */
+/** The app's subscriber (`startSubscriber`) on the context's workspace, with the fake agent following `plan`. */
 async function subscribe(ctx: Context, planFile: string, extra: Partial<SubscriberOptions> = {}): Promise<{ subscriber: RunningSubscriber; log: string[] }> {
     const log: string[] = [];
     const subscriber = await startSubscriber({
