@@ -26,8 +26,6 @@ export {
 } from './domain/graph/ir.js';
 export { PRIMITIVE_LABELS, typeText } from './domain/graph/build.js';
 export { dependencyCounts } from './domain/graph/context-map.js';
-// the model diff (T7: Modeling's domain)
-export { type ModelDiff } from './domain/graph/diff.js';
 
 // ---- core: the storming views (the semantic graph and the occurrences: T7, Storming's domain) -------------------
 export {

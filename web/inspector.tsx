@@ -1,6 +1,5 @@
 import { PanelBottomClose, PanelRightClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
-import { dependencyCounts, type DisplayMode, type ModelDiff } from '@domaintrail/visualization';
 import {
     type CommandModel,
     contextDependencies,
@@ -14,9 +13,11 @@ import {
     groupByContext,
     type InvariantModel,
     type Location,
+    type ModelDiff,
     supportingContexts,
     type TypeExpr,
 } from '@domaintrail/modeling';
+import { dependencyCounts, type DisplayMode } from '@domaintrail/visualization';
 import { Changes, CommandCard, OldType, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
 import {

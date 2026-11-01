@@ -1,5 +1,5 @@
 import { createShapeId, type Editor, type TLShapeId, type TLShapePartial } from 'tldraw';
-import type { Diagnostic } from '@domaintrail/modeling';
+import type { Diagnostic, ModelDiff } from '@domaintrail/modeling';
 import {
     compartmentHeight,
     type DisplayMode,
@@ -9,7 +9,6 @@ import {
     internalRowHeight,
     type LaidOutGraph,
     type Lang,
-    type ModelDiff,
     type NodeLayout,
     type Texts,
     type TransitionLabels,

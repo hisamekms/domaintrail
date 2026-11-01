@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { DomainModel } from '@domaintrail/modeling';
-import type { ModelDiff } from '@domaintrail/visualization';
+import type { DomainModel, ModelDiff } from '@domaintrail/modeling';
 import { menuPlacement } from './baseline-picker';
 import { CommandCard } from './behavior';
 import { MESSAGES } from './i18n';

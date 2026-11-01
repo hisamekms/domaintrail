@@ -1,11 +1,22 @@
-import { analyze, DEFAULT_SOURCES, type DomainModel, type Storming, type StormingAnalysis, supportingContexts } from '@domaintrail/modeling';
+import {
+    analyze,
+    DEFAULT_SOURCES,
+    diffModels,
+    type DomainModel,
+    EMPTY_DIFF,
+    fingerprints,
+    type ModelDiff,
+    type Storming,
+    type StormingAnalysis,
+    supportingContexts,
+} from '@domaintrail/modeling';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../domain/storming/ir.js';
 import { matchRenderNodes, projectView } from '../domain/storming/render.js';
 import { stormingTimelines } from '../domain/storming/semantic.js';
 import { renderToGraph, stormingViewKey } from '../domain/storming/graph.js';
 import { buildStateGraph, buildStructureGraph } from '../domain/graph/build.js';
 import { buildContextMapGraph } from '../domain/graph/context-map.js';
-import { EMPTY_DIFF, diffModels, fingerprints, markLineChanges, type ModelDiff } from '../domain/graph/diff.js';
+import { markLineChanges } from '../domain/graph/line-changes.js';
 import {
     TRANSITION_LABELS,
     graphSignature,

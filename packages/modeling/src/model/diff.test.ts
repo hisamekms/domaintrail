@@ -1,8 +1,25 @@
-// What the diff counts as a change of a command (the diff itself: build.test.ts).
+// The model diff: what counts as an addition, a change and a removal of an element, a state or a command.
 import { describe, expect, test } from 'bun:test';
-import { buildStructureGraph } from './build.js';
-import { diffModels, markLineChanges } from './diff.js';
-import { check } from '../../test-helpers.js';
+import { diffModels } from './diff.js';
+import { check } from '../test-helpers.js';
+
+describe('diff', () => {
+    test('identifies added, changed and removed elements, states and commands', async () => {
+        const before = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId state X state Y command go() X -> Y } value V }' })).model!;
+        const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() X -> Z } value W }' }))
+            .model!;
+        const d = diffModels(before, after);
+        expect(d.added.sort()).toEqual(['S.A#Z', 'S.W']);
+        expect(d.changed.sort()).toEqual(['S.A', 'S.A:go']);
+        expect(d.removed.sort()).toEqual(['S.A#Y', 'S.V']);
+    });
+
+    test('moving declarations between lines or files is not a change', async () => {
+        const before = (await check({ 'a.dt': 'context S { id AId: UUID\n value V }' })).model!;
+        const after = (await check({ 'b.dt': 'context S { value V }', 'c.dt': '\n\ncontext S { id AId: UUID }' })).model!;
+        expect(diffModels(before, after)).toEqual({ added: [], changed: [], removed: [] });
+    });
+});
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
 const review = (commands: string, extra = '') =>
@@ -76,22 +93,5 @@ describe('changes in the DSL', () => {
         const before = await work('command x() Draft -> Draft changes title');
         const after = await work('command x() Draft -> Draft changes title, note');
         expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Tasks.Work', 'Tasks.Work:x'], removed: [] });
-    });
-});
-
-describe('markLineChanges', () => {
-    test('leaves graphs without a baseline and unchanged nodes as they are', async () => {
-        const a = (await check({ 'a.dt': 'context A {\n  value V { x: Int y: String }\n}\n' })).model!;
-        const b = (await check({ 'a.dt': 'context A {\n  value V { x: Int z: Bool }\n}\n' })).model!;
-        const g = buildStructureGraph(b);
-        expect(markLineChanges(g, undefined)).toBe(g);
-        expect(markLineChanges(g, buildStructureGraph(b)).nodes).toEqual(g.nodes);
-        const v = markLineChanges(g, buildStructureGraph(a)).nodes.find((n) => n.id === 'A.V')!;
-        expect(v.lines.map((l) => [l.key.en.name, l.change])).toEqual([
-            ['x', undefined],
-            ['y', 'removed'],
-            ['z', 'added'],
-        ]);
-        expect(v.height).toBe(g.nodes.find((n) => n.id === 'A.V')!.height + 21);
     });
 });

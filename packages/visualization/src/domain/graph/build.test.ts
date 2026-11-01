@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { analyze } from '@domaintrail/modeling';
 import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from './build.js';
-import { diffModels } from './diff.js';
 import { ElkLayoutEngine } from '../../infrastructure/elk.js';
 import { INTERNAL_PADDING, LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, anyLang, sameText, transitionText, type TransitionLabels } from './ir.js';
 import { check, exampleSources } from '../../test-helpers.js';
@@ -216,23 +215,5 @@ describe('layout', () => {
         const [a, b] = [await engine.layout(g), await engine.layout(g)];
         expect(a.nodeLayout).toEqual(b.nodeLayout);
         expect(a.signature).toBe(b.signature);
-    });
-});
-
-describe('diff', () => {
-    test('identifies added, changed and removed elements, states and commands', async () => {
-        const before = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId state X state Y command go() X -> Y } value V }' })).model!;
-        const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() X -> Z } value W }' }))
-            .model!;
-        const d = diffModels(before, after);
-        expect(d.added.sort()).toEqual(['S.A#Z', 'S.W']);
-        expect(d.changed.sort()).toEqual(['S.A', 'S.A:go']);
-        expect(d.removed.sort()).toEqual(['S.A#Y', 'S.V']);
-    });
-
-    test('moving declarations between lines or files is not a change', async () => {
-        const before = (await check({ 'a.dt': 'context S { id AId: UUID\n value V }' })).model!;
-        const after = (await check({ 'b.dt': 'context S { value V }', 'c.dt': '\n\ncontext S { id AId: UUID }' })).model!;
-        expect(diffModels(before, after)).toEqual({ added: [], changed: [], removed: [] });
     });
 });

@@ -1,7 +1,7 @@
 import { PanelLeftClose } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { Diagnostic, DomainModel } from '@domaintrail/modeling';
-import type { DisplayMode, ModelDiff } from '@domaintrail/visualization';
+import type { Diagnostic, DomainModel, ModelDiff } from '@domaintrail/modeling';
+import type { DisplayMode } from '@domaintrail/visualization';
 import { useT } from './i18n';
 import { namer, type Select } from './model-utils';
 
