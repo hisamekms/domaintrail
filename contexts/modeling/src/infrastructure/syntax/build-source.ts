@@ -56,7 +56,7 @@ import {
 import { docComment } from './labels.js';
 import type { FieldLike, ModelIndex } from './model-index.js';
 import { siteOf, type FileResolver } from './diagnostic-sink.js';
-import { regexSource } from '../../domain/rules/expressions.js';
+import { regexSource } from './regex-source.js';
 import { commandId, elementId, stateId } from '../../domain/ids.js';
 import type * as src from '../../domain/source-model.js';
 

@@ -43,7 +43,7 @@ import {
 import { LabelResolver, docComment } from './labels.js';
 import { expressionText } from './format.js';
 import { cardinality, multiplicityText } from './types.js';
-import { regexSource } from '../../domain/rules/expressions.js';
+import { regexSource } from './regex-source.js';
 import {
     commandsOf,
     commonFields,
