@@ -35,7 +35,7 @@ A review of what `dt generate ts` writes for `examples/shop` found seven points,
 
 | Task | What | Compatibility | After |
 |---|---|---|---|
-| G0 | ADR 0028: decisions 1–7, amending ADR 0001 (type mapping of `UUID`), 0020 (contract test inputs, the testing package, recursive arbitraries) and 0023 (the context parameter, infrastructure failures) | — | — |
+| G0 | ADR 0028: decisions 1–10, amending ADR 0001 (type mapping of `UUID`), 0020 (contract test inputs, the testing package, recursive arbitraries) and 0023 (the context parameter, infrastructure failures) | — | — |
 | G1 | Decision 1: the `UUID` check in `make<Name>` for IDs and primitives, the invariant name, the arbitraries, `examples/shop` and the guide | breaking | G0 |
 | G2 | Decision 2: `check<Aggregate>Common` | additive | G0 |
 | G3 | Decision 3: the expression translation (implies, lambda names, quotes) | same behaviour | G0 |
