@@ -858,3 +858,35 @@ participant can call someone's attention to a message. Run references by `#3` we
   of new items, and its label says so. Nothing else notifies.
 - **Solo.** Without a session there is no chat; in a session alone, `@` offers no one.
 
+## Appendix: cards named, not numbered (amendment)
+
+*Decided by the maintainer*: participants read a card — a run and the runs that continue it (answers, picks, replies,
+the same messages applied again) — as one chunk of change. Run numbers meant nothing to them (`#1–2` in 履歴,
+`AI #1–2 · 19:21 · name`, `✓ #2`, `↩ AI #3: …`, `→ #5`).
+
+- **The AI names its runs.** `AgentReply.title?: Text` (`model/agent-run.dt`, generated code regenerated): a short
+  title of what the requests are about. `REPLY_LIMITS.title` (30 characters) bounds it, `REPLY_LIMITS.titleAim` (20) is
+  what the prompt asks for ("about 20 characters, in the requests' language"); `readReply` takes it optional, trimmed,
+  on one line (no line breaks, no control characters); `replyJsonSchema` requires it of the agent; what is kept of an
+  invalid done or declined reply includes the title, whitespace folded to one line and cut to the limit. Replies stored
+  before have none: no migration (replies are JSON in the run).
+- **A card's name** (`unitName`, `web/session/history.ts`): the title of the card's first run that has one — runs that
+  continue it never rename it — else the head of the first message its first run applied, on one line, mentions as the
+  names they were written with. The stream's AI turn shows `AI · <title> · 19:21` (only a real title: the quotes under
+  it already show the message), who queued it in the time's tooltip; continuation runs show their time alone, the
+  number in its tooltip.
+- **履歴's heading**: the outcome icon, the name and the time span (first run queued → latest change); then, muted, whose
+  messages the first run applied (up to two names, else 「佐藤 ほか 2 人の依頼」), how many runs and how many files;
+  then the files the card changed (the first three by name and 「ほか n」), a violet link that opens the comparison of the
+  revisions before its first run and after its last. The page knows each revision's files and hashes, not its elements,
+  so the changes are listed by file; listing the changed elements would need the server to analyse both revisions (a
+  follow-up). The comparison's dialog moved out of the チャット tab so that 履歴 opens it too.
+- **Elsewhere**: an applied message's mark is the glyph alone (`✓`), the card's name and the state in its tooltip — a
+  name on every applied message would crowd the side column and repeat the card's name for each of its messages; the
+  reply chip and reference line name the card (`↩ 「請求書の税区分」への返信`, `↩ 請求書の税区分: …`); the "updated"
+  pill names the card; a pick's `選択 name · time` links its time to the run it queued (same card), with no number; the
+  undo bar says 「実行に入れました」. Revision numbers stay where precision is the point (the card's ⋯, the comparison,
+  the restore box).
+- **The collab's end summary** titles each change with the same name (`unitTitle` of `web/session/collab.ts` takes
+  `unitName`, cut at 60 characters).
+

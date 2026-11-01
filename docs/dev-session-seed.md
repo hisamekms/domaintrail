@@ -57,6 +57,10 @@ tags, see below).
   (and one `@name[n]`, as bodies were written before), people mentioned (`@name[pN]`: two in one message, the
   facilitator in the long one, an element and two people together — sign in as 田中 or 鈴木 to see them marked), a long message
   (clamped), 依頼 / 会話 / no tag, applied marks, and two targets a run then renames and removes (stale).
+Every scripted reply gives a title (the card's name), as Claude Code's does, except the first card of `runs`, whose
+two replies have none, like replies from before titles: it shows the fallback (its first message). A run continuing a
+card gives a title of its own that the card does not take.
+
 - `runs`: completed with changes and then applied again with a note (one card), completed without changes, failed
   (the agent exits 1, with its report; the agent cannot run), declined with its reason, cancelled while running, and
   one run of three messages with a status line each (done, partly, skipped).
@@ -64,7 +68,7 @@ tags, see below).
   answered one (an option, and その他 in the facilitator's words) whose run completes the card, and one taken over by a
   run with a note (its votes frozen).
 - `assumptions`: assumptions with alternatives and votes open (for an alternative and for keeping it), an alternative
-  picked (→ #n, and the run that redoes it), and assumptions left as they were (the message applied again).
+  picked (`選択 name · time`, the time a link to the run that redoes it), and assumptions left as they were (the message applied again).
 - `replies`: two replies to a completed run applied together (their run continues the card), and a reply to that run.
 - `reactions`: one emoji by many (the facilitator's among them), reactions on an AI turn, and 19 different emoji on one
   message (the limit is 20).

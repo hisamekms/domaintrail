@@ -174,8 +174,10 @@ The chat has two views:
   revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target line),
   picked with `#` or added from the selection, whose unsent text and targets stay in the browser; `@` mentions a
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
-  background in your stream, and the closed chat's button shows `@ n` for the new ones. An applied message
-  shows its latest run's mark (`✓ #3`). The facilitator applies messages from the stream (⤓, ▾ with a note, several
+  background in your stream, and the closed chat's button shows `@ n` for the new ones. A card is named by the title
+  the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
+  it show their time only. An applied message shows its latest run's mark (`✓`, the card's name in the tooltip). The
+  facilitator applies messages from the stream (⤓, ▾ with a note, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
   restore and comparison from a card's ⋯ and recording, the hand-over and コラボを終える… from the collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
@@ -183,20 +185,21 @@ The chat has two views:
   run waits; the facilitator sees the counts and decides. Options start with ○ (single choice) or ☐ (multiple), and
   an assumption's 前提 and 別案 stand one under the other, each with ○. An answered question keeps its options, with
   the filled mark (◉, ☑) on what was chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked
-  alternative has ◉ and `選択 name · time → #n`. Anyone reacts to a message or an AI turn with any one emoji
+  alternative has ◉ and `選択 name · time`, the time a link to the run the pick queued. Anyone reacts to a message or an AI turn with any one emoji
   (☺+ on hover: the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
   meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
   who marked is in the tooltip and, for a vote, in a list on a click.
-  ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ AI #3 への返信 ✕`), the targets of its
-  messages to start with; the posted reply shows `↩ AI #3: …` on top, a click going to the card. Replies are applied
+  ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ 「請求書の税区分」への返信 ✕`), the targets of its
+  messages to start with; the posted reply shows `↩ <the card's name>: …` on top, a click going to the card. Replies are applied
   like any message, and the run made from them continues the replied run's card; the agent gets that run's messages,
   reply and diff as context.
   The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
   rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
-- **履歴**: the history of changes, newest first. Each row is one run that changed files — or a run that asked a
-  question together with the run queued again to answer it — with its number, time, outcome, what the AI says about
-  it, the number of files it changed (measured from the revisions) and who asked. Opened, it shows the run's card, and
+- **履歴**: the history of changes, newest first. Each row is one card — a run with the runs that continue it — that
+  changed files: its outcome and name (the title, else the first message) with its time span; whose messages its first
+  run applied, how many runs, how many files it changed (measured from the revisions); and the files themselves, a link
+  that compares the revisions before and after the whole card. Opened, it shows the run's card, and
   チャットで見る scrolls the chat to it. すべて also lists the runs
   that changed nothing, and those declined, failed or cancelled.
 

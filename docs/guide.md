@@ -2442,16 +2442,25 @@ queued at once; runs are serial, so it waits as 実行待ち while another runs)
 agent first; 選択: choose several). Shift- or ⌘-click chooses messages too; a bar then offers a note and まとめてアプライ,
 one run of all of them, and Esc leaves it. Right after applying, 取り消す cancels the run while it is still queued.
 Participants see a run only once it is in the stream: there is no queue to watch. A message that was applied shows the
-mark of its latest run at its right end (`✓ #3`, `◐`, `–`, `?`, …), for everyone; a click goes to the run's card.
+mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for everyone; the tooltip names the card and the
+state, and a click goes to the card.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
-failed or cancelled. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
+failed or cancelled. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
+(about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
+runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
+time's tooltip); before the AI gave a title (still running, or a run from before titles) it reads `AI · 19:21`, the
+quotes under it saying what it is about. Where a card must be named without any title (履歴, a reply, a mark's tooltip), the head of its first
+message stands for it, on one line. In 履歴, each card's heading is its name with its time span (`19:21–22:32`), then,
+small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how many runs and how many files it changed, then
+the files it changed (`→ billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
+card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
 the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
 hovering either one marks the other. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
-card under the one before (question → answer → result); a run of the same messages after a completed one too. The card
-stays where its first run was queued; when it changes out of sight, a pill at the bottom of the stream
-(「#3 が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
+card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
+tooltip); a run of the same messages after a completed one too. The card stays where its first run was queued; when it
+changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
 when it says so) and 答えて再実行 queues the run's messages again with that answer at once. その他 is the last row, a
 radio or checkbox like the options: its own words are written in a dialog — ✎ at the row's end, or choosing その他
 while it has none (Space or Enter on it too) — with the question at its top; 決定 (⌘/Ctrl+Enter) chooses その他 with the
@@ -2466,12 +2475,13 @@ it was before the run (asked first) or compares the two.
 
 **Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
-a queued or running run is not replied to yet). Anyone can reply. A chip `↩ AI #3 への返信 ✕` sits above the composer,
+a queued or running run is not replied to yet). Anyone can reply. A chip `↩ 「請求書の税区分」への返信 ✕` (the card's
+name) sits above the composer,
 whose targets start with those of the run's messages (change them as usual); ✕, or Esc on an empty text, stops the
 reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), applied or not by the
 facilitator (⤓ runs it at once, or choose several replies to apply as one run; in collab mode the facilitator's own reply
-too) — and shows `↩ AI #3: <what the AI said>` on one muted line at its top, a click going to the card. The run made from
-replies continues the replied run's card (`#3–4`) in place, quoting the replies like any applied message, and a reply to
+too) — and shows `↩ 請求書の税区分: <what the AI said>` on one muted line at its top, a click going to the card. The run
+made from replies continues the replied run's card in place, quoting the replies like any applied message, and a reply to
 that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
 (summary, per-message status, assumptions, questions) and what it changed — the unified diff of the sources between
 its base and result revisions, or only the list of the changed files when the diffs of all the replied runs together
@@ -2494,7 +2504,8 @@ options muted, and `回答 name · time` under the questions; the amber bar is g
 its kind, the shape of the facilitator's controls: ○ for a single-choice question, ☐ for a multiple-choice one, filled
 (◉, ☑) once chosen; screen readers hear 選択 / 未選択. An assumption is a group of rows, one under the other —
 `○ 前提: …` and `○ 別案: …` for each alternative, each with its votes —, of which one is taken. One whose alternative
-was picked shows ◉ on it, the others muted, and `選択 name · time → #5` under it (#5 goes to the run that picked it); one
+was picked shows ◉ on it, the others muted, and `選択 name · time` under it (the time goes to the run the pick queued, in
+the same card); one
 left as it was (a later run without a pick) has nothing filled and keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
 every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
 there, faint) and ☺+ at its right end offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
