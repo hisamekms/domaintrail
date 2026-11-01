@@ -5,9 +5,10 @@
 // answers a question by choosing, picks another alternative of an assumption, cancels a run, and through the card's
 // menu confirms its result, restores the workspace as it was before it or compares the two.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Circle, CircleDot, Reply, CircleX, Ellipsis, RotateCcw, Square, SquareCheck, X } from 'lucide-react';
+import { Bot, Circle, CircleDot, Reply, CircleX, Ellipsis, Pencil, RotateCcw, Square, SquareCheck, X } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
+import { OtherDialog } from './answer-other';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { useChat, type Tx } from './chat-context';
 import { pickedAlternative, questionsState, type Decider, type PickedAlternative, type QuestionsState } from './decisions';
@@ -327,88 +328,138 @@ function AgentBody({ message: m, asking }: { message: AgentMessage; asking: bool
 
 /**
  * The run's questions: for the facilitator, each with its options to choose (one, or several when it says so) and
- * "other" in own words, then 答えて再実行, which queues the run's requests again with the answer at once.
+ * その他 — a row like the options, its own words written in a dialog (✎, or choosing it while it has none) —, then
+ * 答えて再実行, which queues the run's requests again with the answer at once. In a single-choice question その他 is one
+ * of the group: choosing an option deselects it but keeps its words, which come back when it is chosen again.
  */
 function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
     const { tx, actions, onNavigate } = useChat();
+    const r = tx.chat.reply;
     const [choices, setChoices] = useState<Record<string, QuestionChoice>>({});
+    // the question whose その他 is being written; kept as the dialog closes, so that it fades out with its question
+    const [writing, setWriting] = useState<{ question: string; open: boolean } | undefined>();
     const answer = answerBody(reply.questions, choices);
-    const choose = (q: ReplyView['questions'][number], option: string, on: boolean): void => {
-        const c = choices[q.id] ?? { options: [] };
-        const options = q.multiple ? (on ? [...c.options, option] : c.options.filter((o) => o !== option)) : on ? [option] : [];
-        setChoices({ ...choices, [q.id]: { ...c, options } });
+    type Question = ReplyView['questions'][number];
+    const update = (q: string, f: (c: QuestionChoice) => QuestionChoice): void => setChoices((all) => ({ ...all, [q]: f(all[q] ?? { options: [] }) }));
+    const choose = (q: Question, option: string, on: boolean): void =>
+        update(q.id, (c) =>
+            q.multiple
+                ? { ...c, options: on ? [...c.options, option] : c.options.filter((o) => o !== option) }
+                : { ...c, options: on ? [option] : [], other: false },
+        );
+    const write = (q: Question): void => setWriting({ question: q.id, open: true });
+    // その他 chosen or not; without words yet, choosing it opens the dialog instead (it is chosen once they are decided)
+    const chooseOther = (q: Question, on: boolean): void => {
+        if (on && !choices[q.id]?.text) write(q);
+        else update(q.id, (c) => (q.multiple || !on ? { ...c, other: on } : { ...c, options: [], other: true }));
     };
-    const write = (q: string, text: string): void => setChoices({ ...choices, [q]: { ...(choices[q] ?? { options: [] }), text } });
+    // the words decided in the dialog: その他 chosen with them; none: その他 cleared
+    const decide = (q: Question, text: string): void =>
+        update(q.id, (c) => (!text ? { options: c.options } : q.multiple ? { ...c, other: true, text } : { options: [], other: true, text }));
+    const asked = reply.questions.find((q) => q.id === writing?.question);
     return (
-        <form
-            className="run-answer-form"
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (answer) void actions.answer(run, answer);
-            }}
-        >
-            <ol className="reply-questions">
-                {reply.questions.map((q) => {
-                    const type = q.multiple ? 'checkbox' : 'radio';
-                    const name = `answer:${run.id}:${q.id}`;
-                    const chosen = choices[q.id]?.options ?? [];
-                    return (
-                        <li key={q.id} className="reply-question">
-                            <p className="chat-text run-question">
-                                <ReplyText text={q.text} onNavigate={onNavigate} />
-                            </p>
-                            <ul className="reply-options" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
-                                {q.options.map((o) => (
-                                    <li key={o.id} className="vote-row">
-                                        <label className="reply-option">
+        <>
+            <form
+                className="run-answer-form"
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    if (answer) void actions.answer(run, answer);
+                }}
+            >
+                <ol className="reply-questions">
+                    {reply.questions.map((q) => {
+                        const type = q.multiple ? 'checkbox' : 'radio';
+                        const name = `answer:${run.id}:${q.id}`;
+                        const c = choices[q.id];
+                        const chosen = c?.options ?? [];
+                        const text = c?.text ?? '';
+                        const other = c?.other === true && text !== '';
+                        return (
+                            <li key={q.id} className="reply-question">
+                                <p className="chat-text run-question">
+                                    <ReplyText text={q.text} onNavigate={onNavigate} />
+                                </p>
+                                <ul className="reply-options" {...(q.multiple && { 'aria-label': r.multiple })}>
+                                    {q.options.map((o) => (
+                                        <li key={o.id} className="vote-row">
+                                            <label className="reply-option">
+                                                <input
+                                                    type={type}
+                                                    name={name}
+                                                    checked={chosen.includes(o.id)}
+                                                    onChange={(e) => choose(q, o.id, e.target.checked)}
+                                                />
+                                                <span>
+                                                    <span className="reply-option-label">
+                                                        <ReplyText text={o.label} onNavigate={onNavigate} />
+                                                    </span>
+                                                    {o.detail && (
+                                                        <span className="reply-option-detail">
+                                                            <ReplyText text={o.detail} onNavigate={onNavigate} />
+                                                        </span>
+                                                    )}
+                                                </span>
+                                            </label>
+                                            <VoteMark target={{ kind: 'QuestionOption', run: run.id, question: q.id, option: o.id }} />
+                                        </li>
+                                    ))}
+                                    {/* その他: 「その他: <the words>」 on one line (all of them on hover), ✎ where the others have ♡ */}
+                                    <li className={`vote-row reply-other-row${other ? ' chosen' : ''}${text ? ' written' : ''}`}>
+                                        <label className="reply-option reply-other" data-tooltip={text || undefined}>
                                             <input
                                                 type={type}
                                                 name={name}
-                                                checked={chosen.includes(o.id)}
-                                                onChange={(e) => choose(q, o.id, e.target.checked)}
+                                                checked={other}
+                                                aria-haspopup={text ? undefined : 'dialog'}
+                                                onChange={(e) => chooseOther(q, e.target.checked)}
+                                                onKeyDown={(e) => {
+                                                    // Enter writes the words while there are none (Space does it by choosing)
+                                                    if (e.key === 'Enter' && !text) {
+                                                        e.preventDefault();
+                                                        write(q);
+                                                    }
+                                                }}
                                             />
-                                            <span>
-                                                <span className="reply-option-label">
-                                                    <ReplyText text={o.label} onNavigate={onNavigate} />
-                                                </span>
-                                                {o.detail && (
-                                                    <span className="reply-option-detail">
-                                                        <ReplyText text={o.detail} onNavigate={onNavigate} />
-                                                    </span>
-                                                )}
+                                            <span className="reply-other-line">
+                                                <span className="reply-option-label">{r.other}</span>
+                                                {text && <span className="reply-other-text">: {oneLine(text)}</span>}
                                             </span>
                                         </label>
-                                        <VoteMark target={{ kind: 'QuestionOption', run: run.id, question: q.id, option: o.id }} />
+                                        <button
+                                            type="button"
+                                            className="icon-button reply-other-write"
+                                            aria-haspopup="dialog"
+                                            aria-label={text ? r.otherEdit : r.otherWrite}
+                                            data-tooltip={text ? r.otherEdit : r.otherWrite}
+                                            onClick={() => write(q)}
+                                        >
+                                            <Pencil size={12} aria-hidden />
+                                        </button>
                                     </li>
-                                ))}
-                                <li>
-                                    <label className="reply-option reply-other">
-                                        <span className="reply-option-label">{tx.chat.reply.other}</span>
-                                        <input
-                                            className="session-text run-answer-text"
-                                            value={choices[q.id]?.text ?? ''}
-                                            maxLength={2000}
-                                            onChange={(e) => write(q.id, e.target.value)}
-                                            aria-label={tx.chat.reply.other}
-                                        />
-                                    </label>
-                                </li>
-                            </ul>
-                        </li>
-                    );
-                })}
-            </ol>
-            <div className="run-answer-actions">
-                <button
-                    type="submit"
-                    className="chat-small primary"
-                    disabled={!answer || actions.busy}
-                    data-tooltip={answer ? undefined : tx.chat.answerNeeded}
-                >
-                    <RotateCcw size={12} aria-hidden /> {tx.chat.answerAndRerun}
-                </button>
-            </div>
-        </form>
+                                </ul>
+                            </li>
+                        );
+                    })}
+                </ol>
+                <div className="run-answer-actions">
+                    <button
+                        type="submit"
+                        className="chat-small primary"
+                        disabled={!answer || actions.busy}
+                        data-tooltip={answer ? undefined : tx.chat.answerNeeded}
+                    >
+                        <RotateCcw size={12} aria-hidden /> {tx.chat.answerAndRerun}
+                    </button>
+                </div>
+            </form>
+            <OtherDialog
+                open={writing?.open === true && asked !== undefined}
+                question={asked?.text ?? ''}
+                text={(asked && choices[asked.id]?.text) ?? ''}
+                onDecide={(text) => asked && decide(asked, text)}
+                onClose={() => setWriting((w) => w && { ...w, open: false })}
+            />
+        </>
     );
 }
 
@@ -536,6 +587,8 @@ function DecidedLine({ label, by, run = false }: { label: string; by: Decider; r
 function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyView; state: Exclude<QuestionsState, { kind: 'open' }> }) {
     const { tx, onNavigate } = useChat();
     const answers = state.kind === 'answered' ? state.answers : undefined;
+    // the own words being read in full; kept as the dialog closes, so that it fades out with them
+    const [reading, setReading] = useState<{ question: string; text: string; open: boolean } | undefined>();
     return (
         <div className="decided-questions">
             <ol className="reply-questions">
@@ -569,9 +622,16 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
                                 {answer?.text !== undefined && (
                                     <li className="reply-option vote-row decided-option chosen">
                                         <ChoiceMark multiple={q.multiple} state="chosen" />
-                                        <span className="decided-other">
-                                            {tx.chat.answeredOther}: {answer.text}
-                                        </span>
+                                        {/* on one line, all of it on hover, or in a dialog on a click */}
+                                        <button
+                                            type="button"
+                                            className="decided-other"
+                                            aria-haspopup="dialog"
+                                            data-tooltip={answer.text}
+                                            onClick={() => setReading({ question: q.text, text: answer.text ?? '', open: true })}
+                                        >
+                                            {tx.chat.answeredOther}: {oneLine(answer.text)}
+                                        </button>
                                     </li>
                                 )}
                             </ul>
@@ -580,6 +640,15 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
                 })}
             </ol>
             {state.kind === 'answered' && <DecidedLine label={tx.chat.answered} by={state.by} />}
+            {reading && (
+                <OtherDialog
+                    open={reading.open}
+                    question={reading.question}
+                    text={reading.text}
+                    readOnly
+                    onClose={() => setReading((r) => r && { ...r, open: false })}
+                />
+            )}
         </div>
     );
 }

@@ -258,7 +258,11 @@ describe('the cards of the chat', () => {
     test("the facilitator's answer: the questions answered only, by option or in own words", () => {
         const questions = [{ id: 'x' }, { id: 'y' }, { id: 'z' }];
         expect(
-            answerBody(questions, { x: { options: ['gross'] }, y: { options: [], text: '  net, after discounts ' }, z: { options: [], text: ' ' } }),
+            answerBody(questions, {
+                x: { options: ['gross'] },
+                y: { options: [], other: true, text: '  net, after discounts ' },
+                z: { options: [], other: true, text: ' ' },
+            }),
         ).toEqual({
             answers: [
                 { question: 'x', options: ['gross'] },
@@ -266,5 +270,37 @@ describe('the cards of the chat', () => {
             ],
         });
         expect(answerBody(questions, {})).toBeUndefined();
+    });
+
+    test("the facilitator's answer: その他 counts only while it is selected with words", () => {
+        const questions = [{ id: 'x' }, { id: 'y', multiple: true }];
+        // written, then an option chosen: the words are kept but not sent
+        expect(answerBody(questions, { x: { options: ['gross'], other: false, text: 'net' } })).toEqual({
+            answers: [{ question: 'x', options: ['gross'] }],
+        });
+        expect(answerBody(questions, { x: { options: [], other: false, text: 'net' }, y: { options: [], text: 'both' } })).toBeUndefined();
+        // selected without words: as if not selected
+        expect(answerBody(questions, { x: { options: [], other: true, text: '   ' } })).toBeUndefined();
+        expect(answerBody(questions, { y: { options: ['a'], other: true } })).toEqual({ answers: [{ question: 'y', options: ['a'] }] });
+    });
+
+    test("the facilitator's answer: one option or own words for a single-choice question, both for a multiple-choice one", () => {
+        const questions = [
+            { id: 'x', multiple: false },
+            { id: 'y', multiple: true },
+        ];
+        expect(
+            answerBody(questions, {
+                x: { options: ['gross'], other: true, text: 'net' },
+                y: { options: ['a', 'b'], other: true, text: ' and c ' },
+            }),
+        ).toEqual({
+            answers: [
+                { question: 'x', options: [], text: 'net' },
+                { question: 'y', options: ['a', 'b'], text: 'and c' },
+            ],
+        });
+        // a single-choice question never sends more than one option
+        expect(answerBody(questions, { x: { options: ['gross', 'net'] } })).toEqual({ answers: [{ question: 'x', options: ['gross'] }] });
     });
 });

@@ -12,19 +12,36 @@ type RunJson = SessionStateBody['runs'][number];
 /** How long the undo after applying is offered. */
 export const UNDO_MS = 6_000;
 
-/** What the facilitator chose for one question: options (by ID) and/or own words. */
+/**
+ * What the facilitator chose for one question: options (by ID), and その他 — selected or not — with its own words. The
+ * words are kept while その他 is not selected (choosing an option of a single-choice question deselects it), so that
+ * selecting it again restores them; they are sent only while it is selected.
+ */
 export interface QuestionChoice {
     readonly options: readonly string[];
+    /** その他 is selected: its words are part of the answer (when there are any). */
+    readonly other?: boolean;
     readonly text?: string;
 }
 
-/** The answer to send: the questions answered (an option chosen or words written), in the reply's order; none answered: undefined. */
-export function answerBody(questions: readonly { readonly id: string }[], choices: Readonly<Record<string, QuestionChoice>>): AnswerBody | undefined {
+/**
+ * The answer to send: the questions answered, in the reply's order; none answered: undefined. A question is answered
+ * by its options, or by その他 while it is selected with words; その他 selected without words counts as not selected,
+ * and words written under an unselected その他 are not sent. A single-choice question is answered by one option or by
+ * its own words, never both (その他 wins: it was the last chosen, as choosing an option deselects it); a
+ * multiple-choice one by any of its options and its own words together.
+ */
+export function answerBody(
+    questions: readonly { readonly id: string; readonly multiple?: boolean }[],
+    choices: Readonly<Record<string, QuestionChoice>>,
+): AnswerBody | undefined {
     const answers = questions.flatMap((q) => {
         const c = choices[q.id];
-        const text = c?.text?.trim();
-        if (!c || (c.options.length === 0 && !text)) return [];
-        return [{ question: q.id, options: [...c.options], ...(text && { text }) }];
+        if (!c) return [];
+        const text = c.other ? c.text?.trim() || undefined : undefined;
+        const options = q.multiple ? [...c.options] : text ? [] : c.options.slice(0, 1);
+        if (options.length === 0 && !text) return [];
+        return [{ question: q.id, options, ...(text && { text }) }];
     });
     return answers.length > 0 ? { answers } : undefined;
 }

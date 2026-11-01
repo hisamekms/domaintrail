@@ -4441,9 +4441,6 @@ del.was.block {
     color: var(--muted);
     font-size: 0.75rem;
 }
-.reply-other .reply-option-label {
-    color: var(--muted);
-}
 .session-chat button.chat-dismiss {
     flex: none;
     width: 22px;
@@ -5020,20 +5017,6 @@ del.was.block {
 .run-answer-form {
     margin-top: 0.375rem;
 }
-.run-answer-form .reply-other {
-    align-items: center;
-}
-.run-answer-form .reply-other .reply-option-label {
-    flex: none;
-}
-.run-answer-text {
-    flex: 1;
-    width: auto;
-    min-width: 0;
-    padding: 2px 6px;
-    font: inherit;
-    font-size: 0.75rem;
-}
 .run-answer-actions {
     display: flex;
     justify-content: flex-end;
@@ -5094,12 +5077,6 @@ del.was.block {
 .decided-option.unchosen,
 .decided-option.unchosen .reply-option-detail {
     color: var(--muted);
-}
-.decided-other {
-    flex: 1;
-    min-width: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
 }
 /* an assumption's rows: 前提 and its alternatives one under the other; once one is picked, it in the text's colour and
    the others muted */
@@ -5669,4 +5646,116 @@ del.was.block {
 .chat-launcher-at {
     font-weight: 600;
     opacity: 0.85;
+}
+
+/* ---------- answer: own words ---------- */
+
+/* その他 in the answer form: a row like the options — the radio or checkbox, 「その他: <the words>」 on one line (all
+   of them on hover), ✎ at the right end where the options have ♡ */
+.reply-other-row > .reply-other {
+    flex: 1;
+    min-width: 0;
+}
+.reply-other-line {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+/* words kept while その他 is not chosen (another option is): muted, back in the text's colour once chosen again */
+.reply-other-row:not(.chosen) .reply-other-text {
+    color: var(--muted);
+}
+.session-chat button.reply-other-write {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 1.25rem;
+    margin-top: 1px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+}
+.session-chat button.reply-other-write:hover {
+    background: var(--hover);
+    color: var(--accent);
+}
+/* その他 once answered: one line too, a click reads all of it in the dialog */
+.session-chat button.decided-other {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.session-chat button.decided-other:hover {
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+/* the dialog: the question, a large text area, キャンセル and 決定 at the bottom right */
+.session-dialog.answer-other-dialog {
+    width: min(36rem, calc(100vw - 32px));
+}
+.answer-other-body {
+    padding-top: 12px;
+}
+.answer-other-question {
+    margin: 0 0 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.answer-other-input {
+    display: block;
+    min-height: 10rem;
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+.answer-other-text {
+    margin: 0;
+    max-height: 50vh;
+    overflow: auto;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+}
+.answer-other-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}
+.answer-other-dialog button.answer-other-button {
+    font: inherit;
+    font-size: 0.8125rem;
+    padding: 3px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--panel);
+}
+.answer-other-dialog button.answer-other-button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.answer-other-dialog button.answer-other-button:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
