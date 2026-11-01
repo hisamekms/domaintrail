@@ -117,7 +117,7 @@ export function equalRunInput(a: RunInput, b: RunInput): boolean {
  */
 export function checkRunInput(runInput: RunInput): readonly 'distinctRequests'[] {
     const violated: 'distinctRequests'[] = [];
-    if (!(distinct(runInput.requests, ($r, $r$) => $r.request === $r$.request))) violated.push('distinctRequests');
+    if (!(distinct(runInput.requests, (r, r2) => r.request === r2.request))) violated.push('distinctRequests');
     return violated;
 }
 
@@ -207,7 +207,7 @@ export function equalRequestReply(a: RequestReply, b: RequestReply): boolean {
  */
 export function checkRequestReply(requestReply: RequestReply): readonly 'noteExplains'[] {
     const violated: 'noteExplains'[] = [];
-    if (!(!((requestReply.status === "Partial") || (requestReply.status === "Skipped")) || (requestReply.note !== undefined))) violated.push('noteExplains');
+    if (((requestReply.status === 'Partial') || (requestReply.status === 'Skipped')) && !(requestReply.note !== undefined)) violated.push('noteExplains');
     return violated;
 }
 
@@ -266,7 +266,7 @@ export function equalReplyQuestion(a: ReplyQuestion, b: ReplyQuestion): boolean 
  */
 export function checkReplyQuestion(replyQuestion: ReplyQuestion): readonly 'distinctOptions'[] {
     const violated: 'distinctOptions'[] = [];
-    if (!(distinct(replyQuestion.options, ($o, $o$) => $o.id === $o$.id))) violated.push('distinctOptions');
+    if (!(distinct(replyQuestion.options, (o, o2) => o.id === o2.id))) violated.push('distinctOptions');
     return violated;
 }
 
@@ -319,7 +319,7 @@ export function equalReplyAssumption(a: ReplyAssumption, b: ReplyAssumption): bo
  */
 export function checkReplyAssumption(replyAssumption: ReplyAssumption): readonly 'distinctAlternatives'[] {
     const violated: 'distinctAlternatives'[] = [];
-    if (!(distinct(replyAssumption.alternatives, ($a, $a$) => $a.id === $a$.id))) violated.push('distinctAlternatives');
+    if (!(distinct(replyAssumption.alternatives, (a, a2) => a.id === a2.id))) violated.push('distinctAlternatives');
     return violated;
 }
 
@@ -358,8 +358,8 @@ export function equalAgentReply(a: AgentReply, b: AgentReply): boolean {
  */
 export function checkAgentReply(agentReply: AgentReply): readonly ('distinctRequests' | 'distinctQuestions')[] {
     const violated: ('distinctRequests' | 'distinctQuestions')[] = [];
-    if (!(distinct(agentReply.requests, ($r, $r$) => $r.request === $r$.request))) violated.push('distinctRequests');
-    if (!(distinct(agentReply.questions, ($q, $q$) => $q.id === $q$.id))) violated.push('distinctQuestions');
+    if (!(distinct(agentReply.requests, (r, r2) => r.request === r2.request))) violated.push('distinctRequests');
+    if (!(distinct(agentReply.questions, (q, q2) => q.id === q2.id))) violated.push('distinctQuestions');
     return violated;
 }
 
@@ -396,7 +396,7 @@ export function equalAnsweredQuestion(a: AnsweredQuestion, b: AnsweredQuestion):
 export function checkAnsweredQuestion(answeredQuestion: AnsweredQuestion): readonly ('answered' | 'distinctChosen')[] {
     const violated: ('answered' | 'distinctChosen')[] = [];
     if (!((answeredQuestion.chosen.length >= 1) || (answeredQuestion.freeText !== undefined))) violated.push('answered');
-    if (!(distinct(answeredQuestion.chosen, ($o, $o$) => $o.id === $o$.id))) violated.push('distinctChosen');
+    if (!(distinct(answeredQuestion.chosen, (o, o2) => o.id === o2.id))) violated.push('distinctChosen');
     return violated;
 }
 
@@ -427,7 +427,7 @@ export function equalAnswer(a: Answer, b: Answer): boolean {
  */
 export function checkAnswer(answer: Answer): readonly 'distinctQuestions'[] {
     const violated: 'distinctQuestions'[] = [];
-    if (!(distinct(answer.answers, ($a, $a$) => $a.question === $a$.question))) violated.push('distinctQuestions');
+    if (!(distinct(answer.answers, (a, a2) => a.question === a2.question))) violated.push('distinctQuestions');
     return violated;
 }
 
@@ -655,8 +655,8 @@ export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (age
         if (!checks.serial(agentRun)) violated.push('serial');
         if (!(((((agentRun.report.exitCode === 0) && (agentRun.report.formatted === true)) && (agentRun.report.checked === true)) && (agentRun.report.newDtErrors === 0)) && (agentRun.report.unparsedDtes === 0))) violated.push('succeeded');
         if (!((!(agentRun.changed === true) || !(agentRun.resultRevision === agentRun.baseRevision)) && (!(agentRun.changed === false) || (agentRun.resultRevision === agentRun.baseRevision)))) violated.push('unchangedKeepsBase');
-        if (!(!(agentRun.reply !== undefined) || (agentRun.reply.questions.length === 0))) violated.push('completedAsksNothing');
-        if (!(!(agentRun.reply !== undefined) || ((agentRun.reply.requests.every(($r) => agentRun.input.requests.some(($i) => ($i.request === $r.request))) && agentRun.reply.questions.every(($q) => $q.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))) && agentRun.reply.assumptions.every(($a) => $a.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))))) violated.push('completedReplyAboutInput');
+        if (agentRun.reply !== undefined && !(agentRun.reply.questions.length === 0)) violated.push('completedAsksNothing');
+        if (agentRun.reply !== undefined && !((agentRun.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && agentRun.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && agentRun.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) violated.push('completedReplyAboutInput');
         return violated;
     };
 }
@@ -669,8 +669,8 @@ export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChec
     return (agentRun) => {
         const violated: ('serial' | 'clarificationAsks' | 'clarificationReplyAboutInput')[] = [];
         if (!checks.serial(agentRun)) violated.push('serial');
-        if (!(!(agentRun.reply !== undefined) || (agentRun.reply.questions.length >= 1))) violated.push('clarificationAsks');
-        if (!(!(agentRun.reply !== undefined) || ((agentRun.reply.requests.every(($r) => agentRun.input.requests.some(($i) => ($i.request === $r.request))) && agentRun.reply.questions.every(($q) => $q.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))) && agentRun.reply.assumptions.every(($a) => $a.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))))) violated.push('clarificationReplyAboutInput');
+        if (agentRun.reply !== undefined && !(agentRun.reply.questions.length >= 1)) violated.push('clarificationAsks');
+        if (agentRun.reply !== undefined && !((agentRun.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && agentRun.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && agentRun.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) violated.push('clarificationReplyAboutInput');
         return violated;
     };
 }
@@ -684,7 +684,7 @@ export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agen
         const violated: ('serial' | 'declinedAsksNothing' | 'declinedReplyAboutInput')[] = [];
         if (!checks.serial(agentRun)) violated.push('serial');
         if (!(agentRun.reply.questions.length === 0)) violated.push('declinedAsksNothing');
-        if (!((agentRun.reply.requests.every(($r) => agentRun.input.requests.some(($i) => ($i.request === $r.request))) && agentRun.reply.questions.every(($q) => $q.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))) && agentRun.reply.assumptions.every(($a) => $a.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x)))))) violated.push('declinedReplyAboutInput');
+        if (!((agentRun.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && agentRun.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && agentRun.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) violated.push('declinedReplyAboutInput');
         return violated;
     };
 }
@@ -697,7 +697,7 @@ export function checkFailedAgentRunWith(checks: AgentRunDeclaredChecks): (agentR
     return (agentRun) => {
         const violated: ('serial' | 'ruleNotMetReported')[] = [];
         if (!checks.serial(agentRun)) violated.push('serial');
-        if (!(!(agentRun.reason === "RuleNotMet") || ((agentRun.report !== undefined) && !(((((agentRun.report.exitCode === 0) && (agentRun.report.formatted === true)) && (agentRun.report.checked === true)) && (agentRun.report.newDtErrors === 0)) && (agentRun.report.unparsedDtes === 0))))) violated.push('ruleNotMetReported');
+        if (agentRun.reason === 'RuleNotMet' && !((agentRun.report !== undefined) && !(((((agentRun.report.exitCode === 0) && (agentRun.report.formatted === true)) && (agentRun.report.checked === true)) && (agentRun.report.newDtErrors === 0)) && (agentRun.report.unparsedDtes === 0)))) violated.push('ruleNotMetReported');
         return violated;
     };
 }
@@ -793,9 +793,9 @@ export type QueueAgentRunDecision = (
  * @see model/agent-run.dt:228
  */
 export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSession, requests: readonly [PendingRequest, ...PendingRequest[]], input: RunInput, _queuedBy: ParticipantId, queuedByRole: ParticipantRole, _queuedAt: Timestamp): 'facilitatorQueues' | 'distinctRequests' | 'inputCoversRequests' | undefined {
-    if (!(queuedByRole === "Facilitator")) return 'facilitatorQueues';
+    if (!(queuedByRole === 'Facilitator')) return 'facilitatorQueues';
     if (!(distinct(requests, ($16: RequestId, $17: RequestId) => $16 === $17))) return 'distinctRequests';
-    if (!((input.requests.length === requests.length) && requests.every(($r) => input.requests.some(($i) => ($i.request === $r))))) return 'inputCoversRequests';
+    if (!((input.requests.length === requests.length) && requests.every((r) => input.requests.some((i) => i.request === r)))) return 'inputCoversRequests';
     return undefined;
 }
 
@@ -918,8 +918,8 @@ export type FinishAgentRunDecision = {
  */
 export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: RunReport, resultRevision: RevisionId, changed: boolean, reply: AgentReply | undefined, _finishedAt: Timestamp): 'changedMatchesResult' | 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!((!(changed === true) || !(resultRevision === agentRun.baseRevision)) && (!(changed === false) || (resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
-    if (!(!(reply !== undefined) || (reply.questions.length === 0))) return 'replyAsksNothing';
-    if (!(!(reply !== undefined) || ((reply.requests.every(($r) => agentRun.input.requests.some(($i) => ($i.request === $r.request))) && reply.questions.every(($q) => $q.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))) && reply.assumptions.every(($a) => $a.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))))) return 'replyAboutInput';
+    if (reply !== undefined && !(reply.questions.length === 0)) return 'replyAsksNothing';
+    if (reply !== undefined && !((reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
     return undefined;
 }
 
@@ -972,8 +972,8 @@ export type AskClarificationAgentRunDecision = {
  * @see model/agent-run.dt:260
  */
 export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, _question: Text, reply: AgentReply | undefined, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsks' | 'replyAboutInput' | undefined {
-    if (!(!(reply !== undefined) || (reply.questions.length >= 1))) return 'replyAsks';
-    if (!(!(reply !== undefined) || ((reply.requests.every(($r) => agentRun.input.requests.some(($i) => ($i.request === $r.request))) && reply.questions.every(($q) => $q.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))) && reply.assumptions.every(($a) => $a.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))))) return 'replyAboutInput';
+    if (reply !== undefined && !(reply.questions.length >= 1)) return 'replyAsks';
+    if (reply !== undefined && !((reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
     return undefined;
 }
 
@@ -1026,7 +1026,7 @@ export type DeclineAgentRunDecision = {
  */
 export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: AgentReply, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!(reply.questions.length === 0)) return 'replyAsksNothing';
-    if (!((reply.requests.every(($r) => agentRun.input.requests.some(($i) => ($i.request === $r.request))) && reply.questions.every(($q) => $q.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x))))) && reply.assumptions.every(($a) => $a.requests.every(($x) => agentRun.input.requests.some(($i) => ($i.request === $x)))))) return 'replyAboutInput';
+    if (!((reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
     return undefined;
 }
 
@@ -1074,7 +1074,7 @@ export type FailAgentRunDecision = {
  * @see model/agent-run.dt:280
  */
 export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: FailureReason, _finishedAt: Timestamp): 'abnormal' | undefined {
-    if (!(!(reason === "RuleNotMet"))) return 'abnormal';
+    if (!(!(reason === 'RuleNotMet'))) return 'abnormal';
     return undefined;
 }
 
@@ -1132,7 +1132,7 @@ export type CancelAgentRunDecision = {
  * @see model/agent-run.dt:286
  */
 export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, _cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, _cancelledAt: Timestamp): 'facilitatorCancels' | undefined {
-    if (!(cancelledByRole === "Facilitator")) return 'facilitatorCancels';
+    if (!(cancelledByRole === 'Facilitator')) return 'facilitatorCancels';
     return undefined;
 }
 
@@ -1610,8 +1610,8 @@ export type MakeWorkspacePath = (value: string) => Result<WorkspacePath, Invalid
  */
 export function checkWorkspacePath(value: string): readonly InvalidWorkspacePath['invariant'][] {
     const violated: InvalidWorkspacePath['invariant'][] = [];
-    if (!(new RegExp("^[^/\\\\]+(/[^/\\\\]+)*$").test(value))) violated.push('relative');
-    if (!(!(new RegExp("(^|/)\\.\\.?(/|$)").test(value)))) violated.push('noDotSegment');
+    if (!(new RegExp('^[^/\\\\]+(/[^/\\\\]+)*$').test(value))) violated.push('relative');
+    if (!(!(new RegExp('(^|/)\\.\\.?(/|$)').test(value)))) violated.push('noDotSegment');
     return violated;
 }
 
@@ -1899,7 +1899,7 @@ export const MarkShape: Shape = {
  */
 export function checkPlacedMark(mark: PlacedMark): readonly 'fitsTarget'[] {
     const violated: 'fitsTarget'[] = [];
-    if (!((!(mark.sign.kind === "Vote") || ((mark.target.kind === "QuestionOption") || (mark.target.kind === "AssumptionChoice"))) && (!(mark.sign.kind === "Reaction") || ((mark.target.kind === "Message") || (mark.target.kind === "Turn"))))) violated.push('fitsTarget');
+    if (!((!(mark.sign.kind === 'Vote') || ((mark.target.kind === 'QuestionOption') || (mark.target.kind === 'AssumptionChoice'))) && (!(mark.sign.kind === 'Reaction') || ((mark.target.kind === 'Message') || (mark.target.kind === 'Turn'))))) violated.push('fitsTarget');
     return violated;
 }
 
@@ -1909,7 +1909,7 @@ export function checkPlacedMark(mark: PlacedMark): readonly 'fitsTarget'[] {
  */
 export function checkRemovedMark(mark: RemovedMark): readonly 'fitsTarget'[] {
     const violated: 'fitsTarget'[] = [];
-    if (!((!(mark.sign.kind === "Vote") || ((mark.target.kind === "QuestionOption") || (mark.target.kind === "AssumptionChoice"))) && (!(mark.sign.kind === "Reaction") || ((mark.target.kind === "Message") || (mark.target.kind === "Turn"))))) violated.push('fitsTarget');
+    if (!((!(mark.sign.kind === 'Vote') || ((mark.target.kind === 'QuestionOption') || (mark.target.kind === 'AssumptionChoice'))) && (!(mark.sign.kind === 'Reaction') || ((mark.target.kind === 'Message') || (mark.target.kind === 'Turn'))))) violated.push('fitsTarget');
     return violated;
 }
 
@@ -1982,8 +1982,8 @@ export type PlaceMarkDecision = (
  * @see model/mark.dt:71
  */
 export function checkPlaceMarkRequires(_id: MarkId, _session: ActiveSession, _participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, _placedAt: Timestamp): 'fitsTarget' | 'participantsVote' | undefined {
-    if (!((!(sign.kind === "Vote") || ((target.kind === "QuestionOption") || (target.kind === "AssumptionChoice"))) && (!(sign.kind === "Reaction") || ((target.kind === "Message") || (target.kind === "Turn"))))) return 'fitsTarget';
-    if (!(!(sign.kind === "Vote") || (role === "Participant"))) return 'participantsVote';
+    if (!((!(sign.kind === 'Vote') || ((target.kind === 'QuestionOption') || (target.kind === 'AssumptionChoice'))) && (!(sign.kind === 'Reaction') || ((target.kind === 'Message') || (target.kind === 'Turn'))))) return 'fitsTarget';
+    if (sign.kind === 'Vote' && !(role === 'Participant')) return 'participantsVote';
     return undefined;
 }
 
@@ -2269,10 +2269,10 @@ export const RequestShape: Shape = {
 export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
     const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] = [];
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
-    if (!(distinct(request.targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) violated.push('distinctTargets');
+    if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
     if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
     if (!(distinct(request.mentions, ($20: ParticipantId, $21: ParticipantId) => $20 === $21))) violated.push('distinctMentions');
-    if (!(request.targets.every(($t) => !($t.target.kind === "Workspace")))) violated.push('noWorkspaceTarget');
+    if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
     return violated;
 }
 
@@ -2283,10 +2283,10 @@ export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyT
 export function checkDismissedRequest(request: DismissedRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
     const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] = [];
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
-    if (!(distinct(request.targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) violated.push('distinctTargets');
+    if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
     if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
     if (!(distinct(request.mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) violated.push('distinctMentions');
-    if (!(request.targets.every(($t) => !($t.target.kind === "Workspace")))) violated.push('noWorkspaceTarget');
+    if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
     return violated;
 }
 
@@ -2369,8 +2369,8 @@ export type SendRequestDecision = (
  */
 export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession, _author: ParticipantId, targets: readonly TargetSnapshot[], _body: Text, _sentAt: Timestamp, _replyTo: ReplyableRun | undefined, mentions: readonly MentionableParticipant[]): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | 'atMostTwentyMentions' | 'distinctMentions' | undefined {
     if (!(targets.length <= 20)) return 'atMostTwentyTargets';
-    if (!(distinct(targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) return 'distinctTargets';
-    if (!(targets.every(($t) => !($t.target.kind === "Workspace")))) return 'noWorkspaceTarget';
+    if (!(distinct(targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
+    if (!(targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
     if (!(mentions.length <= 20)) return 'atMostTwentyMentions';
     if (!(distinct(mentions, ($24: ParticipantId, $25: ParticipantId) => $24 === $25))) return 'distinctMentions';
     return undefined;
@@ -2804,7 +2804,7 @@ export type RevisionDeclaredChecks = { readonly hashOfFiles: (revision: Revision
 export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revision: RecordedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
         const violated: ('distinctPaths' | 'hashOfFiles')[] = [];
-        if (!(distinct(revision.files, ($f, $f$) => $f.path === $f$.path))) violated.push('distinctPaths');
+        if (!(distinct(revision.files, (f, f2) => f.path === f2.path))) violated.push('distinctPaths');
         if (!checks.hashOfFiles(revision)) violated.push('hashOfFiles');
         return violated;
     };
@@ -2817,7 +2817,7 @@ export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revi
 export function checkConfirmedRevisionWith(checks: RevisionDeclaredChecks): (revision: ConfirmedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
         const violated: ('distinctPaths' | 'hashOfFiles')[] = [];
-        if (!(distinct(revision.files, ($f, $f$) => $f.path === $f$.path))) violated.push('distinctPaths');
+        if (!(distinct(revision.files, (f, f2) => f.path === f2.path))) violated.push('distinctPaths');
         if (!checks.hashOfFiles(revision)) violated.push('hashOfFiles');
         return violated;
     };
@@ -2901,7 +2901,7 @@ export type TakeRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: Rev
  */
 export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequires): (id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => 'notRestored' | 'hashMatchesFiles' | undefined {
     return (id, session, origin, contentHash, files, validation, takenAt) => {
-        if (!(!(origin.kind === "Restored"))) return 'notRestored';
+        if (!(!(origin.kind === 'Restored'))) return 'notRestored';
         if (!checks.hashMatchesFiles(id, session, origin, contentHash, files, validation, takenAt)) return 'hashMatchesFiles';
         return undefined;
     };
@@ -2980,7 +2980,7 @@ export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: 
  */
 export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, restoredByRole: ParticipantRole, takenAt: Timestamp) => 'facilitatorRestores' | 'hashMatchesFiles' | undefined {
     return (id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt) => {
-        if (!(restoredByRole === "Facilitator")) return 'facilitatorRestores';
+        if (!(restoredByRole === 'Facilitator')) return 'facilitatorRestores';
         if (!checks.hashMatchesFiles(id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt)) return 'hashMatchesFiles';
         return undefined;
     };
@@ -3032,7 +3032,7 @@ export type ConfirmRevisionDecision = {
  * @see model/revision.dt:93
  */
 export function checkConfirmRevisionRequires(_revision: RecordedRevision, _confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, _confirmedAt: Timestamp): 'facilitatorConfirms' | undefined {
-    if (!(confirmedByRole === "Facilitator")) return 'facilitatorConfirms';
+    if (!(confirmedByRole === 'Facilitator')) return 'facilitatorConfirms';
     return undefined;
 }
 
@@ -3379,8 +3379,8 @@ export const SessionShape: Shape = {
 export function checkOpenSession(session: OpenSession): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
     const violated: ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] = [];
     if (!(distinct(session.participants, equalParticipant))) violated.push('distinctParticipants');
-    if (!(session.participants.some(($p) => (($p.id === session.facilitator) && ($p.role === "Facilitator"))))) violated.push('facilitatorListed');
-    if (!(session.participants.every(($p) => (!($p.role === "Facilitator") || ($p.id === session.facilitator))))) violated.push('soleFacilitator');
+    if (!(session.participants.some((p) => (p.id === session.facilitator) && (p.role === 'Facilitator')))) violated.push('facilitatorListed');
+    if (!(session.participants.every((p) => !(p.role === 'Facilitator') || (p.id === session.facilitator)))) violated.push('soleFacilitator');
     return violated;
 }
 
@@ -3391,8 +3391,8 @@ export function checkOpenSession(session: OpenSession): readonly ('distinctParti
 export function checkClosedSession(session: ClosedSession): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
     const violated: ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] = [];
     if (!(distinct(session.participants, equalParticipant))) violated.push('distinctParticipants');
-    if (!(session.participants.some(($p) => (($p.id === session.facilitator) && ($p.role === "Facilitator"))))) violated.push('facilitatorListed');
-    if (!(session.participants.every(($p) => (!($p.role === "Facilitator") || ($p.id === session.facilitator))))) violated.push('soleFacilitator');
+    if (!(session.participants.some((p) => (p.id === session.facilitator) && (p.role === 'Facilitator')))) violated.push('facilitatorListed');
+    if (!(session.participants.every((p) => !(p.role === 'Facilitator') || (p.id === session.facilitator)))) violated.push('soleFacilitator');
     return violated;
 }
 
@@ -3493,7 +3493,7 @@ export type JoinSessionDecision = {
  * @see model/session.dt:42
  */
 export function checkJoinSessionRequires(session: OpenSession, participant: ParticipantId, _name: DisplayName, _joinedAt: Timestamp): 'newcomer' | undefined {
-    if (!(session.participants.every(($p) => !($p.id === participant)))) return 'newcomer';
+    if (!(session.participants.every((p) => !(p.id === participant)))) return 'newcomer';
     return undefined;
 }
 
@@ -3541,7 +3541,7 @@ export type CloseSessionDecision = {
  * @see model/session.dt:49
  */
 export function checkCloseSessionRequires(_session: OpenSession, closedByRole: ParticipantRole, _closedAt: Timestamp): 'facilitatorCloses' | undefined {
-    if (!(closedByRole === "Facilitator")) return 'facilitatorCloses';
+    if (!(closedByRole === 'Facilitator')) return 'facilitatorCloses';
     return undefined;
 }
 
@@ -4090,7 +4090,7 @@ export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boole
  */
 export function checkTargetSnapshot(targetSnapshot: TargetSnapshot): readonly 'workspaceHasNoRange'[] {
     const violated: 'workspaceHasNoRange'[] = [];
-    if (!(!(targetSnapshot.target.kind === "Workspace") || !(targetSnapshot.range !== undefined))) violated.push('workspaceHasNoRange');
+    if (targetSnapshot.target.kind === 'Workspace' && !(!(targetSnapshot.range !== undefined))) violated.push('workspaceHasNoRange');
     return violated;
 }
 

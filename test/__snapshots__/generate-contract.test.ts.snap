@@ -787,9 +787,9 @@ export const OrderShape: Shape = {
  */
 export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] {
     const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] = [];
-    if (!(order.items.every(($item) => ($item.quantity > 0)))) violated.push('quantitiesPositive');
-    if (!(distinct(order.items, ($item, $item$) => $item.sku === $item$.sku))) violated.push('distinctSkus');
-    if (!(order.items.every(($a) => order.items.every(($b) => ($a.unitPrice.currency === $b.unitPrice.currency))))) violated.push('singleCurrency');
+    if (!(order.items.every((item) => item.quantity > 0))) violated.push('quantitiesPositive');
+    if (!(distinct(order.items, (item, item2) => item.sku === item2.sku))) violated.push('distinctSkus');
+    if (!(order.items.every((a) => order.items.every((b) => a.unitPrice.currency === b.unitPrice.currency)))) violated.push('singleCurrency');
     return violated;
 }
 
@@ -799,9 +799,9 @@ export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositiv
  */
 export function checkConfirmedOrder(order: ConfirmedOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] {
     const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] = [];
-    if (!(order.items.every(($item) => ($item.quantity > 0)))) violated.push('quantitiesPositive');
-    if (!(distinct(order.items, ($item, $item$) => $item.sku === $item$.sku))) violated.push('distinctSkus');
-    if (!(order.items.every(($a) => order.items.every(($b) => ($a.unitPrice.currency === $b.unitPrice.currency))))) violated.push('singleCurrency');
+    if (!(order.items.every((item) => item.quantity > 0))) violated.push('quantitiesPositive');
+    if (!(distinct(order.items, (item, item2) => item.sku === item2.sku))) violated.push('distinctSkus');
+    if (!(order.items.every((a) => order.items.every((b) => a.unitPrice.currency === b.unitPrice.currency)))) violated.push('singleCurrency');
     if (!(order.items.length > 0)) violated.push('hasItems');
     return violated;
 }
@@ -812,10 +812,10 @@ export function checkConfirmedOrder(order: ConfirmedOrder): readonly ('quantitie
  */
 export function checkCancelledOrder(order: CancelledOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] {
     const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] = [];
-    if (!(order.items.every(($item) => ($item.quantity > 0)))) violated.push('quantitiesPositive');
-    if (!(distinct(order.items, ($item, $item$) => $item.sku === $item$.sku))) violated.push('distinctSkus');
-    if (!(order.items.every(($a) => order.items.every(($b) => ($a.unitPrice.currency === $b.unitPrice.currency))))) violated.push('singleCurrency');
-    if (!(!(order.reason === "Other") || (order.note !== undefined))) violated.push('otherNeedsNote');
+    if (!(order.items.every((item) => item.quantity > 0))) violated.push('quantitiesPositive');
+    if (!(distinct(order.items, (item, item2) => item.sku === item2.sku))) violated.push('distinctSkus');
+    if (!(order.items.every((a) => order.items.every((b) => a.unitPrice.currency === b.unitPrice.currency)))) violated.push('singleCurrency');
+    if (order.reason === 'Other' && !(order.note !== undefined)) violated.push('otherNeedsNote');
     return violated;
 }
 
@@ -910,8 +910,8 @@ export type AddItemOrderDecision = {
  * @see sales/order.dt:43
  */
 export function checkAddItemOrderRequires(order: DraftOrder, item: OrderItem): 'newSku' | 'sameCurrency' | undefined {
-    if (!(order.items.every(($i) => !($i.sku === item.sku)))) return 'newSku';
-    if (!(order.items.every(($i) => ($i.unitPrice.currency === item.unitPrice.currency)))) return 'sameCurrency';
+    if (!(order.items.every((i) => !(i.sku === item.sku)))) return 'newSku';
+    if (!(order.items.every((i) => i.unitPrice.currency === item.unitPrice.currency))) return 'sameCurrency';
     return undefined;
 }
 
@@ -1028,7 +1028,7 @@ export type CancelOrderDecision = {
  * @see sales/order.dt:56
  */
 export function checkCancelOrderRequires(order: DraftOrder | ConfirmedOrder, reason: CancelReason): 'noteForOther' | undefined {
-    if (!(!(reason === "Other") || (order.note !== undefined))) return 'noteForOther';
+    if (reason === 'Other' && !(order.note !== undefined)) return 'noteForOther';
     return undefined;
 }
 
@@ -1578,7 +1578,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         Currency: () => given.Currency ?? fc.constantFrom<Common.Currency>('JPY', 'USD'),
         Amount: () => testing.valid(given.Amount ?? testing.collide(testing.cast<Common.Amount>(testing.base('Decimal', { ge: 0 })), seed), (v) => Common.checkAmount(v).length === 0, 'Common.Amount'),
         Money: () => given.Money ?? testing.cast<Common.Money>(fc.record({ amount: a.Amount, currency: a.Currency })),
-        EmailAddress: () => testing.valid(given.EmailAddress ?? testing.collide(testing.cast<Common.EmailAddress>(testing.base('String', { pattern: "^[^@\\\\s]+@[^@\\\\s]+$", maxLength: 254 })), seed), (v) => Common.checkEmailAddress(v).length === 0, 'Common.EmailAddress'),
+        EmailAddress: () => testing.valid(given.EmailAddress ?? testing.collide(testing.cast<Common.EmailAddress>(testing.base('String', { pattern: '^[^@\\\\s]+@[^@\\\\s]+$', maxLength: 254 })), seed), (v) => Common.checkEmailAddress(v).length === 0, 'Common.EmailAddress'),
     });
     return a;
 }
@@ -1605,7 +1605,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...(impl.make.EmailAddress ? testing.primitiveCases({
                 type: 'Common.EmailAddress',
                 base: 'String',
-                hints: { pattern: "^[^@\\\\s]+@[^@\\\\s]+$", maxLength: 254 },
+                hints: { pattern: '^[^@\\\\s]+@[^@\\\\s]+$', maxLength: 254 },
                 invariants: ['format', 'maxLength'],
                 declared: [],
                 check: () => Common.checkEmailAddress,
@@ -1700,7 +1700,7 @@ export function arbitraries(options: Options = {}): Arbitraries {
         OrderItemId: () => given.OrderItemId ?? testing.collide(testing.cast<Sales.OrderItemId>(testing.base('UUID', {})), seed),
         CancelReason: () => given.CancelReason ?? fc.constantFrom<Sales.CancelReason>('Requested', 'Other'),
         Quantity: () => testing.valid(given.Quantity ?? testing.collide(testing.cast<Sales.Quantity>(testing.base('Int', { ge: 1, le: 999 })), seed), (v) => Sales.checkQuantity(v).length === 0, 'Sales.Quantity'),
-        Sku: () => testing.valid(given.Sku ?? testing.collide(testing.cast<Sales.Sku>(testing.base('String', { pattern: "^[A-Z]{3}-\\\\d{4}$" })), seed), (v) => Sales.checkSku(v).length === 0, 'Sales.Sku'),
+        Sku: () => testing.valid(given.Sku ?? testing.collide(testing.cast<Sales.Sku>(testing.base('String', { pattern: '^[A-Z]{3}-\\\\d{4}$' })), seed), (v) => Sales.checkSku(v).length === 0, 'Sales.Sku'),
         DraftOrder: () => testing.withExamples(testing.valid(given.DraftOrder ?? testing.cast<Sales.DraftOrder>(fc.record({ state: fc.constant('Draft' as const), id: a.OrderId, items: testing.many(a.OrderItem, 0), customer: a.CustomerId, note: testing.cast<string>(scalar.String) }, { requiredKeys: ['state', 'id', 'items', 'customer'] })), (v) => Sales.checkDraftOrder(v).length === 0, 'Sales.DraftOrder'), options.examples?.Order?.states?.Draft, Sales.checkDraftOrder, 'Sales.DraftOrder'),
         ConfirmedOrder: () => testing.withExamples(testing.valid(given.ConfirmedOrder ?? testing.cast<Sales.ConfirmedOrder>(fc.record({ state: fc.constant('Confirmed' as const), id: a.OrderId, items: testing.many(a.OrderItem, 0), customer: a.CustomerId, note: testing.cast<string>(scalar.String), confirmedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'items', 'customer', 'confirmedAt'] })), (v) => Sales.checkConfirmedOrder(v).length === 0, 'Sales.ConfirmedOrder'), options.examples?.Order?.states?.Confirmed, Sales.checkConfirmedOrder, 'Sales.ConfirmedOrder'),
         CancelledOrder: () => testing.withExamples(testing.valid(given.CancelledOrder ?? testing.cast<Sales.CancelledOrder>(fc.record({ state: fc.constant('Cancelled' as const), id: a.OrderId, items: testing.many(a.OrderItem, 0), customer: a.CustomerId, note: testing.cast<string>(scalar.String), reason: a.CancelReason }, { requiredKeys: ['state', 'id', 'items', 'customer', 'reason'] })), (v) => Sales.checkCancelledOrder(v).length === 0, 'Sales.CancelledOrder'), options.examples?.Order?.states?.Cancelled, Sales.checkCancelledOrder, 'Sales.CancelledOrder'),
@@ -1766,7 +1766,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...(impl.make.Sku ? testing.primitiveCases({
                 type: 'Sales.Sku',
                 base: 'String',
-                hints: { pattern: "^[A-Z]{3}-\\\\d{4}$" },
+                hints: { pattern: '^[A-Z]{3}-\\\\d{4}$' },
                 invariants: ['valid'],
                 declared: [],
                 check: () => Sales.checkSku,

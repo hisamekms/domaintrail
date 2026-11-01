@@ -10,6 +10,7 @@ import {
     declaredChecksName,
     declaredRequiresName,
     hasDeclared,
+    quote,
     requiresName,
     requiresWithName,
     unionInvariants,
@@ -219,7 +220,7 @@ export function hintsOf(invs: readonly InvariantModel[]): Record<string, number 
 
 const literal = (h: Record<string, number | string>): string =>
     `{ ${Object.entries(h)
-        .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
+        .map(([k, v]) => `${k}: ${typeof v === 'string' ? quote(v) : String(v)}`)
         .join(', ')} }`.replace('{  }', '{}');
 
 /** `lower` and `upper` of a field's multiplicity (`upper` absent: unbounded). */

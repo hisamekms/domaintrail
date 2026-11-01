@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { quote } from './checks.js';
 import { generateTypeScript } from './typescript.js';
 import { check } from '../test-helpers.js';
 
@@ -197,5 +198,99 @@ describe('generated checks', () => {
         expect(req(order, line('2', 'ABC-0002', '100.0'), '1')).toBeUndefined(); // contains: Money by value, Decimal by number
         expect(req(order, line('2', 'ABC-0002', '5'), '1')).toBe('priced');
         expect(Sales.checkCancelOrderRequires).toBeUndefined();
+    });
+});
+
+/** Lambda variables named like the check's parameter, reserved words, imports and each other; implications; quotes. */
+const NAMES = {
+    'common.dt': `shared context Common { enum Unit { Piece } }`,
+    'names.dt': `
+context Names {
+  id BoxId: String
+  value Item { name: String  count: Int }
+  value Flags {
+    a: Bool
+    b: Bool
+    c: Bool
+    invariant implied { a implies b }
+    invariant looseLeft { (a or b) implies c }
+    invariant nested { (a implies b) and c }
+  }
+  aggregate Box {
+    id: BoxId
+    items: Item[0..*]
+    invariant shadow { all(items, box => box.count > 0) }
+    invariant reserved { all(items, enum => all(items, function => enum.name != function.name or enum == function)) }
+    invariant imported { any(items, distinct => distinct.count > 0) implies unique(items, Common => Common.name) }
+    invariant same { all(items, item => any(items, item => item.count > 0)) }
+    invariant pair { unique(items, item => item.name) }
+    invariant quoted { all(items, checks => checks.name != "it's \\"q\\"\\\\") }
+    state Open
+    create command make(id: BoxId) -> Open
+    command add(item: Item, item2: Item?) Open -> Open
+      requires fresh { all(items, item => item.name != "x") } else Dup
+      requires counted { exists(item2) implies item2.count > 0 } else Dup
+      changes items
+  }
+  error Dup
+}`,
+};
+
+describe('readable expressions (ADR 0028)', async () => {
+    const names = await check(NAMES);
+    const source = generateTypeScript(names.model!).find((f) => f.path === 'Names.ts')!.content;
+    const { Names } = await generated(NAMES);
+    const has = (line: string): void => expect(source).toContain(line);
+    const item = (name: string, count = 1) => ({ name, count });
+    const box = (items: unknown[]) => ({ state: 'Open', id: 'b', items });
+
+    test('a violated implication is A && !B, the same condition as !(!A || B); inside another expression it keeps its form', () => {
+        has(`if (flags.a && !(flags.b)) violated.push('implied');`);
+        has(`if ((flags.a || flags.b) && !(flags.c)) violated.push('looseLeft');`);
+        has(`if (!((!(flags.a) || flags.b) && flags.c)) violated.push('nested');`);
+        has(`if (item2 !== undefined && !(item2.count > 0)) return 'counted';`);
+        for (const a of [false, true])
+            for (const b of [false, true])
+                for (const c of [false, true]) {
+                    const expected = [
+                        ...(!(!a || b) ? ['implied'] : []),
+                        ...(!(!(a || b) || c) ? ['looseLeft'] : []),
+                        ...(!((!a || b) && c) ? ['nested'] : []),
+                    ];
+                    expect(Names.checkFlags({ a, b, c })).toEqual(expected);
+                }
+        expect(Names.checkAddBoxRequires(box([]), item('y'), undefined)).toBeUndefined();
+        expect(Names.checkAddBoxRequires(box([]), item('y'), item('z', 1))).toBeUndefined();
+        expect(Names.checkAddBoxRequires(box([]), item('y'), item('z', 0))).toBe('counted');
+    });
+
+    test('lambda variables keep their names, with a number only on a clash', () => {
+        has(`box.items.every((item) => box.items.some((item2) => item2.count > 0))`); // the inner one shadows the outer
+        has(`distinct(box.items, (item, item2) => item.name === item2.name)`); // the second of a pair
+        has(`box.items.every((box2) => box2.count > 0)`); // the check's parameter
+        has(`box.items.every((enum2) => box.items.every((function2) => `); // reserved words
+        has(`box.items.some((distinct2) => distinct2.count > 0) && !(distinct(box.items, (Common2, Common3) => Common2.name === Common3.name))`); // imports
+        has(`box.items.every((checks2) => `); // the slots of a check
+        has(`if (!(box.items.every((item3) => !(item3.name === 'x')))) return 'fresh';`); // the parameters item and item2
+        expect(source).not.toMatch(/\(\$[a-z]/);
+        expect(Names.checkBox(box([item('a'), item('b')]))).toEqual([]);
+        expect(Names.checkBox(box([item('a', 0)]))).toEqual(['shadow', 'same']);
+        expect(Names.checkBox(box([item('a', 1), item('a', 2)]))).toEqual(['reserved', 'imported', 'pair']);
+        expect(Names.checkBox(box([item('a'), item('a')]))).toEqual(['imported', 'pair']); // equal values
+        expect(Names.checkBox(box([item(`it's "q"\\`)]))).toEqual(['quoted']);
+        expect(Names.checkAddBoxRequires(box([item('x')]), item('y'), undefined)).toBe('fresh');
+    });
+
+    test('string literals and enum values are in single quotes, escaped as needed', () => {
+        has(`!(checks2.name === 'it\\'s "q"\\\\')`);
+        expect(source.split('\n').filter((l) => !/^\s*(\*|\/\/|\/\*)/.test(l) && l.includes('"') && !l.includes(`'it\\'s "q"`))).toEqual([]);
+    });
+
+    test('quote writes a literal that reads back as the text', async () => {
+        const texts = ['', `'`, `"`, '\\', `a'b"c\\d`, '\n\t ', 'é'];
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-quote-'));
+        dirs.push(dir);
+        await writeFile(path.join(dir, 'texts.ts'), `export const texts = [${texts.map(quote).join(', ')}];\n`);
+        expect((await import(path.join(dir, 'texts.ts'))).texts).toEqual(texts);
     });
 });

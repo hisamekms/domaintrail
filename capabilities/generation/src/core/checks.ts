@@ -10,10 +10,10 @@ import type {
     PrimitiveName,
     UnionModel,
 } from '@domaintrail/modeling';
-import { BINARY_OP_TEXT, contextNames, elementOf, sharedContexts } from '@domaintrail/modeling';
+import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, sharedContexts } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
-import { invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
+import { RUNTIME_NAMES, TS_RESERVED, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
@@ -60,12 +60,32 @@ interface Binding {
     ty: Ty;
     /** Whether `js` is already in parentheses as a whole. */
     wrapped?: boolean;
+    /** For a `wrapped` binding: the expression inside the parentheses. */
+    inner?: string;
+    /** Whether `inner` can be an operand of `&&` as it is (it is not a `||`). */
+    tight?: boolean;
 }
 
 /** `!x`, with parentheses unless `x` already has them. */
 export const negate = (b: Binding): string => (b.wrapped ? `!${b.js}` : `!(${b.js})`);
 
+/** `x` as an operand of `&&`: without its parentheses when it does not need them. */
+const andOperand = (b: Binding): string => (b.tight && b.inner !== undefined ? b.inner : b.js);
+
 type Scope = Map<string, Binding>;
+
+/** Names a lambda variable must not take, besides the variables in scope and the check's parameters (ADR 0028). */
+const NOT_LAMBDA_NAMES: ReadonlySet<string> = new Set([
+    ...TS_RESERVED,
+    // the names the module imports from the runtime (other contexts are added per model)
+    ...RUNTIME_NAMES,
+    // the globals the translated expressions use
+    'Number',
+    'RegExp',
+    // the variables of the check functions around the expression
+    'checks',
+    'violated',
+]);
 
 const BASE: Record<PrimitiveName, string> = { String: 'string', Int: 'number', Decimal: 'Decimal', Bool: 'boolean', Timestamp: 'Timestamp', UUID: 'string' };
 
@@ -143,8 +163,47 @@ function scalar(b: Binding): string {
 export class ExprCompiler {
     /** Counter of temporaries (`$0`, `$1`, …), which no DSL name can collide with. */
     private temp = 0;
+    /** The parameters of the check the expression being compiled is in (see `violated`). */
+    private params: readonly string[] = [];
+    /** Names a lambda variable must not take in this module, other than those of the scope. */
+    private readonly notLambda: ReadonlySet<string>;
 
-    constructor(private readonly env: CheckEnv) {}
+    constructor(private readonly env: CheckEnv) {
+        const { model, ctx } = env;
+        // the other contexts are imported as namespaces, and the equality of this context's types is called by name
+        const equalities = elementsIn(model, ctx)
+            .filter((el) => el.kind === 'valueObject' || el.kind === 'entity' || el.kind === 'union')
+            .map((el) => equalName(el));
+        this.notLambda = new Set([...NOT_LAMBDA_NAMES, ...contextNames(model), ...equalities]);
+    }
+
+    /**
+     * The condition under which `e`, an invariant or a requirement, is violated: `!(e)`, or `A && !B` for an implication
+     * `A implies B` (ADR 0028), which is the same condition without the double negation. `params` are the parameters of
+     * the check it is in, which lambda variables do not shadow.
+     */
+    violated(e: ExprModel, scope: Scope, params: readonly string[]): string {
+        this.params = params;
+        if (e.k === 'binary' && e.op === 'implies') return `${andOperand(this.compile(e.left, scope))} && ${negate(this.compile(e.right, scope))}`;
+        return negate(this.compile(e, scope));
+    }
+
+    /**
+     * The TypeScript name of a lambda variable: its name in `.dt` (`item`), or with a number (`item2`) when that clashes
+     * with a variable in scope, a parameter of the check, a reserved word or a name the module imports.
+     */
+    private lambdaName(name: string, scope: Scope, more: readonly string[] = []): string {
+        const used = new Set([...this.params, ...more]);
+        for (const b of scope.values()) {
+            const root = /^[A-Za-z_$][\w$]*/.exec(b.js);
+            if (root) used.add(root[0]);
+        }
+        const free = (n: string): boolean => !used.has(n) && !this.notLambda.has(n);
+        if (free(name)) return name;
+        let i = 2;
+        while (!free(`${name}${i}`)) i++;
+        return `${name}${i}`;
+    }
 
     /** `a == b` by the equality of ADR 0016, for two values of type `t` (and `u` on the right, for numbers). */
     equal(t: Ty, a: string, b: string, u: Ty = t): string {
@@ -181,7 +240,10 @@ export class ExprCompiler {
 
     compile(e: ExprModel, scope: Scope): Binding {
         const bool = (js: string): Binding => ({ js, ty: { k: 'prim', name: 'Bool' } });
-        const wrapped = (js: string): Binding => ({ ...bool(`(${js})`), wrapped: true });
+        /** `(js)`; `loose` when `js` is a `||` at the top. */
+        const wrapped = (js: string, loose = false): Binding => ({ ...bool(`(${js})`), wrapped: true, inner: js, tight: !loose });
+        /** The body of an arrow function, which needs no parentheses. */
+        const body = (b: Binding): string => b.inner ?? b.js;
         switch (e.k) {
             case 'bool':
                 return bool(String(e.value));
@@ -190,7 +252,7 @@ export class ExprCompiler {
             case 'decimal':
                 return { js: e.value.startsWith('-') ? `(${e.value})` : e.value, ty: { k: 'prim', name: 'Decimal', literal: true } };
             case 'string':
-                return { js: JSON.stringify(e.value), ty: { k: 'prim', name: 'String', literal: true } };
+                return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true } };
             case 'name':
                 return this.name(e.name, scope);
             case 'member':
@@ -213,9 +275,9 @@ export class ExprCompiler {
             case 'quantifier': {
                 const c = this.compile(e.collection, scope);
                 const elem = c.ty.k === 'list' ? c.ty.elem : c.ty;
-                const p = `$${e.param}`;
-                const body = this.compile(e.body, new Map([...scope, [e.param, { js: p, ty: elem }]]));
-                return bool(`${c.js}.${e.quantifier === 'all' ? 'every' : 'some'}((${p}) => ${body.js})`);
+                const p = this.lambdaName(e.param, scope);
+                const b = this.compile(e.body, new Map([...scope, [e.param, { js: p, ty: elem }]]));
+                return bool(`${c.js}.${e.quantifier === 'all' ? 'every' : 'some'}((${p}) => ${body(b)})`);
             }
             case 'contains': {
                 const c = this.compile(e.collection, scope);
@@ -228,8 +290,9 @@ export class ExprCompiler {
                 const c = this.compile(e.collection, scope);
                 const elem = c.ty.k === 'list' ? c.ty.elem : c.ty;
                 if (!e.param) return bool(`distinct(${c.js}, ${this.equalFn(elem)})`);
-                // the keys of two elements: the parameter as `$x` and as `$x$`
-                const [a, b] = [`$${e.param}`, `$${e.param}$`];
+                // the keys of two elements: the parameter as `x` and as `x2`
+                const a = this.lambdaName(e.param, scope);
+                const b = this.lambdaName(e.param, scope, [a]);
                 const left = new Map([...scope, [e.param, { js: a, ty: elem }]]);
                 const right = new Map([...scope, [e.param, { js: b, ty: elem }]]);
                 const same = e.keys.map((k) => {
@@ -245,9 +308,9 @@ export class ExprCompiler {
                     case 'and':
                         return wrapped(`${l.js} && ${r.js}`);
                     case 'or':
-                        return wrapped(`${l.js} || ${r.js}`);
+                        return wrapped(`${l.js} || ${r.js}`, true);
                     case 'implies':
-                        return wrapped(`${negate(l)} || ${r.js}`);
+                        return wrapped(`${negate(l)} || ${r.js}`, true);
                     case 'eq':
                         return wrapped(this.equal(strip(l.ty), l.js, r.js, strip(r.ty)));
                     case 'ne':
@@ -285,7 +348,7 @@ export class ExprCompiler {
             }
             case 'enumType':
             case 'unionType':
-                return { js: JSON.stringify(m), ty: { k: 'enum' } };
+                return { js: quote(m), ty: { k: 'enum' } };
             case 'union':
                 return { js: `${r.js}.${m}`, ty: { k: 'enum' } }; // only the discriminator is accessible (M009)
             case 'struct': {
@@ -299,9 +362,15 @@ export class ExprCompiler {
     }
 }
 
+/** A string literal in single quotes, as the generated code writes them (ADR 0028). */
+export function quote(text: string): string {
+    // JSON's escapes are those of a JavaScript string; a `"` needs none between single quotes, a `'` does
+    return `'${JSON.stringify(text).slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
+}
+
 /** A regular expression literal for a pattern written as in JavaScript; `new RegExp(…)` when a literal cannot hold it. */
 function regex(pattern: string): string {
-    if (pattern === '' || /[\n\r\u2028\u2029]/.test(pattern) || /(^|[^\\])(\\\\)*\//.test(pattern)) return `new RegExp(${JSON.stringify(pattern)})`;
+    if (pattern === '' || /[\n\r\u2028\u2029]/.test(pattern) || /(^|[^\\])(\\\\)*\//.test(pattern)) return `new RegExp(${quote(pattern)})`;
     return `/${pattern}/`;
 }
 
@@ -342,7 +411,7 @@ export function collect(items: CheckItem[], indent: string): string[] {
 
 /** Compiles the expressed invariants among `invs` in `scope`; declared ones call their slot with `args`. */
 export function items(compiler: ExprCompiler, invs: readonly InvariantModel[], scope: Scope, args: string, guard?: string): CheckItem[] {
-    return invs.map((i) => ({ name: i.name, ...(i.expr ? { violated: negate(compiler.compile(i.expr, scope)) } : { args }), ...(guard && { guard }) }));
+    return invs.map((i) => ({ name: i.name, ...(i.expr ? { violated: compiler.violated(i.expr, scope, [args]) } : { args }), ...(guard && { guard }) }));
 }
 
 /** The requirement scope of a command: the aggregate's fields it sees (from `subject`) and its parameters. */
@@ -648,11 +717,12 @@ export class CheckWriter {
         if (!c.requires.length) return [];
         const scope = requirementScope(this.env.model, agg, c, subject?.name ?? '');
         const args = [...(subject ? [subject] : []), ...ps];
-        const argNames = args.map((a) => a.name).join(', ');
+        const names = args.map((a) => a.name);
+        const argNames = names.join(', ');
         const declared = hasDeclared(c.requires);
         const result = `${namesType(c.requires.map((r) => r.name))} | undefined`;
         const body = [
-            ...c.requires.map((r) => `if (${r.expr ? negate(this.compiler.compile(r.expr, scope)) : `!checks.${r.name}(${argNames})`}) return '${r.name}';`),
+            ...c.requires.map((r) => `if (${r.expr ? this.compiler.violated(r.expr, scope, names) : `!checks.${r.name}(${argNames})`}) return '${r.name}';`),
             'return undefined;',
         ];
         const text = body.join('\n');
