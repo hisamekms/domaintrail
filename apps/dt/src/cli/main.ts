@@ -146,6 +146,8 @@ block generation, which reads the .dt files only. Files generated before are rep
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
 directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
+A context with generate.ts.contexts.<Context>.module is imported from that module by the code of other directories,
+and its contract tests are written into <its out>/tests.
 With generate.ts.tests in the config, also writes the contract tests (fast-check arbitraries and a suite per
 context, by default into <out>/tests); see \`dt guide tests\`.
 With --format json, prints one JSON document like \`check\`, with the directories written ("written") or why
@@ -202,10 +204,19 @@ Examples:
                 : undefined;
             const policies = policyModes(cfg, contextNames(a.model));
             if (tests) for (const w of testsWarnings(a.model, policies)) io.err(`Warning: ${w}`);
-            const files = generateTypeScript(a.model, dirs, tests, policies).map((f) => ({
+            const files = generateTypeScript(a.model, dirs, tests, policies, cfg.tsModules).map((f) => ({
                 ...f,
                 file: path.resolve(cfg.root, f.path),
             }));
+            // Every directory written to, those the generator chose included (the contract tests of a context with a
+            // `module`, in <its out>/tests), checked the same way before anything is written.
+            for (const dir of new Set(files.map((f) => path.dirname(f.file)))) {
+                const linked = await deps.generatedOutput.symlinkOnPath(cfg.root, dir);
+                if (linked) {
+                    fail(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`, 1);
+                    return;
+                }
+            }
             const foreign = await deps.generatedOutput.foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);

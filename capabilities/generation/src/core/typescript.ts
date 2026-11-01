@@ -213,16 +213,21 @@ export type Timestamp = Date;
  * Generates one module per bounded context, plus a runtime and an index in every directory written to.
  * `dirs` places contexts in directories (`/`-separated, relative to the output directory; default: the output
  * directory itself); each index re-exports only the contexts in its directory. With `tests`, also the contract tests
- * (ADR 0020) into `tests.dir`. `policies` gives the mode of each context's policies (absent: `optional`). Requires a
- * model without errors.
+ * (ADR 0020) into `tests.dir`. `policies` gives the mode of each context's policies (absent: `optional`). `modules`
+ * gives the module of each context written into another package (ADR 0028): code in another directory imports the
+ * context from it, and the context's tests are written into `<its directory>/tests`. Requires a model without errors.
  */
 export function generateTypeScript(
     model: DomainModel,
     dirs: Readonly<Record<string, string>> = {},
     tests?: TestsOptions,
     policies: Readonly<Record<string, PolicyMode>> = {},
+    modules: Readonly<Record<string, string>> = {},
 ): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
+    // a context of another package by its module, one of the same directory by relative path
+    const moduleOf = (from: string, ctx: string): string => (modules[ctx] && dirOf(ctx) !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx));
+    const testsDirs = Object.fromEntries(Object.keys(modules).map((c) => [c, posix.join(dirOf(c), 'tests')]));
     const files: GeneratedFile[] = [];
     for (const dir of new Set(contextNames(model).map(dirOf))) {
         const contexts = contextNames(model).filter((c) => dirOf(c) === dir);
@@ -230,7 +235,7 @@ export function generateTypeScript(
         for (const ctx of contexts) {
             files.push({
                 path: posix.join(dir, `${ctx}.ts`),
-                content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other), policies[ctx] ?? 'optional').emit(),
+                content: new ContextEmitter(model, ctx, (other) => moduleOf(dir, other), policies[ctx] ?? 'optional').emit(),
             });
         }
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
@@ -238,7 +243,10 @@ export function generateTypeScript(
     }
     if (tests)
         files.push(
-            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)),
+            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies, dirs: testsDirs, modules }, (from, ctx) =>
+                // the tests in a context's own package import it by relative path
+                modules[ctx] && testsDirs[ctx] !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx),
+            ),
         );
     return files;
 }

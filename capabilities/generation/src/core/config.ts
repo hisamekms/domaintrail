@@ -13,7 +13,7 @@ export const GENERATION_CONFIG_KEYS: Readonly<Record<string, readonly string[]>>
     '': ['lintHint', 'generate'],
     generate: ['ts'],
     'generate.ts': ['out', 'policies', 'contexts', 'tests'],
-    'generate.ts.contexts.*': ['out', 'policies'],
+    'generate.ts.contexts.*': ['out', 'policies', 'module'],
     'generate.ts.tests': ['out', 'runner'],
 };
 
@@ -26,8 +26,11 @@ export interface GenerationConfigFile {
             out?: string;
             /** Whether the policies of a context must be implemented (ADR 0022). Default: `optional`. */
             policies?: PolicyMode;
-            /** Per context: its own output directory, and how its policies are generated (overrides `policies`). */
-            contexts?: Record<string, { out?: string; policies?: PolicyMode }>;
+            /**
+             * Per context: its own output directory, the module through which the package of that directory exports
+             * the context's generated code (ADR 0028), and how its policies are generated (overrides `policies`).
+             */
+            contexts?: Record<string, { out?: string; module?: string; policies?: PolicyMode }>;
             tests?: { out?: string; runner?: Runner };
         };
     };
@@ -39,6 +42,12 @@ export interface ResolvedGenerationConfig {
     tsOut: string;
     /** Output directories of contexts written elsewhere than `tsOut`, by context name. */
     tsContexts: Record<string, string>;
+    /**
+     * The modules of contexts written into another package (`generate.ts.contexts.<Ctx>.module`, with its `out`), by
+     * context name: generated code in another directory imports the context from there, and its tests from
+     * `<module>/tests`.
+     */
+    tsModules: Record<string, string>;
     /**
      * Whether policies are `optional` (a handler type per policy) or `required` (also `<Context>PolicyHandlers`, which
      * the contract tests require): the project's setting (`generate.ts.policies`, default `optional`) and the contexts
@@ -83,6 +92,10 @@ export function validateGenerationConfig(config: Record<string, unknown>, fail: 
             const key = `generate.ts.contexts.${ctx}`;
             if (!isObject(c)) return fail(`'${key}' must be an object`);
             for (const k of Object.keys(c)) if (!GENERATION_CONFIG_KEYS['generate.ts.contexts.*'].includes(k)) fail(`unknown key '${key}.${k}'`);
+            if (c.module !== undefined) {
+                if (typeof c.module !== 'string' || c.module.trim() === '') fail(`'${key}.module' must be a module specifier (a non-empty string)`);
+                if (c.out === undefined) fail(`'${key}.module' needs '${key}.out': the module is that of the package the context is written into`);
+            }
             if (c.out === undefined && c.policies === undefined) fail(`'${key}' needs 'out' or 'policies'`);
             checkOut(c.out, `${key}.out`, fail);
             checkPolicies(c.policies, `${key}.policies`, fail);
@@ -97,6 +110,7 @@ export function resolveGenerationConfig(config: GenerationConfigFile = {}): Reso
         lintHint: config.lintHint ?? true,
         tsOut: config.generate?.ts?.out ?? DEFAULT_TS_OUT,
         tsContexts: Object.fromEntries(contexts.flatMap(([ctx, c]) => (c.out !== undefined ? [[ctx, c.out]] : []))),
+        tsModules: Object.fromEntries(contexts.flatMap(([ctx, c]) => (c.module !== undefined ? [[ctx, c.module]] : []))),
         tsPolicies: {
             project: config.generate?.ts?.policies ?? DEFAULT_POLICIES,
             contexts: Object.fromEntries(contexts.flatMap(([ctx, c]) => (c.policies ? [[ctx, c.policies]] : []))),

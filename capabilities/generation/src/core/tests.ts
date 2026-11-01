@@ -30,6 +30,13 @@ export interface TestsOptions {
     runner?: Runner;
     /** The mode of each context's policies (absent: `optional`); `required` adds `policies` to `contract(impl)`. */
     policies?: Readonly<Record<string, PolicyMode>>;
+    /** The directory of the test modules of the contexts written elsewhere than `dir` (into another package), by context. */
+    dirs?: Readonly<Record<string, string>>;
+    /**
+     * The modules of the contexts written into another package (`generate.ts.contexts.<Ctx>.module`): the tests of
+     * another directory import their tests from `<module>/tests` (ADR 0028).
+     */
+    modules?: Readonly<Record<string, string>>;
 }
 
 interface File {
@@ -141,23 +148,42 @@ export function testsWarnings(model: DomainModel, policies: Readonly<Record<stri
  * `from`.
  */
 export function generateTests(model: DomainModel, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
-    const dir = opts.dir;
-    const files: File[] = [];
     const untested = new Set(untestedTypes(model).types);
-    for (const ctx of contextNames(model)) {
-        files.push({
-            path: posix.join(dir, `${ctx}.ts`),
-            content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required', untested).emit(),
-        });
+    const dirOf = (ctx: string): string => posix.normalize(opts.dirs?.[ctx] ?? opts.dir);
+    // the tests of another context: next to these, from its package (`<module>/tests`), or by relative path
+    const testsOf = (from: string, ctx: string): string => {
+        if (dirOf(ctx) === from) return `./${ctx}.js`;
+        if (opts.modules?.[ctx]) return `${opts.modules[ctx]}/tests`;
+        const rel = posix.relative(from, dirOf(ctx));
+        return `${rel.startsWith('../') ? '' : './'}${rel}/${ctx}.js`;
+    };
+    const files: File[] = [];
+    for (const dir of new Set(contextNames(model).map(dirOf))) {
+        const contexts: string[] = contextNames(model).filter((c) => dirOf(c) === dir);
+        for (const ctx of contexts) {
+            files.push({
+                path: posix.join(dir, `${ctx}.ts`),
+                content: new TestsEmitter(
+                    model,
+                    ctx,
+                    header,
+                    (c) => moduleOf(dir, c),
+                    opts.policies?.[ctx] === 'required',
+                    untested,
+                    (c) => testsOf(dir, c),
+                    (c) => contexts.includes(c),
+                ).emit(),
+            });
+        }
+        if (opts.runner) files.push({ path: posix.join(dir, '_register.ts'), content: adapter(header, opts.runner) });
+        const index = [
+            header,
+            ...(opts.runner ? [`export { register } from './_register.js';`] : []),
+            ...contexts.map((c) => `export * as ${c} from './${c}.js';`),
+            '',
+        ];
+        files.push({ path: posix.join(dir, 'index.ts'), content: index.join('\n') });
     }
-    if (opts.runner) files.push({ path: posix.join(dir, '_register.ts'), content: adapter(header, opts.runner) });
-    const index = [
-        header,
-        ...(opts.runner ? [`export { register } from './_register.js';`] : []),
-        ...contextNames(model).map((c) => `export * as ${c} from './${c}.js';`),
-        '',
-    ];
-    files.push({ path: posix.join(dir, 'index.ts'), content: index.join('\n') });
     return files;
 }
 
@@ -253,6 +279,10 @@ class TestsEmitter {
         private readonly policiesRequired: boolean,
         /** The types without an arbitrary (`untestedTypes`): their cases are left out. */
         private readonly untested: ReadonlySet<string> = new Set(),
+        /** Import specifier of another context's tests. */
+        private readonly testsOf: (ctx: string) => string = (c) => `./${c}.js`,
+        /** Whether another context's tests are in the same directory as these. */
+        private readonly nextTo: (ctx: string) => boolean = () => true,
     ) {
         this.els = elementsIn(model, ctx);
     }
@@ -577,7 +607,9 @@ class TestsEmitter {
             ),
             ...(policyCases.length ? [`testing.suite('policies', [\n${policyCases.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
         ];
-        const all = contextNames(this.model);
+        // the contexts of the options: those whose tests are next to these, and those of another package that are used
+        // (a package's tests import only the packages it depends on)
+        const all: string[] = contextNames(this.model).filter((c) => c === ctx || this.nextTo(c) || this.others.has(c));
         const defsText = defs.join('\n');
         const groupsText = groups.join('\n');
         // the helpers a function body uses (for `noUnusedLocals`)
@@ -668,7 +700,7 @@ class TestsEmitter {
         // modules used only for types are imported as types
         const used = (prefix: string): boolean => text.includes(prefix);
         // other contexts whose checks the policy cases call
-        const checked = all.filter((c) => c !== ctx && this.checked.has(c));
+        const checked = contextNames(this.model).filter((c) => c !== ctx && this.checked.has(c));
         const imports = [
             this.header,
             `import * as fc from 'fast-check';`,
@@ -676,7 +708,7 @@ class TestsEmitter {
             `import * as testing from '${TESTING}';`,
             `import ${used(`${ctx}.check`) ? '' : 'type '}* as ${ctx} from '${this.moduleOf(ctx)}';`,
             ...checked.map((c) => `import ${used(`${c}.check`) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`),
-            ...all.filter((c) => c !== ctx).map((c) => `import ${used(`${c}Tests.arbitraries(`) ? '' : 'type '}* as ${c}Tests from './${c}.js';`),
+            ...all.filter((c) => c !== ctx).map((c) => `import ${used(`${c}Tests.arbitraries(`) ? '' : 'type '}* as ${c}Tests from '${this.testsOf(c)}';`),
             '',
         ];
         return [...imports, text].join('\n');

@@ -20,6 +20,7 @@ describe('the generation sections', () => {
             lintHint: true,
             tsOut: 'generated/domain',
             tsContexts: {},
+            tsModules: {},
             tsPolicies: { project: 'optional', contexts: {} },
         });
     });
@@ -32,11 +33,20 @@ describe('the generation sections', () => {
             lintHint: false,
             tsOut: 'gen',
             tsContexts: { B: 'b' },
+            tsModules: {},
             tsPolicies: { project: 'required', contexts: { A: 'optional' } },
             tsTests: { runner: 'vitest' },
         });
         expect(policyModes(c, ['A', 'B', 'C'])).toEqual({ A: 'optional', B: 'required', C: 'required' });
         expect(policyModes(resolveGenerationConfig(), ['A'])).toEqual({ A: 'optional' });
+    });
+
+    test('generate.ts.contexts.<Ctx>.module: the module of the package its out is in', () => {
+        const ts = { contexts: { K: { out: 'packages/kernel/src/generated', module: '@acme/kernel' }, L: { out: 'l' } } };
+        expect(refusal({ generate: { ts } })).toBeUndefined();
+        const c = resolveGenerationConfig({ generate: { ts } });
+        expect(c.tsModules).toEqual({ K: '@acme/kernel' });
+        expect(c.tsContexts).toEqual({ K: 'packages/kernel/src/generated', L: 'l' });
     });
 
     test('a context the model does not have', () => {
@@ -64,6 +74,15 @@ describe('the generation sections', () => {
         [{ generate: { ts: { contexts: { C: 'x' } } } }, "'generate.ts.contexts.C' must be an object"],
         [{ generate: { ts: { contexts: { C: {} } } } }, "'generate.ts.contexts.C' needs 'out' or 'policies'"],
         [{ generate: { ts: { contexts: { C: { out: 'x', dir: 'y' } } } } }, "unknown key 'generate.ts.contexts.C.dir'"],
+        [
+            { generate: { ts: { contexts: { C: { policies: 'required', module: '@acme/c' } } } } },
+            "'generate.ts.contexts.C.module' needs 'generate.ts.contexts.C.out': the module is that of the package the context is written into",
+        ],
+        [
+            { generate: { ts: { contexts: { C: { out: 'c', module: '' } } } } },
+            "'generate.ts.contexts.C.module' must be a module specifier (a non-empty string)",
+        ],
+        [{ generate: { ts: { contexts: { C: { out: 'c', module: 1 } } } } }, "'generate.ts.contexts.C.module' must be a module specifier (a non-empty string)"],
         [{ generate: { ts: { policies: 'always' } } }, "'generate.ts.policies' must be one of 'optional', 'required'"],
         [{ generate: { ts: { contexts: { C: { policies: true } } } } }, "'generate.ts.contexts.C.policies' must be one of 'optional', 'required'"],
         [{ generate: { ts: { contexts: { C: { out: '../x' } } } } }, "'generate.ts.contexts.C.out' must stay inside the directory of the config file: '../x'"],

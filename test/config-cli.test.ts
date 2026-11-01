@@ -142,6 +142,24 @@ describe('output directories per context', () => {
         expect(await Bun.file(path.join(dir, 'gen', 'tests', '_testing.ts')).text()).toBe('export const mine = 1;\n');
     });
 
+    test('a context with a module is imported by it from other directories; its tests go into its package', async () => {
+        const dir = await project({
+            'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen', module: '@acme/shared' } }, tests: {} }),
+            ...SPLIT_MODEL,
+        });
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect(await Bun.file(path.join(dir, 'gen', 'S.ts')).text()).toContain(`import type * as C from '@acme/shared';`);
+        expect(await ls(path.join(dir, 'gen', 'tests'))).toEqual(['S.ts', 'index.ts']);
+        expect(await ls(path.join(dir, 'shared', 'gen', 'tests'))).toEqual(['C.ts', 'index.ts']);
+        expect(await Bun.file(path.join(dir, 'gen', 'tests', 'S.ts')).text()).toContain(`from '@acme/shared/tests';`);
+        expect(await Bun.file(path.join(dir, 'shared', 'gen', 'tests', 'C.ts')).text()).toContain(`from '../C.js';`);
+
+        await writeFile(path.join(dir, 'domaintrail.json'), config({ contexts: { C: { module: '@acme/shared' } } }));
+        const r = await run('-r', dir, 'generate', 'ts');
+        expect(r.code).toBe(2);
+        expect(r.err.at(-1)).toContain("'generate.ts.contexts.C.module' needs 'generate.ts.contexts.C.out'");
+    });
+
     test('a context name the model does not have is a config error (exit 2) and nothing is written', async () => {
         const dir = await project({ 'domaintrail.json': config({ contexts: { Nope: { out: 'x' } } }), ...SPLIT_MODEL });
         const r = await run('-r', dir, 'generate', 'ts');
@@ -210,6 +228,19 @@ describe('generated output safety', () => {
         expect(r3.code).toBe(1);
         expect(r3.err.at(-1)).toContain('is a symlink');
         expect((await readdir(outside)).sort()).toEqual(['keep.txt']);
+
+        // so is a directory the generator chooses: the contract tests of a context with a module, in <its out>/tests
+        const dir4 = await project({
+            'domaintrail.json': JSON.stringify({ generate: { ts: { out: 'gen', contexts: { S: { out: 'pkg/gen', module: '@acme/s' } }, tests: {} } } }),
+            's.dt': MODEL,
+        });
+        await mkdir(path.join(dir4, 'pkg', 'gen'), { recursive: true });
+        await symlink(outside, path.join(dir4, 'pkg', 'gen', 'tests'));
+        const r4 = await run('-r', dir4, 'generate', 'ts');
+        expect(r4.code).toBe(1);
+        expect(r4.err.at(-1)).toContain('is a symlink');
+        expect((await readdir(outside)).sort()).toEqual(['keep.txt']);
+        expect(await readdir(path.join(dir4, 'pkg', 'gen'))).toEqual(['tests']);
     });
 
     test('--out outside the root is a config error (exit 2) and nothing is written', async () => {
