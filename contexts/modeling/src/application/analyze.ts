@@ -140,7 +140,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkStructure(index, sink);
         checkUnions(index, sink);
         checkFieldSets(sourceModel!, new RuleSink(sink.items));
-        checkVerified(index, sink);
+        checkVerified(sourceModel!, new RuleSink(sink.items));
         checkCommands(index, sink);
         checkFactoryIds(index, sink);
         checkChanges(index, sink);

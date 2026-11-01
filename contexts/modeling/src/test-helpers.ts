@@ -16,7 +16,6 @@ import { checkPolicies } from './domain/rules/policies.js';
 import { checkShared } from './domain/rules/shared.js';
 import { checkStructure } from './domain/rules/structure.js';
 import { checkUnions } from './domain/rules/unions.js';
-import { checkVerified } from './domain/rules/verified.js';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
 
@@ -68,7 +67,6 @@ export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
         checkShared,
         checkStructure,
         checkUnions,
-        checkVerified,
         checkCommands,
         checkFactoryIds,
         checkChanges,

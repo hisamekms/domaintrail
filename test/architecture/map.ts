@@ -123,7 +123,6 @@ export const MAP: Record<string, Module> = {
                 'domain/rules/shared.ts',
                 'domain/rules/structure.ts',
                 'domain/rules/unions.ts',
-                'domain/rules/verified.ts',
             ],
         },
     },
