@@ -57,6 +57,51 @@ export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDepen
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './domain/diff.js';
 export type { ModelingRuleId } from './domain/rule-ids.js';
 
+// ---- the model as written, for the rules: what `DomainAnalysis.sourceModel` holds ------------------------------
+// (not published language: Modeling's rules and, from T10, the generator's name check read it; its lookups and the
+// static types stay inside until then, since the syntax's helpers below still have their names)
+export type {
+    AggregateDecl,
+    AggregateMember,
+    CommandDecl,
+    ContextFragment,
+    DataMember,
+    Declared,
+    ElementDecl,
+    EmitDecl,
+    EntityDecl,
+    EnumDecl,
+    EnumValueDecl,
+    ErrorDecl,
+    EventDecl,
+    Expr,
+    ExprKind,
+    FieldDecl,
+    FieldSetDecl,
+    IdDecl,
+    InvariantDecl,
+    Multiplicity,
+    OutcomePatternDecl,
+    ParamDecl,
+    PolicyDecl,
+    PrimitiveDecl,
+    Ref,
+    RequirementDecl,
+    Site,
+    SourceModel,
+    StateDecl,
+    TermDecl,
+    TransitionDecl,
+    TypeDecl,
+    TypeRef,
+    UnionDecl,
+    ValueObjectDecl,
+    VariantDecl,
+    VerifiedDecl,
+    WithFieldSets,
+    WithMembers,
+} from './domain/source-model.js';
+
 // ---- use cases: Modeling's analysis of the `.dt` sources -------------------------------------------------------
 export { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
 

@@ -20,8 +20,10 @@ import {
 } from '../infrastructure/syntax/generated/ast.js';
 import { createDomainServices } from '../infrastructure/syntax/domain-module.js';
 import { buildModel } from '../infrastructure/syntax/build.js';
+import { buildSourceModel } from '../infrastructure/syntax/build-source.js';
 import { elementIdOf } from '../infrastructure/syntax/element-id.js';
 import type { DomainModel } from '../domain/model.js';
+import type { SourceModel } from '../domain/source-model.js';
 import type { ModelingRuleId } from '../domain/rule-ids.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';
 import { checkEventIds } from '../domain/rules/events.js';
@@ -53,6 +55,12 @@ export interface DomainAnalysis {
     syntaxOk: boolean;
     /** Typed Model; present whenever the `.dt` sources parse (semantic errors are tolerated). */
     model?: DomainModel;
+    /**
+     * The model as written, with the sites of every declaration, member, expression and reference: what Modeling's
+     * rules and the generator's name check read (T10 of docs/plans/0027-boundaries.md moves them onto it). Present
+     * whenever the `.dt` sources parse.
+     */
+    sourceModel?: SourceModel;
     /** The path handed in for a document's URI, for the checks that report on the documents afterwards. */
     resolveFile: FileResolver;
 }
@@ -141,6 +149,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
     }
 
     const model = syntaxOk ? buildModel(index, resolveFile) : undefined;
+    const sourceModel = syntaxOk ? buildSourceModel(index, resolveFile) : undefined;
     diagnostics.sort(compareDiagnostics);
     return {
         files: sources.map((s) => s.path),
@@ -149,6 +158,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         diagnostics: dedupeDiagnostics(diagnostics),
         syntaxOk,
         model,
+        sourceModel,
         resolveFile,
     };
 }
