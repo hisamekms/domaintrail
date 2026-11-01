@@ -22,6 +22,8 @@ export type SessionIdentity = (typeof SESSION_IDENTITIES)[number];
  */
 export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
 export const DEFAULT_MAX_PARTICIPANTS = 50;
+/** The most characters of unified diff the agent is given of the runs a run continues (replies, answers), together. */
+export const DEFAULT_MAX_PREVIOUS_RUN_DIFF = 20 * 1024;
 /** The classifiers of a session's chat messages (request or chat), and the models of Cloudflare's Clef. */
 export const CLASSIFIER_PROVIDERS = ['cloudflare-clef'] as const;
 export const CLEF_MODELS = ['clef-flash', 'clef'] as const;
@@ -88,6 +90,11 @@ export interface SessionConfigFile {
          * paths relative to the config file, outside the workspace. Default: the running `dt` itself.
          */
         dt?: string[];
+        /**
+         * The most characters of unified diff the agent is given of the runs a run continues (the runs its messages reply
+         * to, the run it answers), all of them together; past it, a run's changed files only. Default: 20480.
+         */
+        maxPreviousRunDiff?: number;
     };
     /** Most participants a session admits. Default: 50. */
     maxParticipants?: number;
@@ -133,7 +140,7 @@ export interface ResolvedSessionConfig {
         avatarHosts: string[];
     };
     /** `dt`: the command (absolute paths) the agent's `dt` runs, when configured. */
-    agent: { port: number; allowedTools: string[]; dt?: string[] };
+    agent: { port: number; allowedTools: string[]; dt?: string[]; maxPreviousRunDiff: number };
     maxParticipants: number;
     classifier: ResolvedClassifierConfig;
 }
@@ -282,6 +289,7 @@ function resolveSession(session: SessionConfigFile | undefined, dir?: string): R
             port: session?.agent?.port ?? 0,
             allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS],
             ...(session?.agent?.dt && { dt: dir === undefined ? [...session.agent.dt] : resolveCommand(session.agent.dt, dir) }),
+            maxPreviousRunDiff: session?.agent?.maxPreviousRunDiff ?? DEFAULT_MAX_PREVIOUS_RUN_DIFF,
         },
         maxParticipants: session?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS,
         classifier: {
@@ -456,7 +464,8 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
     const agent = session.agent;
     if (agent !== undefined) {
         if (!isObject(agent)) return fail("'session.agent' must be an object");
-        for (const key of Object.keys(agent)) if (!['port', 'allowedTools', 'dt'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
+        for (const key of Object.keys(agent))
+            if (!['port', 'allowedTools', 'dt', 'maxPreviousRunDiff'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
         if (agent.port !== undefined && !isPort(agent.port)) fail("'session.agent.port' must be a port number");
         if (agent.allowedTools !== undefined && !isStringList(agent.allowedTools)) fail("'session.agent.allowedTools' must be an array of tool rules");
         if (agent.dt !== undefined) {
@@ -465,6 +474,9 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
             const wrong = dtShapeError(agent.dt);
             if (wrong) fail(`'session.agent.dt' ${wrong}`);
         }
+        const max = agent.maxPreviousRunDiff;
+        if (max !== undefined && !(typeof max === 'number' && Number.isInteger(max) && max >= 0))
+            fail("'session.agent.maxPreviousRunDiff' must be a non-negative integer (characters of diff)");
     }
     const classifier = session.classifier;
     if (classifier !== undefined) {

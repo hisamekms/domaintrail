@@ -33,7 +33,10 @@ export const REACTIONS = ['Agree', 'Doubt', 'Like', 'Seen'] as const satisfies r
 export interface MarkRun {
     readonly id: string;
     readonly state: string;
-    readonly input: { readonly requests: readonly { readonly request: string }[]; readonly answer?: { readonly answerTo: string } };
+    readonly input: {
+        readonly requests: readonly { readonly request: string; readonly replyTo?: string }[];
+        readonly answer?: { readonly answerTo: string };
+    };
     /** Absent for a queued run, and for a run cancelled before it started. */
     readonly baseRevision?: string;
     readonly reply?: {
@@ -71,14 +74,17 @@ export const signFits = (target: MarkTargetData, sign: Collaboration.MarkSign): 
 const undone = (run: MarkRun): boolean => run.state === 'Cancelled' && run.baseRevision === undefined;
 
 /**
- * The first run after `run` (in queue order) that answers it or bundles one of its requests, leaving out runs cancelled
- * before they started: the run that took over its requests, which closes its votes.
+ * The first run after `run` (in queue order) that answers it, bundles one of its requests or bundles a reply to it,
+ * leaving out runs cancelled before they started: the run that took over its requests (and continues its card), which
+ * closes its votes.
  */
 export function laterRunOf(run: MarkRun, runs: readonly MarkRun[]): MarkRun | undefined {
     const at = runs.findIndex((r) => r.id === run.id);
     if (at < 0) return undefined;
     const mine = new Set(run.input.requests.map((r) => r.request));
-    return runs.slice(at + 1).find((r) => !undone(r) && (r.input.answer?.answerTo === run.id || r.input.requests.some((q) => mine.has(q.request))));
+    return runs
+        .slice(at + 1)
+        .find((r) => !undone(r) && (r.input.answer?.answerTo === run.id || r.input.requests.some((q) => mine.has(q.request) || q.replyTo === run.id)));
 }
 
 /** `open`: it can be marked now; `closed`: a vote whose decision was made (frozen); `missing`: not in the session. */

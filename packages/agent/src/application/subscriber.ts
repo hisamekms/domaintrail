@@ -1,7 +1,7 @@
 // The subscriber of a session (`dt session subscribe`, ADR 0026, S6): follows the agent API's SSE stream, claims the
 // next queued run, and runs it through the pipeline, one run at a time:
 //
-//   claim → start (the server takes the base revision) → prompt → the agent, with heartbeats → the changed files are
+//   claim → start (the server takes the base revision, and gives the runs it continues) → prompt → the agent, with heartbeats → the changed files are
 //   only DSL sources? → `dt fmt`, `dt check` → finish {exitCode, formatted, checked, reply} (the server decides the rest)
 //
 // or, instead of finish, a clarification (the agent asked questions), a decline (the agent will not do the requests,
@@ -10,7 +10,7 @@
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
 // queued one is claimed without waiting for anyone. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration/domain/reply';
-import type { AgentClaimed } from '@domaintrail/collaboration/protocol';
+import type { AgentClaimed, AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
 import { buildPrompt } from './prompt.js';
 
@@ -189,7 +189,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 );
             });
             try {
-                await runPipeline(id, token, run.input, cancel.signal);
+                await runPipeline(id, token, run.input, started.value.previousRuns ?? [], cancel.signal);
             } catch (e) {
                 // the workspace could not be scanned, the participants not read…: the run fails, the next one is taken
                 log(`run ${id}: ${message(e)}`);
@@ -202,7 +202,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         }
     };
 
-    const runPipeline = async (id: string, token: string, input: AgentClaimed['run']['input'], cancelled: AbortSignal): Promise<void> => {
+    const runPipeline = async (
+        id: string,
+        token: string,
+        input: AgentClaimed['run']['input'],
+        previousRuns: readonly AgentPreviousRun[],
+        cancelled: AbortSignal,
+    ): Promise<void> => {
         const names = await api.participants().then(
             (r) => new Map(r.ok ? r.value.participants.map((p) => [p.id, p.name]) : []),
             (e: unknown) => {
@@ -245,7 +251,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             let outcome: AgentOutcome;
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, deps.nonce()),
+                    prompt: buildPrompt(input, names, deps.nonce(), previousRuns),
                     allowedTools: options.allowedTools,
                     requests: input.requests.length,
                     signal,

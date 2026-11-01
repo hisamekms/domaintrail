@@ -166,6 +166,12 @@
               "type": "array",
               "minItems": 1,
               "items": { "type": "string", "minLength": 1 }
+            },
+            "maxPreviousRunDiff": {
+              "description": "The most characters of unified diff the agent is given of the runs a run continues (the runs its messages reply to, the run it answers), all together; past it, only the files each changed.",
+              "type": "integer",
+              "minimum": 0,
+              "default": 20480
             }
           }
         },

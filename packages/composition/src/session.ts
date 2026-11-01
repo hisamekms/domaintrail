@@ -325,6 +325,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             token: agentToken,
             allowedTools: config.agent.allowedTools,
             leaseMs,
+            maxPreviousRunDiff: config.agent.maxPreviousRunDiff,
             maxStreams: MAX_AGENT_STREAMS,
             pump,
         });

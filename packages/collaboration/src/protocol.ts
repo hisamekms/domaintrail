@@ -3,6 +3,7 @@
 // (the agent API on its own loopback listener: REST and an SSE stream). Types only, shared by presentation, the page
 // (S5) and the subscriber (S6); what goes over the wire is JSON, so a `Date` arrives as an ISO string (`Json<T>`).
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
+import type { PreviousRunChanges } from './domain/previous-runs.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
 
@@ -147,11 +148,14 @@ export interface ClaimBody {
 
 /**
  * `POST /api/session/requests`: 0 to 20 targets, each once, none of them the whole workspace (no target: the whole
- * workspace); `@name[n]` in the body mentions target n. The former body with one `target` is still taken.
+ * workspace); `@name[n]` in the body mentions target n. The former body with one `target` is still taken. `replyTo`: the
+ * run of the session the message replies to — completed, failed, declined or cancelled (`RunNotFound` 404,
+ * `RunOfAnotherSession` 404, `RunNotReplyable` 409 otherwise).
  */
 export interface SendRequestBody {
     readonly targets: readonly Json<Collaboration.TargetSnapshot>[];
     readonly body: string;
+    readonly replyTo?: string;
 }
 
 /**
@@ -287,6 +291,23 @@ export interface AgentClaimed {
 /** `POST /agent/runs/:id/{start,heartbeat,release}`. */
 export interface AgentLeaseBody {
     readonly token: string;
+}
+
+/**
+ * A run the started run continues (ADR 0026, "replies to runs"): a run its messages reply to, or the run its answer
+ * answers, with what it changed from its base to its result revision — a unified diff, or the files only past
+ * `session.agent.maxPreviousRunDiff` characters for all of them.
+ */
+export interface AgentPreviousRun {
+    readonly run: Json<Collaboration.AgentRun>;
+    readonly changes: PreviousRunChanges;
+}
+
+/** `POST /agent/runs/:id/start` → 200: the running run, its base revision, and the runs it continues, in its input's order. */
+export interface AgentStartedBody {
+    readonly run: Json<Collaboration.RunningAgentRun>;
+    readonly baseRevision: Json<Collaboration.Revision>;
+    readonly previousRuns: readonly AgentPreviousRun[];
 }
 
 /**

@@ -420,7 +420,7 @@ const sessionConfig = (access: AccessConfig): ResolvedSessionConfig => ({
     host: '127.0.0.1',
     identity: 'access',
     access,
-    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS] },
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
 });

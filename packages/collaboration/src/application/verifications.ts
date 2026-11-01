@@ -10,7 +10,11 @@ export interface StoreVerifications {
     readonly makeActiveSession: Collaboration.MakeActiveSession;
     readonly makePendingRequest: Collaboration.MakePendingRequest;
     readonly makeOpenMarkTarget: Collaboration.MakeOpenMarkTarget;
+    readonly makeReplyableRun: Collaboration.MakeReplyableRun;
 }
+
+/** The states of a run that a message may reply to: it ended, and it does not wait for an answer (a clarification has its form). */
+export const REPLYABLE_STATES: readonly Collaboration.AgentRun['state'][] = ['Completed', 'Failed', 'Declined', 'Cancelled'];
 
 /** The checks over the stores, made inside the transaction that then uses the verified value. */
 export function storeVerifications(stores: Stores): StoreVerifications {
@@ -37,6 +41,14 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             if (status === 'closed') return err({ type: 'MarkTargetClosed' });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(target as Collaboration.OpenMarkTarget);
+        },
+        async makeReplyableRun(id, session) {
+            const run = stores.runs.load(id)?.run;
+            if (!run) return err({ type: 'RunNotFound', run: id });
+            if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: id });
+            if (!REPLYABLE_STATES.includes(run.state)) return err({ type: 'RunNotReplyable', run: id });
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
+            return ok(id as Collaboration.ReplyableRun);
         },
     };
 }

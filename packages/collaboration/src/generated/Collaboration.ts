@@ -74,6 +74,8 @@ export interface FrozenRequest {
     readonly targets: readonly TargetSnapshot[];
     /** 本文 */
     readonly body: Text;
+    /** 返信先 — 依頼が返信だった実行。エージェントには、その実行の依頼・返答・変更を前の実行として渡す。 */
+    readonly replyTo?: AgentRunId;
 }
 
 /**
@@ -81,14 +83,14 @@ export interface FrozenRequest {
  * @see model/agent-run.dt:23
  */
 export function equalFrozenRequest(a: FrozenRequest, b: FrozenRequest): boolean {
-    return a.request === b.request && a.author === b.author && sameList(a.targets, b.targets, equalTargetSnapshot) && a.body === b.body;
+    return a.request === b.request && a.author === b.author && sameList(a.targets, b.targets, equalTargetSnapshot) && a.body === b.body && sameOptional(a.replyTo, b.replyTo, ($0: AgentRunId, $1: AgentRunId) => $0 === $1);
 }
 
 /**
  * 実行の入力
  * 登録のときに凍結した、実行の入力。束ねた依頼（依頼と実行の多対多）はここにある。
  * @invariant distinctRequests (依頼は1件1回): unique(requests, r => r.request)
- * @see model/agent-run.dt:31
+ * @see model/agent-run.dt:33
  */
 export interface RunInput {
     /** 依頼 */
@@ -101,15 +103,15 @@ export interface RunInput {
 
 /**
  * Whether two RunInput values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:31
+ * @see model/agent-run.dt:33
  */
 export function equalRunInput(a: RunInput, b: RunInput): boolean {
-    return sameList(a.requests, b.requests, equalFrozenRequest) && sameOptional(a.note, b.note, ($0: Text, $1: Text) => $0 === $1) && sameOptional(a.answer, b.answer, equalAnswer);
+    return sameList(a.requests, b.requests, equalFrozenRequest) && sameOptional(a.note, b.note, ($2: Text, $3: Text) => $2 === $3) && sameOptional(a.answer, b.answer, equalAnswer);
 }
 
 /**
  * The invariants of RunInput that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:31
+ * @see model/agent-run.dt:33
  */
 export function checkRunInput(runInput: RunInput): readonly 'distinctRequests'[] {
     const violated: 'distinctRequests'[] = [];
@@ -122,13 +124,13 @@ export function checkRunInput(runInput: RunInput): readonly 'distinctRequests'[]
  * エージェントの返答の中で、問いや選択肢を指す短いキー（英数字と `_` `-`）。長さの上限は返答の上限（コード）が決める。
  * @invariant valid: matches(value, "^[A-Za-z0-9_-]+$")
  * Make it with `makeReplyKey`; never `as ReplyKey` (see dt guide lint).
- * @see model/agent-run.dt:40
+ * @see model/agent-run.dt:42
  */
 export type ReplyKey = string & { readonly __domain: 'Collaboration.ReplyKey' };
 
 /**
  * A value that violates an invariant of ReplyKey.
- * @see model/agent-run.dt:40
+ * @see model/agent-run.dt:42
  */
 export interface InvalidReplyKey {
     readonly type: 'InvalidReplyKey';
@@ -139,13 +141,13 @@ export interface InvalidReplyKey {
 
 /**
  * Creates a ReplyKey, checking its invariants: generated as `makeReplyKey`, or written by hand.
- * @see model/agent-run.dt:40
+ * @see model/agent-run.dt:42
  */
 export type MakeReplyKey = (value: string) => Result<ReplyKey, InvalidReplyKey>;
 
 /**
  * The invariants of ReplyKey that a value violates, in declaration order; empty when it is a ReplyKey.
- * @see model/agent-run.dt:40
+ * @see model/agent-run.dt:42
  */
 export function checkReplyKey(value: string): readonly InvalidReplyKey['invariant'][] {
     const violated: InvalidReplyKey['invariant'][] = [];
@@ -155,7 +157,7 @@ export function checkReplyKey(value: string): readonly InvalidReplyKey['invarian
 
 /**
  * Creates a ReplyKey, checking its invariants with `checkReplyKey`: the first one violated is reported.
- * @see model/agent-run.dt:40
+ * @see model/agent-run.dt:42
  */
 export const makeReplyKey: MakeReplyKey = (value) => {
     const [invariant] = checkReplyKey(value);
@@ -166,7 +168,7 @@ export const makeReplyKey: MakeReplyKey = (value) => {
 /**
  * 依頼の進み具合
  * 依頼ごとの、エージェントの申告。事実（成否・変わったファイル）ではない。
- * @see model/agent-run.dt:43
+ * @see model/agent-run.dt:45
  */
 export type RequestProgress =
     | 'Done' // 対応した
@@ -178,7 +180,7 @@ export type RequestProgress =
  * 依頼ごとの返答
  * 依頼1件についての返答。
  * @invariant noteExplains (一部と未対応には補足がある): (status == RequestProgress.Partial or status == RequestProgress.Skipped) implies exists(note)
- * @see model/agent-run.dt:51
+ * @see model/agent-run.dt:53
  */
 export interface RequestReply {
     /** 依頼 */
@@ -191,15 +193,15 @@ export interface RequestReply {
 
 /**
  * Whether two RequestReply values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:51
+ * @see model/agent-run.dt:53
  */
 export function equalRequestReply(a: RequestReply, b: RequestReply): boolean {
-    return a.request === b.request && a.status === b.status && sameOptional(a.note, b.note, ($2: Text, $3: Text) => $2 === $3);
+    return a.request === b.request && a.status === b.status && sameOptional(a.note, b.note, ($4: Text, $5: Text) => $4 === $5);
 }
 
 /**
  * The invariants of RequestReply that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:51
+ * @see model/agent-run.dt:53
  */
 export function checkRequestReply(requestReply: RequestReply): readonly 'noteExplains'[] {
     const violated: 'noteExplains'[] = [];
@@ -210,7 +212,7 @@ export function checkRequestReply(requestReply: RequestReply): readonly 'noteExp
 /**
  * 選択肢
  * 問いの選択肢。「その他（自由記述）」は画面がいつも足すので、ここには含めない。
- * @see model/agent-run.dt:63
+ * @see model/agent-run.dt:65
  */
 export interface ReplyOption {
     /** 返答のキー */
@@ -223,17 +225,17 @@ export interface ReplyOption {
 
 /**
  * Whether two ReplyOption values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:63
+ * @see model/agent-run.dt:65
  */
 export function equalReplyOption(a: ReplyOption, b: ReplyOption): boolean {
-    return a.id === b.id && a.label === b.label && sameOptional(a.detail, b.detail, ($4: Text, $5: Text) => $4 === $5);
+    return a.id === b.id && a.label === b.label && sameOptional(a.detail, b.detail, ($6: Text, $7: Text) => $6 === $7);
 }
 
 /**
  * 問い
  * エージェントがファシリテーターに選んでもらう問い。
  * @invariant distinctOptions (選択肢のキーは1回): unique(options, o => o.id)
- * @see model/agent-run.dt:70
+ * @see model/agent-run.dt:72
  */
 export interface ReplyQuestion {
     /** 返答のキー */
@@ -250,15 +252,15 @@ export interface ReplyQuestion {
 
 /**
  * Whether two ReplyQuestion values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:70
+ * @see model/agent-run.dt:72
  */
 export function equalReplyQuestion(a: ReplyQuestion, b: ReplyQuestion): boolean {
-    return a.id === b.id && a.text === b.text && sameList(a.requests, b.requests, ($6: RequestId, $7: RequestId) => $6 === $7) && sameList(a.options, b.options, equalReplyOption) && a.multiple === b.multiple;
+    return a.id === b.id && a.text === b.text && sameList(a.requests, b.requests, ($8: RequestId, $9: RequestId) => $8 === $9) && sameList(a.options, b.options, equalReplyOption) && a.multiple === b.multiple;
 }
 
 /**
  * The invariants of ReplyQuestion that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:70
+ * @see model/agent-run.dt:72
  */
 export function checkReplyQuestion(replyQuestion: ReplyQuestion): readonly 'distinctOptions'[] {
     const violated: 'distinctOptions'[] = [];
@@ -269,7 +271,7 @@ export function checkReplyQuestion(replyQuestion: ReplyQuestion): readonly 'dist
 /**
  * 別の選択
  * 前提の代わりにあり得た選択。
- * @see model/agent-run.dt:81
+ * @see model/agent-run.dt:83
  */
 export interface ReplyAlternative {
     /** 返答のキー */
@@ -280,7 +282,7 @@ export interface ReplyAlternative {
 
 /**
  * Whether two ReplyAlternative values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:81
+ * @see model/agent-run.dt:83
  */
 export function equalReplyAlternative(a: ReplyAlternative, b: ReplyAlternative): boolean {
     return a.id === b.id && a.label === b.label;
@@ -290,7 +292,7 @@ export function equalReplyAlternative(a: ReplyAlternative, b: ReplyAlternative):
  * 前提
  * 依頼があいまいだったところで、エージェントが置いた前提。
  * @invariant distinctAlternatives (別の選択のキーは1回): unique(alternatives, a => a.id)
- * @see model/agent-run.dt:87
+ * @see model/agent-run.dt:89
  */
 export interface ReplyAssumption {
     /** 前提 */
@@ -303,15 +305,15 @@ export interface ReplyAssumption {
 
 /**
  * Whether two ReplyAssumption values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:87
+ * @see model/agent-run.dt:89
  */
 export function equalReplyAssumption(a: ReplyAssumption, b: ReplyAssumption): boolean {
-    return a.text === b.text && sameList(a.requests, b.requests, ($8: RequestId, $9: RequestId) => $8 === $9) && sameList(a.alternatives, b.alternatives, equalReplyAlternative);
+    return a.text === b.text && sameList(a.requests, b.requests, ($10: RequestId, $11: RequestId) => $10 === $11) && sameList(a.alternatives, b.alternatives, equalReplyAlternative);
 }
 
 /**
  * The invariants of ReplyAssumption that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:87
+ * @see model/agent-run.dt:89
  */
 export function checkReplyAssumption(replyAssumption: ReplyAssumption): readonly 'distinctAlternatives'[] {
     const violated: 'distinctAlternatives'[] = [];
@@ -325,7 +327,7 @@ export function checkReplyAssumption(replyAssumption: ReplyAssumption): readonly
  * コードの1か所（`domain/reply.ts`）にある。
  * @invariant distinctRequests (依頼は1件1回): unique(requests, r => r.request)
  * @invariant distinctQuestions (問いのキーは1回): unique(questions, q => q.id)
- * @see model/agent-run.dt:97
+ * @see model/agent-run.dt:99
  */
 export interface AgentReply {
     /** 要約 */
@@ -340,7 +342,7 @@ export interface AgentReply {
 
 /**
  * Whether two AgentReply values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:97
+ * @see model/agent-run.dt:99
  */
 export function equalAgentReply(a: AgentReply, b: AgentReply): boolean {
     return a.summary === b.summary && sameList(a.requests, b.requests, equalRequestReply) && sameList(a.questions, b.questions, equalReplyQuestion) && sameList(a.assumptions, b.assumptions, equalReplyAssumption);
@@ -348,7 +350,7 @@ export function equalAgentReply(a: AgentReply, b: AgentReply): boolean {
 
 /**
  * The invariants of AgentReply that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:97
+ * @see model/agent-run.dt:99
  */
 export function checkAgentReply(agentReply: AgentReply): readonly ('distinctRequests' | 'distinctQuestions')[] {
     const violated: ('distinctRequests' | 'distinctQuestions')[] = [];
@@ -362,7 +364,7 @@ export function checkAgentReply(agentReply: AgentReply): readonly ('distinctRequ
  * ファシリテーターが選んだ、問い1つへの答え。登録のときに問いと選択肢を写し取る。
  * @invariant answered (選択か自由記述がある): count(chosen) >= 1 or exists(freeText)
  * @invariant distinctChosen (選択肢は1回): unique(chosen, o => o.id)
- * @see model/agent-run.dt:108
+ * @see model/agent-run.dt:110
  */
 export interface AnsweredQuestion {
     /** 問い */
@@ -377,15 +379,15 @@ export interface AnsweredQuestion {
 
 /**
  * Whether two AnsweredQuestion values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:108
+ * @see model/agent-run.dt:110
  */
 export function equalAnsweredQuestion(a: AnsweredQuestion, b: AnsweredQuestion): boolean {
-    return a.question === b.question && a.text === b.text && sameList(a.chosen, b.chosen, equalReplyOption) && sameOptional(a.freeText, b.freeText, ($10: Text, $11: Text) => $10 === $11);
+    return a.question === b.question && a.text === b.text && sameList(a.chosen, b.chosen, equalReplyOption) && sameOptional(a.freeText, b.freeText, ($12: Text, $13: Text) => $12 === $13);
 }
 
 /**
  * The invariants of AnsweredQuestion that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:108
+ * @see model/agent-run.dt:110
  */
 export function checkAnsweredQuestion(answeredQuestion: AnsweredQuestion): readonly ('answered' | 'distinctChosen')[] {
     const violated: ('answered' | 'distinctChosen')[] = [];
@@ -398,7 +400,7 @@ export function checkAnsweredQuestion(answeredQuestion: AnsweredQuestion): reado
  * 回答
  * 確認待ちの実行の問いへの、ファシリテーターの回答。次の実行の入力に凍結する。
  * @invariant distinctQuestions (問いは1回): unique(answers, a => a.question)
- * @see model/agent-run.dt:119
+ * @see model/agent-run.dt:121
  */
 export interface Answer {
     /** 答える実行 */
@@ -409,7 +411,7 @@ export interface Answer {
 
 /**
  * Whether two Answer values are equal: by all their fields (ADR 0016).
- * @see model/agent-run.dt:119
+ * @see model/agent-run.dt:121
  */
 export function equalAnswer(a: Answer, b: Answer): boolean {
     return a.answerTo === b.answerTo && sameList(a.answers, b.answers, equalAnsweredQuestion);
@@ -417,7 +419,7 @@ export function equalAnswer(a: Answer, b: Answer): boolean {
 
 /**
  * The invariants of Answer that a value violates, in declaration order; empty when it holds them all.
- * @see model/agent-run.dt:119
+ * @see model/agent-run.dt:121
  */
 export function checkAnswer(answer: Answer): readonly 'distinctQuestions'[] {
     const violated: 'distinctQuestions'[] = [];
@@ -428,7 +430,7 @@ export function checkAnswer(answer: Answer): readonly 'distinctQuestions'[] {
 /**
  * Fields shared by every state of エージェント実行 (AgentRun).
  * @invariant serial (セッションで実行中の実行は1つ): not expressed in the DSL
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export interface AgentRunCommon {
     /** エージェント実行ID */
@@ -445,7 +447,7 @@ export interface AgentRunCommon {
 
 /**
  * 待機中
- * @see model/agent-run.dt:137
+ * @see model/agent-run.dt:139
  */
 export interface QueuedAgentRun extends AgentRunCommon {
     readonly state: 'Queued';
@@ -453,7 +455,7 @@ export interface QueuedAgentRun extends AgentRunCommon {
 
 /**
  * 実行中
- * @see model/agent-run.dt:138
+ * @see model/agent-run.dt:140
  */
 export interface RunningAgentRun extends AgentRunCommon {
     readonly state: 'Running';
@@ -469,7 +471,7 @@ export interface RunningAgentRun extends AgentRunCommon {
  * @invariant unchangedKeepsBase (変更がなければ結果は基準リビジョン): (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
  * @invariant completedAsksNothing (完了の返答に問いはない): exists(reply) implies count(reply.questions) == 0
  * @invariant completedReplyAboutInput (完了の返答の依頼は実行の依頼): exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
- * @see model/agent-run.dt:142
+ * @see model/agent-run.dt:144
  */
 export interface CompletedAgentRun extends AgentRunCommon {
     readonly state: 'Completed';
@@ -494,7 +496,7 @@ export interface CompletedAgentRun extends AgentRunCommon {
  * エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
  * @invariant clarificationAsks (確認待ちの返答には問いがある): exists(reply) implies count(reply.questions) >= 1
  * @invariant clarificationReplyAboutInput (確認の返答の依頼は実行の依頼): exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
- * @see model/agent-run.dt:167
+ * @see model/agent-run.dt:169
  */
 export interface NeedsClarificationAgentRun extends AgentRunCommon {
     readonly state: 'NeedsClarification';
@@ -517,7 +519,7 @@ export interface NeedsClarificationAgentRun extends AgentRunCommon {
  * エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
  * @invariant declinedAsksNothing (辞退の返答に問いはない): count(reply.questions) == 0
  * @invariant declinedReplyAboutInput (辞退の返答の依頼は実行の依頼): (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
- * @see model/agent-run.dt:182
+ * @see model/agent-run.dt:184
  */
 export interface DeclinedAgentRun extends AgentRunCommon {
     readonly state: 'Declined';
@@ -536,7 +538,7 @@ export interface DeclinedAgentRun extends AgentRunCommon {
 /**
  * 失敗
  * @invariant ruleNotMetReported (成功の条件を満たさないことが報告にある): reason == FailureReason.RuleNotMet implies (exists(report) and not (report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0))
- * @see model/agent-run.dt:194
+ * @see model/agent-run.dt:196
  */
 export interface FailedAgentRun extends AgentRunCommon {
     readonly state: 'Failed';
@@ -556,7 +558,7 @@ export interface FailedAgentRun extends AgentRunCommon {
 
 /**
  * 取消
- * @see model/agent-run.dt:206
+ * @see model/agent-run.dt:208
  */
 export interface CancelledAgentRun extends AgentRunCommon {
     readonly state: 'Cancelled';
@@ -571,13 +573,13 @@ export interface CancelledAgentRun extends AgentRunCommon {
 /**
  * エージェント実行
  * ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export type AgentRun = QueuedAgentRun | RunningAgentRun | CompletedAgentRun | NeedsClarificationAgentRun | DeclinedAgentRun | FailedAgentRun | CancelledAgentRun;
 
 /**
  * The fields of AgentRun as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export const AgentRunShape: Shape = {
     fields: ['id', 'session', 'input', 'queuedBy', 'queuedAt'],
@@ -586,13 +588,13 @@ export const AgentRunShape: Shape = {
 
 /**
  * The invariants of AgentRun that the DSL does not express: implement them in your code and pass them to `checkAgentRunWith`.
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export type AgentRunDeclaredChecks = { readonly serial: (agentRun: AgentRun) => boolean };
 
 /**
  * The invariants of AgentRun in state Queued (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:137
+ * @see model/agent-run.dt:139
  */
 export function checkQueuedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: QueuedAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
@@ -604,7 +606,7 @@ export function checkQueuedAgentRunWith(checks: AgentRunDeclaredChecks): (agentR
 
 /**
  * The invariants of AgentRun in state Running (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:138
+ * @see model/agent-run.dt:140
  */
 export function checkRunningAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RunningAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
@@ -616,7 +618,7 @@ export function checkRunningAgentRunWith(checks: AgentRunDeclaredChecks): (agent
 
 /**
  * The invariants of AgentRun in state Completed (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:142
+ * @see model/agent-run.dt:144
  */
 export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: CompletedAgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput')[] {
     return (agentRun) => {
@@ -632,7 +634,7 @@ export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (age
 
 /**
  * The invariants of AgentRun in state NeedsClarification (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:167
+ * @see model/agent-run.dt:169
  */
 export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: NeedsClarificationAgentRun) => readonly ('serial' | 'clarificationAsks' | 'clarificationReplyAboutInput')[] {
     return (agentRun) => {
@@ -646,7 +648,7 @@ export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChec
 
 /**
  * The invariants of AgentRun in state Declined (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:182
+ * @see model/agent-run.dt:184
  */
 export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: DeclinedAgentRun) => readonly ('serial' | 'declinedAsksNothing' | 'declinedReplyAboutInput')[] {
     return (agentRun) => {
@@ -660,7 +662,7 @@ export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agen
 
 /**
  * The invariants of AgentRun in state Failed (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:194
+ * @see model/agent-run.dt:196
  */
 export function checkFailedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: FailedAgentRun) => readonly ('serial' | 'ruleNotMetReported')[] {
     return (agentRun) => {
@@ -673,7 +675,7 @@ export function checkFailedAgentRunWith(checks: AgentRunDeclaredChecks): (agentR
 
 /**
  * The invariants of AgentRun in state Cancelled (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/agent-run.dt:206
+ * @see model/agent-run.dt:208
  */
 export function checkCancelledAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: CancelledAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
@@ -685,7 +687,7 @@ export function checkCancelledAgentRunWith(checks: AgentRunDeclaredChecks): (age
 
 /**
  * The invariants of AgentRun in the state it is in that an aggregate violates (see the check of each state).
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput' | 'clarificationAsks' | 'clarificationReplyAboutInput' | 'declinedAsksNothing' | 'declinedReplyAboutInput' | 'ruleNotMetReported')[] {
     return (agentRun) => {
@@ -712,7 +714,7 @@ export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: Ag
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
  * @emits RunQueued — exactly once when the command succeeds
- * @see model/agent-run.dt:212
+ * @see model/agent-run.dt:214
  */
 export type QueueAgentRun = (
     id: AgentRunId,
@@ -735,7 +737,7 @@ export type QueueAgentRun = (
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
  * new -> Queued — set: every field
  * @emits RunQueued — exactly once when the command succeeds
- * @see model/agent-run.dt:212
+ * @see model/agent-run.dt:214
  */
 export type QueueAgentRunDecision = (
     id: AgentRunId,
@@ -753,10 +755,10 @@ export type QueueAgentRunDecision = (
 
 /**
  * The first requirement of AgentRun.queue that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:212
+ * @see model/agent-run.dt:214
  */
 export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSession, requests: readonly [PendingRequest, ...PendingRequest[]], input: RunInput, _queuedBy: ParticipantId, _queuedAt: Timestamp): 'distinctRequests' | 'inputCoversRequests' | undefined {
-    if (!(distinct(requests, ($12: RequestId, $13: RequestId) => $12 === $13))) return 'distinctRequests';
+    if (!(distinct(requests, ($14: RequestId, $15: RequestId) => $14 === $15))) return 'distinctRequests';
     if (!((input.requests.length === requests.length) && requests.every(($r) => input.requests.some(($i) => ($i.request === $r))))) return 'inputCoversRequests';
     return undefined;
 }
@@ -768,7 +770,7 @@ export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSess
  * @param baseRevision リビジョンID
  * @changes none — the command changes no common field
  * @emits RunStarted — exactly once when the command succeeds
- * @see model/agent-run.dt:221
+ * @see model/agent-run.dt:223
  */
 export type StartAgentRun = (
     agentRun: QueuedAgentRun,
@@ -786,7 +788,7 @@ export type StartAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Queued -> Running — set: baseRevision (new in Running), startedAt (new in Running); carried over: id, session, input, queuedBy, queuedAt
- * @see model/agent-run.dt:221
+ * @see model/agent-run.dt:223
  */
 export type StartAgentRunDecision = {
     /** @emits RunStarted — exactly once when the command succeeds */
@@ -812,7 +814,7 @@ export type StartAgentRunDecision = {
  * @changes none — the command changes no common field
  * @emits RunCompleted — exactly once when it ends in Completed
  * @emits RunFailed — exactly once when it ends in Failed
- * @see model/agent-run.dt:227
+ * @see model/agent-run.dt:229
  */
 export type FinishAgentRun = (
     agentRun: RunningAgentRun,
@@ -848,7 +850,7 @@ export type FinishAgentRun = (
  * @changes none — the command changes no common field
  * Running -> Completed — set: report (new in Completed), resultRevision (new in Completed), changed (new in Completed), reply (new in Completed), finishedAt (new in Completed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:227
+ * @see model/agent-run.dt:229
  */
 export type FinishAgentRunDecision = {
     /**
@@ -876,7 +878,7 @@ export type FinishAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.finish that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:227
+ * @see model/agent-run.dt:229
  */
 export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: RunReport, resultRevision: RevisionId, changed: boolean, reply: AgentReply | undefined, _finishedAt: Timestamp): 'changedMatchesResult' | 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!((!(changed === true) || !(resultRevision === agentRun.baseRevision)) && (!(changed === false) || (resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
@@ -895,7 +897,7 @@ export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: 
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunNeedsClarification — exactly once when the command succeeds
- * @see model/agent-run.dt:241
+ * @see model/agent-run.dt:243
  */
 export type AskClarificationAgentRun = (
     agentRun: RunningAgentRun,
@@ -917,7 +919,7 @@ export type AskClarificationAgentRun = (
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> NeedsClarification — set: question (new in NeedsClarification), reply (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:241
+ * @see model/agent-run.dt:243
  */
 export type AskClarificationAgentRunDecision = {
     /** @emits RunNeedsClarification — exactly once when the command succeeds */
@@ -931,7 +933,7 @@ export type AskClarificationAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.askClarification that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:241
+ * @see model/agent-run.dt:243
  */
 export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, _question: Text, reply: AgentReply | undefined, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsks' | 'replyAboutInput' | undefined {
     if (!(!(reply !== undefined) || (reply.questions.length >= 1))) return 'replyAsks';
@@ -949,7 +951,7 @@ export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun,
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunDeclined — exactly once when the command succeeds
- * @see model/agent-run.dt:252
+ * @see model/agent-run.dt:254
  */
 export type DeclineAgentRun = (
     agentRun: RunningAgentRun,
@@ -970,7 +972,7 @@ export type DeclineAgentRun = (
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> Declined — set: reply (new in Declined), resultRevision (new in Declined), finishedAt (new in Declined); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:252
+ * @see model/agent-run.dt:254
  */
 export type DeclineAgentRunDecision = {
     /** @emits RunDeclined — exactly once when the command succeeds */
@@ -984,7 +986,7 @@ export type DeclineAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.decline that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:252
+ * @see model/agent-run.dt:254
  */
 export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: AgentReply, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!(reply.questions.length === 0)) return 'replyAsksNothing';
@@ -1000,7 +1002,7 @@ export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: A
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * @emits RunFailed — exactly once when the command succeeds
- * @see model/agent-run.dt:261
+ * @see model/agent-run.dt:263
  */
 export type FailAgentRun = (
     agentRun: RunningAgentRun,
@@ -1019,7 +1021,7 @@ export type FailAgentRun = (
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:261
+ * @see model/agent-run.dt:263
  */
 export type FailAgentRunDecision = {
     /** @emits RunFailed — exactly once when the command succeeds */
@@ -1033,7 +1035,7 @@ export type FailAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.fail that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:261
+ * @see model/agent-run.dt:263
  */
 export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: FailureReason, _finishedAt: Timestamp): 'abnormal' | undefined {
     if (!(!(reason === "RuleNotMet"))) return 'abnormal';
@@ -1046,7 +1048,7 @@ export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: Fa
  * @param cancelledBy 参加者ID
  * @changes none — the command changes no common field
  * @emits RunCancelled — exactly once when the command succeeds
- * @see model/agent-run.dt:266
+ * @see model/agent-run.dt:268
  */
 export type CancelAgentRun = (
     agentRun: QueuedAgentRun | RunningAgentRun,
@@ -1065,7 +1067,7 @@ export type CancelAgentRun = (
  * @changes none — the command changes no common field
  * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt
  * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
- * @see model/agent-run.dt:266
+ * @see model/agent-run.dt:268
  */
 export type CancelAgentRunDecision = {
     /** @emits RunCancelled — exactly once when the command succeeds */
@@ -1087,7 +1089,7 @@ export type CancelAgentRunDecision = {
 /**
  * Command contracts of AgentRun. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export interface AgentRunCommands {
     /** 実行を登録する */
@@ -1108,14 +1110,14 @@ export interface AgentRunCommands {
 
 /**
  * Events that the commands of AgentRun may emit.
- * @see model/agent-run.dt:127
+ * @see model/agent-run.dt:129
  */
 export type AgentRunEvent = RunQueued | RunStarted | RunCompleted | RunFailed | RunNeedsClarification | RunDeclined | RunCancelled;
 
 /**
  * 実行登録
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:271
+ * @see model/agent-run.dt:273
  */
 export interface RunQueued {
     readonly type: 'RunQueued';
@@ -1133,7 +1135,7 @@ export interface RunQueued {
 /**
  * 実行開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:279
+ * @see model/agent-run.dt:281
  */
 export interface RunStarted {
     readonly type: 'RunStarted';
@@ -1147,7 +1149,7 @@ export interface RunStarted {
 /**
  * 実行完了
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:285
+ * @see model/agent-run.dt:287
  */
 export interface RunCompleted {
     readonly type: 'RunCompleted';
@@ -1162,7 +1164,7 @@ export interface RunCompleted {
 /**
  * 確認依頼
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:292
+ * @see model/agent-run.dt:294
  */
 export interface RunNeedsClarification {
     readonly type: 'RunNeedsClarification';
@@ -1178,7 +1180,7 @@ export interface RunNeedsClarification {
 /**
  * 実行辞退
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:299
+ * @see model/agent-run.dt:301
  */
 export interface RunDeclined {
     readonly type: 'RunDeclined';
@@ -1192,7 +1194,7 @@ export interface RunDeclined {
 /**
  * 実行失敗
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:305
+ * @see model/agent-run.dt:307
  */
 export interface RunFailed {
     readonly type: 'RunFailed';
@@ -1206,7 +1208,7 @@ export interface RunFailed {
 /**
  * 実行取消
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:311
+ * @see model/agent-run.dt:313
  */
 export interface RunCancelled {
     readonly type: 'RunCancelled';
@@ -1220,7 +1222,7 @@ export interface RunCancelled {
 /**
  * 依頼の重複
  * 同じ依頼を2回束ねた。
- * @see model/agent-run.dt:318
+ * @see model/agent-run.dt:320
  */
 export interface DuplicateRequest {
     readonly type: 'DuplicateRequest';
@@ -1229,7 +1231,7 @@ export interface DuplicateRequest {
 /**
  * 入力の不一致
  * 凍結した入力が、束ねた依頼と合わない。
- * @see model/agent-run.dt:321
+ * @see model/agent-run.dt:323
  */
 export interface InputMismatch {
     readonly type: 'InputMismatch';
@@ -1238,7 +1240,7 @@ export interface InputMismatch {
 /**
  * 変更の有無の不一致
  * 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
- * @see model/agent-run.dt:324
+ * @see model/agent-run.dt:326
  */
 export interface ChangedMismatch {
     readonly type: 'ChangedMismatch';
@@ -1247,7 +1249,7 @@ export interface ChangedMismatch {
 /**
  * 報告が必要
  * 成功の条件を満たさない失敗は、報告とともに finish で終える。
- * @see model/agent-run.dt:327
+ * @see model/agent-run.dt:329
  */
 export interface ReportRequired {
     readonly type: 'ReportRequired';
@@ -1256,7 +1258,7 @@ export interface ReportRequired {
 /**
  * 返答の不整合
  * エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
- * @see model/agent-run.dt:330
+ * @see model/agent-run.dt:332
  */
 export interface InvalidReply {
     readonly type: 'InvalidReply';
@@ -1652,7 +1654,7 @@ export function equalMarkTarget(a: MarkTarget, b: MarkTarget): boolean {
     }
     if (a.kind === 'AssumptionChoice') {
         const y = b as Extract<MarkTarget, { readonly kind: 'AssumptionChoice' }>;
-        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($14: ReplyKey, $15: ReplyKey) => $14 === $15);
+        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($16: ReplyKey, $17: ReplyKey) => $16 === $17);
     }
     return true;
 }
@@ -1986,11 +1988,27 @@ export type PendingRequest = RequestId & { readonly 'verified:Collaboration.Pend
 export type MakePendingRequest = (value: RequestId, context: SessionId) => Promise<Result<PendingRequest, RequestNotFound | RequestOfAnotherSession | RequestAlreadyDismissed>>;
 
 /**
+ * 返信できる実行
+ * 返信できると、依頼を送るときに確かめた実行。そのセッションの、終わった実行（完了・失敗・辞退・取消）。
+ * 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
+ * A value of AgentRunId for which MakeReplyableRun made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your `MakeReplyableRun` factory; never `as ReplyableRun` outside it (see dt guide lint).
+ * @see model/request.dt:10
+ */
+export type ReplyableRun = AgentRunId & { readonly 'verified:Collaboration.ReplyableRun': true };
+
+/**
+ * Checks a value of AgentRunId, given the SessionId the check needs, and returns it as ReplyableRun when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * @see model/request.dt:10
+ */
+export type MakeReplyableRun = (value: AgentRunId, context: SessionId) => Promise<Result<ReplyableRun, RunNotFound | RunOfAnotherSession | RunNotReplyable>>;
+
+/**
  * Fields shared by every state of 依頼 (Request).
  * @invariant atMostTwentyTargets (対象は20件まで): count(targets) <= 20
  * @invariant distinctTargets (同じ対象は1回): unique(targets, t => t.target)
  * @invariant noWorkspaceTarget (ワークスペース全体は対象に挙げない): all(targets, t => t.target.kind != ModelTarget.Workspace)
- * @see model/request.dt:10
+ * @see model/request.dt:14
  */
 export interface RequestCommon {
     /** 依頼ID */
@@ -2005,11 +2023,13 @@ export interface RequestCommon {
     readonly body: Text;
     /** 送信日時 */
     readonly sentAt: Timestamp;
+    /** 返信先 — AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。 */
+    readonly replyTo?: AgentRunId; // -> Collaboration.AgentRun
 }
 
 /**
  * 送信済み
- * @see model/request.dt:25
+ * @see model/request.dt:31
  */
 export interface SentRequest extends RequestCommon {
     readonly state: 'Sent';
@@ -2018,7 +2038,7 @@ export interface SentRequest extends RequestCommon {
 /**
  * 見送り
  * 見送りは印で、依頼そのものは残る。
- * @see model/request.dt:27
+ * @see model/request.dt:33
  */
 export interface DismissedRequest extends RequestCommon {
     readonly state: 'Dismissed';
@@ -2032,22 +2052,22 @@ export interface DismissedRequest extends RequestCommon {
  * 依頼
  * 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
  * 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の言及（`@注文[1]`）は対象の番号で指す。
- * @see model/request.dt:10
+ * @see model/request.dt:14
  */
 export type Request = SentRequest | DismissedRequest;
 
 /**
  * The fields of Request as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see model/request.dt:10
+ * @see model/request.dt:14
  */
 export const RequestShape: Shape = {
-    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt'],
+    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo'],
     states: { Sent: [], Dismissed: ['dismissedBy', 'dismissedAt'] },
 };
 
 /**
  * The invariants of Request in state Sent (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/request.dt:25
+ * @see model/request.dt:31
  */
 export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] {
     const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] = [];
@@ -2059,7 +2079,7 @@ export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyT
 
 /**
  * The invariants of Request in state Dismissed (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/request.dt:27
+ * @see model/request.dt:33
  */
 export function checkDismissedRequest(request: DismissedRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] {
     const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] = [];
@@ -2071,7 +2091,7 @@ export function checkDismissedRequest(request: DismissedRequest): readonly ('atM
 
 /**
  * The invariants of Request in the state it is in that an aggregate violates (see the check of each state).
- * @see model/request.dt:10
+ * @see model/request.dt:14
  */
 export function checkRequest(request: Request): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget')[] {
     switch (request.state) {
@@ -2088,11 +2108,12 @@ export function checkRequest(request: Request): readonly ('atMostTwentyTargets' 
  * @param author 参加者ID
  * @param targets 依頼時の対象
  * @param body 文章
+ * @param replyTo 返信できる実行
  * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: count(targets) <= 20
  * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: unique(targets, t => t.target)
  * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
  * @emits RequestSent — exactly once when the command succeeds
- * @see model/request.dt:32
+ * @see model/request.dt:38
  */
 export type SendRequest = (
     id: RequestId,
@@ -2101,6 +2122,7 @@ export type SendRequest = (
     targets: readonly TargetSnapshot[],
     body: Text,
     sentAt: Timestamp,
+    replyTo: ReplyableRun | undefined,
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
@@ -2116,7 +2138,7 @@ export type SendRequest = (
  * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see model/request.dt:32
+ * @see model/request.dt:38
  */
 export type SendRequestDecision = (
     id: RequestId,
@@ -2125,18 +2147,19 @@ export type SendRequestDecision = (
     targets: readonly TargetSnapshot[],
     body: Text,
     sentAt: Timestamp,
+    replyTo: ReplyableRun | undefined,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: AgentRunId | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, TooManyTargets | DuplicateTarget | WorkspaceTarget>;
 
 /**
  * The first requirement of Request.send that does not hold, in declaration order; `undefined` when all hold.
- * @see model/request.dt:32
+ * @see model/request.dt:38
  */
-export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession, _author: ParticipantId, targets: readonly TargetSnapshot[], _body: Text, _sentAt: Timestamp): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | undefined {
+export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession, _author: ParticipantId, targets: readonly TargetSnapshot[], _body: Text, _sentAt: Timestamp, _replyTo: ReplyableRun | undefined): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | undefined {
     if (!(targets.length <= 20)) return 'atMostTwentyTargets';
     if (!(distinct(targets, ($t, $t$) => equalModelTarget($t.target, $t$.target)))) return 'distinctTargets';
     if (!(targets.every(($t) => !($t.target.kind === "Workspace")))) return 'noWorkspaceTarget';
@@ -2149,7 +2172,7 @@ export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession
  * @param dismissedBy 参加者ID
  * @changes none — the command changes no common field
  * @emits RequestDismissed — exactly once when the command succeeds
- * @see model/request.dt:41
+ * @see model/request.dt:47
  */
 export type DismissRequest = (
     request: SentRequest,
@@ -2166,8 +2189,8 @@ export type DismissRequest = (
  * Request.dismiss, decided per source state; implement it with `decide(RequestShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
- * Sent -> Dismissed — set: dismissedBy (new in Dismissed), dismissedAt (new in Dismissed); carried over: id, session, author, targets, body, sentAt
- * @see model/request.dt:41
+ * Sent -> Dismissed — set: dismissedBy (new in Dismissed), dismissedAt (new in Dismissed); carried over: id, session, author, targets, body, sentAt, replyTo
+ * @see model/request.dt:47
  */
 export type DismissRequestDecision = {
     /** @emits RequestDismissed — exactly once when the command succeeds */
@@ -2182,7 +2205,7 @@ export type DismissRequestDecision = {
 /**
  * Command contracts of Request. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see model/request.dt:10
+ * @see model/request.dt:14
  */
 export interface RequestCommands {
     /** 依頼を送る */
@@ -2193,14 +2216,14 @@ export interface RequestCommands {
 
 /**
  * Events that the commands of Request may emit.
- * @see model/request.dt:10
+ * @see model/request.dt:14
  */
 export type RequestEvent = RequestSent | RequestDismissed;
 
 /**
  * 依頼送信
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/request.dt:46
+ * @see model/request.dt:52
  */
 export interface RequestSent {
     readonly type: 'RequestSent';
@@ -2215,12 +2238,14 @@ export interface RequestSent {
     /** 文章 */
     readonly body: Text;
     readonly sentAt: Timestamp;
+    /** エージェント実行ID */
+    readonly replyTo?: AgentRunId;
 }
 
 /**
  * 依頼見送り
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/request.dt:55
+ * @see model/request.dt:62
  */
 export interface RequestDismissed {
     readonly type: 'RequestDismissed';
@@ -2234,7 +2259,7 @@ export interface RequestDismissed {
 /**
  * 依頼なし
  * 指定した依頼がない。
- * @see model/request.dt:62
+ * @see model/request.dt:69
  */
 export interface RequestNotFound {
     readonly type: 'RequestNotFound';
@@ -2245,7 +2270,7 @@ export interface RequestNotFound {
 /**
  * 別のセッションの依頼
  * 依頼は別のセッションのもの。
- * @see model/request.dt:67
+ * @see model/request.dt:74
  */
 export interface RequestOfAnotherSession {
     readonly type: 'RequestOfAnotherSession';
@@ -2256,7 +2281,7 @@ export interface RequestOfAnotherSession {
 /**
  * 見送り済みの依頼
  * 依頼はすでに見送られている。
- * @see model/request.dt:72
+ * @see model/request.dt:79
  */
 export interface RequestAlreadyDismissed {
     readonly type: 'RequestAlreadyDismissed';
@@ -2265,9 +2290,42 @@ export interface RequestAlreadyDismissed {
 }
 
 /**
+ * 実行なし
+ * 返信先の実行がない。
+ * @see model/request.dt:84
+ */
+export interface RunNotFound {
+    readonly type: 'RunNotFound';
+    /** エージェント実行ID */
+    readonly run: AgentRunId;
+}
+
+/**
+ * 別のセッションの実行
+ * 返信先の実行は別のセッションのもの。
+ * @see model/request.dt:89
+ */
+export interface RunOfAnotherSession {
+    readonly type: 'RunOfAnotherSession';
+    /** エージェント実行ID */
+    readonly run: AgentRunId;
+}
+
+/**
+ * 返信できない実行
+ * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・取消の実行）。
+ * @see model/request.dt:94
+ */
+export interface RunNotReplyable {
+    readonly type: 'RunNotReplyable';
+    /** エージェント実行ID */
+    readonly run: AgentRunId;
+}
+
+/**
  * 対象が多すぎる
  * 依頼の対象が20件を超える。
- * @see model/request.dt:77
+ * @see model/request.dt:99
  */
 export interface TooManyTargets {
     readonly type: 'TooManyTargets';
@@ -2276,7 +2334,7 @@ export interface TooManyTargets {
 /**
  * 対象の重複
  * 依頼の対象に同じものが2回ある。
- * @see model/request.dt:80
+ * @see model/request.dt:102
  */
 export interface DuplicateTarget {
     readonly type: 'DuplicateTarget';
@@ -2285,7 +2343,7 @@ export interface DuplicateTarget {
 /**
  * 対象にワークスペース全体
  * 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
- * @see model/request.dt:83
+ * @see model/request.dt:105
  */
 export interface WorkspaceTarget {
     readonly type: 'WorkspaceTarget';
@@ -3699,7 +3757,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($16: string, $17: string) => $16 === $17);
+        return sameOptional(a.scope, y.scope, ($18: string, $19: string) => $18 === $19);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -3775,7 +3833,7 @@ export interface TargetSnapshot {
  * @see model/target.dt:56
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($18: string, $19: string) => $18 === $19) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($20: string, $21: string) => $20 === $21) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**

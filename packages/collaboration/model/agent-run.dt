@@ -25,6 +25,8 @@ context Collaboration {
     author: ParticipantId "依頼者"
     targets: TargetSnapshot[0..20] "対象"
     body: Text "本文"
+    /// 依頼が返信だった実行。エージェントには、その実行の依頼・返答・変更を前の実行として渡す。
+    replyTo: AgentRunId? "返信先"
   }
 
   /// 登録のときに凍結した、実行の入力。束ねた依頼（依頼と実行の多対多）はここにある。

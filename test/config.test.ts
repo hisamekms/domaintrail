@@ -426,7 +426,7 @@ describe('session section (ADR 0026)', () => {
             port: 4321,
             host: '127.0.0.1',
             identity: 'dev',
-            agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'] },
+            agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'], maxPreviousRunDiff: 20480 },
             maxParticipants: 50,
             classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
         });
@@ -443,7 +443,7 @@ describe('session section (ADR 0026)', () => {
                     allowedHosts: ['s.example.com'],
                     allowedOrigins: ['https://s.example.com'],
                 },
-                agent: { port: 9000, allowedTools: ['Read'] },
+                agent: { port: 9000, allowedTools: ['Read'], maxPreviousRunDiff: 4096 },
                 maxParticipants: 5,
             },
         });
@@ -461,7 +461,7 @@ describe('session section (ADR 0026)', () => {
                 acceptCookie: false,
                 avatarHosts: [],
             },
-            agent: { port: 9000, allowedTools: ['Read'] },
+            agent: { port: 9000, allowedTools: ['Read'], maxPreviousRunDiff: 4096 },
             maxParticipants: 5,
             classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
         });
@@ -500,6 +500,8 @@ describe('session section (ADR 0026)', () => {
         [{ access: { teamDomain: 't', audience: 'a', avatarHosts: ['https://x.example'] } }, "'session.access.avatarHosts'"],
         [{ agent: { allowedTools: [''] } }, "'session.agent.allowedTools'"],
         [{ agent: { port: 70000 } }, "'session.agent.port'"],
+        [{ agent: { maxPreviousRunDiff: -1 } }, "'session.agent.maxPreviousRunDiff'"],
+        [{ agent: { maxPreviousRunDiff: 1.5 } }, "'session.agent.maxPreviousRunDiff'"],
         [{ maxParticipants: 0 }, "'session.maxParticipants'"],
         [{ token: 'x' }, "unknown key 'session.token'"],
         [{ agent: { dt: [] } }, "'session.agent.dt' must be a command"],

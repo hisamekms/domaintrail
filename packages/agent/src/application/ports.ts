@@ -6,6 +6,7 @@ import type {
     AgentReplyBody,
     AgentFinishBody,
     AgentLease,
+    AgentPreviousRun,
     AgentParticipantsBody,
     AgentSessionBody,
     EventMessage,
@@ -39,10 +40,11 @@ export type StreamItem =
     /** The stream is open (first, and again after each reconnection): queued runs may have been missed meanwhile. */
     { readonly kind: 'open' } | { readonly kind: 'event'; readonly id: string; readonly type: string; readonly message: EventMessage };
 
-/** `POST /agent/runs/:id/start` → 200. */
+/** `POST /agent/runs/:id/start` → 200 (`AgentStartedBody`): `previousRuns` may be absent from an older server. */
 export interface Started {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
+    readonly previousRuns?: readonly AgentPreviousRun[];
 }
 
 /** The agent API of the session server (loopback, bearer token). */

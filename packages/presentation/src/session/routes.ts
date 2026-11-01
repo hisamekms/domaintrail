@@ -99,6 +99,8 @@ export function statusOf(type: string): number {
         case 'RevisionNotFound':
         case 'RevisionOfAnotherSession':
         case 'MarkTargetNotFound':
+        case 'RunNotFound':
+        case 'RunOfAnotherSession':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':
@@ -297,7 +299,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ req, res, auth }) => {
                 // `target` (one) is the former body, still taken; `apply` (the facilitator's): queued as a run at once
-                const raw = await input(req, res, ['targets', 'target', 'body', 'apply']);
+                const raw = await input(req, res, ['targets', 'target', 'body', 'apply', 'replyTo']);
                 if (!raw) return;
                 const me = who(auth);
                 const apply = checked(res, applyInput(raw.apply));
@@ -307,6 +309,13 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!targets) return;
                 const t = checked(res, text(raw.body, 'body', MAX_REQUEST_TEXT));
                 if (!t) return;
+                // a reply to a run of the session (ended, not waiting for an answer): the use case checks the run
+                let replyTo: Collaboration.AgentRunId | undefined;
+                if (raw.replyTo !== undefined) {
+                    const id = checked(res, uuid(raw.replyTo, 'replyTo'));
+                    if (!id) return;
+                    replyTo = Collaboration.makeAgentRunId(id);
+                }
                 const revisions = (await state()).revisions;
                 const unknown = targets.findIndex((target) => !revisions.some((r) => r.id === target.sourceRevision));
                 if (unknown >= 0)
@@ -315,7 +324,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
                         message: 'Not a revision of this session.',
                     });
-                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t });
+                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t, ...(replyTo && { replyTo }) });
                 if (!sent.ok || !apply) return answer(res, sent, 201, (request) => ({ request }));
                 // sent and applied: the message is in the stream whatever the run's fate
                 const queued = await use.queueRun({ session, requests: [sent.value.id], queuedBy: me.participant.id, ...(apply.note && { note: apply.note }) });

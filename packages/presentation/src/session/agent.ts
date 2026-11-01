@@ -2,7 +2,7 @@
 // public listener, and requiring the bearer token of `.domaintrail/session/agent.json` on every request. Browsers are
 // refused (any `Origin`). The subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed
 // with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
-// starts it, heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
+// starts it (and gets the runs it continues, with what they changed), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
 // fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -31,6 +31,8 @@ export interface AgentApiDeps {
     readonly allowedTools: readonly string[];
     /** How long a claim or a heartbeat holds the lease. */
     readonly leaseMs: number;
+    /** The most characters of diff a started run is given of the runs it continues, together (`session.agent.maxPreviousRunDiff`). */
+    readonly maxPreviousRunDiff: number;
     /** Most SSE streams open at once. */
     readonly maxStreams: number;
     /** Sends what the outbox got to the pages (and wakes the streams); called after every change. */
@@ -184,7 +186,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'start': {
                 const b = await input(req, res, ['token']);
                 if (!b) return;
-                return answer(res, await use.startRun({ run, token: String(b.token) }), (v) => ({ run: v.run, baseRevision: v.base }));
+                const started = await use.startRun({ run, token: String(b.token) });
+                if (!started.ok) return answer(res, started, (v) => v);
+                // the runs it continues (replies, an answer) and what they changed, measured now (ADR 0026, "replies to runs")
+                const previous = await use.previousRuns({ run, maxDiff: deps.maxPreviousRunDiff });
+                const previousRuns = previous.ok ? previous.value : [];
+                return answer(res, started, (v) => ({ run: v.run, baseRevision: v.base, previousRuns }));
             }
             case 'heartbeat': {
                 const b = await input(req, res, ['token']);

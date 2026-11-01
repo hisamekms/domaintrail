@@ -160,6 +160,13 @@ export const MIGRATIONS: readonly string[] = [
     CREATE INDEX marks_placed ON marks(session_id, participant, seq) WHERE state = 'Placed';
     CREATE UNIQUE INDEX marks_one_placed ON marks(session_id, participant, target_key, sign) WHERE state = 'Placed';
     `,
+    // ---------- replies to runs ----------
+    // a message that replies to a run (ADR 0026, amendment "replies to runs"): the run it names, kept next to the JSON so
+    // that the database refuses a reply to a run it does not hold; rows written before reply to none (NULL)
+    `
+    ALTER TABLE requests ADD COLUMN reply_to TEXT REFERENCES agent_runs(id);
+    CREATE INDEX requests_by_reply_to ON requests(reply_to) WHERE reply_to IS NOT NULL;
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -294,8 +301,8 @@ function sessions(db: DatabaseSync): SessionRepository {
 function requests(db: DatabaseSync): RequestRepository {
     const load = db.prepare('SELECT data FROM requests WHERE id = :id');
     const save = db.prepare(
-        `INSERT INTO requests (id, session_id, seq, state, data)
-         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data)
+        `INSERT INTO requests (id, session_id, seq, state, data, reply_to)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo)
          ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
     );
     const list = db.prepare('SELECT data FROM requests WHERE session_id = :session ORDER BY seq');
@@ -305,7 +312,7 @@ function requests(db: DatabaseSync): RequestRepository {
             return r ? decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest) : undefined;
         },
         save(request) {
-            save.run(params({ id: request.id, session: request.session, state: request.state, data: encodeJson(request) }));
+            save.run(params({ id: request.id, session: request.session, state: request.state, data: encodeJson(request), replyTo: request.replyTo ?? null }));
         },
         listBySession(session) {
             return list.all(params({ session })).map((r) => decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest));

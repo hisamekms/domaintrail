@@ -1,6 +1,6 @@
 // The commands of the collaboration aggregates, checked against the generated contracts (ADR 0026). Each is a pure
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
-// PendingRequest, RestorableRevision) are parameters that the application makes. The requirements are checked with the
+// PendingRequest, ReplyableRun, RestorableRevision) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
 // what each outcome sets.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
@@ -37,8 +37,8 @@ export const sessionCommands: Collaboration.SessionCommands = {
 };
 
 export const requestCommands: Collaboration.RequestCommands = {
-    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, targets, body, sentAt) => {
-        switch (Collaboration.checkSendRequestRequires(id, session, author, targets, body, sentAt)) {
+    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, targets, body, sentAt, replyTo) => {
+        switch (Collaboration.checkSendRequestRequires(id, session, author, targets, body, sentAt, replyTo)) {
             case 'atMostTwentyTargets':
                 return err({ type: 'TooManyTargets' });
             case 'distinctTargets':
@@ -48,8 +48,9 @@ export const requestCommands: Collaboration.RequestCommands = {
         }
         return ok({
             Sent: {
-                set: { id, session, author, targets, body, sentAt },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt } },
+                // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
+                set: { id, session, author, targets, body, sentAt, replyTo },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }) } },
             },
         });
     }),

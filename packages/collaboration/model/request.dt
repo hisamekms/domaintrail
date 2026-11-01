@@ -5,6 +5,10 @@ context Collaboration {
   /// まだ見送られていない、そのセッションの依頼だと、エージェント実行に束ねるときに確かめたもの。
   verified PendingRequest "未処理の依頼" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestAlreadyDismissed
 
+  /// 返信できると、依頼を送るときに確かめた実行。そのセッションの、終わった実行（完了・失敗・辞退・取消）。
+  /// 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
+  verified ReplyableRun "返信できる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable
+
   /// 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
   /// 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の言及（`@注文[1]`）は対象の番号で指す。
   aggregate Request "依頼" {
@@ -14,6 +18,8 @@ context Collaboration {
     owns targets: TargetSnapshot[0..20] "対象"
     body: Text "本文"
     sentAt: Timestamp "送信日時"
+    /// AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。
+    references replyTo: AgentRunId? -> AgentRun "返信先"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
     invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
@@ -29,7 +35,7 @@ context Collaboration {
       dismissedAt: Timestamp "見送り日時"
     }
 
-    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp) "依頼を送る"
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableRun?) "依頼を送る"
       -> Sent
       requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
       requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
@@ -50,6 +56,7 @@ context Collaboration {
     targets: TargetSnapshot[0..20]
     body: Text
     sentAt: Timestamp
+    replyTo: AgentRunId?
   }
 
   persistent event RequestDismissed "依頼見送り" {
@@ -71,6 +78,21 @@ context Collaboration {
   /// 依頼はすでに見送られている。
   error RequestAlreadyDismissed "見送り済みの依頼" {
     request: RequestId
+  }
+
+  /// 返信先の実行がない。
+  error RunNotFound "実行なし" {
+    run: AgentRunId
+  }
+
+  /// 返信先の実行は別のセッションのもの。
+  error RunOfAnotherSession "別のセッションの実行" {
+    run: AgentRunId
+  }
+
+  /// 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・取消の実行）。
+  error RunNotReplyable "返信できない実行" {
+    run: AgentRunId
   }
 
   /// 依頼の対象が20件を超える。

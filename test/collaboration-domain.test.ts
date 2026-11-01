@@ -261,7 +261,8 @@ describe('transitions', () => {
             sourceRevision: base,
         };
         const body = value(C.makeText('Split the timeline.'));
-        const sent = value(requestCommands.send(C.makeRequestId('00000000-0000-4000-8000-000000000004'), active, guest, [target], body, at)).Sent.aggregate;
+        const sent = value(requestCommands.send(C.makeRequestId('00000000-0000-4000-8000-000000000004'), active, guest, [target], body, at, undefined)).Sent
+            .aggregate;
         const dismissed = value(requestCommands.dismiss(sent, facilitator, later));
         expect(dismissed.Dismissed.aggregate).toEqual({ ...sent, state: 'Dismissed', dismissedBy: facilitator, dismissedAt: later });
     });

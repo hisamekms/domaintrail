@@ -9,6 +9,7 @@ import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } 
 import { exclusiveGroup, markChange, markCommands } from '../domain/marks.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, type AnswerData } from '../domain/reply.js';
+import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
@@ -142,6 +143,12 @@ export const MAX_COMPARISON_DIFF = 512 * 1024;
 /** The least budget a file's diff is started with: below it, the rest of the comparison's diffs are omitted. */
 const MIN_DIFF_ROOM = 2 * 1024;
 
+/** A run that a run continues (its messages reply to it, or its answer answers it), with what it changed. */
+export interface PreviousRun {
+    readonly run: Collaboration.AgentRun;
+    readonly changes: PreviousRunChanges;
+}
+
 /** Everything a session holds, for a page that shows it. */
 export interface SessionState {
     readonly session: Collaboration.Session;
@@ -198,12 +205,17 @@ export interface CollaborationUseCases {
         /** What the request is about: none for the whole workspace. */
         readonly targets: readonly Collaboration.TargetSnapshot[];
         readonly body: Collaboration.Text;
+        /** The run of the session it replies to: ended (completed, failed, declined or cancelled), not waiting for an answer. */
+        readonly replyTo?: AgentRunId;
     }): Promise<
         Result<
             Collaboration.SentRequest,
             | Collaboration.SessionNotFound
             | Collaboration.SessionAlreadyClosed
             | NotAParticipant
+            | Collaboration.RunNotFound
+            | Collaboration.RunOfAnotherSession
+            | Collaboration.RunNotReplyable
             | InvalidTarget
             | Collaboration.TooManyTargets
             | Collaboration.DuplicateTarget
@@ -350,6 +362,12 @@ export interface CollaborationUseCases {
         readonly before: RevisionId;
         readonly after: RevisionId;
     }): Promise<Result<Comparison, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
+    /**
+     * The runs a run continues — those its messages reply to, then the one its answer answers, as its frozen input names
+     * them — each with what it changed from its base to its result revision: a unified diff while the diffs of all of
+     * them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
+     */
+    previousRuns(input: { readonly run: AgentRunId; readonly maxDiff: number }): Promise<Result<readonly PreviousRun[], NotFound>>;
     /** The restores attempted in the session, in order. */
     restoreOperations(input: { readonly session: SessionId }): Promise<readonly RestoreOperation[]>;
     sessionState(input: { readonly session: SessionId }): Promise<Result<SessionState, NotFound>>;
@@ -556,7 +574,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async sendRequest({ session, author, targets, body }) {
+        async sendRequest({ session, author, targets, body, replyTo }) {
             const violated = targets.flatMap((target) => [
                 ...Collaboration.checkTargetSnapshot(target),
                 ...(target.range ? Collaboration.checkSourceRange(target.range) : []),
@@ -566,8 +584,14 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === author)) return err({ type: 'NotAParticipant', participant: author });
+                let replyable: Collaboration.ReplyableRun | undefined;
+                if (replyTo !== undefined) {
+                    const r = await storeVerifications(stores).makeReplyableRun(replyTo, session);
+                    if (!r.ok) return r;
+                    replyable = r.value;
+                }
                 const at = clock.now();
-                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at);
+                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at, replyable);
                 if (!sent.ok) return sent;
                 const { Sent } = sent.value;
                 stores.requests.save(Sent.aggregate);
@@ -649,7 +673,8 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     pending.push(p.value);
                     const r = stores.requests.load(id);
                     // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
-                    if (r && !frozen.some((f) => f.request === id)) frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body });
+                    if (r && !frozen.some((f) => f.request === id))
+                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(r.replyTo && { replyTo: r.replyTo }) });
                 }
                 const bundled = nonEmpty(pending);
                 const input = nonEmpty(frozen);
@@ -1010,6 +1035,46 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 files.push({ ...f, diff });
             }
             return ok({ before: a, after: b, files, counts: statusCounts(files), diffsOmitted });
+        },
+
+        async previousRuns({ run, maxDiff }) {
+            const found = await uow.transaction((stores) => {
+                const r = stores.runs.load(run)?.run;
+                if (!r) return undefined;
+                // the runs named by the frozen input, of the run's session only (checked when the reply was sent)
+                return previousRunIds(r.input).flatMap((id) => {
+                    const p = stores.runs.load(id)?.run;
+                    return p && p.session === r.session ? [p] : [];
+                });
+            });
+            if (!found) return err(notFound('AgentRun', run));
+            const compared: (ComparedChange[] | undefined)[] = [];
+            for (const p of found) {
+                const base = 'baseRevision' in p ? p.baseRevision : undefined;
+                const result = 'resultRevision' in p ? p.resultRevision : undefined;
+                if (!base || !result) {
+                    compared.push(undefined);
+                    continue;
+                }
+                const c = await useCases.compareRevisions({ session: p.session, before: base, after: result });
+                if (c.ok) {
+                    compared.push(
+                        c.value.files.flatMap((f) => (f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status, ...(f.diff && { diff: f.diff }) }])),
+                    );
+                    continue;
+                }
+                // the bytes are gone (or the revisions): the files by hash, without their diff
+                const revisions = await uow.transaction((stores) => ({ a: stores.revisions.load(base), b: stores.revisions.load(result) }));
+                compared.push(
+                    revisions.a && revisions.b
+                        ? compareFiles(revisions.a.files, revisions.b.files).flatMap((f) =>
+                              f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status }],
+                          )
+                        : undefined,
+                );
+            }
+            const changes = boundChanges(compared, maxDiff);
+            return ok(found.map((p, i) => ({ run: p, changes: changes[i] })));
         },
 
         async restoreOperations({ session }) {
