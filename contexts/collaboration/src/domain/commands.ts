@@ -235,5 +235,5 @@ export const revisionCommands: Collaboration.RevisionCommands = {
 
 /** The declared invariants of the aggregates, as the contract tests and the stores check them. */
 export const declaredChecks = {
-    Revision: { hashOfFiles: (revision: Collaboration.Revision): boolean => holdsHashOfFiles(revision) },
+    Revision: { hashOfFiles: (revision: Collaboration.RevisionCommon): boolean => holdsHashOfFiles(revision) },
 } as const;

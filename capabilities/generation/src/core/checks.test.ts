@@ -232,9 +232,9 @@ describe('generated checks', () => {
         expect(Sales.checkOrderCommon({ ...order, lines: [] })).toEqual([]);
         const cancelled = { ...order, state: 'Cancelled', reason: 'Other' };
         expect(Sales.checkCancelledOrderWith({ audited: () => false })(cancelled)).toEqual(['distinctSkus', 'distinctLines', 'otherNeedsNote', 'audited']);
-        // A slot of the aggregate's own: the common check takes it (and the aggregate, the slot's argument)
+        // A slot of the aggregate's own takes the common part, like the common check
         const ticket = { state: 'Closed', id: 't', title: 'x'.repeat(81) };
-        expect(Sales.checkTicketCommonWith({ titled: () => false })(ticket)).toEqual(['titled']);
+        expect(Sales.checkTicketCommonWith({ titled: (t: { state?: string }) => t.state !== undefined })({ id: 't', title: '' })).toEqual(['titled']);
         expect(Sales.checkClosedTicketWith({ titled: () => false })(ticket)).toEqual(['titled', 'short']);
         expect(Sales.checkOpenTicketWith({ titled: () => true })({ ...ticket, state: 'Open' })).toEqual([]);
         // An aggregate with states and no invariants still has its common check, which reports none

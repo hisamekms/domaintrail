@@ -695,7 +695,7 @@ export class CheckWriter {
         const out: string[] = [];
         if (declared) {
             const slots = [
-                ...agg.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: slotArgs(agg.name) })),
+                ...agg.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: slotArgs(states.length ? commonTypeName(agg) : agg.name) })),
                 ...states.flatMap((s) => s.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: slotArgs(stateTypeName(agg, s)) }))),
             ];
             out.push(...this.declaredType(agg.name, agg.location, slots));
@@ -714,7 +714,7 @@ export class CheckWriter {
             );
             return out;
         }
-        // The slot of an aggregate's invariant declared without an expression takes the aggregate, so then does its check.
+        // An invariant of the aggregate holds in every state: it, and the slot of one without an expression, sees the common part.
         const common = commonTypeName(agg);
         const commonDeclared = hasDeclared(agg.invariants);
         out.push(
@@ -722,7 +722,7 @@ export class CheckWriter {
                 [`The invariants of ${agg.name} (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.`],
                 agg.location,
                 common,
-                { name: subject, type: commonDeclared ? agg.name : common },
+                { name: subject, type: common },
                 namesType(agg.invariants.map((i) => i.name)),
                 commonDeclared && agg.name,
                 collect(items(this.compiler, agg.invariants, fieldScope(model, subject, agg.fields), subject), ''),

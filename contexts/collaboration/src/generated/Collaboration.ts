@@ -648,13 +648,13 @@ export const AgentRunShape: Shape = {
  * The invariants of AgentRun that the DSL does not express: implement them in your code and pass them to `checkAgentRunWith`.
  * @see model/agent-run.dt:142
  */
-export type AgentRunDeclaredChecks = { readonly serial: (agentRun: AgentRun) => boolean };
+export type AgentRunDeclaredChecks = { readonly serial: (agentRun: AgentRunCommon) => boolean };
 
 /**
  * The invariants of AgentRun (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
  * @see model/agent-run.dt:142
  */
-export function checkAgentRunCommonWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly 'serial'[] {
+export function checkAgentRunCommonWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRunCommon) => readonly 'serial'[] {
     return (agentRun) => {
         const violated: 'serial'[] = [];
         if (!checks.serial(agentRun)) violated.push('serial');
@@ -2929,13 +2929,13 @@ export const RevisionShape: Shape = {
  * The invariants of Revision that the DSL does not express: implement them in your code and pass them to `checkRevisionWith`.
  * @see model/revision.dt:55
  */
-export type RevisionDeclaredChecks = { readonly hashOfFiles: (revision: Revision) => boolean };
+export type RevisionDeclaredChecks = { readonly hashOfFiles: (revision: RevisionCommon) => boolean };
 
 /**
  * The invariants of Revision (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
  * @see model/revision.dt:55
  */
-export function checkRevisionCommonWith(checks: RevisionDeclaredChecks): (revision: Revision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
+export function checkRevisionCommonWith(checks: RevisionDeclaredChecks): (revision: RevisionCommon) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
         const violated: ('distinctPaths' | 'hashOfFiles')[] = [];
         if (!(distinct(revision.files, (f, f2) => f.path === f2.path))) violated.push('distinctPaths');
