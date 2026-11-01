@@ -5,12 +5,15 @@ import { createApiRoutes } from '@domaintrail/presentation/http/routes';
 import { defaultWebDir, loadAssets, type Assets } from '@domaintrail/presentation/http/assets';
 import { createViewHttpServer } from '@domaintrail/presentation/http/server';
 import { createWebSocketHub } from '@domaintrail/presentation/websocket/hub';
-import type { LayoutEngine } from '@domaintrail/visualization/application/layout-engine';
-import type { GitRevisions } from '@domaintrail/visualization/application/ports';
-import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
-import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import {
+    createFileLayoutStore,
+    createGitRevisions,
+    createViewService,
+    ElkLayoutEngine,
+    type GitRevisions,
+    type LayoutEngine,
+    type ViewService,
+} from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
 import { createGitRefWatcher, createWorkspaceWatcher } from '@domaintrail/workspace/infrastructure/watchers';

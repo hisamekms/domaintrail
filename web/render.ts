@@ -1,20 +1,20 @@
 import { createShapeId, type Editor, type TLShapeId, type TLShapePartial } from 'tldraw';
 import type { Diagnostic } from '@domaintrail/modeling';
-import type { ModelDiff } from '@domaintrail/visualization/domain/graph/diff';
 import {
-    INTERNAL_PADDING,
     compartmentHeight,
-    internalRowHeight,
-    transitionText,
     type DisplayMode,
     type GraphEdge,
     type GraphNode,
-    type Lang,
+    INTERNAL_PADDING,
+    internalRowHeight,
     type LaidOutGraph,
+    type Lang,
+    type ModelDiff,
     type NodeLayout,
     type Texts,
     type TransitionLabels,
-} from '@domaintrail/visualization/domain/graph/ir';
+    transitionText,
+} from '@domaintrail/visualization';
 import { MESSAGES } from './i18n';
 import type { ChangeMark, DiagMark, EdgeTone } from './shapes';
 

@@ -1,5 +1,4 @@
-import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
-import { PRIMITIVE_LABELS, typeText } from '@domaintrail/visualization/domain/graph/build';
+import { type DisplayMode, PRIMITIVE_LABELS, typeText } from '@domaintrail/visualization';
 import type { CommandModel, DomainModel, ElementKind, ElementModel, StateModel, TypeExpr } from '@domaintrail/modeling';
 import { ownerElement } from './render';
 

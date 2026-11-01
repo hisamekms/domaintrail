@@ -1,8 +1,7 @@
 // Where a participant is looking (ADR 0026, Presence): the page's view as a `ViewLocation`, and when two of them are
 // the same view, so that cursors are drawn only between equal locations.
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
-import type { LaidOutGraph } from '@domaintrail/visualization/domain/graph/ir';
-import type { ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
+import type { LaidOutGraph, ViewOptions } from '@domaintrail/visualization';
 import type { View } from '../view/navigation';
 
 /** The `layoutKey` of a view without a laid-out graph (the catalog, a view still loading). */

@@ -1,4 +1,4 @@
-import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
+import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
 import { usePersistentState } from '../shared/layout';
 import type { StormingChoice } from '../storming';
 

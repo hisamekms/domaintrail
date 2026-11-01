@@ -1,6 +1,6 @@
 import { PanelBottomClose, PanelRightClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
-import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
+import { dependencyCounts, type DisplayMode, type ModelDiff } from '@domaintrail/visualization';
 import {
     type CommandModel,
     contextDependencies,
@@ -17,8 +17,6 @@ import {
     supportingContexts,
     type TypeExpr,
 } from '@domaintrail/modeling';
-import type { ModelDiff } from '@domaintrail/visualization/domain/graph/diff';
-import { dependencyCounts } from '@domaintrail/visualization/domain/graph/context-map';
 import { Changes, CommandCard, OldType, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';
 import {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { LaidOutGraph } from '@domaintrail/visualization/domain/graph/ir';
+import type { LaidOutGraph } from '@domaintrail/visualization';
 import type { BaseView, StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { shownStorming, stormingGraph } from '../storming';
 import { isCanvas, type View } from './navigation';

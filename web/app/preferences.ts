@@ -1,5 +1,5 @@
 import { useLayoutEffect, useState } from 'react';
-import type { DisplayMode, Lang } from '@domaintrail/visualization/domain/graph/ir';
+import type { DisplayMode, Lang } from '@domaintrail/visualization';
 import { LANG_KEY, useResolvedLang, type LangPreference } from '../i18n';
 import { usePersistentState } from '../shared/layout';
 import { THEME_KEY, useResolvedTheme, type Theme, type ThemePreference } from '../theme';

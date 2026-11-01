@@ -1,6 +1,6 @@
 import { Eye, EyeDashed, EyeOff } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
+import type { DisplayMode } from '@domaintrail/visualization';
 import { useT } from './i18n';
 import { nameIn } from './model-utils';
 

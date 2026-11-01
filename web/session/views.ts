@@ -2,8 +2,7 @@
 // participant's whereabouts seen from this page, the view a location stands for (to name it and to open it), and the
 // small rules of the chat's layout (consecutive bubbles of one author, the send shortcut's name).
 import type { Me, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { STRUCTURE_LEVELS, type DisplayMode, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
-import { VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization/domain/storming/ir';
+import { type DisplayMode, STRUCTURE_LEVELS, type StructureLevel, VIEW_LEVELS, type ViewLevel } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { nameIn } from '../model-utils';
 import { sameLocation } from './location';

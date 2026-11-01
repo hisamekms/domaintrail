@@ -1,7 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
-import { UnknownRevisionError, type GitRevisions } from '@domaintrail/visualization/application/ports';
-import type { ViewService } from '@domaintrail/visualization/application/view-service';
+import { type GitRevisions, STRUCTURE_LEVELS, type StructureLevel, UnknownRevisionError, type ViewService } from '@domaintrail/visualization';
 import type { BaselineSpec, ViewPayload } from '@domaintrail/visualization/protocol';
 
 /** Answers one API request; the access check has been passed already (see `createViewHttpServer`). */

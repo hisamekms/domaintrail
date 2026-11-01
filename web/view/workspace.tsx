@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Box, LayoutGrid, LayoutList, type LucideIcon } from 'lucide-react';
 import { Tldraw, type Editor } from 'tldraw';
-import { STRUCTURE_LEVELS, type DisplayMode, type Lang, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
+import { type DisplayMode, type Lang, STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
 import { ContextList } from '../context-picker';

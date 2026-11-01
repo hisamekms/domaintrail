@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Editor, TLCamera } from 'tldraw';
-import type { DisplayMode, Lang } from '@domaintrail/visualization/domain/graph/ir';
+import type { DisplayMode, Lang } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { renderGraph, withWriteAccess } from '../render';
 import { cameraMove, fitAll, fitReadable } from './canvas';

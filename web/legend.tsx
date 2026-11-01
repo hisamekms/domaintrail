@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react';
-import type { EdgeKind } from '@domaintrail/visualization/domain/graph/ir';
+import type { EdgeKind } from '@domaintrail/visualization';
 import { useT, type Messages } from './i18n';
 
 /** The canvas views a legend is for (the structure's levels, focused or not, read differently). */

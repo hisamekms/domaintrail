@@ -312,7 +312,7 @@ Examples:
         )
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
-            const { UnknownRevisionError } = await import('@domaintrail/visualization/application/ports');
+            const { UnknownRevisionError } = await import('@domaintrail/visualization');
             const port = opts.port ?? cfg.view.port;
             const host = opts.host ?? cfg.view.host;
             const server = await deps
@@ -359,7 +359,7 @@ Examples:
         )
         .action(async (opts: { port?: number; host?: string; base?: string }) => {
             const cfg = await config();
-            const { UnknownRevisionError } = await import('@domaintrail/visualization/application/ports');
+            const { UnknownRevisionError } = await import('@domaintrail/visualization');
             const settings = { ...cfg.session, port: opts.port ?? cfg.session.port, host: opts.host ?? cfg.session.host };
             const server = await deps
                 .startSessionServer({
