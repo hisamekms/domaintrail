@@ -339,33 +339,49 @@ to exercise the rules depends on the model.
 - Other names for the setting: `maxDepth` (depth of what?), `maxNestingDepth` (reads as any nesting, of lists and
   records too), `recursion: { maxDepth }` (a group for one setting).
 
-### 9. A context imported from another package
+### 9. A context generated into another package is imported by its module
 
 **Today.** `generate.ts.contexts.<Ctx>.out` writes a context to another directory, but generated modules import each
 other by relative path (`import type * as Common from './Common.js'`), which crosses package boundaries (ADR 0027). So
-a package cannot use a context another package generates: Modeling's `.dt` copies the kernel's `Location` structurally
+contexts generated into different packages of a monorepo cannot use each other. In this repository, where ADR 0027's
+T11 gave Modeling its own `domaintrail.jsonc`, Modeling's `.dt` copies the kernel's `Location` structurally
 (`contexts/modeling/model/context.dt`).
 
-**Decision.** *Decided by the maintainer:* a context may be imported instead of generated:
+**Decision.** *Decided by the maintainer:* one repository keeps one set of `.dt` and one `domaintrail.jsonc` for all
+its contexts, and a context written into another package is imported by that package's module name:
 
 ```jsonc
-// the context's and the module's names are illustrative
-"generate": { "ts": { "contexts": { "Kernel": { "import": "@domaintrail/kernel" } } } }
+// the context's directory and module names are illustrative
+"generate": { "ts": { "contexts": {
+    "Kernel": { "out": "shared/kernel/src/generated", "module": "@domaintrail/kernel" }
+} } }
 ```
 
-- `generate.ts.contexts.<Ctx>.import: "<module>"`, next to `out`. The context's `.dt` is read and checked with the
-  others; nothing is written for it; generated code imports it from the module (`import type * as Kernel from
-  '@domaintrail/kernel'`). The module is that context's generated code, published by its own package.
-- The kernel describes itself in `.dt` as a shared context, and Modeling uses its `Location` instead of a copy.
+- `generate.ts.contexts.<Ctx>.module: "<module>"`, next to `out` (an error without it): the module through which that
+  package exports the context's generated code. Generated code in another output directory imports the context from
+  the module (`import type * as Kernel from '@domaintrail/kernel'`); code in the same directory keeps relative paths.
+- Everything is still read, checked and generated from the one configuration, and the Live View opens on it, showing
+  every context.
+- This repository follows it: one `domaintrail.jsonc` at the root covers the kernel, Modeling and Collaboration, each
+  written into its package with its module; the kernel describes itself in `.dt` as a shared context, and Modeling
+  uses its `Location` instead of a copy.
 
-**Why.** A context shared across packages is described once, and its users get its types, not a copy that may drift.
+**Why.** The model of a system spans its contexts, and its users read it as one (one check, one view); packages are
+where the code is deployed, and the configuration maps contexts onto them. A context used by several packages is
+described once, and its users get its types, not a copy that may drift.
 
 **Compatibility.** Additive (G8): a new key.
 
 **Rejected.**
 
-- An `out` per context with relative imports between them: the paths cross package boundaries, which ADR 0027 forbids.
-- Keeping structural copies (the state today): two descriptions of one type, kept equal by hand.
+- An `out` per context with relative imports between them (the state today): the paths cross package boundaries,
+  which ADR 0027 forbids.
+- Keeping structural copies: two descriptions of one type, kept equal by hand.
+- One configuration per package, with a context imported from another configuration and its `.dt` read from there
+  (`contexts.<Ctx>.import`, first planned): the model splits into projects that are checked and viewed apart, and
+  each package must find another's `.dt` (paths out of its root, or resolving the package and reading its
+  configuration). Needed only when a context's owner is outside the repository (a published model, another
+  repository); left until there is such a case, as a separate key that does not conflict with `module`.
 
 ### 10. Infrastructure failures in the factories of verified types
 
@@ -406,7 +422,7 @@ the domain's.
 - [ADR 0023](0023-verified-types.md), Generated TypeScript: why the context parameter is required (decision 6), and
   what a rejected promise of a factory means (decision 10).
 - [ADR 0027](0027-domain-and-application-boundaries.md), Implementation notes: the rule `generated` ("a package's
-  generated code imports only its own files") lets generated code import an imported context's module (decision 9);
+  generated code imports only its own files") lets generated code import the module of a context written into another package (decision 9);
   two items of "Left for later" are done (values of recursive types, the kernel's `Location` imported).
 - The examples of command types in ADR 0018 and 0019 (`ConfirmOrder = (order: DraftOrder, at: Timestamp) => …`) show
   positional parameters; the generated code takes an object (decision 7). Their text is not rewritten.
@@ -450,12 +466,13 @@ maintainer. A task that finds one of them unworkable records a different choice 
 - G7: a cycle of types whose per-type settings differ uses the greatest depth among them: a per-type setting asks to
   reach at least that depth.
 - G8:
-  - `import` excludes `out` and `policies`: nothing is generated for an imported context, so both are an error next
-    to it.
-  - The setting may also be an object, `import: { module, tests }`, naming the module of the imported context's
-    contract-test support. The contract tests of a context using an imported one draw its values from there; when they
-    need them and `tests` is not given, it is an error.
+  - `module` without `out` is an error, as is a `module` that is not a non-empty string.
+  - The contract tests of a context that uses a context written into another package reach that context's
+    generated tests through its package too; the task chooses the specifier (`<module>/tests` is expected) and how
+    the boundary rules of ADR 0027 allow it.
   - The kernel's hand-written types are replaced by the code generated from its `.dt`, so that it is defined once.
+  - The bootstrap steps of CONTRIBUTING (regenerating Modeling's code, recovering from a broken generator) work from
+    the root configuration.
 
 ## Consequences
 
@@ -464,6 +481,7 @@ maintainer. A task that finds one of them unworkable records a different choice 
 - The generated checks read like the model, once per invariant; references are navigable.
 - Contract tests reach recursive types, and a project with contract tests imports `domaintrail/testing` from its dev
   dependency on domaintrail.
-- A context can be described in one package and used by others through `.dt`; Modeling's copy of `Location` goes.
+- Contexts generated into different packages use each other, from one configuration; Modeling's copy of `Location`
+  goes, and this repository's model is checked and viewed as one.
 - What a factory's failure means is written down, for factories and policy handlers alike: the domain's answers in the
   `Result`, the infrastructure's in the rejection.
