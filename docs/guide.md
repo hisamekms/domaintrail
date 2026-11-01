@@ -2421,10 +2421,20 @@ right end of the page — チャット: every message posted, one card per run, 
 files — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
-chat's ⋯ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
+collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
 facilitator applies messages, answers the agent, cancels runs, records, confirms and restores revisions, changes the
-shared 比較対象 (baseline) and closes the session (the chat's ⋯). The server checks every role; the page only hides what
-is not yours.
+shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
+only hides what is not yours.
+
+**The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars, how
+many are online and コラボ中 ▾ — that opens the participants (where each is, and → to open the view another is on) and
+the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
+behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
+ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
+lists what is not finished — runs queued or running, questions waiting for an answer, and the results recorded since
+the last revision confirmed — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
+files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
+when it ended; the session's record stays in the workspace's `.domaintrail`.
 
 **Messages and apply.** Everything posted in the chat is a **message**, shown in the stream as it is sent; nothing
 runs until the facilitator **applies** it. On each message the facilitator has ⤓ (apply: a run of that message,
@@ -2630,7 +2640,7 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
 ```
 
 **Identity modes.** `dev` is for a session on one machine: the first visit gets a join form asking for a name, and an
-HttpOnly cookie keeps the sign-in (the chat's leave button signs out). `access` puts the session behind Cloudflare Access
+HttpOnly cookie keeps the sign-in (the collab menu's 退出 signs out). `access` puts the session behind Cloudflare Access
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by

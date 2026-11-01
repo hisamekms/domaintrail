@@ -110,8 +110,8 @@ Tick each line; for a failure, record what is listed under [When something fails
       configured one. When a participant's token expires, their page's WebSocket closes (close code 4002, "token
       expired", visible in the developer tools' Network tab); the page reconnects once Access gives it a fresh token,
       or Access asks them to sign in again.
-- [ ] A participant who leaves the session (`POST /api/session/leave`, from the page's control when it has one, else
-      from the developer tools' console) has their pages closed (code 4001); the answer names `/cdn-cgi/access/logout`,
+- [ ] A participant who leaves the session (`POST /api/session/leave`, from the collab menu's 退出, else from the developer
+      tools' console) has their pages closed (code 4001); the answer names `/cdn-cgi/access/logout`,
       where the page sends them to end the Access session.
 
 **A run across the tunnel**

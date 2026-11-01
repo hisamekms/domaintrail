@@ -34,7 +34,7 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 1. **Start the session** (terminal 1): `dt -r /tmp/dt-session session start`. It prints `Session: … (started, identity
    dev)`, the Live View's URL (`http://127.0.0.1:4321/`), a facilitator link and the agent API's address.
 2. **Become the facilitator**: open the Live View in your browser, give a name on the join form (*Ada*), then open the
-   facilitator link. The chat opens at the right end; its participants (the avatars in its head) list you once, as
+   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, コラボ中 ▾) list you once, as
    *Facilitator*.
 3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
 4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session session subscribe --agent claude --once`. It prints
@@ -53,7 +53,7 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    marks the result; ⋯ → 実行前に戻す… restores the workspace as before the run: both pages show the model as it was, and
    `git -C /tmp/dt-session diff` is empty.
 9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt session start`). To end it,
-   as Ada, the chat's ⋯ → セッションを終了… — every page closes. Then remove `/tmp/dt-session`.
+   as Ada, the collab menu → コラボを終える… → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.
 
 **Developing DomainTrail itself?** Point the agent's `dt` at your clone in the workspace's `domaintrail.jsonc`, outside
 the workspace: `"session": { "agent": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",

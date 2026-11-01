@@ -157,7 +157,8 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 ## In a session
 
 Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
-the same for everyone and open when the page joins. Its head shows the participants online (a click lists them) and
+the same for everyone and open when the page joins. Its head shows the collab menu (the avatars, the participants online and コラボ中 ▾: who is where, the invite link,
+退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
 the agent's status at a glance, with ✕ to close it; while it is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
 messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection and `C`
@@ -176,7 +177,8 @@ The chat has two views:
   background in your stream, and the closed chat's button shows `@ n` for the new ones. An applied message
   shows its latest run's mark (`✓ #3`). The facilitator applies messages from the stream (⤓, ▾ with a note, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
-  restore and comparison from a card's ⋯ and the session's actions from the head's ⋯.
+  restore and comparison from a card's ⋯ and recording, the hand-over and コラボを終える… from the collab menu. Once the
+  collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
   run waits; the facilitator sees the counts and decides. Options start with ○ (single choice) or ☐ (multiple), and
   an assumption's 前提 and 別案 stand one under the other, each with ○. An answered question keeps its options, with
