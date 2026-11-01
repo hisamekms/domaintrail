@@ -122,6 +122,27 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   test no longer asserts the page's listing of participants (web/session/page.test.ts does).
 - **T3 — the kernel (P2).** `Diagnostic`, `SourceFile`, `Location`, `didYouMean` and the other suggestions into
   `modeling/src/kernel/` (moved to `shared/kernel` in T8). Nothing in the kernel imports Langium.
+  **T3 (done).** `core/diagnostics.ts` → `kernel/diagnostics.ts` (`Diagnostic`, `Position`, `Severity`, `RuleId`,
+  `hasErrors`, `compareDiagnostics`, `formatDiagnostic`, `jsonDiagnostic`), `core/suggest.ts` → `kernel/suggest.ts`,
+  and `kernel/source.ts` for `SourceFile` (from `core/analyze.ts`) and `Location` (from `model/model.ts`). The part of
+  `core/diagnostics.ts` that reports on Langium nodes, `DiagnosticSink` (and its `FileResolver`), stays in core as
+  `core/diagnostic-sink.ts`: it is the checkers' syntax side (T8: `infrastructure/syntax/`, until T10). Modeling imports
+  the kernel relatively; the other packages take the same names from `.` as before, so nothing outside modeling changed
+  but `test/guide.test.ts`, which reads the rule IDs from `kernel/diagnostics.ts`. The kernel's files import nothing at
+  all today. *In the map:* modeling has `kernel: 'kernel'` (the directory of its sources that is the shared kernel until
+  T8) and its `published` no longer lists `core/diagnostics` and `core/suggest`; a context may take what index.ts
+  exports from the kernel as it takes an upstream's published language (collaboration takes `Diagnostic`, `RuleId`).
+  Two architecture tests more: the rule `kernel` (a kernel file imports only kernel files and the pure builtins; no
+  exception) and that index.ts exports every module of the kernel. The `kinds` exception workspace → modeling stays:
+  the platform's `SourceFile` is the kernel's now, which a platform may take, but the kernel lies inside modeling until
+  T8 makes it `shared/kernel`, and the platform still takes the configuration and `GENERATED_MARKER` (T6). Exceptions
+  unchanged: `kinds` 2, `public-surface` 3, `pure-core-io` 1, `kernel` 0. The kernel's unit tests are next to it
+  (`kernel/suggest.test.ts`: edit distance and the closest names; `kernel/diagnostics.test.ts`: a diagnostic's text and
+  JSON); the hints the checkers give, which go through the analysis, stay in core as `core/hints.test.ts` (was
+  `core/suggest.test.ts`). 1242 → 1244 passing (7 todo), the two architecture tests; T0 baselines byte-identical.
+  *Left open:* `RuleId` lists Modeling's and Storming's rules (`M…`, `L…`, `S…`) but lives in the kernel because
+  `Diagnostic.code` is typed with it (T8: keep it, or a plain code in the kernel and the rule IDs with their contexts).
+  `camel` (T5) was not touched.
 - **T4 — the analysis split (P2).** `core/analyze` into an analysis of `.dt` alone, the storming analysis taking the
   model, and an orchestrator (`modeling/src/analysis/`, moved to `capabilities/analysis` in T8) that runs both, links
   and adds the generation's checks. `core` no longer imports `storming`.
@@ -211,6 +232,7 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
 
 - T5: where `camel` lives (kernel or model).
 - T8: one Langium project per context, or a shared grammar part; where `docComment` goes.
+- T8 (from T3): whether `RuleId`, the union of Modeling's and Storming's rule IDs, stays in the kernel.
 - T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
 - T6 (from T0): where `core/emoji.ts` goes — Collaboration's domain (proposed) or `shared/kernel` — and the owners of
   the sections #23 added.

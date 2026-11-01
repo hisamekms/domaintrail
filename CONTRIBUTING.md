@@ -39,7 +39,7 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `packages/modeling/src` | `language` (Langium grammars, generated parser/AST, scoping), `core` (analyzer, diagnostics, validation rules in `checker/`, the config's types and validation), `model` (the Typed Model), `generator` (TypeScript generator, generated checks and contract tests), `format` (`dt fmt`), `storming` (the Event Storming DSL) |
+| `packages/modeling/src` | `language` (Langium grammars, generated parser/AST, scoping), `kernel` (`Diagnostic`, the suggestions, `SourceFile`, `Location`: ADR 0027's shared kernel, which imports nothing outside it), `core` (analyzer, the diagnostic sink, validation rules in `checker/`, the config's types and validation), `model` (the Typed Model), `generator` (TypeScript generator, generated checks and contract tests), `format` (`dt fmt`), `storming` (the Event Storming DSL) |
 | `packages/workspace/src` | the workspace on disk: sources and `.gitignore`, config loading, the output of `dt generate ts`, the file and git ref watchers |
 | `packages/visualization/src` | the Live View's model: graph IR and diff, the storming views, the view service and its ports, the ELK layout, the layout file and git adapters, `protocol.ts` |
 | `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check) |
@@ -63,8 +63,8 @@ Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, 
   `src/protocol.ts`). `exports` lists nothing else ([ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)).
   Inside a package, import relatively with `.js`.
 - `test/architecture.test.ts` enforces the boundary map of ADR 0027 (`test/architecture/map.ts`): the package graph,
-  the declared dependencies, the entries, the versions and the layers (`domain/`, `application/`, `infrastructure/`).
-  A new package gets an entry in the map.
+  the declared dependencies, the entries, the versions, the layers (`domain/`, `application/`, `infrastructure/`) and
+  the kernel (modeling's `kernel/` until it becomes `shared/kernel`). A new package gets an entry in the map.
 
 ## Tests
 
