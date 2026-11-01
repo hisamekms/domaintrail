@@ -92,6 +92,34 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   packages' own: collaboration's `domain/reply`, `domain/body`, `domain/marks` (agent, presentation, web, composition),
   `application/classifier` and `infrastructure/clef` (composition), agent's `application/ports` and
   `infrastructure/dt-shim` (composition), modeling's `core/emoji` (collaboration, presentation, web).
+  **T2 (done).** Every package has `src/index.ts` (the `.` export) and `exports` lists only `.` and, for
+  collaboration and visualization, `./protocol`; no deep import is left in the packages, web, `bin/`, `scripts/` or the
+  tests. An index names what it exports, module by module, in sections: a context's published language first, then
+  its use cases, then the adapters an app wires; what moves later is marked with its task (modeling's analysis T4, its
+  configuration and emoji rule T6, the syntax for the language server and the generator T8; visualization's diff and
+  storming semantics T7). `"sideEffects": false` in modeling, collaboration and visualization keeps what the page does
+  not use (Langium, `node:sqlite`) out of its bundle (dist/web unchanged in size); presentation's `lsp/start.ts` keeps
+  `dt lsp` loading the language server lazily, as composition's dynamic import of `lsp/server` did. `scripts/session-seed*`
+  needed nothing beyond the entries (composition's `readCredential`, collaboration's `readServerAddress`, the agent's
+  adapters are what the app wires anyway).
+  *The cross-boundary imports that stay (T4, T6):* collaboration's use of modeling's `analyze`/`isStormingFile`,
+  `isNormalEmoji` and `ClefModel` now goes through `.` like everything else, so the map gained `published` (the
+  modules of modeling's index that are its published language) and the architecture test reads each index.ts to know
+  which module an imported name comes from: a context importing a name from outside an upstream's `published` breaks
+  `public-surface`, keyed by that module (`@domaintrail/modeling/core/emoji`, as before); a package that is not an app
+  importing a name that comes from `infrastructure/` or `adapters/` breaks `foreign-infrastructure` the same way.
+  Exceptions: `exports` 7 → 0, `public-surface` 117 → 3 (collaboration → `core/analyze`, `core/emoji`, `core/config`),
+  `kinds` 2 and `pure-core-io` 1 unchanged.
+  *Tests (decided by the maintainer: unit tests next to the code, integration tests in `test/`, CONTRIBUTING.md).*
+  864 tests in 79 files are unit tests now (modeling 308, web 218, collaboration 165, visualization 78, workspace 67,
+  agent 26, presentation 2); 385 in 47 files stay integration tests (the baselines, the architecture test, the CLI
+  with the composition's adapters, the servers on a port, child processes — `tsc` in `test/typecheck/`, `dt`, `node`,
+  `git`, the fake agent — the use cases over the workspace's real snapshot, the scripts). Feature files that tested
+  several packages were split by whose code they test. 1234 → 1242 passing (7 todo): two tests that asserted two
+  packages at once became two each (a keyword highlighted, and the diff of the change), and the architecture test has
+  six more. The T0 baselines changed only their import lines; their snapshots are byte-identical. Some entries export
+  a name only an integration or another package's unit test uses (listed in the T2 report); the session server's
+  test no longer asserts the page's listing of participants (web/session/page.test.ts does).
 - **T3 — the kernel (P2).** `Diagnostic`, `SourceFile`, `Location`, `didYouMean` and the other suggestions into
   `modeling/src/kernel/` (moved to `shared/kernel` in T8). Nothing in the kernel imports Langium.
 - **T4 — the analysis split (P2).** `core/analyze` into an analysis of `.dt` alone, the storming analysis taking the
@@ -177,7 +205,7 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
 | every file `dt generate ts` writes for `examples/shop`, in full | `test/generate-contract.test.ts`; their hashes with `--out`: `test/live-contract.test.ts` |
 | Collaboration's generated TypeScript | `test/collaboration-contracts.test.ts` (generating again gives the committed `src/generated`) |
 | Live View payloads of `examples/shop` with and without stormings, and after a change | `test/live-payload-contract.test.ts` (readable parts and hashes; `DT_CONTRACT_DUMP=<dir>` writes the payloads to diff); the payload's keys over the server: `test/live-contract.test.ts` |
-| HTTP: status and error body of the session routes' refusals; `statusOf` of every error type | `test/session-errors-contract.test.ts`; the rest of HTTP, the WebSocket and the agent API: `test/session-server.test.ts`, `test/session-access.test.ts`, `test/session-stream.test.ts`, `test/live-contract.test.ts` |
+| HTTP: status and error body of the session routes' refusals; `statusOf` of every error type | `test/session-errors-contract.test.ts`; the rest of HTTP, the WebSocket and the agent API: `test/session-server.test.ts`, `test/session-access.test.ts`, `test/live-contract.test.ts` |
 
 ## Open in the tasks
 
@@ -186,6 +214,7 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
 - T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
 - T6 (from T0): where `core/emoji.ts` goes — Collaboration's domain (proposed) or `shared/kernel` — and the owners of
   the sections #23 added.
-- T2 (from T0): how the tests and `scripts/session-seed*` reach what is not public — through the public surfaces only,
-  a test-only export, or relative paths into `packages/`.
+- T2 (from T0): how the tests and `scripts/session-seed*` reach what is not public — *decided by the maintainer:* unit
+  tests move next to the code and read it relatively; integration tests and the scripts use the entries only (done in
+  T2).
 - T12 (from T0): `dismiss` has no route since #23 — *decided by the maintainer:* removed (done in T12).

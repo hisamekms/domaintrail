@@ -1,6 +1,6 @@
 // The pure decisions of packages/collaboration/src/domain (ADR 0026): content hashes, the run success rule and the
 // diagnostics diff, target staleness, and the transitions of the commands beyond what the generated contract tests
-// check (test/collaboration-contract-run.test.ts).
+// check (src/contracts.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import type { Diagnostic } from '@domaintrail/modeling';

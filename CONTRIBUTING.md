@@ -18,7 +18,7 @@ bun run langium:generate   # after editing a .langium grammar (and once after cl
 bun run typecheck
 bun run lint               # oxlint --type-aware, no narrowing casts without a reason (after `bun run dt -r examples/shop generate ts`)
 bun run fmt                # oxfmt (`fmt:check` in CI); the .dt files are formatted by `dt fmt`, the Markdown by hand
-bun test                   # the repository's tests (bunfig.toml: test/ only)
+bun test                   # all the tests: unit tests next to the code, integration tests in test/ (see Tests)
 bun run build              # dist/: the CLI bundled for Node and the Live View page (needed by `view` and the tests)
 ```
 
@@ -43,7 +43,7 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 | `packages/workspace/src` | the workspace on disk: sources and `.gitignore`, config loading, the output of `dt generate ts`, the file and git ref watchers |
 | `packages/visualization/src` | the Live View's model: graph IR and diff, the storming views, the view service and its ports, the ELK layout, the layout file and git adapters, `protocol.ts` |
 | `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check) |
-| `packages/collaboration` | collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `test/collaboration-contract-run.test.ts` runs its contract tests); `domain` (the commands and pure decisions), `application` (use cases, ports), `infrastructure` (`node:sqlite` store, blobs, validator) |
+| `packages/collaboration` | collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions), `application` (use cases, ports), `infrastructure` (`node:sqlite` store, blobs, validator) |
 | `packages/agent/src` | `dt session subscribe` (ADR 0026): `application` (the subscriber and the run pipeline over its ports, the prompt), `infrastructure` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan) |
 | `packages/composition/src` | the wiring: `cli.ts` (`runDt`, called by `bin/dt.ts`), `view.ts` (`startViewServer`) |
 | `web` | the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `shared` |
@@ -58,10 +58,13 @@ Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, 
 - A package declares in its `package.json` every package it imports, `@domaintrail/*` and third-party alike. A
   third-party dependency the CLI needs at run time is also in the root's `dependencies` (the bundle keeps those
   external), at the same version: a dependency declared in several manifests must have the same version everywhere.
-- Across packages, import by package name without an extension (`@domaintrail/modeling/core/analyze`, served by
-  `"exports": { "./*": "./src/*.ts" }`); inside a package, import relatively with `.js`.
-- `test/architecture.test.ts` enforces the package graph, the declared dependencies, the versions and the layers
-  (`domain/`, `application/`, `infrastructure/`). A new package gets an entry in its `PACKAGES`.
+- Across packages, import only a package's entries: `@domaintrail/<area>` (its `src/index.ts`: published language,
+  use cases, the adapters an app wires) and, where a package has wire types, `@domaintrail/<area>/protocol` (its
+  `src/protocol.ts`). `exports` lists nothing else ([ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)).
+  Inside a package, import relatively with `.js`.
+- `test/architecture.test.ts` enforces the boundary map of ADR 0027 (`test/architecture/map.ts`): the package graph,
+  the declared dependencies, the entries, the versions and the layers (`domain/`, `application/`, `infrastructure/`).
+  A new package gets an entry in the map.
 
 ## Tests
 
@@ -83,10 +86,11 @@ an integration test that goes through the entries.
   move with it. The baseline snapshots (see `docs/plans/0027-boundaries.md`, Baseline) are in `test/__snapshots__/`.
 - Fixtures used by several tests or packages stay in `test/fixtures/`; a fixture only one package's unit tests read
   lives in `packages/<pkg>/test-fixtures/`, outside its sources. Helpers shared by a package's unit tests are in
-  `packages/<pkg>/src/test-helpers.ts` (counted as test code: the bundle and the layer rules ignore it).
+  `packages/<pkg>/src/test-helpers.ts` (`web/test-helpers.ts`; counted as test code: the bundle and the layer rules
+  ignore it).
 - `test/architecture.test.ts` checks the imports of the tests too: a unit test imports other packages only through
   their entries, and so does an integration test (or `dist/`). A package declares the test-only dependencies its unit
-  tests import (`fast-check`, `react-dom/server`) in its own `devDependencies`.
+  tests import (`fast-check`) in its own `devDependencies`.
 
 ```bash
 bun test               # all of them (CI)
