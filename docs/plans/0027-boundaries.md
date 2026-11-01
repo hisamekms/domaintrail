@@ -245,6 +245,27 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   into collaboration's `domain/emoji.test.ts`. 1252 → 1330 passing (7 todo); T0 baselines unchanged.
 - **T7 — domain knowledge out of visualization (P2).** The items of the code map marked T7. `markLineChanges`, the trie
   and rendering stay.
+  **T7 (done).** Into modeling, in the published language (`published` in the map) and exported by its index.ts:
+  `model/diff.ts` (`ModelDiff`, `EMPTY_DIFF`, `fingerprints`, `diffModels`, `isEmptyDiff`; T8: `contexts/modeling/src/
+  domain/diff.ts`); `model/aggregates.ts`, next to `model/dependencies.ts` (`aggregateDependencies`,
+  `AggregateDependency`, and the `owningAggregates` and `soleOwner` it needs, which the Structure View also uses to put
+  an entity inside its aggregate's boundary); `storming/semantic.ts`, in the inner module `storming` (imports only
+  `storming/ir`; T8: Storming's domain): the semantic graph (`SemanticGraph`, `SemanticEdge`, `SemanticEdgeKind`,
+  `semanticEdgeKey`, `firstDeclarations`, `stormingTimelines`, `buildSemanticGraph`) and the occurrences
+  (`EventOccurrence`, `timelineOccurrences`). *Judged rendering, kept in visualization:* `markLineChanges` (the rows of
+  a drawn node marked against the baseline's graph; `graph/diff.ts` renamed `graph/line-changes.ts`), the prefix trie
+  (`trie.ts`: `buildTrie`, its node IDs and sort order) with the step comparison it is keyed by (`Step`, `StepKey`,
+  `stepKey`, `stepOf`), `isCausal` (solid or dotted, spec §9.4), `ViewOptions`/`LEVEL_KINDS` (what each level shows) and
+  the render graph; visualization's `HELD_KINDS` stays a local copy for its own edges. Visualization's index no longer
+  exports `ModelDiff`, `EventOccurrence`, `SemanticEdgeKind`, `buildSemanticGraph`, `firstDeclarations`,
+  `stormingTimelines`, `timelineOccurrences` (`diffModels` already left it in the T2 follow-up); visualization
+  (`protocol.ts`'s `ModelDiff` too) and web take them from modeling's `.`. Exceptions unchanged (none was T7's): `kinds`
+  2, `public-surface` 1, `pure-core-io` 0, `kernel` 0, `inner-modules` 0. *Tests:* the model diff's (`model/diff.test.ts`, from visualization's `graph/diff.test.ts` and
+  `graph/build.test.ts`), the aggregates' dependencies (`model/aggregates.test.ts`, from `graph/structure-levels.test.ts`,
+  its fixture copied) and the semantic graph's and occurrences' (`storming/semantic.test.ts`, from
+  `storming/project.test.ts`, its hand-built IR helpers copied) are modeling's unit tests; two tests that asserted the
+  semantic graph and the views at once (R09, R13) became two each. 1330 → 1332 passing (7 todo); T0 baselines
+  byte-identical.
 - **T12 — authorization.** Before T8, to keep the moves last. `Actor` in Collaboration; `dismiss` and the
   facilitator-only operations (confirm, restore, close) get role/participant parameters and `requires` in
   `collaboration/model/*.dt`; regenerate; the use cases build the `Actor` and pass it; the routes map the domain
