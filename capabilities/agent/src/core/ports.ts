@@ -1,6 +1,6 @@
 // The ports of the subscriber (`dt session subscribe`, ADR 0026, S6), defined here on its side: the session server's
 // agent API, the agent that edits the workspace, the DSL tools run after it, the workspace's files, and time. The
-// adapters are in `../infrastructure`, wired by composition (`startSubscriber`).
+// adapters are in `../adapters`, wired by the app (`startSubscriber`).
 import type {
     AgentClaimed,
     AgentReplyBody,

@@ -1,6 +1,6 @@
 // Time and randomness of a running subscriber.
 import { randomBytes } from 'node:crypto';
-import type { Clock } from '../application/ports.js';
+import type { Clock } from '../core/ports.js';
 
 export const systemClock: Clock = {
     sleep: (ms, signal) =>

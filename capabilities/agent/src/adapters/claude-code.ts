@@ -5,9 +5,9 @@
 // cancel the whole process group is killed. Neither the prompt nor the agent's output is logged. The agent's `dt` is a
 // shim first on its PATH (`dt-shim.ts`).
 import { spawn } from 'node:child_process';
-import type { AgentInvocation, AgentOutcome, AgentRunner } from '../application/ports.js';
+import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration';
-import { parseReply } from '../application/prompt.js';
+import { parseReply } from '../core/prompt.js';
 import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */

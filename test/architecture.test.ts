@@ -605,8 +605,8 @@ describe('runtimes', () => {
         expect(show(runtime.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
     });
 
-    test('agent runs on Node: only its infrastructure imports node:*, and nothing imports bun', () => {
-        expect(show(IMPORTS.agent.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
+    test('agent runs on Node: only its adapters import node:*, and nothing imports bun', () => {
+        expect(show(IMPORTS.agent.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('adapters')))).toEqual([]);
         expect(show(IMPORTS.agent.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
     });
 

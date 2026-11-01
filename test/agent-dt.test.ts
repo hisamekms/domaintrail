@@ -1,5 +1,5 @@
 // The agent's dt (session.agent.dt) as the configuration reads it, and as the agent pins it (the shim itself:
-// packages/agent/src/infrastructure/dt-shim.test.ts).
+// capabilities/agent/src/adapters/dt-shim.test.ts).
 import { afterAll, describe, expect, test } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';

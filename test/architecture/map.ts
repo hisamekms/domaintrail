@@ -168,8 +168,8 @@ export const MAP: Record<string, Module> = {
     },
     agent: {
         kind: 'capability',
-        dir: 'packages/agent',
-        sources: 'packages/agent/src',
+        dir: 'capabilities/agent',
+        sources: 'capabilities/agent/src',
         upstream: ['collaboration'],
     },
     workspace: {

@@ -2,7 +2,7 @@
 // SSE stream parsed here (`id:`, `event:`, `data:`, comments), resumed with `Last-Event-ID`. The token is sent only to
 // the URL of `agent.json` (loopback) and never logged.
 import type { AgentClaimed, AgentLease, AgentParticipantsBody, AgentSessionBody, EventMessage } from '@domaintrail/collaboration/protocol';
-import { AgentApiError, type AgentApi, type ApiResult, type Started, type StreamItem } from '../application/ports.js';
+import { AgentApiError, type AgentApi, type ApiResult, type Started, type StreamItem } from '../core/ports.js';
 
 /** How long a call may take (a start or a finish takes a snapshot of the workspace on the server). */
 const CALL_TIMEOUT_MS = 120_000;

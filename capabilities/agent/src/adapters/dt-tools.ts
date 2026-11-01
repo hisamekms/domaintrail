@@ -3,7 +3,7 @@
 // syntax errors untouched and exits 1; `dt check` exits 1 on errors: both still ran. Exit 2 (an invalid config), a
 // signal or a failure to start means it did not. Their output is not kept: the server analyzes the result itself.
 import { spawn } from 'node:child_process';
-import type { DslTools } from '../application/ports.js';
+import type { DslTools } from '../core/ports.js';
 import { privateDir } from './dt-shim.js';
 
 /** How `dt` is started: the runtime and the CLI's entry (e.g. `process.execPath` and `dist/dt.js`). */

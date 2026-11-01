@@ -6,9 +6,9 @@
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
-import { claudeArguments, resultOf, toolNames } from '../infrastructure/claude-code.js';
+import { claudeArguments, resultOf, toolNames } from '../adapters/claude-code.js';
 import { type Collaboration, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
-import { parseSse } from '../infrastructure/http-agent-api.js';
+import { parseSse } from '../adapters/http-agent-api.js';
 import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
 /** The default tools of the agent (`session.agent.allowedTools`; the configuration's default is tested with it). */
