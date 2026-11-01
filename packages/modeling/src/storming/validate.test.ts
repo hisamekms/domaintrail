@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { Diagnostic } from '../kernel/diagnostics.js';
+import type { Diagnostic } from '@domaintrail/kernel';
 import type { Clause, Group, NodeElement, NodeElementKind, RelationKeyword, SourceRange, Storming, Timeline } from './ir.js';
 import { validateStormings } from './validate.js';
 

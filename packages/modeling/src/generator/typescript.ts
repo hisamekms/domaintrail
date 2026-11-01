@@ -12,7 +12,7 @@ import type {
     RequirementModel,
     TypeExpr,
 } from '../model/model.js';
-import type { Location } from '../kernel/source.js';
+import type { Location } from '@domaintrail/kernel';
 import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
 import { CheckWriter } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';

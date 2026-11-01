@@ -6,7 +6,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
     "chokidar": "6.0.0",
     "ignore": "7.0.14"
   }

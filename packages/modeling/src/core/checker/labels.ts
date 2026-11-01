@@ -3,7 +3,7 @@ import { isAggregate, isContext, isEntity, isEnumDecl, isUnionDecl, isValueObjec
 import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { LabelResolver } from '../labels.js';
 import { commandsOf, commonFields, fieldsOf, includedFields, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
-import { didYouMean } from '../../kernel/suggest.js';
+import { didYouMean } from '@domaintrail/kernel';
 
 /**
  * Japanese names (all warnings, except duplicate terms):

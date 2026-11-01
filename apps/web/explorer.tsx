@@ -1,6 +1,7 @@
 import { ChevronRight, Database, Diff, Folder, FolderOpen, PanelLeftClose, Search, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { Diagnostic, DomainModel, ElementModel, ModelDiff } from '@domaintrail/modeling';
+import type { DomainModel, ElementModel, ModelDiff } from '@domaintrail/modeling';
+import type { Diagnostic } from '@domaintrail/kernel';
 import type { DisplayMode } from '@domaintrail/visualization';
 import { buildFileTree, filesIn, type FileTreeNode } from './file-tree';
 import { usePersistentState } from './shared/layout';

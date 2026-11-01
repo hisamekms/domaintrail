@@ -11,18 +11,20 @@
 // The exceptions only shrink: an exception that no longer occurs fails the test. New code adds none; a task adds only
 // the ones it lists in docs/plans/0027-boundaries.md.
 
-/** The kinds of module of ADR 0027 (Three kinds of module, Layout). */
-export type Kind = 'context' | 'capability' | 'platform' | 'app';
+/** The kinds of module of ADR 0027 (Three kinds of module, Layout); `kernel` is `shared/kernel`. */
+export type Kind = 'context' | 'capability' | 'platform' | 'kernel' | 'app';
 
 /** The kinds a kind may depend on (ADR 0027, Dependency rules). A dependency must also be declared in `upstream`. */
 export const MAY_DEPEND_ON: Record<Kind, readonly Kind[]> = {
-    // declared upstream contexts only
-    context: ['context'],
-    // contexts; other capabilities only when declared (`analysis → generation`); the platform
-    capability: ['context', 'capability', 'platform'],
-    platform: ['platform'],
-    // contexts, capabilities, the platform; not another app
-    app: ['context', 'capability', 'platform'],
+    // declared upstream contexts only; the kernel
+    context: ['context', 'kernel'],
+    // contexts; other capabilities only when declared (`analysis → generation`); the platform; the kernel
+    capability: ['context', 'capability', 'platform', 'kernel'],
+    platform: ['platform', 'kernel'],
+    // everyone may take the kernel; it depends on nothing
+    kernel: [],
+    // contexts, capabilities, the platform, the kernel; not another app
+    app: ['context', 'capability', 'platform', 'kernel'],
 };
 
 /**
@@ -34,6 +36,7 @@ export const SURFACES: Record<Kind, readonly string[]> = {
     context: ['.'],
     capability: ['.', './protocol'],
     platform: ['.'],
+    kernel: ['.'],
     app: ['.', './protocol'],
 };
 
@@ -63,8 +66,8 @@ export type Rule =
     /** an import of I/O by a file under `application/` — `<file>: <specifier>` */
     | 'application-io'
     /**
-     * an import by a file of the kernel of anything but the kernel's own files and the pure builtins (Langium, the
-     * model, any other module) — `<file>: <specifier>`
+     * an import by a file of the kernel (shared/kernel) of anything but the kernel's own files and the pure builtins
+     * (Langium, the model, any other module) — `<file>: <specifier>`
      */
     | 'kernel'
     /**
@@ -92,13 +95,6 @@ export interface Module {
      */
     published?: readonly string[];
     /**
-     * The directory of its sources that holds the shared kernel (ADR 0027, Layout: `shared/kernel/`) until T8 moves it
-     * into a package of its own: `Diagnostic`, `SourceFile`, `Location`, the suggestions. Every package may take what
-     * index.ts exports from it, a context too, as if it came from `shared/kernel` (ADR 0027, Dependency rules). It
-     * imports nothing outside it but the pure builtins (rule `kernel`).
-     */
-    kernel?: string;
-    /**
      * The modules that lie inside its sources until T8 moves them into packages of their own, by directory (as `kernel`
      * for the shared kernel): the module each becomes, the other inner modules it may import (`upstream`), and the
      * modules of the package it must not import (`never`, without `.js`). The rest of the package is the package
@@ -118,7 +114,7 @@ export const MAP: Record<string, Module> = {
         kind: 'context',
         dir: 'packages/modeling',
         sources: 'packages/modeling/src',
-        upstream: [],
+        upstream: ['kernel'],
         // the typed model with its dependencies and diff, Modeling's rule IDs; Storming's IR, semantic graph and
         // occurrences, its rule IDs (T8: contexts/storming)
         published: [
@@ -134,8 +130,6 @@ export const MAP: Record<string, Module> = {
             'storming/rule-ids',
             'storming/files',
         ],
-        // diagnostics, suggestions, sources and locations, `camel` (T8: shared/kernel)
-        kernel: 'kernel',
         inner: {
             // Storming reads Modeling's typed model, which knows nothing of it; its analysis takes the model as its
             // input and does not run Modeling's analysis (T4)
@@ -158,13 +152,13 @@ export const MAP: Record<string, Module> = {
         sources: 'contexts/collaboration/src',
         // Collaboration → Modeling, Storming (Storming is part of modeling until T8). Today's test also let it take
         // visualization's types; it imports none, and the map does not carry that edge over (ADR 0027).
-        upstream: ['modeling'],
+        upstream: ['kernel', 'modeling'],
     },
     visualization: {
         kind: 'capability',
         dir: 'capabilities/visualization',
         sources: 'capabilities/visualization/src',
-        upstream: ['modeling'],
+        upstream: ['kernel', 'modeling'],
     },
     agent: {
         kind: 'capability',
@@ -176,14 +170,16 @@ export const MAP: Record<string, Module> = {
         kind: 'platform',
         dir: 'platform/workspace',
         sources: 'platform/workspace/src',
-        upstream: ['modeling'],
-        exceptions: {
-            // the platform knows no context: since T6 it receives the configuration's values (the sources, the
-            // directories never scanned, the config file's format, the generator's marker) and takes from modeling only
-            // the kernel's `SourceFile` (a type), which a platform may take, but the kernel lies inside modeling until T8
-            // makes it shared/kernel
-            kinds: ['modeling'],
-        },
+        // the platform knows no context: it receives the configuration's values (the sources, the directories never
+        // scanned, the config file's format, the generator's marker) and takes the kernel's `SourceFile` (T6, T8)
+        upstream: ['kernel'],
+    },
+    kernel: {
+        kind: 'kernel',
+        dir: 'shared/kernel',
+        sources: 'shared/kernel/src',
+        // diagnostics, suggestions, sources and locations, `camel`: everyone may take it, it imports nothing (T3, T8)
+        upstream: [],
     },
     dt: {
         kind: 'app',
@@ -191,12 +187,12 @@ export const MAP: Record<string, Module> = {
         sources: 'apps/dt/src',
         // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (presentation and
         // composition until T8)
-        upstream: ['agent', 'collaboration', 'modeling', 'visualization', 'workspace'],
+        upstream: ['agent', 'collaboration', 'kernel', 'modeling', 'visualization', 'workspace'],
     },
     web: {
         kind: 'app',
         dir: 'apps/web',
         sources: 'apps/web',
-        upstream: ['collaboration', 'modeling', 'visualization'],
+        upstream: ['collaboration', 'kernel', 'modeling', 'visualization'],
     },
 };

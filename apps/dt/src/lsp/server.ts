@@ -68,7 +68,6 @@ import {
     ast,
     commandsOf,
     DEFAULT_SOURCES,
-    type Diagnostic,
     docComment,
     DomainGeneratedModule,
     DomainGeneratedSharedModule,
@@ -81,6 +80,7 @@ import {
     LabelResolver,
     ModelIndex,
 } from '@domaintrail/modeling';
+import { type Diagnostic } from '@domaintrail/kernel';
 import { CONFIG_FILES, ConfigError, defaultConfig, type ResolvedConfig } from '../config/config.js';
 
 export interface LanguageServerOptions {

@@ -4,8 +4,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyzeDomain, type DomainAnalysis } from '../core/analyze.js';
 import { DiagnosticSink } from '../core/diagnostic-sink.js';
-import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '../kernel/diagnostics.js';
-import type { SourceFile } from '../kernel/source.js';
+import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '@domaintrail/kernel';
+import type { SourceFile } from '@domaintrail/kernel';
 import { checkTsNames } from './tsnames.js';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', '..', 'examples', 'shop');

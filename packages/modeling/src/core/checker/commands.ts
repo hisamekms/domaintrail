@@ -2,7 +2,7 @@ import { isIdType, isReferenceField, type Command, type State } from '../../lang
 import { emitApplies } from '../../model/model.js';
 import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, commonFields, fieldsOf, identityField, includedFields, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
-import { suggestFrom } from '../../kernel/suggest.js';
+import { suggestFrom } from '@domaintrail/kernel';
 import { baseType, multiplicityText, sameType } from '../types.js';
 
 /**

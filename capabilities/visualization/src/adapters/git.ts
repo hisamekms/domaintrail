@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import * as path from 'node:path';
-import { type SourceFile, sourceMatcher } from '@domaintrail/modeling';
+import { sourceMatcher } from '@domaintrail/modeling';
+import { type SourceFile } from '@domaintrail/kernel';
 import { UnknownRevisionError, type GitCommit, type GitRefs, type GitRevisions } from '../application/ports.js';
 
 /**

@@ -4,7 +4,6 @@ import {
     type CommandModel,
     contextDependencies,
     type ContextDependency,
-    type Diagnostic,
     type DomainModel,
     type ElementModel,
     emitSuffix,
@@ -12,11 +11,11 @@ import {
     type FieldModel,
     groupByContext,
     type InvariantModel,
-    type Location,
     type ModelDiff,
     supportingContexts,
     type TypeExpr,
 } from '@domaintrail/modeling';
+import { type Diagnostic, type Location } from '@domaintrail/kernel';
 import { dependencyCounts, type DisplayMode } from '@domaintrail/visualization';
 import { Changes, CommandCard, OldType, OutcomeCard, outcomesOf, PersistenceBadge, PolicyReaction, Requirements } from './behavior';
 import { useLang, useT, type ItemKind } from './i18n';

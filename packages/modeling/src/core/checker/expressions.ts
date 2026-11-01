@@ -39,7 +39,7 @@ import {
 import { GrammarUtils, type AstNode } from 'langium';
 import { docComment } from '../labels.js';
 import type { DiagnosticSink } from '../diagnostic-sink.js';
-import { didYouMean, suggestFrom, type Candidate } from '../../kernel/suggest.js';
+import { didYouMean, suggestFrom, type Candidate } from '@domaintrail/kernel';
 import {
     commandsOf,
     commonFields,

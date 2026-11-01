@@ -3,7 +3,7 @@
 // check (src/contracts.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import type { Diagnostic } from '@domaintrail/modeling';
+import type { Diagnostic } from '@domaintrail/kernel';
 import { Collaboration as C } from '../generated/index.js';
 import { agentRunCommands, revisionCommands, sessionCommands } from './commands.js';
 import { compareFiles, LINE_CUT, lineDiff, MAX_DIFF_BYTES, MAX_DIFF_LINES, MAX_EDITS, MAX_LINE_CHARS, MAX_OUTPUT_LINES } from './compare.js';

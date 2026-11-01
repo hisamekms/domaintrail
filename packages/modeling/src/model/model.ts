@@ -2,7 +2,7 @@
  * Typed Model: a resolved, serializable view of the domain model.
  * It is the input of the TypeScript generator and of the Graph IR, and is sent to the Live View.
  */
-import type { Location } from '../kernel/source.js';
+import type { Location } from '@domaintrail/kernel';
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 

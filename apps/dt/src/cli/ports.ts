@@ -1,4 +1,4 @@
-import type { SourceFile } from '@domaintrail/modeling';
+import type { SourceFile } from '@domaintrail/kernel';
 import type { ResolvedConfig, ResolvedSessionConfig } from '../config/config.js';
 import type { LanguageServerOptions } from '../lsp/server.js';
 

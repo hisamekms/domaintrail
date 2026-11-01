@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { SourceFile } from '@domaintrail/modeling';
+import type { SourceFile } from '@domaintrail/kernel';
 import type { SourceSelection } from '../ports.js';
 import { GitIgnore } from './gitignore.js';
 

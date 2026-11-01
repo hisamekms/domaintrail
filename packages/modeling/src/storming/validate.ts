@@ -1,5 +1,4 @@
-import { compareDiagnostics, type Diagnostic } from '../kernel/diagnostics.js';
-import { didYouMean } from '../kernel/suggest.js';
+import { compareDiagnostics, type Diagnostic, didYouMean } from '@domaintrail/kernel';
 import {
     declarations,
     esDiagnostic,

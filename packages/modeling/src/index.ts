@@ -1,10 +1,10 @@
 // The public surface of @domaintrail/modeling (the `.` export; ADR 0027, Dependency rules): Modeling's and Storming's
-// published language, the kernel, then the use cases the apps and capabilities call. Storming is part of this package
-// until T8 (contexts/storming), the kernel until T8 (shared/kernel), the project analysis (`analysis/`) until T8
-// (capabilities/analysis), the generator until T8 (capabilities/generation).
+// published language, then the use cases the apps and capabilities call. Storming is part of this package until T8
+// (contexts/storming), the project analysis (`analysis/`) until T8 (capabilities/analysis), the generator until T8
+// (capabilities/generation). The kernel is @domaintrail/kernel.
 //
-// A downstream context takes only the published language and the kernel (the sections marked so; `published` and
-// `kernel` in test/architecture/map.ts). The other sections are for the apps and capabilities; what is not Modeling's
+// A downstream context takes only the published language (the sections marked so; `published` in
+// test/architecture/map.ts). The other sections are for the apps and capabilities; what is not Modeling's
 // at all is marked with the task that moves it.
 
 // ---- published language: the typed model ----------------------------------------------------------------------
@@ -57,22 +57,6 @@ export { elementIdOf } from './model/ids.js';
 export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './model/aggregates.js';
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './model/diff.js';
 export type { ModelingRuleId } from './model/rule-ids.js';
-
-// ---- the kernel: diagnostics, suggestions, sources and locations, names (T8: shared/kernel) ---------------------
-export {
-    compareDiagnostics,
-    formatDiagnostic,
-    hasErrors,
-    jsonDiagnostic,
-    type Diagnostic,
-    type JsonDiagnostic,
-    type Position,
-    type RuleCode,
-    type Severity,
-} from './kernel/diagnostics.js';
-export { closest, didYouMean, type Candidate } from './kernel/suggest.js';
-export { camel } from './kernel/names.js';
-export { type Location, type SourceFile } from './kernel/source.js';
 
 // ---- published language: Storming's IR (T8: contexts/storming) -------------------------------------------------
 export {

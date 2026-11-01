@@ -18,6 +18,7 @@
         "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/dt": "workspace:*",
+        "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "@domaintrail/web": "workspace:*",
@@ -42,6 +43,7 @@
       "dependencies": {
         "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "@domaintrail/workspace": "workspace:*",
@@ -58,6 +60,7 @@
       "name": "@domaintrail/web",
       "dependencies": {
         "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
         "lucide-react": "1.62.0",
@@ -80,6 +83,7 @@
     "capabilities/visualization": {
       "name": "@domaintrail/visualization",
       "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "elkjs": "0.12.0",
       },
@@ -90,6 +94,7 @@
     "contexts/collaboration": {
       "name": "@domaintrail/collaboration",
       "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
       },
       "devDependencies": {
@@ -99,6 +104,7 @@
     "packages/modeling": {
       "name": "@domaintrail/modeling",
       "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
         "langium": "4.4.0",
         "picomatch": "4.0.7",
       },
@@ -110,10 +116,13 @@
     "platform/workspace": {
       "name": "@domaintrail/workspace",
       "dependencies": {
-        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/kernel": "workspace:*",
         "chokidar": "6.0.0",
         "ignore": "7.0.14",
       },
+    },
+    "shared/kernel": {
+      "name": "@domaintrail/kernel",
     },
   },
   "packages": {
@@ -132,6 +141,8 @@
     "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:contexts/collaboration"],
 
     "@domaintrail/dt": ["@domaintrail/dt@workspace:apps/dt"],
+
+    "@domaintrail/kernel": ["@domaintrail/kernel@workspace:shared/kernel"],
 
     "@domaintrail/modeling": ["@domaintrail/modeling@workspace:packages/modeling"],
 

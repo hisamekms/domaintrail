@@ -4,7 +4,6 @@ import {
     type AnyDeclaration,
     buildSemanticGraph,
     declarations,
-    type Diagnostic,
     type DomainModel,
     type EventOccurrence,
     firstDeclarations,
@@ -13,6 +12,7 @@ import {
     stormingTimelines,
     timelineOccurrences,
 } from '@domaintrail/modeling';
+import { type Diagnostic } from '@domaintrail/kernel';
 import {
     type DisplayMode,
     type LaidOutGraph,

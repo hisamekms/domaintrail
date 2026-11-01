@@ -1,10 +1,7 @@
 import {
     aggregateParamName,
-    type Candidate,
-    closest,
     type CommandModel,
     commandsWithOutcome,
-    didYouMean,
     type DomainModel,
     type ElementKind,
     type ElementModel,
@@ -17,7 +14,6 @@ import {
     fieldUseText,
     identityOf,
     type InvariantModel,
-    type Location,
     outcomeFields,
     outcomePatternText,
     policiesReactingTo,
@@ -26,6 +22,7 @@ import {
     type TermModel,
     type TypeExpr,
 } from '@domaintrail/modeling';
+import { type Candidate, closest, didYouMean, type Location } from '@domaintrail/kernel';
 
 /**
  * `dt show`: the resolved model of one element (or a context, a state, a command), from the Typed Model.

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Diagnostic } from '@domaintrail/modeling';
+import type { Diagnostic } from '@domaintrail/kernel';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
 import { Explorer } from '../explorer';
 import { I18nProvider, MESSAGES } from '../i18n';

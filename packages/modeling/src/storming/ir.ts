@@ -7,7 +7,7 @@
  * - the **semantic graph** and the **occurrences** (`./semantic.ts`): what it means, its valid elements and relations;
  * - the **render graph** (`@domaintrail/visualization`): what the projection makes of it for the Live View.
  */
-import type { Diagnostic, Position, Severity } from '../kernel/diagnostics.js';
+import type { Diagnostic, Position, Severity } from '@domaintrail/kernel';
 import type { StormingRuleId } from './rule-ids.js';
 
 // ---- Storming IR ----

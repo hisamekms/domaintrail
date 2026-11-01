@@ -1,5 +1,6 @@
 import { createShapeId, type Editor, type TLShapeId, type TLShapePartial } from 'tldraw';
-import type { Diagnostic, ModelDiff } from '@domaintrail/modeling';
+import type { ModelDiff } from '@domaintrail/modeling';
+import type { Diagnostic } from '@domaintrail/kernel';
 import {
     compartmentHeight,
     type DisplayMode,

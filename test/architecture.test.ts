@@ -245,7 +245,7 @@ const RULES: Record<Rule, RuleText> = {
     },
     kernel: {
         section: 'Layout',
-        statement: `the kernel (shared/kernel; a package's \`kernel\` directory in the map until T8) is kept small: it imports only its own files and ${PURE_BUILTINS.join(', ')}, no Langium and no other module.`,
+        statement: `the kernel (shared/kernel) is kept small: it imports only its own files and ${PURE_BUILTINS.join(', ')}, no Langium and no other module.`,
         fix: () =>
             'keep the kernel to plain types and functions: leave what needs Langium or the model in the module that uses it (as `DiagnosticSink` in core/), or pass it in as a value',
     },
@@ -413,11 +413,11 @@ describe('public surface', () => {
                 const reached = foreign(name, imp);
                 if (!reached) return [];
                 if (!SURFACES[MAP[name].kind].includes(reached.entry)) return [{ module: name, key: imp.specifier, where: [imp.file] }];
-                // a context takes only the published language of its upstream contexts (and their kernel, which is
-                // shared/kernel's after T8), not the rest of their `.`
-                const { published, kernel } = MAP[reached.target];
+                // a context takes only the published language of its upstream contexts (and all of the kernel's `.`),
+                // not the rest of their `.`
+                const { published } = MAP[reached.target];
                 if (MAP[name].kind !== 'context' || !published) return [];
-                const allowed = (module: string): boolean => published.includes(module) || (kernel !== undefined && module.startsWith(`${kernel}/`));
+                const allowed = (module: string): boolean => published.includes(module);
                 return reachedModules(name, imp)
                     .filter((m) => !allowed(m.slice(`@domaintrail/${reached.target}/`.length)))
                     .map((m) => ({ module: name, key: m, where: [imp.file] }));
@@ -454,14 +454,12 @@ describe('public surface', () => {
         }
     });
 
-    test("a package's kernel is exported by its index.ts, every module of it", async () => {
-        for (const name of NAMES) {
-            const { kernel, sources } = MAP[name];
-            if (kernel === undefined) continue;
+    test('the kernel exports every module of it from its index.ts', async () => {
+        for (const name of NAMES.filter((n) => MAP[n].kind === 'kernel')) {
             const modules = new Set(SURFACES_BY_NAME[name]?.values() ?? []);
             const files: string[] = [];
-            for await (const rel of new Glob('*.ts').scan({ cwd: path.join(ROOT, sources, kernel) })) {
-                if (!isTest(rel)) files.push(`${kernel}/${rel.replace(/\.ts$/, '')}`);
+            for await (const rel of new Glob('*.ts').scan({ cwd: path.join(ROOT, MAP[name].sources) })) {
+                if (!isTest(rel) && rel !== 'index.ts') files.push(rel.replace(/\.ts$/, ''));
             }
             expect(files.length).toBeGreaterThan(0);
             expect({ name, missing: files.filter((m) => !modules.has(m)) }).toEqual({ name, missing: [] });
@@ -504,11 +502,8 @@ describe('layers', () => {
     });
 
     test('the kernel imports only its own files and the pure builtins: no Langium, no other module (kernel)', () => {
-        const inKernel = (name: string, file: string): boolean => {
-            const { kernel, sources } = MAP[name];
-            return kernel !== undefined && file.startsWith(`${sources}/${kernel}/`);
-        };
-        // the kernel's files import nothing today; `a package's kernel is exported` checks that there are files
+        const inKernel = (name: string, file: string): boolean => MAP[name].kind === 'kernel' && file.startsWith(`${MAP[name].sources}/`);
+        // the kernel's files import nothing but each other today; `the kernel exports every module` checks that there are files
         const kernel = all.filter(({ name, imp }) => inKernel(name, imp.file));
         expectNoProblems(
             'kernel',

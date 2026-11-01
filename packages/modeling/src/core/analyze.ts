@@ -35,9 +35,8 @@ import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
 import { checkUnions } from './checker/unions.js';
 import { checkVerified } from './checker/verified.js';
-import { compareDiagnostics, dedupeDiagnostics, type Diagnostic } from '../kernel/diagnostics.js';
-import type { SourceFile } from '../kernel/source.js';
-import { didYouMean, suggestFrom, type Candidate } from '../kernel/suggest.js';
+import { compareDiagnostics, dedupeDiagnostics, type Diagnostic, didYouMean, suggestFrom, type Candidate } from '@domaintrail/kernel';
+import type { SourceFile } from '@domaintrail/kernel';
 import { DiagnosticSink, type FileResolver } from './diagnostic-sink.js';
 import { ModelIndex, commandsOf, statesOf } from './model-index.js';
 

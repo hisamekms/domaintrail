@@ -11,7 +11,7 @@ import {
     isVerifiedDecl,
 } from '../language/generated/ast.js';
 import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
-import { camel } from '../kernel/names.js';
+import { camel } from '@domaintrail/kernel';
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */

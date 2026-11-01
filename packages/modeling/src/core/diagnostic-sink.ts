@@ -1,5 +1,5 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
-import type { Diagnostic, Severity } from '../kernel/diagnostics.js';
+import type { Diagnostic, Severity } from '@domaintrail/kernel';
 import type { ModelingRuleId } from '../model/rule-ids.js';
 import { elementIdOf } from '../model/ids.js';
 

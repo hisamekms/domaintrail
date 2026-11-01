@@ -1,5 +1,5 @@
 import { isIdType } from '../../language/generated/ast.js';
-import { camel } from '../../kernel/names.js';
+import { camel } from '@domaintrail/kernel';
 import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, identityField, includedFields, type ModelIndex } from '../model-index.js';
 

@@ -8,6 +8,7 @@
   "dependencies": {
     "@domaintrail/agent": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/workspace": "workspace:*",

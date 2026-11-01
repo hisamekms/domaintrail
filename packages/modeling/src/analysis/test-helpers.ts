@@ -2,8 +2,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyze, type Analysis } from './analyze.js';
-import type { Diagnostic } from '../kernel/diagnostics.js';
-import type { SourceFile } from '../kernel/source.js';
+import type { Diagnostic, SourceFile } from '@domaintrail/kernel';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', '..', 'examples', 'shop');
 

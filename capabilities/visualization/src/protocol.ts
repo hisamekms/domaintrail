@@ -1,4 +1,5 @@
-import type { Diagnostic, DomainModel, ModelDiff, Storming } from '@domaintrail/modeling';
+import type { DomainModel, ModelDiff, Storming } from '@domaintrail/modeling';
+import type { Diagnostic } from '@domaintrail/kernel';
 import type { RenderGraph } from './core/storming/ir.js';
 import type { LaidOutGraph, TransitionLabels } from './core/graph/ir.js';
 import type { GitCommit } from './application/ports.js';

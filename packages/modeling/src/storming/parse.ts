@@ -22,8 +22,8 @@ import {
     type EsStorming,
     type EsTimeline,
 } from '../language/generated/ast.js';
-import type { SourceFile } from '../kernel/source.js';
-import { compareDiagnostics, type Diagnostic } from '../kernel/diagnostics.js';
+import type { SourceFile } from '@domaintrail/kernel';
+import { compareDiagnostics, type Diagnostic } from '@domaintrail/kernel';
 import { docComment } from '../core/labels.js';
 import type { Clause, EventStepRef, Group, NodeElement, NodeElementKind, SourceRange, Storming, Timeline } from './ir.js';
 import { createStormingServices } from './language/module.js';

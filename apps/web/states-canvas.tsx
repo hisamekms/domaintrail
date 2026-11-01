@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tldraw, react, useValue, type Editor, type TLCamera } from 'tldraw';
-import type { Diagnostic, ModelDiff } from '@domaintrail/modeling';
+import type { ModelDiff } from '@domaintrail/modeling';
+import type { Diagnostic } from '@domaintrail/kernel';
 import { type DisplayMode, type LaidOutGraph, type Lang, TRANSITION_LABELS, type TransitionLabels } from '@domaintrail/visualization';
 import { fitAll, highlightElement, usePointerCursor } from './view/canvas';
 import { useT } from './i18n';

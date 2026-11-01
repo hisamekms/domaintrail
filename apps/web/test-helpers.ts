@@ -2,7 +2,8 @@
 // and the payloads the view service sends for them.
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type Analysis, type SourceFile } from '@domaintrail/modeling';
+import { analyze, type Analysis } from '@domaintrail/modeling';
+import { type SourceFile } from '@domaintrail/kernel';
 import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 

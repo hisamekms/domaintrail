@@ -39,6 +39,7 @@
     "contexts/*",
     "capabilities/*",
     "platform/*",
+    "shared/*",
     "apps/*"
   ],
   "scripts": {
@@ -49,7 +50,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "bun test",
-    "test:unit": "bun test ./packages ./contexts ./capabilities ./platform ./apps",
+    "test:unit": "bun test ./packages ./contexts ./capabilities ./platform ./shared ./apps",
     "test:it": "bun test ./test",
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
@@ -69,8 +70,9 @@
   "devDependencies": {
     "@domaintrail/agent": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
-    "@domaintrail/modeling": "workspace:*",
     "@domaintrail/dt": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
+    "@domaintrail/modeling": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/web": "workspace:*",
     "@domaintrail/workspace": "workspace:*",
