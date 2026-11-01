@@ -1223,29 +1223,23 @@ function Composer(props: {
             </div>
             <div className="chat-composer-bar">
                 <div className="chat-chips" aria-label={tx.chat.target}>
-                    {count === 0 ? (
-                        <span className="chat-target kind-Workspace" data-tooltip={tx.chat.noTargets}>
-                            {tx.workspace}
-                        </span>
-                    ) : (
-                        value.chips.map((c, i) => (
-                            <span
-                                key={targetKey(c.target.target)}
-                                className={`chat-chip kind-${c.target.target.kind}`}
-                                data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
+                    {value.chips.map((c, i) => (
+                        <span
+                            key={targetKey(c.target.target)}
+                            className={`chat-chip kind-${c.target.target.kind}`}
+                            data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
+                        >
+                            <span className="chat-chip-number">{i + 1}</span>
+                            <span className="chat-chip-name">{nameOf(c.target)}</span>
+                            <button
+                                className="chat-chip-remove"
+                                aria-label={tx.chat.removeTarget(nameOf(c.target))}
+                                onClick={() => composer.setValue(removeChip(value, i))}
                             >
-                                <span className="chat-chip-number">{i + 1}</span>
-                                <span className="chat-chip-name">{nameOf(c.target)}</span>
-                                <button
-                                    className="chat-chip-remove"
-                                    aria-label={tx.chat.removeTarget(nameOf(c.target))}
-                                    onClick={() => composer.setValue(removeChip(value, i))}
-                                >
-                                    <X size={12} aria-hidden />
-                                </button>
-                            </span>
-                        ))
-                    )}
+                                <X size={12} aria-hidden />
+                            </button>
+                        </span>
+                    ))}
                     {suggested.targets.map((s, i) => (
                         <span
                             key={`suggested:${targetKey(s.target)}`}

@@ -53,7 +53,7 @@ tags, see below).
 ## What the scenarios show
 
 - `chat`: consecutive messages by one person, the facilitator's own messages, targets of each kind (a `.dt` element, a
-  state, a command, a storming element, an occurrence) and the whole workspace, `@name[n]` mentions, a long message
+  state, a command, a storming element, an occurrence) and the whole workspace (no target line), `@name[n]` mentions, a long message
   (clamped), 依頼 / 会話 / no tag, applied marks, and two targets a run then renames and removes (stale).
 - `runs`: completed with changes and then applied again with a note (one card), completed without changes, failed
   (the agent exits 1, with its report; the agent cannot run), declined with its reason, cancelled while running, and

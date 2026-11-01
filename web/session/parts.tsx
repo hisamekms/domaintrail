@@ -65,7 +65,7 @@ export function TargetChip({
     );
 }
 
-/** A request's targets on one line above its body (`→ 注文、請求書`), each with its status; none: the whole workspace. */
+/** A request's targets on one line above its body (`→ 注文、請求書`), each with its status; none (the whole workspace): no line. */
 export function TargetChips(props: {
     targets: readonly Snapshot[];
     statuses: readonly TargetStatus[] | undefined;
@@ -73,19 +73,16 @@ export function TargetChips(props: {
     tx: Tx;
 }) {
     const { targets, tx } = props;
+    if (targets.length === 0) return null;
     return (
         <p className="chat-targets">
             <span aria-hidden>→ </span>
-            {targets.length === 0 ? (
-                <span className="chat-target kind-Workspace">{tx.workspace}</span>
-            ) : (
-                targets.map((t, i) => (
-                    <Fragment key={targetKey(t.target)}>
-                        {i > 0 && tx.chat.listSeparator}
-                        <TargetChip target={t} status={props.statuses?.[i]} onNavigate={props.onNavigate} tx={tx} />
-                    </Fragment>
-                ))
-            )}
+            {targets.map((t, i) => (
+                <Fragment key={targetKey(t.target)}>
+                    {i > 0 && tx.chat.listSeparator}
+                    <TargetChip target={t} status={props.statuses?.[i]} onNavigate={props.onNavigate} tx={tx} />
+                </Fragment>
+            ))}
         </p>
     );
 }

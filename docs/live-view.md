@@ -170,7 +170,7 @@ The chat has two views:
 - **チャット**: one stream of every message posted, one card per run — updated in place, with the runs that continue it
   (an answer, an alternative) one under the other and a quote of each message it applied (with the reply's mark when
   it applied several) — the
-  revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace),
+  revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target line),
   picked with `@` or added from the selection, whose unsent text and targets stay in the browser. An applied message
   shows its latest run's mark (`✓ #3`). The facilitator applies messages from the stream (⤓, ▾ with a note, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,

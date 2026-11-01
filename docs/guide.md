@@ -2488,7 +2488,7 @@ always possible). No closing, and neither votes nor reactions count as unread or
 gets every vote and reaction with the session's state.
 
 **Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
-whole workspace. A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
+whole workspace, and such a message shows no target line (nor the composer any chip). A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
 element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `@`
 to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
 Enter or Tab, Esc; Japanese input works: a candidate is never picked while the IME converts): it becomes a chip under
