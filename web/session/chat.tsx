@@ -34,11 +34,23 @@ import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { changeUnits, shownUnits, type ChangeUnit, type UnitOutcome } from './history';
-import { composerKey, editText, insertMention, matchCandidates, MAX_REQUEST_TARGETS, mentionQuery, removeChip, type MentionCandidate } from './mentions';
+import {
+    addChips,
+    composerKey,
+    editText,
+    insertMention,
+    matchCandidates,
+    MAX_REQUEST_TARGETS,
+    mentionQuery,
+    removeChip,
+    type MentionCandidate,
+} from './mentions';
 import { useTargetNaming } from './naming';
 import { ParticipantsButton } from './participants';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { ReplyText } from './reply';
+import { parseReplyText, referenceText } from './references';
+import { isReplyable, replyReference, replyTargets, runNumber, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { latestRevision } from './state';
 import { agentStatus, elapsed, isFacilitator, participantNames, speakerName, streamItems, targetText, type AgentStatus, type StreamItem } from './stream';
@@ -122,6 +134,27 @@ export function SessionChat(props: {
         }
     };
     const [view, setView] = useState<'chat' | 'history'>('chat');
+    // the reply being written (to an AI turn): its chip above the composer; the composer takes the focus when it starts
+    const [replyDraft, setReplyDraft] = useState<ReplyDraft | undefined>();
+    const [replyFocus, setReplyFocus] = useState(0);
+    const replies = useMemo(
+        () => ({
+            draft: replyDraft,
+            start: (id: string): void => {
+                const run = state.runs.find((r) => r.id === id);
+                const number = runNumber(state, id);
+                if (!run || number === undefined || !isReplyable(run)) return;
+                setReplyDraft({ run: id, number });
+                // the targets start with the replied run's requests' (editable as usual)
+                composer.setValue(addChips(composer.value, replyTargets(run)).value);
+                setView('chat');
+                setReplyFocus((n) => n + 1);
+            },
+            cancel: (): void => setReplyDraft(undefined),
+            referenceOf: (run: string) => replyReference(units, run),
+        }),
+        [replyDraft, state, composer, units],
+    );
     // the selection confirmed for a request: the composer is in the chat
     useEffect(() => {
         if (focusPending) setView('chat');
@@ -191,6 +224,7 @@ export function SessionChat(props: {
         hovered,
         hover,
         jump,
+        replies,
     };
 
     return (
@@ -237,6 +271,9 @@ export function SessionChat(props: {
                             candidates={props.candidates}
                             focusPending={focusPending}
                             onFocused={props.onFocused}
+                            reply={replyDraft}
+                            replyFocus={replyFocus}
+                            onReplyDone={() => setReplyDraft(undefined)}
                             tx={tx}
                         />
                     )}
@@ -602,6 +639,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 className={`chat-bubble-request${mine ? ' mine' : ''}`}
                 side={side}
             >
+                {r.replyTo !== undefined && <ReplyReferenceLine run={r.replyTo} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
                 <Clamped tx={tx}>
                     <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
@@ -634,6 +672,30 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 </form>
             )}
         </div>
+    );
+}
+
+/**
+ * The run a reply replies to, on one muted line at the top of the message: `↩ AI #3: the head of what it said`; a click
+ * goes to its card (scrolled to and flashed, as a quote does).
+ */
+function ReplyReferenceLine({ run }: { run: string }) {
+    const { tx, jump, replies } = useChat();
+    const naming = useTargetNaming();
+    const ref = replies.referenceOf(run);
+    if (!ref) return null;
+    const r = tx.chat.replies;
+    // plain text in a button: an element the AI named reads as its name, not a link
+    const head =
+        ref.summary === undefined
+            ? r.states[ref.state]
+            : parseReplyText(ref.summary)
+                  .map((seg) => (seg.kind === 'text' ? seg.text : referenceText(seg, naming).text))
+                  .join('');
+    return (
+        <button className="chat-reply-ref" onClick={() => jump(`card:${ref.card}`)} data-tooltip={r.referenceHint(ref.number)}>
+            <span className="chat-reply-ref-run">↩ {r.reference(ref.number)}:</span> <span className="chat-reply-ref-head">{head}</span>
+        </button>
     );
 }
 
@@ -973,9 +1035,13 @@ function Composer(props: {
     candidates: readonly MentionCandidate[];
     focusPending: boolean;
     onFocused: () => void;
+    /** The run the message replies to, while a reply is written; `replyFocus` changes when one starts. */
+    reply: ReplyDraft | undefined;
+    replyFocus: number;
+    onReplyDone: () => void;
     tx: Tx;
 }) {
-    const { session, composer, selectionTargets, tx } = props;
+    const { session, composer, selectionTargets, tx, reply, onReplyDone } = props;
     const t = useT();
     const naming = useTargetNaming();
     const value = composer.value;
@@ -1037,6 +1103,16 @@ function Composer(props: {
         onFocused();
     }, [focusPending, onFocused]);
 
+    // a reply just started (↩ on an AI turn): the text takes the focus, the caret at its end
+    const { replyFocus } = props;
+    useEffect(() => {
+        const el = input.current;
+        if (replyFocus === 0 || !el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+        setCaret(el.value.length);
+    }, [replyFocus]);
+
     const pick = (c: MentionCandidate | undefined): void => {
         if (!c || !query) return;
         const picked = insertMention(value, { start: query.start, end: caret }, c.target, c.mention);
@@ -1052,8 +1128,13 @@ function Composer(props: {
         setSending(true);
         try {
             const targets = targetsToSend(value, suggested);
-            await sessionApi.sendRequest({ targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })), body: value.text });
+            await sessionApi.sendRequest({
+                targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })),
+                body: value.text,
+                ...(reply && { replyTo: reply.run }),
+            });
             await composer.clear();
+            onReplyDone();
             // what was just sent is not suggested again for the same selection
             setDismissals(suggested.targets.reduce((d, t) => dismiss(d, selectionTargets, t), dismissals));
             setError(undefined);
@@ -1069,6 +1150,14 @@ function Composer(props: {
 
     return (
         <div className="chat-composer">
+            {reply && (
+                <div className="chat-reply-chip motion-pop motion-pop-up" role="status">
+                    <span className="chat-reply-chip-text">↩ {tx.chat.replies.replyingTo(reply.number)}</span>
+                    <button className="chat-chip-remove" onClick={onReplyDone} aria-label={tx.chat.replies.cancel} data-tooltip={tx.chat.replies.cancel}>
+                        <X size={12} aria-hidden />
+                    </button>
+                </div>
+            )}
             <div className="chat-composer-input">
                 {open && (
                     <ul className="chat-mentions motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
@@ -1118,6 +1207,8 @@ function Composer(props: {
                         const action = composerKey(e.nativeEvent, open && matches.length > 0);
                         if (action === 'none') {
                             if (e.key === 'Escape' && open) setDismissed(query.start);
+                            // Esc on an empty text stops the reply
+                            else if (e.key === 'Escape' && reply && value.text === '' && !e.nativeEvent.isComposing) onReplyDone();
                             return;
                         }
                         e.preventDefault();

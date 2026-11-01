@@ -5,13 +5,14 @@
 // answers a question by choosing, picks another alternative of an assumption, cancels a run, and through the card's
 // menu confirms its result, restores the workspace as it was before it or compares the two.
 import { Fragment, useRef, useState, type ReactNode } from 'react';
-import { Bot, CircleX, Ellipsis, RotateCcw, X } from 'lucide-react';
+import { Bot, Reply, CircleX, Ellipsis, RotateCcw, X } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { laterRunOf } from '@domaintrail/collaboration/domain/marks';
 import { answerBody, type QuestionChoice } from './actions';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { useChat, type Tx } from './chat-context';
 import type { ChangeUnit } from './history';
+import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { assumptionVoteLines, questionVoteLines } from './marks';
 import { bodyText } from './mentions';
@@ -75,6 +76,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                         {!compact && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
                         {control && !compact && <CardMenu last={last.run} />}
                         {actions}
+                        {!compact && <ReplyButton run={last.run} />}
                     </span>
                 </div>
                 {runs.map((r, i) => (
@@ -90,6 +92,30 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                 ))}
             </div>
         </div>
+    );
+}
+
+/**
+ * ↩ at the far right of an AI turn whose latest run ended (completed, failed, declined, cancelled; not a question,
+ * which has its form): anyone starts a reply to it, shown on hover or focus (always, faint, on touch).
+ */
+function ReplyButton({ run }: { run: RunJson }) {
+    const { tx, session, replies } = useChat();
+    const live = session.status === 'live' && session.state.session.state === 'Open';
+    if (!live || !isReplyable(run)) return null;
+    const r = tx.chat.replies;
+    const active = replies.draft?.run === run.id;
+    return (
+        <button
+            type="button"
+            className={`icon-button run-card-reply${active ? ' active' : ''}`}
+            aria-label={r.reply}
+            aria-pressed={active}
+            data-tooltip={r.replyHint}
+            onClick={() => replies.start(run.id)}
+        >
+            <Reply size={14} aria-hidden />
+        </button>
     );
 }
 

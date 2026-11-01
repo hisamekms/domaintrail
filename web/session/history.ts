@@ -1,6 +1,6 @@
 // The session's runs grouped into "change units", without React: one card of the chat, and one row of its 履歴. A
-// unit is one run, or a run followed by the runs that continue it (the answer to its question, an alternative picked,
-// the same messages applied again), and so on. Everything is derived from the session's state on the page.
+// unit is one run, or a run followed by the runs that continue it (the answer to its question, the replies to it, an
+// alternative picked, the same messages applied again), and so on. Everything is derived from the session's state on the page.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -104,8 +104,9 @@ function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
 
 /**
  * The change units of a session, newest first (by when each last changed). A run joins the unit of the run it answers
- * (`answer.answerTo`), or else the latest unit whose latest run asked or completed with the same messages (queued again
- * with a note, an alternative picked, applied again); otherwise it starts a unit. A unit is one card of the chat.
+ * (`answer.answerTo`), or else the unit of a run its messages reply to (`replyTo`; the latest such unit when they reply
+ * to runs of several), or else the latest unit whose latest run asked or completed with the same messages (queued
+ * again with a note, an alternative picked, applied again); otherwise it starts a unit. A unit is one card of the chat.
  */
 export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>): ChangeUnit[] {
     const revisions = new Map(state.revisions.map((r) => [r.id, r]));
@@ -113,8 +114,10 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
     const groups: UnitRun[][] = [];
     runs.forEach((run, i) => {
         const answerTo = run.input.answer?.answerTo;
+        const replied = new Set(run.input.requests.flatMap((r) => (r.replyTo === undefined ? [] : [r.replyTo])));
         const into =
             (answerTo !== undefined ? groups.find((g) => g.some((u) => u.run.id === answerTo)) : undefined) ??
+            (replied.size > 0 ? groups.findLast((g) => g.some((u) => replied.has(u.run.id))) : undefined) ??
             groups.findLast((g) => continues(g[g.length - 1].run, run));
         if (into) into.push({ run, number: i + 1 });
         else groups.push([{ run, number: i + 1 }]);

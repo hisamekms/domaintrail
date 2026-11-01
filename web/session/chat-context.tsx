@@ -7,6 +7,7 @@ import type { Messages } from '../i18n';
 import type { ChatActions } from './actions';
 import type { MessageMark } from './cards';
 import type { MarkIndex, MarkTargetData, Sign } from './marks';
+import type { ReplyDraft, ReplyReference } from './replies';
 import type { RevisionTools } from './revisions';
 import type { ModelTarget } from './targets';
 import type { SessionData } from './useSession';
@@ -40,6 +41,13 @@ export interface ChatContextValue {
     readonly hover: (id: string | undefined) => void;
     /** Scrolls the stream to an item (`message:<id>`, `card:<key>`) and marks it for a moment. */
     readonly jump: (key: string) => void;
+    /** Replies to runs: the reply being written, starting one (from an AI turn) and what a posted reply names. */
+    readonly replies: {
+        readonly draft: ReplyDraft | undefined;
+        start(run: string): void;
+        cancel(): void;
+        referenceOf(run: string): ReplyReference | undefined;
+    };
 }
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);

@@ -5379,3 +5379,70 @@ del.was.block {
     box-shadow: 0 2px 8px var(--shadow);
     pointer-events: none;
 }
+
+/* ---------- replies to runs ---------- */
+/* ↩ at the far right of an AI turn: like ☺+, on hover or focus, always (faint) on touch */
+.session-chat button.run-card-reply {
+    width: 22px;
+    height: 20px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.run-card:hover .run-card-reply,
+.run-card:focus-within .run-card-reply,
+.session-chat button.run-card-reply.active {
+    opacity: 1;
+}
+.session-chat button.run-card-reply.active {
+    color: var(--accent);
+}
+@media (hover: none) {
+    .session-chat button.run-card-reply {
+        opacity: 0.6;
+    }
+}
+/* the reply being written: one quiet line above the text, its ✕ stops it */
+.chat-reply-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+.chat-reply-chip-text {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+/* a posted reply: the run it replies to, one muted line at the top of the message (a quote's look) */
+.session-chat button.chat-reply-ref {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    max-width: 100%;
+    margin: 0 0 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    text-align: left;
+    cursor: pointer;
+}
+.session-chat button.chat-reply-ref:hover .chat-reply-ref-head {
+    text-decoration: underline;
+}
+.chat-reply-ref-run {
+    flex: none;
+}
+.chat-reply-ref-head {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
