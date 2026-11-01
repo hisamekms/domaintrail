@@ -2447,6 +2447,20 @@ done card, an alternative of an assumption queues them again with a note asking 
 (or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
 it was before the run (asked first) or compares the two.
 
+**Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a
+reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
+a queued or running run is not replied to yet). Anyone can reply. A chip `↩ AI #3 への返信 ✕` sits above the composer,
+whose targets start with those of the run's messages (change them as usual); ✕, or Esc on an empty text, stops the
+reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), applied or not by the
+facilitator (⤓ runs it at once, or choose several replies to apply as one run; in collab mode the facilitator's own reply
+too) — and shows `↩ AI #3: <what the AI said>` on one muted line at its top, a click going to the card. The run made from
+replies continues the replied run's card (`#3–4`) in place, quoting the replies like any applied message, and a reply to
+that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
+(summary, per-message status, assumptions, questions) and what it changed — the unified diff of the sources between
+its base and result revisions, or only the list of the changed files when the diffs of all the replied runs together
+exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
+that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
+
 **Votes and reactions.** Participants signal a preference; the facilitator decides. On a question's options, everyone
 but the facilitator sees ♡ at the right of each option: a click votes for it (again to take it back). In a
 single-choice question each participant has one vote, and voting another option moves it; in a multiple-choice question
@@ -2565,6 +2579,9 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
       // ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], relative to this file, outside the workspace:
       // "dt": ["node", "../domaintrail/dist/dt.js"]
+      // the most characters of diff given to the agent of the runs a run replies to or answers, all together;
+      // past it, only their changed files (default 20480)
+      // "maxPreviousRunDiff": 20480
     },
     "maxParticipants": 50,
     // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
@@ -2635,8 +2652,8 @@ stormings; then `dt fmt` and `dt check` run, and the server records the result.
   refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
   `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
 
-- **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests in a
-  delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
+- **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests (and,
+  for replies and answers, the earlier run's messages, reply and diff) in a delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
   plain `Bash`).
 - **Your own settings still apply.** `--setting-sources user` keeps the workspace's `.claude/settings.json` and
   `.claude/settings.local.json` out (the agent could write them), but loads `~/.claude/settings.json` of whoever runs

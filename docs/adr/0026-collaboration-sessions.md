@@ -711,3 +711,49 @@ decides. Both are **one mechanism**: a mark is who (a participant) marked what (
   After closing, the answer line's tooltip (and the note line of an alternative picked) keeps the counts and names.
   No optimistic change: the server broadcasts the change before it answers; a mark being set is not clickable again
   until then. Votes and reactions are not unread items and notify no one.
+
+## Appendix: replies to runs (amendment)
+
+*Decided by the maintainer*: people answer what the AI did by replying to its turn, and the agent sees what it is
+answered about. Until now a run's input held only the request texts, the facilitator's note and an answer's question
+and choices — never the previous run's reply or changes, even when answering.
+
+- **A reply is a message.** `Request.replyTo?: AgentRunId` (`references … -> AgentRun`), copied into the frozen input
+  (`FrozenRequest.replyTo?`) and `RequestSent.replyTo?`. `send` takes the verified `ReplyableRun` (made in
+  `application/verifications.ts`: `RunNotFound`, `RunOfAnotherSession`, `RunNotReplyable`): a run of the same session
+  that ended — `Completed`, `Failed`, `Declined`, `Cancelled` (`REPLYABLE_STATES`). Not `Queued` or `Running` (nothing
+  to reply to yet) and not `NeedsClarification`, which has its answer form and votes. Anyone may reply; whether a reply
+  runs is decided as for any message: classified (a thank-you reads as talk), applied by the facilitator (one at once,
+  several as one run; the facilitator's own reply like the participants' in collab mode). No new state or entity.
+- **API.** `POST /api/session/requests` takes `replyTo` (a UUID, `InvalidInput` with the field; 404 `RunNotFound` /
+  `RunOfAnotherSession`, 409 `RunNotReplyable`), with `apply` too.
+- **Persistence.** Migration 5 adds `requests.reply_to` (a foreign key to `agent_runs`, indexed when set): the database
+  refuses a reply to a run it does not hold. Rows written before have `NULL` and load unchanged (the JSON field is
+  optional); tested on a database built with the first four migrations.
+- **Previous runs** (`domain/previous-runs.ts`, pure). The runs a run continues are those its requests reply to, then
+  the run its answer answers (`previousRunIds`, each once, in the input's order): the input names them only, frozen at
+  queueing. What they changed is measured when the run starts: the use case `previousRuns({ run, maxDiff })` compares
+  each one's base and result revisions with `compareRevisions` (its bounds apply) and `boundChanges` gives, in order, a
+  run whose whole unified diff (`--- a/…`/`+++ b/…` per file) fits what is left of the budget its diff, any other its
+  changed files with the lines added and removed (`diffOmitted`); a run without a result revision (cancelled, failed
+  before its end) is `unrecorded`; missing blobs give the files without diff. The budget is
+  `session.agent.maxPreviousRunDiff` (default 20480 characters, all previous runs of one run together), next to the
+  agent's other settings.
+- **Agent API.** `POST /agent/runs/:id/start` answers `previousRuns: [{ run, changes }]` (`AgentStartedBody`) with the
+  running run and its base revision: the subscriber needs no blob or revision access, and the API stays on its loopback
+  listener with its credential.
+- **Prompt.** The block gains `previousRuns` — each `{ number, requests (numbered, as its prompt numbered them),
+  facilitatorNote?, outcome, failure?, yourReply? { summary, requests: [{ request, status, note? }], questions?,
+  assumptions? }, yourQuestion?, changes }` with `changes` the `{ files, diff }`, `{ files, linesAdded, linesRemoved,
+  diffOmitted }`, `"no file changed"` or `"not recorded …"` — and a request that replies gets `inReplyToPreviousRun: n`,
+  an answer `questionsAskedInPreviousRun: n`. Rule 9 says they are context, that the current files are the truth and
+  other runs may have happened since, and never to re-apply an old diff. Everything stays in the delimited JSON block as
+  data (`<` and `>` escaped).
+- **Cards.** A run joins the unit of the run its answer answers, else of a run its requests reply to (the latest such
+  unit when they reply to several), else as before (`history.ts`); the unit keeps its place and its "updated" pill. The
+  votes of a run close when a later run bundles a reply to it (`laterRunOf`), consistent with the card it continues.
+- **Page** (`web/session/replies.ts`, pure and tested). ↩ at the far right of an AI turn (after ☺+), on hover or focus,
+  faint on touch, for the turn's latest run when it is replyable; a click puts `↩ AI #3 への返信 ✕` above the composer
+  (✕, or Esc on an empty text, cancels) and adds the run's requests' targets to the composer's chips. The posted reply
+  shows `↩ AI #3: <head of the summary>` on one muted line at its top (plain text, cut to the room), a click jumping to
+  the card and flashing it. The continuation quotes the replies like other applied messages.
