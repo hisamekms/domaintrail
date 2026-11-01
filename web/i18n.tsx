@@ -534,6 +534,18 @@ const ja = {
             answerAndRerun: '答えて再実行',
             answerNeeded: '選ぶか、その他に書いてください',
             pickAlternative: 'この別案で再実行',
+            votes: {
+                vote: '♡ を付ける（参加者の票。決めるのはファシリテーター）',
+                unvote: '♡ を外す',
+                votes: '♡（参加者の票）',
+                count: (n: number) => `♡ ${n} 票`,
+                whoTitle: '♡ を付けた人',
+                keep: 'このまま',
+            },
+            reactions: {
+                names: { Agree: '賛成', Doubt: '疑問・引っかかる', Like: 'いいね', Seen: '了解・見た' } as Record<'Agree' | 'Doubt' | 'Like' | 'Seen', string>,
+                add: '反応する',
+            },
             alternativeNote: (assumption: string, alternative: string) => `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`,
             sessionMenu: 'セッションのメニュー',
             handOver: 'ファシリテーターを引き継ぐリンク',
@@ -1139,6 +1151,21 @@ const en: Messages = {
             answerAndRerun: 'Answer and run again',
             answerNeeded: 'Choose an option, or write under other',
             pickAlternative: 'Run again with this alternative',
+            votes: {
+                vote: 'Give ♡ (a participant’s vote; the facilitator decides)',
+                unvote: 'Take back ♡',
+                votes: '♡ (participants’ votes)',
+                count: (n: number) => `♡ ${n} vote${n === 1 ? '' : 's'}`,
+                whoTitle: 'Who gave ♡',
+                keep: 'As is',
+            },
+            reactions: {
+                names: { Agree: 'Agree', Doubt: 'Question / not sure', Like: 'Like', Seen: 'Got it / seen' } as Record<
+                    'Agree' | 'Doubt' | 'Like' | 'Seen',
+                    string
+                >,
+                add: 'React',
+            },
             alternativeNote: (assumption, alternative) => `Do not assume "${assumption}": redo it with "${alternative}".`,
             sessionMenu: "The session's menu",
             handOver: 'A link to hand the facilitator role over',

@@ -5010,6 +5010,217 @@ del.was.block {
 .chat-unit-body .run-card {
     margin-top: 0;
 }
+/* ---------- votes and reactions (web/session/mark-controls.tsx) ---------- */
+
+/* a row with a vote at its right end: a question's option */
+.vote-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.vote-row > .reply-option,
+.vote-row > span:first-child {
+    flex: 1;
+    min-width: 0;
+}
+.reply-option.vote-row {
+    cursor: default;
+}
+.vote-hint {
+    margin: 2px 0 0 10px;
+}
+/* `♡ 2`: small muted text; mine is the clickable violet with a filled heart, never red */
+.vote-mark {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-top: 1px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+    vertical-align: baseline;
+}
+.vote-mark.mine {
+    color: var(--accent);
+}
+/* the assumptions apart a little, now that each has its votes */
+.reply-assumption + .reply-assumption {
+    margin-top: 0.375rem;
+}
+.reply-alternatives .vote-mark {
+    margin-left: 3px;
+}
+.vote-heart {
+    display: inline-grid;
+    place-items: center;
+}
+.session-chat button.vote-heart,
+.session-chat button.mark-count {
+    padding: 0 1px;
+    border: none;
+    border-radius: 3px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+.session-chat button.vote-heart:hover:not(:disabled) {
+    color: var(--accent);
+}
+.session-chat button.vote-heart:disabled {
+    cursor: default;
+}
+.session-chat button.mark-count:hover {
+    text-decoration: underline;
+}
+/* an assumption: its text, and its vote (kept as it is) at the right */
+.reply-assumption-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.reply-assumption-line > .reply-text {
+    flex: 1;
+    min-width: 0;
+}
+/* who voted: a small list under the count (a click, for touch) */
+.mark-who {
+    position: relative;
+    display: inline-flex;
+}
+.mark-who-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 7rem;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+    color: var(--text);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-align: left;
+}
+.mark-who-title {
+    color: var(--muted);
+    font-size: 0.6875rem;
+}
+/* the reactions under a message or a turn: icons and counts, muted; no pills */
+.reaction-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    margin: 0.25rem 0 0 -3px;
+}
+.session-chat button.reaction {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 3px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+.session-chat button.reaction:hover:not(:disabled) {
+    background: var(--hover);
+}
+.session-chat button.reaction:disabled {
+    cursor: default;
+}
+.session-chat button.reaction.mine {
+    color: var(--accent);
+}
+/* ☺+ at the right end of a message or a turn: on hover or focus, always (faint) on touch */
+.reaction-add {
+    position: relative;
+    display: inline-flex;
+}
+.session-chat .reaction-add-button {
+    width: 22px;
+    height: 20px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.chat-row:hover .reaction-add-button,
+.chat-row:focus-within .reaction-add-button,
+.run-card:hover .reaction-add-button,
+.run-card:focus-within .reaction-add-button,
+.reaction-add-button[aria-expanded='true'] {
+    opacity: 1;
+}
+@media (hover: none) {
+    .session-chat .reaction-add-button {
+        opacity: 0.6;
+    }
+}
+.reaction-picker {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 30;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+}
+.reaction-choices {
+    display: flex;
+    gap: 2px;
+}
+.session-chat button.reaction-choice {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+.session-chat button.reaction-choice:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+.session-chat button.reaction-choice.mine {
+    color: var(--accent);
+}
+.reaction-who {
+    margin: 4px 2px 0;
+    padding: 4px 0 0;
+    list-style: none;
+    border-top: 1px solid var(--border);
+    min-width: 9rem;
+    max-width: 16rem;
+    font-size: 0.75rem;
+}
+.reaction-who li {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 1px 2px;
+}
+.reaction-who svg {
+    flex: none;
+    color: var(--muted);
+    transform: translateY(1px);
+}
+
 /* ---------- the canvas's bottom-left controls (web/view/canvas-controls.tsx) ---------- */
 
 /* the legend opens upward from the bar; the canvas stays draggable around them */

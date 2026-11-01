@@ -30,6 +30,7 @@ import { useT } from '../i18n';
 import { useChatActions } from './actions';
 import { sessionApi } from './api';
 import { RunCard } from './card';
+import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { changeUnits, shownUnits, type ChangeUnit, type UnitOutcome } from './history';
@@ -108,6 +109,7 @@ export function SessionChat(props: {
     const running = state.runs.some((r) => r.state === 'Running');
     const now = useNow(running);
     const actions = useChatActions();
+    const marking = useMarking(session);
     const revisions = useRevisionTools(state, tx);
     const [leaveError, setLeaveError] = useState<string | undefined>();
     const leave = async (): Promise<void> => {
@@ -183,6 +185,7 @@ export function SessionChat(props: {
         actions,
         revisions,
         marks,
+        marking,
         classifications: me.participant.role === 'facilitator' ? session.classifications : undefined,
         selection,
         hovered,
@@ -222,6 +225,7 @@ export function SessionChat(props: {
                     <div className="chat-tray">
                         {revisions.node}
                         {actions.error && <p className="session-note chat-notice session-error">{tx.error(actions.error)}</p>}
+                        {marking.error && <p className="session-note chat-notice session-error">{tx.error(marking.error)}</p>}
                         {actions.undo && <UndoBar />}
                         {control && selection.active && <SelectionBar />}
                     </div>
@@ -540,6 +544,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     };
     const side = (
         <div className="chat-message-side">
+            {/* first, so that the mark stays at the right end while ☺+ is hidden */}
+            {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
             {control && classification && classification.kind !== 'unknown' && (
                 <span
                     className={`chat-class class-${classification.kind}`}
@@ -600,6 +606,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 <Clamped tx={tx}>
                     <MentionedText body={r.body} targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
                 </Clamped>
+                <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
             {note !== undefined && (
                 <form

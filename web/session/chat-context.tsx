@@ -6,6 +6,7 @@ import type { Classification } from '@domaintrail/collaboration/protocol';
 import type { Messages } from '../i18n';
 import type { ChatActions } from './actions';
 import type { MessageMark } from './cards';
+import type { MarkIndex, MarkTargetData, Sign } from './marks';
 import type { RevisionTools } from './revisions';
 import type { ModelTarget } from './targets';
 import type { SessionData } from './useSession';
@@ -23,6 +24,13 @@ export interface ChatContextValue {
     readonly actions: ChatActions;
     readonly revisions: RevisionTools;
     readonly marks: ReadonlyMap<string, MessageMark>;
+    /** Votes and reactions: the session's placed marks counted, and setting one of mine (placed or taken off). */
+    readonly marking: {
+        readonly index: MarkIndex;
+        set(target: MarkTargetData, sign: Sign, placed: boolean): void;
+        /** A mark being set (its sign and target key): not clickable again until the server answered. */
+        readonly pending: ReadonlySet<string>;
+    };
     /** The facilitator's: how each message reads (undefined: not classified, every message applicable). */
     readonly classifications: Readonly<Record<string, Classification>> | undefined;
     /** The messages chosen to apply together (selection mode while any is chosen or the mode was entered). */

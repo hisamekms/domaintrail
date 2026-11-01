@@ -1,6 +1,16 @@
 // The session's REST API as the page calls it (`/api/session/*`, ADR 0026). Called only once the page knows it is in
 // a session (the socket sent `session.state`): under `dt view` none of these requests is made.
-import type { ComparisonBody, ErrorBody, Me, QueueRunBody, RestoredBody, SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type {
+    ComparisonBody,
+    ErrorBody,
+    MarkSetBody,
+    Me,
+    QueueRunBody,
+    RestoredBody,
+    SendRequestBody,
+    SessionStateBody,
+    SetMarkBody,
+} from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
 
 /**
@@ -69,6 +79,8 @@ export const sessionApi = {
     queueRun: (body: QueueRunBody): Promise<{ run: { id: string } }> => call('runs', { method: 'POST', body }),
     /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),
+    /** Places or takes off one of my marks (a vote or a reaction). */
+    setMark: (body: SetMarkBody): Promise<MarkSetBody> => call('marks', { method: 'POST', body }),
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
     /** Records the workspace as it is now (the facilitator). */
     takeRevision: (): Promise<unknown> => call('revisions', { method: 'POST', body: {} }),

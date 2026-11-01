@@ -28,6 +28,8 @@ import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
 import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
+import { assumptionVoteLines, canVote, markIndex, names, questionVoteLines, reactionsOn, tallyOf } from '@domaintrail/web/session/marks';
+import { applyEvent } from '@domaintrail/web/session/state';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -586,5 +588,86 @@ describe('the marks route and its broadcast', () => {
             409,
             'MarkTargetClosed',
         ]);
+    });
+});
+
+// ---- the page ----
+
+describe("the page's derivations", () => {
+    type MarkJson = SessionStateBody['marks'][number];
+    const mark = (id: string, participant: string, target: MarkJson['target'], sign: MarkJson['sign']): MarkJson => ({
+        state: 'Placed',
+        id,
+        session: 's',
+        participant,
+        target,
+        sign,
+        placedAt: '2026-11-01T09:00:00.000Z',
+    });
+    const message = { kind: 'Message', request: 'm1' } as const;
+    const marks = [
+        mark('1', 'ann', message, 'Like'),
+        mark('2', 'bob', message, 'Agree'),
+        mark('3', 'me', message, 'Agree'),
+        mark('4', 'ann', { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' }, 'Vote'),
+        mark('5', 'bob', { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' }, 'Vote'),
+    ];
+    const nameOf = (id: string): string => id.toUpperCase();
+
+    test('counts, who in the order they marked, and mine; reactions in the fixed order', () => {
+        const index = markIndex({ marks }, 'me');
+        expect(tallyOf(index, message, 'Agree')).toEqual({ count: 2, who: ['bob', 'me'], mine: true });
+        expect(tallyOf(index, message, 'Seen')).toEqual({ count: 0, who: [], mine: false });
+        expect(reactionsOn(index, message).map((r) => [r.sign, r.tally.count, r.tally.mine])).toEqual([
+            ['Agree', 2, true],
+            ['Like', 1, false],
+        ]);
+        expect(names(tallyOf(index, message, 'Agree'), nameOf, '、')).toBe('BOB、ME');
+        // a state from before marks has none
+        expect(markIndex({} as Pick<SessionStateBody, 'marks'>, 'me').size).toBe(0);
+    });
+
+    test("the lines that keep a closed vote's counts in a tooltip", () => {
+        const index = markIndex({ marks }, 'me');
+        const question = {
+            id: 'q1',
+            options: [
+                { id: 'a', label: 'A' },
+                { id: 'b', label: 'B' },
+            ],
+        };
+        expect(questionVoteLines(index, 'r1', question, nameOf, ', ')).toEqual(['A ♡ 2: ANN, BOB']);
+        const kept = markIndex({ marks: [mark('6', 'ann', { kind: 'AssumptionChoice', run: 'r2', assumption: 0 }, 'Vote')] }, 'me');
+        expect(assumptionVoteLines(kept, 'r2', 0, [{ id: 'x', label: 'X' }], 'As is', nameOf, ', ')).toEqual(['As is ♡ 1: ANN']);
+    });
+
+    test('a participant votes while the run waits; the facilitator and a closed session only see', () => {
+        const state = { requests: [{ id: 'm1' }], runs: [run('r1', 'NeedsClarification', ['m1'], { reply: asking })] } as unknown as Pick<
+            SessionStateBody,
+            'requests' | 'runs'
+        >;
+        const target = { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' } as const;
+        expect(canVote(target, state, 'participant', true)).toBe(true);
+        expect(canVote(target, state, 'facilitator', true)).toBe(false);
+        expect(canVote(target, state, 'participant', false)).toBe(false);
+        expect(canVote(message, state, 'participant', true)).toBe(false);
+    });
+
+    test('mark events are applied to the state once, after its seq', () => {
+        const base = { seq: 1, marks: [] } as unknown as SessionStateBody;
+        const placed = {
+            type: 'mark.placed',
+            seq: 2,
+            event: { type: 'MarkPlaced', markId: '9', session: 's', participant: 'ann', target: message, sign: 'Like', placedAt: '2026-11-01T09:00:00.000Z' },
+        } as const;
+        const once = applyEvent(base, placed).state;
+        expect(once.marks).toEqual([mark('9', 'ann', message, 'Like')]);
+        expect(applyEvent(once, placed).state).toBe(once);
+        const removed = {
+            type: 'mark.removed',
+            seq: 3,
+            event: { type: 'MarkRemoved', markId: '9', participant: 'ann', target: message, sign: 'Like', removedAt: '2026-11-01T09:01:00.000Z' },
+        } as const;
+        expect(applyEvent(once, removed)).toEqual({ state: { ...once, seq: 3, marks: [] }, refetch: false });
     });
 });
