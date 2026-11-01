@@ -84,6 +84,21 @@ export type AvailableEmail = EmailAddress & { readonly 'verified:Sales.Available
         expect(ts).toContain('export function checkChangeEmailCustomerRequires(customer: Customer, newEmail: AvailableEmail)');
     });
 
+    test('the doc comment of the factory says why an optional context is required, and what a rejection means', () => {
+        expect(ts).toContain(`/**
+ * Checks a value of EmailAddress, given the CustomerId (or \`undefined\`) the check needs, and returns it as AvailableEmail when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The context is required even when there is none: pass \`undefined\` explicitly. Were it optional, a call that forgot it would compile, and the check would then not leave out the one it should (e.g. report an aggregate's own value as taken).
+ * The errors of the \`Result\` are the domain's answers: EmailTaken. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
+ * @see sales.dt:9
+ */
+export type MakeAvailableEmail =`);
+        // a required context needs no explanation; a factory without errors says so
+        expect(ts).toContain(`/**
+ * Checks a value of EmailAddress, given the TenantId the check needs, and returns it as Deliverable when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the \`Result\` are the domain's answers, none here. A rejected promise means`);
+        expect(ts).toContain("The errors of the `Result` are the domain's answers: OverBudget or Unknown.");
+    });
+
     test('the contract tests take values of the base as verified, and the arbitraries can be overridden', async () => {
         // (examples/shop runs such tests: Customer.register and changeEmail take an AvailableEmail)
         const tests = generateTypeScript((await run()).model!, {}, { dir: 'tests' }).find((f) => f.path === 'tests/Sales.ts')!.content;

@@ -573,6 +573,12 @@ class ContextEmitter {
         const given = context ? `, given the ${contextType}${context.optional ? ' (or `undefined`)' : ''} the check needs` : '';
         this.jsdoc([
             `Checks a value of ${base}${given}, and returns it as ${v.name} when the check passes. Written by hand (with repositories and services): the only code that may assert the type.`,
+            ...(context?.optional
+                ? [
+                      `The context is required even when there is none: pass \`undefined\` explicitly. Were it optional, a call that forgot it would compile, and the check would then not leave out the one it should (e.g. report an aggregate's own value as taken).`,
+                  ]
+                : []),
+            `The errors of the \`Result\` are the domain's answers${errors.length ? `: ${or(errors.map((e) => this.ref(e)))}` : ', none here'}. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).`,
             seeLine(v.location),
         ]);
         const params = [`value: ${base}`, ...(context ? [`context: ${contextType}${context.optional ? ' | undefined' : ''}`] : [])];

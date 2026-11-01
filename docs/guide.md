@@ -1013,6 +1013,15 @@ export type MakeAvailableEmail = (value: Common.EmailAddress, context: CustomerI
 - The factory `Make<Name>` is async (the check reads repositories and services) and returns a `Result`: the value, or
   one of `errors` (`never` without `errors`, still a `Result`, so every factory is called the same way). Its second
   parameter is the context of `for`: required with `for X`, `X | undefined` with `for X?`, absent without `for`.
+  With `for X?` the parameter is still required, and a call with no context passes `undefined` explicitly: were it
+  optional, a call that forgot the context would compile, and the check would then not leave out the one it should —
+  `changeEmail` would report a customer's own address as taken. The factory's JSDoc says so.
+- **Two kinds of failure.** The errors of the `Result` are the domain's answers, those named in `errors`: the use case
+  returns them, and its callers branch on them. A **rejected promise** means the check could not be made — the
+  repository is down, the outside service timed out: not an answer of the domain, of open-ended kinds, and what to do
+  with it (fail the request, retry) belongs to the application's edge, the HTTP handler or the job runner (below). Do
+  not turn it into a domain error inside the factory or the use case. The same holds for policy handlers (see
+  [Reactions to events](#reactions-to-events-policies)).
 - **You write the factory**, with your repositories and services. It is the only code that may assert the type
   (`email as Sales.AvailableEmail`); a cast anywhere else defeats the purpose — the same weakness as the constructors
   of domain primitives.
@@ -1028,6 +1037,26 @@ export function verifications(customers: CustomerRepository): Verifications {
             return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
         },
     };
+}
+```
+
+A use case returns the domain's answers in its `Result` and lets a rejection pass; the edge that called it handles
+the rejection:
+
+```ts
+// the edge of the application: an HTTP handler around the use case (a job runner would retry it instead)
+async function postCustomer(request: Request): Promise<Response> {
+    const { name, email } = await request.json();
+    try {
+        const r = await shop.app.registerCustomer(name, email); // shop = createShop(…), as in examples/shop
+        // the domain's answers (InvalidEmailAddress, EmailTaken, …): the client can act on them
+        if (!r.ok) return Response.json(r.error, { status: 422 });
+        return Response.json(r.value, { status: 201 });
+    } catch (e) {
+        // the check could not be made (MakeAvailableEmail's repository failed): not an answer, so no domain error
+        console.error(e);
+        return new Response('temporarily unavailable', { status: 503, headers: { 'Retry-After': '5' } });
+    }
 }
 ```
 

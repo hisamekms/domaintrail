@@ -1838,6 +1838,7 @@ export type OpenMarkTarget = MarkTarget & { readonly 'verified:Collaboration.Ope
 
 /**
  * Checks a value of MarkTarget, given the SessionId the check needs, and returns it as OpenMarkTarget when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: MarkTargetNotFound or MarkTargetClosed. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see model/mark.dt:48
  */
 export type MakeOpenMarkTarget = (value: MarkTarget, context: SessionId) => Promise<Result<OpenMarkTarget, MarkTargetNotFound | MarkTargetClosed>>;
@@ -2173,6 +2174,7 @@ export type PendingRequest = RequestId & { readonly 'verified:Collaboration.Pend
 
 /**
  * Checks a value of RequestId, given the SessionId the check needs, and returns it as PendingRequest when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: RequestNotFound, RequestOfAnotherSession or RequestAlreadyDismissed. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see model/request.dt:6
  */
 export type MakePendingRequest = (value: RequestId, context: SessionId) => Promise<Result<PendingRequest, RequestNotFound | RequestOfAnotherSession | RequestAlreadyDismissed>>;
@@ -2189,6 +2191,7 @@ export type ReplyableRun = AgentRunId & { readonly 'verified:Collaboration.Reply
 
 /**
  * Checks a value of AgentRunId, given the SessionId the check needs, and returns it as ReplyableRun when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: RunNotFound, RunOfAnotherSession or RunNotReplyable. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see model/request.dt:10
  */
 export type MakeReplyableRun = (value: AgentRunId, context: SessionId) => Promise<Result<ReplyableRun, RunNotFound | RunOfAnotherSession | RunNotReplyable>>;
@@ -2204,6 +2207,7 @@ export type MentionableParticipant = ParticipantId & { readonly 'verified:Collab
 
 /**
  * Checks a value of ParticipantId, given the SessionId the check needs, and returns it as MentionableParticipant when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: MentionedNotAParticipant. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see model/request.dt:13
  */
 export type MakeMentionableParticipant = (value: ParticipantId, context: SessionId) => Promise<Result<MentionableParticipant, MentionedNotAParticipant>>;
@@ -2607,6 +2611,7 @@ export type RestorableRevision = RevisionId & { readonly 'verified:Collaboration
 
 /**
  * Checks a value of RevisionId, given the SessionId the check needs, and returns it as RestorableRevision when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: RevisionNotFound, RevisionOfAnotherSession, SymlinkInWorkspace, PathOutsideRoot or ExternalChangesSinceSnapshot. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see model/revision.dt:7
  */
 export type MakeRestorableRevision = (value: RevisionId, context: SessionId) => Promise<Result<RestorableRevision, RevisionNotFound | RevisionOfAnotherSession | SymlinkInWorkspace | PathOutsideRoot | ExternalChangesSinceSnapshot>>;
@@ -3348,6 +3353,7 @@ export type ActiveSession = SessionId & { readonly 'verified:Collaboration.Activ
 
 /**
  * Checks a value of SessionId, and returns it as ActiveSession when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: SessionNotFound or SessionAlreadyClosed. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see model/session.dt:15
  */
 export type MakeActiveSession = (value: SessionId) => Promise<Result<ActiveSession, SessionNotFound | SessionAlreadyClosed>>;
