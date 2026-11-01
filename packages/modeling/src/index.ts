@@ -54,6 +54,7 @@ export {
 } from './model/dependencies.js';
 export { commandsWithOutcome, fieldSetUsers, fieldUseText, fieldUses, identityOf, type FieldUse, type Named } from './model/usages.js';
 export { elementIdOf } from './model/ids.js';
+export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './model/aggregates.js';
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './model/diff.js';
 
 // ---- the kernel: diagnostics, suggestions, sources and locations (T8: shared/kernel) ----------------------------

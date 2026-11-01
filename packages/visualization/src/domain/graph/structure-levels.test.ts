@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { aggregateDependencies, buildStructureGraph, wrapText } from './build.js';
+import { buildStructureGraph, wrapText } from './build.js';
 import { ElkLayoutEngine } from '../../infrastructure/elk.js';
 import type { DomainModel } from '@domaintrail/modeling';
 import { check } from '../../test-helpers.js';
@@ -62,18 +62,6 @@ async function model(): Promise<DomainModel> {
     expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     return a.model!;
 }
-
-describe('dependencies between aggregates', () => {
-    test('through references, IDs, and the entities, value objects and unions an aggregate holds', async () => {
-        const deps = aggregateDependencies(await model()).map((d) => `${d.source} -> ${d.target} (${d.type ? 'type' : 'id'}): ${d.paths.join(', ')}`);
-        expect(deps).toEqual([
-            'Sales.Order -> Sales.Customer (id): customer',
-            'Sales.Order -> Sales.Product (id): items.detail.product',
-            // an ID of an entity stands for the aggregate that owns it
-            'Billing.Invoice -> Sales.Order (id): order, origin.item',
-        ]);
-    });
-});
 
 describe('Structure View levels', () => {
     test('the aggregates level draws the aggregates with their descriptions, in their contexts', async () => {

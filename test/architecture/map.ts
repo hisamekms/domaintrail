@@ -120,7 +120,7 @@ export const MAP: Record<string, Module> = {
         sources: 'packages/modeling/src',
         upstream: [],
         // the typed model, Storming's IR (T8: contexts/storming)
-        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'model/diff', 'storming/ir'],
+        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'model/aggregates', 'model/diff', 'storming/ir'],
         // diagnostics, suggestions, sources and locations (T8: shared/kernel)
         kernel: 'kernel',
         inner: {

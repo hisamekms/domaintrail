@@ -1,5 +1,5 @@
 import {
-    allFieldsOf,
+    aggregateDependencies,
     type CommandModel,
     contextDependencies,
     type DomainModel,
@@ -7,7 +7,9 @@ import {
     type ElementModel,
     emitApplies,
     type FieldModel,
+    owningAggregates,
     representative,
+    soleOwner,
     supportingContexts,
     type TypeExpr,
     type VariantModel,
@@ -350,59 +352,6 @@ function buildAggregatesGraph(model: DomainModel, opts: StructureOptions): Graph
     return { id: focus ? focusGraphId(opts.focus!, 'aggregates', hidden) : STRUCTURE_AGGREGATES_GRAPH_ID, nodes, edges, textScale: scale };
 }
 
-/** A dependency of one aggregate on another, with the paths of the fields it goes through (`items.product`). */
-export interface AggregateDependency {
-    source: string;
-    target: string;
-    /** Holds a type of the other aggregate, not only its ID. */
-    type: boolean;
-    paths: string[];
-}
-
-/**
- * Dependencies between aggregates: an aggregate depends on another when it, or an entity / value object / union it
- * holds, references it, holds its ID or the ID of one of its entities, or holds it as a value. One per pair, in
- * declaration order.
- */
-export function aggregateDependencies(model: DomainModel): AggregateDependency[] {
-    const elements = elementList(model);
-    const byId = new Map(elements.map((e) => [e.id, e]));
-    const owners = owningAggregates(elements, byId);
-    /** The aggregate that stands for an element: itself, or the aggregate that owns an entity. */
-    const aggregateOf = (el: ElementModel | undefined): string | undefined =>
-        el?.kind === 'aggregate' ? el.id : el?.kind === 'entity' ? soleOwner(owners.get(el.id), el.context) : undefined;
-    const out = new Map<string, AggregateDependency>();
-    for (const agg of elements.filter((e) => e.kind === 'aggregate')) {
-        const add = (target: string | undefined, type: boolean, path: string): void => {
-            if (!target || target === agg.id) return;
-            const key = `${agg.id}=>${target}`;
-            const dep = out.get(key) ?? { source: agg.id, target, type: false, paths: [] };
-            dep.type ||= type;
-            if (!dep.paths.includes(path)) dep.paths.push(path);
-            out.set(key, dep);
-        };
-        const queue: [ElementModel, string][] = [[agg, '']];
-        const seen = new Set<string>();
-        while (queue.length) {
-            const [el, prefix] = queue.shift()!;
-            if (seen.has(el.id)) continue;
-            seen.add(el.id);
-            for (const f of allFieldsOf(el)) {
-                const path = prefix + f.name;
-                if (f.kind === 'references') {
-                    if (f.target) add(aggregateOf(representative(model, f.target)), false, path);
-                    continue;
-                }
-                const t = f.type.kind === 'ref' ? byId.get(f.type.ref) : undefined;
-                if (t?.kind === 'id') add(aggregateOf(representative(model, t.id)), false, path);
-                else if (t?.kind === 'aggregate') add(t.id, true, path);
-                else if (t && HELD_KINDS.has(t.kind)) queue.push([t, `${path}.`]);
-            }
-        }
-    }
-    return [...out.values()];
-}
-
 /** A description as body rows of at most `width` characters. */
 function docLines(doc: string | undefined, width: number): GraphLine[] {
     return doc ? wrapText(doc, width).map((l) => ({ key: sameText(l) })) : [];
@@ -520,36 +469,6 @@ function fieldEdge(el: ElementModel, f: FieldModel, byId: Map<string, ElementMod
     const target = byId.get(f.type.ref);
     if (!target || !HELD_KINDS.has(target.kind)) return undefined;
     return { id, kind: f.kind === 'owns' ? 'owns' : 'value', source: el.id, target: target.id, label: label(f.multiplicity) };
-}
-
-/** Aggregates that (transitively) hold each entity / value object. */
-function owningAggregates(shown: ElementModel[], byId: Map<string, ElementModel>): Map<string, Set<string>> {
-    const owners = new Map<string, Set<string>>();
-    for (const agg of shown.filter((e) => e.kind === 'aggregate')) {
-        const stack: ElementModel[] = [agg];
-        const seen = new Set<string>();
-        while (stack.length) {
-            const el = stack.pop()!;
-            if (seen.has(el.id)) continue;
-            seen.add(el.id);
-            for (const f of allFieldsOf(el)) {
-                if (f.kind === 'references' || f.type.kind !== 'ref') continue;
-                const t = byId.get(f.type.ref);
-                if (!t || !HELD_KINDS.has(t.kind)) continue;
-                const set = owners.get(t.id) ?? new Set<string>();
-                set.add(agg.id);
-                owners.set(t.id, set);
-                stack.push(t);
-            }
-        }
-    }
-    return owners;
-}
-
-function soleOwner(owners: Set<string> | undefined, ctx: string): string | undefined {
-    if (!owners || owners.size !== 1) return undefined;
-    const [owner] = owners;
-    return owner.startsWith(`${ctx}.`) ? owner : undefined;
 }
 
 /**
