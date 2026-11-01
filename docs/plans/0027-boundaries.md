@@ -30,7 +30,7 @@ From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each p
 | `storming/storming.langium`, `storming/language/module.ts` | `contexts/storming/src/infrastructure/syntax/` | T8 |
 | `model/` (`model.ts`, `build.ts`, `ids.ts`, `usages.ts`, `dependencies.ts`) | `contexts/modeling/src/domain/` (`build.ts`, the AST → model mapping, to `infrastructure/syntax/`) | T8, T9 |
 | `core/checker/*` except `tsnames.ts` | `contexts/modeling/src/domain/rules/` | T8; onto the typed model in T10 |
-| `core/checker/tsnames.ts`, `generator/naming.ts` | `capabilities/generation/src/core/` | T5 |
+| `core/checker/tsnames.ts`, `generator/naming.ts` | `capabilities/generation/src/core/` (since T5 `generator/tsnames.ts` next to `generator/naming.ts`; T8 moves them with the generator) | T5, T8 |
 | `core/model-index.ts`, `core/types.ts`, `core/labels.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
 | `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` | T3 |
 | `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/` (since T4 `analysis/analyze.ts`; Modeling's analysis of `.dt`, `analyzeDomain`, stays in `core/analyze.ts` and goes to `contexts/modeling`, its layer chosen in T8) | T4, T8 |
@@ -189,6 +189,24 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
 - **T5 — generation's side (P2).** `checker/tsnames` and `generator/naming` behind the generator; the orchestrator runs
   the TypeScript name check. `checker/events` stops importing the generator (`camel` to the kernel or to the model).
   `core/config` stops importing the generator (T6 takes the options).
+  **T5 (done).** `camel` is the kernel's (*decided by the maintainer*): `kernel/names.ts`, exported by index.ts like the
+  rest of the kernel and taken by `core/checker/events.ts` (the M017 hint) and the generator (`checks.ts`, `naming.ts`'s
+  `aggregateParamName`); `naming.ts` keeps `pascal` and the generated names. `core/checker/tsnames.ts` →
+  `generator/tsnames.ts` (`checkTsNames`, M011, unchanged), the generator's check that the project analysis's
+  `generationChecks` (`analysis/analyze.ts`) calls; nothing in `core/checker/` is generation's any more. Since T6 the
+  generator's section of the configuration is `generator/config.ts`, inside the inner module, so no module of the
+  package but the analysis (and index.ts) imports the generator. *In the map:* `generator` is an inner module (`becomes:
+  'capabilities/generation'`, upstream none, `never: ['core/analyze']`), and `analysis.upstream` gains `generator`; the
+  rule `inner-modules` now rejects an import of the generator by the checkers or the rest of `core/`. *The T10
+  dependency:* the name check and `naming.ts` read the AST (`language/generated/ast`, `core/model-index`) and report
+  through `core/diagnostic-sink`, Modeling's syntax side. The rule lets an inner module import the rest of its package,
+  so this is no exception entry (it would be stale); it is written as a comment on the map's `generator` entry: T10 puts
+  the check onto the typed model, and T8 leaves generation importing only Modeling's `.`. Exceptions unchanged
+  (`inner-modules` 0). *Tests:* the M011 tests moved with the check (`generator/tsnames.test.ts`, through the project
+  analysis like the other checker tests until T8); the analysis keeps that the generation's checks run once the `.dt`
+  sources parse and not before; `kernel/names.test.ts` is new. The checker tests that call `generateTypeScript` are
+  tests and stay (the architecture test does not read tests' imports for `inner-modules`). 1332 → 1333 passing (7 todo;
+  unit tests 980 → 981, integration tests 352); T0 baselines byte-identical.
 - **T6 — configuration by owner (P2).** Each owner defines its section's type, defaults and validation; `composition`
   (later `apps/dt`) composes the schema of `domaintrail.jsonc`; `workspace` reads the file and receives what it needs
   (sources, ignored directories) as values. The resolved configuration and its errors stay as they are. The sections
@@ -335,7 +353,7 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
 
 ## Open in the tasks
 
-- T5: where `camel` lives (kernel or model).
+- T5: where `camel` lives (kernel or model) — *decided by the maintainer:* the kernel (done in T5).
 - T8: one Langium project per context, or a shared grammar part; where `docComment` goes.
 - T8 (from T3): whether `RuleId`, the union of Modeling's and Storming's rule IDs, stays in the kernel.
 - T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
