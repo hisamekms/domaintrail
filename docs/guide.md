@@ -2442,7 +2442,14 @@ run that answers the card's question, or that picks another alternative of one o
 card under the one before (question → answer → result); a run of the same messages after a completed one too. The card
 stays where its first run was queued; when it changes out of sight, a pill at the bottom of the stream
 (「#3 が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
-when it says so, and その他 in own words) and 答えて再実行 queues the run's messages again with that answer at once; on a
+when it says so) and 答えて再実行 queues the run's messages again with that answer at once. その他 is the last row, a
+radio or checkbox like the options: its own words are written in a dialog — ✎ at the row's end, or choosing その他
+while it has none (Space or Enter on it too) — with the question at its top; 決定 (⌘/Ctrl+Enter) chooses その他 with the
+words, キャンセル (Esc) leaves it as it was, and 決定 on an emptied text clears it. The row then reads
+`その他: <the words>` on one line (all of them on hover). In a single-choice question その他 is one of the group: the
+answer is one option or the own words, never both; choosing an option deselects その他 but keeps its words, so choosing
+it again brings them back. In a multiple-choice question it is a checkbox, sent together with the options chosen. Words
+under an unselected その他 are not sent. On a
 done card, an alternative of an assumption queues them again with that pick and a note asking for it; ✕ on a queued or running card
 (or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
 it was before the run (asked first) or compares the two.
@@ -2472,7 +2479,7 @@ and nothing is chosen for them. A vote closes when its run is no longer the late
 question, picking an alternative, or applying the same messages again — or when the run no longer waits for an answer;
 cancelling that later run before it started opens it again. Closed votes are frozen, muted and not clickable (who
 voted is still on hover and click). Once answered, a question stays as it was asked — the same options in the same
-order, with their frozen votes — with the filled mark on what was chosen (その他 in own words as a last row), the other
+order, with their frozen votes — with the filled mark on what was chosen (その他 and its words as a last row, on one line: hover it for all of them, or click it to read them in a dialog), the other
 options muted, and `回答 name · time` under the questions; the amber bar is gone. Each option starts with the mark of
 its kind, the shape of the facilitator's controls: ○ for a single-choice question, ☐ for a multiple-choice one, filled
 (◉, ☑) once chosen; screen readers hear 選択 / 未選択. An assumption is a group of rows, one under the other —
