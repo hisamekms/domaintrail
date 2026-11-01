@@ -1,9 +1,7 @@
 // From the outbox to the pages: the events the use cases appended, read in order after each change (and
 // periodically) and sent over the WebSocket as `EventMessage`s. The agent's SSE streams read the outbox themselves
 // (from their own cursor); the relay only wakes them.
-import type { OutboxEntry } from '@domaintrail/collaboration/application/ports';
-import type { CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import type { Collaboration, CollaborationUseCases, OutboxEntry } from '@domaintrail/collaboration';
 import { EVENT_MESSAGE_TYPES, type EventMessage } from '@domaintrail/collaboration/protocol';
 
 /** How many events one read takes from the outbox. */

@@ -7,15 +7,12 @@
 // commands refuse what the role does not allow; the role of each route below is a hint that answers first, with the
 // same status and body as the refusal of the domain.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { IdentityKey } from '@domaintrail/collaboration/application/identity';
-import type { CollaborationUseCases, SessionState } from '@domaintrail/collaboration/application/use-cases';
-import { Collaboration } from '@domaintrail/collaboration/generated/index';
+import { type AnswerData, Collaboration, type CollaborationUseCases, type IdentityKey, type PickData, type SessionState } from '@domaintrail/collaboration';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
-import type { AnswerData, PickData } from '@domaintrail/collaboration/domain/reply';
 import {
     answer as answerInput,
     body,

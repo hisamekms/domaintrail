@@ -10,7 +10,7 @@ import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent
 import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/system';
 import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
 import { readCredential } from '@domaintrail/composition/subscriber';
-import { plainQuestion, readReply, requestNumber, type ReplyData } from '@domaintrail/collaboration/domain/reply';
+import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
 import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
 

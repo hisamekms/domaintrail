@@ -3,7 +3,7 @@
 // alternative of one of its assumptions, or neither (they were left as they were). Who decided and when are that run's
 // `queuedBy` and `queuedAt`. Both are recorded in that run's input: an answer as `answer`, a picked alternative as
 // `pick` (the note the page writes with it is for the agent and the people, never read back here).
-import { laterRunOf } from '@domaintrail/collaboration/domain/marks';
+import { laterRunOf } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];

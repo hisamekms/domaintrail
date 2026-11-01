@@ -11,7 +11,7 @@ import type {
     SessionStateBody,
     SetMarkBody,
 } from '@domaintrail/collaboration/protocol';
-import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
+import type { TargetStatus } from '@domaintrail/collaboration';
 
 /**
  * A failed call: the server's error type (`FacilitatorOnly`, `InvalidInput`, …) or `Network`, its status, and the

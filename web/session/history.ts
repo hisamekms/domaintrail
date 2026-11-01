@@ -5,7 +5,7 @@
 // People read a unit as one chunk of change, so it is named, not numbered: its title is the one the AI gave its first
 // run that has one (the runs that continue it never rename it), else the head of the first message it applied.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { MAX_REQUEST_MENTIONS, plainBody } from '@domaintrail/collaboration/domain/body';
+import { MAX_REQUEST_MENTIONS, plainBody } from '@domaintrail/collaboration';
 
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];

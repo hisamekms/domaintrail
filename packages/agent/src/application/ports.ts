@@ -12,8 +12,7 @@ import type {
     EventMessage,
     Json,
 } from '@domaintrail/collaboration/protocol';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
-import type { ReplyData, ReplyOutcome } from '@domaintrail/collaboration/domain/reply';
+import type { Collaboration, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
 
 /** An answer of the agent API other than 2xx: its HTTP status and the error's `type` (`LeaseLost`, `NothingQueued`, …). */
 export interface ApiFailure {

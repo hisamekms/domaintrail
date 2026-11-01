@@ -6,7 +6,7 @@
 // shim first on its PATH (`dt-shim.ts`).
 import { spawn } from 'node:child_process';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../application/ports.js';
-import { replyJsonSchema } from '@domaintrail/collaboration/domain/reply';
+import { replyJsonSchema } from '@domaintrail/collaboration';
 import { parseReply } from '../application/prompt.js';
 import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 

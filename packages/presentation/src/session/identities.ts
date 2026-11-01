@@ -4,12 +4,23 @@
 // cookie when configured), verified by the `IdentityProvider` on every request. The facilitator is the identity that used a facilitator link.
 import type { IncomingHttpHeaders } from 'node:http';
 import { randomUUID } from 'node:crypto';
-import { secretHash, type LinkInvalid, type SessionAccess } from '@domaintrail/collaboration/application/access';
-import { actorOf } from '@domaintrail/collaboration/application/actor';
-import { participantOf, type Identity, type IdentityKey, type IdentityMode, type IdentityProvider } from '@domaintrail/collaboration/application/identity';
-import type { SignIn } from '@domaintrail/collaboration/application/ports';
-import type { CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
-import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
+import {
+    actorOf,
+    Collaboration,
+    type CollaborationUseCases,
+    err,
+    type Identity,
+    type IdentityKey,
+    type IdentityMode,
+    type IdentityProvider,
+    type LinkInvalid,
+    ok,
+    participantOf,
+    type Result,
+    secretHash,
+    type SessionAccess,
+    type SignIn,
+} from '@domaintrail/collaboration';
 import type { Identified } from '../http/access.js';
 
 /** The cookie of a `dev` sign-in. */

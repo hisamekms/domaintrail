@@ -4,18 +4,18 @@
 // output), read back here. The requests, the facilitator's note, answer and pick, and the previous runs (people's requests,
 // the agent's earlier reply, the diff of the files) are data: they go into the prompt as JSON inside a delimited block,
 // as data the rules tell the agent not to obey, and nothing of them reaches a command line.
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
-import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
-import { peopleAsNames } from '@domaintrail/collaboration/domain/body';
 import {
+    type Collaboration,
+    peopleAsNames,
     plainQuestion,
     readReply,
     REPLY_LIMITS,
     REPLY_OUTCOMES,
-    requestNumber,
     type ReplyData,
     type ReplyOutcome,
-} from '@domaintrail/collaboration/domain/reply';
+    requestNumber,
+} from '@domaintrail/collaboration';
+import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
 /**
  * The marker of the former outcome line, `DT-OUTCOME: {…}` as the reply's last line: still read when the agent gives no

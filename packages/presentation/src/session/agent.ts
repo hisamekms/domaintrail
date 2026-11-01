@@ -6,9 +6,7 @@
 // fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import type { OutboxEntry } from '@domaintrail/collaboration/application/ports';
-import type { CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
-import { Collaboration } from '@domaintrail/collaboration/generated/index';
+import { Collaboration, type CollaborationUseCases, type OutboxEntry } from '@domaintrail/collaboration';
 import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';

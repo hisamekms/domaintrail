@@ -9,7 +9,7 @@
 // run or changed other files; `Interrupted`: the subscriber was stopped). A cancel of the run (`run.cancel_requested`)
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
 // queued one is claimed without waiting for anyone. Functions over the ports only: no I/O of its own.
-import { mapRequests } from '@domaintrail/collaboration/domain/reply';
+import { mapRequests } from '@domaintrail/collaboration';
 import type { AgentClaimed, AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
 import { buildPrompt } from './prompt.js';

@@ -1,20 +1,24 @@
 // The inputs of the session APIs, checked at the boundary before any use case sees them: IDs, targets, text lengths.
 // A failure names the field and why, and is answered 400 (`InvalidInput`).
 import {
+    type AnswerData,
     checkAgentReplyDeep,
+    Collaboration,
+    err,
+    makeEmoji,
+    MAX_REQUEST_MENTIONS,
+    MAX_REQUEST_TARGETS,
+    ok,
+    type PickData,
     readAnswer,
     readReply,
     REPLY_LIMITS,
-    toAgentReply,
-    type AnswerData,
-    type PickData,
     type ReplyOutcome,
-} from '@domaintrail/collaboration/domain/reply';
-import { makeEmoji, VOTE } from '@domaintrail/collaboration/domain/marks';
-import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
-import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration/domain/body';
+    type Result,
+    toAgentReply,
+    VOTE,
+} from '@domaintrail/collaboration';
 import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling';
-import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
 /** Why an input was refused. */
 export interface InvalidInput {

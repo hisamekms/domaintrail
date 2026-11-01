@@ -6,14 +6,14 @@
 import {
     isVoteTarget,
     markKey,
+    type MarkSignData,
+    type MarkStatus,
+    type MarkTargetData,
     markTargetStatus,
     MAX_REACTION_EMOJI,
     signKey,
     VOTE,
-    type MarkSignData,
-    type MarkStatus,
-    type MarkTargetData,
-} from '@domaintrail/collaboration/domain/marks';
+} from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { DEFAULT_QUICK_REACTIONS, readEmoji } from '@domaintrail/modeling';
 

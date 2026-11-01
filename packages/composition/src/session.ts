@@ -1,28 +1,40 @@
 // `dt session start` (ADR 0026, S4): the Live View exactly as `dt view` serves it, plus a collaboration session in the
 // same HTTP process (its REST API, its WebSocket messages, its identities), and the agent API on a listener of its
 // own bound to 127.0.0.1. One open session per workspace: an open session is resumed, else one is started.
-import { plainBody } from '@domaintrail/collaboration/domain/body';
-import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
-import { createSessionAccess, type SessionAccess } from '@domaintrail/collaboration/application/access';
 import {
+    type AccessAdapterOptions,
+    type AccessTokenVerifier,
+    type Classifications,
+    type Clock,
+    type Collaboration,
+    type CollaborationUseCases,
+    createClassifications,
+    createClefClassifier,
+    createCloudflareAccess,
+    createCollaboration,
+    createModelValidator,
+    createSessionAccess,
+    createUnitOfWork,
     FACILITATOR_NAME,
     FACILITATOR_PARTICIPANT,
-    sameIdentity,
     type IdentityKey,
     type IdentityProvider,
-} from '@domaintrail/collaboration/application/identity';
-import { createClassifications, type Classifications, type MessageClassifier } from '@domaintrail/collaboration/application/classifier';
-import type { Clock } from '@domaintrail/collaboration/application/ports';
-import { createCollaboration, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
-import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
-import { createClefClassifier } from '@domaintrail/collaboration/infrastructure/clef';
-import { createCloudflareAccess, type AccessAdapterOptions, type AccessTokenVerifier } from '@domaintrail/collaboration/infrastructure/identity';
-import { readServerAddress, removeSessionFiles, writeAgentCredential, writeServerAddress } from '@domaintrail/collaboration/infrastructure/session-files';
-import { createUnitOfWork, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
-import { randomIds, randomSecrets, systemClock } from '@domaintrail/collaboration/infrastructure/system';
-import { createModelValidator } from '@domaintrail/collaboration/infrastructure/validator';
+    type MessageClassifier,
+    openSessionBlobs,
+    openSessionDatabase,
+    plainBody,
+    randomIds,
+    randomSecrets,
+    readServerAddress,
+    removeSessionFiles,
+    sameIdentity,
+    type SessionAccess,
+    systemClock,
+    writeAgentCredential,
+    writeServerAddress,
+} from '@domaintrail/collaboration';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
 import { DEFAULT_SOURCES, type ResolvedSessionConfig } from '@domaintrail/modeling';
 import { SessionError } from '@domaintrail/presentation/cli/ports';
 import { isLoopbackBind, sessionHostPolicy } from '@domaintrail/presentation/http/access';

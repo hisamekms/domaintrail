@@ -4,8 +4,7 @@ import type { ElementKind, StormingElementKind as EsElementKind } from '@domaint
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 import type { Role } from '@domaintrail/collaboration/protocol';
-import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import type { Collaboration, TargetStatus } from '@domaintrail/collaboration';
 import type { Whereabouts } from './session/presence';
 
 /** The user's choice: follow the browser, or force a language. */

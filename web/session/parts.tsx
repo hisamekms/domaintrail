@@ -2,7 +2,7 @@
 // (a line of its targets with each one's status, mentions of elements and people as links).
 import { Fragment } from 'react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
+import type { TargetStatus } from '@domaintrail/collaboration';
 import type { Messages } from '../i18n';
 import { SessionApiError } from './api';
 import { parseBody } from './mentions';

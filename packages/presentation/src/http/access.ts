@@ -1,7 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
-import type { Actor } from '@domaintrail/collaboration/application/actor';
-import type { Identity } from '@domaintrail/collaboration/application/identity';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import type { Actor, Collaboration, Identity } from '@domaintrail/collaboration';
 import type { Role } from '@domaintrail/collaboration/protocol';
 
 const LOOPBACK = ['127.0.0.1', 'localhost', '[::1]'];

@@ -12,13 +12,12 @@
 import { declarations } from '@domaintrail/modeling';
 import { firstDeclarations } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
-import { MAX_REQUEST_MENTIONS, plainBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration/domain/body';
+import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, plainBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
 import { nameIn } from '../model-utils';
 import { targetKey, targetName, targetOfSelection, type NamingContext, type TargetDraft } from './targets';
 
 export { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS };
-export { parseBody, type BodySegment } from '@domaintrail/collaboration/domain/body';
+export { type BodySegment, parseBody } from '@domaintrail/collaboration';
 
 /** A target of the request being written: `mentioned` once the body mentioned it (then deleting its mentions removes it). */
 export interface ComposerChip {

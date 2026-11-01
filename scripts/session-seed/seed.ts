@@ -3,7 +3,7 @@
 // named participants signed in with their own cookies (one of them made the facilitator with the start's link), the
 // seed's agent (the real subscriber with a scripted runner), and the scenarios played through the session API as pages
 // play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over.
-import { plainBody } from '@domaintrail/collaboration/domain/body';
+import { plainBody } from '@domaintrail/collaboration';
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import type { DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
