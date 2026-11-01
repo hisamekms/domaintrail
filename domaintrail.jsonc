@@ -16,7 +16,7 @@
         "Collaboration": { "out": "contexts/collaboration/src/generated", "module": "@domaintrail/collaboration" },
       },
       // the contract tests, into <out>/tests of each context, registered with bun:test (Collaboration's run in
-      // contexts/collaboration/src/contracts.test.ts)
+      // contexts/collaboration/src/contracts.test.ts; Modeling's arbitraries are drawn in contexts/modeling/src/contracts.test.ts)
       "tests": { "runner": "bun" },
     },
   },
