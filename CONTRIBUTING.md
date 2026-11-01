@@ -218,7 +218,7 @@ Compare the syntax errors of common mistakes (a keyword with its name missing, a
 install dev extension* and that directory. `extension.toml` pins the grammar to a commit of this repository
 (`[grammars.domaintrail] rev`), which Zed fetches from GitHub: after a change of the grammar reaches `main`, point
 `rev` at that commit of `main` in a follow-up pull request (a branch's commits are gone once it is squash merged). Its
-version follows the package's.
+version follows the package's: `npm version` sets it (`scripts/zed-version.ts`), and `test/zed-version.test.ts` checks it.
 
 ## Commits
 

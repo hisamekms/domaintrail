@@ -30,7 +30,9 @@ match.
    through pull requests.
 
 2. On an up-to-date `main`, bump the version, which commits (`chore(release): X.Y.Z`, `.npmrc`) and tags, and push.
-   Only an admin can push this commit, bypassing the ruleset of `main`:
+   `npm version` also sets the Zed extension's version (`scripts/zed-version.ts`, the `version` script: the extension,
+   its crate and lock entry, and the `dt` it installs), so they go into the same commit; `test/zed-version.test.ts`
+   fails if they differ. Only an admin can push this commit, bypassing the ruleset of `main`:
 
    ```bash
    git switch main && git pull --ff-only
