@@ -69,6 +69,25 @@ describe('domain primitive declarations', () => {
         expect(d.message).toContain('([a-z');
     });
 
+    test("M002: an ID or primitive on UUID cannot declare an invariant named 'uuid', the generated one", async () => {
+        const a = await checkSales(`
+  id OrderId: UUID { invariant uuid { length(value) == 36 } }
+  primitive Token: UUID { invariant uuid { length(value) == 36 } }
+  primitive Code: String { invariant uuid { length(value) == 36 } }
+  id OtherId: UUID { invariant v7 { matches(value, "^.{14}7") } }`);
+        expect(only(a, 'M002').map((d) => [d.message, d.hint])).toEqual([
+            [
+                "Invariant 'uuid' of 'OrderId' clashes with the invariant generated for its base 'UUID'.",
+                "rename the invariant: 'uuid' is the generated check that the value is a UUID",
+            ],
+            [
+                "Invariant 'uuid' of 'Token' clashes with the invariant generated for its base 'UUID'.",
+                "rename the invariant: 'uuid' is the generated check that the value is a UUID",
+            ],
+        ]);
+        expect(codes(a).filter((c) => c !== 'M002')).toEqual([]);
+    });
+
     test('primitives cannot be owned, referenced or used as identity', async () => {
         const a = await checkSales(`${DECLS}
   aggregate X { id: Quantity owns q: Quantity references o: Quantity -> Order }

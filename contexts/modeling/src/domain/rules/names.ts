@@ -11,7 +11,10 @@ import {
     type SourceModel,
 } from '../source-model.js';
 
-/** M002: names are unique within their scope. */
+/** The invariant the generated code checks on an ID or domain primitive whose base is `UUID` (ADR 0028). */
+const UUID_INVARIANT = 'uuid';
+
+/** M002: names are unique within their scope (the invariant `uuid` of a type on `UUID` is the generated one's). */
 export function checkNames(model: SourceModel, rules: RuleSink): void {
     for (const dups of duplicates(model)) {
         const [first, ...rest] = dups;
@@ -30,6 +33,13 @@ export function checkNames(model: SourceModel, rules: RuleSink): void {
             for (const v of el.variants) {
                 unique(fieldsOf(v.members), (f) => `Field '${f.name}' is declared more than once in variant '${el.name}.${v.name}'.`, rules);
                 unique(invariantsOf(v.members), (i) => `Invariant '${i.name}' is declared more than once in variant '${el.name}.${v.name}'.`, rules);
+            }
+        } else if (el.kind === 'id' || el.kind === 'primitive') {
+            for (const i of el.invariants) {
+                if (el.base === 'UUID' && i.name === UUID_INVARIANT) {
+                    const hint = `rename the invariant: '${UUID_INVARIANT}' is the generated check that the value is a UUID`;
+                    rules.error('M002', `Invariant '${i.name}' of '${el.name}' clashes with the invariant generated for its base 'UUID'.`, i.nameAt, hint);
+                }
             }
         } else if ('members' in el) {
             const members = el.members;
