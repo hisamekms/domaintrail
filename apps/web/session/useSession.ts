@@ -25,10 +25,10 @@ import { NO_PEERS, receivePresence, throttle, type Peers } from './presence';
 import { adopt, disconnected, INITIAL_SESSION, receive, refetched, type SessionModel } from './state';
 import type { ModelTarget, TargetDraft } from './targets';
 
-/** The WebSocket close codes of a session (composition's `WS_SESSION_CLOSED`, `WS_REVOKED`). */
+/** The WebSocket close codes of a session (apps/dt's `WS_SESSION_CLOSED`, `WS_REVOKED`). */
 const WS_SESSION_CLOSED = 4000;
 const WS_REVOKED = 4001;
-/** The Access token of the page expired (composition's `WS_EXPIRED`): the socket reconnects; a reload signs in again. */
+/** The Access token of the page expired (apps/dt's `WS_EXPIRED`): the socket reconnects; a reload signs in again. */
 const WS_EXPIRED = 4002;
 /** At most 20 presence updates a second (the server's interval). */
 export const PRESENCE_INTERVAL_MS = 50;

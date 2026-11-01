@@ -1,5 +1,5 @@
 // What policies make of the generated TypeScript, its contract tests run, and the generator's check of their names
-// (M011) (the DSL and its checks: core/checker/policies.test.ts).
+// (M011) (the DSL and its checks: contexts/modeling/src/domain/rules/policies.test.ts).
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

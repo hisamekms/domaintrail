@@ -1,5 +1,5 @@
 // What `emits` makes of the generated TypeScript, and the generator's check of the events' names (M011) (the DSL and its
-// checks: core/checker/emits.test.ts).
+// checks: contexts/modeling/src/domain/rules/emits.test.ts).
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

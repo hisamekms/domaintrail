@@ -1,4 +1,4 @@
-// Labels and descriptions in the generated TypeScript (the DSL's labels and their checks: core/labels.test.ts).
+// Labels and descriptions in the generated TypeScript (the DSL's labels and their checks: contexts/modeling/src/infrastructure/syntax/labels.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
 import { analyzeForGeneration, exampleSources } from '../test-helpers.js';

@@ -136,18 +136,18 @@
         "fast-check": "4.10.2",
       },
     },
+    "contexts/modeling": {
+      "name": "@domaintrail/modeling",
+      "dependencies": {
+        "@domaintrail/kernel": "workspace:*",
+        "langium": "4.4.0",
+      },
+    },
     "contexts/storming": {
       "name": "@domaintrail/storming",
       "dependencies": {
         "@domaintrail/kernel": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
-        "langium": "4.4.0",
-      },
-    },
-    "packages/modeling": {
-      "name": "@domaintrail/modeling",
-      "dependencies": {
-        "@domaintrail/kernel": "workspace:*",
         "langium": "4.4.0",
       },
     },
@@ -186,7 +186,7 @@
 
     "@domaintrail/kernel": ["@domaintrail/kernel@workspace:shared/kernel"],
 
-    "@domaintrail/modeling": ["@domaintrail/modeling@workspace:packages/modeling"],
+    "@domaintrail/modeling": ["@domaintrail/modeling@workspace:contexts/modeling"],
 
     "@domaintrail/storming": ["@domaintrail/storming@workspace:contexts/storming"],
 

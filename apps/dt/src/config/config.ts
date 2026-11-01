@@ -3,8 +3,7 @@
 // the ports and hosts (./server.ts), the session's owners the `session` section (./session.ts) — and this module puts
 // them together: the file's keys, its validation in a fixed order (the first error wins, as it always did), and the
 // resolved configuration. The workspace reads the file (`loadConfig`, given `CONFIG_FILE_FORMAT` by the composition)
-// and knows none of the sections. Here until presentation and composition merge into apps/dt (T8): the CLI and the
-// language server read the resolved configuration and its errors, and an app imports no other app.
+// and knows none of the sections. The CLI and the language server read the resolved configuration and its errors.
 import * as path from 'node:path';
 import {
     type GenerationConfigFile,

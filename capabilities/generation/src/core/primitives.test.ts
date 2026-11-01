@@ -1,5 +1,5 @@
 // What domain primitives make of the generated TypeScript, and the generator's check of their constructors' names (M011)
-// (the DSL and its checks: core/checker/primitives.test.ts).
+// (the DSL and its checks: contexts/modeling/src/domain/rules/primitives.test.ts).
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

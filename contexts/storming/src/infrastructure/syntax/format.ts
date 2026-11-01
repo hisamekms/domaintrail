@@ -180,7 +180,7 @@ class Layout {
         this.block(el, el.clauses, indent);
     }
 
-    // ---- printing (as in ../format/format.ts) ----
+    // ---- printing (as in Modeling's infrastructure/syntax/format.ts) ----
 
     print(): string {
         type Item = { offset: number; end: number; token?: number; comment?: Comment };

@@ -1,4 +1,4 @@
-// What unions make of the generated TypeScript (the DSL and its checks: core/checker/unions.test.ts).
+// What unions make of the generated TypeScript (the DSL and its checks: contexts/modeling/src/domain/rules/unions.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
 import { check } from '../test-helpers.js';

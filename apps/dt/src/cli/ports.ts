@@ -4,7 +4,7 @@ import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**
  * What the CLI needs from outside, defined here on its side (ADR 0025): `cliDeps` (`main.ts`)
- * wires the workspace's adapters, the Live View and the language server into `runCli`, so that presentation depends on
+ * wires the workspace's adapters, the Live View and the language server into `runCli`, so that the CLI depends on
  * none of them.
  */
 export interface CliDeps {

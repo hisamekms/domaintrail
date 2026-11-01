@@ -1,9 +1,9 @@
 // domaintrail.jsonc composed from its sections' owners: the file's keys and the schema, the order of the checks (the
 // first error wins), the resolved configuration and its errors. Each section's own cases are its owner's: the
-// analysis (modeling/src/analysis/sources.test.ts), the generation (modeling/src/generator/config.test.ts),
-// Collaboration (collaboration/src/application/config.test.ts), the agent (agent/src/adapters/config.test.ts,
-// adapters/dt-shim.test.ts). Finding the file: workspace/src/infrastructure/config.test.ts; through the CLI:
-// test/config-cli.test.ts.
+// analysis (capabilities/analysis/src/core/sources.test.ts), the generation (capabilities/generation/src/core/
+// config.test.ts), Collaboration (contexts/collaboration/src/application/config.test.ts), the agent
+// (capabilities/agent/src/adapters/config.test.ts, adapters/dt-shim.test.ts). Finding the file:
+// platform/workspace/src/infrastructure/config.test.ts; through the CLI: test/config-cli.test.ts.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';

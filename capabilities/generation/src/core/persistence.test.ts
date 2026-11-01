@@ -1,5 +1,5 @@
 // What persistent events make of the generated TypeScript, and the generator's check of `PersistentEvent` (M011) (the
-// DSL: core/checker/persistence.test.ts).
+// DSL: contexts/modeling/src/domain/rules/persistence.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
 import { checkSales, only } from '../test-helpers.js';

@@ -1,5 +1,5 @@
 // What field sets make of the generated TypeScript, and the generator's check of their names (M011) (the DSL and its
-// checks: core/checker/field-sets.test.ts).
+// checks: contexts/modeling/src/domain/rules/field-sets.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
 import { check, checkSales, only } from '../test-helpers.js';

@@ -66,7 +66,7 @@ describe('tree-sitter grammar', () => {
     });
 
     test('takes the keywords that may name fields from the Langium grammar', async () => {
-        const langium = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium'), 'utf8');
+        const langium = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
         const grammar = await readFile(path.join(GRAMMAR_DIR, 'grammar.js'), 'utf8');
         const quoted = (s: string) => [...s.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
         expect(quoted(/FEATURE_KEYWORDS = \[([^\]]*)\]/.exec(grammar)![1])).toEqual(quoted(/FeatureName returns string:([^;]*);/.exec(langium)![1]));

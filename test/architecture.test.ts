@@ -25,6 +25,8 @@ const OUTSIDE_PACKAGE: Record<string, string[]> = {
 const IO_PACKAGES = ['chokidar', 'ws', 'elkjs'];
 /** The directories of a package's pure part: a context's `domain/`, a capability's `core/` (ADR 0027, Layout). */
 const PURE = ['domain', 'core'];
+/** A context's syntax (ADR 0027, Modeling): the grammar, the parser, the AST and its mapping; Langium lives there. */
+const SYNTAX = 'infrastructure/syntax/';
 /** The directories of a package's technology: a context's `infrastructure/`, a capability's `adapters/`. */
 const TECHNOLOGY = ['infrastructure', 'adapters'];
 
@@ -151,7 +153,7 @@ const reaches = (imp: Import, dirs: string[]): boolean => (imp.resolved ?? imp.s
 const local = (name: string, file: string): string => file.slice(MAP[name].sources.length + 1);
 const show = (imps: Import[]): string[] => imps.map((i) => `${i.file}: ${i.specifier}`);
 
-/** Another @domaintrail/* package that an import reaches, and the entry (`.`, `./protocol`, `./core/analyze`, ...). */
+/** Another @domaintrail/* package that an import reaches, and the entry (`.`, `./protocol`, or a deep `./domain/model`, ...). */
 function foreign(name: string, imp: Import): { target: string; entry: string } | undefined {
     if (!imp.specifier.startsWith('@domaintrail/')) return undefined;
     const [, target, ...rest] = imp.specifier.split('/');
@@ -242,6 +244,13 @@ const RULES: Record<Rule, RuleText> = {
         section: 'Layout, Enforcement',
         statement: `\`application/\` imports no I/O (node:* but ${PURE_BUILTINS.join(', ')}, bun, ${IO_PACKAGES.join(', ')}): it reaches technology through ports.`,
         fix: () => "define a port in `application/` and implement it in `infrastructure/` (a capability's `adapters/`), wired by an app",
+    },
+    syntax: {
+        section: 'Modeling',
+        statement:
+            "`domain/` and `core/` read no syntax: they import neither Langium nor a context's `infrastructure/syntax/` (the grammar, the AST, its index); the checkers run on the typed model. Until T10 moves every checker onto it, those that still read the AST are listed as exceptions, one per file.",
+        fix: () =>
+            'read the typed model (`domain/`), which `infrastructure/syntax/` builds from the AST and which keeps the source locations; or move what needs the AST into `infrastructure/syntax/`',
     },
     kernel: {
         section: 'Layout',
@@ -485,9 +494,21 @@ describe('layers', () => {
     });
 
     test('domain/ and core/ import neither application/ nor infrastructure/ (pure-core-layers)', () => {
+        // an import of `infrastructure/syntax/` is the rule `syntax`'s
         expectNoProblems(
             'pure-core-layers',
-            pure.filter(({ imp }) => reaches(imp, ['application', ...TECHNOLOGY])).map(({ name, imp }) => atFile(name, imp)),
+            pure
+                .filter(({ imp }) => reaches(imp, ['application', ...TECHNOLOGY]) && !imp.resolved?.includes(`/${SYNTAX}`))
+                .map(({ name, imp }) => atFile(name, imp)),
+        );
+    });
+
+    test('domain/ and core/ import neither Langium nor infrastructure/syntax/ (syntax)', () => {
+        expectNoProblems(
+            'syntax',
+            pure
+                .filter(({ imp }) => packageName(imp.specifier) === 'langium' || imp.resolved?.includes(`/${SYNTAX}`))
+                .map(({ name, imp }) => ({ module: name, key: local(name, imp.file), where: [imp.file] })),
         );
     });
 

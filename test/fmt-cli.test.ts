@@ -1,4 +1,4 @@
-// dt fmt through the CLI over files (formatting itself: packages/modeling/src/format/format.test.ts).
+// dt fmt through the CLI over files (formatting itself: contexts/modeling/src/infrastructure/syntax/format.test.ts).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

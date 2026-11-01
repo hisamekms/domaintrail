@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 const ROOT = path.join(import.meta.dir, '..');
-const DOMAIN = path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium');
+const DOMAIN = path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium');
 const STORMING = path.join(ROOT, 'contexts', 'storming', 'src', 'infrastructure', 'syntax', 'storming.langium');
 
 /** The terminal rules of a grammar by name: the rule as written, after its name. */

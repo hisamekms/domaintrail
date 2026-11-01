@@ -1,6 +1,6 @@
 // The messages of a collaboration session (ADR 0026) between the server and its two kinds of clients: the page
 // (REST under `/api/session/`, and the WebSocket next to the Live View's `type: 'update'`) and the agent subscriber
-// (the agent API on its own loopback listener: REST and an SSE stream). Types only, shared by presentation, the page
+// (the agent API on its own loopback listener: REST and an SSE stream). Types only, shared by the app (apps/dt), the page
 // (S5) and the subscriber (S6); what goes over the wire is JSON, so a `Date` arrives as an ISO string (`Json<T>`).
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';

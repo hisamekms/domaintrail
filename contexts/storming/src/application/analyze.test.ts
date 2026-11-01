@@ -1,5 +1,5 @@
 // Storming's analysis of the .dtes sources, given the Typed Model of the .dt sources (the project analysis runs it after
-// Modeling's: analysis/analyze.test.ts).
+// Modeling's: capabilities/analysis/src/application/analyze.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { analyzeDomain } from '@domaintrail/modeling';
 import type { DomainModel } from '@domaintrail/modeling';

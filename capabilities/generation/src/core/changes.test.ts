@@ -1,5 +1,5 @@
 // What `changes` makes of the generated TypeScript: the `set` of a decision, the JSDoc, `decide` (the DSL and its checks:
-// core/checker/changes.test.ts).
+// contexts/modeling/src/domain/rules/changes.test.ts).
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

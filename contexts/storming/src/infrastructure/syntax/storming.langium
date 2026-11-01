@@ -90,7 +90,7 @@ EsName returns string:
     ID | 'storming' | 'event' | 'actor' | 'external' | 'command' | 'policy' | 'aggregate' | 'readmodel' | 'hotspot' |
     'timeline' | 'group' | 'ref' | 'reads' | 'target' | 'emits' | 'on' | 'issues' | 'status' | 'resolution';
 
-// The terminals of Modeling's grammar (packages/modeling/src/language/domain.langium), copied verbatim
+// The terminals of Modeling's grammar (contexts/modeling/src/infrastructure/syntax/domain.langium), copied verbatim
 // (test/grammars.test.ts keeps them equal); INT and DECIMAL are unused.
 hidden terminal WS: /\s+/;
 terminal STRING: /"(\\.|[^"\\])*"/;

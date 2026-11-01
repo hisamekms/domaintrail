@@ -1,6 +1,6 @@
 // The generation's sections of domaintrail.jsonc (ADR 0027, Project analysis and configuration: `generation` owns its
 // output and options): `generate.ts` and `lintHint`, their defaults and their validation. The app composes them with
-// the other sections. Inside modeling until T8 moves the generator to capabilities/generation.
+// the other sections.
 import * as path from 'node:path';
 import { RUNNERS, type Runner } from './tests.js';
 import { POLICY_MODES, type PolicyMode } from './typescript.js';

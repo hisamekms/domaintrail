@@ -24,7 +24,7 @@ async function ruleIds(): Promise<string> {
     const union = async (file: string[], name: string): Promise<string> =>
         new RegExp(`export type ${name} =([^;]*);`).exec(await readFile(path.join(ROOT, ...file), 'utf8'))![1];
     return [
-        await union(['packages', 'modeling', 'src', 'model', 'rule-ids.ts'], 'ModelingRuleId'),
+        await union(['contexts', 'modeling', 'src', 'domain', 'rule-ids.ts'], 'ModelingRuleId'),
         await union(['contexts', 'storming', 'src', 'domain', 'rule-ids.ts'], 'StormingRuleId'),
     ].join('');
 }
@@ -54,7 +54,7 @@ describe('dt guide', () => {
     });
 
     test('its DSL examples use every keyword of the grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dt')
             .join('\n')

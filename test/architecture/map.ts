@@ -69,7 +69,12 @@ export type Rule =
      * an import by a file of the kernel (shared/kernel) of anything but the kernel's own files and the pure builtins
      * (Langium, the model, any other module) — `<file>: <specifier>`
      */
-    | 'kernel';
+    | 'kernel'
+    /**
+     * an import of Langium or of a context's `infrastructure/syntax/` by a file under `domain/` or `core/` — the file,
+     * `<file under the sources>` (one entry per checker that still reads the AST, until T10)
+     */
+    | 'syntax';
 
 export interface Module {
     kind: Kind;
@@ -98,11 +103,33 @@ export interface Module {
 export const MAP: Record<string, Module> = {
     modeling: {
         kind: 'context',
-        dir: 'packages/modeling',
-        sources: 'packages/modeling/src',
+        dir: 'contexts/modeling',
+        sources: 'contexts/modeling/src',
         upstream: ['kernel'],
-        // the typed model with its dependencies and diff, Modeling's rule IDs
-        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'model/aggregates', 'model/diff', 'model/rule-ids'],
+        // the typed model with its dependencies and diff, the stable IDs, Modeling's rule IDs
+        published: ['domain/model', 'domain/dependencies', 'domain/usages', 'domain/ids', 'domain/aggregates', 'domain/diff', 'domain/rule-ids'],
+        exceptions: {
+            // T10 (ADR 0027, Modeling: every checker moves onto the typed model): the checkers that still read the AST,
+            // its index and the diagnostic sink from `infrastructure/syntax/` (and Langium), one entry per file; each
+            // checker's task removes its entry
+            syntax: [
+                // `elementIdOf` (the ID of the element an AST node lies in) moves to infrastructure/syntax in the next
+                // commit of T8
+                'domain/ids.ts',
+                'domain/rules/commands.ts',
+                'domain/rules/events.ts',
+                'domain/rules/expressions.ts',
+                'domain/rules/field-sets.ts',
+                'domain/rules/labels.ts',
+                'domain/rules/names.ts',
+                'domain/rules/payloads.ts',
+                'domain/rules/policies.ts',
+                'domain/rules/shared.ts',
+                'domain/rules/structure.ts',
+                'domain/rules/unions.ts',
+                'domain/rules/verified.ts',
+            ],
+        },
     },
     storming: {
         kind: 'context',
@@ -135,9 +162,19 @@ export const MAP: Record<string, Module> = {
         dir: 'capabilities/generation',
         sources: 'capabilities/generation/src',
         // the TypeScript generator, its sections of the configuration (T6) and its name check (M011), which the project
-        // analysis runs (T5). Until T10 the name check and `naming` read Modeling's AST, its index and its diagnostic
-        // sink, which modeling's `.` exports for them (T8)
+        // analysis runs (T5)
         upstream: ['kernel', 'modeling'],
+        exceptions: {
+            // T10: the name check (`core/tsnames.ts`) and `core/naming.ts`'s generated names read Modeling's AST, its
+            // index and its diagnostic sink, which modeling's `.` exports for them; on the typed model they need none
+            'foreign-infrastructure': [
+                '@domaintrail/modeling/infrastructure/syntax/generated/ast',
+                '@domaintrail/modeling/infrastructure/syntax/model-index',
+                '@domaintrail/modeling/infrastructure/syntax/diagnostic-sink',
+            ],
+            // T10: `core/naming.ts` names the AST node a generated name comes from (Langium's `AstNode`)
+            syntax: ['core/naming.ts'],
+        },
     },
     visualization: {
         kind: 'capability',
@@ -171,8 +208,8 @@ export const MAP: Record<string, Module> = {
         kind: 'app',
         dir: 'apps/dt',
         sources: 'apps/dt/src',
-        // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (presentation and
-        // composition until T8)
+        // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (`main.ts`,
+        // `wiring/`; presentation and composition before T8)
         upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'modeling', 'storming', 'visualization', 'workspace'],
     },
     web: {

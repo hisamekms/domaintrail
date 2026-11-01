@@ -1,5 +1,5 @@
 // What verified types make of the generated TypeScript and its contract tests, and the generator's check of their
-// factories' names (M011) (the DSL and its checks: core/checker/verified.test.ts).
+// factories' names (M011) (the DSL and its checks: contexts/modeling/src/domain/rules/verified.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { generateTypeScript } from './typescript.js';
 import { check, only } from '../test-helpers.js';
