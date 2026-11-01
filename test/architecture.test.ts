@@ -243,6 +243,12 @@ const RULES: Record<Rule, RuleText> = {
         statement: `\`application/\` imports no I/O (node:* but ${PURE_BUILTINS.join(', ')}, bun, ${IO_PACKAGES.join(', ')}): it reaches technology through ports.`,
         fix: () => "define a port in `application/` and implement it in `infrastructure/` (a capability's `adapters/`), wired by an app",
     },
+    kernel: {
+        section: 'Layout',
+        statement: `the kernel (shared/kernel; a package's \`kernel\` directory in the map until T8) is kept small: it imports only its own files and ${PURE_BUILTINS.join(', ')}, no Langium and no other module.`,
+        fix: () =>
+            'keep the kernel to plain types and functions: leave what needs Langium or the model in the module that uses it (as `DiagnosticSink` in core/), or pass it in as a value',
+    },
 };
 
 /** The problems of a rule: violations that no exception lists, and exceptions that no longer occur. */
@@ -437,6 +443,20 @@ describe('public surface', () => {
             expect({ name, missing: (MAP[name].published ?? []).filter((m) => !modules.has(m)) }).toEqual({ name, missing: [] });
         }
     });
+
+    test("a package's kernel is exported by its index.ts, every module of it", async () => {
+        for (const name of NAMES) {
+            const { kernel, sources } = MAP[name];
+            if (kernel === undefined) continue;
+            const modules = new Set(SURFACES_BY_NAME[name]?.values() ?? []);
+            const files: string[] = [];
+            for await (const rel of new Glob('*.ts').scan({ cwd: path.join(ROOT, sources, kernel) })) {
+                if (!isTest(rel)) files.push(`${kernel}/${rel.replace(/\.ts$/, '')}`);
+            }
+            expect(files.length).toBeGreaterThan(0);
+            expect({ name, missing: files.filter((m) => !modules.has(m)) }).toEqual({ name, missing: [] });
+        }
+    });
 });
 
 // ---- layers ----------------------------------------------------------------------------------------------------
@@ -470,6 +490,21 @@ describe('layers', () => {
         expectNoProblems(
             'pure-core-layers',
             pure.filter(({ imp }) => reaches(imp, ['application', ...TECHNOLOGY])).map(({ name, imp }) => atFile(name, imp)),
+        );
+    });
+
+    test('the kernel imports only its own files and the pure builtins: no Langium, no other module (kernel)', () => {
+        const inKernel = (name: string, file: string): boolean => {
+            const { kernel, sources } = MAP[name];
+            return kernel !== undefined && file.startsWith(`${sources}/${kernel}/`);
+        };
+        // the kernel's files import nothing today; `a package's kernel is exported` checks that there are files
+        const kernel = all.filter(({ name, imp }) => inKernel(name, imp.file));
+        expectNoProblems(
+            'kernel',
+            kernel
+                .filter(({ name, imp }) => (imp.resolved ? !inKernel(name, imp.resolved) : !PURE_BUILTINS.includes(imp.specifier)))
+                .map(({ name, imp }) => atFile(name, imp)),
         );
     });
 

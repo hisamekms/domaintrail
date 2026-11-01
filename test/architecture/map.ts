@@ -61,7 +61,12 @@ export type Rule =
     /** an import of `application/`, `infrastructure/` or `adapters/` by a file under `domain/` or `core/` — `<file>: <specifier>` */
     | 'pure-core-layers'
     /** an import of I/O by a file under `application/` — `<file>: <specifier>` */
-    | 'application-io';
+    | 'application-io'
+    /**
+     * an import by a file of the kernel of anything but the kernel's own files and the pure builtins (Langium, the
+     * model, any other module) — `<file>: <specifier>`
+     */
+    | 'kernel';
 
 export interface Module {
     kind: Kind;
@@ -83,7 +88,8 @@ export interface Module {
     /**
      * The directory of its sources that holds the shared kernel (ADR 0027, Layout: `shared/kernel/`) until T8 moves it
      * into a package of its own: `Diagnostic`, `SourceFile`, `Location`, the suggestions. Every package may take what
-     * index.ts exports from it, a context too, as if it came from `shared/kernel` (ADR 0027, Dependency rules).
+     * index.ts exports from it, a context too, as if it came from `shared/kernel` (ADR 0027, Dependency rules). It
+     * imports nothing outside it but the pure builtins (rule `kernel`).
      */
     kernel?: string;
     /** The violations it still has, by rule; the comment of each group names the task that removes it. */
