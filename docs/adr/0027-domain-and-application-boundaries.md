@@ -4,7 +4,8 @@
   by the maintainer: the split into contexts and capabilities, the checkers moved onto the typed model, Modeling
   described in its own `.dt`, protocols as a separate export, the boundary map as a TypeScript table first, the
   project analysis as its own capability named `analysis`, the top-level names, and authorization written with
-  parameters and `requires` without new syntax (marked *Decided by the maintainer*).
+  parameters and `requires` without new syntax, and one integration branch with one pull request (marked *Decided
+  by the maintainer*).
 - Date: 2026-11-01
 - Input: the code on `main` at `8a77a8d` (M0, ADR 0025, and M1, ADR 0026, merged).
 
@@ -231,6 +232,8 @@ CLI, DSL, HTTP and WebSocket unchanged, and passes typecheck, lint, tests and bu
 - **Authorization (independent of P1–P4):** `dismiss` and the facilitator-only operations (confirm, restore, close)
   become `requires` on Collaboration's commands, with `Actor` passed by the use cases.
 - The release with `.dtes` should go out before P3, or wait until after it: P3 moves every path.
+- *Decided by the maintainer:* as for M0, one integration branch and one pull request to `main`. The code map, the
+  tasks and how each is checked are in [the plan](../plans/0027-boundaries.md).
 
 ## Consequences
 

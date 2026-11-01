@@ -1,0 +1,121 @@
+# Plan: carrying out ADR 0027 (domain and application boundaries)
+
+The decisions are in [ADR 0027](../adr/0027-domain-and-application-boundaries.md); this plan says how they land. It is
+written against `main` at `8a77a8d`. **Work starts only after the large pull request in flight has landed**, and the
+first task (T0) reconciles this plan with the code as it is then: where the code differs, the code wins and this plan
+is corrected in the same task.
+
+## Landing
+
+*Decided by the maintainer:* as for M0, one integration branch `refactor/boundaries` from `main`, one worktree and
+branch per task (`refactor/boundaries-tN`), each done by a worker and merged into `refactor/boundaries` after review,
+and one pull request to `main`, squash merged. `main` is merged into the integration branch whenever it moves.
+
+Every task leaves:
+
+- `bun run typecheck`, `bun run lint`, `bun test`, `bun run build` passing;
+- the T0 baseline unchanged: generated TypeScript, `dt check` output, Live View payloads, HTTP and WebSocket answers
+  (only T12 may change what a use case receives; it keeps every HTTP status and error body);
+- the architecture test passing, with no exception added that the task does not list.
+
+## Code map
+
+From `main` at `8a77a8d` to the layout of ADR 0027. Paths are relative to each package's `src/`.
+
+### `packages/modeling`
+
+| Today | Goes to | Task |
+|---|---|---|
+| `language/domain.langium`, `language/generated`, `domain-module.ts`, `parser-messages.ts` | `contexts/modeling/src/infrastructure/syntax/` | T8 |
+| `storming/storming.langium`, `storming/language/module.ts` | `contexts/storming/src/infrastructure/syntax/` | T8 |
+| `model/` (`model.ts`, `build.ts`, `ids.ts`, `usages.ts`, `dependencies.ts`) | `contexts/modeling/src/domain/` (`build.ts`, the AST → model mapping, to `infrastructure/syntax/`) | T8, T9 |
+| `core/checker/*` except `tsnames.ts` | `contexts/modeling/src/domain/rules/` | T8; onto the typed model in T10 |
+| `core/checker/tsnames.ts`, `generator/naming.ts` | `capabilities/generation/src/core/` | T5 |
+| `core/model-index.ts`, `core/types.ts`, `core/labels.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
+| `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` | T3 |
+| `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/` | T4 |
+| `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/` | T6 |
+| `format/format.ts` | `contexts/modeling/src/application/` (formatting) with its printer in `infrastructure/syntax/` | T8 |
+| `generator/` (`typescript.ts`, `checks.ts`, `tests.ts`, `testing/`) | `capabilities/generation/src/core/` | T8 |
+| `storming/` (`parse`, `validate`, `link`, `format`, `analyze`, `ir`) | `contexts/storming/src/` (`ir`, `validate`, `link` to `domain/`; `analyze` to `application/`; `parse`, `format` to `infrastructure/syntax/`) | T8 |
+| `langium-config.json` | one per context (see T8) | T8 |
+
+### Other packages
+
+| Today | Goes to | Task |
+|---|---|---|
+| `visualization/domain/graph/diff.ts`: `ModelDiff`, `fingerprints`, `diffModels`, `isEmptyDiff` | `contexts/modeling/src/domain/diff.ts` | T7 |
+| `visualization/domain/graph/build.ts`: `aggregateDependencies` | `contexts/modeling/src/domain/` (next to `model/dependencies.ts`) | T7 |
+| `visualization/domain/storming/semantic.ts`, `trie.ts`: `timelineOccurrences` | `contexts/storming/src/domain/` | T7 |
+| `visualization/domain/` (the rest) | `capabilities/visualization/src/core/` | T8 |
+| `visualization/application/`, `infrastructure/`, `protocol.ts` | `capabilities/visualization/src/application/`, `adapters/`, `protocol.ts` | T8 |
+| `collaboration/` | `contexts/collaboration/` (same inner layout) | T8 |
+| `agent/application/`, `infrastructure/` | `capabilities/agent/src/core/`, `adapters/` | T8 |
+| `workspace/` | `platform/workspace/` | T8 |
+| `presentation/` (`cli`, `http`, `lsp`, `session`, `websocket`) | `apps/dt/src/` (`cli`, `lsp`, `server/{http,session,websocket}`) | T8 |
+| `composition/` | `apps/dt/src/` (`main.ts` and the wiring) | T8 |
+| `web/` | `apps/web/` (inner layout unchanged in this plan) | T8 |
+
+## Tasks
+
+```text
+T0 → T1 → T2 → T3 → T4 → T5 ─┐
+                  T3 → T6 ────┼→ T12 → T8 → T9 → T10 (one checker each) → T11 → T13
+                  T3 → T7 ────┘
+```
+
+- **T0 — reconcile and baseline.** Check this plan against the code after the large pull request; correct the code
+  map. Add what the baseline lacks: the generated TypeScript of `examples/shop` and of `collaboration`, the `dt check`
+  output (diagnostics and exit code) over the test fixtures, Live View payloads for `examples/shop` with and without
+  stormings. Most exists (`test/live-contract.test.ts` snapshot, `test/collaboration-contracts.test.ts`); add only
+  the gaps.
+- **T1 — the boundary map (P1).** The map table (kind, upstream, exceptions) for today's packages: `modeling` and
+  `collaboration` as contexts, `visualization` and `agent` as capabilities, `workspace` as platform, `presentation`,
+  `composition` and `web` as apps. `test/architecture.test.ts` derives its checks from the map and replaces the
+  per-package rules; every current violation is an exception entry; a stale exception fails; failures name the rule,
+  the ADR and the fix.
+- **T2 — public surfaces (P1).** An `index.ts` (and `protocol.ts` where there are wire types) per package; `exports`
+  narrowed to `.` and `./protocol`; every deep import replaced. The architecture test checks the `exports`.
+- **T3 — the kernel (P2).** `Diagnostic`, `SourceFile`, `Location`, `didYouMean` and the other suggestions into
+  `modeling/src/kernel/` (moved to `shared/kernel` in T8). Nothing in the kernel imports Langium.
+- **T4 — the analysis split (P2).** `core/analyze` into an analysis of `.dt` alone, the storming analysis taking the
+  model, and an orchestrator (`modeling/src/analysis/`, moved to `capabilities/analysis` in T8) that runs both, links
+  and adds the generation's checks. `core` no longer imports `storming`.
+- **T5 — generation's side (P2).** `checker/tsnames` and `generator/naming` behind the generator; the orchestrator runs
+  the TypeScript name check. `checker/events` stops importing the generator (`camel` to the kernel or to the model).
+  `core/config` stops importing the generator (T6 takes the options).
+- **T6 — configuration by owner (P2).** Each owner defines its section's type, defaults and validation; `composition`
+  (later `apps/dt`) composes the schema of `domaintrail.jsonc`; `workspace` reads the file and receives what it needs
+  (sources, ignored directories) as values. The resolved configuration and its errors stay as they are.
+- **T7 — domain knowledge out of visualization (P2).** The items of the code map marked T7. `markLineChanges`, the trie
+  and rendering stay.
+- **T12 — authorization.** Before T8, to keep the moves last. `Actor` in Collaboration; `dismiss` and the
+  facilitator-only operations (confirm, restore, close) get role/participant parameters and `requires` in
+  `collaboration/model/*.dt`; regenerate; the use cases build the `Actor` and pass it; the routes map the domain
+  errors to the same statuses and bodies as today; the route role table stays as a hint.
+- **T8 — the move (P3).** The code map's T8 rows. `modeling` splits into `contexts/modeling`, `contexts/storming`,
+  `capabilities/generation`, `capabilities/analysis` and `shared/kernel`; `presentation` and `composition` merge into
+  `apps/dt`. Updated with it: `tsconfig.json`, `bunfig.toml` and the root `package.json` workspaces, `scripts/build.ts`,
+  `scripts/tree-sitter.ts`, `.github/workflows/*`, `.github/dependabot.yml`, `editors/zed` if it points into
+  `packages/`, the map's kinds. One commit per package moved, so that `git log --follow` keeps working.
+  **Risk:** both grammars are generated by one Langium project (`packages/modeling/langium-config.json`, output
+  `src/language/generated`), so `.dt` and `.dtes` share one generated `ast.ts`. Splitting them needs one Langium
+  project per context, or the storming grammar importing the domain grammar's terminals; T8 chooses and records why.
+  `docComment` (`core/labels.ts`) is used by both syntaxes; it goes where the grammars' shared parts go.
+- **T9 — the typed model for the checkers (P4).** The typed model gains what the checkers read from the AST
+  (source locations of every element, member and expression; the expression tree; resolved references), built in
+  `infrastructure/syntax`. No checker moves yet.
+- **T10 — checkers onto the typed model (P4).** One task per checker (13), any order; each removes its exceptions from
+  the map. Diagnostics (rule, message, range, order) stay the same. Done when Langium is imported only under
+  `infrastructure/syntax` and the exception list has no syntax entries.
+- **T11 — Modeling in its own `.dt`.** `contexts/modeling/model/*.dt` for the typed model (not the AST and its
+  mapping), generated code committed in `src/generated`, the domain built on it, a test that fails when generating
+  again differs (as `test/collaboration-contracts.test.ts`), and the bootstrap steps.
+- **T13 — wrap-up.** `CONTRIBUTING.md` (the package table, the boundary rules, the bootstrap steps), ADR 0027's status
+  to implemented, this plan reconciled with what was built.
+
+## Open in the tasks
+
+- T5: where `camel` lives (kernel or model).
+- T8: one Langium project per context, or a shared grammar part; where `docComment` goes.
+- T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
