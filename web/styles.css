@@ -2907,7 +2907,8 @@ svg.chat-launcher-mark {
    - `motion-pop` alone: below its anchor (it comes down from it);
    - with `motion-pop-up`: above its anchor (it comes up from it);
    - with `motion-pop-right` / `motion-pop-left`: beside its anchor, to its right / left.
-   The menus with the shared `.pane-menu-list` (below their ⋯) have it without the class. */
+   The menus with the shared `.pane-menu-list` (below their ⋯) have it without the class. An item arriving in a list
+   (a chat message posted live) comes in the same way: `motion-pop motion-pop-up` on the new item only. */
 @keyframes motion-pop {
     from {
         opacity: 0;
@@ -2915,8 +2916,7 @@ svg.chat-launcher-mark {
     }
 }
 .motion-pop,
-.pane-menu-list,
-.chat-people-popover {
+.pane-menu-list {
     animation: motion-pop var(--motion-pop) var(--motion-ease-enter);
 }
 .motion-pop-up {
@@ -2987,8 +2987,7 @@ svg.chat-launcher-mark {
 
 @media (prefers-reduced-motion: reduce) {
     .motion-pop,
-    .pane-menu-list,
-    .chat-people-popover {
+    .pane-menu-list {
         animation: none;
     }
     .legend-slot,
@@ -4586,6 +4585,26 @@ del.was.block {
     padding: 0 10px 10px;
     background: var(--bg);
 }
+/* the body unfolds and folds like the tree's branches; the chevron turns with it */
+.chat-unit-fold {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--motion-medium) var(--motion-ease-standard);
+}
+.chat-unit.open > .chat-unit-fold {
+    grid-template-rows: 1fr;
+}
+.chat-unit-fold-inner {
+    min-height: 0;
+    overflow: hidden;
+}
+.chat-unit-twisty {
+    flex: none;
+    transition: transform var(--motion-medium) var(--motion-ease-standard);
+}
+.chat-unit.open .chat-unit-twisty {
+    transform: rotate(90deg);
+}
 .chat-items.compact .chat-item {
     margin-top: 6px;
 }
@@ -4690,7 +4709,7 @@ del.was.block {
     display: inline-flex;
     align-items: center;
     opacity: 0.35;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-pop) var(--motion-ease-standard);
 }
 .chat-row:hover .chat-apply,
 .chat-row:focus-within .chat-apply {
@@ -5064,13 +5083,13 @@ del.was.block {
 }
 /*
  * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
- * motion: switch to the shared tokens
+ * It opens and closes at the panes' paces (the motion tokens).
  */
 .canvas-controls-bar {
     clip-path: inset(0 0 0 0 round 8px);
     transition:
-        clip-path 220ms ease-out,
-        opacity 220ms ease-out,
+        clip-path var(--motion-enter) var(--motion-ease-enter),
+        opacity var(--motion-enter) var(--motion-ease-enter),
         visibility 0s;
 }
 .canvas-controls.collapsed .canvas-controls-bar {
@@ -5078,9 +5097,9 @@ del.was.block {
     opacity: 0;
     visibility: hidden;
     transition:
-        clip-path 160ms ease-in,
-        opacity 160ms ease-in,
-        visibility 0s linear 160ms;
+        clip-path var(--motion-exit) var(--motion-ease-exit),
+        opacity var(--motion-exit) var(--motion-ease-exit),
+        visibility 0s linear var(--motion-exit);
 }
 .canvas-controls .canvas-expand {
     position: absolute;
@@ -5096,14 +5115,15 @@ del.was.block {
     opacity: 0;
     visibility: hidden;
     transition:
-        opacity 160ms ease-in,
-        visibility 0s linear 160ms;
+        opacity var(--motion-exit) var(--motion-ease-exit),
+        visibility 0s linear var(--motion-exit);
 }
 .canvas-controls.collapsed .canvas-expand {
     opacity: 1;
     visibility: visible;
+    /* after the bar has started folding */
     transition:
-        opacity 220ms ease-out 60ms,
+        opacity var(--motion-enter) var(--motion-ease-enter) calc(var(--motion-enter) * 0.25),
         visibility 0s;
 }
 @media (prefers-reduced-motion: reduce) {

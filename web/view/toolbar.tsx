@@ -146,7 +146,7 @@ export function SubjectPicker(props: { label: string; value: string; options: Pi
                 </span>
             </button>
             {open && (
-                <div className="toolbar-menu subject-menu" role="listbox" aria-label={label} ref={list} onKeyDown={onListKey}>
+                <div className="toolbar-menu subject-menu motion-pop" role="listbox" aria-label={label} ref={list} onKeyDown={onListKey}>
                     {options.map((o) => (
                         <button
                             key={o.value}
@@ -227,7 +227,7 @@ export function FilterPopover(props: { count: number; onClear: () => void; child
                 {count > 0 && <span className="filter-count">{count}</span>}
             </button>
             {open && (
-                <div className="toolbar-menu filter-menu" role="dialog" ref={menu} aria-label={t.filters.label}>
+                <div className="toolbar-menu filter-menu motion-pop" role="dialog" ref={menu} aria-label={t.filters.label}>
                     <div className="filter-menu-head">
                         <span>{t.filters.label}</span>
                         <button className="filter-clear" disabled={count === 0} onClick={onClear}>

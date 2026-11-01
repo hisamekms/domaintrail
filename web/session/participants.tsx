@@ -98,7 +98,7 @@ export function ParticipantsButton(props: { session: SessionData; location: View
                 <span className="chat-online">{tx.chat.onlineCount(online.length, rows.length)}</span>
             </button>
             {open && (
-                <div className="chat-people-popover" role="dialog" aria-label={tx.chat.participantsTitle}>
+                <div className="chat-people-popover motion-pop" role="dialog" aria-label={tx.chat.participantsTitle}>
                     <ul className="chat-people-list">{online.map(row)}</ul>
                     {offline.length > 0 && (
                         <>

@@ -420,13 +420,27 @@ function Stream({ items }: { items: StreamItem[] }) {
 
     const rows = streamRows(items, tx);
     const follows = continued(rows.map((r) => r.author));
+    // the items there when the stream is first shown with something in it (the page loaded, the tab switched back):
+    // only those posted after come in with motion
+    const [initial] = useState(() => new Set<string>());
+    if (initial.size === 0) for (const row of rows) initial.add(row.key);
     const substantive = items.some((i) => i.kind !== 'session-start');
     return (
         <div className="chat-stream-wrap">
             <div className="chat-stream" ref={ref} onScroll={(e) => onScroll(e.currentTarget)}>
                 <ol className="chat-items">
                     {rows.map((row, i) => (
-                        <li key={row.key} className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}`} data-item={row.key}>
+                        <li
+                            key={row.key}
+                            className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}${initial.has(row.key) ? '' : ' motion-pop motion-pop-up'}`}
+                            data-item={row.key}
+                            onAnimationEnd={(e) => {
+                                // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
+                                if (e.target !== e.currentTarget || initial.has(row.key)) return;
+                                initial.add(row.key);
+                                e.currentTarget.classList.remove('motion-pop', 'motion-pop-up');
+                            }}
+                        >
                             {row.render(follows[i])}
                         </li>
                     ))}
@@ -778,6 +792,9 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
     const Icon = OUTCOME_ICONS[unit.outcome];
     const requesters = unit.requesters.map(nameOf).join(', ');
     const summary = unit.summary ?? fallbackSummary(last.run, nameOf, tx);
+    // the card is mounted the first time the unit opens, and stays so that it folds away as it closes
+    const [mounted, setMounted] = useState(open);
+    if (open && !mounted) setMounted(true);
     return (
         <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}`} data-unit={unit.key}>
             <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={onToggle}>
@@ -788,7 +805,7 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
                     <time className="chat-time" dateTime={unit.at}>
                         {time(unit.at)}
                     </time>
-                    {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
+                    <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
                 </span>
                 {/* opened, the card says it */}
                 {summary && !open && (
@@ -798,19 +815,24 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
                 )}
                 {requesters && <span className="chat-unit-who muted">{h.requesters(requesters)}</span>}
             </button>
-            {open && (
-                <div className="chat-unit-body">
-                    <RunCard
-                        unit={unit}
-                        compact
-                        actions={
-                            <button className="chat-small" onClick={() => jump(`card:${unit.key}`)}>
-                                <MessagesSquare size={12} aria-hidden /> {h.showInChat}
-                            </button>
-                        }
-                    />
+            {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}
+            <div className="chat-unit-fold" inert={!open}>
+                <div className="chat-unit-fold-inner">
+                    {mounted && (
+                        <div className="chat-unit-body">
+                            <RunCard
+                                unit={unit}
+                                compact
+                                actions={
+                                    <button className="chat-small" onClick={() => jump(`card:${unit.key}`)}>
+                                        <MessagesSquare size={12} aria-hidden /> {h.showInChat}
+                                    </button>
+                                }
+                            />
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </li>
     );
 }
@@ -1042,7 +1064,7 @@ function Composer(props: {
         <div className="chat-composer">
             <div className="chat-composer-input">
                 {open && (
-                    <ul className="chat-mentions" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
+                    <ul className="chat-mentions motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
                         {matches.length === 0 && <li className="chat-mention-none muted">{tx.chat.mentionNoMatch}</li>}
                         {matches.map((c, i) => (
                             <li
