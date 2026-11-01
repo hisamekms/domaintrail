@@ -1,14 +1,27 @@
 // Votes and reactions as the page shows them (ADR 0026, appendix "Votes and reactions"), without React: the session's
 // placed marks counted per target and sign, who placed them (names on hover, in a popover on a click), and whether one
-// is mine; whether a vote can still change (the rules of `domain/marks.ts`, the same as the server's); the lines of the
-// tooltips that keep a closed vote's counts. Everything is derived from the session's state on the page.
-import { isVoteTarget, markKey, markTargetStatus, REACTIONS, type MarkStatus, type MarkTargetData } from '@domaintrail/collaboration/domain/marks';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+// is mine; the emoji placed on a message or a turn, in the order they first appeared, and whether another one fits
+// (`MAX_REACTION_EMOJI`); whether a vote can still change (the rules of `domain/marks.ts`, the same as the server's);
+// the lines of the tooltips that keep a closed vote's counts. Everything is derived from the session's state on the page.
+import {
+    isVoteTarget,
+    markKey,
+    markTargetStatus,
+    MAX_REACTION_EMOJI,
+    signKey,
+    VOTE,
+    type MarkSignData,
+    type MarkStatus,
+    type MarkTargetData,
+} from '@domaintrail/collaboration/domain/marks';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { DEFAULT_QUICK_REACTIONS, readEmoji } from '@domaintrail/modeling/core/emoji';
 
-export { REACTIONS, markKey, type MarkTargetData };
-export type Sign = Collaboration.MarkSign;
-export type Reaction = (typeof REACTIONS)[number];
+export { MAX_REACTION_EMOJI, markKey, readEmoji, signKey, VOTE, type MarkTargetData };
+export type Sign = MarkSignData;
+
+/** A reaction with an emoji (in the form reactions are kept). */
+export const reaction = (emoji: string): Sign => ({ kind: 'Reaction', emoji });
 
 /** The marks of one sign on one target: how many, who (participant IDs, in the order they marked), and whether I am among them. */
 export interface Tally {
@@ -19,31 +32,39 @@ export interface Tally {
 
 export const NO_TALLY: Tally = { count: 0, who: [], mine: false };
 
-/** The session's placed marks by target and sign (`markKey(target)` and the sign). */
-export type MarkIndex = ReadonlyMap<string, Tally>;
-
-const indexKey = (target: MarkTargetData, sign: Sign): string => `${sign}|${markKey(target)}`;
+/** The session's placed marks by target (`markKey`), then by sign (`signKey`), each in the order it first appeared. */
+export type MarkIndex = ReadonlyMap<string, ReadonlyMap<string, Tally>>;
 
 /** Counts the session's placed marks (a state from before marks has none). */
 export function markIndex(state: Pick<SessionStateBody, 'marks'>, me: string): MarkIndex {
-    const index = new Map<string, Tally>();
+    const index = new Map<string, Map<string, Tally>>();
     for (const m of state.marks ?? []) {
-        const key = indexKey(m.target, m.sign);
-        const t = index.get(key) ?? NO_TALLY;
-        index.set(key, { count: t.count + 1, who: [...t.who, m.participant], mine: t.mine || m.participant === me });
+        const target = markKey(m.target);
+        const signs = index.get(target) ?? new Map<string, Tally>();
+        const key = signKey(m.sign);
+        const t = signs.get(key) ?? NO_TALLY;
+        signs.set(key, { count: t.count + 1, who: [...t.who, m.participant], mine: t.mine || m.participant === me });
+        index.set(target, signs);
     }
     return index;
 }
 
-export const tallyOf = (index: MarkIndex, target: MarkTargetData, sign: Sign): Tally => index.get(indexKey(target, sign)) ?? NO_TALLY;
+export const tallyOf = (index: MarkIndex, target: MarkTargetData, sign: Sign): Tally => index.get(markKey(target))?.get(signKey(sign)) ?? NO_TALLY;
 
-/** The reactions on a message or a turn that someone placed, in the fixed order. */
-export function reactionsOn(index: MarkIndex, target: MarkTargetData): { readonly sign: Reaction; readonly tally: Tally }[] {
-    return REACTIONS.flatMap((sign) => {
-        const tally = tallyOf(index, target, sign);
-        return tally.count > 0 ? [{ sign, tally }] : [];
-    });
+/** The emoji placed on a message or a turn, in the order each first appeared (the row does not reorder as counts change). */
+export function reactionsOn(index: MarkIndex, target: MarkTargetData): { readonly emoji: string; readonly tally: Tally }[] {
+    return [...(index.get(markKey(target)) ?? new Map<string, Tally>())].flatMap(([key, tally]) => (key === signKey(VOTE) ? [] : [{ emoji: key, tally }]));
 }
+
+/** Whether I can react with an emoji there: it is there already, or the target has fewer than `MAX_REACTION_EMOJI` different emoji. */
+export function reactionFits(index: MarkIndex, target: MarkTargetData, emoji: string): boolean {
+    const placed = reactionsOn(index, target);
+    return placed.some((r) => r.emoji === emoji) || placed.length < MAX_REACTION_EMOJI;
+}
+
+/** The emoji the add-reaction popover offers first: the session's (`session.quickReactions`), or the default ones. */
+export const quickReactions = (state: Partial<Pick<SessionStateBody, 'quickReactions'>>): readonly string[] =>
+    state.quickReactions && state.quickReactions.length > 0 ? state.quickReactions : DEFAULT_QUICK_REACTIONS;
 
 /** Whether a target's marks can change now: reactions while the session is live, votes while their run is the latest of its requests too. */
 export function markStatus(target: MarkTargetData, state: Pick<SessionStateBody, 'requests' | 'runs'>): MarkStatus {
@@ -75,7 +96,7 @@ export function questionVoteLines(
     separator: string,
 ): string[] {
     return question.options.flatMap((o) => {
-        const t = tallyOf(index, { kind: 'QuestionOption', run, question: question.id, option: o.id }, 'Vote');
+        const t = tallyOf(index, { kind: 'QuestionOption', run, question: question.id, option: o.id }, VOTE);
         return t.count > 0 ? [`${o.label} ♡ ${t.count}: ${names(t, nameOf, separator)}`] : [];
     });
 }
@@ -95,7 +116,7 @@ export function assumptionVoteLines(
 ): string[] {
     const choices = [{ id: undefined, label: keep }, ...alternatives];
     return choices.flatMap((c) => {
-        const t = tallyOf(index, { kind: 'AssumptionChoice', run, assumption, ...(c.id !== undefined && { alternative: c.id }) }, 'Vote');
+        const t = tallyOf(index, { kind: 'AssumptionChoice', run, assumption, ...(c.id !== undefined && { alternative: c.id }) }, VOTE);
         return t.count > 0 ? [`${c.label} ♡ ${t.count}: ${names(t, nameOf, separator)}`] : [];
     });
 }

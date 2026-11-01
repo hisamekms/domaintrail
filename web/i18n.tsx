@@ -546,8 +546,12 @@ const ja = {
                 keep: 'このまま',
             },
             reactions: {
-                names: { Agree: '賛成', Doubt: '疑問・引っかかる', Like: 'いいね', Seen: '了解・見た' } as Record<'Agree' | 'Doubt' | 'Like' | 'Seen', string>,
                 add: '反応する',
+                other: 'ほかの絵文字',
+                typeLabel: '絵文字を1つ（Enter で付ける、Esc で閉じる）',
+                typePlaceholder: '絵文字を入力・貼り付け',
+                notOneEmoji: '絵文字を1つだけ入力してください',
+                limit: (n: number) => `1つに付けられる絵文字は ${n} 種類までです`,
             },
             replies: {
                 reply: '返信',
@@ -1183,11 +1187,12 @@ const en: Messages = {
                 keep: 'As is',
             },
             reactions: {
-                names: { Agree: 'Agree', Doubt: 'Question / not sure', Like: 'Like', Seen: 'Got it / seen' } as Record<
-                    'Agree' | 'Doubt' | 'Like' | 'Seen',
-                    string
-                >,
                 add: 'React',
+                other: 'Another emoji',
+                typeLabel: 'One emoji (Enter adds it, Esc closes)',
+                typePlaceholder: 'Type or paste an emoji',
+                notOneEmoji: 'Enter exactly one emoji',
+                limit: (n) => `A message holds at most ${n} different emoji`,
             },
             replies: {
                 reply: 'Reply',

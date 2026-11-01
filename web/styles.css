@@ -5177,20 +5177,26 @@ del.was.block {
     color: var(--muted);
     font-size: 0.6875rem;
 }
-/* the reactions under a message or a turn: icons and counts, muted; no pills */
+/* the reactions under a message or a turn: each emoji in colour (the one exception to the decoration budget) and a
+   small muted count, no pills; mine: the count in violet, with a faint violet outline and background */
 .reaction-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 8px;
+    gap: 2px 4px;
     margin: 0.25rem 0 0 -3px;
+}
+.reaction-emoji {
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+    font-size: 0.875rem;
+    line-height: 1;
 }
 .session-chat button.reaction {
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    padding: 1px 3px;
-    border: none;
-    border-radius: 4px;
+    padding: 1px 5px 1px 4px;
+    border: 1px solid transparent;
+    border-radius: 6px;
     background: none;
     color: var(--muted);
     font-size: 0.6875rem;
@@ -5205,6 +5211,11 @@ del.was.block {
 }
 .session-chat button.reaction.mine {
     color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.session-chat button.reaction.mine:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 /* ☺+ at the right end of a message or a turn: on hover or focus, always (faint) on touch */
 .reaction-add {
@@ -5251,18 +5262,55 @@ del.was.block {
     width: 30px;
     height: 28px;
     padding: 0;
-    border: none;
-    border-radius: 5px;
+    border: 1px solid transparent;
+    border-radius: 6px;
     background: none;
     color: var(--muted);
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+    font-size: 1rem;
+    line-height: 1;
     cursor: pointer;
 }
-.session-chat button.reaction-choice:hover {
+.session-chat button.reaction-choice:hover:not(:disabled) {
     background: var(--hover);
     color: var(--text);
 }
+.session-chat button.reaction-choice:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
 .session-chat button.reaction-choice.mine {
-    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+/* [＋]: any other emoji, typed or pasted */
+.reaction-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 4px 2px 0;
+}
+.session-chat .reaction-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    font-size: 0.8125rem;
+}
+.session-chat .reaction-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.session-chat .reaction-input[aria-invalid='true'] {
+    border-color: var(--error);
+}
+.reaction-hint {
+    color: var(--muted);
+    font-size: 0.6875rem;
 }
 .reaction-who {
     margin: 4px 2px 0;
@@ -5279,10 +5327,8 @@ del.was.block {
     gap: 6px;
     padding: 1px 2px;
 }
-.reaction-who svg {
+.reaction-who .reaction-emoji {
     flex: none;
-    color: var(--muted);
-    transform: translateY(1px);
 }
 
 /* ---------- the canvas's bottom-left controls (web/view/canvas-controls.tsx) ---------- */

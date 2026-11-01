@@ -1,21 +1,38 @@
 // The controls of votes and reactions in the chat (ADR 0026, appendix "Votes and reactions"), within the chat's
-// decoration budget: counts are small muted text and line icons, no pills or borders; my own mark is the clickable
-// violet (a filled ♥ for my vote), never red. Who marked is not shown until asked: on hover of a count (a tooltip of
-// names) and on a click of the vote's count (a small popover, for touch). A reaction's click toggles mine, so its names
-// are in its tooltip and, for touch, in the add-reaction popover (☺+), which lists who placed each reaction under the
-// four choices.
+// decoration budget: votes are small muted text with a line ♡, my vote the clickable violet (a filled ♥), never red.
+// Reactions are emoji the participants choose — the app gives none a meaning — drawn in colour (the one exception to
+// the budget), each with a small muted count and no pill; mine has its count in violet with a faint violet outline and
+// background. Who marked is not shown until asked: on hover of a count or a reaction (a tooltip: the emoji and the
+// names) and on a click of the vote's count (a small popover, for touch). A reaction's click toggles mine, so for touch
+// its names are in the add-reaction popover (☺+): the quick emoji (`session.quickReactions`), [＋] for any other one
+// typed or pasted (the OS emoji picker works there), and who placed each reaction there is.
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Check, CircleHelp, Heart, SmilePlus, ThumbsUp, type LucideIcon } from 'lucide-react';
+import { Heart, Plus, SmilePlus } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { sessionApi } from './api';
 import { useChat, type ChatContextValue } from './chat-context';
 import { failure } from './parts';
 import type { SessionData } from './useSession';
-import { canVote, markIndex, markKey, names, REACTIONS, reactionsOn, tallyOf, type MarkTargetData, type Reaction, type Sign, type Tally } from './marks';
+import {
+    canVote,
+    markIndex,
+    markKey,
+    MAX_REACTION_EMOJI,
+    names,
+    quickReactions,
+    reaction,
+    reactionFits,
+    reactionsOn,
+    readEmoji,
+    signKey,
+    tallyOf,
+    VOTE,
+    type MarkTargetData,
+    type Sign,
+    type Tally,
+} from './marks';
 
-export const REACTION_ICON: Record<Reaction, LucideIcon> = { Agree: ThumbsUp, Doubt: CircleHelp, Like: Heart, Seen: Check };
-
-const pendingKey = (target: MarkTargetData, sign: Sign): string => `${sign}|${markKey(target)}`;
+const pendingKey = (target: MarkTargetData, sign: Sign): string => `${signKey(sign)}|${markKey(target)}`;
 
 /** Whether marks can be set now: the session is open and this page is connected. */
 function useLive(): boolean {
@@ -65,7 +82,7 @@ function VoteCount({ tally }: { tally: Tally }) {
 export function VoteMark({ target }: { target: MarkTargetData }) {
     const { tx, session, marking } = useChat();
     const live = useLive();
-    const tally = tallyOf(marking.index, target, 'Vote');
+    const tally = tallyOf(marking.index, target, VOTE);
     const can = canVote(target, session.state, session.me.participant.role, live);
     if (!can && tally.count === 0) return null;
     const v = tx.chat.votes;
@@ -79,8 +96,8 @@ export function VoteMark({ target }: { target: MarkTargetData }) {
                     aria-pressed={tally.mine}
                     aria-label={tally.mine ? v.unvote : v.vote}
                     data-tooltip={tally.mine ? v.unvote : v.vote}
-                    disabled={marking.pending.has(pendingKey(target, 'Vote'))}
-                    onClick={() => marking.set(target, 'Vote', !tally.mine)}
+                    disabled={marking.pending.has(pendingKey(target, VOTE))}
+                    onClick={() => marking.set(target, VOTE, !tally.mine)}
                 >
                     {heart}
                 </button>
@@ -94,21 +111,20 @@ export function VoteMark({ target }: { target: MarkTargetData }) {
     );
 }
 
-/** The reactions placed on a message or a turn, under its body: icon and count each; a click toggles mine; the names in the tooltip. */
+/** The reactions placed on a message or a turn, under its body: each emoji and its count; a click toggles mine; the emoji and names in the tooltip. */
 export function ReactionRow({ target }: { target: MarkTargetData }) {
     const { tx, nameOf, marking } = useChat();
     const live = useLive();
     const placed = reactionsOn(marking.index, target);
     if (placed.length === 0) return null;
-    const r = tx.chat.reactions;
     return (
         <div className="reaction-row">
-            {placed.map(({ sign, tally }) => {
-                const Icon = REACTION_ICON[sign];
-                const who = `${r.names[sign]}: ${names(tally, nameOf, tx.chat.listSeparator)}`;
+            {placed.map(({ emoji, tally }) => {
+                const sign = reaction(emoji);
+                const who = `${emoji} ${names(tally, nameOf, tx.chat.listSeparator)}`;
                 return (
                     <button
-                        key={sign}
+                        key={emoji}
                         type="button"
                         className={`reaction${tally.mine ? ' mine' : ''}`}
                         aria-pressed={tally.mine}
@@ -117,7 +133,9 @@ export function ReactionRow({ target }: { target: MarkTargetData }) {
                         disabled={!live || marking.pending.has(pendingKey(target, sign))}
                         onClick={() => marking.set(target, sign, !tally.mine)}
                     >
-                        <Icon size={13} aria-hidden />
+                        <span className="reaction-emoji" aria-hidden>
+                            {emoji}
+                        </span>
                         <span className="reaction-count">{tally.count}</span>
                     </button>
                 );
@@ -127,18 +145,78 @@ export function ReactionRow({ target }: { target: MarkTargetData }) {
 }
 
 /**
- * ☺+ at the right end of a message or a turn (shown on hover or focus, always on touch): a small popover of the four
- * reactions to toggle mine, and under them who placed each reaction there is (where touch reads the names).
+ * [＋] of the add-reaction popover opened: a small field for any one emoji, typed or pasted (the OS emoji picker works
+ * there). Enter adds it (as mine; nothing when it is mine already), Escape closes the field. Not one emoji, or one more
+ * than a target holds: a short hint, and the field stays.
+ */
+function EmojiField({ target, onAdd, onClose }: { target: MarkTargetData; onAdd: (emoji: string) => void; onClose: () => void }) {
+    const { tx, marking } = useChat();
+    const r = tx.chat.reactions;
+    const [text, setText] = useState('');
+    const [hint, setHint] = useState<string | undefined>();
+    return (
+        <div className="reaction-field">
+            <input
+                className="reaction-input"
+                // the field is opened by a click on [＋]: focus moves to it
+                // oxlint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+                value={text}
+                placeholder={r.typePlaceholder}
+                aria-label={r.typeLabel}
+                aria-invalid={hint !== undefined}
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(e) => {
+                    setText(e.target.value);
+                    setHint(undefined);
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                        // the field closes; the popover stays (a second Escape closes it)
+                        e.stopPropagation();
+                        onClose();
+                    } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        const emoji = readEmoji(text);
+                        if (emoji === undefined) setHint(r.notOneEmoji);
+                        else if (!reactionFits(marking.index, target, emoji)) setHint(r.limit(MAX_REACTION_EMOJI));
+                        else onAdd(emoji);
+                    }
+                }}
+            />
+            {hint && (
+                <span className="reaction-hint" role="alert">
+                    {hint}
+                </span>
+            )}
+        </div>
+    );
+}
+
+/**
+ * ☺+ at the right end of a message or a turn (shown on hover or focus, always on touch): a small popover with the quick
+ * emoji to toggle mine and [＋] for any other one, and under them who placed each reaction there is (where touch reads
+ * the names).
  */
 export function AddReaction({ target }: { target: MarkTargetData }) {
-    const { tx, nameOf, marking } = useChat();
+    const { tx, nameOf, marking, session } = useChat();
     const live = useLive();
     const [open, setOpen] = useState(false);
+    const [typing, setTyping] = useState(false);
     const root = useRef<HTMLDivElement>(null);
-    useDismiss(open, root, () => setOpen(false));
+    const close = useCallback(() => {
+        setOpen(false);
+        setTyping(false);
+    }, []);
+    useDismiss(open, root, close);
     if (!live) return null;
     const r = tx.chat.reactions;
     const placed = reactionsOn(marking.index, target);
+    const toggle = (emoji: string, mine: boolean): void => {
+        marking.set(target, reaction(emoji), !mine);
+        close();
+    };
     return (
         <div className="reaction-add" ref={root}>
             <button
@@ -148,46 +226,55 @@ export function AddReaction({ target }: { target: MarkTargetData }) {
                 aria-expanded={open}
                 aria-label={r.add}
                 data-tooltip={r.add}
-                onClick={() => setOpen(!open)}
+                onClick={() => (open ? close() : setOpen(true))}
             >
                 <SmilePlus size={14} aria-hidden />
             </button>
             {open && (
                 <div className="reaction-picker motion-pop" role="dialog" aria-label={r.add}>
                     <div className="reaction-choices">
-                        {REACTIONS.map((sign) => {
-                            const Icon = REACTION_ICON[sign];
-                            const mine = tallyOf(marking.index, target, sign).mine;
+                        {quickReactions(session.state).map((emoji) => {
+                            const mine = tallyOf(marking.index, target, reaction(emoji)).mine;
                             return (
                                 <button
-                                    key={sign}
+                                    key={emoji}
                                     type="button"
                                     className={`reaction-choice${mine ? ' mine' : ''}`}
                                     aria-pressed={mine}
-                                    aria-label={r.names[sign]}
-                                    data-tooltip={r.names[sign]}
-                                    disabled={marking.pending.has(pendingKey(target, sign))}
-                                    onClick={() => {
-                                        marking.set(target, sign, !mine);
-                                        setOpen(false);
-                                    }}
+                                    aria-label={emoji}
+                                    disabled={marking.pending.has(pendingKey(target, reaction(emoji))) || !reactionFits(marking.index, target, emoji)}
+                                    onClick={() => toggle(emoji, mine)}
                                 >
-                                    <Icon size={15} aria-hidden />
+                                    <span aria-hidden>{emoji}</span>
                                 </button>
                             );
                         })}
+                        <button
+                            type="button"
+                            className="reaction-choice reaction-other"
+                            aria-expanded={typing}
+                            aria-label={r.other}
+                            data-tooltip={r.other}
+                            onClick={() => setTyping(!typing)}
+                        >
+                            <Plus size={14} aria-hidden />
+                        </button>
                     </div>
+                    {typing && (
+                        <EmojiField
+                            target={target}
+                            onAdd={(emoji) => (tallyOf(marking.index, target, reaction(emoji)).mine ? close() : toggle(emoji, false))}
+                            onClose={() => setTyping(false)}
+                        />
+                    )}
                     {placed.length > 0 && (
                         <ul className="reaction-who">
-                            {placed.map(({ sign, tally }) => {
-                                const Icon = REACTION_ICON[sign];
-                                return (
-                                    <li key={sign}>
-                                        <Icon size={12} aria-label={r.names[sign]} />
-                                        <span>{names(tally, nameOf, tx.chat.listSeparator)}</span>
-                                    </li>
-                                );
-                            })}
+                            {placed.map(({ emoji, tally }) => (
+                                <li key={emoji}>
+                                    <span className="reaction-emoji">{emoji}</span>
+                                    <span>{names(tally, nameOf, tx.chat.listSeparator)}</span>
+                                </li>
+                            ))}
                         </ul>
                     )}
                 </div>
