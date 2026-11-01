@@ -122,6 +122,19 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   six more. The T0 baselines changed only their import lines; their snapshots are byte-identical. Some entries export
   a name only an integration or another package's unit test uses (listed in the T2 report); the session server's
   test no longer asserts the page's listing of participants (web/session/page.test.ts does).
+  *T2 follow-up.* With the amended definition, the tests of one package's own adapter or output that spawn processes
+  or serve localhost moved into the packages: the agent's `dt` shim and runner (`infrastructure/dt-shim.test.ts`),
+  the JWKS verifier and the Identity API against a local stand-in (collaboration's `infrastructure/identity.test.ts`),
+  `tsc` over the generated TypeScript (`test/typecheck/` → modeling's `*.typecheck.test.ts`), and from the integration
+  tests what tests Presentation alone (`dt guide`'s topics, the routes' error answers). The use cases over the
+  workspace's real snapshot stay integration tests: their symbolic-link and external-change cases exercise the
+  workspace's adapter. No entry exports a name only for tests any more: the tests read the diff and the render graphs
+  from what the view service sends (over in-memory ports), a storming's IR from `analyze`, the docs' JSONC with Bun's
+  reader, each session's database through `openSessionDatabase`, and state the comparison's limits as values. Left
+  exported and used only by tests: collaboration's `AccessClaims` and the agent's `AgentApi`, `StreamItem` and
+  `WorkspaceFiles` (types in the signatures of exported adapters and of `startSubscriber`), and presentation's
+  `statusOf` (imported by the T0 baseline `test/session-errors-contract.test.ts`, which is not changed). Unit tests:
+  900 passing and 7 todo in 93 files; integration tests: 352 in 39 files (1252 passing in all, with T3's and T4's).
 - **T3 — the kernel (P2).** `Diagnostic`, `SourceFile`, `Location`, `didYouMean` and the other suggestions into
   `modeling/src/kernel/` (moved to `shared/kernel` in T8). Nothing in the kernel imports Langium.
   **T3 (done).** `core/diagnostics.ts` → `kernel/diagnostics.ts` (`Diagnostic`, `Position`, `Severity`, `RuleId`,
