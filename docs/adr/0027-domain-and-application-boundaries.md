@@ -206,7 +206,7 @@ the module that owns them and are exported as `./protocol`, apart from the publi
 |---|---|---|
 | Connection guards | Host and Origin, the agent API on loopback only | `apps/dt` |
 | Authentication | Access JWT, the dev cookie, the facilitator link | infrastructure verifies; the context's application binds the identity to a participant |
-| Rules of the work | "only the facilitator confirms a revision", "the author or the facilitator dismisses a request" | the context's domain |
+| Rules of the work | "only the facilitator confirms a revision", "only the facilitator closes the session" | the context's domain |
 | Settings of the deployment | sign-in required, the agent's allowed tools | application and apps; the agent's tools are enforced by its adapter |
 
 - Whether a permission is a domain or an application concern depends on the rule: a rule users state about the work,
@@ -216,12 +216,47 @@ the module that owns them and are exported as `./protocol`, apart from the publi
   parameter.
 - *Decided by the maintainer:* **no new syntax.** Rules of the work are written in `.dt` as command parameters and
   `requires` (ADR 0017), for example
-  `command dismiss(dismissedBy: ParticipantId, dismissedByRole: ParticipantRole, dismissedAt: Timestamp) requires authorOrFacilitator { dismissedBy == author or dismissedByRole == ParticipantRole.Facilitator } else NotYourRequest`.
+  `command close(closedByRole: ParticipantRole, closedAt: Timestamp) requires facilitatorCloses { closedByRole == ParticipantRole.Facilitator } else FacilitatorOnly`.
+  (The first example here was `dismiss` with an "author or facilitator" rule; `dismiss` has since been removed — see
+  the amendment below — so a rule over the aggregate's state, `dismissedBy == author`, is now only illustrative.)
   The generated checks and contract tests then guard them. A first-class actor on commands — which would link the
   `.dtes` `actor` (docs/dtes-v0.1.md) to `.dt` commands and could draw who may do what — is reconsidered once
   Collaboration shows the participant/role pair repeating.
 - `apps/dt` answers 401 when no one has signed in and maps domain errors to 403. The route role table may stay as a hint
   for the UI; it is not what makes a request allowed.
+
+#### Amendment: as carried out (T12)
+
+- **`Actor`** (`collaboration/src/application/actor.ts`): `{ kind: 'participant', participant, role, identity? }`,
+  built by `actorOf(identity, facilitatorHolder)` — the facilitator (`FACILITATOR_PARTICIPANT`, `Facilitator`) for the
+  identity that used the facilitator link, otherwise `participantOf(identity)` as a `Participant`. `apps/dt` carries
+  it with the identified participant and passes it to the use cases a person calls (`sendRequest`, `setMark`,
+  `queueRun`, `cancelRun`, `takeRevision`, `confirmRevision`, `restoreRevision`, `closeSession`); the role reaching a
+  command is the actor's.
+- **No agent variant yet.** No use case a person calls is open to the agent; the agent's use cases (claim, heartbeat,
+  start, finish, ask, decline, fail, release) keep authenticating with the token of the lease they claimed. `kind`
+  leaves room for `{ kind: 'agent' }`.
+- **Reads take no `Actor`** (`sessionState`, `compareRevisions`, `targetStatuses`, `previousRuns`,
+  `restoreOperations`, `eventsAfter`, `currentSession`), nor do `startSession` and `joinSession`, which bind
+  identities.
+- **Per operation:**
+
+  | Operation | Where the rule is |
+  |---|---|
+  | queue a run (with an answer or a picked alternative) | domain: `queue` `requires facilitatorQueues … else FacilitatorOnly` |
+  | cancel a run | domain: `cancel` `requires facilitatorCancels` |
+  | confirm a revision | domain: `confirm` `requires facilitatorConfirms` |
+  | restore a revision | domain: `restore` `requires facilitatorRestores`; the use case also refuses first, before the workspace is read |
+  | close the session | domain: `close` `requires facilitatorCloses` |
+  | take a revision by hand | application: `takeRevision` (`take` records the system's snapshots too) |
+  | vote (the facilitator does not) | domain, unchanged: `Mark.place` `requires participantsVote`, role from the actor |
+  | apply a message on sending it | unchanged: the route refuses before the message is sent; `queue`'s rule guards the run |
+  | issue a facilitator link (hand the role over) | unchanged: a security rule, in `apps/dt` with the session's access |
+  | mentions, replies | unchanged: no role rule; membership is the verified types' |
+  | dismiss a request | removed: no route since #23; the command and the use case are gone, the `Dismissed` state and its event stay so that older sessions load and replay |
+
+- The route role table stays and answers first; a domain `FacilitatorOnly` reaching a route is answered with the same
+  status and body (`403 { "error": { "type": "FacilitatorOnly", "message": "Only the facilitator may do this." } }`).
 
 ## Migration
 
@@ -238,8 +273,9 @@ CLI, DSL, HTTP and WebSocket unchanged, and passes typecheck, lint, tests and bu
   `composition` merged into `apps/dt`; `web` into `apps/web`.
 - **P4 — checkers onto the typed model**, one checker at a time; the syntax exception list shrinks to empty. Then
   Modeling's own `.dt`.
-- **Authorization (independent of P1–P4):** `dismiss` and the facilitator-only operations (confirm, restore, close)
-  become `requires` on Collaboration's commands, with `Actor` passed by the use cases.
+- **Authorization (independent of P1–P4):** the facilitator-only operations (queue, cancel, confirm, restore, close)
+  become `requires` on Collaboration's commands, with `Actor` passed by the use cases; `dismiss` is removed (done in
+  T12, see the amendment above).
 - The release with `.dtes` should go out before P3, or wait until after it: P3 moves every path.
 - *Decided by the maintainer:* as for M0, one integration branch and one pull request to `main`. The code map, the
   tasks and how each is checked are in [the plan](../plans/0027-boundaries.md).

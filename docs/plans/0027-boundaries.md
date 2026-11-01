@@ -120,6 +120,12 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   from the session — but the route answers first, with a `message` the domain error lacks; the bodies are pinned by
   `test/session-errors-contract.test.ts`. Facilitator-only routes today: queue and cancel runs, take, confirm and
   restore revisions, issue a facilitator link, close.
+  **T12 (done).** `Actor` in `collaboration/src/application/actor.ts`, built by `actorOf` and passed by `apps/dt` to
+  the use cases a person calls; `queue`, `cancel`, `confirm`, `restore` and `close` take the role and `requires` it
+  (`FacilitatorOnly`); a manual snapshot is checked by `takeRevision`; votes, apply, the facilitator link, mentions and
+  replies are unchanged; `dismiss` and `dismissRequest` are removed (the `Dismissed` state and `RequestDismissed` stay
+  for older sessions). Statuses and bodies unchanged (`test/session-errors-contract.test.ts`,
+  `test/session-authorization.test.ts`). Decisions per operation: ADR 0027, Authorization, amendment.
 - **T8 — the move (P3).** The code map's T8 rows. `modeling` splits into `contexts/modeling`, `contexts/storming`,
   `capabilities/generation`, `capabilities/analysis` and `shared/kernel`; `presentation` and `composition` merge into
   `apps/dt`. Updated with it: `tsconfig.json`, `bunfig.toml` and the root `package.json` workspaces, `scripts/build.ts`,
@@ -177,4 +183,4 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
   the sections #23 added.
 - T2 (from T0): how the tests and `scripts/session-seed*` reach what is not public — through the public surfaces only,
   a test-only export, or relative paths into `packages/`.
-- T12 (from T0): `dismiss` has no route since #23 — give `dismissRequest` the `requires` anyway, or remove it.
+- T12 (from T0): `dismiss` has no route since #23 — *decided by the maintainer:* removed (done in T12).
