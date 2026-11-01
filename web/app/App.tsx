@@ -93,7 +93,7 @@ export function App() {
                 }
                 banners={
                     <>
-                        {connection === 'closed' && <div className="banner banner-error">{t.connectionLost}</div>}
+                        {connection === 'closed' && !session.ended && <div className="banner banner-error">{t.connectionLost}</div>}
                         {current?.baseline.kind === 'git' && current.baseline.error && (
                             <div className="banner">{t.baselineError(current.baseline.ref, current.baseline.error)}</div>
                         )}

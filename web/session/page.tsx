@@ -38,6 +38,8 @@ export interface SessionPage {
     readonly canvasOverlay: ReactNode;
     /** In a session only the facilitator changes the shared baseline (the server answers others 403). */
     readonly baselineLocked: boolean;
+    /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
+    readonly ended: boolean;
 }
 
 export function useSessionPage(input: {
@@ -259,10 +261,11 @@ export function useSessionPage(input: {
         [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
     );
 
-    if (!session) return { conversation: undefined, canvasOverlay: undefined, baselineLocked: false };
+    if (!session) return { conversation: undefined, canvasOverlay: undefined, baselineLocked: false, ended: false };
     const facilitator = session.me.participant.role === 'facilitator';
     return {
         baselineLocked: !facilitator,
+        ended,
         canvasOverlay: (
             <>
                 <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />
