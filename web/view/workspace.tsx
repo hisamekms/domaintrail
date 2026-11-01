@@ -11,6 +11,7 @@ import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
+import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
 import { fitAll, usePointerCursor } from './canvas';
 import { activeFilterCount } from './filters';
@@ -51,6 +52,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     useSelectOnCanvas(editor, nav.select);
     usePointerCursor(editor);
+    useCenterOnResize(editor);
 
     const onMount = useCallback((e: Editor) => {
         e.updateInstanceState({ isReadonly: true });

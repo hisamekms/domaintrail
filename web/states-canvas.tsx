@@ -10,6 +10,7 @@ import { renderGraph, shapeElementId, withWriteAccess } from './render';
 import { shapeUtils } from './shapes';
 import { applyTheme, type Theme } from './theme';
 import { CanvasControls, EdgeHint } from './view/canvas-controls';
+import { useCenterOnResize } from './view/center';
 
 /** Camera of each aggregate's diagram, kept while the page is open (the canvas unmounts with its inspector tab). */
 const cameras = new Map<string, TLCamera>();
@@ -45,6 +46,7 @@ export function StatesCanvas(props: {
     const shown = useRef<string | null>(null);
 
     usePointerCursor(editor);
+    useCenterOnResize(editor);
     useEffect(() => {
         applyTheme(props.theme, editor);
     }, [props.theme, editor]);
