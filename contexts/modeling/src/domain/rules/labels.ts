@@ -1,19 +1,28 @@
-import { AstUtils, type AstNode } from 'langium';
-import { isAggregate, isContext, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Parameter } from '../../infrastructure/syntax/generated/ast.js';
-import type { DiagnosticSink } from '../../infrastructure/syntax/diagnostic-sink.js';
-import { LabelResolver } from '../../infrastructure/syntax/labels.js';
+import type { RuleSink } from '../diagnostics.js';
+import { contextLabel, fieldLabel, termFor } from '../labels.js';
 import {
     commandsOf,
     commonFields,
+    elementsOf,
     fieldsOf,
     includedFields,
     invariantsOf,
+    isShared,
     statesOf,
     variantFields,
-    type FieldLike,
-    type ModelIndex,
-} from '../../infrastructure/syntax/model-index.js';
+    type FieldDecl,
+    type ParamDecl,
+    type Site,
+    type SourceModel,
+    type WithFieldSets,
+} from '../source-model.js';
 import { didYouMean } from '@domaintrail/kernel';
+
+/** A field or parameter with the context it is declared in (its label may come from a term of that context). */
+interface InContext {
+    field: FieldDecl | ParamDecl;
+    context: string;
+}
 
 /**
  * Japanese names (all warnings, except duplicate terms):
@@ -22,20 +31,16 @@ import { didYouMean } from '@domaintrail/kernel';
  *   L002  a term is not used by any field or parameter of its context
  *   L003  two things in the same scope have the same Japanese name
  */
-export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
-    const labels = new LabelResolver(index);
-
-    for (const ctx of index.contextNames) {
-        const fragments = index.fragments.filter((c) => c.name === ctx);
-        const contextLabel = labels.contextLabel(ctx);
+export function checkLabels(model: SourceModel, rules: RuleSink): void {
+    for (const ctx of model.contexts) {
+        const fragments = model.fragments.filter((c) => c.name === ctx);
+        const label = contextLabel(model, ctx);
         for (const f of fragments) {
-            if (f.label && f.label !== contextLabel) {
-                sink.warning(
+            if (f.label && f.label !== label) {
+                rules.warning(
                     'L001',
-                    `Context '${ctx}' is named '${contextLabel}' elsewhere, but '${f.label}' here.`,
-                    f,
-                    'label',
-                    undefined,
+                    `Context '${ctx}' is named '${label}' elsewhere, but '${f.label}' here.`,
+                    f.labelAt,
                     `use one name for the context in every file, or omit it here`,
                 );
             }
@@ -44,122 +49,109 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
         // Terms: duplicates and usage.
         const seen = new Set<string>();
         // Terms of a shared context may be used by fields of any context.
-        const used = new Set(index.isShared(ctx) ? allFields(index).map((f) => f.name) : fieldNamesIn(index, ctx));
-        for (const block of fragments.flatMap((c) => c.terms)) {
-            for (const entry of block.entries) {
-                if (seen.has(entry.name)) {
-                    sink.error('M002', `Term '${entry.name}' is defined more than once in context '${ctx}'.`, entry, 'name');
-                    continue;
-                }
-                seen.add(entry.name);
-                if (!used.has(entry.name)) {
-                    const hint = didYouMean(entry.name, [...used]) ?? `remove the term, or use the name for a field or parameter`;
-                    sink.warning(
-                        'L002',
-                        `Term '${entry.name}' ("${entry.label}") is not used by any field or parameter in context '${ctx}'.`,
-                        entry,
-                        'name',
-                        undefined,
-                        hint,
-                    );
-                }
+        const used = new Set(isShared(model, ctx) ? allFields(model).map((f) => f.field.name) : fieldNamesIn(model, ctx));
+        for (const entry of fragments.flatMap((c) => c.terms)) {
+            if (seen.has(entry.name)) {
+                rules.error('M002', `Term '${entry.name}' is defined more than once in context '${ctx}'.`, entry.nameAt);
+                continue;
+            }
+            seen.add(entry.name);
+            if (!used.has(entry.name)) {
+                const hint = didYouMean(entry.name, [...used]) ?? `remove the term, or use the name for a field or parameter`;
+                rules.warning('L002', `Term '${entry.name}' ("${entry.label}") is not used by any field or parameter in context '${ctx}'.`, entry.nameAt, hint);
             }
         }
 
         // Context-level declarations share one namespace of Japanese names.
         sameLabel(
-            index.elementsOf(ctx).map((e) => ({ node: e, name: e.name, label: e.label })),
+            elementsOf(model, ctx).map((e) => ({ at: e.labelAt, name: e.name, label: e.label })),
             `context '${ctx}'`,
-            sink,
+            rules,
         );
     }
 
-    for (const field of allFields(index)) {
+    for (const { field, context } of allFields(model)) {
         if (!field.label) continue;
-        const ctx = ctxOf(field);
-        const term = ctx ? labels.termFor(ctx, field.name) : undefined;
+        const term = termFor(model, context, field.name);
         if (term && term.label !== field.label) {
-            sink.warning(
+            rules.warning(
                 'L001',
                 `'${field.name}' is named '${field.label}' here, but the term '${field.name}' is '${term.label}'.`,
-                field,
-                'label',
-                undefined,
+                field.labelAt,
                 `remove the label to use the term, or rename the field if it means something else`,
             );
         }
     }
 
     /** `inherited` fields were already checked in their own scope (common fields seen from a state). */
-    const fieldScope = (fields: (FieldLike | Parameter)[], where: string, inherited: (FieldLike | Parameter)[] = []): void =>
+    const fieldScope = (fields: InContext[], where: string, inherited: InContext[] = []): void =>
         sameLabel(
-            [...inherited.map((f) => ({ f, inherited: true })), ...fields.map((f) => ({ f, inherited: false }))].map(({ f, inherited }) => ({
-                node: f,
-                name: f.name,
-                label: labels.fieldLabel(f)?.label,
-                property: f.label ? 'label' : 'name',
-                inherited,
-            })),
+            [...inherited.map((f) => ({ f, inherited: true })), ...fields.map((f) => ({ f, inherited: false }))].map(
+                ({ f: { field, context }, inherited }) => ({
+                    at: field.label ? field.labelAt : field.nameAt,
+                    name: field.name,
+                    label: fieldLabel(model, context, field)?.label,
+                    inherited,
+                }),
+            ),
             where,
-            sink,
+            rules,
         );
 
-    for (const el of index.elements) {
-        if (isEnumDecl(el)) {
+    for (const el of model.elements) {
+        const own = (fields: (FieldDecl | ParamDecl)[]): InContext[] => fields.map((field) => ({ field, context: el.context }));
+        const fromFieldSets = (e: WithFieldSets): InContext[] => includedFields(e).map((x) => ({ field: x.field, context: x.fieldSet.context }));
+        if (el.kind === 'enum') {
             sameLabel(
-                el.values.map((v) => ({ node: v, name: v.name, label: v.label })),
+                el.values.map((v) => ({ at: v.labelAt, name: v.name, label: v.label })),
                 `enum '${el.name}'`,
-                sink,
+                rules,
             );
-        } else if (isUnionDecl(el)) {
+        } else if (el.kind === 'union') {
             sameLabel(
-                el.variants.map((v) => ({ node: v, name: v.name, label: v.label })),
+                el.variants.map((v) => ({ at: v.labelAt, name: v.name, label: v.label })),
                 `union '${el.name}'`,
-                sink,
+                rules,
             );
             for (const v of el.variants) {
-                fieldScope(fieldsOf(v.members), `variant '${el.name}.${v.name}'`);
+                fieldScope(own(fieldsOf(v.members)), `variant '${el.name}.${v.name}'`);
                 sameLabel(
-                    invariantsOf(v.members).map((i) => ({ node: i, name: i.name, label: i.label })),
+                    invariantsOf(v.members).map((i) => ({ at: i.labelAt, name: i.name, label: i.label })),
                     `the invariants of '${el.name}.${v.name}'`,
-                    sink,
+                    rules,
                 );
             }
-        } else if (isAggregate(el)) {
-            const included = includedFields(el).map((x) => x.field);
-            const common = commonFields(el);
+        } else if (el.kind === 'aggregate') {
+            const included = fromFieldSets(el);
+            const common = own(commonFields(el));
             const states = statesOf(el);
             fieldScope(common, `'${el.name}'`, included);
-            for (const s of states) fieldScope(fieldsOf(s.members), `state '${el.name}.${s.name}'`, [...included, ...common]);
+            for (const s of states) fieldScope(own(fieldsOf(s.members)), `state '${el.name}.${s.name}'`, [...included, ...common]);
             sameLabel(
-                states.map((s) => ({ node: s, name: s.name, label: s.label })),
+                states.map((s) => ({ at: s.labelAt, name: s.name, label: s.label })),
                 `the states of '${el.name}'`,
-                sink,
+                rules,
             );
             sameLabel(
-                commandsOf(el).map((c) => ({ node: c, name: c.name, label: c.label })),
+                commandsOf(el).map((c) => ({ at: c.labelAt, name: c.name, label: c.label })),
                 `the commands of '${el.name}'`,
-                sink,
+                rules,
             );
             const invariants = [...invariantsOf(el.members), ...states.flatMap((s) => invariantsOf(s.members))];
             sameLabel(
-                invariants.map((i) => ({ node: i, name: i.name, label: i.label })),
+                invariants.map((i) => ({ at: i.labelAt, name: i.name, label: i.label })),
                 `the invariants of '${el.name}'`,
-                sink,
+                rules,
             );
-            for (const c of commandsOf(el)) fieldScope(c.params, `command '${el.name}.${c.name}'`);
+            for (const c of commandsOf(el)) fieldScope(own(c.params), `command '${el.name}.${c.name}'`);
         } else if ('members' in el) {
             // fields of field sets were checked in the field set
-            fieldScope(
-                fieldsOf(el.members),
-                `'${el.name}'`,
-                includedFields(el).map((x) => x.field),
-            );
-            if (isEntity(el) || isValueObject(el)) {
+            fieldScope(own(fieldsOf(el.members)), `'${el.name}'`, fromFieldSets(el));
+            if (el.kind === 'entity' || el.kind === 'valueObject') {
                 sameLabel(
-                    invariantsOf(el.members).map((i) => ({ node: i, name: i.name, label: i.label })),
+                    invariantsOf(el.members).map((i) => ({ at: i.labelAt, name: i.name, label: i.label })),
                     `the invariants of '${el.name}'`,
-                    sink,
+                    rules,
                 );
             }
         }
@@ -167,15 +159,14 @@ export function checkLabels(index: ModelIndex, sink: DiagnosticSink): void {
 }
 
 interface Labeled {
-    node: AstNode;
+    at: Site;
     name: string;
     label: string | undefined;
-    property?: string;
     inherited?: boolean;
 }
 
 /** L003: different names in one scope must not share a Japanese name. */
-function sameLabel(items: Labeled[], where: string, sink: DiagnosticSink): void {
+function sameLabel(items: Labeled[], where: string, rules: RuleSink): void {
     const byLabel = new Map<string, Labeled>();
     for (const item of items) {
         if (!item.label) continue;
@@ -184,38 +175,30 @@ function sameLabel(items: Labeled[], where: string, sink: DiagnosticSink): void 
             byLabel.set(item.label, item);
         } else if (first.name !== item.name && !(first.inherited && item.inherited)) {
             const hint = `give one of them another Japanese name (with a label, or a term)`;
-            sink.warning(
-                'L003',
-                `'${item.name}' and '${first.name}' are both named '${item.label}' in ${where}.`,
-                item.node,
-                item.property ?? 'label',
-                undefined,
-                hint,
-            );
+            rules.warning('L003', `'${item.name}' and '${first.name}' are both named '${item.label}' in ${where}.`, item.at, hint);
         }
     }
 }
 
-function ctxOf(node: AstNode): string | undefined {
-    return AstUtils.getContainerOfType(node, isContext)?.name;
-}
-
-function allFields(index: ModelIndex): (FieldLike | Parameter)[] {
-    const out: (FieldLike | Parameter)[] = [];
-    for (const el of index.elements) {
-        if (isAggregate(el)) {
-            out.push(...commonFields(el), ...statesOf(el).flatMap((s) => fieldsOf(s.members)), ...commandsOf(el).flatMap((c) => c.params));
-        } else if (isUnionDecl(el)) {
-            out.push(...variantFields(el));
+/** Every field and parameter with its context, in the order of the sources. */
+function allFields(model: SourceModel): InContext[] {
+    const out: InContext[] = [];
+    for (const el of model.elements) {
+        const fields: (FieldDecl | ParamDecl)[] = [];
+        if (el.kind === 'aggregate') {
+            fields.push(...commonFields(el), ...statesOf(el).flatMap((s) => fieldsOf(s.members)), ...commandsOf(el).flatMap((c) => c.params));
+        } else if (el.kind === 'union') {
+            fields.push(...variantFields(el));
         } else if ('members' in el) {
-            out.push(...fieldsOf(el.members));
+            fields.push(...fieldsOf(el.members));
         }
+        out.push(...fields.map((field) => ({ field, context: el.context })));
     }
     return out;
 }
 
-function fieldNamesIn(index: ModelIndex, ctx: string): string[] {
-    return allFields(index)
-        .filter((f) => ctxOf(f) === ctx)
-        .map((f) => f.name);
+function fieldNamesIn(model: SourceModel, ctx: string): string[] {
+    return allFields(model)
+        .filter((f) => f.context === ctx)
+        .map((f) => f.field.name);
 }

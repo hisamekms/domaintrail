@@ -108,12 +108,6 @@ export const MAP: Record<string, Module> = {
         upstream: ['kernel'],
         // the typed model with its dependencies and diff, the stable IDs, Modeling's rule IDs
         published: ['domain/model', 'domain/dependencies', 'domain/usages', 'domain/ids', 'domain/aggregates', 'domain/diff', 'domain/rule-ids'],
-        exceptions: {
-            // T10 (ADR 0027, Modeling: every checker moves onto the typed model): the checkers that still read the AST,
-            // its index and the diagnostic sink from `infrastructure/syntax/` (and Langium), one entry per file; each
-            // checker's task removes its entry
-            syntax: ['domain/rules/labels.ts'],
-        },
     },
     storming: {
         kind: 'context',

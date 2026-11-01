@@ -6,7 +6,6 @@ import { hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
 import type { Site, SourceModel } from './domain/source-model.js';
 import { DiagnosticSink } from './infrastructure/syntax/diagnostic-sink.js';
-import type { ModelIndex } from './infrastructure/syntax/model-index.js';
 import { RuleSink } from './domain/diagnostics.js';
 import { checkChanges, checkCommands, checkFactoryIds } from './domain/rules/commands.js';
 import { checkEventIds } from './domain/rules/events.js';
@@ -68,26 +67,24 @@ export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
     const sink = new DiagnosticSink(a.resolveFile);
     const model = a.sourceModel!;
     const rules = new RuleSink(sink.items);
-    // in the order `analyzeDomain` runs them; the rules still on the AST (until T10 moves them) take its index
-    const ast = (rule: (index: ModelIndex, sink: DiagnosticSink) => void) => (): void => rule(a.index, sink);
-    const written = (rule: (model: SourceModel, rules: RuleSink) => void) => (): void => rule(model, rules);
-    for (const run of [
-        written(checkNames),
-        written(checkShared),
-        written(checkStructure),
-        written(checkUnions),
-        written(checkFieldSets),
-        written(checkVerified),
-        written(checkCommands),
-        written(checkFactoryIds),
-        written(checkChanges),
-        written(checkEventIds),
-        written(checkPayloadNames),
-        written(checkPolicies),
-        written(checkInvariants),
-        ast(checkLabels),
+    // in the order `analyzeDomain` runs them
+    for (const rule of [
+        checkNames,
+        checkShared,
+        checkStructure,
+        checkUnions,
+        checkFieldSets,
+        checkVerified,
+        checkCommands,
+        checkFactoryIds,
+        checkChanges,
+        checkEventIds,
+        checkPayloadNames,
+        checkPolicies,
+        checkInvariants,
+        checkLabels,
     ])
-        run();
+        rule(model, rules);
     return sink.items;
 }
 
