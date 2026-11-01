@@ -252,9 +252,9 @@ const RULES: Record<Rule, RuleText> = {
     'inner-modules': {
         section: 'Layout; Project analysis and configuration',
         statement:
-            "the modules that lie inside a package until T8 (the map's `inner`: Storming, the project analysis) depend in one direction: the package's own code imports none of them, and an inner module imports another only when the map lists it in its `upstream`, never a module of its `never`.",
+            "the modules that lie inside a package until T8 (the map's `inner`: Storming, the project analysis, the generator) depend in one direction: the package's own code imports none of them, and an inner module imports another only when the map lists it in its `upstream`, never a module of its `never`.",
         fix: () =>
-            "turn the dependency around: the downstream module takes what it needs as its input (Storming's analysis takes the typed model), and the project analysis (`analysis/`) runs the analyses and combines them",
+            "turn the dependency around: the downstream module takes what it needs as its input (Storming's analysis takes the typed model, a checker takes a name rule from the kernel), and the project analysis (`analysis/`) runs the analyses and the generation's checks and combines them",
     },
 };
 

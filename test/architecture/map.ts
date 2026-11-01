@@ -129,8 +129,15 @@ export const MAP: Record<string, Module> = {
             // input and does not run Modeling's analysis (T4)
             storming: { becomes: 'contexts/storming', upstream: [], never: ['core/analyze'] },
             // the project analysis runs Modeling's analysis, then Storming's with the model, and the generation's
-            // checks (T4)
-            analysis: { becomes: 'capabilities/analysis', upstream: ['storming'] },
+            // checks (T4, T5)
+            analysis: { becomes: 'capabilities/analysis', upstream: ['storming', 'generator'] },
+            // the TypeScript generator, its section of the configuration (`generator/config.ts`, T6) and its name check
+            // (M011), which the project analysis runs; Modeling's own code (the checkers) does not import it (T5), and
+            // it does not run Modeling's analysis. Until T10
+            // its name check and `naming` read the AST: they take `core/model-index` (the AST index) and
+            // `core/diagnostic-sink` from the package, which an inner module may import; T10 puts them onto the typed
+            // model, and T8 makes generation a capability of its own that imports only Modeling's `.`
+            generator: { becomes: 'capabilities/generation', upstream: [], never: ['core/analyze'] },
         },
     },
     collaboration: {
