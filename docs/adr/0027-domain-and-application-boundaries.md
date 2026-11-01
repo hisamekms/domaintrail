@@ -130,6 +130,35 @@ take visualization's types; it imports none, and the map does not carry that edg
   `test/architecture.test.ts`. It replaces the per-package rules there. *Decided by the maintainer:* a table first;
   it moves to a `.dt` context map (ADR 0006) once the context map can say upstream/downstream and published language.
 
+### Enforcement
+
+What can be stopped by a mechanism is; the architecture test covers the rest; review covers what is about meaning.
+
+| Stage | Mechanism | Stops |
+|---|---|---|
+| Declared dependencies | Bun's isolated linker, each package's `package.json` | imports of undeclared packages, at install and run time |
+| Public surface | `exports` narrowed to `.` and `./protocol` (today `"./*"` exposes every file) | deep imports, at typecheck (`moduleResolution: bundler` follows `exports`) |
+| Architecture test | `test/architecture.test.ts` reading the map | the rest, below |
+| Review | this ADR, pull request review | rules about meaning: a capability holds no domain state; domain rules do not grow in a capability |
+
+The linker alone is not enough: a lookup that misses a package's own `node_modules` walks up to the root's, which
+hold every `@domaintrail/*` package (the note at the top of `test/architecture.test.ts`). The test checks:
+
+- each `package.json` declares exactly the `@domaintrail/*` packages the map allows (derived from the map, not listed
+  again);
+- the rules between kinds in the table above;
+- `exports` lists only `.` and `./protocol`;
+- the layers: `domain/` and `core/` import no I/O, only `apps/` imports another package's `infrastructure/` or
+  `adapters/`;
+- no violation outside the exception list, and **no exception that no longer occurs**, so the list only shrinks.
+
+A failure names the rule, this ADR and the usual fix ("a context may not import a capability; move the domain
+knowledge into the context, or let the capability read the context's published language"), so that an agent can fix
+it without reading the ADR first.
+
+No lint rule (`no-restricted-imports`) and no third-party tool (dependency-cruiser, eslint-plugin-boundaries): both
+would repeat the map, and typecheck plus `bun test` in CI already fail the build.
+
 ### Modeling
 
 - *Decided by the maintainer:* **every checker moves onto the typed model.** The typed model keeps source locations
