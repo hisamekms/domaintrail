@@ -5,8 +5,6 @@
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';
 export { SessionError, type CliDeps } from './cli/ports.js';
-// the topics of `dt guide` in docs/guide.md (the documentation's tests compare the two)
-export { parseGuide } from './cli/guide.js';
 
 // ---- the language server (loaded only by `dt lsp`) -------------------------------------------------------------
 export { startLanguageServer } from './lsp/start.js';
@@ -20,8 +18,8 @@ export { createViewHttpServer } from './http/server.js';
 export { createWebSocketHub, type Connection } from './websocket/hub.js';
 
 // ---- the session's routes, identities, presence and events; the agent API --------------------------------------
-// `statusOf` and `errorAnswer` map the use cases' errors to HTTP (a baseline: test/session-errors-contract.test.ts)
-export { createSessionHttp, errorAnswer, meOf, stateBody, statusOf } from './session/routes.js';
+// `statusOf` maps the use cases' errors to HTTP statuses (the T0 baseline test/session-errors-contract.test.ts pins it)
+export { createSessionHttp, meOf, stateBody, statusOf } from './session/routes.js';
 export { createSessionIdentities } from './session/identities.js';
 export { createPresenceRelay, type SessionConnection } from './session/presence.js';
 export { createEventRelay, lastSeq } from './session/relay.js';

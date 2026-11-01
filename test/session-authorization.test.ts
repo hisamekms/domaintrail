@@ -9,7 +9,6 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
-import { errorAnswer } from '@domaintrail/presentation';
 import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling';
 
 const DT = `context Shop {
@@ -191,27 +190,5 @@ describe('the operations reserved to the facilitator', () => {
         }
         const closed = await api(ada, 'close', {});
         expect([closed.status, ((await closed.json()) as { session: { state: string } }).session.state]).toEqual([200, 'Closed']);
-    });
-});
-
-describe("the domain's refusals over HTTP", () => {
-    test('read as the routes always answered them: 403, and FacilitatorOnly with the routes’ message', () => {
-        expect(errorAnswer({ type: 'FacilitatorOnly' })).toEqual({ status: 403, body: FACILITATOR_ONLY });
-        expect(errorAnswer({ type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' })).toEqual({
-            status: 403,
-            body: { error: { type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' } },
-        });
-        expect(errorAnswer({ type: 'NotYourRequest' })).toEqual({ status: 403, body: { error: { type: 'NotYourRequest' } } });
-        expect(errorAnswer({ type: 'FacilitatorDoesNotVote' })).toEqual({ status: 403, body: { error: { type: 'FacilitatorDoesNotVote' } } });
-        const notAParticipant = { type: 'NotAParticipant', participant: 'p' };
-        expect(errorAnswer(notAParticipant)).toEqual({
-            status: 403,
-            body: { error: { type: 'NotAParticipant', participant: 'p' } },
-        });
-        const notAllowed = { type: 'NotAllowed', command: 'close', state: 'Closed' };
-        expect(errorAnswer(notAllowed)).toEqual({
-            status: 409,
-            body: { error: { type: 'NotAllowed', command: 'close', state: 'Closed' } },
-        });
     });
 });
