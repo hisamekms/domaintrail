@@ -1,5 +1,5 @@
-import { compareDiagnostics, type Diagnostic } from '../core/diagnostics.js';
-import { didYouMean } from '../core/suggest.js';
+import { compareDiagnostics, type Diagnostic } from '../kernel/diagnostics.js';
+import { didYouMean } from '../kernel/suggest.js';
 import {
     declarations,
     esDiagnostic,

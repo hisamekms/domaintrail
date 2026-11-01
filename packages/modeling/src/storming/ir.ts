@@ -7,7 +7,7 @@
  * - the **semantic graph** and the **render graph** (`@domaintrail/visualization/domain/storming/ir`): what the
  *   projection makes of it for the Live View.
  */
-import type { Diagnostic, Position, RuleId, Severity } from '../core/diagnostics.js';
+import type { Diagnostic, Position, RuleId, Severity } from '../kernel/diagnostics.js';
 
 // ---- Storming IR ----
 

@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { Diagnostic } from '../core/diagnostics.js';
+import type { Diagnostic } from '../kernel/diagnostics.js';
 import { esElementId, type Clause, type NodeElement, type NodeElementKind, type SourceRange, type Storming } from './ir.js';
 import { linkStormings, resolveDtRef } from './link.js';
 import type { DomainModel } from '../model/model.js';

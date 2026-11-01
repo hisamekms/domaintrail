@@ -150,7 +150,7 @@ describe('dt guide', () => {
     });
 
     test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
-        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
+        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'kernel', 'diagnostics.ts'), 'utf8');
         const union = /export type RuleId =([^;]*);/.exec(source)![1];
         const rules = [...union.matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
         const examples = blocks('dtes').flatMap((b) => {
@@ -166,7 +166,7 @@ describe('dt guide', () => {
     });
 
     test('its rules table lists every diagnostic code', async () => {
-        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
+        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'kernel', 'diagnostics.ts'), 'utf8');
         const union = /export type RuleId =([^;]*);/.exec(source)![1];
         const codes = [...union.matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]);
         expect(codes.length).toBeGreaterThan(10);

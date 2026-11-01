@@ -1,5 +1,5 @@
 import { isAggregate, isEventDecl, type Policy } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import type { ModelIndex } from '../model-index.js';
 
 /**

@@ -1,6 +1,6 @@
 import type { AstNode } from 'langium';
 import { isAggregate, isEnumDecl, isUnionDecl, type Aggregate } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, commonFields, fieldsOf, invariantsOf, statesOf, type ModelIndex } from '../model-index.js';
 
 /** M002: names are unique within their scope. */

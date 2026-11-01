@@ -1,6 +1,6 @@
 import { isIdType } from '../../language/generated/ast.js';
 import { camel } from '../../generator/naming.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, identityField, includedFields, type ModelIndex } from '../model-index.js';
 
 /**

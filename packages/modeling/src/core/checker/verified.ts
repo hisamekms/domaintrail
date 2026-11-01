@@ -1,5 +1,5 @@
 import { isAggregate, isEntity, isVerifiedDecl, type TypeRef, type VerifiedDecl } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commonFields, fieldsOf, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
 
 /** The type a verified type stands on in the end, past other verified types, as written (`EmailAddress`). */

@@ -1,5 +1,5 @@
-import type { SourceFile } from '../core/analyze.js';
-import { compareDiagnostics } from '../core/diagnostics.js';
+import type { SourceFile } from '../kernel/source.js';
+import { compareDiagnostics } from '../kernel/diagnostics.js';
 import type { DomainModel } from '../model/model.js';
 import type { StormingAnalysis } from './ir.js';
 import { linkStormings } from './link.js';

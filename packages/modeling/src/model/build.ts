@@ -58,6 +58,7 @@ import {
     type ModelIndex,
     type WithFieldSets,
 } from '../core/model-index.js';
+import type { Location } from '../kernel/source.js';
 import { commandId, elementId, stateId } from './ids.js';
 import type {
     CommandModel,
@@ -68,7 +69,6 @@ import type {
     ElementModel,
     FieldModel,
     InvariantModel,
-    Location,
     RequirementModel,
     StateModel,
     TermModel,

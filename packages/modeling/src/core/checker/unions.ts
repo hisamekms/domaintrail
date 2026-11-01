@@ -1,6 +1,6 @@
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { discriminatorOf, fieldsOf, type ModelIndex } from '../model-index.js';
-import { didYouMean } from '../suggest.js';
+import { didYouMean } from '../../kernel/suggest.js';
 
 /**
  * M015: unions.

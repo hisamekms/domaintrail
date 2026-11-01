@@ -2,6 +2,7 @@
  * Typed Model: a resolved, serializable view of the domain model.
  * It is the input of the TypeScript generator and of the Graph IR, and is sent to the Live View.
  */
+import type { Location } from '../kernel/source.js';
 
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
@@ -79,14 +80,6 @@ export type ExprModel =
     | { k: 'unique'; collection: ExprModel; param?: string; keys: ExprModel[] }
     | { k: 'contains'; collection: ExprModel; element: ExprModel }
     | { k: 'quantifier'; quantifier: 'all' | 'any'; collection: ExprModel; param: string; body: ExprModel };
-
-export interface Location {
-    file: string;
-    /** 1-based first line of the declaration. */
-    line: number;
-    /** 1-based last line of the declaration. */
-    endLine: number;
-}
 
 export interface StateModel extends Described {
     id: string;

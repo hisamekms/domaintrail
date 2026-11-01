@@ -14,7 +14,7 @@ import {
     type UnionDecl,
     type ValueObject,
 } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, commonFields, fieldsOf, identityField, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
 import { multiplicityText } from '../types.js';
 

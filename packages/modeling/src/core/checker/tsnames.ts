@@ -1,6 +1,6 @@
 import { isAggregate } from '../../language/generated/ast.js';
 import { EVENT_TAG, RUNTIME_NAMES, TS_RESERVED, aggregateParamName, commandTypeName, generatedNames } from '../../generator/naming.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, includedFields, type ModelIndex } from '../model-index.js';
 
 /** M011: generated TypeScript names do not collide. */

@@ -1,4 +1,5 @@
-import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, Location, PrimitiveName } from '../model/model.js';
+import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PrimitiveName } from '../model/model.js';
+import type { Location } from '../kernel/source.js';
 import { camel, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
 
 /**

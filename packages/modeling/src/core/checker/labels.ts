@@ -1,9 +1,9 @@
 import { AstUtils, type AstNode } from 'langium';
 import { isAggregate, isContext, isEntity, isEnumDecl, isUnionDecl, isValueObject, type Parameter } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { LabelResolver } from '../labels.js';
 import { commandsOf, commonFields, fieldsOf, includedFields, invariantsOf, statesOf, variantFields, type FieldLike, type ModelIndex } from '../model-index.js';
-import { didYouMean } from '../suggest.js';
+import { didYouMean } from '../../kernel/suggest.js';
 
 /**
  * Japanese names (all warnings, except duplicate terms):

@@ -397,11 +397,13 @@ describe('public surface', () => {
                 const reached = foreign(name, imp);
                 if (!reached) return [];
                 if (!SURFACES[MAP[name].kind].includes(reached.entry)) return [{ module: name, key: imp.specifier, where: [imp.file] }];
-                // a context takes only the published language of its upstream contexts, not the rest of their `.`
-                const published = MAP[reached.target].published;
+                // a context takes only the published language of its upstream contexts (and their kernel, which is
+                // shared/kernel's after T8), not the rest of their `.`
+                const { published, kernel } = MAP[reached.target];
                 if (MAP[name].kind !== 'context' || !published) return [];
+                const allowed = (module: string): boolean => published.includes(module) || (kernel !== undefined && module.startsWith(`${kernel}/`));
                 return reachedModules(name, imp)
-                    .filter((m) => !published.includes(m.slice(`@domaintrail/${reached.target}/`.length)))
+                    .filter((m) => !allowed(m.slice(`@domaintrail/${reached.target}/`.length)))
                     .map((m) => ({ module: name, key: m, where: [imp.file] }));
             }),
         );

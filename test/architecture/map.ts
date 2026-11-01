@@ -80,6 +80,12 @@ export interface Module {
      * capabilities; a context importing it violates `public-surface`, keyed by the module it reaches.
      */
     published?: readonly string[];
+    /**
+     * The directory of its sources that holds the shared kernel (ADR 0027, Layout: `shared/kernel/`) until T8 moves it
+     * into a package of its own: `Diagnostic`, `SourceFile`, `Location`, the suggestions. Every package may take what
+     * index.ts exports from it, a context too, as if it came from `shared/kernel` (ADR 0027, Dependency rules).
+     */
+    kernel?: string;
     /** The violations it still has, by rule; the comment of each group names the task that removes it. */
     exceptions?: Partial<Record<Rule, readonly string[]>>;
 }
@@ -93,8 +99,10 @@ export const MAP: Record<string, Module> = {
         dir: 'packages/modeling',
         sources: 'packages/modeling/src',
         upstream: [],
-        // the typed model, diagnostics and suggestions (T3: shared/kernel), Storming's IR (T8: contexts/storming)
-        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'core/diagnostics', 'core/suggest', 'storming/ir'],
+        // the typed model, Storming's IR (T8: contexts/storming)
+        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'storming/ir'],
+        // diagnostics, suggestions, sources and locations (T8: shared/kernel)
+        kernel: 'kernel',
         exceptions: {
             'pure-core-io': [
                 // the configuration: split by owner, and the `realpathSync` check of `session.agent.dt` out of the pure
@@ -141,8 +149,10 @@ export const MAP: Record<string, Module> = {
         sources: 'packages/workspace/src',
         upstream: ['modeling'],
         exceptions: {
-            // the platform knows no context: `SourceFile` goes to the kernel (T3); the configuration's sections are
-            // owned elsewhere and their values (sources, ignored directories, the generated marker) passed in (T6)
+            // the platform knows no context: it still takes the configuration (`DEFAULT_SOURCES`, `IGNORED_DIRS`,
+            // `sourceMatcher`, `resolveConfig`, `staysInside`, ...) and the generator's `GENERATED_MARKER` from
+            // modeling; their owners pass the values in (T6). Its `SourceFile` is the kernel's since T3, which the
+            // platform may take, but the kernel lies inside modeling until T8 makes it shared/kernel
             kinds: ['modeling'],
         },
     },

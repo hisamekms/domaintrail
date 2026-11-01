@@ -1,8 +1,8 @@
 import { isIdType, isReferenceField, type Command, type State } from '../../language/generated/ast.js';
 import { emitApplies } from '../../model/model.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, commonFields, fieldsOf, identityField, includedFields, statesOf, type FieldLike, type ModelIndex } from '../model-index.js';
-import { suggestFrom } from '../suggest.js';
+import { suggestFrom } from '../../kernel/suggest.js';
 import { baseType, multiplicityText, sameType } from '../types.js';
 
 /**

@@ -7,8 +7,8 @@
  * Clauses the validator rejects (a `ref` where none is allowed, a second `ref` or `target`, a relation to the wrong kind)
  * are left to it: the contract warnings only use what is valid.
  */
-import type { Diagnostic } from '../core/diagnostics.js';
-import { didYouMean, type Candidate } from '../core/suggest.js';
+import type { Diagnostic } from '../kernel/diagnostics.js';
+import { didYouMean, type Candidate } from '../kernel/suggest.js';
 import { commandId } from '../model/ids.js';
 import { elementList, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '../model/model.js';
 import { esDiagnostic, esElementId, REF_KINDS, type Clause, type NodeElement, type Storming } from './ir.js';

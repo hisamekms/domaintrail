@@ -1,10 +1,11 @@
 // The public surface of @domaintrail/modeling (the `.` export; ADR 0027, Dependency rules): Modeling's and Storming's
-// published language, then the use cases the apps and capabilities call. Storming is part of this package until T8
-// (contexts/storming), the analysis until T4 (capabilities/analysis), the generator until T8 (capabilities/generation).
+// published language, the kernel, then the use cases the apps and capabilities call. Storming is part of this package
+// until T8 (contexts/storming), the kernel until T8 (shared/kernel), the analysis until T4 (capabilities/analysis), the
+// generator until T8 (capabilities/generation).
 //
-// A downstream context takes only the published language (the sections marked so; `published` in
-// test/architecture/map.ts). The other sections are for the apps and capabilities; what is not Modeling's at all is
-// marked with the task that moves it.
+// A downstream context takes only the published language and the kernel (the sections marked so; `published` and
+// `kernel` in test/architecture/map.ts). The other sections are for the apps and capabilities; what is not Modeling's
+// at all is marked with the task that moves it.
 
 // ---- published language: the typed model ----------------------------------------------------------------------
 export {
@@ -31,7 +32,6 @@ export {
     type ExprModel,
     type FieldModel,
     type InvariantModel,
-    type Location,
     type OutcomePatternModel,
     type PolicyModel,
     type PrimitiveName,
@@ -55,7 +55,7 @@ export {
 export { commandsWithOutcome, fieldSetUsers, fieldUseText, fieldUses, identityOf, type FieldUse, type Named } from './model/usages.js';
 export { elementIdOf } from './model/ids.js';
 
-// ---- published language: diagnostics and suggestions (T3: shared/kernel) ---------------------------------------
+// ---- the kernel: diagnostics, suggestions, sources and locations (T8: shared/kernel) ----------------------------
 export {
     compareDiagnostics,
     formatDiagnostic,
@@ -66,8 +66,9 @@ export {
     type Position,
     type RuleId,
     type Severity,
-} from './core/diagnostics.js';
-export { closest, didYouMean, type Candidate } from './core/suggest.js';
+} from './kernel/diagnostics.js';
+export { closest, didYouMean, type Candidate } from './kernel/suggest.js';
+export { type Location, type SourceFile } from './kernel/source.js';
 
 // ---- published language: Storming's IR (T8: contexts/storming) -------------------------------------------------
 export {
@@ -90,8 +91,8 @@ export {
     type TimelineStep,
 } from './storming/ir.js';
 
-// ---- use cases: the project analysis (T4: capabilities/analysis; `SourceFile` to the kernel in T3) ---------------
-export { analyze, isStormingFile, type Analysis, type SourceFile } from './core/analyze.js';
+// ---- use cases: the project analysis (T4: capabilities/analysis) ------------------------------------------------
+export { analyze, isStormingFile, type Analysis } from './core/analyze.js';
 
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './format/format.js';

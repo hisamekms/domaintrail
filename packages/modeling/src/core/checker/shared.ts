@@ -9,7 +9,7 @@ import {
     isValueObject,
     type ContextElement,
 } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import type { ModelIndex } from '../model-index.js';
 
 const ALLOWED = 'domain primitives, enums, value objects, unions, field sets and terms';

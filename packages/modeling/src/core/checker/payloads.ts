@@ -11,9 +11,9 @@ import {
     type State,
 } from '../../language/generated/ast.js';
 import { emitApplies } from '../../model/model.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commandsOf, commonFields, fieldsOf, identityField, includedFields, type FieldLike, type ModelIndex } from '../model-index.js';
-import { distance } from '../suggest.js';
+import { distance } from '../../kernel/suggest.js';
 import { baseType, cardinality, sameType, type Ty } from '../types.js';
 
 /** At most this many sources of the same type are named in a warning. */

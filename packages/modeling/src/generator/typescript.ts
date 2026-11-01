@@ -7,12 +7,12 @@ import type {
     ElementModel,
     FieldModel,
     InvariantModel,
-    Location,
     OutcomePatternModel,
     PrimitiveName,
     RequirementModel,
     TypeExpr,
 } from '../model/model.js';
+import type { Location } from '../kernel/source.js';
 import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '../model/model.js';
 import { CheckWriter } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';

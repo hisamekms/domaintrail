@@ -38,8 +38,8 @@ import {
 } from '../../language/generated/ast.js';
 import { GrammarUtils, type AstNode } from 'langium';
 import { docComment } from '../labels.js';
-import type { DiagnosticSink } from '../diagnostics.js';
-import { didYouMean, suggestFrom, type Candidate } from '../suggest.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
+import { didYouMean, suggestFrom, type Candidate } from '../../kernel/suggest.js';
 import {
     commandsOf,
     commonFields,

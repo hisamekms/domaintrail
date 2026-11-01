@@ -9,7 +9,7 @@ import {
     isReferenceField,
     isValueObject,
 } from '../../language/generated/ast.js';
-import type { DiagnosticSink } from '../diagnostics.js';
+import type { DiagnosticSink } from '../diagnostic-sink.js';
 import { commonFields, fieldsOf, includedFields, statesOf, type FieldLike, type ModelIndex, type WithFieldSets } from '../model-index.js';
 
 /**
