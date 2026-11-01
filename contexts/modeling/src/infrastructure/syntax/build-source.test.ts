@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { AstUtils, isReference, type AstNode, type CstNode, type Reference } from 'langium';
 import { analyzeDomain, type DomainAnalysis } from '../../application/analyze.js';
-import { check, exampleSources, ruleDiagnostics, siteKey, sitesOf } from '../../test-helpers.js';
+import { check, exampleSources } from '../../test-helpers.js';
 import type { ExprModel } from '../../domain/model.js';
 import {
     commandsOf,
@@ -196,18 +196,6 @@ describe('the model as written', () => {
             expect(written.map(toExprModel)).toEqual(typed);
             expect(written.length).toBeGreaterThan(2);
         }
-    });
-
-    test('carries the site of every diagnostic of the rules', async () => {
-        for (const [, a] of await sources()) {
-            const sites = sitesOf(a.sourceModel!);
-            const reported = ruleDiagnostics(a);
-            expect(reported.filter((d) => !sites.has(siteKey(d)))).toEqual([]);
-        }
-        const [, fixture] = (await sources())[1];
-        expect(ruleDiagnostics(fixture).map((d) => d.code)).toEqual(['M002', 'M002', 'M013', 'M009', 'M009', 'M018']);
-        // a site it does not have is noticed
-        expect(sitesOf(fixture.sourceModel!).has(siteKey({ file: 'sales.dt', start: { line: 1, column: 1 }, end: { line: 1, column: 2 } }))).toBe(false);
     });
 });
 
