@@ -131,9 +131,9 @@ const added = (cart: { id: string }, n: number) => ({ Added: Array.from({ length
 /** A correct implementation; `change` replaces some of its parts. */
 function cart(change: Record<string, unknown> = {}) {
     return {
-        start: decide(Shop.CartShape, (id: string) => ok({ Open: { set: { id, lines: [] }, events: { Opened: { type: 'Opened', cart: id } } } })),
+        start: decide(Shop.CartShape, ({ id }: { id: string }) => ok({ Open: { set: { id, lines: [] }, events: { Opened: { type: 'Opened', cart: id } } } })),
         add: decide(Shop.CartShape, {
-            Open: (c: any, line: any, limit: number) => {
+            Open: (c: any, { line, limit }: any) => {
                 if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Duplicate' });
                 if (!(c.lines.length < limit)) return err({ type: 'Full' });
                 if (forbidden(line.code)) return err({ type: 'Forbidden' });
@@ -207,21 +207,38 @@ describe('generated contract tests', () => {
 
     test('the declared checks passed in are tested like the generated ones', async () => {
         const declared = {
-            Shop: { Code: { reserved: (v: string) => v !== 'AA0' }, AddCart: { allowed: (_c: unknown, line: { code: string }) => !forbidden(line.code) } },
+            Shop: {
+                Code: { reserved: (v: string) => v !== 'AA0' },
+                AddCart: { allowed: (_c: unknown, { line }: { line: { code: string } }) => !forbidden(line.code) },
+            },
         };
         const r = await run(contract({ make: { Code: makeCode }, Cart: cart() }, { declared }));
         expect(failing(r)).toEqual([]);
         expect(todos(r)).toEqual([]);
         // an implementation that ignores `allowed` is now caught
         const lax = cart({
-            add: decide(Shop.CartShape, { Open: (c: any, line: any) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }) }),
+            add: decide(Shop.CartShape, { Open: (c: any, { line }: any) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }) }),
         });
         expect(
             failing(
                 await run(
                     contract(
                         { Cart: lax },
-                        { declared, examples: { Cart: { commands: { add: [[{ state: 'Open', id: 'c', lines: [] }, { code: 'ZZ1', qty: 1 }, 5]] } } } },
+                        {
+                            declared,
+                            examples: {
+                                Cart: {
+                                    commands: {
+                                        add: [
+                                            [
+                                                { state: 'Open', id: 'c', lines: [] },
+                                                { line: { code: 'ZZ1', qty: 1 }, limit: 5 },
+                                            ],
+                                        ],
+                                    },
+                                },
+                            },
+                        },
                     ),
                 ),
             ),
@@ -251,14 +268,14 @@ describe('generated contract tests', () => {
 
     test('T2 catches requirements checked in the wrong order, a missing one, and an error returned although all hold', async () => {
         const name = 'Shop > Cart > Cart.add returns the error of the first requirement that does not hold, and none of their errors when all hold';
-        const add = (body: (c: any, line: any, limit: number) => unknown) => cart({ add: decide(Shop.CartShape, { Open: body }) });
-        const swapped = add((c, line, limit) => {
+        const add = (body: (c: any, params: any) => unknown) => cart({ add: decide(Shop.CartShape, { Open: body }) });
+        const swapped = add((c, { line, limit }) => {
             if (!(c.lines.length < limit)) return err({ type: 'Full' });
             if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Duplicate' });
             return ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } });
         });
         expect((await run(contract({ Cart: swapped })))[name]).toContain("requirement 'fresh' is the first that does not hold: expected Duplicate");
-        const missing = add((c, line) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }));
+        const missing = add((c, { line }) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }));
         expect((await run(contract({ Cart: missing })))[name]).toContain('succeeded, but requirement');
         const strict = add((c) => (c.lines.length > 2 ? err({ type: 'Full' }) : ok({ Open: { set: { lines: c.lines }, events: added(c, 2) } })));
         expect((await run(contract({ Cart: strict })))[name]).toBeDefined();
@@ -276,7 +293,7 @@ describe('generated contract tests', () => {
     test('T4 catches an event count outside bounds the types cannot express', async () => {
         const once = cart({
             add: decide(Shop.CartShape, {
-                Open: (c: any, line: any, limit: number) =>
+                Open: (c: any, { line, limit }: any) =>
                     c.lines.some((l: any) => l.code === line.code)
                         ? err({ type: 'Duplicate' })
                         : c.lines.length >= limit
@@ -293,7 +310,7 @@ describe('generated contract tests', () => {
 
     test('T5 catches randomness and a changed input', async () => {
         const random = cart({
-            start: decide(Shop.CartShape, (id: string) =>
+            start: decide(Shop.CartShape, ({ id }: { id: string }) =>
                 ok({
                     Open: {
                         set: { id, lines: Math.random() < 2 ? [{ code: `A${Math.floor(Math.random() * 1e9)}`, qty: 1 }] : [] },

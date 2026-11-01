@@ -93,7 +93,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!address.ok) return address;
             const available = await makeAvailableEmail(address.value, undefined); // a new customer: no one to leave out
             if (!available.ok) return available;
-            const r = customerCommands.register(idOf(makeCustomerId(providers.newId('customer'))), name, available.value);
+            const r = customerCommands.register({ id: idOf(makeCustomerId(providers.newId('customer'))), name, email: available.value });
             if (!r.ok) return r; // `never` today; kept so that an error added to the DSL is returned, not lost
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(customers, aggregate, undefined, eventList(emitted), cause);
@@ -102,7 +102,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
         async renameCustomer(id: Sales.CustomerId, name: string, cause = request()): Promise<Result<Sales.Customer, AppError>> {
             const loaded = await load(customers, 'Customer', id);
             if (!loaded.ok) return loaded;
-            const r = customerCommands.rename(loaded.value.aggregate, name);
+            const r = customerCommands.rename(loaded.value.aggregate, { name });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(customers, aggregate, loaded.value.meta.version, eventList(emitted), cause);
@@ -119,7 +119,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!loaded.ok) return loaded;
             const available = await makeAvailableEmail(address.value, id); // the customer may keep its own address
             if (!available.ok) return available;
-            const r = customerCommands.changeEmail(loaded.value.aggregate, available.value);
+            const r = customerCommands.changeEmail(loaded.value.aggregate, { email: available.value });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(customers, aggregate, loaded.value.meta.version, eventList(emitted), cause);
@@ -129,7 +129,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
         async placeOrder(customer: Sales.CustomerId, cause = request()): Promise<Result<Sales.DraftOrder, AppError>> {
             const known = await load(customers, 'Customer', customer);
             if (!known.ok) return known;
-            const r = orderCommands.place(idOf(makeOrderId(providers.newId('order'))), customer);
+            const r = orderCommands.place({ id: idOf(makeOrderId(providers.newId('order'))), customer });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(orders, aggregate, undefined, eventList(emitted), cause);
@@ -163,7 +163,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
                 quantity: quantity.value,
                 unitPrice: { amount: amount.value, currency: input.unitPrice.currency },
             };
-            const r = orderCommands.addItem(order, item);
+            const r = orderCommands.addItem(order, { item });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(orders, aggregate, loaded.value.meta.version, eventList(emitted), cause);
@@ -175,7 +175,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!loaded.ok) return loaded;
             const order = loaded.value.aggregate;
             if (order.state !== 'Draft') return notAllowed('confirm', order.state);
-            const r = orderCommands.confirm(order, providers.now());
+            const r = orderCommands.confirm(order, { at: providers.now() });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(orders, aggregate, loaded.value.meta.version, eventList(emitted), cause);
@@ -190,7 +190,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!loaded.ok) return loaded;
             const order = loaded.value.aggregate;
             if (order.state === 'Cancelled') return notAllowed('cancel', order.state);
-            const r = orderCommands.cancel(order, reason);
+            const r = orderCommands.cancel(order, { reason });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(orders, aggregate, loaded.value.meta.version, eventList(emitted), cause);
@@ -201,7 +201,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!loaded.ok) return loaded;
             const order = loaded.value.aggregate;
             if (order.state === 'Cancelled') return notAllowed('changeNote', order.state);
-            const r = orderCommands.changeNote(order, note);
+            const r = orderCommands.changeNote(order, { note });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(orders, aggregate, loaded.value.meta.version, eventList(emitted), cause);
@@ -209,10 +209,11 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
 
         /**
          * Billing: issues an invoice. Run by the policy `BillConfirmedOrder` on `OrderConfirmed`, with the input its
-         * handler computed (the generated `IssueInvoiceInput`: the new ID, the order and the amount).
+         * handler computed (the generated `IssueInvoiceInput`: the new ID, the order and the amount). The input of a
+         * factory is its parameters object as it is.
          */
-        async issueInvoice({ id, order, billedAmount }: Billing.IssueInvoiceInput, cause = request()): Promise<Result<Billing.OpenInvoice, AppError>> {
-            const r = invoiceCommands.issue(id, order, billedAmount);
+        async issueInvoice(input: Billing.IssueInvoiceInput, cause = request()): Promise<Result<Billing.OpenInvoice, AppError>> {
+            const r = invoiceCommands.issue(input);
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(invoices, aggregate, undefined, eventList(emitted), cause);
@@ -223,7 +224,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!loaded.ok) return loaded;
             const invoice = loaded.value.aggregate;
             if (invoice.state !== 'Open') return notAllowed('pay', invoice.state);
-            const r = invoiceCommands.pay(invoice, providers.now());
+            const r = invoiceCommands.pay(invoice, { paidAt: providers.now() });
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(invoices, aggregate, loaded.value.meta.version, eventList(emitted), cause);

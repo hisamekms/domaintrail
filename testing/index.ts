@@ -382,7 +382,7 @@ export interface CommandSpec {
     /** `Order.confirm`. */
     readonly name: string;
     readonly run: (...args: never[]) => unknown;
-    /** The arguments: the aggregate (except for a factory) and the parameters; made when a case runs. */
+    /** The arguments: the aggregate (except for a factory) and the parameters as one object (none without parameters); made when a case runs. */
     readonly input: () => fc.Arbitrary<readonly unknown[]>;
     readonly examples: readonly (readonly unknown[])[];
     readonly factory: boolean;

@@ -157,18 +157,26 @@ export function checkInvoiceCommon(_invoice: InvoiceCommon): readonly never[] {
 }
 
 /**
+ * The parameters of Invoice.issue, by name.
+ * @see billing/invoice.dt:14
+ */
+export interface IssueInvoiceParams {
+    /** 請求書ID */
+    readonly id: InvoiceId;
+    /** 注文ID */
+    readonly order: Sales.OrderId;
+    /** 請求金額 */
+    readonly billedAmount: Common.Money;
+}
+
+/**
  * Invoice.issue (new -> Open) — factory
  * 請求書を発行する
- * @param id 請求書ID
- * @param order 注文ID
- * @param billedAmount 請求金額
  * @emits nothing
  * @see billing/invoice.dt:14
  */
 export type IssueInvoice = (
-    id: InvoiceId,
-    order: Sales.OrderId,
-    billedAmount: Common.Money,
+    params: IssueInvoiceParams,
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenInvoice;
@@ -184,9 +192,7 @@ export type IssueInvoice = (
  * @see billing/invoice.dt:14
  */
 export type IssueInvoiceDecision = (
-    id: InvoiceId,
-    order: Sales.OrderId,
-    billedAmount: Common.Money,
+    params: IssueInvoiceParams,
 ) => Result<{
     readonly Open: {
         readonly set: { readonly id: InvoiceId; readonly order: Sales.OrderId; readonly billedAmount: Common.Money };
@@ -195,16 +201,24 @@ export type IssueInvoiceDecision = (
 }, never>;
 
 /**
+ * The parameters of Invoice.pay, by name.
+ * @see billing/invoice.dt:16
+ */
+export interface PayInvoiceParams {
+    /** 支払日時 */
+    readonly paidAt: Timestamp;
+}
+
+/**
  * Invoice.pay (Open -> Paid)
  * 支払う
- * @param paidAt 支払日時
  * @changes none — the command changes no common field
  * @emits InvoicePaid — exactly once when the command succeeds
  * @see billing/invoice.dt:16
  */
 export type PayInvoice = (
     invoice: OpenInvoice,
-    paidAt: Timestamp,
+    params: PayInvoiceParams,
 ) => Result<{
     readonly Paid: {
         readonly aggregate: PaidInvoice;
@@ -221,7 +235,7 @@ export type PayInvoice = (
  */
 export type PayInvoiceDecision = {
     /** @emits InvoicePaid — exactly once when the command succeeds */
-    readonly Open: (invoice: OpenInvoice, paidAt: Timestamp) => Result<{
+    readonly Open: (invoice: OpenInvoice, params: PayInvoiceParams) => Result<{
         readonly Paid: {
             readonly set: { readonly paidAt: Timestamp };
             readonly events: { readonly InvoicePaid: InvoicePaid };
@@ -495,18 +509,26 @@ export interface Customer {
 export const CustomerShape: Shape = { fields: ['id', 'name', 'email'] };
 
 /**
+ * The parameters of Customer.register, by name.
+ * @see sales/customer.dt:12
+ */
+export interface RegisterCustomerParams {
+    /** 顧客ID */
+    readonly id: CustomerId;
+    /** 氏名 */
+    readonly name: string;
+    /** 未使用のメールアドレス */
+    readonly email: AvailableEmail;
+}
+
+/**
  * Customer.register (new -> Customer) — factory
  * 顧客を登録する
- * @param id 顧客ID
- * @param name 氏名
- * @param email 未使用のメールアドレス
  * @emits CustomerRegistered — exactly once when the command succeeds
  * @see sales/customer.dt:12
  */
 export type RegisterCustomer = (
-    id: CustomerId,
-    name: string,
-    email: AvailableEmail,
+    params: RegisterCustomerParams,
 ) => Result<{
     readonly Customer: {
         readonly aggregate: Customer;
@@ -522,9 +544,7 @@ export type RegisterCustomer = (
  * @see sales/customer.dt:12
  */
 export type RegisterCustomerDecision = (
-    id: CustomerId,
-    name: string,
-    email: AvailableEmail,
+    params: RegisterCustomerParams,
 ) => Result<{
     readonly Customer: {
         readonly set: { readonly id: CustomerId; readonly name: string; readonly email: Common.EmailAddress };
@@ -533,16 +553,24 @@ export type RegisterCustomerDecision = (
 }, never>;
 
 /**
+ * The parameters of Customer.rename, by name.
+ * @see sales/customer.dt:15
+ */
+export interface RenameCustomerParams {
+    /** 氏名 */
+    readonly name: string;
+}
+
+/**
  * Customer.rename
  * 氏名を変更する
- * @param name 氏名
  * @changes name
  * @emits nothing
  * @see sales/customer.dt:15
  */
 export type RenameCustomer = (
     customer: Customer,
-    name: string,
+    params: RenameCustomerParams,
 ) => Result<{
     readonly Customer: {
         readonly aggregate: Customer;
@@ -560,7 +588,7 @@ export type RenameCustomer = (
  */
 export type RenameCustomerDecision = (
     customer: Customer,
-    name: string,
+    params: RenameCustomerParams,
 ) => Result<{
     readonly Customer: {
         readonly set: { readonly name: string };
@@ -569,16 +597,24 @@ export type RenameCustomerDecision = (
 }, never>;
 
 /**
+ * The parameters of Customer.changeEmail, by name.
+ * @see sales/customer.dt:17
+ */
+export interface ChangeEmailCustomerParams {
+    /** 未使用のメールアドレス */
+    readonly email: AvailableEmail;
+}
+
+/**
  * Customer.changeEmail
  * メールアドレスを変更する
- * @param email 未使用のメールアドレス
  * @changes email
  * @emits nothing
  * @see sales/customer.dt:17
  */
 export type ChangeEmailCustomer = (
     customer: Customer,
-    email: AvailableEmail,
+    params: ChangeEmailCustomerParams,
 ) => Result<{
     readonly Customer: {
         readonly aggregate: Customer;
@@ -596,7 +632,7 @@ export type ChangeEmailCustomer = (
  */
 export type ChangeEmailCustomerDecision = (
     customer: Customer,
-    email: AvailableEmail,
+    params: ChangeEmailCustomerParams,
 ) => Result<{
     readonly Customer: {
         readonly set: { readonly email: Common.EmailAddress };
@@ -954,16 +990,24 @@ export function checkOrder(order: Order): readonly ('quantitiesPositive' | 'dist
 }
 
 /**
+ * The parameters of Order.place, by name.
+ * @see sales/order.dt:26
+ */
+export interface PlaceOrderParams {
+    /** 注文ID */
+    readonly id: OrderId;
+    /** 顧客ID */
+    readonly customer: CustomerId;
+}
+
+/**
  * Order.place (new -> Draft) — factory
  * 注文する
- * @param id 注文ID
- * @param customer 顧客ID
  * @emits OrderPlaced — exactly once when the command succeeds
  * @see sales/order.dt:26
  */
 export type PlaceOrder = (
-    id: OrderId,
-    customer: CustomerId,
+    params: PlaceOrderParams,
 ) => Result<{
     readonly Draft: {
         readonly aggregate: DraftOrder;
@@ -979,8 +1023,7 @@ export type PlaceOrder = (
  * @see sales/order.dt:26
  */
 export type PlaceOrderDecision = (
-    id: OrderId,
-    customer: CustomerId,
+    params: PlaceOrderParams,
 ) => Result<{
     readonly Draft: {
         readonly set: { readonly id: OrderId; readonly items: readonly OrderItem[]; readonly customer: CustomerId; readonly note: string | undefined };
@@ -989,9 +1032,17 @@ export type PlaceOrderDecision = (
 }, never>;
 
 /**
+ * The parameters of Order.addItem, by name.
+ * @see sales/order.dt:43
+ */
+export interface AddItemOrderParams {
+    /** 追加する明細 */
+    readonly item: OrderItem;
+}
+
+/**
  * Order.addItem (Draft -> Draft)
  * 明細を追加する
- * @param item 追加する明細
  * @requires newSku (同じ商品コードの明細がない) else DuplicateSku: all(items, i => i.sku != item.sku)
  * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: all(items, i => i.unitPrice.currency == item.unitPrice.currency)
  * @changes items
@@ -1000,7 +1051,7 @@ export type PlaceOrderDecision = (
  */
 export type AddItemOrder = (
     order: DraftOrder,
-    item: OrderItem,
+    params: AddItemOrderParams,
 ) => Result<{
     readonly Draft: {
         readonly aggregate: DraftOrder;
@@ -1019,7 +1070,7 @@ export type AddItemOrder = (
  */
 export type AddItemOrderDecision = {
     /** @emits nothing */
-    readonly Draft: (order: DraftOrder, item: OrderItem) => Result<{
+    readonly Draft: (order: DraftOrder, params: AddItemOrderParams) => Result<{
         readonly Draft: {
             readonly set: { readonly items: readonly OrderItem[] };
             readonly events: NoEvents;
@@ -1031,16 +1082,24 @@ export type AddItemOrderDecision = {
  * The first requirement of Order.addItem that does not hold, in declaration order; \`undefined\` when all hold.
  * @see sales/order.dt:43
  */
-export function checkAddItemOrderRequires(order: DraftOrder, item: OrderItem): 'newSku' | 'sameCurrency' | undefined {
-    if (!(order.items.every((i) => !(i.sku === item.sku)))) return 'newSku';
-    if (!(order.items.every((i) => i.unitPrice.currency === item.unitPrice.currency))) return 'sameCurrency';
+export function checkAddItemOrderRequires(order: DraftOrder, params: AddItemOrderParams): 'newSku' | 'sameCurrency' | undefined {
+    if (!(order.items.every((i) => !(i.sku === params.item.sku)))) return 'newSku';
+    if (!(order.items.every((i) => i.unitPrice.currency === params.item.unitPrice.currency))) return 'sameCurrency';
     return undefined;
+}
+
+/**
+ * The parameters of Order.confirm, by name.
+ * @see sales/order.dt:51
+ */
+export interface ConfirmOrderParams {
+    /** 日時 */
+    readonly at: Timestamp;
 }
 
 /**
  * Order.confirm (Draft -> Confirmed)
  * 注文を確定する
- * @param at 日時
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
@@ -1048,7 +1107,7 @@ export function checkAddItemOrderRequires(order: DraftOrder, item: OrderItem): '
  */
 export type ConfirmOrder = (
     order: DraftOrder,
-    at: Timestamp,
+    params: ConfirmOrderParams,
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
@@ -1066,7 +1125,7 @@ export type ConfirmOrder = (
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
-    readonly Draft: (order: DraftOrder, at: Timestamp) => Result<{
+    readonly Draft: (order: DraftOrder, params: ConfirmOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedAt: Timestamp };
             readonly events: { readonly OrderConfirmed: OrderConfirmed };
@@ -1078,15 +1137,23 @@ export type ConfirmOrderDecision = {
  * The first requirement of Order.confirm that does not hold, in declaration order; \`undefined\` when all hold.
  * @see sales/order.dt:51
  */
-export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'hasItems' | undefined {
+export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrderParams): 'hasItems' | undefined {
     if (!(order.items.length > 0)) return 'hasItems';
     return undefined;
 }
 
 /**
+ * The parameters of Order.cancel, by name.
+ * @see sales/order.dt:56
+ */
+export interface CancelOrderParams {
+    /** 取消理由 */
+    readonly reason: CancelReason;
+}
+
+/**
  * Order.cancel (Draft | Confirmed -> Cancelled)
  * 注文を取り消す
- * @param reason 取消理由
  * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: reason == CancelReason.Other implies exists(note)
  * @changes none — the command changes no common field
  * @emits OrderCancelled — exactly once when the command succeeds
@@ -1095,7 +1162,7 @@ export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'h
  */
 export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
-    reason: CancelReason,
+    params: CancelOrderParams,
 ) => {
     /** @emits OrderCancelled — exactly once when the command succeeds */
     readonly Draft: Result<{
@@ -1127,7 +1194,7 @@ export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
  */
 export type CancelOrderDecision = {
     /** @emits OrderCancelled — exactly once when the command succeeds */
-    readonly Draft: (order: DraftOrder, reason: CancelReason) => Result<{
+    readonly Draft: (order: DraftOrder, params: CancelOrderParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly reason: CancelReason };
             readonly events: { readonly OrderCancelled: OrderCancelled };
@@ -1137,7 +1204,7 @@ export type CancelOrderDecision = {
      * @emits OrderCancelled — exactly once when the command succeeds
      * @emits RefundRequested — exactly once when the command succeeds
      */
-    readonly Confirmed: (order: ConfirmedOrder, reason: CancelReason) => Result<{
+    readonly Confirmed: (order: ConfirmedOrder, params: CancelOrderParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly reason: CancelReason };
             readonly events: { readonly OrderCancelled: OrderCancelled; readonly RefundRequested: RefundRequested };
@@ -1149,9 +1216,18 @@ export type CancelOrderDecision = {
  * The first requirement of Order.cancel that does not hold, in declaration order; \`undefined\` when all hold.
  * @see sales/order.dt:56
  */
-export function checkCancelOrderRequires(order: DraftOrder | ConfirmedOrder, reason: CancelReason): 'noteForOther' | undefined {
-    if (reason === 'Other' && !(order.note !== undefined)) return 'noteForOther';
+export function checkCancelOrderRequires(order: DraftOrder | ConfirmedOrder, params: CancelOrderParams): 'noteForOther' | undefined {
+    if (params.reason === 'Other' && !(order.note !== undefined)) return 'noteForOther';
     return undefined;
+}
+
+/**
+ * The parameters of Order.changeNote, by name.
+ * @see sales/order.dt:66
+ */
+export interface ChangeNoteOrderParams {
+    /** 備考 */
+    readonly note?: string;
 }
 
 /**
@@ -1159,14 +1235,13 @@ export function checkCancelOrderRequires(order: DraftOrder | ConfirmedOrder, rea
  * 備考を変更する
  * 確定後も備考は変更できる。状態は変わらない。
  * 備考が変わらなければイベントは発生しない。
- * @param note 備考
  * @changes note
  * @emits NoteChanged? — at most once when the command succeeds
  * @see sales/order.dt:66
  */
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
-    note: string | undefined,
+    params: ChangeNoteOrderParams,
 ) => {
     /** @emits NoteChanged? — at most once when the command succeeds */
     readonly Draft: Result<{
@@ -1194,14 +1269,14 @@ export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
  */
 export type ChangeNoteOrderDecision = {
     /** @emits NoteChanged? — at most once when the command succeeds */
-    readonly Draft: (order: DraftOrder, note: string | undefined) => Result<{
+    readonly Draft: (order: DraftOrder, params: ChangeNoteOrderParams) => Result<{
         readonly Draft: {
             readonly set: { readonly note: string | undefined };
             readonly events: { readonly NoteChanged?: NoteChanged };
         };
     }, never>;
     /** @emits NoteChanged? — at most once when the command succeeds */
-    readonly Confirmed: (order: ConfirmedOrder, note: string | undefined) => Result<{
+    readonly Confirmed: (order: ConfirmedOrder, params: ChangeNoteOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly note: string | undefined };
             readonly events: { readonly NoteChanged?: NoteChanged };
@@ -1620,7 +1695,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Invoice.issue',
                 run: impl.Invoice.issue,
-                input: () => fc.tuple(a.InvoiceId, SalesArbs().OrderId, CommonArbs().Money),
+                input: () => fc.tuple(fc.record({ id: a.InvoiceId, order: SalesArbs().OrderId, billedAmount: CommonArbs().Money })),
                 examples: options.examples?.Invoice?.commands?.issue ?? [],
                 factory: true,
                 requires: [],
@@ -1632,7 +1707,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Invoice.pay',
                 run: impl.Invoice.pay,
-                input: () => fc.tuple(fc.oneof(a.OpenInvoice), testing.cast<Date>(scalar.Timestamp)),
+                input: () => fc.tuple(fc.oneof(a.OpenInvoice), fc.record({ paidAt: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Invoice?.commands?.pay ?? [],
                 factory: false,
                 requires: [],
@@ -1909,7 +1984,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Customer.register',
                 run: impl.Customer.register,
-                input: () => fc.tuple(a.CustomerId, testing.cast<string>(scalar.String), a.AvailableEmail),
+                input: () => fc.tuple(fc.record({ id: a.CustomerId, name: testing.cast<string>(scalar.String), email: a.AvailableEmail })),
                 examples: options.examples?.Customer?.commands?.register ?? [],
                 factory: true,
                 requires: [],
@@ -1921,7 +1996,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Customer.rename',
                 run: impl.Customer.rename,
-                input: () => fc.tuple(a.Customer, testing.cast<string>(scalar.String)),
+                input: () => fc.tuple(a.Customer, fc.record({ name: testing.cast<string>(scalar.String) })),
                 examples: options.examples?.Customer?.commands?.rename ?? [],
                 factory: false,
                 requires: [],
@@ -1933,7 +2008,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Customer.changeEmail',
                 run: impl.Customer.changeEmail,
-                input: () => fc.tuple(a.Customer, a.AvailableEmail),
+                input: () => fc.tuple(a.Customer, fc.record({ email: a.AvailableEmail })),
                 examples: options.examples?.Customer?.commands?.changeEmail ?? [],
                 factory: false,
                 requires: [],
@@ -1947,7 +2022,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.place',
                 run: impl.Order.place,
-                input: () => fc.tuple(a.OrderId, a.CustomerId),
+                input: () => fc.tuple(fc.record({ id: a.OrderId, customer: a.CustomerId })),
                 examples: options.examples?.Order?.commands?.place ?? [],
                 factory: true,
                 requires: [],
@@ -1960,7 +2035,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.addItem',
                 run: impl.Order.addItem,
-                input: () => fc.tuple(fc.oneof(a.DraftOrder), a.OrderItem),
+                input: () => fc.tuple(fc.oneof(a.DraftOrder), fc.record({ item: a.OrderItem })),
                 examples: options.examples?.Order?.commands?.addItem ?? [],
                 factory: false,
                 requires: [{ name: 'newSku', error: 'DuplicateSku' }, { name: 'sameCurrency', error: 'CurrencyMismatch' }],
@@ -1974,7 +2049,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.confirm',
                 run: impl.Order.confirm,
-                input: () => fc.tuple(fc.oneof(a.DraftOrder), testing.cast<Date>(scalar.Timestamp)),
+                input: () => fc.tuple(fc.oneof(a.DraftOrder), fc.record({ at: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Order?.commands?.confirm ?? [],
                 factory: false,
                 requires: [{ name: 'hasItems', error: 'EmptyOrder' }],
@@ -1988,7 +2063,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.cancel',
                 run: impl.Order.cancel,
-                input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), a.CancelReason),
+                input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), fc.record({ reason: a.CancelReason })),
                 examples: options.examples?.Order?.commands?.cancel ?? [],
                 factory: false,
                 requires: [{ name: 'noteForOther', error: 'NoteRequired' }],
@@ -2002,7 +2077,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.changeNote',
                 run: impl.Order.changeNote,
-                input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), testing.optional(testing.cast<string>(scalar.String))),
+                input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), fc.record({ note: testing.cast<string>(scalar.String) }, { requiredKeys: [] })),
                 examples: options.examples?.Order?.commands?.changeNote ?? [],
                 factory: false,
                 requires: [],

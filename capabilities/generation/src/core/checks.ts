@@ -430,14 +430,17 @@ export function items(compiler: ExprCompiler, invs: readonly InvariantModel[], s
     return invs.map((i) => ({ name: i.name, ...(i.expr ? { violated: compiler.violated(i.expr, scope, [args]) } : { args }), ...(guard && { guard }) }));
 }
 
-/** The requirement scope of a command: the aggregate's fields it sees (from `subject`) and its parameters. */
-export function requirementScope(model: DomainModel, agg: AggregateModel, c: CommandModel, subject: string): Scope {
+/**
+ * The requirement scope of a command: the aggregate's fields it sees (from `subject`) and its parameters, read from the
+ * parameters object `params`.
+ */
+export function requirementScope(model: DomainModel, agg: AggregateModel, c: CommandModel, subject: string, params: string): Scope {
     const states = agg.states;
     const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
     const first = states.find((s) => s.name === sources[0]);
     const fields = c.factory ? [] : [...agg.fields, ...(first?.fields ?? [])];
     const scope = fieldScope(model, subject, fields);
-    for (const p of c.params) scope.set(p.name, { js: p.name, ty: fieldTy(model, p) });
+    for (const p of c.params) scope.set(p.name, { js: `${params}.${p.name}`, ty: fieldTy(model, p) });
     return scope;
 }
 
@@ -768,12 +771,12 @@ export class CheckWriter {
 
     /**
      * The requirements of a command: the first that does not hold, in declaration order (ADR 0020, D2), or `undefined`.
-     * `subject` is the aggregate parameter (absent for a factory), `ps` the command's parameters as in its contract.
+     * `subject` is the aggregate parameter (absent for a factory), `ps` the parameters object (absent without parameters).
      */
-    requires(agg: AggregateModel, c: CommandModel, typeName: string, subject: Param | undefined, ps: Param[]): string[] {
+    requires(agg: AggregateModel, c: CommandModel, typeName: string, subject: Param | undefined, ps: Param | undefined): string[] {
         if (!c.requires.length) return [];
-        const scope = requirementScope(this.env.model, agg, c, subject?.name ?? '');
-        const args = [...(subject ? [subject] : []), ...ps];
+        const scope = requirementScope(this.env.model, agg, c, subject?.name ?? '', ps?.name ?? '');
+        const args = [...(subject ? [subject] : []), ...(ps ? [ps] : [])];
         const names = args.map((a) => a.name);
         const argNames = names.join(', ');
         const declared = hasDeclared(c.requires);

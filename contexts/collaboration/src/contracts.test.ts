@@ -150,8 +150,8 @@ register(
                 Collaboration: {
                     Emoji: { singleEmoji: isNormalEmoji },
                     Revision: declaredChecks.Revision,
-                    TakeRevision: { hashMatchesFiles: (_id, _session, _origin, contentHash, fs) => snapshotHash(fs) === contentHash },
-                    RestoreRevision: { hashMatchesFiles: (_id, _session, _from, _pre, contentHash, fs) => snapshotHash(fs) === contentHash },
+                    TakeRevision: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
+                    RestoreRevision: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
                 },
             },
             arbitraries: {
@@ -167,30 +167,67 @@ register(
             examples: {
                 AgentRun: {
                     commands: {
-                        queue: [[running.id, active, [pending], { requests: [frozen] }, facilitator, 'Facilitator', at]],
-                        finish: [
-                            [running, success, revision, false, undefined, at],
-                            [running, success, knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'), true, reply, at],
-                            [running, { ...success, newDtErrors: tally(1) }, revision, false, reply, at],
+                        queue: [
+                            [
+                                {
+                                    id: running.id,
+                                    session: active,
+                                    requests: [pending],
+                                    input: { requests: [frozen] },
+                                    queuedBy: facilitator,
+                                    queuedByRole: 'Facilitator',
+                                    queuedAt: at,
+                                },
+                            ],
                         ],
-                        askClarification: [[running, value(C.makeText('Which orders?')), asking, revision, at]],
-                        decline: [[running, reply, revision, at]],
+                        finish: [
+                            [running, { report: success, resultRevision: revision, changed: false, finishedAt: at }],
+                            [
+                                running,
+                                {
+                                    report: success,
+                                    resultRevision: knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'),
+                                    changed: true,
+                                    reply,
+                                    finishedAt: at,
+                                },
+                            ],
+                            [running, { report: { ...success, newDtErrors: tally(1) }, resultRevision: revision, changed: false, reply, finishedAt: at }],
+                        ],
+                        askClarification: [
+                            [running, { question: value(C.makeText('Which orders?')), reply: asking, resultRevision: revision, finishedAt: at }],
+                        ],
+                        decline: [[running, { reply, resultRevision: revision, finishedAt: at }]],
                     },
                 },
                 Revision: {
                     commands: {
-                        take: [[revision, session, { kind: 'SessionStart', session }, snapshotHash(files), files, validation, at]],
+                        take: [
+                            [
+                                {
+                                    id: revision,
+                                    session,
+                                    origin: { kind: 'SessionStart', session },
+                                    contentHash: snapshotHash(files),
+                                    files,
+                                    validation,
+                                    takenAt: at,
+                                },
+                            ],
+                        ],
                         restore: [
                             [
-                                knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000006'),
-                                session,
-                                restorable,
-                                revision,
-                                snapshotHash(files),
-                                files,
-                                validation,
-                                'Facilitator',
-                                at,
+                                {
+                                    id: knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000006'),
+                                    session,
+                                    restoredFrom: restorable,
+                                    preRestore: revision,
+                                    contentHash: snapshotHash(files),
+                                    files,
+                                    validation,
+                                    restoredByRole: 'Facilitator',
+                                    takenAt: at,
+                                },
                             ],
                         ],
                     },

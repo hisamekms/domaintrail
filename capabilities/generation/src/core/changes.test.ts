@@ -104,10 +104,10 @@ describe('changes in the generated TypeScript', () => {
         expect(setOf('OpenWorkDecision', '')).toBe(
             '{ readonly updatedAt: Timestamp | undefined; readonly id: WorkId; readonly title: string; readonly note: string | undefined; readonly tags: readonly string[]; readonly draftNo: number }',
         );
-        expect(code).toContain('export type OpenWorkDecision = (\n    id: WorkId,\n    title: string,\n) => Result<{');
+        expect(code).toContain('export type OpenWorkDecision = (\n    params: OpenWorkParams,\n) => Result<{');
         expect(setOf('RecolorTagDecision', '')).toBe('{ readonly color: string }');
         expect(code).toContain(
-            'export type RecolorTagDecision = (\n    tag: Tag,\n    color: string,\n) => Result<{\n    readonly Tag: {\n        readonly set: { readonly color: string };',
+            'export type RecolorTagDecision = (\n    tag: Tag,\n    params: RecolorTagParams,\n) => Result<{\n    readonly Tag: {\n        readonly set: { readonly color: string };',
         );
     });
 

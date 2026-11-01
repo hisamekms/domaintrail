@@ -764,15 +764,29 @@ export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: Ag
 }
 
 /**
+ * The parameters of AgentRun.queue, by name.
+ * @see contexts/collaboration/model/agent-run.dt:228
+ */
+export interface QueueAgentRunParams {
+    /** エージェント実行ID */
+    readonly id: AgentRunId;
+    /** セッション */
+    readonly session: ActiveSession;
+    /** 未処理の依頼 */
+    readonly requests: readonly [PendingRequest, ...PendingRequest[]];
+    /** 実行の入力 */
+    readonly input: RunInput;
+    /** 参加者ID */
+    readonly queuedBy: ParticipantId;
+    /** 役割 */
+    readonly queuedByRole: ParticipantRole;
+    readonly queuedAt: Timestamp;
+}
+
+/**
  * AgentRun.queue (new -> Queued) — factory
  * 実行を登録する
  * 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
- * @param id エージェント実行ID
- * @param session セッション
- * @param requests 未処理の依頼
- * @param input 実行の入力
- * @param queuedBy 参加者ID
- * @param queuedByRole 役割
  * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
@@ -780,13 +794,7 @@ export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: Ag
  * @see contexts/collaboration/model/agent-run.dt:228
  */
 export type QueueAgentRun = (
-    id: AgentRunId,
-    session: ActiveSession,
-    requests: readonly [PendingRequest, ...PendingRequest[]],
-    input: RunInput,
-    queuedBy: ParticipantId,
-    queuedByRole: ParticipantRole,
-    queuedAt: Timestamp,
+    params: QueueAgentRunParams,
 ) => Result<{
     readonly Queued: {
         readonly aggregate: QueuedAgentRun;
@@ -805,13 +813,7 @@ export type QueueAgentRun = (
  * @see contexts/collaboration/model/agent-run.dt:228
  */
 export type QueueAgentRunDecision = (
-    id: AgentRunId,
-    session: ActiveSession,
-    requests: readonly [PendingRequest, ...PendingRequest[]],
-    input: RunInput,
-    queuedBy: ParticipantId,
-    queuedByRole: ParticipantRole,
-    queuedAt: Timestamp,
+    params: QueueAgentRunParams,
 ) => Result<{
     readonly Queued: {
         readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp };
@@ -823,26 +825,34 @@ export type QueueAgentRunDecision = (
  * The first requirement of AgentRun.queue that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:228
  */
-export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSession, requests: readonly [PendingRequest, ...PendingRequest[]], input: RunInput, _queuedBy: ParticipantId, queuedByRole: ParticipantRole, _queuedAt: Timestamp): 'facilitatorQueues' | 'distinctRequests' | 'inputCoversRequests' | undefined {
-    if (!(queuedByRole === 'Facilitator')) return 'facilitatorQueues';
-    if (!(distinct(requests, ($16: RequestId, $17: RequestId) => $16 === $17))) return 'distinctRequests';
-    if (!((input.requests.length === requests.length) && requests.every((r) => input.requests.some((i) => i.request === r)))) return 'inputCoversRequests';
+export function checkQueueAgentRunRequires(params: QueueAgentRunParams): 'facilitatorQueues' | 'distinctRequests' | 'inputCoversRequests' | undefined {
+    if (!(params.queuedByRole === 'Facilitator')) return 'facilitatorQueues';
+    if (!(distinct(params.requests, ($16: RequestId, $17: RequestId) => $16 === $17))) return 'distinctRequests';
+    if (!((params.input.requests.length === params.requests.length) && params.requests.every((r) => params.input.requests.some((i) => i.request === r)))) return 'inputCoversRequests';
     return undefined;
+}
+
+/**
+ * The parameters of AgentRun.start, by name.
+ * @see contexts/collaboration/model/agent-run.dt:240
+ */
+export interface StartAgentRunParams {
+    /** リビジョンID */
+    readonly baseRevision: RevisionId;
+    readonly startedAt: Timestamp;
 }
 
 /**
  * AgentRun.start (Queued -> Running)
  * 実行を始める
  * 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
- * @param baseRevision リビジョンID
  * @changes none — the command changes no common field
  * @emits RunStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:240
  */
 export type StartAgentRun = (
     agentRun: QueuedAgentRun,
-    baseRevision: RevisionId,
-    startedAt: Timestamp,
+    params: StartAgentRunParams,
 ) => Result<{
     readonly Running: {
         readonly aggregate: RunningAgentRun;
@@ -859,7 +869,7 @@ export type StartAgentRun = (
  */
 export type StartAgentRunDecision = {
     /** @emits RunStarted — exactly once when the command succeeds */
-    readonly Queued: (agentRun: QueuedAgentRun, baseRevision: RevisionId, startedAt: Timestamp) => Result<{
+    readonly Queued: (agentRun: QueuedAgentRun, params: StartAgentRunParams) => Result<{
         readonly Running: {
             readonly set: { readonly baseRevision: RevisionId; readonly startedAt: Timestamp };
             readonly events: { readonly RunStarted: RunStarted };
@@ -868,13 +878,25 @@ export type StartAgentRunDecision = {
 };
 
 /**
+ * The parameters of AgentRun.finish, by name.
+ * @see contexts/collaboration/model/agent-run.dt:246
+ */
+export interface FinishAgentRunParams {
+    /** 実行の報告 */
+    readonly report: RunReport;
+    /** リビジョンID */
+    readonly resultRevision: RevisionId;
+    readonly changed: boolean;
+    /** エージェントの返答 */
+    readonly reply?: AgentReply;
+    readonly finishedAt: Timestamp;
+}
+
+/**
  * AgentRun.finish (Running -> Completed | Failed)
  * 実行を終える
  * 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。
  * 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
- * @param report 実行の報告
- * @param resultRevision リビジョンID
- * @param reply エージェントの返答
  * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
  * @requires replyAsksNothing (完了の返答に問いはない) else InvalidReply: exists(reply) implies count(reply.questions) == 0
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
@@ -885,11 +907,7 @@ export type StartAgentRunDecision = {
  */
 export type FinishAgentRun = (
     agentRun: RunningAgentRun,
-    report: RunReport,
-    resultRevision: RevisionId,
-    changed: boolean,
-    reply: AgentReply | undefined,
-    finishedAt: Timestamp,
+    params: FinishAgentRunParams,
 ) => Result<
     | {
           readonly Completed: {
@@ -924,7 +942,7 @@ export type FinishAgentRunDecision = {
      * @emits RunCompleted — exactly once when it ends in Completed
      * @emits RunFailed — exactly once when it ends in Failed
      */
-    readonly Running: (agentRun: RunningAgentRun, report: RunReport, resultRevision: RevisionId, changed: boolean, reply: AgentReply | undefined, finishedAt: Timestamp) => Result<
+    readonly Running: (agentRun: RunningAgentRun, params: FinishAgentRunParams) => Result<
         | {
               readonly Completed: {
                   readonly set: { readonly report: RunReport; readonly resultRevision: RevisionId; readonly changed: boolean; readonly reply: AgentReply | undefined; readonly finishedAt: Timestamp };
@@ -947,19 +965,30 @@ export type FinishAgentRunDecision = {
  * The first requirement of AgentRun.finish that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:246
  */
-export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: RunReport, resultRevision: RevisionId, changed: boolean, reply: AgentReply | undefined, _finishedAt: Timestamp): 'changedMatchesResult' | 'replyAsksNothing' | 'replyAboutInput' | undefined {
-    if (!((!(changed === true) || !(resultRevision === agentRun.baseRevision)) && (!(changed === false) || (resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
-    if (reply !== undefined && !(reply.questions.length === 0)) return 'replyAsksNothing';
-    if (reply !== undefined && !((reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
+export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, params: FinishAgentRunParams): 'changedMatchesResult' | 'replyAsksNothing' | 'replyAboutInput' | undefined {
+    if (!((!(params.changed === true) || !(params.resultRevision === agentRun.baseRevision)) && (!(params.changed === false) || (params.resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
+    if (params.reply !== undefined && !(params.reply.questions.length === 0)) return 'replyAsksNothing';
+    if (params.reply !== undefined && !((params.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && params.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && params.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
     return undefined;
+}
+
+/**
+ * The parameters of AgentRun.askClarification, by name.
+ * @see contexts/collaboration/model/agent-run.dt:260
+ */
+export interface AskClarificationAgentRunParams {
+    /** 文章 */
+    readonly question: Text;
+    /** エージェントの返答 */
+    readonly reply?: AgentReply;
+    /** リビジョンID */
+    readonly resultRevision: RevisionId;
+    readonly finishedAt: Timestamp;
 }
 
 /**
  * AgentRun.askClarification (Running -> NeedsClarification)
  * 確認を求める
- * @param question 文章
- * @param reply エージェントの返答
- * @param resultRevision リビジョンID
  * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: exists(reply) implies count(reply.questions) >= 1
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
@@ -968,10 +997,7 @@ export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: 
  */
 export type AskClarificationAgentRun = (
     agentRun: RunningAgentRun,
-    question: Text,
-    reply: AgentReply | undefined,
-    resultRevision: RevisionId,
-    finishedAt: Timestamp,
+    params: AskClarificationAgentRunParams,
 ) => Result<{
     readonly NeedsClarification: {
         readonly aggregate: NeedsClarificationAgentRun;
@@ -990,7 +1016,7 @@ export type AskClarificationAgentRun = (
  */
 export type AskClarificationAgentRunDecision = {
     /** @emits RunNeedsClarification — exactly once when the command succeeds */
-    readonly Running: (agentRun: RunningAgentRun, question: Text, reply: AgentReply | undefined, resultRevision: RevisionId, finishedAt: Timestamp) => Result<{
+    readonly Running: (agentRun: RunningAgentRun, params: AskClarificationAgentRunParams) => Result<{
         readonly NeedsClarification: {
             readonly set: { readonly question: Text; readonly reply: AgentReply | undefined; readonly resultRevision: RevisionId; readonly finishedAt: Timestamp };
             readonly events: { readonly RunNeedsClarification: RunNeedsClarification };
@@ -1002,18 +1028,28 @@ export type AskClarificationAgentRunDecision = {
  * The first requirement of AgentRun.askClarification that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:260
  */
-export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, _question: Text, reply: AgentReply | undefined, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsks' | 'replyAboutInput' | undefined {
-    if (reply !== undefined && !(reply.questions.length >= 1)) return 'replyAsks';
-    if (reply !== undefined && !((reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
+export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, params: AskClarificationAgentRunParams): 'replyAsks' | 'replyAboutInput' | undefined {
+    if (params.reply !== undefined && !(params.reply.questions.length >= 1)) return 'replyAsks';
+    if (params.reply !== undefined && !((params.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && params.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && params.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
     return undefined;
+}
+
+/**
+ * The parameters of AgentRun.decline, by name.
+ * @see contexts/collaboration/model/agent-run.dt:271
+ */
+export interface DeclineAgentRunParams {
+    /** エージェントの返答 */
+    readonly reply: AgentReply;
+    /** リビジョンID */
+    readonly resultRevision: RevisionId;
+    readonly finishedAt: Timestamp;
 }
 
 /**
  * AgentRun.decline (Running -> Declined)
  * 辞退する
  * エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
- * @param reply エージェントの返答
- * @param resultRevision リビジョンID
  * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: count(reply.questions) == 0
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
@@ -1022,9 +1058,7 @@ export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun,
  */
 export type DeclineAgentRun = (
     agentRun: RunningAgentRun,
-    reply: AgentReply,
-    resultRevision: RevisionId,
-    finishedAt: Timestamp,
+    params: DeclineAgentRunParams,
 ) => Result<{
     readonly Declined: {
         readonly aggregate: DeclinedAgentRun;
@@ -1043,7 +1077,7 @@ export type DeclineAgentRun = (
  */
 export type DeclineAgentRunDecision = {
     /** @emits RunDeclined — exactly once when the command succeeds */
-    readonly Running: (agentRun: RunningAgentRun, reply: AgentReply, resultRevision: RevisionId, finishedAt: Timestamp) => Result<{
+    readonly Running: (agentRun: RunningAgentRun, params: DeclineAgentRunParams) => Result<{
         readonly Declined: {
             readonly set: { readonly reply: AgentReply; readonly resultRevision: RevisionId; readonly finishedAt: Timestamp };
             readonly events: { readonly RunDeclined: RunDeclined };
@@ -1055,17 +1089,26 @@ export type DeclineAgentRunDecision = {
  * The first requirement of AgentRun.decline that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:271
  */
-export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: AgentReply, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsksNothing' | 'replyAboutInput' | undefined {
-    if (!(reply.questions.length === 0)) return 'replyAsksNothing';
-    if (!((reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
+export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, params: DeclineAgentRunParams): 'replyAsksNothing' | 'replyAboutInput' | undefined {
+    if (!(params.reply.questions.length === 0)) return 'replyAsksNothing';
+    if (!((params.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && params.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && params.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) return 'replyAboutInput';
     return undefined;
+}
+
+/**
+ * The parameters of AgentRun.fail, by name.
+ * @see contexts/collaboration/model/agent-run.dt:280
+ */
+export interface FailAgentRunParams {
+    /** 失敗の理由 */
+    readonly reason: FailureReason;
+    readonly finishedAt: Timestamp;
 }
 
 /**
  * AgentRun.fail (Running -> Failed)
  * 実行を失敗にする
  * 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断）。
- * @param reason 失敗の理由
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * @emits RunFailed — exactly once when the command succeeds
@@ -1073,8 +1116,7 @@ export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: A
  */
 export type FailAgentRun = (
     agentRun: RunningAgentRun,
-    reason: FailureReason,
-    finishedAt: Timestamp,
+    params: FailAgentRunParams,
 ) => Result<{
     readonly Failed: {
         readonly aggregate: FailedAgentRun;
@@ -1092,7 +1134,7 @@ export type FailAgentRun = (
  */
 export type FailAgentRunDecision = {
     /** @emits RunFailed — exactly once when the command succeeds */
-    readonly Running: (agentRun: RunningAgentRun, reason: FailureReason, finishedAt: Timestamp) => Result<{
+    readonly Running: (agentRun: RunningAgentRun, params: FailAgentRunParams) => Result<{
         readonly Failed: {
             readonly set: { readonly reason: FailureReason; readonly report: RunReport | undefined; readonly resultRevision: RevisionId | undefined; readonly finishedAt: Timestamp };
             readonly events: { readonly RunFailed: RunFailed };
@@ -1104,17 +1146,27 @@ export type FailAgentRunDecision = {
  * The first requirement of AgentRun.fail that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:280
  */
-export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: FailureReason, _finishedAt: Timestamp): 'abnormal' | undefined {
-    if (!(!(reason === 'RuleNotMet'))) return 'abnormal';
+export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, params: FailAgentRunParams): 'abnormal' | undefined {
+    if (!(!(params.reason === 'RuleNotMet'))) return 'abnormal';
     return undefined;
+}
+
+/**
+ * The parameters of AgentRun.cancel, by name.
+ * @see contexts/collaboration/model/agent-run.dt:286
+ */
+export interface CancelAgentRunParams {
+    /** 参加者ID */
+    readonly cancelledBy: ParticipantId;
+    /** 役割 */
+    readonly cancelledByRole: ParticipantRole;
+    readonly cancelledAt: Timestamp;
 }
 
 /**
  * AgentRun.cancel (Queued | Running -> Cancelled)
  * 実行を取り消す
  * 取り消すのはファシリテーター。
- * @param cancelledBy 参加者ID
- * @param cancelledByRole 役割
  * @requires facilitatorCancels (ファシリテーターが取り消す) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits RunCancelled — exactly once when the command succeeds
@@ -1122,9 +1174,7 @@ export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: Fa
  */
 export type CancelAgentRun = (
     agentRun: QueuedAgentRun | RunningAgentRun,
-    cancelledBy: ParticipantId,
-    cancelledByRole: ParticipantRole,
-    cancelledAt: Timestamp,
+    params: CancelAgentRunParams,
 ) => Result<{
     readonly Cancelled: {
         readonly aggregate: CancelledAgentRun;
@@ -1143,14 +1193,14 @@ export type CancelAgentRun = (
  */
 export type CancelAgentRunDecision = {
     /** @emits RunCancelled — exactly once when the command succeeds */
-    readonly Queued: (agentRun: QueuedAgentRun, cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) => Result<{
+    readonly Queued: (agentRun: QueuedAgentRun, params: CancelAgentRunParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
             readonly events: { readonly RunCancelled: RunCancelled };
         };
     }, FacilitatorOnly>;
     /** @emits RunCancelled — exactly once when the command succeeds */
-    readonly Running: (agentRun: RunningAgentRun, cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) => Result<{
+    readonly Running: (agentRun: RunningAgentRun, params: CancelAgentRunParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
             readonly events: { readonly RunCancelled: RunCancelled };
@@ -1162,8 +1212,8 @@ export type CancelAgentRunDecision = {
  * The first requirement of AgentRun.cancel that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:286
  */
-export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, _cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, _cancelledAt: Timestamp): 'facilitatorCancels' | undefined {
-    if (!(cancelledByRole === 'Facilitator')) return 'facilitatorCancels';
+export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams): 'facilitatorCancels' | undefined {
+    if (!(params.cancelledByRole === 'Facilitator')) return 'facilitatorCancels';
     return undefined;
 }
 
@@ -1992,27 +2042,35 @@ export function checkMark(mark: Mark): readonly 'fitsTarget'[] {
 }
 
 /**
+ * The parameters of Mark.place, by name.
+ * @see contexts/collaboration/model/mark.dt:71
+ */
+export interface PlaceMarkParams {
+    /** 印ID */
+    readonly id: MarkId;
+    /** セッション */
+    readonly session: ActiveSession;
+    /** 参加者 */
+    readonly participant: ParticipantId;
+    /** 役割 */
+    readonly role: ParticipantRole;
+    /** 付け外しできる対象 */
+    readonly target: OpenMarkTarget;
+    /** 印の種類 */
+    readonly sign: MarkSign;
+    readonly placedAt: Timestamp;
+}
+
+/**
  * Mark.place (new -> Placed) — factory
  * 印を付ける
- * @param id 印ID
- * @param session セッション
- * @param participant 参加者
- * @param role 役割
- * @param target 付け外しできる対象
- * @param sign 印の種類
  * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
  * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
  * @emits MarkPlaced — exactly once when the command succeeds
  * @see contexts/collaboration/model/mark.dt:71
  */
 export type PlaceMark = (
-    id: MarkId,
-    session: ActiveSession,
-    participant: ParticipantId,
-    role: ParticipantRole,
-    target: OpenMarkTarget,
-    sign: MarkSign,
-    placedAt: Timestamp,
+    params: PlaceMarkParams,
 ) => Result<{
     readonly Placed: {
         readonly aggregate: PlacedMark;
@@ -2030,13 +2088,7 @@ export type PlaceMark = (
  * @see contexts/collaboration/model/mark.dt:71
  */
 export type PlaceMarkDecision = (
-    id: MarkId,
-    session: ActiveSession,
-    participant: ParticipantId,
-    role: ParticipantRole,
-    target: OpenMarkTarget,
-    sign: MarkSign,
-    placedAt: Timestamp,
+    params: PlaceMarkParams,
 ) => Result<{
     readonly Placed: {
         readonly set: { readonly id: MarkId; readonly session: SessionId; readonly participant: ParticipantId; readonly target: MarkTarget; readonly sign: MarkSign; readonly placedAt: Timestamp };
@@ -2048,25 +2100,33 @@ export type PlaceMarkDecision = (
  * The first requirement of Mark.place that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/mark.dt:71
  */
-export function checkPlaceMarkRequires(_id: MarkId, _session: ActiveSession, _participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, _placedAt: Timestamp): 'fitsTarget' | 'participantsVote' | undefined {
-    if (!((!(sign.kind === 'Vote') || ((target.kind === 'QuestionOption') || (target.kind === 'AssumptionChoice'))) && (!(sign.kind === 'Reaction') || ((target.kind === 'Message') || (target.kind === 'Turn'))))) return 'fitsTarget';
-    if (sign.kind === 'Vote' && !(role === 'Participant')) return 'participantsVote';
+export function checkPlaceMarkRequires(params: PlaceMarkParams): 'fitsTarget' | 'participantsVote' | undefined {
+    if (!((!(params.sign.kind === 'Vote') || ((params.target.kind === 'QuestionOption') || (params.target.kind === 'AssumptionChoice'))) && (!(params.sign.kind === 'Reaction') || ((params.target.kind === 'Message') || (params.target.kind === 'Turn'))))) return 'fitsTarget';
+    if (params.sign.kind === 'Vote' && !(params.role === 'Participant')) return 'participantsVote';
     return undefined;
+}
+
+/**
+ * The parameters of Mark.remove, by name.
+ * @see contexts/collaboration/model/mark.dt:83
+ */
+export interface RemoveMarkParams {
+    /** 付け外しできる対象 */
+    readonly open: OpenMarkTarget;
+    readonly removedAt: Timestamp;
 }
 
 /**
  * Mark.remove (Placed -> Removed)
  * 印を外す
  * 締め切られた票は外せない（対象を付け外しできると確かめてから外す）。
- * @param open 付け外しできる対象
  * @changes none — the command changes no common field
  * @emits MarkRemoved — exactly once when the command succeeds
  * @see contexts/collaboration/model/mark.dt:83
  */
 export type RemoveMark = (
     mark: PlacedMark,
-    open: OpenMarkTarget,
-    removedAt: Timestamp,
+    params: RemoveMarkParams,
 ) => Result<{
     readonly Removed: {
         readonly aggregate: RemovedMark;
@@ -2083,7 +2143,7 @@ export type RemoveMark = (
  */
 export type RemoveMarkDecision = {
     /** @emits MarkRemoved — exactly once when the command succeeds */
-    readonly Placed: (mark: PlacedMark, open: OpenMarkTarget, removedAt: Timestamp) => Result<{
+    readonly Placed: (mark: PlacedMark, params: RemoveMarkParams) => Result<{
         readonly Removed: {
             readonly set: { readonly removedAt: Timestamp };
             readonly events: { readonly MarkRemoved: MarkRemoved };
@@ -2406,15 +2466,30 @@ export function checkRequest(request: Request): readonly ('atMostTwentyTargets' 
 }
 
 /**
+ * The parameters of Request.send, by name.
+ * @see contexts/collaboration/model/request.dt:47
+ */
+export interface SendRequestParams {
+    /** 依頼ID */
+    readonly id: RequestId;
+    /** セッション */
+    readonly session: ActiveSession;
+    /** 参加者ID */
+    readonly author: ParticipantId;
+    /** 依頼時の対象 */
+    readonly targets: readonly TargetSnapshot[];
+    /** 文章 */
+    readonly body: Text;
+    readonly sentAt: Timestamp;
+    /** 返信できる実行 */
+    readonly replyTo?: ReplyableRun;
+    /** 言及できる参加者 */
+    readonly mentions: readonly MentionableParticipant[];
+}
+
+/**
  * Request.send (new -> Sent) — factory
  * 依頼を送る
- * @param id 依頼ID
- * @param session セッション
- * @param author 参加者ID
- * @param targets 依頼時の対象
- * @param body 文章
- * @param replyTo 返信できる実行
- * @param mentions 言及できる参加者
  * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: count(targets) <= 20
  * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: unique(targets, t => t.target)
  * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
@@ -2424,14 +2499,7 @@ export function checkRequest(request: Request): readonly ('atMostTwentyTargets' 
  * @see contexts/collaboration/model/request.dt:47
  */
 export type SendRequest = (
-    id: RequestId,
-    session: ActiveSession,
-    author: ParticipantId,
-    targets: readonly TargetSnapshot[],
-    body: Text,
-    sentAt: Timestamp,
-    replyTo: ReplyableRun | undefined,
-    mentions: readonly MentionableParticipant[],
+    params: SendRequestParams,
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
@@ -2452,14 +2520,7 @@ export type SendRequest = (
  * @see contexts/collaboration/model/request.dt:47
  */
 export type SendRequestDecision = (
-    id: RequestId,
-    session: ActiveSession,
-    author: ParticipantId,
-    targets: readonly TargetSnapshot[],
-    body: Text,
-    sentAt: Timestamp,
-    replyTo: ReplyableRun | undefined,
-    mentions: readonly MentionableParticipant[],
+    params: SendRequestParams,
 ) => Result<{
     readonly Sent: {
         readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: AgentRunId | undefined; readonly mentions: readonly ParticipantId[] };
@@ -2471,12 +2532,12 @@ export type SendRequestDecision = (
  * The first requirement of Request.send that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/request.dt:47
  */
-export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession, _author: ParticipantId, targets: readonly TargetSnapshot[], _body: Text, _sentAt: Timestamp, _replyTo: ReplyableRun | undefined, mentions: readonly MentionableParticipant[]): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | 'atMostTwentyMentions' | 'distinctMentions' | undefined {
-    if (!(targets.length <= 20)) return 'atMostTwentyTargets';
-    if (!(distinct(targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
-    if (!(targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
-    if (!(mentions.length <= 20)) return 'atMostTwentyMentions';
-    if (!(distinct(mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) return 'distinctMentions';
+export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwentyTargets' | 'distinctTargets' | 'noWorkspaceTarget' | 'atMostTwentyMentions' | 'distinctMentions' | undefined {
+    if (!(params.targets.length <= 20)) return 'atMostTwentyTargets';
+    if (!(distinct(params.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
+    if (!(params.targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
+    if (!(params.mentions.length <= 20)) return 'atMostTwentyMentions';
+    if (!(distinct(params.mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) return 'distinctMentions';
     return undefined;
 }
 
@@ -2978,27 +3039,35 @@ export function checkRevisionWith(checks: RevisionDeclaredChecks): (revision: Re
 }
 
 /**
+ * The parameters of Revision.take, by name.
+ * @see contexts/collaboration/model/revision.dt:74
+ */
+export interface TakeRevisionParams {
+    /** リビジョンID */
+    readonly id: RevisionId;
+    /** セッション */
+    readonly session: SessionId;
+    /** リビジョンの由来 */
+    readonly origin: RevisionOrigin;
+    /** 内容ハッシュ */
+    readonly contentHash: ContentHash;
+    /** スナップショットのファイル */
+    readonly files: readonly SnapshotFile[];
+    /** 検証の要約 */
+    readonly validation: ValidationSummary;
+    readonly takenAt: Timestamp;
+}
+
+/**
  * Revision.take (new -> Recorded) — factory
  * スナップショットを取る
- * @param id リビジョンID
- * @param session セッション
- * @param origin リビジョンの由来
- * @param contentHash 内容ハッシュ
- * @param files スナップショットのファイル
- * @param validation 検証の要約
  * @requires notRestored (復元でない) else RestoreNeedsCheck: origin.kind != RevisionOrigin.Restored
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRecorded — exactly once when the command succeeds
  * @see contexts/collaboration/model/revision.dt:74
  */
 export type TakeRevision = (
-    id: RevisionId,
-    session: SessionId,
-    origin: RevisionOrigin,
-    contentHash: ContentHash,
-    files: readonly SnapshotFile[],
-    validation: ValidationSummary,
-    takenAt: Timestamp,
+    params: TakeRevisionParams,
 ) => Result<{
     readonly Recorded: {
         readonly aggregate: RecordedRevision;
@@ -3016,13 +3085,7 @@ export type TakeRevision = (
  * @see contexts/collaboration/model/revision.dt:74
  */
 export type TakeRevisionDecision = (
-    id: RevisionId,
-    session: SessionId,
-    origin: RevisionOrigin,
-    contentHash: ContentHash,
-    files: readonly SnapshotFile[],
-    validation: ValidationSummary,
-    takenAt: Timestamp,
+    params: TakeRevisionParams,
 ) => Result<{
     readonly Recorded: {
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
@@ -3034,18 +3097,42 @@ export type TakeRevisionDecision = (
  * The requirements of Revision.take that the DSL does not express: implement them in your code and pass them to `checkTakeRevisionRequiresWith`.
  * @see contexts/collaboration/model/revision.dt:74
  */
-export type TakeRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => boolean };
+export type TakeRevisionDeclaredRequires = { readonly hashMatchesFiles: (params: TakeRevisionParams) => boolean };
 
 /**
  * The first requirement of Revision.take that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/revision.dt:74
  */
-export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequires): (id: RevisionId, session: SessionId, origin: RevisionOrigin, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => 'notRestored' | 'hashMatchesFiles' | undefined {
-    return (id, session, origin, contentHash, files, validation, takenAt) => {
-        if (!(!(origin.kind === 'Restored'))) return 'notRestored';
-        if (!checks.hashMatchesFiles(id, session, origin, contentHash, files, validation, takenAt)) return 'hashMatchesFiles';
+export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequires): (params: TakeRevisionParams) => 'notRestored' | 'hashMatchesFiles' | undefined {
+    return (params) => {
+        if (!(!(params.origin.kind === 'Restored'))) return 'notRestored';
+        if (!checks.hashMatchesFiles(params)) return 'hashMatchesFiles';
         return undefined;
     };
+}
+
+/**
+ * The parameters of Revision.restore, by name.
+ * @see contexts/collaboration/model/revision.dt:83
+ */
+export interface RestoreRevisionParams {
+    /** リビジョンID */
+    readonly id: RevisionId;
+    /** セッション */
+    readonly session: SessionId;
+    /** 復元元 */
+    readonly restoredFrom: RestorableRevision;
+    /** 復元前のリビジョン */
+    readonly preRestore: RevisionId;
+    /** 内容ハッシュ */
+    readonly contentHash: ContentHash;
+    /** スナップショットのファイル */
+    readonly files: readonly SnapshotFile[];
+    /** 検証の要約 */
+    readonly validation: ValidationSummary;
+    /** 役割 */
+    readonly restoredByRole: ParticipantRole;
+    readonly takenAt: Timestamp;
 }
 
 /**
@@ -3053,29 +3140,13 @@ export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequir
  * リビジョンを復元する
  * 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
  * 復元するのはファシリテーター。
- * @param id リビジョンID
- * @param session セッション
- * @param restoredFrom 復元元
- * @param preRestore 復元前のリビジョン
- * @param contentHash 内容ハッシュ
- * @param files スナップショットのファイル
- * @param validation 検証の要約
- * @param restoredByRole 役割
  * @requires facilitatorRestores (ファシリテーターが復元する) else FacilitatorOnly: restoredByRole == ParticipantRole.Facilitator
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRestored — exactly once when the command succeeds
  * @see contexts/collaboration/model/revision.dt:83
  */
 export type RestoreRevision = (
-    id: RevisionId,
-    session: SessionId,
-    restoredFrom: RestorableRevision,
-    preRestore: RevisionId,
-    contentHash: ContentHash,
-    files: readonly SnapshotFile[],
-    validation: ValidationSummary,
-    restoredByRole: ParticipantRole,
-    takenAt: Timestamp,
+    params: RestoreRevisionParams,
 ) => Result<{
     readonly Recorded: {
         readonly aggregate: RecordedRevision;
@@ -3093,15 +3164,7 @@ export type RestoreRevision = (
  * @see contexts/collaboration/model/revision.dt:83
  */
 export type RestoreRevisionDecision = (
-    id: RevisionId,
-    session: SessionId,
-    restoredFrom: RestorableRevision,
-    preRestore: RevisionId,
-    contentHash: ContentHash,
-    files: readonly SnapshotFile[],
-    validation: ValidationSummary,
-    restoredByRole: ParticipantRole,
-    takenAt: Timestamp,
+    params: RestoreRevisionParams,
 ) => Result<{
     readonly Recorded: {
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
@@ -3113,26 +3176,36 @@ export type RestoreRevisionDecision = (
  * The requirements of Revision.restore that the DSL does not express: implement them in your code and pass them to `checkRestoreRevisionRequiresWith`.
  * @see contexts/collaboration/model/revision.dt:83
  */
-export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, restoredByRole: ParticipantRole, takenAt: Timestamp) => boolean };
+export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (params: RestoreRevisionParams) => boolean };
 
 /**
  * The first requirement of Revision.restore that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/revision.dt:83
  */
-export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, restoredByRole: ParticipantRole, takenAt: Timestamp) => 'facilitatorRestores' | 'hashMatchesFiles' | undefined {
-    return (id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt) => {
-        if (!(restoredByRole === 'Facilitator')) return 'facilitatorRestores';
-        if (!checks.hashMatchesFiles(id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt)) return 'hashMatchesFiles';
+export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (params: RestoreRevisionParams) => 'facilitatorRestores' | 'hashMatchesFiles' | undefined {
+    return (params) => {
+        if (!(params.restoredByRole === 'Facilitator')) return 'facilitatorRestores';
+        if (!checks.hashMatchesFiles(params)) return 'hashMatchesFiles';
         return undefined;
     };
+}
+
+/**
+ * The parameters of Revision.confirm, by name.
+ * @see contexts/collaboration/model/revision.dt:93
+ */
+export interface ConfirmRevisionParams {
+    /** 参加者ID */
+    readonly confirmedBy: ParticipantId;
+    /** 役割 */
+    readonly confirmedByRole: ParticipantRole;
+    readonly confirmedAt: Timestamp;
 }
 
 /**
  * Revision.confirm (Recorded -> Confirmed)
  * リビジョンを確認済みにする
  * 確認済みにするのはファシリテーター。
- * @param confirmedBy 参加者ID
- * @param confirmedByRole 役割
  * @requires facilitatorConfirms (ファシリテーターが確認する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits RevisionConfirmed — exactly once when the command succeeds
@@ -3140,9 +3213,7 @@ export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclared
  */
 export type ConfirmRevision = (
     revision: RecordedRevision,
-    confirmedBy: ParticipantId,
-    confirmedByRole: ParticipantRole,
-    confirmedAt: Timestamp,
+    params: ConfirmRevisionParams,
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedRevision;
@@ -3160,7 +3231,7 @@ export type ConfirmRevision = (
  */
 export type ConfirmRevisionDecision = {
     /** @emits RevisionConfirmed — exactly once when the command succeeds */
-    readonly Recorded: (revision: RecordedRevision, confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, confirmedAt: Timestamp) => Result<{
+    readonly Recorded: (revision: RecordedRevision, params: ConfirmRevisionParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedBy: ParticipantId; readonly confirmedAt: Timestamp };
             readonly events: { readonly RevisionConfirmed: RevisionConfirmed };
@@ -3172,8 +3243,8 @@ export type ConfirmRevisionDecision = {
  * The first requirement of Revision.confirm that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/revision.dt:93
  */
-export function checkConfirmRevisionRequires(_revision: RecordedRevision, _confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, _confirmedAt: Timestamp): 'facilitatorConfirms' | undefined {
-    if (!(confirmedByRole === 'Facilitator')) return 'facilitatorConfirms';
+export function checkConfirmRevisionRequires(_revision: RecordedRevision, params: ConfirmRevisionParams): 'facilitatorConfirms' | undefined {
+    if (!(params.confirmedByRole === 'Facilitator')) return 'facilitatorConfirms';
     return undefined;
 }
 
@@ -3580,19 +3651,27 @@ export function checkSession(session: Session): readonly ('distinctParticipants'
 }
 
 /**
+ * The parameters of Session.start, by name.
+ * @see contexts/collaboration/model/session.dt:37
+ */
+export interface StartSessionParams {
+    /** セッションID */
+    readonly id: SessionId;
+    /** ファシリテーター */
+    readonly facilitator: ParticipantId;
+    /** 表示名 */
+    readonly name: DisplayName;
+    readonly startedAt: Timestamp;
+}
+
+/**
  * Session.start (new -> Open) — factory
  * セッションを始める
- * @param id セッションID
- * @param facilitator ファシリテーター
- * @param name 表示名
  * @emits SessionStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/session.dt:37
  */
 export type StartSession = (
-    id: SessionId,
-    facilitator: ParticipantId,
-    name: DisplayName,
-    startedAt: Timestamp,
+    params: StartSessionParams,
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenSession;
@@ -3608,10 +3687,7 @@ export type StartSession = (
  * @see contexts/collaboration/model/session.dt:37
  */
 export type StartSessionDecision = (
-    id: SessionId,
-    facilitator: ParticipantId,
-    name: DisplayName,
-    startedAt: Timestamp,
+    params: StartSessionParams,
 ) => Result<{
     readonly Open: {
         readonly set: { readonly id: SessionId; readonly facilitator: ParticipantId; readonly participants: readonly [Participant, ...Participant[]]; readonly startedAt: Timestamp };
@@ -3620,11 +3696,21 @@ export type StartSessionDecision = (
 }, never>;
 
 /**
+ * The parameters of Session.join, by name.
+ * @see contexts/collaboration/model/session.dt:42
+ */
+export interface JoinSessionParams {
+    /** 参加者 */
+    readonly participant: ParticipantId;
+    /** 表示名 */
+    readonly name: DisplayName;
+    readonly joinedAt: Timestamp;
+}
+
+/**
  * Session.join (Open -> Open)
  * 参加する
  * 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。
- * @param participant 参加者
- * @param name 表示名
  * @requires newcomer (まだ参加していない) else AlreadyJoined: all(participants, p => p.id != participant)
  * @changes participants
  * @emits ParticipantJoined — exactly once when the command succeeds
@@ -3632,9 +3718,7 @@ export type StartSessionDecision = (
  */
 export type JoinSession = (
     session: OpenSession,
-    participant: ParticipantId,
-    name: DisplayName,
-    joinedAt: Timestamp,
+    params: JoinSessionParams,
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenSession;
@@ -3652,7 +3736,7 @@ export type JoinSession = (
  */
 export type JoinSessionDecision = {
     /** @emits ParticipantJoined — exactly once when the command succeeds */
-    readonly Open: (session: OpenSession, participant: ParticipantId, name: DisplayName, joinedAt: Timestamp) => Result<{
+    readonly Open: (session: OpenSession, params: JoinSessionParams) => Result<{
         readonly Open: {
             readonly set: { readonly participants: readonly [Participant, ...Participant[]] };
             readonly events: { readonly ParticipantJoined: ParticipantJoined };
@@ -3664,16 +3748,25 @@ export type JoinSessionDecision = {
  * The first requirement of Session.join that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/session.dt:42
  */
-export function checkJoinSessionRequires(session: OpenSession, participant: ParticipantId, _name: DisplayName, _joinedAt: Timestamp): 'newcomer' | undefined {
-    if (!(session.participants.every((p) => !(p.id === participant)))) return 'newcomer';
+export function checkJoinSessionRequires(session: OpenSession, params: JoinSessionParams): 'newcomer' | undefined {
+    if (!(session.participants.every((p) => !(p.id === params.participant)))) return 'newcomer';
     return undefined;
+}
+
+/**
+ * The parameters of Session.close, by name.
+ * @see contexts/collaboration/model/session.dt:49
+ */
+export interface CloseSessionParams {
+    /** 役割 */
+    readonly closedByRole: ParticipantRole;
+    readonly closedAt: Timestamp;
 }
 
 /**
  * Session.close (Open -> Closed)
  * セッションを終える
  * セッションを終えるのはファシリテーター。
- * @param closedByRole 役割
  * @requires facilitatorCloses (ファシリテーターが終える) else FacilitatorOnly: closedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits SessionClosed — exactly once when the command succeeds
@@ -3681,8 +3774,7 @@ export function checkJoinSessionRequires(session: OpenSession, participant: Part
  */
 export type CloseSession = (
     session: OpenSession,
-    closedByRole: ParticipantRole,
-    closedAt: Timestamp,
+    params: CloseSessionParams,
 ) => Result<{
     readonly Closed: {
         readonly aggregate: ClosedSession;
@@ -3700,7 +3792,7 @@ export type CloseSession = (
  */
 export type CloseSessionDecision = {
     /** @emits SessionClosed — exactly once when the command succeeds */
-    readonly Open: (session: OpenSession, closedByRole: ParticipantRole, closedAt: Timestamp) => Result<{
+    readonly Open: (session: OpenSession, params: CloseSessionParams) => Result<{
         readonly Closed: {
             readonly set: { readonly closedAt: Timestamp };
             readonly events: { readonly SessionClosed: SessionClosed };
@@ -3712,8 +3804,8 @@ export type CloseSessionDecision = {
  * The first requirement of Session.close that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/session.dt:49
  */
-export function checkCloseSessionRequires(_session: OpenSession, closedByRole: ParticipantRole, _closedAt: Timestamp): 'facilitatorCloses' | undefined {
-    if (!(closedByRole === 'Facilitator')) return 'facilitatorCloses';
+export function checkCloseSessionRequires(_session: OpenSession, params: CloseSessionParams): 'facilitatorCloses' | undefined {
+    if (!(params.closedByRole === 'Facilitator')) return 'facilitatorCloses';
     return undefined;
 }
 

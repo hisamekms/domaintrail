@@ -203,15 +203,22 @@ describe('the rules of marks', () => {
             question: value(C.makeReplyKey('q1')),
             option: value(C.makeReplyKey('a')),
         };
-        expect(error(markCommands.place(id, session, who, 'Facilitator', open(target), VOTE, at))).toEqual({ type: 'FacilitatorDoesNotVote' });
-        expect(error(markCommands.place(id, session, who, 'Participant', open(target), react('❤️'), at))).toEqual({ type: 'MarkNotForTarget' });
-        const placed = value(markCommands.place(id, session, who, 'Participant', open(target), VOTE, at)).Placed;
+        expect(error(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: open(target), sign: VOTE, placedAt: at }))).toEqual({
+            type: 'FacilitatorDoesNotVote',
+        });
+        expect(
+            error(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: react('❤️'), placedAt: at })),
+        ).toEqual({ type: 'MarkNotForTarget' });
+        const placed = value(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: VOTE, placedAt: at })).Placed;
         expect(placed.aggregate).toMatchObject({ state: 'Placed', sign: VOTE, target });
         expect(placed.events.MarkPlaced).toMatchObject({ type: 'MarkPlaced', markId: id, participant: who });
-        const removed = value(markCommands.remove(placed.aggregate, open(target), at)).Removed;
+        const removed = value(markCommands.remove(placed.aggregate, { open: open(target), removedAt: at })).Removed;
         expect(removed.aggregate).toMatchObject({ state: 'Removed', removedAt: at });
         // the facilitator reacts like anyone
         const turn = open({ kind: 'Turn', run: target.run });
-        expect(value(markCommands.place(id, session, who, 'Facilitator', turn, react('👍'), at)).Placed.aggregate.sign).toEqual(react('👍'));
+        expect(
+            value(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: turn, sign: react('👍'), placedAt: at })).Placed.aggregate
+                .sign,
+        ).toEqual(react('👍'));
     });
 });

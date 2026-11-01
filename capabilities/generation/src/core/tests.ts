@@ -477,7 +477,8 @@ class TestsEmitter {
         const states = agg.states;
         const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
         const subject = c.factory ? [] : [states.length ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})` : `a.${agg.name}`];
-        const input = `fc.tuple(${[...subject, ...c.params.map((p) => this.fieldArb(p, true))].join(', ')})`;
+        // the parameters as one record, an optional one left out or given (none without parameters)
+        const input = `fc.tuple(${[...subject, ...(c.params.length ? [this.record([], c.params)] : [])].join(', ')})`;
         const t = commandTypeName(agg, c);
         const declaredReqs = c.requires.filter((r) => !r.expr).map((r) => `'${r.name}'`);
         const invs = aggregateInvariants(agg);

@@ -460,7 +460,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
 
     /** Records a captured snapshot as a new revision (take). */
     const record = (stores: Stores, session: SessionId, origin: Collaboration.RevisionOrigin, captured: Captured, at: Date): Collaboration.RecordedRevision => {
-        const taken = revisionCommands.take(knownRevisionId(ids.newId()), session, origin, captured.contentHash, captured.files, captured.validation, at);
+        const taken = revisionCommands.take({
+            id: knownRevisionId(ids.newId()),
+            session,
+            origin,
+            contentHash: captured.contentHash,
+            files: captured.files,
+            validation: captured.validation,
+            takenAt: at,
+        });
         // the hash is computed from the files, and the origins taken here are never Restored
         if (!taken.ok) throw new Error(`Taking a revision failed: ${taken.error.type}`);
         stores.revisions.save(taken.value.Recorded.aggregate);
@@ -557,7 +565,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             return uow.transaction((stores) => {
                 const at = clock.now();
                 const id = knownSessionId(ids.newId());
-                const { Open } = decided(sessionCommands.start(id, facilitator, name, at));
+                const { Open } = decided(sessionCommands.start({ id, facilitator, name, startedAt: at }));
                 stores.sessions.save(Open.aggregate);
                 publish(stores, id, Open.events, at);
                 const revision = record(stores, id, { kind: 'SessionStart', session: id }, captured.value, at);
@@ -572,7 +580,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const open = stores.sessions.load(session);
                 if (open?.state !== 'Open') throw new Error(`Session ${session} is no longer open`);
                 const at = clock.now();
-                const joined = sessionCommands.join(open, participant, name, at);
+                const joined = sessionCommands.join(open, { participant, name, joinedAt: at });
                 if (!joined.ok) return ok({ session: open, joined: false });
                 stores.sessions.save(joined.value.Open.aggregate);
                 publish(stores, session, joined.value.Open.events, at);
@@ -586,7 +594,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (!found) return err(notFound('Session', session));
                 if (found.state !== 'Open') return err(notAllowed('close', found.state));
                 const at = clock.now();
-                const closed = sessionCommands.close(found, actor.role, at);
+                const closed = sessionCommands.close(found, { closedByRole: actor.role, closedAt: at });
                 if (!closed.ok) return closed;
                 const { Closed } = closed.value;
                 stores.sessions.save(Closed.aggregate);
@@ -619,7 +627,16 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     mentioned.push(p.value);
                 }
                 const at = clock.now();
-                const sent = requestCommands.send(knownRequestId(ids.newId()), active.value, author, targets, body, at, replyable, mentioned);
+                const sent = requestCommands.send({
+                    id: knownRequestId(ids.newId()),
+                    session: active.value,
+                    author,
+                    targets,
+                    body,
+                    sentAt: at,
+                    replyTo: replyable,
+                    mentions: mentioned,
+                });
                 if (!sent.ok) return sent;
                 const { Sent } = sent.value;
                 stores.requests.save(Sent.aggregate);
@@ -652,7 +669,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     )
                         return err({ type: 'ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
                     // decided before anything is removed: a refused mark changes nothing
-                    const decided = markCommands.place(knownMarkId(ids.newId()), active.value, participant, role, open.value, sign, at);
+                    const decided = markCommands.place({
+                        id: knownMarkId(ids.newId()),
+                        session: active.value,
+                        participant,
+                        role,
+                        target: open.value,
+                        sign,
+                        placedAt: at,
+                    });
                     if (!decided.ok) return decided;
                     made = decided.value.Placed.aggregate;
                     events.push(decided.value.Placed.events.MarkPlaced);
@@ -662,7 +687,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     // the votes moved from are in the same run's question or assumption: open as the target is
                     const off = await verify.makeOpenMarkTarget(mark.target, session);
                     if (!off.ok) return off;
-                    const { Removed } = decided(markCommands.remove(mark, off.value, at));
+                    const { Removed } = decided(markCommands.remove(mark, { open: off.value, removedAt: at }));
                     stores.marks.save(Removed.aggregate);
                     removed.push(Removed.aggregate);
                     events.unshift(Removed.events.MarkRemoved);
@@ -711,15 +736,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const input = nonEmpty(frozen);
                 if (!bundled || !input) return err({ type: 'NoRequests' });
                 const at = clock.now();
-                const queued = agentRunCommands.queue(
-                    knownAgentRunId(ids.newId()),
-                    active.value,
-                    bundled,
-                    { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }), ...(picked && { pick: picked }) },
-                    actor.participant,
-                    actor.role,
-                    at,
-                );
+                const queued = agentRunCommands.queue({
+                    id: knownAgentRunId(ids.newId()),
+                    session: active.value,
+                    requests: bundled,
+                    input: { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }), ...(picked && { pick: picked }) },
+                    queuedBy: actor.participant,
+                    queuedByRole: actor.role,
+                    queuedAt: at,
+                });
                 if (!queued.ok) return queued;
                 stores.runs.enqueue(queued.value.Queued.aggregate);
                 publish(stores, session, queued.value.Queued.events, at);
@@ -779,7 +804,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (!queued.ok) return queued;
                 const at = clock.now();
                 const base = record(stores, queued.value.session, { kind: 'RunBase', run }, captured.value, at);
-                const { Running } = decided(agentRunCommands.start(queued.value, base.id, at));
+                const { Running } = decided(agentRunCommands.start(queued.value, { baseRevision: base.id, startedAt: at }));
                 stores.runs.save(Running.aggregate);
                 publish(stores, Running.aggregate.session, Running.events, at);
                 return ok({ run: Running.aggregate, base });
@@ -814,10 +839,16 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const at = clock.now();
                 const report = runReport(facts, diff);
                 // the reply is checked before the result is recorded: a refused reply records nothing
-                const check = agentRunCommands.finish(r.value, report, r.value.baseRevision, false, reply, at);
+                const check = agentRunCommands.finish(r.value, { report, resultRevision: r.value.baseRevision, changed: false, reply, finishedAt: at });
                 if (!check.ok && check.error.type === 'InvalidReply') return err(check.error);
                 const result = resultOf(stores, r.value, captured.value, at);
-                const finished = agentRunCommands.finish(r.value, report, result.revision.id, result.changed, reply, at);
+                const finished = agentRunCommands.finish(r.value, {
+                    report,
+                    resultRevision: result.revision.id,
+                    changed: result.changed,
+                    reply,
+                    finishedAt: at,
+                });
                 // `changed` is decided from the revisions above, and the reply was checked
                 if (!finished.ok) throw new Error(`Finishing run ${run} failed: ${finished.error.type}`);
                 const outcome = finished.value.Completed ?? finished.value.Failed;
@@ -830,14 +861,14 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
 
         async askClarification({ run, token, question, reply }) {
             return endWithoutChecks(run, token, 'NeedsClarification', (r, revision, at) => {
-                const asked = agentRunCommands.askClarification(r, question, reply, revision, at);
+                const asked = agentRunCommands.askClarification(r, { question, reply, resultRevision: revision, finishedAt: at });
                 return asked.ok ? ok(asked.value.NeedsClarification) : asked;
             });
         },
 
         async declineRun({ run, token, reply }) {
             return endWithoutChecks(run, token, 'Declined', (r, revision, at) => {
-                const declined = agentRunCommands.decline(r, reply, revision, at);
+                const declined = agentRunCommands.decline(r, { reply, resultRevision: revision, finishedAt: at });
                 return declined.ok ? ok(declined.value.Declined) : declined;
             });
         },
@@ -849,7 +880,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const r = running(stores, run, token, clock.now());
                 if (!r.ok) return r;
                 const at = clock.now();
-                const failed = agentRunCommands.fail(r.value, reason, at);
+                const failed = agentRunCommands.fail(r.value, { reason, finishedAt: at });
                 if (!failed.ok) throw new Error(`Failing run ${run} failed: ${failed.error.type}`);
                 stores.runs.save(failed.value.Failed.aggregate);
                 stores.runs.endLease(run, token);
@@ -865,7 +896,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const r = stored.run;
                 if (r.state !== 'Queued' && r.state !== 'Running') return err(notAllowed('cancel', r.state));
                 const at = clock.now();
-                const cancelled = agentRunCommands.cancel(r, actor.participant, actor.role, at);
+                const cancelled = agentRunCommands.cancel(r, { cancelledBy: actor.participant, cancelledByRole: actor.role, cancelledAt: at });
                 if (!cancelled.ok) return cancelled;
                 const { Cancelled } = cancelled.value;
                 stores.runs.save(Cancelled.aggregate);
@@ -882,7 +913,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const released: AgentRunId[] = [];
                 for (const { run } of stores.runs.expired(now)) {
                     if (run.state === 'Running') {
-                        const f = agentRunCommands.fail(run, 'LeaseExpired', now);
+                        const f = agentRunCommands.fail(run, { reason: 'LeaseExpired', finishedAt: now });
                         if (!f.ok) throw new Error(`Failing run ${run.id} failed: ${f.error.type}`);
                         stores.runs.save(f.value.Failed.aggregate);
                         publish(stores, run.session, f.value.Failed.events, now);
@@ -913,7 +944,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (!found) return err(notFound('Revision', revision));
                 if (found.state !== 'Recorded') return err(notAllowed('confirm', found.state));
                 const at = clock.now();
-                const confirmed = revisionCommands.confirm(found, actor.participant, actor.role, at);
+                const confirmed = revisionCommands.confirm(found, { confirmedBy: actor.participant, confirmedByRole: actor.role, confirmedAt: at });
                 if (!confirmed.ok) return confirmed;
                 const { Confirmed } = confirmed.value;
                 stores.revisions.save(Confirmed.aggregate);
@@ -998,17 +1029,17 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const restored = await uow
                     .transaction((stores) => {
                         const at = clock.now();
-                        const made = revisionCommands.restore(
-                            knownRevisionId(ids.newId()),
+                        const made = revisionCommands.restore({
+                            id: knownRevisionId(ids.newId()),
                             session,
-                            restorable.value,
-                            preRestore.id,
-                            after.value.contentHash,
-                            after.value.files,
-                            after.value.validation,
-                            actor.role,
-                            at,
-                        );
+                            restoredFrom: restorable.value,
+                            preRestore: preRestore.id,
+                            contentHash: after.value.contentHash,
+                            files: after.value.files,
+                            validation: after.value.validation,
+                            restoredByRole: actor.role,
+                            takenAt: at,
+                        });
                         if (!made.ok) throw new Error(`Recording the restore failed: ${made.error.type}`);
                         stores.revisions.save(made.value.Recorded.aggregate);
                         publish(stores, session, made.value.Recorded.events, at);

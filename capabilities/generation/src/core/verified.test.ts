@@ -79,9 +79,9 @@ export type AvailableEmail = EmailAddress & { readonly 'verified:Sales.Available
         expect(ts).toContain('export type MakeReachable = (value: AvailableEmail) => Promise<Result<Reachable, never>>;');
         expect(ts).toContain('export type MakeCoveredSpend = (value: Spend) => Promise<Result<CoveredSpend, OverBudget | Unknown>>;');
         // a requirement over a verified parameter reads it as its base
-        expect(ts).toContain("export function checkSpendCustomerRequires(customer: Customer, spend: CoveredSpend): 'positive' | undefined {");
-        expect(ts).toContain("if (!((Number(spend.amount) > 0) && !(customer.contact === customer.email))) return 'positive';");
-        expect(ts).toContain('export function checkChangeEmailCustomerRequires(customer: Customer, newEmail: AvailableEmail)');
+        expect(ts).toContain("export function checkSpendCustomerRequires(customer: Customer, params: SpendCustomerParams): 'positive' | undefined {");
+        expect(ts).toContain("if (!((Number(params.spend.amount) > 0) && !(customer.contact === customer.email))) return 'positive';");
+        expect(ts).toContain('export function checkChangeEmailCustomerRequires(customer: Customer, params: ChangeEmailCustomerParams)');
     });
 
     test('the doc comment of the factory says why an optional context is required, and what a rejection means', () => {

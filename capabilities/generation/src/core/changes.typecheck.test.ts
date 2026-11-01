@@ -101,26 +101,26 @@ describe('changes in the generated TypeScript', () => {
             `import { Tasks, decide, err, ok } from '../generated/index.js';
 
 export const work: Tasks.WorkCommands = {
-    open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, (id, title) => ok({ Draft: { set: { updatedAt: undefined, id, title, note: undefined, tags: [], draftNo: 1 }, events: {} } })),
+    open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, ({ id, title }) => ok({ Draft: { set: { updatedAt: undefined, id, title, note: undefined, tags: [], draftNo: 1 }, events: {} } })),
     rename: decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, {
-        Draft: (w, newTitle, at) => (newTitle === '' ? err({ type: 'NotReady' }) : ok({ Draft: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } })),
-        Review: (w, newTitle, at) => ok({ Review: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }),
+        Draft: (w, { newTitle, at }) => (newTitle === '' ? err({ type: 'NotReady' }) : ok({ Draft: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } })),
+        Review: (w, { newTitle, at }) => ok({ Review: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }),
     }),
-    submit: decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer }, events: {} } }) }),
+    submit: decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, { reviewer }) => ok({ Review: { set: { reviewer }, events: {} } }) }),
     renumber: decide<Tasks.RenumberWorkDecision>(Tasks.WorkShape, {
-        Draft: (w, n) => ok({ Draft: { set: { draftNo: n }, events: {} } }),
+        Draft: (w, { n }) => ok({ Draft: { set: { draftNo: n }, events: {} } }),
         // a command that changes a field only in some cases gives the old value in the others
-        Review: (w, n) => ok({ Review: { set: { draftNo: n > w.draftNo ? n : w.draftNo }, events: {} } }),
+        Review: (w, { n }) => ok({ Review: { set: { draftNo: n > w.draftNo ? n : w.draftNo }, events: {} } }),
     }),
-    finish: decide<Tasks.FinishWorkDecision>(Tasks.WorkShape, { Review: (w, at) => ok({ Done: { set: { doneAt: at }, events: {} } }) }),
+    finish: decide<Tasks.FinishWorkDecision>(Tasks.WorkShape, { Review: (w, { at }) => ok({ Done: { set: { doneAt: at }, events: {} } }) }),
     archive: decide<Tasks.ArchiveWorkDecision>(Tasks.WorkShape, { Done: (w) => ok({ Archived: { set: { reviewer: w.reviewer }, events: {} } }) }),
     clearNote: decide<Tasks.ClearNoteWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: { note: undefined }, events: {} } }) }),
     touch: decide<Tasks.TouchWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: {}, events: {} } }) }),
 };
 
 export const tag: Tasks.TagCommands = {
-    make: decide<Tasks.MakeTagDecision>(Tasks.TagShape, (id, name, color) => ok({ Tag: { set: { id, name, color }, events: {} } })),
-    recolor: decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, color) => ok({ Tag: { set: { color }, events: {} } })),
+    make: decide<Tasks.MakeTagDecision>(Tasks.TagShape, ({ id, name, color }) => ok({ Tag: { set: { id, name, color }, events: {} } })),
+    recolor: decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, { color }) => ok({ Tag: { set: { color }, events: {} } })),
 };
 `,
         );
@@ -133,7 +133,7 @@ export const tag: Tasks.TagCommands = {
         const cases: [string, string][] = [
             // a field not in changes
             [
-                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, tags: [] }, events: {} } }) })`,
+                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, { reviewer }) => ok({ Review: { set: { reviewer, tags: [] }, events: {} } }) })`,
                 "'tags' does not exist in type '{ readonly reviewer: string; }'",
             ],
             // the new field of the target state left out
@@ -143,7 +143,7 @@ export const tag: Tasks.TagCommands = {
             ],
             // a field in changes left out (rule 5)
             [
-                `decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, { Draft: (w, title, at) => ok({ Draft: { set: { title }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }), Review: (w, title, at) => ok({ Review: { set: { title, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }) })`,
+                `decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, { Draft: (w, { newTitle: title }) => ok({ Draft: { set: { title }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }), Review: (w, { newTitle: title, at }) => ok({ Review: { set: { title, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }) })`,
                 "Property 'updatedAt' is missing in type '{ title: string; }'",
             ],
             // nothing to set
@@ -153,12 +153,12 @@ export const tag: Tasks.TagCommands = {
             ],
             // a carried-over field not in changes
             [
-                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, draftNo: 2 }, events: {} } }) })`,
+                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, { reviewer }) => ok({ Review: { set: { reviewer, draftNo: 2 }, events: {} } }) })`,
                 "'draftNo' does not exist in type '{ readonly reviewer: string; }'",
             ],
             // without states
             [
-                `decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, color) => ok({ Tag: { set: { color, name: 'x' }, events: {} } }))`,
+                `decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, { color }) => ok({ Tag: { set: { color, name: 'x' }, events: {} } }))`,
                 "'name' does not exist in type '{ readonly color: string; }'",
             ],
         ];

@@ -103,14 +103,14 @@ declare const both: Sales.AvailableEmail & Sales.Deliverable;
 declare const register: Sales.RegisterCustomer;
 declare const id: Sales.CustomerId;
 // @ts-expect-error the check was skipped
-register(id, raw);
+register({ id, email: raw });
 // @ts-expect-error another check is not this one
-register(id, deliverable);
-register(id, available);
-register(id, both); // a value with both checks is either
+register({ id, email: deliverable });
+register({ id, email: available });
+register({ id, email: both }); // a value with both checks is either
 export const stored: Sales.EmailAddress = available;
 export const reach: Sales.Reachable extends Sales.AvailableEmail ? true : false = true; // a chain carries both
-export const changeEmail = decide<Sales.ChangeEmailCustomerDecision>(Sales.CustomerShape, (_c, email) => ok({ Customer: { set: { email }, events: {} } }));
+export const changeEmail = decide<Sales.ChangeEmailCustomerDecision>(Sales.CustomerShape, (_c, { newEmail }) => ok({ Customer: { set: { email: newEmail }, events: {} } }));
 export const make: Sales.MakeAvailableEmail = async (value, customer) => (customer === undefined ? ok(value as Sales.AvailableEmail) : ok(value as Sales.AvailableEmail));
 `,
         );

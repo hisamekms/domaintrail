@@ -50,7 +50,7 @@ const request = knownRequestId('00000000-0000-4000-8000-000000000010');
 const revision = knownRevisionId('00000000-0000-4000-8000-000000000020');
 
 function openSession(stores: Stores, id: C.SessionId): void {
-    const { Open } = value(sessionCommands.start(id, facilitator, value(C.makeDisplayName('Ada')), at));
+    const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), startedAt: at }));
     stores.sessions.save(Open.aggregate);
     stores.outbox.append(id, [Open.events.SessionStarted], at);
 }
@@ -210,7 +210,7 @@ describe('the run queue', () => {
     test('serial: a running run blocks claims, and the store refuses a second running run or lease of a session', async () => {
         const { uow, runs } = await queue();
         await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), at));
-        const running = value(agentRunCommands.start(runs[0], revision, at)).Running.aggregate;
+        const running = value(agentRunCommands.start(runs[0], { baseRevision: revision, startedAt: at })).Running.aggregate;
         await uow.transaction((s) => {
             s.runs.save(running);
             s.runs.endLease(running.id, 'done');
@@ -218,7 +218,7 @@ describe('the run queue', () => {
         // no lease left, but a running run: no claim
         expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t2'), at))).toBeUndefined();
         expect((await uow.transaction((s) => s.runs.active(sessionId, at)))?.run.id).toBe(running.id);
-        const second = value(agentRunCommands.start(runs[1], revision, at)).Running.aggregate;
+        const second = value(agentRunCommands.start(runs[1], { baseRevision: revision, startedAt: at })).Running.aggregate;
         expect(await thrown(uow.transaction((s) => s.runs.save(second)))).toMatchObject(errorLike(/UNIQUE/));
         expect((await uow.transaction((s) => s.runs.load(runs[1].id)))?.run.state).toBe('Queued');
     });

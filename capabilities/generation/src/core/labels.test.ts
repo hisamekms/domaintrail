@@ -13,7 +13,9 @@ describe('labels in generated code', () => {
         expect(sales).toContain("    | 'Requested' // 顧客都合");
         expect(sales).toContain(' * @invariant hasItems (明細が1件以上): count(items) > 0');
         expect(sales).toContain(
-            ' * 注文を確定する\n * @param at 日時\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n * @changes none — the command changes no common field\n * @emits OrderConfirmed — exactly once when the command succeeds\n * @see sales/order.dt:51\n */\nexport type ConfirmOrder',
+            ' * 注文を確定する\n * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0\n * @changes none — the command changes no common field\n * @emits OrderConfirmed — exactly once when the command succeeds\n * @see sales/order.dt:51\n */\nexport type ConfirmOrder',
         );
+        // the label of a parameter is on its property in the parameters object
+        expect(sales).toContain('export interface ConfirmOrderParams {\n    /** 日時 */\n    readonly at: Timestamp;\n}');
     });
 });

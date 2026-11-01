@@ -86,8 +86,8 @@ describe('emits in the generated TypeScript', () => {
 const ev = <T extends string>(type: T, work: Tasks.Work) => ({ type, workId: work.id });
 
 export const commands: Tasks.WorkCommands = {
-    open: (id) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { WorkOpened: { type: 'WorkOpened', workId: id }, ItemAdded: [] } } }),
-    progress: (work, at) => {
+    open: ({ id }) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { WorkOpened: { type: 'WorkOpened', workId: id }, ItemAdded: [] } } }),
+    progress: (work, { at }) => {
         if (at.getTime() < 0) return err({ type: 'NotReady' });
         if (at.getTime() === 0) return ok({ InProgress: { aggregate: work, events: { StepRecorded: ev('StepRecorded', work) } } });
         return ok({
@@ -108,7 +108,7 @@ export const commands: Tasks.WorkCommands = {
 
 declare const inProgress: Tasks.InProgressWork;
 declare const at: Date;
-const r = commands.progress(inProgress, at);
+const r = commands.progress(inProgress, { at });
 if (r.ok) {
     const o = outcome(r.value);
     const to: 'InProgress' | 'Completed' = o.to;
@@ -159,7 +159,7 @@ const events: readonly Tasks.WorkEvent[] = r.ok ? eventList(outcome(r.value).eve
                 `import { ok, type Tasks } from '../generated/index.js';`,
                 `const step = (w: Tasks.Work): Tasks.StepRecorded => ({ type: 'StepRecorded', workId: w.id });`,
                 `const done = (w: Tasks.Work): Tasks.WorkCompleted => ({ type: 'WorkCompleted', workId: w.id });`,
-                ...Object.entries(cases).map(([name, [body]]) => `export const ${name}: Tasks.ProgressWork = (work, at) => ${body};`),
+                ...Object.entries(cases).map(([name, [body]]) => `export const ${name}: Tasks.ProgressWork = (work, { at }) => ${body};`),
                 noEvents,
                 empty,
                 '',

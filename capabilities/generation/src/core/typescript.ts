@@ -39,6 +39,8 @@ import {
     invalidTypeName,
     makeTypeName,
     outputsVary,
+    paramsArgName,
+    paramsTypeName,
     policyHandlersName,
     policyTypeName,
     shapeName,
@@ -707,7 +709,8 @@ class ContextEmitter {
         const generic = stateful && outputsVary(c.factory, transitions, c.emits);
         const input = stateUnion(transitions.flatMap((t) => t.from));
         const self = aggregateParamName(agg);
-        const params = c.params.map((p) => `${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
+        // the parameters as one object (`params: CancelOrderParams`), and none without parameters
+        const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
         // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name; the
         // contract holds the aggregate, the decision what to `set`
@@ -726,10 +729,16 @@ class ContextEmitter {
         const transition = c.factory
             ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
             : transitions.map((t) => `${t.from.join(' | ')} -> ${t.to.join(' | ')}`).join('; ');
+        if (c.params.length) {
+            this.jsdoc([`The parameters of ${agg.name}.${c.name}, by name.`, seeLine(c.location)]);
+            this.line(`export interface ${paramsTypeName(agg, c)} {`);
+            for (const l of c.params.flatMap((f) => this.property(f))) this.line(`    ${l}`);
+            this.line('}');
+            this.out.push('');
+        }
         this.jsdoc([
             `${agg.name}.${c.name}${transition ? ` (${transition})` : ''}${c.factory ? ' — factory' : ''}`,
             ...describedLines(c),
-            ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
             ...requires,
             ...changes,
             ...this.emitsLines(c.emits.map((e) => ({ e, when: e.when }))),
@@ -790,8 +799,8 @@ class ContextEmitter {
         const sources = unique(c.transitions.flatMap((t) => t.from));
         const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
-        const ps = c.params.map((p) => ({ name: p.name, type: `${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}` }));
-        return this.checks.requires(agg, c, commandTypeName(agg, c), subject, ps);
+        const params = c.params.length ? { name: paramsArgName(agg), type: paramsTypeName(agg, c) } : undefined;
+        return this.checks.requires(agg, c, commandTypeName(agg, c), subject, params);
     }
 
     /** The entries of `emits` for a source state, with `when` reduced to what still selects among its targets. */

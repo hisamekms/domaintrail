@@ -246,12 +246,12 @@ describe('generated checks', () => {
         const order = { state: 'Draft', id: 'o', lines: [line('1', 'ABC-0001')], prices: [yen('100')] };
         const known = { known: () => true };
         const req = Sales.checkAddOrderRequiresWith(known);
-        expect(req(order, line('2', 'ABC-0002'), '1')).toBeUndefined();
-        expect(req(order, line('2', 'ABC-0001'), '1000')).toBe('newSku');
-        expect(Sales.checkAddOrderRequiresWith({ known: () => false })(order, line('2', 'ABC-0002'), '1000')).toBe('known');
-        expect(req(order, line('2', 'ABC-0002'), '100.5')).toBe('small');
-        expect(req(order, line('2', 'ABC-0002', '100.0'), '1')).toBeUndefined(); // contains: Money by value, Decimal by number
-        expect(req(order, line('2', 'ABC-0002', '5'), '1')).toBe('priced');
+        expect(req(order, { line: line('2', 'ABC-0002'), total: '1' })).toBeUndefined();
+        expect(req(order, { line: line('2', 'ABC-0001'), total: '1000' })).toBe('newSku');
+        expect(Sales.checkAddOrderRequiresWith({ known: () => false })(order, { line: line('2', 'ABC-0002'), total: '1000' })).toBe('known');
+        expect(req(order, { line: line('2', 'ABC-0002'), total: '100.5' })).toBe('small');
+        expect(req(order, { line: line('2', 'ABC-0002', '100.0'), total: '1' })).toBeUndefined(); // contains: Money by value, Decimal by number
+        expect(req(order, { line: line('2', 'ABC-0002', '5'), total: '1' })).toBe('priced');
         expect(Sales.checkCancelOrderRequires).toBeUndefined();
     });
 });
@@ -303,7 +303,7 @@ describe('readable expressions (ADR 0028)', async () => {
         has(`if (flags.a && !(flags.b)) violated.push('implied');`);
         has(`if ((flags.a || flags.b) && !(flags.c)) violated.push('looseLeft');`);
         has(`if (!((!(flags.a) || flags.b) && flags.c)) violated.push('nested');`);
-        has(`if (item2 !== undefined && !(item2.count > 0)) return 'counted';`);
+        has(`if (params.item2 !== undefined && !(params.item2.count > 0)) return 'counted';`);
         for (const a of [false, true])
             for (const b of [false, true])
                 for (const c of [false, true]) {
@@ -314,9 +314,9 @@ describe('readable expressions (ADR 0028)', async () => {
                     ];
                     expect(Names.checkFlags({ a, b, c })).toEqual(expected);
                 }
-        expect(Names.checkAddBoxRequires(box([]), item('y'), undefined)).toBeUndefined();
-        expect(Names.checkAddBoxRequires(box([]), item('y'), item('z', 1))).toBeUndefined();
-        expect(Names.checkAddBoxRequires(box([]), item('y'), item('z', 0))).toBe('counted');
+        expect(Names.checkAddBoxRequires(box([]), { item: item('y') })).toBeUndefined();
+        expect(Names.checkAddBoxRequires(box([]), { item: item('y'), item2: item('z', 1) })).toBeUndefined();
+        expect(Names.checkAddBoxRequires(box([]), { item: item('y'), item2: item('z', 0) })).toBe('counted');
     });
 
     test('lambda variables keep their names, with a number only on a clash', () => {
@@ -326,7 +326,7 @@ describe('readable expressions (ADR 0028)', async () => {
         has(`box.items.every((enum2) => box.items.every((function2) => `); // reserved words
         has(`box.items.some((distinct2) => distinct2.count > 0) && !(distinct(box.items, (Common2, Common3) => Common2.name === Common3.name))`); // imports
         has(`box.items.every((checks2) => `); // the slots of a check
-        has(`if (!(box.items.every((item3) => !(item3.name === 'x')))) return 'fresh';`); // the parameters item and item2
+        has(`if (!(box.items.every((item) => !(item.name === 'x')))) return 'fresh';`); // the parameters are read from `params`
         expect(source).not.toMatch(/\(\$[a-z]/);
         expect(Names.checkBox(box([item('a'), item('b')]))).toEqual([]);
         expect(Names.checkBox(box([item('a', 0)]))).toEqual(['shadow', 'same']);

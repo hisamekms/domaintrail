@@ -110,29 +110,35 @@ export function declaredOnly(order: Sales.DraftOrder, when: Date): ConfirmResult
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: when };
     return ok({ Confirmed: { aggregate: c, events: { OrderConfirmed: confirmedEvent(order) } } });
 }
-export const noEvents: Sales.OrderCommands['addItem'] = (order, item) =>
+export const noEvents: Sales.OrderCommands['addItem'] = (order, { item }) =>
     // @ts-expect-error a command without emits emits nothing
     ok({ Draft: { aggregate: { ...order, items: [...order.items, item] }, events: { OrderPlaced: { type: 'OrderPlaced', orderId: order.id } } } });
 
 declare const commands: Sales.OrderCommands;
 // @ts-expect-error confirm accepts only Draft orders
-commands.confirm(confirmed, at);
-commands.confirm(draft, at);
+commands.confirm(confirmed, { at });
+commands.confirm(draft, { at });
 // cancel accepts Draft | Confirmed
+commands.cancel(confirmed, { reason: 'Requested' });
+// @ts-expect-error the parameters are one object, by name
 commands.cancel(confirmed, 'Requested');
+// @ts-expect-error a misspelt parameter is an excess property
+commands.cancel(confirmed, { reasn: 'Requested' });
+// an optional parameter may be left out
+commands.changeNote(draft, {});
 
-const r = commands.addItem(draft, draft.items[0]);
+const r = commands.addItem(draft, { item: draft.items[0] });
 if (r.ok) {
     const events = r.value.Draft.events;
     // @ts-expect-error a command without emits has no events
     events.OrderPlaced.type;
 }
-const c = commands.cancel(confirmed, 'Requested');
+const c = commands.cancel(confirmed, { reason: 'Requested' });
 if (c.ok) {
     // RefundRequested when Confirmed ->: a Confirmed order emits it
     const refund: Sales.RefundRequested = c.value.Cancelled.events.RefundRequested;
 }
-const d = commands.cancel(draft, 'Requested');
+const d = commands.cancel(draft, { reason: 'Requested' });
 if (d.ok) {
     // @ts-expect-error a Draft order does not
     d.value.Cancelled.events.RefundRequested;
@@ -200,19 +206,19 @@ declare const either: Tasks.DraftWork | Tasks.InProgressWork;
 declare const completed: Tasks.CompletedWork;
 declare const title: Tasks.Title;
 
-const a = commands.change(draft, title);
+const a = commands.change(draft, { title });
 if (a.ok) {
     const stays: Tasks.DraftWork = a.value.Draft.aggregate;
     // @ts-expect-error a Draft work stays Draft: it never comes back InProgress
     a.value.InProgress;
 }
-const b = commands.change(inProgress, title);
+const b = commands.change(inProgress, { title });
 if (b.ok) {
     const stays: Tasks.InProgressWork = b.value.InProgress.aggregate;
     // @ts-expect-error an InProgress work stays InProgress
     b.value.Draft;
 }
-const c = commands.change(either, title);
+const c = commands.change(either, { title });
 if (c.ok) {
     // either state may come back: narrow by the key
     const any: Tasks.DraftWork | Tasks.InProgressWork = 'Draft' in c.value ? c.value.Draft.aggregate : c.value.InProgress.aggregate;
@@ -220,7 +226,7 @@ if (c.ok) {
     c.value.Draft.aggregate;
 }
 // @ts-expect-error change takes only Draft or InProgress
-commands.change(completed, title);
+commands.change(completed, { title });
 
 const d = commands.step(inProgress);
 if (d.ok) {
@@ -228,7 +234,7 @@ if (d.ok) {
 }
 
 // an implementation returning a Draft work as InProgress is rejected
-export const wrong: Tasks.ChangeWork = (work, title) =>
+export const wrong: Tasks.ChangeWork = (work, { title }) =>
     // @ts-expect-error Draft -> InProgress is not a transition of change
     ok({ InProgress: { aggregate: { ...work, title, state: 'InProgress' } as Tasks.InProgressWork, events: { WorkChanged: { type: 'WorkChanged', workId: work.id } } } });
 `,
@@ -247,10 +253,10 @@ const changed = (work: Tasks.Work) => ({ WorkChanged: { type: 'WorkChanged', wor
 declare const now: Date;
 
 export const commands: Tasks.WorkCommands = {
-    open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, (id, title) => ok({ Draft: { set: { id, title }, events: {} } })),
+    open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, ({ id, title }) => ok({ Draft: { set: { id, title }, events: {} } })),
     change: decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
-        Draft: (work, title) => ok({ Draft: { set: { title }, events: changed(work) } }),
-        InProgress: (work, title) => ok({ InProgress: { set: { title }, events: changed(work) } }),
+        Draft: (work, { title }) => ok({ Draft: { set: { title }, events: changed(work) } }),
+        InProgress: (work, { title }) => ok({ InProgress: { set: { title }, events: changed(work) } }),
     }),
     start: decide<Tasks.StartWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ InProgress: { set: {}, events: {} } }) }),
     cancel: decide<Tasks.CancelWorkDecision>(Tasks.WorkShape, {
@@ -258,7 +264,7 @@ export const commands: Tasks.WorkCommands = {
         InProgress: () => ok({ Cancelled: { set: {}, events: {} } }),
     }),
     review: decide<Tasks.ReviewWorkDecision>(Tasks.WorkShape, {
-        InProgress: (work, at) => (at < now ? err({ type: 'NotReady' }) : ok({ Completed: { set: { completedAt: at }, events: {} } })),
+        InProgress: (work, { at }) => (at < now ? err({ type: 'NotReady' }) : ok({ Completed: { set: { completedAt: at }, events: {} } })),
         Draft: () => ok({ Draft: { set: {}, events: {} } }),
     }),
     step: decide<Tasks.StepWorkDecision>(Tasks.WorkShape, {
@@ -271,20 +277,20 @@ export const commands: Tasks.WorkCommands = {
 
 declare const draft: Tasks.DraftWork;
 declare const title: Tasks.Title;
-const r = commands.change(draft, title);
+const r = commands.change(draft, { title });
 if (r.ok) {
     const stays: Tasks.DraftWork = r.value.Draft.aggregate;
 }
 
 export const draftToInProgress: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
     // @ts-expect-error the Draft handler decides the Draft outcome
-    Draft: (work, title) => ok({ InProgress: { set: { title }, events: changed(work) } }),
-    InProgress: (work, title) => ok({ InProgress: { set: { title }, events: changed(work) } }),
+    Draft: (work, { title }) => ok({ InProgress: { set: { title }, events: changed(work) } }),
+    InProgress: (work, { title }) => ok({ InProgress: { set: { title }, events: changed(work) } }),
 });
 
 // @ts-expect-error a handler for every source state is required
 export const missing: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
-    Draft: (work, title) => ok({ Draft: { set: { title }, events: changed(work) } }),
+    Draft: (work, { title }) => ok({ Draft: { set: { title }, events: changed(work) } }),
 });
 
 // the decision of another command does not make this one
@@ -292,9 +298,9 @@ export const missing: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.
 export const otherDecision: Tasks.ChangeWork = decide<Tasks.StartWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ InProgress: { set: {}, events: {} } }) });
 
 export const wrongArgs: Tasks.ChangeWorkDecision = {
-    Draft: (work, title) => ok({ Draft: { set: { title }, events: changed(work) } }),
+    Draft: (work, { title }) => ok({ Draft: { set: { title }, events: changed(work) } }),
     // @ts-expect-error parameters are those of the command
-    InProgress: (work, title: number) => ok({ InProgress: { set: { title: work.title }, events: changed(work) } }),
+    InProgress: (work, _params: { readonly title: number }) => ok({ InProgress: { set: { title: work.title }, events: changed(work) } }),
 };
 `,
         );
@@ -332,7 +338,7 @@ import type { Billing } from '../generated/domain/index.js';
 import type { Common } from '../packages/shared/src/generated/index.js';
 
 // a Common value is what Billing expects, and the two runtimes' Decimal and Result are interchangeable
-export const issue: Billing.InvoiceCommands['issue'] = (id, order, billedAmount: Common.Money) =>
+export const issue: Billing.InvoiceCommands['issue'] = ({ id, order, billedAmount }: { readonly id: Billing.InvoiceId; readonly order: domain.Sales.OrderId; readonly billedAmount: Common.Money }) =>
     shared.ok({ Open: { aggregate: { state: 'Open', id, order, billedAmount }, events: {} } });
 export const makeAmount: Common.MakeAmount = (value: domain.Decimal) =>
     Number(value) >= 0 ? domain.ok(value as Common.Amount) : domain.err({ type: 'InvalidAmount', value, invariant: 'nonNegative' });
