@@ -1,7 +1,10 @@
-import { isAggregate } from '../../language/generated/ast.js';
-import { EVENT_TAG, RUNTIME_NAMES, TS_RESERVED, aggregateParamName, commandTypeName, generatedNames } from '../../generator/naming.js';
-import type { DiagnosticSink } from '../diagnostic-sink.js';
-import { commandsOf, includedFields, type ModelIndex } from '../model-index.js';
+// The generator's check of the `.dt` sources (ADR 0027, Modeling: the TypeScript name check is generation's, and the
+// project analysis runs it): what `generateTypeScript` would write must not collide. It reads the AST index and
+// reports through the diagnostic sink, Modeling's syntax side (`core/`), until T10 puts the checks onto the typed model.
+import { isAggregate } from '../language/generated/ast.js';
+import type { DiagnosticSink } from '../core/diagnostic-sink.js';
+import { commandsOf, includedFields, type ModelIndex } from '../core/model-index.js';
+import { EVENT_TAG, RUNTIME_NAMES, TS_RESERVED, aggregateParamName, commandTypeName, generatedNames } from './naming.js';
 
 /** M011: generated TypeScript names do not collide. */
 export function checkTsNames(index: ModelIndex, sink: DiagnosticSink): void {

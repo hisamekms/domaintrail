@@ -6,9 +6,9 @@
 import type { LangiumDocument } from 'langium';
 import type { Model } from '../language/generated/ast.js';
 import { analyzeDomain, type DomainAnalysis } from '../core/analyze.js';
-import { checkTsNames } from '../core/checker/tsnames.js';
 import { DiagnosticSink } from '../core/diagnostic-sink.js';
 import type { ModelIndex } from '../core/model-index.js';
+import { checkTsNames } from '../generator/tsnames.js';
 import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '../kernel/diagnostics.js';
 import type { SourceFile } from '../kernel/source.js';
 import type { DomainModel } from '../model/model.js';
@@ -65,7 +65,7 @@ export async function analyze(allSources: readonly SourceFile[]): Promise<Analys
     };
 }
 
-/** The checks of the TypeScript generator over the `.dt` sources (M011, `core/checker/tsnames.ts` until T5). */
+/** The checks of the TypeScript generator over the `.dt` sources (M011, `generator/tsnames.ts`). */
 function generationChecks(domain: DomainAnalysis): Diagnostic[] {
     if (!domain.syntaxOk) return [];
     const sink = new DiagnosticSink(domain.resolveFile);

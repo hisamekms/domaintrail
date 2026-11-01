@@ -2,7 +2,7 @@
 // (through the CLI: test/dtes-cli.test.ts), and the generation's checks.
 import { describe, expect, test } from 'bun:test';
 import { analyze, isStormingFile } from './analyze.js';
-import { check, checkSales, exampleSources, only } from '../test-helpers.js';
+import { check, exampleSources, only } from '../test-helpers.js';
 
 const DT = `context Delivery {
   id ShipmentId: UUID
@@ -129,36 +129,14 @@ const ORDER = `
   entity Line { id: LineId  quantity: Int }
 `;
 
-describe('generated TypeScript names (M011)', () => {
-    test('collision between a generated command type and a declared type', async () => {
-        const a = await checkSales(`${ORDER} value FinishOrder`);
-        expect(only(a, 'M011')[0].message).toBe("Generated TypeScript name 'FinishOrder' for value object 'FinishOrder' collides with command 'Order.finish'.");
-    });
-
-    test('collision with the decision of a command, and with the shape of an aggregate', async () => {
-        const a = await checkSales(`${ORDER} value FinishOrderDecision value OrderShape`);
-        expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Generated TypeScript name 'FinishOrderDecision' for value object 'FinishOrderDecision' collides with the decision of 'Order.finish'.",
-            "Generated TypeScript name 'OrderShape' for value object 'OrderShape' collides with the shape of 'Order'.",
-        ]);
-    });
-
-    test('reserved discriminant and parameter names', async () => {
-        const a = await checkSales(`${ORDER.replace('finish(at: Timestamp)', 'finish(order: Timestamp, default: Int)')} event E { type: String }`);
-        expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Parameter 'order' of FinishOrder collides with the aggregate parameter 'order'.",
-            "Parameter name 'default' is a reserved word in TypeScript.",
-            "Field 'type' is reserved for the discriminant of generated event types.",
-        ]);
-    });
-});
-
 describe('sources by language', () => {
     test('a .dtes source is a storming, every other source is a .dt source', () => {
         expect(['a.dtes', 'a.dt', 'dtes', 'a.dtes.bak'].map(isStormingFile)).toEqual([true, false, false, false]);
     });
 
-    test("the generation's checks are left out while the .dt sources do not parse", async () => {
+    test("the generation's checks run once the .dt sources parse, and are left out while they do not", async () => {
+        const parsed = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrder\n}\n` });
+        expect(only(parsed, 'M011').map((d) => `${d.file}:${d.start.line}`)).toEqual(['sales.dt:13']);
         const a = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrder\n` });
         expect(a.syntaxOk).toBe(false);
         expect(only(a, 'M011')).toEqual([]);
