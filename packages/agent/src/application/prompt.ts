@@ -187,6 +187,8 @@ function replyDescription(): string {
     const L = REPLY_LIMITS;
     return `Your final answer is the reply, a JSON object (structured output), written in the language of the requests:
 - outcome: "done" (you carried the requests out), "clarification" (rule 6) or "declined" (rule 7).
+- title: a short title (about ${L.titleAim} characters, at most ${L.title}, one line, in the requests' language) naming
+  what these requests are about; people see it as the name of this change.
 - summary: 1-2 sentences, at most ${L.summary} characters; for "declined", why.
 - requests: one entry per request, by its number: status "done", "partial", "skipped" or "question"; a note (at
   most ${L.requestNote} characters) is required for "partial" and "skipped".
@@ -301,6 +303,8 @@ const isObject = (v: unknown): v is Raw => typeof v === 'object' && v !== null &
 /** Text the session takes: control characters other than tabs and line breaks removed, trimmed. */
 // oxlint-disable-next-line eslint/no-control-regex -- removing control characters is the point
 const clean = (s: string): string => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/g, '').trim();
+/** A title kept of an invalid reply: on one line (whitespace runs as one space), cut to `REPLY_LIMITS.title`. */
+const oneLineTitle = (s: string): string => clean(s.replace(/\s+/g, ' ')).slice(0, REPLY_LIMITS.title).trim();
 
 /** The reply object in the agent's output: its structured output, else its text as JSON, else its last `DT-OUTCOME:` line. */
 function replyObject(structured: unknown, text: string): Raw | undefined {
@@ -326,7 +330,8 @@ function replyObject(structured: unknown, text: string): Raw | undefined {
  * The agent's reply: its structured output (`structured`), or the result text as JSON, or the text's last
  * `DT-OUTCOME:` line (the former protocol, `{"outcome":"done","summary":…}` or `{"outcome":"clarification","question":…}`).
  * A reply valid against the shape and the limits (`readReply`, requests 1 to `requests`) is taken whole. Otherwise
- * what can be read is kept — the outcome, a summary within the limit, a clarification's question text — and the rest
+ * what can be read is kept — the outcome, a summary within the limit, a title cut to one line within its limit (for a
+ * done or a decline), a clarification's question text — and the rest
  * dropped; with nothing, it is a plain `done`. A run never fails for its reply's shape.
  */
 export function parseReply(structured: unknown, text: string, requests: number): ParsedReply {
@@ -345,6 +350,8 @@ export function parseReply(structured: unknown, text: string, requests: number):
     // what can be read of an invalid reply, or of a former outcome line
     const outcome = REPLY_OUTCOMES.find((o) => o === value.outcome) ?? 'done';
     const summary = typeof value.summary === 'string' ? clean(value.summary).slice(0, REPLY_LIMITS.summary).trim() : '';
+    const titled = typeof value.title === 'string' ? oneLineTitle(value.title) : '';
+    const title = titled ? { title: titled } : {};
     if (outcome === 'clarification') {
         const texts =
             typeof value.question === 'string'
@@ -359,7 +366,7 @@ export function parseReply(structured: unknown, text: string, requests: number):
         return { outcome: 'done', summary };
     }
     // a summary alone is still a valid reply; a decline without a reason is a plain done
-    const minimal = readReply({ outcome, summary, requests: [] }, requestNumber(requests), requests);
+    const minimal = readReply({ outcome, ...title, summary, requests: [] }, requestNumber(requests), requests);
     if (minimal.ok) return { outcome, summary, reply: minimal.value };
     return { outcome: 'done', summary: '' };
 }

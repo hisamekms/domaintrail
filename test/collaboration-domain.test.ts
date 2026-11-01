@@ -457,6 +457,7 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
 
     test('every limit is the one of REPLY_LIMITS: at the limit it is taken, one past it refused, at the path named', () => {
         const cases: [string, (n: number) => unknown, number][] = [
+            ['reply.title', (n) => ({ ...asking, title: 't'.repeat(n) }), L.title],
             ['reply.summary', (n) => ({ ...asking, summary: 's'.repeat(n) }), L.summary],
             ['reply.requests[0].note', (n) => ({ ...asking, requests: [{ request: 1, status: 'partial', note: 'n'.repeat(n) }] }), L.requestNote],
             ['reply.questions', (n) => ({ ...asking, questions: many(n, (i) => ({ ...question, id: `q${i}` })) }), L.questions],
@@ -495,6 +496,20 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
             const refused = read(make(limit + 1));
             expect([where, !refused.ok && refused.error.path]).toEqual([where, where]);
         }
+    });
+
+    test('the title: optional, trimmed, on one line; kept in the model value when given', () => {
+        expect(read(asking)).toMatchObject({ ok: true, value: { summary: 'One question.' } });
+        expect(read({ ...asking, title: '  請求書の税区分 ' })).toMatchObject({ ok: true, value: { title: '請求書の税区分' } });
+        expect(read({ ...asking, title: '請求書の\n税区分' })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        expect(read({ ...asking, title: ' ' })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        expect(read({ ...asking, title: 3 })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        const titled = read({ ...asking, title: '税区分' });
+        if (!titled.ok) throw new Error(titled.error.message);
+        expect(String(toAgentReply({ ...titled.value, requests: [], questions: [], assumptions: [] }).title)).toBe('税区分');
+        const untitled = read(asking);
+        if (!untitled.ok) throw new Error(untitled.error.message);
+        expect('title' in toAgentReply({ ...untitled.value, requests: [], questions: [], assumptions: [] })).toBe(false);
     });
 
     test('the shape: an outcome of three, questions for a clarification only, notes for partial and skipped, keys, plain text', () => {

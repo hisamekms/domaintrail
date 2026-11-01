@@ -334,6 +334,7 @@ export interface AgentStartedBody {
  */
 export interface AgentReplyBody {
     readonly outcome: 'done' | 'clarification' | 'declined';
+    readonly title?: string;
     readonly summary: string;
     readonly requests: readonly { readonly request: string; readonly status: 'done' | 'partial' | 'skipped' | 'question'; readonly note?: string }[];
     readonly questions?: readonly {

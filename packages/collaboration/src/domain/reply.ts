@@ -9,6 +9,10 @@ import { Collaboration, err, ok, type Result } from '../generated/index.js';
 
 /** The limits of a reply, and of the facilitator's answer to it: change one here and every side follows. */
 export const REPLY_LIMITS = {
+    /** Characters of the title (one line naming what the requests are about; the prompt asks for about `titleAim`). */
+    title: 30,
+    /** Characters the prompt asks the title to be, about. */
+    titleAim: 20,
     /** Characters of the summary (1–2 sentences; for a decline, the reason). */
     summary: 300,
     /** Characters of a request's note (required when it is partly done or skipped). */
@@ -56,6 +60,8 @@ const KEY = /^[A-Za-z0-9_-]+$/;
 /** A reply as validated, with its requests named by `R`: their number in the prompt, or their ID. */
 export interface ReplyData<R> {
     readonly outcome: ReplyOutcome;
+    /** A short name of what the requests are about (one line); none in a reply that gives none. */
+    readonly title?: string;
     readonly summary: string;
     readonly requests: readonly { readonly request: R; readonly status: RequestStatus; readonly note?: string }[];
     readonly questions: readonly {
@@ -150,7 +156,7 @@ function requestList<R>(v: unknown, path: string, request: RequestReader<R>, max
 }
 
 /**
- * A reply validated against the shape and the limits: `outcome`, `summary`, `requests` (each of the run's requests
+ * A reply validated against the shape and the limits: `outcome`, `title` (optional, one line), `summary`, `requests` (each of the run's requests
  * at most once, a note for partial and skipped), `questions` (1 to `questions` for a clarification, none otherwise),
  * `assumptions`. Unknown fields are refused. `request` reads a request reference (a number in the prompt, or an ID);
  * `maxRequests` is how many the run has.
@@ -166,9 +172,10 @@ export function readReply<R>(raw: unknown, request: RequestReader<R>, maxRequest
 
 function readOrThrow<R>(raw: unknown, request: RequestReader<R>, maxRequests: number): ReplyData<R> {
     const L = REPLY_LIMITS;
-    const v = object(raw, 'reply', ['outcome', 'summary', 'requests', 'questions', 'assumptions']);
+    const v = object(raw, 'reply', ['outcome', 'title', 'summary', 'requests', 'questions', 'assumptions']);
     const outcome = REPLY_OUTCOMES.find((o) => o === v.outcome);
     if (!outcome) throw new Refused('reply.outcome', `Expected one of ${REPLY_OUTCOMES.join(', ')}.`);
+    const title = v.title === undefined ? undefined : text(v.title, 'reply.title', L.title, false);
     const summary = text(v.summary, 'reply.summary', L.summary);
     const requests = list(v.requests, 'reply.requests', maxRequests).map((x, i) => {
         const p = `reply.requests[${i}]`;
@@ -231,7 +238,7 @@ function readOrThrow<R>(raw: unknown, request: RequestReader<R>, maxRequests: nu
         );
         return { text: text(o.text, `${p}.text`, L.assumptionText), requests: requestList(o.requests, `${p}.requests`, request, maxRequests), alternatives };
     });
-    return { outcome, summary, requests, questions, assumptions };
+    return { outcome, ...(title !== undefined && { title }), summary, requests, questions, assumptions };
 }
 
 /** A reader of request numbers as the prompt numbers them: 1 to `count`. */
@@ -255,7 +262,8 @@ export const plainQuestion = (reply: Pick<ReplyData<unknown>, 'questions'>): str
 
 /**
  * The JSON schema of the reply the agent returns (`claude --json-schema`), from the limits; `requests` is how many the
- * run has (they are numbered from 1 in the prompt).
+ * run has (they are numbered from 1 in the prompt). The title is required of the agent, though a stored reply may have
+ * none (replies from before it, and what is kept of an invalid reply).
  */
 export function replyJsonSchema(requests: number): Record<string, unknown> {
     const L = REPLY_LIMITS;
@@ -272,6 +280,7 @@ export function replyJsonSchema(requests: number): Record<string, unknown> {
     return obj(
         {
             outcome: { type: 'string', enum: REPLY_OUTCOMES },
+            title: str(L.title),
             summary: str(L.summary),
             requests: {
                 type: 'array',
@@ -313,7 +322,7 @@ export function replyJsonSchema(requests: number): Record<string, unknown> {
                 ),
             },
         },
-        ['outcome', 'summary', 'requests'],
+        ['outcome', 'title', 'summary', 'requests'],
     );
 }
 
@@ -328,6 +337,7 @@ export function toAgentReply(reply: ReplyData<Collaboration.RequestId>): Collabo
     const t = (s: string): Collaboration.Text => made(Collaboration.makeText(s));
     const k = (s: string): Collaboration.ReplyKey => made(Collaboration.makeReplyKey(s));
     return {
+        ...(reply.title !== undefined && { title: t(reply.title) }),
         summary: t(reply.summary),
         requests: reply.requests.map((r) => ({ request: r.request, status: PROGRESS[r.status], ...(r.note !== undefined && { note: t(r.note) }) })),
         questions: reply.questions.map((q) => ({

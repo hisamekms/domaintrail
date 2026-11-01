@@ -98,6 +98,9 @@ context Collaboration {
   /// エージェントの返答を検証したもの。AI の申告で、信頼しない入力として上限とともに検証してから持つ。件数と長さの上限は
   /// コードの1か所（`domain/reply.ts`）にある。
   value AgentReply "エージェントの返答" {
+    /// 依頼が何についてかを短く名付けたもの。続きの実行の題は使わず、ひとまとまりの最初の題がまとまりの題になる。
+    /// 前からの返答にはない。
+    title: Text? "題"
     summary: Text "要約"
     requests: RequestReply[0..*] "依頼ごとの返答"
     questions: ReplyQuestion[0..*] "問い"
