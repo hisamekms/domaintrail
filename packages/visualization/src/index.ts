@@ -27,19 +27,9 @@ export {
 export { PRIMITIVE_LABELS, typeText } from './domain/graph/build.js';
 export { dependencyCounts } from './domain/graph/context-map.js';
 
-// ---- core: the storming views (the semantic graph and the occurrences: T7, Storming's domain) -------------------
-export {
-    LEVEL_KINDS,
-    VIEW_LEVELS,
-    type EventOccurrence,
-    type RenderGraph,
-    type SemanticEdgeKind,
-    type ViewLevel,
-    type ViewOptions,
-} from './domain/storming/ir.js';
+// ---- core: the storming views ----------------------------------------------------------------------------------
+export { LEVEL_KINDS, VIEW_LEVELS, type RenderGraph, type ViewLevel, type ViewOptions } from './domain/storming/ir.js';
 export { stormingViewKey } from './domain/storming/graph.js';
-export { buildSemanticGraph, firstDeclarations, stormingTimelines } from './domain/storming/semantic.js';
-export { timelineOccurrences } from './domain/storming/trie.js';
 
 // ---- application: the view service and its ports ---------------------------------------------------------------
 export { createViewService, type ViewService, type ViewServiceDeps } from './application/view-service.js';

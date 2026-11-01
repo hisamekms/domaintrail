@@ -1,18 +1,10 @@
 /**
- * Timelines as occurrences and as a prefix trie (spec §7.2, §8). The trie shares only the leading identical steps of
+ * Timelines as a prefix trie (spec §7.2, §8): how the Live View draws the occurrences of Storming's timelines. The trie shares only the leading identical steps of
  * timelines, compared by `stepKey` (a group is the set of its events), and never depends on the order of the timelines:
  * its node IDs are derived from the keys of their path, and every list it gives is sorted.
  */
-import type { Timeline } from '@domaintrail/modeling';
-import { stepKey, type EventOccurrence, type Step, type StepKey } from './ir.js';
-
-export function timelineOccurrences(timeline: Timeline): EventOccurrence[] {
-    return timeline.steps.flatMap((step, i): EventOccurrence[] =>
-        step.type === 'event'
-            ? [{ timelineId: timeline.id, stepPath: [i], eventId: step.eventId }]
-            : step.events.map((e, j) => ({ timelineId: timeline.id, stepPath: [i, j], eventId: e.eventId })),
-    );
-}
+import type { EventOccurrence, Timeline } from '@domaintrail/modeling';
+import { stepKey, type Step, type StepKey } from './ir.js';
 
 /** A step shared by the timelines whose prefix up to it is the same. */
 export interface TrieNode {

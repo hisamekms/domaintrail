@@ -4,8 +4,8 @@
 // that timeline). On the integrated canvas a note is the event's definition. Render node IDs are never stored.
 import type { Json } from '@domaintrail/collaboration/protocol';
 import type { Collaboration } from '@domaintrail/collaboration';
-import type { DomainModel, SourceRange as StormingRange } from '@domaintrail/modeling';
-import { type DisplayMode, firstDeclarations, type RenderGraph } from '@domaintrail/visualization';
+import { type DomainModel, firstDeclarations, type SourceRange as StormingRange } from '@domaintrail/modeling';
+import type { DisplayMode, RenderGraph } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { nameIn, namer, resolve, selectedFile, withLabel } from '../model-utils';
 import { locationOf } from '../source';

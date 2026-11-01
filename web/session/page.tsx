@@ -2,7 +2,8 @@
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createShapeId, useValue } from 'tldraw';
-import { type DisplayMode, firstDeclarations, LEVEL_KINDS } from '@domaintrail/visualization';
+import { firstDeclarations } from '@domaintrail/modeling';
+import { type DisplayMode, LEVEL_KINDS } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { Panes } from '../app/panes';
 import type { Conversation } from '../app/shell';

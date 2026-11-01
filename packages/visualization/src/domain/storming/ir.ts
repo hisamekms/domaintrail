@@ -1,55 +1,18 @@
 /**
- * The views of a storming (docs/dtes-v0.1.md, ADR 0024): the types the projection produces from the storming IR
- * (`Storming`, in `@domaintrail/modeling/storming/ir`) and the Live View draws (spec §7):
- *
- * - the **semantic graph** (`SemanticGraph`): the valid elements and relations only, independent of timelines;
- * - the **render graph** (`RenderGraph`): the nodes and edges of one view (`ViewOptions`), where one event node may stand
- *   for several occurrences of the same event (a pure drawing optimization: it never adds a semantic edge).
+ * The views of a storming (docs/dtes-v0.1.md, ADR 0024): the types the projection produces from the storming IR and
+ * its semantic graph and occurrences (`Storming`, `SemanticGraph`, `EventOccurrence`: Storming's, in
+ * `@domaintrail/modeling`) and the Live View draws (spec §7): the **render graph** (`RenderGraph`), the nodes and edges
+ * of one view (`ViewOptions`), where one event node may stand for several occurrences of the same event (a pure drawing
+ * optimization: it never adds a semantic edge).
  */
-import type { NodeElement, NodeElementKind, TimelineStep } from '@domaintrail/modeling';
+import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep } from '@domaintrail/modeling';
 
-// ---- Semantic graph (spec §7.1, §9.1) ----
-
-/**
- * The kind of a semantic edge. `hotspot-on` is a hotspot's `on`, which is not causal; a policy's `on` is `on`.
- * `actor`, `reads` and `target` relate, `on`, `issues` and `emits` are type-level causal candidates.
- */
-export type SemanticEdgeKind = 'on' | 'issues' | 'emits' | 'target' | 'actor' | 'reads' | 'hotspot-on';
-
-/** A valid relation, directed as in spec §9.1 (`Event → Policy`, `Actor → Command`, `Read Model → Command`, the others from the owner). */
-export interface SemanticEdge {
-    /** Local IDs. */
-    sourceId: string;
-    targetId: string;
-    kind: SemanticEdgeKind;
-}
-
-export interface SemanticGraph {
-    stormingId: string;
-    /** The node elements of the storming (not timelines or groups), in source order. */
-    nodes: NodeElement[];
-    /** Each valid relation clause once, in source order, never inferred ones (no Event → Command across a policy). */
-    edges: SemanticEdge[];
-}
-
-/** Identity of a semantic edge, for render edges to point back to it. */
-export const semanticEdgeKey = (e: SemanticEdge): string => `${e.kind}:${e.sourceId}->${e.targetId}`;
+// ---- Semantic edges as drawn (spec §9.4) ----
 
 /** How a semantic edge is drawn (spec §9.4): solid causal, dotted related. */
 export const isCausal = (kind: SemanticEdgeKind): boolean => kind === 'on' || kind === 'issues' || kind === 'emits';
 
-// ---- Timelines and occurrences (spec §7.2, §8.3) ----
-
-/**
- * One appearance of an event in a timeline. Not persistent: `stepPath` changes when a step is inserted before it.
- * Occurrences of the same event in two timelines are never taken to be the same happening.
- */
-export interface EventOccurrence {
-    timelineId: string;
-    /** `[step]` for an event step, `[step, index]` for the index-th event of a group step (source order). */
-    stepPath: number[];
-    eventId: string;
-}
+// ---- Timeline steps compared (spec §7.2, §8.3) ----
 
 /** A timeline step for comparison: an event, or the set of a group's events (sorted, each once). */
 export type Step = { type: 'event'; eventId: string } | { type: 'group'; eventIds: string[] };

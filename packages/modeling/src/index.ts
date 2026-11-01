@@ -92,6 +92,17 @@ export {
     type Timeline,
     type TimelineStep,
 } from './storming/ir.js';
+export {
+    buildSemanticGraph,
+    firstDeclarations,
+    semanticEdgeKey,
+    stormingTimelines,
+    timelineOccurrences,
+    type EventOccurrence,
+    type SemanticEdge,
+    type SemanticEdgeKind,
+    type SemanticGraph,
+} from './storming/semantic.js';
 
 // ---- use cases: the project analysis (T8: capabilities/analysis) ------------------------------------------------
 export { analyze, isStormingFile, type Analysis } from './analysis/analyze.js';

@@ -1,10 +1,20 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
-import type { Clause, NodeElement, NodeElementKind, RelationKeyword, SourceRange, Storming, StormingElement, Timeline } from '@domaintrail/modeling';
-import { VIEW_LEVELS, semanticEdgeKey, type RenderEventNode, type RenderGraph, type ViewOptions } from './ir.js';
+import {
+    buildSemanticGraph,
+    type Clause,
+    type NodeElement,
+    type NodeElementKind,
+    type RelationKeyword,
+    semanticEdgeKey,
+    type SourceRange,
+    type Storming,
+    type StormingElement,
+    type Timeline,
+    timelineOccurrences,
+} from '@domaintrail/modeling';
+import { VIEW_LEVELS, type RenderEventNode, type RenderGraph, type ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
-import { buildSemanticGraph } from './semantic.js';
-import { timelineOccurrences } from './trie.js';
 
 // ---- IR built by hand (the parser is not needed) ----
 
@@ -45,7 +55,8 @@ const sequences = (g: RenderGraph): string[] => g.edges.filter((e) => e.type ===
 const semanticEdges = (g: RenderGraph): string[] => g.edges.filter((e) => e.type === 'semantic').map((e) => `${e.kind}:${e.source}->${e.target}`);
 const elementIds = (g: RenderGraph): string[] => g.nodes.flatMap((n) => (n.type === 'element' ? [n.elementId] : []));
 
-describe('semantic graph (spec §9.1)', () => {
+// the semantic graph and the occurrences themselves: modeling's storming/semantic.test.ts
+describe('semantic edges in the views (spec §9.1)', () => {
     test('R09: a policy with several on and issues keeps the policy, with no Event → Command edges', () => {
         const s = storming(
             ...events('E1', 'E2', 'E3'),
@@ -53,70 +64,24 @@ describe('semantic graph (spec §9.1)', () => {
             el('command', 'C1', ['emits', 'E3']),
             el('command', 'C2'),
         );
-        expect(buildSemanticGraph(s).edges.map(semanticEdgeKey)).toEqual(['on:E1->P', 'on:E2->P', 'issues:P->C1', 'issues:P->C2', 'emits:C1->E3']);
         const kinds = new Map(buildSemanticGraph(s).nodes.map((n) => [n.id, n.kind]));
-        for (const e of buildSemanticGraph(s).edges) expect([kinds.get(e.sourceId), kinds.get(e.targetId)]).not.toEqual(['event', 'command']);
         const g = projectView(s, DL);
         const kindOf = (id: string) => (id.startsWith('n:') ? kinds.get(id.slice(2)) : 'event');
         for (const e of g.edges) expect([kindOf(e.source), kindOf(e.target)]).not.toEqual(['event', 'command']);
     });
 
-    test('§9.1: relations are directed actor/read model → command, every other one from its owner', () => {
-        const s = storming(
-            ...events('E'),
-            el('actor', 'A'),
-            el('external', 'X'),
-            el('readmodel', 'R'),
-            el('aggregate', 'G'),
-            el('command', 'C', ['actor', 'A'], ['actor', 'X'], ['reads', 'R'], ['target', 'G'], ['emits', 'E']),
-            el('hotspot', 'H', ['on', 'E']),
-        );
-        expect(buildSemanticGraph(s).edges).toEqual([
-            { sourceId: 'A', targetId: 'C', kind: 'actor' },
-            { sourceId: 'X', targetId: 'C', kind: 'actor' },
-            { sourceId: 'R', targetId: 'C', kind: 'reads' },
-            { sourceId: 'C', targetId: 'G', kind: 'target' },
-            { sourceId: 'C', targetId: 'E', kind: 'emits' },
-            { sourceId: 'H', targetId: 'E', kind: 'hotspot-on' },
-        ]);
-    });
-
-    test('invalid relations, duplicate IDs and timelines are left out, nothing is inferred', () => {
-        const s = storming(
-            ...events('E'),
-            el('command', 'C', ['target', 'E'], ['emits', 'Missing'], ['issues', 'C'], ['emits', 'E'], ['emits', 'E']),
-            el('aggregate', 'E'),
-            el('policy', 'P', ['on', 'T']),
-            tl('T', 'E'),
-        );
-        const graph = buildSemanticGraph(s);
-        expect(graph.nodes.map((n) => `${n.kind}:${n.id}`)).toEqual(['event:E', 'command:C', 'policy:P']);
-        expect(graph.edges.map(semanticEdgeKey)).toEqual(['emits:C->E']);
-    });
-
-    test('R13: changing a .dt ref keeps the semantic graph and the views', () => {
+    test('R13: changing a .dt ref keeps the views', () => {
         const withRef = (path: string): Storming => {
             const s = storming(...events('E'), el('command', 'C', ['emits', 'E']), tl('T', 'E'));
             s.elements[0] = { ...el('event', 'E'), clauses: [{ type: 'ref', path, segments: path.split('.'), range }] };
             return s;
         };
         const [a, b] = [withRef('Sales.OrderPlaced'), withRef('Sales.OrderConfirmed')];
-        expect(buildSemanticGraph(a).nodes.map((n) => n.id)).toEqual(buildSemanticGraph(b).nodes.map((n) => n.id));
-        expect(buildSemanticGraph(a).edges).toEqual(buildSemanticGraph(b).edges);
         expect(projectView(a, DL)).toEqual(projectView(b, DL));
     });
 });
 
-describe('occurrences and the prefix trie (spec §7.2, §8)', () => {
-    test('one occurrence per timeline reference, with its step path', () => {
-        expect(timelineOccurrences(tl('T', 'A', ['C', 'B'], 'A'))).toEqual([
-            { timelineId: 'T', stepPath: [0], eventId: 'A' },
-            { timelineId: 'T', stepPath: [1, 0], eventId: 'C' },
-            { timelineId: 'T', stepPath: [1, 1], eventId: 'B' },
-            { timelineId: 'T', stepPath: [2], eventId: 'A' },
-        ]);
-    });
-
+describe('the prefix trie (spec §7.2, §8)', () => {
     test('R01: A B C and A B D share A B', () => {
         const g = projectView(storming(...events('A', 'B', 'C', 'D'), tl('T1', 'A', 'B', 'C'), tl('T2', 'A', 'B', 'D')), BP);
         expect(nodeIds(g)).toEqual(['t:e:A', 't:e:A>e:B', 't:e:A>e:B>e:C', 't:e:A>e:B>e:D']);

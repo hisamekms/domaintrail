@@ -8,11 +8,11 @@ import {
     type ModelDiff,
     type Storming,
     type StormingAnalysis,
+    stormingTimelines,
     supportingContexts,
 } from '@domaintrail/modeling';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../domain/storming/ir.js';
 import { matchRenderNodes, projectView } from '../domain/storming/render.js';
-import { stormingTimelines } from '../domain/storming/semantic.js';
 import { renderToGraph, stormingViewKey } from '../domain/storming/graph.js';
 import { buildStateGraph, buildStructureGraph } from '../domain/graph/build.js';
 import { buildContextMapGraph } from '../domain/graph/context-map.js';

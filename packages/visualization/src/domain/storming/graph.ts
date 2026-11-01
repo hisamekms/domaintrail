@@ -5,9 +5,8 @@
  */
 import { named, sized } from '../graph/build.js';
 import { mapTexts, maxUnits, perLang, type EdgeKind, type Graph, type GraphEdge, type GraphNode, type NodeKind, type Texts } from '../graph/ir.js';
-import { esElementId, type NodeElementKind, type Storming } from '@domaintrail/modeling';
+import { esElementId, firstDeclarations, type NodeElementKind, type Storming } from '@domaintrail/modeling';
 import { isCausal, type RenderEdge, type RenderGraph, type RenderNode, type ViewOptions } from './ir.js';
-import { firstDeclarations } from './semantic.js';
 
 /** Graph ID of a view: `storming:<StormingId>:<level>:<timelineId or *>` (the `storming` prefix lays it out left to right). */
 export const stormingGraphId = (stormingId: string, options: ViewOptions): string => `storming:${stormingId}:${options.level}:${options.timelineId ?? '*'}`;
