@@ -116,7 +116,6 @@ export const MAP: Record<string, Module> = {
                 'domain/rules/expressions.ts',
                 'domain/rules/labels.ts',
                 'domain/rules/names.ts',
-                'domain/rules/policies.ts',
                 'domain/rules/shared.ts',
                 'domain/rules/structure.ts',
                 'domain/rules/unions.ts',
