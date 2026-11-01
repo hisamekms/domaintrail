@@ -4,7 +4,8 @@ The tests run sessions with a fake agent in place of Claude Code. This page is f
 the real Claude Code once, on a scratch copy of the example, before using sessions on their own model: the commands,
 what to check, and what to record when something fails. What a session is, and every option, is in
 [`dt guide session`](guide.md#collaboration-sessions); the same check behind Cloudflare Access is
-[Running a session behind Cloudflare Access](session-access.md).
+[Running a session behind Cloudflare Access](session-access.md). To review the chat without Claude Code, a session filled
+with every display pattern is one command away: [A seeded session for review](dev-session-seed.md).
 
 ## Before you start
 

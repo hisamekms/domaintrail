@@ -175,6 +175,7 @@ describe('documentation links', () => {
         'docs/live-view.md',
         'docs/session-access.md',
         'docs/session-first-run.md',
+        'docs/dev-session-seed.md',
         'CHANGELOG.md',
         'CHANGELOG.ja.md',
     ];
