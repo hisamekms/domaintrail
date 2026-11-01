@@ -44,19 +44,41 @@ interface Import {
     resolved?: string;
     /** `import type` / `export type`: erased at run time. */
     typeOnly: boolean;
+    /** The names it takes (`import { a, type B as C }` → a, B), or all of them (`import * as`, a side-effect import). */
+    names: string[] | 'all';
 }
 
+/** A unit test next to the code, or a helper of the unit tests (CONTRIBUTING.md, Tests): not part of the package's code. */
+const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file) || path.posix.basename(file) === 'test-helpers.ts';
+
 /**
- * The module specifiers of a file's import and export declarations and dynamic imports. A declaration starts its
- * line, so the code that the generators write into template literals (`import * as fc from 'fast-check';`) is not one.
+ * The module specifiers of a file's import and export declarations and dynamic imports, with the names they take. A
+ * declaration starts its line, so the code that the generators write into template literals (`import * as fc from
+ * 'fast-check';`) is not one.
  */
-function specifiers(source: string): { specifier: string; typeOnly: boolean }[] {
-    const declarations = source.matchAll(/^\s*(?:import|export)\s+(type\s+)?(?:[\w$*{},\s]+?\s+from\s+)?['"]([^'"]+)['"]/gm);
-    const dynamic = source.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g);
+function specifiers(source: string): { specifier: string; typeOnly: boolean; names: string[] | 'all' }[] {
+    const declarations = source.matchAll(/^\s*(?:import|export)\s+(type\s+)?(?:([\w$*{},\s]+?)\s+from\s+)?['"]([^'"]+)['"]/gm);
+    const dynamic = source.matchAll(/(?:const\s+(\{[^}]*\})\s*=\s*await\s+)?\bimport\(\s*['"]([^'"]+)['"]\s*\)/g);
     return [
-        ...[...declarations].map((m) => ({ specifier: m[2], typeOnly: m[1] !== undefined })),
-        ...[...dynamic].map((m) => ({ specifier: m[1], typeOnly: false })),
+        ...[...declarations].map((m) => ({ specifier: m[3], typeOnly: m[1] !== undefined, names: namesOf(m[2]) })),
+        ...[...dynamic].map((m) => ({ specifier: m[2], typeOnly: false, names: namesOf(m[1]) })),
     ];
+}
+
+/** The names an import clause takes: `{ a, type B as C }` → a, B; a default or namespace import (or none) takes all. */
+function namesOf(clause: string | undefined): string[] | 'all' {
+    const braces = clause?.match(/\{([^}]*)\}/);
+    if (!braces || /\*/.test(clause!.replace(braces[0], ''))) return 'all';
+    return braces[1]
+        .split(',')
+        .map((n) =>
+            n
+                .trim()
+                .replace(/^type\s+/, '')
+                .split(/\s+as\s+|\s*:\s*/)[0]
+                .trim(),
+        )
+        .filter(Boolean);
 }
 
 async function importsOf(name: string): Promise<Import[]> {
@@ -64,17 +86,49 @@ async function importsOf(name: string): Promise<Import[]> {
     const imports: Import[] = [];
     for await (const rel of new Glob('**/*.{ts,tsx}').scan({ cwd: path.join(ROOT, sources) })) {
         if (rel.split('/').includes('node_modules')) continue;
-        const file = path.posix.join(sources, rel);
-        for (const { specifier, typeOnly } of specifiers(await readFile(path.join(ROOT, file), 'utf8'))) {
-            const resolved = specifier.startsWith('.') ? path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier)) : undefined;
-            imports.push({ file, specifier, resolved, typeOnly });
-        }
+        imports.push(...(await importsIn(path.posix.join(sources, rel))));
     }
     return imports;
 }
 
+async function importsIn(file: string): Promise<Import[]> {
+    return specifiers(await readFile(path.join(ROOT, file), 'utf8')).map(({ specifier, typeOnly, names }) => {
+        const resolved = specifier.startsWith('.') ? path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier)) : undefined;
+        return { file, specifier, resolved, typeOnly, names };
+    });
+}
+
+/**
+ * What a package's index.ts (its `.` entry) exports, by name: the module of its sources each name comes from
+ * (`core/emoji`). index.ts names everything it exports (`export { a, type B } from './x.js'`, `export * as ns from`), so
+ * that the rules can tell which module an import through `.` reaches.
+ */
+async function surfaceOf(name: string): Promise<Map<string, string> | undefined> {
+    const file = Bun.file(path.join(ROOT, MAP[name].sources, 'index.ts'));
+    if (!(await file.exists())) return undefined;
+    const source = await file.text();
+    const names = new Map<string, string>();
+    const module = (from: string): string => path.posix.normalize(from).replace(/\.js$/, '');
+    for (const m of source.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'([^']+)'/gm)) {
+        for (const entry of m[1]
+            .split(',')
+            .map((e) => e.trim().replace(/^type\s+/, ''))
+            .filter(Boolean)) {
+            const [, alias] = entry.match(/(?:\w+\s+as\s+)?(\w+)$/)!;
+            names.set(alias, module(m[2]));
+        }
+    }
+    for (const m of source.matchAll(/^export\s+\*\s+as\s+(\w+)\s+from\s+'([^']+)'/gm)) names.set(m[1], module(m[2]));
+    return names;
+}
+
 const NAMES = Object.keys(MAP);
-const IMPORTS = Object.fromEntries(await Promise.all(NAMES.map(async (name) => [name, await importsOf(name)] as const)));
+const ALL_IMPORTS = Object.fromEntries(await Promise.all(NAMES.map(async (name) => [name, await importsOf(name)] as const)));
+/** The imports of each package's code; its unit tests have rules of their own (see `tests`). */
+const IMPORTS = Object.fromEntries(NAMES.map((name) => [name, ALL_IMPORTS[name].filter((i) => !isTest(i.file))]));
+/** The imports of each package's unit tests and their helpers. */
+const UNIT_TEST_IMPORTS = Object.fromEntries(NAMES.map((name) => [name, ALL_IMPORTS[name].filter((i) => isTest(i.file))]));
+const SURFACES_BY_NAME = Object.fromEntries(await Promise.all(NAMES.map(async (name) => [name, await surfaceOf(name)] as const)));
 const MANIFESTS: Record<string, PackageJson> = Object.fromEntries(
     await Promise.all(NAMES.map(async (name) => [name, (await Bun.file(path.join(ROOT, MAP[name].dir, 'package.json')).json()) as PackageJson] as const)),
 );
@@ -103,6 +157,19 @@ function foreign(name: string, imp: Import): { target: string; entry: string } |
     const [, target, ...rest] = imp.specifier.split('/');
     if (target === name) return undefined;
     return { target, entry: rest.length === 0 ? '.' : `./${rest.join('/')}` };
+}
+
+/**
+ * The modules of another package that an import reaches, as `@domaintrail/<package>/<module>`: through `.`, the modules
+ * index.ts takes the imported names from; through another entry, that entry.
+ */
+function reachedModules(name: string, imp: Import): string[] {
+    const reached = foreign(name, imp);
+    if (!reached) return [];
+    const surface = SURFACES_BY_NAME[reached.target];
+    if (reached.entry !== '.' || !surface) return [`@domaintrail/${reached.target}/${reached.entry.slice(2) || 'index'}`];
+    const modules = imp.names === 'all' ? [...surface.values()] : imp.names.map((n) => surface.get(n) ?? `index (no export ${n})`);
+    return [...new Set(modules)].map((m) => `@domaintrail/${reached.target}/${m}`);
 }
 
 // ---- the rules and their verdict -------------------------------------------------------------------------------
@@ -151,7 +218,9 @@ const RULES: Record<Rule, RuleText> = {
         statement:
             'across packages only what `exports` lists is imported: `.` and `./protocol`; a context takes only the published language (`.`) of its declared upstream contexts. Deep imports (`@domaintrail/<package>/<path>`) are rejected.',
         fix: (v) =>
-            `import it from '${packageName(v.key)}' and export it from that package's index.ts if it is its published language or a use case (protocol.ts if it is a wire type); if it is neither, the code belongs on the other side of the boundary: move it to its owner`,
+            v.key.split('/').length > 2 && MAP[v.module].kind === 'context' && MAP[packageName(v.key).split('/')[1]]?.published
+                ? `a context takes only the published language of its upstream contexts, and ${v.key} is not part of it: move what it needs into the published language of its owner (or into this context), or pass it in through a port`
+                : `import it from '${packageName(v.key)}' and export it from that package's index.ts if it is its published language or a use case (protocol.ts if it is a wire type); if it is neither, the code belongs on the other side of the boundary: move it to its owner`,
     },
     'foreign-infrastructure': {
         section: 'Layout, Enforcement',
@@ -326,11 +395,34 @@ describe('public surface', () => {
         const violations = NAMES.flatMap((name) =>
             IMPORTS[name].flatMap((imp) => {
                 const reached = foreign(name, imp);
-                if (!reached || SURFACES[MAP[name].kind].includes(reached.entry)) return [];
-                return [{ module: name, key: imp.specifier, where: [imp.file] }];
+                if (!reached) return [];
+                if (!SURFACES[MAP[name].kind].includes(reached.entry)) return [{ module: name, key: imp.specifier, where: [imp.file] }];
+                // a context takes only the published language of its upstream contexts, not the rest of their `.`
+                const published = MAP[reached.target].published;
+                if (MAP[name].kind !== 'context' || !published) return [];
+                return reachedModules(name, imp)
+                    .filter((m) => !published.includes(m.slice(`@domaintrail/${reached.target}/`.length)))
+                    .map((m) => ({ module: name, key: m, where: [imp.file] }));
             }),
         );
         expectNoProblems('public-surface', violations);
+    });
+
+    test("index.ts names what it exports, from the package's own modules", async () => {
+        for (const name of NAMES) {
+            const surface = SURFACES_BY_NAME[name];
+            if (!surface) continue;
+            const source = await Bun.file(path.join(ROOT, MAP[name].sources, 'index.ts')).text();
+            expect({ name, star: /^export\s+\*\s+from/m.test(source) }).toEqual({ name, star: false });
+            expect({ name, outside: [...surface.values()].filter((m) => m.startsWith('..')) }).toEqual({ name, outside: [] });
+        }
+    });
+
+    test("a context's published language is exported by its index.ts", () => {
+        for (const name of NAMES) {
+            const modules = new Set(SURFACES_BY_NAME[name]?.values() ?? []);
+            expect({ name, missing: (MAP[name].published ?? []).filter((m) => !modules.has(m)) }).toEqual({ name, missing: [] });
+        }
     });
 });
 
@@ -342,9 +434,14 @@ describe('layers', () => {
     const atFile = (name: string, imp: Import): Violation => ({ module: name, key: `${local(name, imp.file)}: ${imp.specifier}`, where: [imp.file] });
 
     test("only an app imports another package's infrastructure/ or adapters/ (foreign-infrastructure)", () => {
+        // through `.`, by the modules index.ts takes the imported names from
         const violations = all
-            .filter(({ name, imp }) => MAP[name].kind !== 'app' && foreign(name, imp) && reaches(imp, TECHNOLOGY))
-            .map(({ name, imp }) => ({ module: name, key: imp.specifier, where: [imp.file] }));
+            .filter(({ name }) => MAP[name].kind !== 'app')
+            .flatMap(({ name, imp }) =>
+                reachedModules(name, imp)
+                    .filter((m) => m.split('/').some((s) => TECHNOLOGY.includes(s)))
+                    .map((m) => ({ module: name, key: m, where: [imp.file] })),
+            );
         expectNoProblems('foreign-infrastructure', violations);
     });
 
@@ -370,6 +467,28 @@ describe('layers', () => {
             'application-io',
             application.filter(({ imp }) => isIO(imp.specifier)).map(({ name, imp }) => atFile(name, imp)),
         );
+    });
+});
+
+// ---- tests ----------------------------------------------------------------------------------------------------
+
+describe('tests', () => {
+    test('a unit test imports builtins, its own package by relative paths, and what its package.json declares', () => {
+        for (const name of NAMES) {
+            const manifest = MANIFESTS[name];
+            const declared = new Set(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }));
+            const wrong = UNIT_TEST_IMPORTS[name].filter((i) =>
+                i.resolved ? !i.resolved.startsWith(`${MAP[name].sources}/`) : !isBuiltin(i.specifier) && !declared.has(packageName(i.specifier)),
+            );
+            expect(show(wrong)).toEqual([]);
+        }
+    });
+
+    test('a unit test imports another package only through its entries (. and ./protocol)', () => {
+        const deep = NAMES.flatMap((name) =>
+            UNIT_TEST_IMPORTS[name].filter((i) => foreign(name, i) && !(EXPORTS as readonly string[]).includes(foreign(name, i)!.entry)),
+        );
+        expect(show(deep)).toEqual([]);
     });
 });
 
