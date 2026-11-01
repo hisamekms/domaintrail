@@ -5,7 +5,8 @@
 //
 // The map lives under test/ because only the architecture test reads it: inside a package it would be a module that
 // some package then depends on. What lies outside the workspace packages is outside the map: `bin/`, `scripts/` and
-// `test/` import the packages as the root package.json's devDependencies, and are bound only by `exports` (T2).
+// `test/` import the packages as the root package.json's devDependencies, through their entries only (`exports`, and
+// a rule of the architecture test).
 //
 // The exceptions only shrink: an exception that no longer occurs fails the test. New code adds none; a task adds only
 // the ones it lists in docs/plans/0027-boundaries.md.
@@ -95,7 +96,6 @@ export const MAP: Record<string, Module> = {
         // the typed model, diagnostics and suggestions (T3: shared/kernel), Storming's IR (T8: contexts/storming)
         published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'core/diagnostics', 'core/suggest', 'storming/ir'],
         exceptions: {
-            exports: ['./*'],
             'pure-core-io': [
                 // the configuration: split by owner, and the `realpathSync` check of `session.agent.dt` out of the pure
                 // validation (T6)
@@ -111,7 +111,6 @@ export const MAP: Record<string, Module> = {
         // visualization's types; it imports none, and the map does not carry that edge over (ADR 0027).
         upstream: ['modeling'],
         exceptions: {
-            exports: ['./*'],
             'public-surface': [
                 // the project analysis (`isStormingFile`, `analyze`): the capability `analysis` after T4, which a
                 // context may not import; the validator goes behind Collaboration's ModelValidator port, implemented in
@@ -129,18 +128,12 @@ export const MAP: Record<string, Module> = {
         dir: 'packages/visualization',
         sources: 'packages/visualization/src',
         upstream: ['modeling'],
-        exceptions: {
-            exports: ['./*'],
-        },
     },
     agent: {
         kind: 'capability',
         dir: 'packages/agent',
         sources: 'packages/agent/src',
         upstream: ['collaboration'],
-        exceptions: {
-            exports: ['./*'],
-        },
     },
     workspace: {
         kind: 'platform',
@@ -151,7 +144,6 @@ export const MAP: Record<string, Module> = {
             // the platform knows no context: `SourceFile` goes to the kernel (T3); the configuration's sections are
             // owned elsewhere and their values (sources, ignored directories, the generated marker) passed in (T6)
             kinds: ['modeling'],
-            exports: ['./*'],
         },
     },
     presentation: {
@@ -159,9 +151,6 @@ export const MAP: Record<string, Module> = {
         dir: 'packages/presentation',
         sources: 'packages/presentation/src',
         upstream: ['collaboration', 'modeling', 'visualization'],
-        exceptions: {
-            exports: ['./*'],
-        },
     },
     composition: {
         kind: 'app',
@@ -172,7 +161,6 @@ export const MAP: Record<string, Module> = {
         exceptions: {
             // an app depends on no other app: presentation and composition merge into apps/dt (T8)
             kinds: ['presentation'],
-            exports: ['./*'],
         },
     },
     web: {

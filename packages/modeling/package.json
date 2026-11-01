@@ -4,8 +4,7 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
-    "./*": "./src/*.ts"
+    ".": "./src/index.ts"
   },
   "dependencies": {
     "langium": "4.4.0",

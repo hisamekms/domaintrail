@@ -408,6 +408,17 @@ describe('public surface', () => {
         expectNoProblems('public-surface', violations);
     });
 
+    test('a package others depend on exports its src/index.ts as `.`, and its src/protocol.ts as `./protocol` when it has one', async () => {
+        const depended = new Set(NAMES.flatMap((name) => MAP[name].upstream));
+        for (const name of NAMES) {
+            const { exports } = MANIFESTS[name];
+            const entries = exports === undefined ? {} : typeof exports === 'string' ? { '.': exports } : exports;
+            const protocol = await Bun.file(path.join(ROOT, MAP[name].sources, 'protocol.ts')).exists();
+            const expected = depended.has(name) ? { '.': './src/index.ts', ...(protocol && { './protocol': './src/protocol.ts' }) } : entries;
+            expect({ name, exports: entries }).toEqual({ name, exports: expected });
+        }
+    });
+
     test("index.ts names what it exports, from the package's own modules", async () => {
         for (const name of NAMES) {
             const surface = SURFACES_BY_NAME[name];
@@ -489,6 +500,32 @@ describe('tests', () => {
             UNIT_TEST_IMPORTS[name].filter((i) => foreign(name, i) && !(EXPORTS as readonly string[]).includes(foreign(name, i)!.entry)),
         );
         expect(show(deep)).toEqual([]);
+    });
+});
+
+/** The code outside the packages that imports them: the integration tests, the scripts, bin/. */
+const OUTSIDE = ['test', 'scripts', 'bin'];
+const OUTSIDE_IMPORTS = (
+    await Promise.all(
+        OUTSIDE.map(async (dir) => {
+            const files: string[] = [];
+            for await (const rel of new Glob('**/*.{ts,tsx}').scan({ cwd: path.join(ROOT, dir) })) {
+                if (!rel.split('/').includes('node_modules')) files.push(path.posix.join(dir, rel));
+            }
+            return (await Promise.all(files.map(importsIn))).flat();
+        }),
+    )
+).flat();
+
+describe('integration tests, scripts and bin/', () => {
+    test('import the packages only through their entries (. and ./protocol), never by a path into packages/ or web/', () => {
+        expect(OUTSIDE_IMPORTS.length).toBeGreaterThan(0);
+        const wrong = OUTSIDE_IMPORTS.filter((i) =>
+            i.resolved
+                ? i.resolved.startsWith('packages/') || i.resolved.startsWith('web/')
+                : i.specifier.startsWith('@domaintrail/') && !(EXPORTS as readonly string[]).includes(foreign('', i)!.entry),
+        );
+        expect(show(wrong)).toEqual([]);
     });
 });
 
