@@ -98,9 +98,6 @@ export { analyze, isStormingFile, type Analysis } from './analysis/analyze.js';
 export { formatDomain, FormatError } from './format/format.js';
 export { formatStorming } from './storming/format.js';
 
-// ---- use cases: Storming's parser, the .dtes sources to its IR (T8: contexts/storming) --------------------------
-export { parseStormings } from './storming/parse.js';
-
 // ---- use cases: the TypeScript generator (T8: capabilities/generation) ------------------------------------------
 export { GENERATED_MARKER, generateTypeScript, type GeneratedFile, type PolicyMode } from './generator/typescript.js';
 export { aggregateParamName } from './generator/naming.js';
@@ -114,7 +111,6 @@ export {
     DEFAULT_SOURCES,
     defaultConfig,
     IGNORED_DIRS,
-    parseJsonc,
     policyModes,
     resolveConfig,
     sourceMatcher,
@@ -125,7 +121,7 @@ export {
 } from './core/config.js';
 
 // ---- not Modeling's language: the emoji rule of Collaboration's `Emoji` (T6: moves to collaboration) ------------
-export { DEFAULT_QUICK_REACTIONS, isNormalEmoji, isSingleEmoji, MAX_EMOJI_BYTES, normalizeEmoji, readEmoji } from './core/emoji.js';
+export { DEFAULT_QUICK_REACTIONS, isNormalEmoji, MAX_EMOJI_BYTES, readEmoji } from './core/emoji.js';
 
 // ---- the syntax, for the language server (T8: Modeling's and Storming's infrastructure/syntax) -----------------
 export * as ast from './language/generated/ast.js';

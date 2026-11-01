@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { analyze, DEFAULT_AGENT_TOOLS, formatDomain, formatStorming, generateTypeScript, parseJsonc, resolveConfig } from '@domaintrail/modeling';
+import { analyze, DEFAULT_AGENT_TOOLS, formatDomain, formatStorming, generateTypeScript, resolveConfig } from '@domaintrail/modeling';
 import { loadWorkspace } from '@domaintrail/workspace';
 import { EXAMPLES, check } from './helpers.js';
 
@@ -132,7 +132,7 @@ describe('dt guide', () => {
 
     test('its config example is valid JSONC', () => {
         const config = blocks('jsonc').find((b) => b.includes('"sources"')) ?? '';
-        expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
+        expect(resolveConfig(config, path.join(ROOT, 'domaintrail.jsonc'))).toMatchObject({ sources: expect.any(Array) });
     });
 
     test('its session config example is a valid config, with the defaults it says', () => {

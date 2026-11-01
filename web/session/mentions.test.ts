@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze, type DomainModel, parseStormings } from '@domaintrail/modeling';
+import { analyze, type DomainModel } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import {
     addChips,
@@ -213,7 +213,7 @@ describe('the composer keys', () => {
 });
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
-const { stormings: parsed } = await parseStormings([{ path: 'es.dtes', text: SAMPLE }]);
+const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
 const stormings = [{ id: parsed[0].id, storming: parsed[0] }] as unknown as StormingView[];
 const workspace = await exampleSources();
 const model = (await analyze(workspace)).model as DomainModel;

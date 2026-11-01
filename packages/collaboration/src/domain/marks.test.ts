@@ -1,7 +1,7 @@
 // Votes and reactions (ADR 0026, appendix "Votes and reactions"): the pure rules of marks and the emoji of a reaction
 // (the use case and the route: test/session-marks.test.ts; the migrations: infrastructure/migrations.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { isNormalEmoji, isSingleEmoji, normalizeEmoji, readEmoji } from '@domaintrail/modeling';
+import { isNormalEmoji, readEmoji } from '@domaintrail/modeling';
 import { Collaboration as C } from '../generated/index.js';
 import {
     exclusiveGroup,
@@ -86,8 +86,7 @@ describe('one emoji (a reaction)', () => {
     });
 
     test('❤ and ❤️ are the same reaction: only the kept form is an Emoji', () => {
-        expect(normalizeEmoji('❤')).toBe(normalizeEmoji('❤️'));
-        expect(isSingleEmoji('❤')).toBe(true);
+        expect(readEmoji('❤')).toBe('❤️');
         expect(error(makeEmoji('❤'))).toMatchObject({ type: 'InvalidEmoji', invariant: 'singleEmoji' });
         expect(error(makeEmoji('x'.repeat(65)))).toMatchObject({ invariant: 'bounded' });
     });

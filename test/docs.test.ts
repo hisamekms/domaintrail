@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps } from '@domaintrail/composition';
 import { runCli } from '@domaintrail/presentation';
-import { formatDomain, formatStorming, parseJsonc } from '@domaintrail/modeling';
+import { formatDomain, formatStorming } from '@domaintrail/modeling';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -91,7 +91,8 @@ describe('getting started', () => {
         test(`${file}: its JSONC blocks are valid`, () => {
             const blocks = blocksOf(page, 'jsonc');
             expect(blocks.length).toBeGreaterThan(0);
-            for (const block of blocks) expect(parseJsonc(block)).toBeInstanceOf(Object);
+            // the config and tsconfig.json alike: JSONC as Bun reads it
+            for (const block of blocks) expect(Bun.JSONC.parse(block)).toBeInstanceOf(Object);
         });
     }
 

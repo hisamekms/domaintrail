@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { parseStormings, type Storming } from '@domaintrail/modeling';
+import { analyze, type Storming } from '@domaintrail/modeling';
 import type { ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
 import { renderToGraph, stormingGraphId, stormingViewKey } from './graph.js';
@@ -11,8 +11,9 @@ import { ElkLayoutEngine } from '../../infrastructure/elk.js';
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
 async function parse(text: string): Promise<Storming> {
-    const { stormings, diagnostics } = await parseStormings([{ path: 'es.dtes', text }]);
-    expect(diagnostics).toEqual([]);
+    const { stormings, diagnostics } = (await analyze([{ path: 'es.dtes', text }])).stormings;
+    // without a .dt model its refs name nothing (S010–S013); the storming itself parses and validates clean
+    expect(diagnostics.filter((d) => !['S010', 'S011', 'S012', 'S013'].includes(d.code))).toEqual([]);
     return stormings[0];
 }
 

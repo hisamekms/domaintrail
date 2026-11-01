@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { EventMessage, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { analyze, type DomainModel, parseStormings } from '@domaintrail/modeling';
+import { analyze, type DomainModel } from '@domaintrail/modeling';
 import { type LaidOutGraph, projectView } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from './drafts';
@@ -15,7 +15,7 @@ import { occurrenceNode, selectionOf, targetKey, targetOfSelection, WORKSPACE_TA
 import { exampleSources } from '../test-helpers';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
-const { stormings: parsed } = await parseStormings([{ path: 'es.dtes', text: SAMPLE }]);
+const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
 const storming = parsed[0];
 const stormingViews = [{ id: storming.id, storming }] as unknown as StormingView[];
 const workspace = await exampleSources();
