@@ -1619,7 +1619,7 @@ select,
     overflow: clip;
     background: var(--panel);
     border-right: 1px solid var(--border);
-    transition: width 180ms ease;
+    transition: width var(--pane-duration) var(--pane-easing);
 }
 .left-head {
     flex: none;
@@ -1642,7 +1642,7 @@ select,
     align-items: baseline;
     gap: 8px;
     padding-right: 10px;
-    transition: opacity 180ms ease;
+    transition: opacity var(--pane-duration) var(--pane-easing);
 }
 .left:not(.open) .brand-text,
 .left:not(.open) .left-pane {
@@ -1718,7 +1718,7 @@ select,
 }
 .left-pane {
     height: 100%;
-    transition: opacity 180ms ease;
+    transition: opacity var(--pane-duration) var(--pane-easing);
 }
 .left-foot {
     flex: none;
@@ -1856,8 +1856,9 @@ select,
     overflow: clip;
     background: var(--panel);
     transition:
-        width 180ms ease,
-        height 180ms ease;
+        width var(--pane-duration) var(--pane-easing),
+        height var(--pane-duration) var(--pane-easing),
+        opacity var(--motion-swap) var(--motion-ease-standard);
 }
 .dock-right {
     border-left: 1px solid var(--border);
@@ -1868,7 +1869,7 @@ select,
 .dock > .pane,
 .dock > .rail {
     position: absolute;
-    transition: opacity 180ms ease;
+    transition: opacity var(--pane-duration) var(--pane-easing);
 }
 .dock-right > * {
     top: 0;
@@ -1955,7 +1956,7 @@ select,
     overflow: clip;
     background: var(--panel);
     border-left: 1px solid var(--border);
-    transition: width 180ms ease;
+    transition: width var(--pane-duration) var(--pane-easing);
 }
 .conversation:not(.open) {
     border-left: none;
@@ -2493,7 +2494,7 @@ svg.chat-launcher-mark {
     color: var(--muted);
 }
 .tree-twisty svg {
-    transition: transform 180ms ease;
+    transition: transform var(--motion-medium) var(--motion-ease-standard);
 }
 .tree-twisty.open svg {
     transform: rotate(90deg);
@@ -2502,7 +2503,7 @@ svg.chat-launcher-mark {
 .tree-children {
     display: grid;
     grid-template-rows: 0fr;
-    transition: grid-template-rows 180ms ease;
+    transition: grid-template-rows var(--motion-medium) var(--motion-ease-standard);
 }
 .tree-children.open {
     grid-template-rows: 1fr;
@@ -2784,13 +2785,218 @@ svg.chat-launcher-mark {
     .dock > .pane,
     .dock > .rail,
     .conversation,
-    .legend,
+    .conversation-inner,
+    .legend-slot,
     .tree-children,
     .tree-twisty svg {
         transition: none;
     }
     .spin {
         animation: none;
+    }
+}
+
+/* ---------- motion ---------- */
+
+/* The page's motion tokens: every transition and animation of the UI takes its duration and easing from these (a
+   value in JavaScript too: shared/motion.ts reads them). Opening decelerates and takes a little longer; closing is
+   shorter. With "reduce motion" (the OS) they are all 0ms: everything is instant. */
+:root {
+    /* a pane opening (and the others giving way) / closing */
+    --motion-enter: 220ms;
+    --motion-exit: 160ms;
+    /* the inspector fading out before it moves (right ↔ below), then in */
+    --motion-swap: 120ms;
+    /* a menu, a popover or a suggestion list appearing (it disappears at once) */
+    --motion-pop: 120ms;
+    /* a dialog appearing / closing */
+    --motion-dialog-in: 160ms;
+    --motion-dialog-out: 100ms;
+    /* small changes in place: the legend folding, the tree's branches */
+    --motion-medium: 180ms;
+    --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+    --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+    --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-enter: 0ms;
+        --motion-exit: 0ms;
+        --motion-swap: 0ms;
+        --motion-pop: 0ms;
+        --motion-dialog-in: 0ms;
+        --motion-dialog-out: 0ms;
+        --motion-medium: 0ms;
+    }
+}
+
+/* The panes (the left pane, the inspector, the chat) open and close at the pace of the change: `motion-enter` as soon
+   as one opens, `motion-exit` when they only close (usePaneMotion, on .app). The outer box's size moves, clipped; its
+   content keeps the size it ends with and slides in with the box's moving edge as it fades, so that nothing is laid
+   out again on the way. A drag of a pane's edge stays instant (.resizing). */
+.app.motion-enter {
+    --pane-duration: var(--motion-enter);
+    --pane-easing: var(--motion-ease-enter);
+}
+.app.motion-exit {
+    --pane-duration: var(--motion-exit);
+    --pane-easing: var(--motion-ease-exit);
+}
+/* the left pane's list comes out from under the activity bar */
+.left-main {
+    position: relative;
+}
+.left-main > .activity-bar {
+    position: relative;
+    z-index: 1;
+    background: var(--panel);
+}
+.left-main > .left-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+/* the inspector, on the right: with its left edge; below the canvas: with its top edge, at its final width (set by
+   the shell) while the chat opens or closes beside it */
+.dock-right > .pane {
+    right: auto;
+    left: 0;
+}
+.dock-bottom > .pane {
+    right: auto;
+}
+/* the chat: with its left edge, fading */
+.conversation-inner {
+    right: auto;
+    left: 0;
+    transition: opacity var(--pane-duration) var(--pane-easing);
+}
+.conversation:not(.open) .conversation-inner {
+    opacity: 0;
+}
+/* the inspector moving (right ↔ below): it fades out, moves, and fades in, without changing shape on the way */
+.dock.moving {
+    opacity: 0;
+}
+
+/* The legend folds down into its button: its slot's height goes to nothing (a grid row animates to 0fr, which
+   height cannot do from auto) with the legend anchored at the bottom, as it fades. */
+.legend-slot {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows var(--motion-medium) var(--motion-ease-standard),
+        opacity var(--motion-medium) var(--motion-ease-standard);
+}
+.legend-slot.open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+.legend-clip {
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+/* Menus, popovers and suggestion lists: they come 4px out of their anchor as they fade in (`--motion-pop`), and close
+   at once (no exit). To use it, add the class `motion-pop` to the element shown while open (mounted when it opens):
+   - `motion-pop` alone: below its anchor (it comes down from it);
+   - with `motion-pop-up`: above its anchor (it comes up from it);
+   - with `motion-pop-right` / `motion-pop-left`: beside its anchor, to its right / left.
+   The menus with the shared `.pane-menu-list` (below their ⋯) have it without the class. */
+@keyframes motion-pop {
+    from {
+        opacity: 0;
+        transform: translate(var(--motion-pop-x, 0), var(--motion-pop-y, -4px));
+    }
+}
+.motion-pop,
+.pane-menu-list,
+.chat-people-popover {
+    animation: motion-pop var(--motion-pop) var(--motion-ease-enter);
+}
+.motion-pop-up {
+    --motion-pop-y: 4px;
+}
+.motion-pop-right {
+    --motion-pop-x: -4px;
+    --motion-pop-y: 0;
+}
+.motion-pop-left {
+    --motion-pop-x: 4px;
+    --motion-pop-y: 0;
+}
+
+/* Dialogs: the backdrop fades in as the dialog grows from 98% and fades in; closing, both fade out (shorter). */
+.settings-dialog,
+.session-dialog {
+    opacity: 0;
+    transform: scale(0.98);
+}
+.settings-dialog::backdrop,
+.session-dialog::backdrop {
+    opacity: 0;
+}
+.settings-dialog[open],
+.session-dialog[open] {
+    opacity: 1;
+    transform: none;
+    transition:
+        opacity var(--motion-dialog-in) var(--motion-ease-enter),
+        transform var(--motion-dialog-in) var(--motion-ease-enter);
+}
+.settings-dialog[open]::backdrop,
+.session-dialog[open]::backdrop {
+    opacity: 1;
+    transition: opacity var(--motion-dialog-in) var(--motion-ease-enter);
+}
+@starting-style {
+    .settings-dialog[open],
+    .session-dialog[open] {
+        opacity: 0;
+        transform: scale(0.98);
+    }
+    .settings-dialog[open]::backdrop,
+    .session-dialog[open]::backdrop {
+        opacity: 0;
+    }
+}
+/* the fade out needs the dialog kept in the top layer while it fades (overlay); elsewhere it closes at once. A dialog
+   that unmounts as it closes (the session's comparison) closes at once too. */
+@supports (overlay: auto) {
+    .settings-dialog,
+    .session-dialog {
+        transition:
+            opacity var(--motion-dialog-out) var(--motion-ease-exit),
+            transform var(--motion-dialog-out) var(--motion-ease-exit),
+            overlay var(--motion-dialog-out) allow-discrete,
+            display var(--motion-dialog-out) allow-discrete;
+    }
+    .settings-dialog::backdrop,
+    .session-dialog::backdrop {
+        transition:
+            opacity var(--motion-dialog-out) var(--motion-ease-exit),
+            overlay var(--motion-dialog-out) allow-discrete,
+            display var(--motion-dialog-out) allow-discrete;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .motion-pop,
+    .pane-menu-list,
+    .chat-people-popover {
+        animation: none;
+    }
+    .legend-slot,
+    .settings-dialog,
+    .session-dialog,
+    .settings-dialog::backdrop,
+    .session-dialog::backdrop {
+        transition: none;
     }
 }
 
@@ -2911,15 +3117,6 @@ svg.chat-launcher-mark {
     border: 1px solid var(--border);
     border-radius: 8px;
     pointer-events: none;
-    transform-origin: left bottom;
-    transition:
-        transform 180ms ease,
-        opacity 180ms ease;
-}
-/* closed, it shrinks into its button at the canvas's bottom-left */
-.legend-closed {
-    transform: scale(0.2);
-    opacity: 0;
 }
 .legend-title {
     display: flex;
@@ -3168,7 +3365,6 @@ del.was.block {
     position: fixed;
     z-index: 30;
     width: min(26.25rem, calc(100vw - 16px));
-    animation: baseline-menu-in 120ms ease-out;
     overflow: auto;
     padding: 8px;
     background: var(--panel);
@@ -3225,22 +3421,6 @@ del.was.block {
 .baseline-error {
     color: var(--error);
     font-size: 0.8125rem;
-}
-
-/* the menu slides a little out of the button that opened it */
-@keyframes baseline-menu-in {
-    from {
-        opacity: 0;
-        transform: translateY(var(--menu-from, -4px));
-    }
-}
-.baseline-menu-above {
-    --menu-from: 4px;
-}
-@media (prefers-reduced-motion: reduce) {
-    .baseline-menu {
-        animation: none;
-    }
 }
 
 /* ---------- the session pane and the others' cursors (dt session start only) ---------- */

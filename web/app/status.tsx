@@ -46,7 +46,7 @@ export function HealthButton({ current, connection }: { current: ViewPayload | n
                 {health !== 'ok' && <span className="health-text">{what}</span>}
             </button>
             {place && (
-                <div className="health-popover" role="dialog" aria-label={label} style={place}>
+                <div className="health-popover motion-pop motion-pop-up" role="dialog" aria-label={label} style={place}>
                     <dl>
                         <dt>{t.healthRows.status}</dt>
                         <dd>{current ? <span className={`pill pill-${current.status}`}>{t.status[current.status]}</span> : '—'}</dd>

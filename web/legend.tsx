@@ -57,28 +57,33 @@ export function Legend({ view, open, onToggle }: { view: LegendView; open: boole
     const t = useT();
     const rows = legendRows(view, t.legendRows);
     return (
-        <div className={`legend${open ? '' : ' legend-closed'}`} inert={!open}>
-            <div className="legend-title">
-                {t.legend}
-                <button className="icon-button" onClick={onToggle} data-tooltip={t.closeLegend} aria-label={t.closeLegend}>
-                    <ChevronDown size={14} aria-hidden />
-                </button>
-            </div>
-            {rows.map((r) => (
-                <div key={r.kind} className="legend-row">
-                    <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
-                        <path d="M4,7 L42,7" className="de-line" />
-                        {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
-                        {r.kind !== 'esHotspot' && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
-                    </svg>
-                    <span>{r.text}</span>
+        // closed, it folds down into its button: the slot's height goes to nothing as the legend fades (styles.css)
+        <div className={`legend-slot${open ? ' open' : ''}`} inert={!open}>
+            <div className="legend-clip">
+                <div className="legend">
+                    <div className="legend-title">
+                        {t.legend}
+                        <button className="icon-button" onClick={onToggle} data-tooltip={t.closeLegend} aria-label={t.closeLegend}>
+                            <ChevronDown size={14} aria-hidden />
+                        </button>
+                    </div>
+                    {rows.map((r) => (
+                        <div key={r.kind} className="legend-row">
+                            <svg width="56" height="14" className={`de de-${r.kind}`} aria-hidden>
+                                <path d="M4,7 L42,7" className="de-line" />
+                                {r.kind === 'owns' && <path d="M2,7 L9,3.5 L16,7 L9,10.5 Z" className="de-head de-diamond" />}
+                                {r.kind !== 'esHotspot' && <path d="M54,7 L41,0.5 L41,13.5 Z" className="de-head" />}
+                            </svg>
+                            <span>{r.text}</span>
+                        </div>
+                    ))}
+                    {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
+                    {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
+                    {view === 'states' && <div className="legend-note">{t.internalNote}</div>}
+                    {view === 'storming' && <div className="legend-note">{t.stormingColorNote}</div>}
+                    <div className="legend-note">{view === 'storming' ? t.stormingArrowNote : t.arrowNote}</div>
                 </div>
-            ))}
-            {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
-            {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
-            {view === 'states' && <div className="legend-note">{t.internalNote}</div>}
-            {view === 'storming' && <div className="legend-note">{t.stormingColorNote}</div>}
-            <div className="legend-note">{view === 'storming' ? t.stormingArrowNote : t.arrowNote}</div>
+            </div>
         </div>
     );
 }

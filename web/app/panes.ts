@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { InspectorTab } from '../inspector';
 import { usePersistentState } from '../shared/layout';
+import { useSwap } from '../shared/motion';
 import { autoInspectorWidth, effectiveLayout, keptOverrides, NO_OVERRIDES, type Dock, type Overrides } from './responsive';
 import { scaledSize } from './text-size';
 
@@ -24,8 +25,11 @@ export interface Panes {
     /** The inspector (the dock) is open. */
     inspectorOpen: boolean;
     setInspectorOpen: (open: boolean) => void;
+    /** Where the inspector is shown: a move lags `--motion-swap` behind, while `inspectorMoving` fades it out. */
     inspectorDock: Dock;
     setInspectorDock: (dock: Dock) => void;
+    /** The inspector is fading out before it moves to the other side (`inspectorDock` is still the old one). */
+    inspectorMoving: boolean;
     /** The inspector's width on the right: the reader's (once dragged), else one that leaves the canvas its share. */
     inspectorWidth: number;
     setInspectorWidth: (width: number) => void;
@@ -90,6 +94,7 @@ export function usePanes(uiScale = 1): Panes {
     const [overrides, setOverrides] = useState<Overrides>(NO_OVERRIDES);
     const layout = effectiveLayout({ width, conversationOpen, left: leftSaved, dock: dockSaved, overrides, scale: uiScale });
     const { forced } = layout;
+    const dockShown = useSwap(layout.dock);
     // an override ends with the narrow window (or with the conversation closed): the saved choices are shown again
     useEffect(() => {
         setOverrides((o) => keptOverrides(o, { left: forced.left, dock: forced.dock }));
@@ -124,8 +129,9 @@ export function usePanes(uiScale = 1): Panes {
         showLeft,
         inspectorOpen: dockOpen,
         setInspectorOpen,
-        inspectorDock: layout.dock,
+        inspectorDock: dockShown.shown,
         setInspectorDock,
+        inspectorMoving: dockShown.swapping,
         inspectorWidth,
         setInspectorWidth,
         inspectorHeight,

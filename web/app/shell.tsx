@@ -2,12 +2,15 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Diff, Ellipsis, FolderTree, PanelBottomOpen, PanelRightOpen, TriangleAlert, Waypoints, type LucideIcon } from 'lucide-react';
 import { useT } from '../i18n';
 import { Resizer, useDismiss } from '../shared/layout';
+import { usePaneMotion } from '../shared/motion';
 import { Tooltips } from '../tooltip';
 import type { LeftView, Panes } from './panes';
 
 /** Width of the activity bar (the collapsed left pane), and of the rail a closed dock leaves (its height below the canvas); see styles.css. */
 const BAR_WIDTH = 44;
 const RAIL_SIZE = 28;
+/** What a resizer between two panes takes of the row (5px, overlapping both by 2px; see `.resizer-x` in styles.css). */
+const RESIZER_SPACE = 1;
 /** The dock can be widened until the canvas is this narrow, and raised until the canvas is this low. */
 const MIN_CANVAS_WIDTH = 320;
 const MIN_CANVAS_HEIGHT = 200;
@@ -74,9 +77,13 @@ export function AppShell(props: {
     const menu = <DockMenu panes={panes} />;
     const leftWidth = leftOpen ? BAR_WIDTH + explorerWidth : BAR_WIDTH;
     const conversationSpace = conversationShown ? conversationWidth : 0;
+    // opening and closing panes move at different paces (the motion section of styles.css)
+    const motion = usePaneMotion([leftOpen, dockOpen, conversationShown]);
+    // below the canvas, the inspector's content is laid out at the width it ends with while the panes beside it move
+    const bottomWidth = `calc(100vw - ${leftWidth + RESIZER_SPACE + (conversationShown ? conversationSpace + RESIZER_SPACE : 0)}px)`;
 
     return (
-        <div className="app">
+        <div className={`app motion-${motion}`}>
             <div className={`left${leftOpen ? ' open' : ''}`} style={{ width: leftWidth }}>
                 <div className="left-head">
                     <span className="brand-mark" aria-hidden>
@@ -156,7 +163,7 @@ export function AppShell(props: {
                     onOpenChange={setDockOpen}
                 />
                 <div
-                    className={`dock dock-${dock}${dockOpen ? ' open' : ''}`}
+                    className={`dock dock-${dock}${dockOpen ? ' open' : ''}${panes.inspectorMoving ? ' moving' : ''}`}
                     style={right ? { width: dockOpen ? dockSize : RAIL_SIZE } : { height: dockOpen ? dockSize : RAIL_SIZE }}
                 >
                     <div className="rail" inert={dockOpen}>
@@ -169,7 +176,7 @@ export function AppShell(props: {
                             {right ? <PanelRightOpen size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
                         </button>
                     </div>
-                    <aside className="pane" style={right ? { width: dockSize } : { height: dockSize }} inert={!dockOpen}>
+                    <aside className="pane" style={right ? { width: dockSize } : { width: bottomWidth, height: dockSize }} inert={!dockOpen}>
                         {props.inspector(menu)}
                     </aside>
                 </div>
