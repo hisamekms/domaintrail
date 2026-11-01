@@ -366,19 +366,19 @@ class TestsEmitter {
         return { String: 'string', Int: 'number', Decimal: 'Decimal', Bool: 'boolean', Timestamp: 'Date', UUID: 'string' }[name] ?? 'unknown';
     }
 
-    /** The arbitrary of a field in a record (optional fields are left out of `requiredKeys`) or of a parameter. */
-    private fieldArb(f: FieldModel, param: boolean): string {
+    /** The arbitrary of a field in a record (optional fields are left out of `requiredKeys`, or drawn with the depth). */
+    private fieldArb(f: FieldModel): string {
         const b = this.baseArb(f);
         if (f.cardinality === 'one') return b;
-        if (!param && this.optionalAt(f)) return `testing.optionalAt(depth, ${b})`;
-        if (f.cardinality === 'optional') return param ? `testing.optional(${b})` : b;
+        if (this.optionalAt(f)) return `testing.optionalAt(depth, ${b})`;
+        if (f.cardinality === 'optional') return b;
         const { lower, upper } = bounds(f);
-        if (!param && lower === 0 && this.onCycle(f)) return `testing.manyAt(depth, ${b}${upper !== undefined ? `, ${upper}` : ''})`;
+        if (lower === 0 && this.onCycle(f)) return `testing.manyAt(depth, ${b}${upper !== undefined ? `, ${upper}` : ''})`;
         return `testing.many(${b}, ${lower}${upper !== undefined ? `, ${upper}` : ''})`;
     }
 
     private record(head: string[], fields: readonly FieldModel[]): string {
-        const props = [...head, ...fields.map((f) => `${f.name}: ${this.fieldArb(f, false)}`)];
+        const props = [...head, ...fields.map((f) => `${f.name}: ${this.fieldArb(f)}`)];
         const isOptional = (f: FieldModel): boolean => f.cardinality === 'optional' && !this.optionalAt(f);
         const optional = fields.some(isOptional);
         const required = [...head.map((h) => h.slice(0, h.indexOf(':'))), ...fields.filter((f) => !isOptional(f)).map((f) => f.name)];

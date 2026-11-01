@@ -145,13 +145,17 @@ describe('recursive value types', async () => {
         const suite = tests.M.contract(
             {
                 Doc: {
-                    start: (id: string, rule: Value) =>
+                    start: ({ id, rule }: { id: string; rule: Value }) =>
                         ok({ Open: { aggregate: { state: 'Open', id, rule }, events: { Opened: { type: 'Opened', docId: id, rule } } } }),
-                    rename: (doc: Value, name: string) => ok({ Open: { aggregate: { ...doc, rule: { ...(doc.rule as Value), name } }, events: {} } }),
+                    rename: (doc: Value, { name }: { name: string }) =>
+                        ok({ Open: { aggregate: { ...doc, rule: { ...(doc.rule as Value), name } }, events: {} } }),
                 },
                 Note: {
-                    write: (id: string, text: string) => ok({ Note: { aggregate: { id, text }, events: {} } }),
-                    touch: (note: Value) => ok({ Note: { aggregate: note, events: {} } }),
+                    write: ({ id, text }: { id: string; text: string }) => ok({ Note: { aggregate: { id, text }, events: {} } }),
+                    touch: (note: Value, { expr, chain }: { expr: Value; chain: Value }) => {
+                        if (typeof expr.kind !== 'string' || typeof chain.label !== 'string') throw new Error('touch got no expression and chain');
+                        return ok({ Note: { aggregate: note, events: {} } });
+                    },
                 },
                 policies: { React: async () => ({ note: '00000000-0000-4000-8000-000000000001', expr: { kind: 'lit', value: 1 }, chain: { label: 'c' } }) },
             },

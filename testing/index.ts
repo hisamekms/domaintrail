@@ -155,13 +155,9 @@ export function lazy<T extends object>(defs: { readonly [K in keyof T]: () => T[
 
 export const cast = <T>(arb: fc.Arbitrary<unknown>): fc.Arbitrary<T> => arb as fc.Arbitrary<T>;
 
-/** A field or parameter of a multiplicity: `[lower..upper]` elements (`upper` absent: a few more than `lower`). */
+/** A field of a multiplicity: `[lower..upper]` elements (`upper` absent: a few more than `lower`). */
 export function many<T>(arb: fc.Arbitrary<T>, lower: number, upper?: number): fc.Arbitrary<T[]> {
     return fc.array(arb, { minLength: lower, maxLength: upper ?? lower + 4 });
-}
-
-export function optional<T>(arb: fc.Arbitrary<T>): fc.Arbitrary<T | undefined> {
-    return fc.option(arb, { nil: undefined });
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
