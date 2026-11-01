@@ -62,7 +62,7 @@
               "examples": [{ "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } }]
             },
             "tests": {
-              "description": "Contract tests generated from the model (ADR 0020), written only when this key is present: fast-check arbitraries of the types and a runner-agnostic suite per context. Your project needs fast-check as a (dev) dependency.",
+              "description": "Contract tests generated from the model (ADR 0020), written only when this key is present: fast-check arbitraries of the types and a runner-agnostic suite per context. They import domaintrail/testing (a subpath of the domaintrail package); your project needs fast-check as a (dev) dependency.",
               "type": "object",
               "additionalProperties": false,
               "properties": {

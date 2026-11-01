@@ -8,7 +8,7 @@ This page is about working on DomainTrail itself. To use it, start with the [REA
 Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.13 or later. `bun run dt` runs the
 CLI from source.
 
-The repository is a Bun workspace: the root package (the published CLI, `test/`) and the private packages under
+The repository is a Bun workspace: the root package (the published CLI and `domaintrail/testing`, `test/`) and the private packages under
 `contexts/`, `capabilities/`, `platform/`, `shared/` and `apps/` (see [Repository layout](#repository-layout)). `bun install` at the root installs all of them
 with the isolated linker (`bunfig.toml`), so each package resolves the dependencies its own `package.json` declares.
 
@@ -19,7 +19,7 @@ bun run typecheck
 bun run lint               # oxlint --type-aware, no narrowing casts without a reason (after `bun run dt -r examples/shop generate ts`)
 bun run fmt                # oxfmt (`fmt:check` in CI); the .dt files are formatted by `dt fmt`, the Markdown by hand
 bun test                   # all the tests: unit tests next to the code, integration tests in test/ (see Tests)
-bun run build              # dist/: the CLI bundled for Node and the Live View page (needed by `view` and the tests)
+bun run build              # dist/: the CLI bundled for Node, the Live View page, domaintrail/testing (needed by `view`, examples/shop and the tests)
 ```
 
 Try the CLI on the example:
@@ -27,7 +27,7 @@ Try the CLI on the example:
 ```bash
 bun run dt -r examples/shop check
 bun run dt -r examples/shop generate ts      # then examples/shop/src type-checks against it
-(cd examples/shop && bun test)               # passes the generated contract tests and the application's tests
+(cd examples/shop && bun test)               # passes the generated contract tests and the application's tests (after `bun run build`)
 (cd examples/shop && bun src/demo.ts)        # a walk through the shop: orders, an invoice, a refund request
 bun run build && bun run dt -r examples/shop view
 ```
@@ -50,10 +50,29 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 | `shared/kernel` | `@domaintrail/kernel`, ADR 0027's shared kernel: `Diagnostic` (its code a plain string; each context owns its rule IDs), the suggestions, `SourceFile`, `Location`, `camel`; it imports nothing |
 | `apps/dt` | `@domaintrail/dt`, the one binary: `main.ts` (`runDt`, called by `bin/dt.ts`, and `cliDeps`), `wiring` (the Live View server, the session server, the subscriber, the model validator, with every adapter wired), `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `server` (`http` and `websocket`: the Live View server and its access check; `session`: the session's routes, identities, presence, the agent API), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports, hosts and allowed hosts and origins are the app's own) |
 | `apps/web` | `@domaintrail/web`, the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `session`, `shared` |
+| `testing` | `domaintrail/testing`, the support of the generated contract tests (ADR 0028, decision 5): a subpath of the published package, built into `dist/testing.js` (see [The testing support](#the-testing-support)) |
 | `docs` | the guide (`dt guide`), Getting started, the Live View, the ADRs, releasing |
 | `examples/shop` | the complete example, also run by the tests |
 | `tree-sitter-domaintrail` | the tree-sitter grammar |
 | `editors/zed` | the Zed extension |
+
+## The testing support
+
+The generated contract tests import their generic helpers from `domaintrail/testing`, a subpath of the published
+package (`exports` in the root `package.json`): its source is `testing/index.ts`, and `bun run build` writes
+`dist/testing.js` and `dist/testing.d.ts`. fast-check is an optional peer dependency. In the repository the import
+resolves without a package to install:
+
+- the code below the root `tsconfig.json` (Collaboration's committed tests, `test/`) takes the source through its
+  `paths`, for `tsc` and Bun alike; the architecture test lets a package's generated tests import it undeclared;
+- `examples/shop`, which has a `tsconfig.json` of its own and no `package.json`, takes the built package through the
+  root package's `exports` (a self-reference), like a project that installed domaintrail: run `bun run build` first;
+- the temporary projects of the tests get a `node_modules` whose `domaintrail/testing` is the source
+  (`linkNodeModules` in `test/helpers.ts` and in `capabilities/generation/src/test-helpers.ts`).
+
+The generated tests state the version of domaintrail that generated them and check it when loaded
+(`testing.checkVersion`); the baselines of the generated code leave it out (`withoutVersion` in `test/helpers.ts`), so
+that a release changes no snapshot.
 
 ## Boundaries
 

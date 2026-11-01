@@ -506,7 +506,8 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
 The generated tests check what the types cannot: the values. They generate inputs with fast-check and use the
 generated checks as the oracle — the constructors accept exactly the valid values, a command returns the error of the
 first requirement that does not hold, an aggregate made by a command holds the invariants of its state, and commands
-are pure. Register them with one test file:
+are pure. Their helpers come with domaintrail, as `domaintrail/testing`, and they need fast-check, installed above.
+Register them with one test file:
 
 ```ts
 // src/contract.test.ts

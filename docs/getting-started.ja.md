@@ -496,7 +496,8 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
 
 生成されたテストは、型では確かめられないこと、つまり値を検査します。fast-check で入力を生成し、生成されたチェックを
 正解として使います。コンストラクタがちょうど正しい値だけを受け付けること、コマンドが成り立たない最初の要件のエラーを
-返すこと、コマンドが作った集約がその状態の不変条件を満たすこと、コマンドが純粋であること。テストファイル 1 つで登録します。
+返すこと、コマンドが作った集約がその状態の不変条件を満たすこと、コマンドが純粋であること。補助関数は domaintrail に
+`domaintrail/testing` として含まれ、上で入れた fast-check を使います。テストファイル 1 つで登録します。
 
 ```ts
 // src/contract.test.ts

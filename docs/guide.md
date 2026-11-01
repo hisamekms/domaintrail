@@ -1577,8 +1577,15 @@ aggregates per state. A parameter of a verified type gets values of its base typ
 passed); `arbitraries` overrides it like any other type (`{ Sales: { AvailableEmail: … } }`). **Inputs are always valid**: only values that hold their invariants are used, and parameters
 are values of their types; what a command does with invalid input is outside its contract. Values of one type are
 drawn often from a small pool, so that duplicates, `contains` and `!=` are decided both ways. Runs are deterministic
-(fixed seed, configurable), and a failure shows the shrunk counterexample and the seed. Install fast-check as a dev
-dependency of your project; generated product code does not use it.
+(fixed seed, configurable), and a failure shows the shrunk counterexample and the seed.
+
+The generic helpers of the tests are **`domaintrail/testing`**, a subpath of the domaintrail package, which your
+project already has as a dev dependency to run `dt`. Install fast-check as a dev dependency too (an optional peer
+dependency of domaintrail); generated product code uses neither. Each test module states the version of domaintrail
+that generated it and, when it is loaded, fails unless `domaintrail/testing` is compatible with it (as with
+`^<version>`: at least as new, of the same minor version while the major is 0): after upgrading domaintrail, run
+`dt generate ts` again. `tests/index.ts` exports the suites of the contexts and `register`; the helpers themselves
+(`cases`, `suite`, the types `Suite` and `TestCase`) are imported from `domaintrail/testing`.
 
 Per context, `tests/<Context>.ts` exports `contract(impl, options?)`, returning a suite of named test cases
 (`{ name, children }` of `{ name, run, todo? }`) for any runner, and `arbitraries(options?)`. `impl` lists what to
@@ -2349,7 +2356,7 @@ relative to the config file, and its directory becomes the root. Without a confi
       "policies": "optional",                               // default: "optional"
       // per context: a directory of its own instead of "out", and/or its own "policies" (both optional)
       "contexts": { "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } },
-      // contract tests, written only with this key (optional); needs fast-check in your project
+      // contract tests, written only with this key (optional); they import domaintrail/testing and need fast-check
       "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
     }
   },

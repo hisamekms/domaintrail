@@ -3,7 +3,8 @@
 Releases go to npm through [staged publishing](https://docs.npmjs.com/staged-publishing): the Release workflow
 (`.github/workflows/release.yml`) tests, builds and stages the package, and nothing is public until a maintainer
 approves it with 2FA. The workflow also creates the version's GitHub Release as a **draft**, with the notes from the
-changelogs; a maintainer reviews it and publishes it.
+changelogs; a maintainer reviews it and publishes it. The one package holds the CLI and `domaintrail/testing`, the
+support of the generated contract tests (a subpath in its `exports`); nothing else is published.
 
 ## The changelog
 
@@ -37,6 +38,17 @@ match.
    ```bash
    git switch main && git pull --ff-only
    npm version patch   # or minor / major; commits and creates the vX.Y.Z tag
+   git push --follow-tags
+   ```
+
+   A **minor or major** version also regenerates Collaboration's committed contract tests in the release commit: they
+   state the version of domaintrail that generated them and fail when loaded with `domaintrail/testing` of another
+   minor version (a patch version leaves them as they are; the tests comparing generated code ignore the version):
+
+   ```bash
+   npm version minor --no-git-tag-version   # or major
+   bun run dt -r contexts/collaboration generate ts
+   git commit -am "chore(release): X.Y.Z" && git tag -a vX.Y.Z -m X.Y.Z
    git push --follow-tags
    ```
 
