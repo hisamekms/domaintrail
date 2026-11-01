@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { answerBody } from '@domaintrail/web/session/actions';
-import { cardRuns, messageMarks, quoteDisplay, updatedCards } from '@domaintrail/web/session/cards';
-import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unitName } from '@domaintrail/web/session/history';
-import { latestAt, revisionLookup, streamItems, unreadCount } from '@domaintrail/web/session/stream';
+import { answerBody } from './actions';
+import { cardRuns, messageMarks, quoteDisplay, updatedCards } from './cards';
+import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unitName } from './history';
+import { latestAt, revisionLookup, streamItems, unreadCount } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];

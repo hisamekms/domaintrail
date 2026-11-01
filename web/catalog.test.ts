@@ -1,26 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { analyze, type InvariantModel } from '@domaintrail/modeling';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { InvariantModel } from '@domaintrail/modeling/model/model';
-import { CardHead, Invariants as CardInvariants } from '@domaintrail/web/catalog';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { Invariants as InspectorInvariants } from '@domaintrail/web/inspector';
-import {
-    catalogSections,
-    commandsWithOutcome,
-    filterCatalog,
-    inCatalog,
-    isCatalogFiltered,
-    matchesQuery,
-    namer,
-    type CatalogFilter,
-} from '@domaintrail/web/model-utils';
-import { EXAMPLES } from './helpers.js';
+import { CardHead, Invariants as CardInvariants } from './catalog';
+import { MESSAGES } from './i18n';
+import { Invariants as InspectorInvariants } from './inspector';
+import { catalogSections, commandsWithOutcome, filterCatalog, inCatalog, isCatalogFiltered, matchesQuery, namer, type CatalogFilter } from './model-utils';
+import { exampleSources } from './test-helpers';
 
 async function shopModel() {
-    return (await analyze(await loadWorkspace(EXAMPLES))).model!;
+    return (await analyze(await exampleSources())).model!;
 }
 
 describe('catalog', () => {

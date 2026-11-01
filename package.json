@@ -46,6 +46,8 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "bun test",
+    "test:unit": "bun test ./packages ./web",
+    "test:it": "bun test ./test",
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
     "session:seed": "bun ./scripts/session-seed.ts",

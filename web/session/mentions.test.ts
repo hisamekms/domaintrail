@@ -4,11 +4,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import { parseStormings } from '@domaintrail/modeling/storming/parse';
+import { analyze, type DomainModel, parseStormings } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
 import {
     addChips,
     bodyText,
@@ -28,9 +25,9 @@ import {
     removeChip,
     type ComposerValue,
     type PersonCandidate,
-} from '@domaintrail/web/session/mentions';
-import type { TargetDraft } from '@domaintrail/web/session/targets';
-import { EXAMPLES } from './helpers.js';
+} from './mentions';
+import type { TargetDraft } from './targets';
+import { exampleSources } from '../test-helpers';
 
 const el = (element: string): TargetDraft => ({ target: { kind: 'DtElement', element }, label: element });
 const order = el('Sales.Order');
@@ -215,10 +212,10 @@ describe('the composer keys', () => {
     });
 });
 
-const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 const { stormings: parsed } = await parseStormings([{ path: 'es.dtes', text: SAMPLE }]);
 const stormings = [{ id: parsed[0].id, storming: parsed[0] }] as unknown as StormingView[];
-const workspace = await loadWorkspace(EXAMPLES);
+const workspace = await exampleSources();
 const model = (await analyze(workspace)).model as DomainModel;
 const sources = workspace.map((f) => ({ path: f.path, text: f.text }));
 

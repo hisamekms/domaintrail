@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { linesOf, SourceView } from '@domaintrail/web/source';
+import { linesOf, SourceView } from './source';
 
 const text = 'context Shop {\n  aggregate Order {\n    id: OrderId\n  }\n}\n';
 const sources = [{ path: 'shop.dt', text }];

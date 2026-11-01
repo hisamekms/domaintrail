@@ -1,14 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import type { DomainModel, ElementModel } from '@domaintrail/modeling/model/model';
-import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from '@domaintrail/web/behavior';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { tabsFor } from '@domaintrail/web/inspector';
-import { namer, resolve } from '@domaintrail/web/model-utils';
-import { EXAMPLES } from './helpers.js';
+import { analyze, type DomainModel, type ElementModel } from '@domaintrail/modeling';
+import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from './behavior';
+import { MESSAGES } from './i18n';
+import { tabsFor } from './inspector';
+import { namer, resolve } from './model-utils';
+import { exampleSources } from './test-helpers';
 
 let model: DomainModel;
 let order: ElementModel;
@@ -17,7 +15,7 @@ const names = () => namer('both', model);
 const command = (name: string) => order.commands!.find((c) => c.name === name)!;
 
 beforeAll(async () => {
-    model = (await analyze(await loadWorkspace(EXAMPLES))).model!;
+    model = (await analyze(await exampleSources())).model!;
     order = Object.values(model.elements).find((e) => e.name === 'Order')!;
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { backIndex, popHistory, pushHistory } from '@domaintrail/web/view/history';
+import { backIndex, popHistory, pushHistory } from './history';
 
 const all = () => true;
 

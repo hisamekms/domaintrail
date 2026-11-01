@@ -97,6 +97,9 @@ export { analyze, isStormingFile, type Analysis, type SourceFile } from './core/
 export { formatDomain, FormatError } from './format/format.js';
 export { formatStorming } from './storming/format.js';
 
+// ---- use cases: Storming's parser, the .dtes sources to its IR (T8: contexts/storming) --------------------------
+export { parseStormings } from './storming/parse.js';
+
 // ---- use cases: the TypeScript generator (T8: capabilities/generation) ------------------------------------------
 export { GENERATED_MARKER, generateTypeScript, type GeneratedFile, type PolicyMode } from './generator/typescript.js';
 export { aggregateParamName } from './generator/naming.js';

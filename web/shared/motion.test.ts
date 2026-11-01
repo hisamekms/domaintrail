@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { paneMotion, parseDuration } from '@domaintrail/web/shared/motion';
-import { centeredCamera, isLaidOut } from '@domaintrail/web/view/center';
+import { paneMotion, parseDuration } from './motion';
+import { centeredCamera, isLaidOut } from '../view/center';
 
-const styles = readFileSync(join(import.meta.dir, '..', 'web', 'styles.css'), 'utf8');
+const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
 
 describe('the motion tokens', () => {
     test('a CSS duration in milliseconds; anything else is no motion', () => {

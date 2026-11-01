@@ -1,12 +1,10 @@
 // Element references in the agent's reply (web/session/references.ts): the token grammar, both kinds, resolution in the
 // name display setting, and what is left as text.
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { parseStormings } from '@domaintrail/modeling/storming/parse';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { parseReplyText, referenceText, type ReplySegment } from '@domaintrail/web/session/references';
-import type { NamingContext } from '@domaintrail/web/session/targets';
-import { EXAMPLES } from './helpers.js';
+import { analyze, parseStormings } from '@domaintrail/modeling';
+import { parseReplyText, referenceText, type ReplySegment } from './references';
+import type { NamingContext } from './targets';
+import { exampleSources } from '../test-helpers';
 
 const refs = (text: string): ReplySegment[] => parseReplyText(text);
 
@@ -37,7 +35,7 @@ describe('reply text with element references', () => {
     });
 
     test('resolved in the display setting; unresolved as the identifier, without braces', async () => {
-        const files = await loadWorkspace(EXAMPLES);
+        const files = await exampleSources();
         const a = await analyze(files);
         const parsed = await parseStormings(files.filter((f) => f.path.endsWith('.dtes')));
         const stormings = parsed.stormings.map((s) => ({ id: s.id, storming: s }));

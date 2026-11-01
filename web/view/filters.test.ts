@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { activeFilterCount, shownKinds, toggleKind } from '@domaintrail/web/view/filters';
+import { activeFilterCount, shownKinds, toggleKind } from './filters';
 
 describe("the view toolbar's 絞り込み button", () => {
     test('the context map: active when the shared and external BCs are shown (not the default)', () => {

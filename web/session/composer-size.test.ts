@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    clampComposerRows,
-    DEFAULT_COMPOSER_ROWS,
-    draggedComposerRows,
-    keyedComposerRows,
-    maxComposerRows,
-    MIN_COMPOSER_ROWS,
-} from '@domaintrail/web/session/composer-size';
+import { clampComposerRows, DEFAULT_COMPOSER_ROWS, draggedComposerRows, keyedComposerRows, maxComposerRows, MIN_COMPOSER_ROWS } from './composer-size';
 
 describe("the chat composer's height", () => {
     test('at most 60% of the pillar, in whole rows, and never fewer than the minimum', () => {

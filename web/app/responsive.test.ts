@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { healthOf, workspaceName } from '@domaintrail/web/app/health';
-import { COLLAPSE_LEFT_BELOW, DOCK_BELOW_BELOW, effectiveLayout, keptOverrides, NO_OVERRIDES } from '@domaintrail/web/app/responsive';
+import { healthOf, workspaceName } from './health';
+import { COLLAPSE_LEFT_BELOW, DOCK_BELOW_BELOW, effectiveLayout, keptOverrides, NO_OVERRIDES } from './responsive';
 
 describe('the layout on a narrow window', () => {
     const saved = { left: true, dock: 'right' as const, overrides: NO_OVERRIDES };
@@ -56,7 +56,7 @@ describe('the head and the foot of the left pane', () => {
 
 describe("the inspector's width until it is dragged", () => {
     test('about a third of the room the other panes leave, within 300–420px', async () => {
-        const { autoInspectorWidth } = await import('@domaintrail/web/app/responsive');
+        const { autoInspectorWidth } = await import('./responsive');
         // 1600px with the left pane (304) and the chat (380) open
         expect(autoInspectorWidth(1600 - 304 - 380)).toBe(330);
         expect(autoInspectorWidth(2400)).toBe(420);
@@ -66,7 +66,7 @@ describe("the inspector's width until it is dragged", () => {
 
 describe('the text size (文字の大きさ)', () => {
     test('標準 leaves the root at the browser default; the others scale it', async () => {
-        const { rootFontSize, TEXT_SCALES, TEXT_SIZES, isTextSize } = await import('@domaintrail/web/app/text-size');
+        const { rootFontSize, TEXT_SCALES, TEXT_SIZES, isTextSize } = await import('./text-size');
         expect(TEXT_SIZES).toEqual(['small', 'standard', 'large', 'xlarge']);
         expect(TEXT_SCALES).toEqual({ small: 0.9, standard: 1, large: 1.15, xlarge: 1.3 });
         expect(rootFontSize('standard')).toBe('');
@@ -79,7 +79,7 @@ describe('the text size (文字の大きさ)', () => {
     });
 
     test("the UI scale is the root font size against 16px (the browser's default and the chosen size together)", async () => {
-        const { uiScale } = await import('@domaintrail/web/app/text-size');
+        const { uiScale } = await import('./text-size');
         expect(uiScale(16)).toBe(1);
         expect(uiScale(20.8)).toBeCloseTo(1.3);
         // a browser set to 20px with 標準
@@ -89,7 +89,7 @@ describe('the text size (文字の大きさ)', () => {
     });
 
     test("the panes' default sizes follow the UI scale; a dragged size is kept", async () => {
-        const { DEFAULT_PANE_SIZES, paneSize } = await import('@domaintrail/web/app/panes');
+        const { DEFAULT_PANE_SIZES, paneSize } = await import('./panes');
         expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1)).toBe(260);
         expect(paneSize(null, DEFAULT_PANE_SIZES.conversationWidth, 1)).toBe(380);
         expect(paneSize(null, DEFAULT_PANE_SIZES.explorerWidth, 1.3)).toBe(338);
@@ -98,7 +98,7 @@ describe('the text size (文字の大きさ)', () => {
     });
 
     test("the inspector's automatic width and the narrow-window thresholds grow with the UI scale", async () => {
-        const { autoInspectorWidth } = await import('@domaintrail/web/app/responsive');
+        const { autoInspectorWidth } = await import('./responsive');
         expect(autoInspectorWidth(500, 1.3)).toBe(390);
         expect(autoInspectorWidth(2400, 1.3)).toBe(546);
         expect(autoInspectorWidth(1000, 1.3)).toBe(390);
@@ -110,7 +110,7 @@ describe('the text size (文字の大きさ)', () => {
     });
 
     test("the UI's font sizes in styles.css are in rem (the canvas's shapes keep px: the zoom scales them)", async () => {
-        const css = await Bun.file(new URL('../web/styles.css', import.meta.url)).text();
+        const css = await Bun.file(new URL('../styles.css', import.meta.url)).text();
         const sections = css.split(/(?=\/\* -{10} )/);
         const pxFonts = (s: string): string[] => s.match(/(?:font-size|font|line-height):\s*[\d.]+px[^;]*/g) ?? [];
         const ui = sections.filter((s) => !s.startsWith('/* ---------- canvas shapes'));
@@ -119,10 +119,10 @@ describe('the text size (文字の大きさ)', () => {
     });
 
     test("the explorer's rows: the first level one step inside the section titles, in rem so that it grows with the text size", async () => {
-        const { indent } = await import('@domaintrail/web/explorer');
+        const { indent } = await import('../explorer');
         expect(indent(0)).toEqual({ '--depth': 0 });
         expect(indent(3)).toEqual({ '--depth': 3 });
-        const css = await Bun.file(new URL('../web/styles.css', import.meta.url)).text();
+        const css = await Bun.file(new URL('../styles.css', import.meta.url)).text();
         const rule = (selector: string): string => css.slice(css.indexOf(`${selector} {`)).split('}')[0] ?? '';
         expect(rule('.explorer-section-title')).toContain('padding: 4px 12px 4px 8px;');
         const padding = /padding-left: calc\(([\d.]+)rem \+ \(var\(--depth, 0\) \+ 1\) \* ([\d.]+)rem\);/.exec(rule('.tree-group'));

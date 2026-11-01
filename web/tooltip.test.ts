@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { placeTooltip } from '@domaintrail/web/tooltip';
+import { placeTooltip } from './tooltip';
 
-const WEB = join(import.meta.dir, '..', 'web');
+const WEB = import.meta.dir;
 const viewport = { width: 1000, height: 800 };
 const size = { width: 120, height: 24 };
 
@@ -23,7 +23,7 @@ describe('tooltips', () => {
 
     test('icon buttons use the app tooltip, not the native title', () => {
         const offending = readdirSync(WEB)
-            .filter((f) => f.endsWith('.tsx'))
+            .filter((f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx'))
             .flatMap((f) =>
                 // a button's opening tag (attributes may contain `=>` but not a bare `>` before the children)
                 [...readFileSync(join(WEB, f), 'utf8').matchAll(/<button\b(?:=>|[^>])*>/g)]

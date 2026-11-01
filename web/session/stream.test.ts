@@ -1,16 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Me, Presence, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { COMPOSER_DRAFT, composerScope, createMemoryDrafts, newDraft, scopeKey } from '@domaintrail/web/session/drafts';
-import { NO_PEERS } from '@domaintrail/web/session/presence';
-import { targetName, WORKSPACE_TARGET, type NamingContext } from '@domaintrail/web/session/targets';
+import { COMPOSER_DRAFT, composerScope, createMemoryDrafts, newDraft, scopeKey } from './drafts';
+import { NO_PEERS } from './presence';
+import { targetName, WORKSPACE_TARGET, type NamingContext } from './targets';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import { parseStormings } from '@domaintrail/modeling/storming/parse';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { EXAMPLES } from './helpers.js';
-import { applyEvent } from '@domaintrail/web/session/state';
+import { analyze, type DomainModel, parseStormings } from '@domaintrail/modeling';
+import { exampleSources } from '../test-helpers';
+import { applyEvent } from './state';
 import {
     agentStatus,
     elapsed,
@@ -25,7 +22,7 @@ import {
     speakerName,
     targetsSummary,
     targetText,
-} from '@domaintrail/web/session/stream';
+} from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
@@ -289,10 +286,10 @@ describe("the composer's draft", () => {
     });
 });
 
-const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 const { stormings: parsed } = await parseStormings([{ path: 'es.dtes', text: SAMPLE }]);
 const storming = parsed[0];
-const model = (await analyze(await loadWorkspace(EXAMPLES))).model as DomainModel;
+const model = (await analyze(await exampleSources())).model as DomainModel;
 
 describe('targets named in the display setting', () => {
     const stormings = [{ id: storming.id, storming }];

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { pickedAlternative, questionsState, runNumber } from '@domaintrail/web/session/decisions';
+import { MESSAGES } from '../i18n';
+import { pickedAlternative, questionsState, runNumber } from './decisions';
 
 type RunJson = SessionStateBody['runs'][number];
 

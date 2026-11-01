@@ -1,9 +1,9 @@
 // The selection as suggested targets of the request being written (web/session/suggestions.ts): merged with the
 // confirmed chips, dismissed until the selection changes, within the limit of targets, and the `C` key.
 import { describe, expect, test } from 'bun:test';
-import { MAX_REQUEST_TARGETS, type ComposerValue } from '@domaintrail/web/session/mentions';
-import { confirmSelection, dismiss, isConfirmKey, isTyping, NO_DISMISSALS, suggestions, targetsToSend } from '@domaintrail/web/session/suggestions';
-import type { TargetDraft } from '@domaintrail/web/session/targets';
+import { MAX_REQUEST_TARGETS, type ComposerValue } from './mentions';
+import { confirmSelection, dismiss, isConfirmKey, isTyping, NO_DISMISSALS, suggestions, targetsToSend } from './suggestions';
+import type { TargetDraft } from './targets';
 
 const dt = (element: string): TargetDraft => ({ target: { kind: 'DtElement', element }, label: element });
 const es = (local: string): TargetDraft => ({ target: { kind: 'DtesElement', storming: 'Returns', local } });

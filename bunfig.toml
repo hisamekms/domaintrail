@@ -1,6 +1,7 @@
 [test]
-# the repository's tests; examples/shop runs its own tests (contract and application) itself (test/contract-tests.test.ts)
-root = "./test"
+# the unit tests next to the code (packages/*/src, web) and the integration tests in test/ (CONTRIBUTING.md, Tests);
+# examples/shop runs its own tests (contract and application) itself (test/contract-tests.test.ts)
+pathIgnorePatterns = ["examples/**", "dist/**", "tree-sitter-domaintrail/**", "editors/**"]
 
 [install]
 # install only versions published at least 3 days ago, matching the cooldown of Dependabot (.github/dependabot.yml)

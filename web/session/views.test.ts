@@ -2,7 +2,7 @@
 // participants' rows, and the chat's small layout rules.
 import { describe, expect, test } from 'bun:test';
 import type { Me, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { canOpen, continued, isMac, participantRows, viewName, viewTargetOf, type ViewScope, type ViewWords } from '@domaintrail/web/session/views';
+import { canOpen, continued, isMac, participantRows, viewName, viewTargetOf, type ViewScope, type ViewWords } from './views';
 
 const words: ViewWords = {
     views: { contextMap: 'コンテキストマップ', structure: '構造図', catalog: 'カタログ', storming: 'イベントストーミング' },

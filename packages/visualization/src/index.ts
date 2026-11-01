@@ -27,7 +27,7 @@ export {
 export { PRIMITIVE_LABELS, typeText } from './domain/graph/build.js';
 export { dependencyCounts } from './domain/graph/context-map.js';
 // the model diff (T7: Modeling's domain)
-export { type ModelDiff } from './domain/graph/diff.js';
+export { diffModels, type ModelDiff } from './domain/graph/diff.js';
 
 // ---- core: the storming views (the semantic graph and the occurrences: T7, Storming's domain) -------------------
 export {
@@ -39,7 +39,8 @@ export {
     type ViewLevel,
     type ViewOptions,
 } from './domain/storming/ir.js';
-export { stormingViewKey } from './domain/storming/graph.js';
+export { stormingGraphId, stormingViewKey } from './domain/storming/graph.js';
+export { projectView } from './domain/storming/render.js';
 export { buildSemanticGraph, firstDeclarations, stormingTimelines } from './domain/storming/semantic.js';
 export { timelineOccurrences } from './domain/storming/trie.js';
 

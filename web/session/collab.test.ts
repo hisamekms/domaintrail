@@ -2,9 +2,9 @@
 // when the facilitator ends it, and the summary everyone sees then.
 import { describe, expect, test } from 'bun:test';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { collabMenuItems, collabSummary, hasUnfinished, hoursMinutes, inviteLink, unfinishedWork, unitTitle } from '@domaintrail/web/session/collab';
-import { changeUnits } from '@domaintrail/web/session/history';
-import { NO_PEERS } from '@domaintrail/web/session/presence';
+import { collabMenuItems, collabSummary, hasUnfinished, hoursMinutes, inviteLink, unfinishedWork, unitTitle } from './collab';
+import { changeUnits } from './history';
+import { NO_PEERS } from './presence';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];

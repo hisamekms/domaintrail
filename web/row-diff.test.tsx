@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import { menuPlacement } from '@domaintrail/web/baseline-picker';
-import { CommandCard } from '@domaintrail/web/behavior';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { Inspector, type InspectorProps, type InspectorTab } from '@domaintrail/web/inspector';
-import { namer } from '@domaintrail/web/model-utils';
-import { diffRows } from '@domaintrail/web/row-diff';
-import { check } from './helpers.js';
+import { diffModels } from '@domaintrail/visualization';
+import type { DomainModel } from '@domaintrail/modeling';
+import { menuPlacement } from './baseline-picker';
+import { CommandCard } from './behavior';
+import { MESSAGES } from './i18n';
+import { Inspector, type InspectorProps, type InspectorTab } from './inspector';
+import { namer } from './model-utils';
+import { diffRows } from './row-diff';
+import { check } from './test-helpers';
 
 const model = async (body: string): Promise<DomainModel> => (await check({ 'a.dt': `context A {\n${body}\n}\n` })).model!;
 

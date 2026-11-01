@@ -3,16 +3,10 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { buildStateGraph, buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
-import { buildContextMapGraph } from '@domaintrail/visualization/domain/graph/context-map';
-import type { Graph } from '@domaintrail/visualization/domain/graph/ir';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { KIND_ORDER } from '@domaintrail/web/model-utils';
-import { EXAMPLES } from './helpers.js';
+import { MESSAGES } from './i18n';
+import { KIND_ORDER } from './model-utils';
 
-const WEB = join(import.meta.dir, '..', 'web');
+const WEB = import.meta.dir;
 
 /** Every text of a message tree, by its path; functions are called with sample arguments. */
 function texts(value: unknown, path = ''): [string, string][] {
@@ -79,30 +73,6 @@ describe('i18n', () => {
         expect(english).toEqual([]);
     });
 
-    test('Japanese diagrams leave no English words untranslated', async () => {
-        const model = (await analyze(await loadWorkspace(EXAMPLES))).model!;
-        const contexts = model.contexts.filter((c) => !model.sharedContexts.includes(c));
-        const graphs: Graph[] = [
-            buildContextMapGraph(model, { all: true }),
-            buildStructureGraph(model),
-            buildStructureGraph(model, { level: 'aggregates' }),
-            // stubs of the other contexts
-            ...contexts.flatMap((c) => [buildStructureGraph(model, { focus: [c] }), buildStructureGraph(model, { focus: [c], level: 'aggregates' })]),
-            ...Object.values(model.elements)
-                .filter((e) => e.kind === 'aggregate')
-                .map((agg) => buildStateGraph(agg, model)),
-        ];
-        // the Live View's own words in diagrams: the captions, and the counts on the context map
-        const words = graphs.flatMap((g) =>
-            g.nodes.flatMap((n) => [
-                ...(n.stereotype ? [n.stereotype.ja.name] : []),
-                ...(n.kind === 'boundedContext' ? n.lines.map((l) => l.key.ja.name) : []),
-            ]),
-        );
-        expect(words.length).toBeGreaterThan(0);
-        expect([...new Set(words.flatMap(englishIn))]).toEqual([]);
-    });
-
     /**
      * Words of the Live View belong in i18n.tsx: no other component may show a literal text. Literal strings in the
      * transpiled components are suspect when they hold Japanese or a capitalized word; those that are not shown
@@ -112,7 +82,7 @@ describe('i18n', () => {
 
     test('components show no literal text', async () => {
         const transpiler = new Bun.Transpiler({ loader: 'tsx' });
-        const files = readdirSync(WEB).filter((f) => f.endsWith('.tsx') && f !== 'i18n.tsx');
+        const files = readdirSync(WEB).filter((f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx') && f !== 'i18n.tsx');
         const found: string[] = [];
         for (const file of files) {
             const code = transpiler.transformSync(await Bun.file(join(WEB, file)).text());

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { legendRows } from '@domaintrail/web/legend';
-import { canvasShortcut, EXPANDED, formatZoom, parseControls, toggleCollapsed } from '@domaintrail/web/view/controls';
+import { MESSAGES } from '../i18n';
+import { legendRows } from '../legend';
+import { canvasShortcut, EXPANDED, formatZoom, parseControls, toggleCollapsed } from './controls';
 
 const key = (k: Partial<Parameters<typeof canvasShortcut>[0]>): Parameters<typeof canvasShortcut>[0] => ({
     key: '',
