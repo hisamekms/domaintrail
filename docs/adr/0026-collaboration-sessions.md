@@ -661,3 +661,53 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   directory, never the workspace, so no runtime picks up a config of it.
 - **Inspector width.** Until the reader drags it, the inspector on the right takes about a third of the room beside
   the left pane and the chat (300–420 px), so that the canvas keeps its share when the chat is open.
+
+## Appendix: votes and reactions (amendment)
+
+*Decided by the maintainer*: participants signal a preference on a question's options and an assumption's choices
+(votes, ♡), anyone reacts to a message or an AI turn (👍 賛成, 🤔 疑問・引っかかる, ♡ いいね, ✓ 了解・見た); the facilitator
+decides. Both are **one mechanism**: a mark is who (a participant) marked what (a target) with which sign.
+
+- **Model** (`model/mark.dt`, generated code regenerated). Aggregate `Mark` (`participant`, `target: MarkTarget`, `sign:
+  MarkSign`, `placedAt`; `Placed` → `Removed { removedAt }`), the union `MarkTarget` — `Message { request }`, `Turn
+  { run }`, `QuestionOption { run, question, option }` (the reply's keys), `AssumptionChoice { run, assumption,
+  alternative? }` (the assumption's index in the reply, which has no key; no alternative = keep it as it is) —, the enum
+  `MarkSign` (`Vote`, `Agree`, `Doubt`, `Like`, `Seen`), events `MarkPlaced` / `MarkRemoved`. The invariant `fitsTarget`
+  (the vote on options and assumptions, the reactions on messages and turns) and the requirement `participantsVote`
+  (`FacilitatorDoesNotVote`; the role is the session's, never the caller's word) are the DSL's; `place` and `remove` take
+  the verified `OpenMarkTarget` (`MarkTargetNotFound`, `MarkTargetClosed`), made in `application/verifications.ts`. A
+  removed mark is kept; placing it again is a new mark. Not a field on `Request`/`AgentRun`: those never change once
+  sent or ended, and a mark is many people's.
+- **Rules per kind of target** (`domain/marks.ts`, pure, over plain shapes so that the page decides the same way):
+  exclusive groups — one vote per participant in a single-choice question and in an assumption group (the assumption
+  and its alternatives), moved by voting another; any number in a multiple-choice question; each reaction on its own.
+  **Closing is derived, never stored**: a reaction never closes. A vote is open while its run is the latest run to have
+  handled its requests — no later run (in queue order) answers it (`input.answer.answerTo`) or bundles any of its
+  requests, a run cancelled before it started (no base revision) not counting — and the run is `NeedsClarification` (a
+  question's option) or `Completed` (an assumption's choices). So the facilitator's answer, an alternative picked (a
+  run of the same requests with a note), the same messages applied again, or a re-run of an overlapping set all close
+  it; cancelling that run before it started (the undo after applying) opens it again. "Overlapping" rather than "the
+  same set": a later run that took over any of the requests has the newer say on them. Closed votes are frozen.
+- **Use case** `setMark { session, participant, target, sign, placed }`: setting a mark to what it is changes nothing
+  (idempotent, so a page sends the state it wants, not a toggle); placing a vote removes the participant's vote of the
+  same group in the same transaction (both events, the removal first). Refused while the session is not open, for a
+  stranger, a missing or closed target, a sign that does not fit, a vote of the facilitator.
+- **Persistence.** Migration 4 adds `marks` (`target_key` = `markKey(target)`, `sign`, `state`, JSON `data`) with a
+  unique partial index: one placed mark per session, participant, target and sign. Nothing else changes, so a session
+  database of the version before is upgraded in place (tested on a database built with the former migrations, and by
+  starting this build on a copy of a live session's directory).
+- **Transport.** `POST /api/session/marks { target, sign, placed }` (any participant; 64 KiB body as the other routes;
+  each field checked at the boundary: `target.*`, `sign`, `placed`) → `{ placed?, removed }`; errors 400
+  `MarkNotForTarget`, 403 `FacilitatorDoesNotVote` (also refused before the use case), 404 `MarkTargetNotFound`, 409
+  `MarkTargetClosed`. The outbox events reach the pages as `mark.placed` / `mark.removed`; the agent's SSE stream does
+  not carry them (not in `AGENT_EVENT_TYPES`), and the agent API is unchanged. `session.state` and `GET
+  /api/session/state` carry `marks` (the placed ones), so a late joiner or a reload sees them.
+- **Page** (`web/session/marks.ts`, pure and tested; `mark-controls.tsx`). Within the chat's decoration budget: counts
+  small and muted, line icons (lucide), no pills; my own mark in the clickable violet (a filled ♥ for my vote), never
+  red. Who marked is never always shown: the count's tooltip names them, and a click on a vote's count opens a small
+  list (for touch). A reaction's click toggles mine, so its names are in its tooltip and, for touch, in the ☺+ popover,
+  which lists who placed each reaction under the four choices. Participants see a clarification's questions as rows
+  with ♡ (no "other": they write in the chat); the facilitator's answer form shows the counts and never preselects.
+  After closing, the answer line's tooltip (and the note line of an alternative picked) keeps the counts and names.
+  No optimistic change: the server broadcasts the change before it answers; a mark being set is not clickable again
+  until then. Votes and reactions are not unread items and notify no one.

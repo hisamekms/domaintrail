@@ -2447,6 +2447,23 @@ done card, an alternative of an assumption queues them again with a note asking 
 (or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
 it was before the run (asked first) or compares the two.
 
+**Votes and reactions.** Participants signal a preference; the facilitator decides. On a question's options, everyone
+but the facilitator sees ♡ at the right of each option: a click votes for it (again to take it back). In a
+single-choice question each participant has one vote, and voting another option moves it; in a multiple-choice question
+any number. The same goes for an assumption of a done card: ♡ on 前提 means "keep it as it is", ♡ on an alternative
+asks for that one — one vote per assumption, moving. Counts show as `♡ 2`, small; your own vote is a filled ♥ in violet.
+Who voted is not on the screen: hover the count for the names, or click it for a small list (on touch). The facilitator
+sees the counts (and the same names) next to the options of the answer form and next to 前提 and each 別案, never votes,
+and nothing is chosen for them. A vote closes when its run is no longer the latest run of its messages — answering the
+question, picking an alternative, or applying the same messages again — or when the run no longer waits for an answer;
+cancelling that later run before it started opens it again. Closed votes are frozen and not clickable; the answer's line
+(`↳ 回答 …`) and the note's line of a picked alternative keep the counts and names in their tooltip. On every message and
+every AI turn, anyone (the facilitator too) can **react**: hover the message (on touch it is always there, faint) and
+☺+ at its right end offers 👍 賛成, 🤔 疑問・引っかかる, ♡ いいね and ✓ 了解・見た, with who reacted under them. The
+reactions placed show under the message as icons with counts; a click toggles yours; the tooltip names who. Several
+kinds per message, no closing, and neither votes nor reactions count as unread or notify anyone. A page that joins late
+gets every vote and reaction with the session's state.
+
 **Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
 whole workspace. A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
 element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `@`

@@ -175,6 +175,9 @@ The chat has two views:
   shows its latest run's mark (`✓ #3`). The facilitator applies messages from the stream (⤓, ▾ with a note, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
   restore and comparison from a card's ⋯ and the session's actions from the head's ⋯.
+  Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
+  run waits; the facilitator sees the counts and decides. Anyone reacts to a message or an AI turn (☺+ on hover:
+  賛成, 疑問, いいね, 了解). Counts are small; who marked is in the tooltip and, for a vote, in a list on a click.
 - **履歴**: the history of changes, newest first. Each row is one run that changed files — or a run that asked a
   question together with the run queued again to answer it — with its number, time, outcome, what the AI says about
   it, the number of files it changed (measured from the revisions) and who asked. Opened, it shows the run's card, and
