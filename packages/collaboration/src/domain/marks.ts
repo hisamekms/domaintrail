@@ -2,11 +2,12 @@
 // what (a target) with which sign. What differs between votes and reactions is a rule per kind of target, decided here:
 //
 // - which signs fit a target: the vote (♡) on a question's option and on an assumption's choices (the assumption kept
-//   as it is, or one of its alternatives); the four reactions on a message and on an AI turn (`signFits`);
+//   as it is, or one of its alternatives); reactions — any one emoji, to which the app gives no meaning — on a message
+//   and on an AI turn (`signFits`), at most `MAX_REACTION_EMOJI` different emoji per target (`reactionRoom`);
 // - who may mark: anyone for a reaction, participants only for a vote (the facilitator's answer is the decision; the
 //   model's `participantsVote`);
 // - exclusivity: one vote per participant in a single-choice question and in an assumption group, moved by voting
-//   another; any number in a multiple-choice question; each reaction on its own (`exclusiveGroup`);
+//   another; any number in a multiple-choice question; each emoji on its own (`exclusiveGroup`);
 // - closing, derived from the runs and never stored (`markTargetStatus`): a reaction never closes; a vote is open while
 //   its run is the latest run to have handled its requests — no later run (one cancelled before it started does not
 //   count) bundles any of them or answers it — and the run is still waiting for an answer (a question's option) or
@@ -15,6 +16,7 @@
 //
 // Pure, and over the plain shapes of the runs and requests, so that the server (the generated types) and the page
 // (their JSON) decide the same way.
+import { isNormalEmoji } from '@domaintrail/modeling/core/emoji';
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 
 /** A target as JSON carries it (the generated `MarkTarget` without its brands). */
@@ -24,10 +26,20 @@ export type MarkTargetData =
     | { readonly kind: 'QuestionOption'; readonly run: string; readonly question: string; readonly option: string }
     | { readonly kind: 'AssumptionChoice'; readonly run: string; readonly assumption: number; readonly alternative?: string };
 
-export type MarkSignData = Collaboration.MarkSign;
+/** A sign as JSON carries it (the generated `MarkSign` without its brands): the vote, or a reaction's emoji. */
+export type MarkSignData = { readonly kind: 'Vote' } | { readonly kind: 'Reaction'; readonly emoji: string };
 
-/** The reactions, in the order a page offers them. */
-export const REACTIONS = ['Agree', 'Doubt', 'Like', 'Seen'] as const satisfies readonly Collaboration.MarkSign[];
+/** The vote (♡). */
+export const VOTE = { kind: 'Vote' } as const satisfies Collaboration.MarkSign;
+
+/** Most different emoji on one message or turn: placing one more is refused (`ReactionLimitReached`). */
+export const MAX_REACTION_EMOJI = 20;
+
+/** The `Emoji` primitive's constructor: one emoji, in the form reactions are kept (`@domaintrail/modeling/core/emoji`). */
+export const makeEmoji: Collaboration.MakeEmoji = Collaboration.makeEmojiWith({ singleEmoji: isNormalEmoji });
+
+/** One text per sign, equal exactly for equal signs: `Vote`, or the reaction's emoji (the store's column and unique index, the page's maps). */
+export const signKey = (sign: MarkSignData): string => (sign.kind === 'Vote' ? 'Vote' : sign.emoji);
 
 /** What the rules read of a run: an `AgentRun`, or its JSON on a page. */
 export interface MarkRun {
@@ -68,7 +80,17 @@ export function markKey(target: MarkTargetData): string {
 export const isVoteTarget = (target: MarkTargetData): boolean => target.kind === 'QuestionOption' || target.kind === 'AssumptionChoice';
 
 /** Whether a sign fits a target: the vote on an option or an assumption's choice, a reaction on a message or a turn (`fitsTarget`). */
-export const signFits = (target: MarkTargetData, sign: Collaboration.MarkSign): boolean => (sign === 'Vote') === isVoteTarget(target);
+export const signFits = (target: MarkTargetData, sign: MarkSignData): boolean => (sign.kind === 'Vote') === isVoteTarget(target);
+
+/**
+ * Whether a sign may be placed on a target, given the marks placed there (anyone's): a reaction with an emoji already
+ * there always, another one while the target has fewer than `MAX_REACTION_EMOJI` different emoji. Votes are not limited.
+ */
+export function reactionRoom(placed: readonly { readonly sign: MarkSignData }[], sign: MarkSignData): boolean {
+    if (sign.kind === 'Vote') return true;
+    const emoji = new Set(placed.flatMap((m) => (m.sign.kind === 'Reaction' ? [m.sign.emoji] : [])));
+    return emoji.has(sign.emoji) || emoji.size < MAX_REACTION_EMOJI;
+}
 
 /** Whether a run was cancelled before it started: as if it had never been queued. */
 const undone = (run: MarkRun): boolean => run.state === 'Cancelled' && run.baseRevision === undefined;
@@ -127,7 +149,7 @@ export function exclusiveGroup(target: MarkTargetData, runs: readonly MarkRun[])
 export interface MarkFacts {
     readonly participant: string;
     readonly target: MarkTargetData;
-    readonly sign: Collaboration.MarkSign;
+    readonly sign: MarkSignData;
 }
 
 /**
@@ -139,16 +161,17 @@ export interface MarkFacts {
 export function markChange<M extends MarkFacts>(
     mine: readonly M[],
     target: MarkTargetData,
-    sign: Collaboration.MarkSign,
+    sign: MarkSignData,
     want: boolean,
     groupOf: (target: MarkTargetData) => string | undefined,
 ): { readonly place: boolean; readonly remove: readonly M[] } {
     const key = markKey(target);
-    const existing = mine.filter((m) => m.sign === sign && markKey(m.target) === key);
+    const same = (m: M): boolean => signKey(m.sign) === signKey(sign);
+    const existing = mine.filter((m) => same(m) && markKey(m.target) === key);
     if (!want) return { place: false, remove: existing };
     if (existing.length > 0) return { place: false, remove: [] };
     const group = groupOf(target);
-    return { place: true, remove: group === undefined ? [] : mine.filter((m) => m.sign === sign && groupOf(m.target) === group) };
+    return { place: true, remove: group === undefined ? [] : mine.filter((m) => same(m) && groupOf(m.target) === group) };
 }
 
 /** The commands of a mark, checked against the generated contracts as the other aggregates' (`commands.ts`). */

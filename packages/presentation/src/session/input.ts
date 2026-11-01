@@ -9,7 +9,9 @@ import {
     type AnswerData,
     type ReplyOutcome,
 } from '@domaintrail/collaboration/domain/reply';
+import { makeEmoji, VOTE } from '@domaintrail/collaboration/domain/marks';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
+import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling/core/emoji';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
 /** Why an input was refused. */
@@ -245,8 +247,6 @@ export function answer(v: unknown, field = 'answer'): Result<AnswerData, Invalid
     return read.ok ? read : invalid(read.error.path.replace(/^answer/, field), read.error.message);
 }
 
-const MARK_SIGNS: readonly Collaboration.MarkSign[] = ['Vote', 'Agree', 'Doubt', 'Like', 'Seen'];
-
 /** A reply's key (a question's, an option's, an alternative's): letters, digits, `_` and `-`, at most `REPLY_LIMITS.key`. */
 function replyKey(v: unknown, field: string): Result<Collaboration.ReplyKey, InvalidInput> {
     if (typeof v !== 'string' || !v || v.length > REPLY_LIMITS.key) return invalid(field, `Expected a key of 1 to ${REPLY_LIMITS.key} characters.`);
@@ -307,8 +307,18 @@ export function markTarget(v: unknown, field = 'target'): Result<Collaboration.M
     }
 }
 
-/** A mark's sign: `Vote`, or one of the reactions (`Agree`, `Doubt`, `Like`, `Seen`). */
+/**
+ * A mark's sign: `{ kind: 'Vote' }`, or `{ kind: 'Reaction', emoji }` with exactly one emoji (one grapheme, at most
+ * `MAX_EMOJI_BYTES` bytes), turned into the form reactions are kept (NFC, fully qualified: ❤ is ❤️).
+ */
 export function markSign(v: unknown, field = 'sign'): Result<Collaboration.MarkSign, InvalidInput> {
-    const sign = MARK_SIGNS.find((s) => s === v);
-    return sign ? ok(sign) : invalid(field, `Expected one of ${MARK_SIGNS.join(', ')}.`);
+    if (!isObject(v)) return invalid(field, 'Expected { "kind": "Vote" } or { "kind": "Reaction", "emoji": … }.');
+    const keys = v.kind === 'Reaction' ? ['kind', 'emoji'] : ['kind'];
+    if (!body(v, keys).ok) return invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
+    if (v.kind === 'Vote') return ok(VOTE);
+    if (v.kind !== 'Reaction') return invalid(`${field}.kind`, 'Expected Vote or Reaction.');
+    const read = typeof v.emoji === 'string' ? readEmoji(v.emoji) : undefined;
+    const emoji = read === undefined ? undefined : makeEmoji(read);
+    if (!emoji?.ok) return invalid(`${field}.emoji`, `Expected exactly one emoji (at most ${MAX_EMOJI_BYTES} bytes).`);
+    return ok({ kind: 'Reaction', emoji: emoji.value });
 }

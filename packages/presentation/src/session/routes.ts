@@ -65,6 +65,8 @@ export interface SessionHttpDeps {
     readonly issueFacilitatorLink: () => Promise<{ readonly link: string; readonly expiresAt: string }>;
     /** The cookie is `Secure` (the session is served over https). */
     readonly secureCookie: boolean;
+    /** The emoji the add-reaction popover offers first (`session.quickReactions`), sent with the state. */
+    readonly quickReactions: readonly string[];
     readonly log: (line: string) => void;
 }
 
@@ -127,10 +129,15 @@ export function meOf(session: Collaboration.SessionId, who: Identified): Me {
     };
 }
 
-/** The state for the pages: the session's aggregates at `seq`, and the participant holding the facilitator's role, if any. */
-export function stateBody(state: SessionState, seq: number, facilitatorHolder?: Collaboration.ParticipantId): SessionStateBody {
+/** The state for the pages: the session's aggregates at `seq`, the quick reactions, and the participant holding the facilitator's role, if any. */
+export function stateBody(
+    state: SessionState,
+    seq: number,
+    quickReactions: readonly string[],
+    facilitatorHolder?: Collaboration.ParticipantId,
+): SessionStateBody {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded (dates as ISO strings)
-    return { ...state, seq, ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
+    return { ...state, seq, quickReactions, ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
 }
 
 /** The cookie that signs a browser in (dev), or out (`secret` undefined). */
@@ -284,7 +291,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ res }) => {
                 const seq = deps.cursor();
-                sendJson(res, 200, stateBody(await state(), seq, await identities.facilitatorParticipant()));
+                sendJson(res, 200, stateBody(await state(), seq, deps.quickReactions, await identities.facilitatorParticipant()));
             },
         },
         {
@@ -345,9 +352,14 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!sign) return;
                 if (typeof raw.placed !== 'boolean') return fail(res, { type: 'InvalidInput', field: 'placed', message: 'Expected true or false.' });
                 const me = who(auth);
-                if (sign === 'Vote' && me.role === 'facilitator')
+                if (sign.kind === 'Vote' && me.role === 'facilitator')
                     return fail(res, { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." });
                 const set = await use.setMark({ session, participant: me.participant.id, target, sign, placed: raw.placed });
+                if (!set.ok && set.error.type === 'ReactionLimitReached')
+                    return fail(res, {
+                        ...set.error,
+                        message: `A message or a turn holds at most ${set.error.limit} different emoji: add one already there, or take one off first.`,
+                    });
                 await answer(res, set, 200, (r) => ({ ...(r.placed && { placed: r.placed }), removed: r.removed }));
             },
         },

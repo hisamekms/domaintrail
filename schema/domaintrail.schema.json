@@ -176,6 +176,15 @@
           }
         },
         "maxParticipants": { "description": "Most participants a session admits.", "type": "integer", "minimum": 1, "default": 50 },
+        "quickReactions": {
+          "description": "The emoji the add-reaction popover of the chat offers first, in order: each exactly one emoji (one grapheme; ZWJ sequences, skin tones, flags and keycaps count as one), distinct. Any other emoji can still be typed there.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "default": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"]
+        },
         "classifier": {
           "description": "Telling the chat's requests from its talk (opt-in). When enabled, the text of each chat message is sent to Cloudflare Workers AI.",
           "type": "object",

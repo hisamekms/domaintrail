@@ -2,6 +2,7 @@ import { realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
+import { DEFAULT_QUICK_REACTIONS, readEmoji } from './emoji.js';
 import { POLICY_MODES, type PolicyMode } from '../generator/typescript.js';
 
 /** Config file names, in order of preference within one directory. */
@@ -30,6 +31,9 @@ export const CLEF_MODELS = ['clef-flash', 'clef'] as const;
 export type ClefModel = (typeof CLEF_MODELS)[number];
 export const DEFAULT_CLASSIFIER_TOKEN_ENV = 'CLOUDFLARE_API_TOKEN';
 export const DEFAULT_CLASSIFIER_THRESHOLD = 0.5;
+export { DEFAULT_QUICK_REACTIONS };
+/** Most emoji in `session.quickReactions`. */
+export const MAX_QUICK_REACTIONS = 8;
 
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile {
@@ -98,6 +102,11 @@ export interface SessionConfigFile {
     };
     /** Most participants a session admits. Default: 50. */
     maxParticipants?: number;
+    /**
+     * The emoji the add-reaction popover of the chat offers first, in order: each exactly one emoji, distinct, at most
+     * `MAX_QUICK_REACTIONS`. Any other emoji can still be typed there. Default: 👍 👀 🤔 🎉 ❤️ 🙏.
+     */
+    quickReactions?: string[];
     /** Telling the chat's requests from its talk (opt-in; the message text goes to the provider). */
     classifier?: {
         /** Default: false (every message can be applied). */
@@ -142,6 +151,8 @@ export interface ResolvedSessionConfig {
     /** `dt`: the command (absolute paths) the agent's `dt` runs, when configured. */
     agent: { port: number; allowedTools: string[]; dt?: string[]; maxPreviousRunDiff: number };
     maxParticipants: number;
+    /** In the form reactions are kept (`normalizeEmoji`). */
+    quickReactions: string[];
     classifier: ResolvedClassifierConfig;
 }
 
@@ -292,6 +303,8 @@ function resolveSession(session: SessionConfigFile | undefined, dir?: string): R
             maxPreviousRunDiff: session?.agent?.maxPreviousRunDiff ?? DEFAULT_MAX_PREVIOUS_RUN_DIFF,
         },
         maxParticipants: session?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS,
+        // validated: each reads as one emoji
+        quickReactions: (session?.quickReactions ?? DEFAULT_QUICK_REACTIONS).map((e) => readEmoji(e) ?? e),
         classifier: {
             enabled: session?.classifier?.enabled ?? false,
             provider: session?.classifier?.provider ?? 'cloudflare-clef',
@@ -423,7 +436,8 @@ const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(
 function validateSession(session: unknown, fail: (msg: string) => never): void {
     if (!isObject(session)) return fail("'session' must be an object");
     for (const key of Object.keys(session)) {
-        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants', 'classifier'].includes(key)) fail(`unknown key 'session.${key}'`);
+        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants', 'quickReactions', 'classifier'].includes(key))
+            fail(`unknown key 'session.${key}'`);
     }
     if (session.port !== undefined && !isPort(session.port)) fail("'session.port' must be a port number");
     if (session.host !== undefined && (typeof session.host !== 'string' || !session.host)) fail("'session.host' must be a string");
@@ -501,6 +515,18 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
         !(typeof session.maxParticipants === 'number' && Number.isInteger(session.maxParticipants) && session.maxParticipants >= 1)
     )
         fail("'session.maxParticipants' must be a positive integer");
+    const quick = session.quickReactions;
+    if (quick !== undefined) {
+        if (!isStringList(quick) || quick.length === 0 || quick.length > MAX_QUICK_REACTIONS)
+            return fail(`'session.quickReactions' must be an array of 1 to ${MAX_QUICK_REACTIONS} emoji`);
+        const seen = new Set<string>();
+        for (const e of quick) {
+            const emoji = readEmoji(e);
+            if (emoji === undefined) fail(`'session.quickReactions' must hold one emoji per entry: '${e}'`);
+            if (seen.has(emoji)) fail(`'session.quickReactions' must not repeat an emoji: '${e}'`);
+            seen.add(emoji);
+        }
+    }
 }
 
 /** An output directory: a string inside the directory of the config file. */

@@ -246,7 +246,12 @@ export async function startSessionServer(options: SessionServerOptions): Promise
         const sendState = async (connection: Connection<SessionConnection>): Promise<void> => {
             const seq = cursor();
             const [state, holder] = await Promise.all([collaboration.sessionState({ session }), identities.facilitatorParticipant()]);
-            if (state.ok) connection.send({ type: 'session.state', state: stateBody(state.value, seq, holder), me: meOf(session, connection.data) });
+            if (state.ok)
+                connection.send({
+                    type: 'session.state',
+                    state: stateBody(state.value, seq, config.quickReactions, holder),
+                    me: meOf(session, connection.data),
+                });
         };
         const stateFailed = (e: unknown): void => log(`session state failed: ${e instanceof Error ? e.message : String(e)}`);
         const hub = createWebSocketHub<SessionConnection>(() => view.state, {
@@ -363,6 +368,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 return { link: linkOf(url, link.value.code), expiresAt: link.value.expiresAt.toISOString() };
             },
             secureCookie: accessConfig?.publicUrl?.startsWith('https://') ?? false,
+            quickReactions: config.quickReactions,
             log,
         });
         const http = createViewHttpServer({

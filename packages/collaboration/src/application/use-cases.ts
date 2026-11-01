@@ -6,13 +6,13 @@
 // is decided by the caller (S4); the use cases take the participant as a fact.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
-import { exclusiveGroup, markChange, markCommands } from '../domain/marks.js';
+import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, type AnswerData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
-import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
+import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { IdentityKey } from './identity.js';
 import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
@@ -230,7 +230,8 @@ export interface CollaborationUseCases {
      * Places or takes off a participant's mark (a vote or a reaction; `placed`: whether it should be there). Placing
      * a vote moves the participant's vote of the same exclusive group; setting a mark to what it is changes nothing.
      * Refused when the target is not the session's, or is a vote that closed (`domain/marks.ts`), when the sign does
-     * not fit the target, and for a vote of the facilitator.
+     * not fit the target, for a vote of the facilitator, and for an emoji new to a target that has
+     * `MAX_REACTION_EMOJI` different emoji already.
      */
     setMark(input: {
         readonly session: SessionId;
@@ -248,6 +249,7 @@ export interface CollaborationUseCases {
             | Collaboration.MarkTargetClosed
             | Collaboration.MarkNotForTarget
             | Collaboration.FacilitatorDoesNotVote
+            | Collaboration.ReactionLimitReached
         >
     >;
     /** Bundles sent requests of the session into a queued run, freezing their content as its input. */
@@ -629,6 +631,14 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 let made: Collaboration.PlacedMark | undefined;
                 const events: Collaboration.PersistentEvent[] = [];
                 if (change.place) {
+                    const key = markKey(target);
+                    if (
+                        !reactionRoom(
+                            stores.marks.placedBySession(session).filter((m) => markKey(m.target) === key),
+                            sign,
+                        )
+                    )
+                        return err({ type: 'ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
                     // decided before anything is removed: a refused mark changes nothing
                     const decided = markCommands.place(Collaboration.makeMarkId(ids.newId()), active.value, participant, who.role, open.value, sign, at);
                     if (!decided.ok) return decided;

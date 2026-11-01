@@ -428,6 +428,7 @@ describe('session section (ADR 0026)', () => {
             identity: 'dev',
             agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'], maxPreviousRunDiff: 20480 },
             maxParticipants: 50,
+            quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
             classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
         });
     });
@@ -463,6 +464,7 @@ describe('session section (ADR 0026)', () => {
             },
             agent: { port: 9000, allowedTools: ['Read'], maxPreviousRunDiff: 4096 },
             maxParticipants: 5,
+            quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
             classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
         });
     });
@@ -472,6 +474,12 @@ describe('session section (ADR 0026)', () => {
         expect((await loadConfig({ start: dir })).session.agent.dt).toEqual(['bun', path.resolve(dir, '../clone/bin/dt.ts')]);
         const exe = await project({ 'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['../bin/dt'] } } }) });
         expect((await loadConfig({ start: exe })).session.agent.dt).toEqual([path.resolve(exe, '../bin/dt')]);
+    });
+
+    test('the quick reactions: one emoji each, kept in the form reactions are (❤ as ❤️)', async () => {
+        const text = JSON.stringify({ session: { quickReactions: ['❤', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1⃣'] } });
+        const c = await loadConfig({ start: await project({ 'domaintrail.json': text }) });
+        expect(c.session.quickReactions).toEqual(['❤️', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣']);
     });
 
     test('the classifier: opt-in, Clef Flash, the token by the name of its variable', async () => {
@@ -503,6 +511,12 @@ describe('session section (ADR 0026)', () => {
         [{ agent: { maxPreviousRunDiff: -1 } }, "'session.agent.maxPreviousRunDiff'"],
         [{ agent: { maxPreviousRunDiff: 1.5 } }, "'session.agent.maxPreviousRunDiff'"],
         [{ maxParticipants: 0 }, "'session.maxParticipants'"],
+        [{ quickReactions: [] }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: '👍' }, "'session.quickReactions' must be an array"],
+        [{ quickReactions: ['👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍'] }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: ['ok'] }, "'session.quickReactions' must hold one emoji per entry: 'ok'"],
+        [{ quickReactions: ['👍👍'] }, "'session.quickReactions' must hold one emoji per entry"],
+        [{ quickReactions: ['❤', '❤️'] }, "'session.quickReactions' must not repeat an emoji"],
         [{ token: 'x' }, "unknown key 'session.token'"],
         [{ agent: { dt: [] } }, "'session.agent.dt' must be a command"],
         [{ agent: { dt: ['node', ''] } }, "'session.agent.dt' must be a command"],

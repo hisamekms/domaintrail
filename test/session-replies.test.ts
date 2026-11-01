@@ -325,7 +325,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(5);
+        expect(MIGRATIONS.length).toBe(6);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(C.makeRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -572,6 +572,7 @@ describe('the requests route and the agent API with replies', () => {
                 identity: 'dev',
                 agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
                 maxParticipants: 50,
+                quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
                 classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
             },
         });

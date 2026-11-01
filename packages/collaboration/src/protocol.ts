@@ -40,6 +40,8 @@ export interface SessionStateBody {
     readonly revisions: Json<readonly Collaboration.Revision[]>;
     /** The marks still placed (votes and reactions), in the order they were placed: a page that joins late sees them. */
     readonly marks: Json<readonly Collaboration.PlacedMark[]>;
+    /** The emoji the add-reaction popover offers first (`session.quickReactions`), in the form reactions are kept. */
+    readonly quickReactions: readonly string[];
     /** The outbox position the state includes: event messages with a `seq` up to it are already in it. */
     readonly seq: number;
     /**
@@ -160,14 +162,17 @@ export interface SendRequestBody {
 
 /**
  * `POST /api/session/marks` (any participant): sets one of my marks — a vote (♡) on a question's option or an
- * assumption's choice, a reaction on a message or an AI turn — placed or taken off (`placed`). Placing a vote moves my
- * vote of the same single-choice question or assumption. The facilitator does not vote (`FacilitatorDoesNotVote`); a
- * vote that closed is refused (`MarkTargetClosed`). → 200 `MarkSetBody`; the change reaches every page as
- * `mark.placed` / `mark.removed`.
+ * assumption's choice, a reaction on a message or an AI turn — placed or taken off (`placed`). `sign` is
+ * `{ "kind": "Vote" }` or `{ "kind": "Reaction", "emoji": "👍" }`: any one emoji (one grapheme, at most
+ * `MAX_EMOJI_BYTES` bytes), kept and sent back in one form (NFC, fully qualified: ❤ and ❤️ are the same reaction,
+ * `@domaintrail/modeling/core/emoji`). Placing a vote moves my vote of the same single-choice question or assumption.
+ * The facilitator does not vote (`FacilitatorDoesNotVote`); a vote that closed is refused (`MarkTargetClosed`); an
+ * emoji new to a target that has `MAX_REACTION_EMOJI` different ones is refused (`ReactionLimitReached`, 409).
+ * → 200 `MarkSetBody`; the change reaches every page as `mark.placed` / `mark.removed`.
  */
 export interface SetMarkBody {
     readonly target: Json<Collaboration.MarkTarget>;
-    readonly sign: Collaboration.MarkSign;
+    readonly sign: Json<Collaboration.MarkSign>;
     readonly placed: boolean;
 }
 

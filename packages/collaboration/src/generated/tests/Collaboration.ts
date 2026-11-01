@@ -44,6 +44,7 @@ export interface Arbitraries {
     readonly WorkspacePath: fc.Arbitrary<Collaboration.WorkspacePath>;
     readonly SourceLanguage: fc.Arbitrary<Collaboration.SourceLanguage>;
     readonly MarkId: fc.Arbitrary<Collaboration.MarkId>;
+    readonly Emoji: fc.Arbitrary<Collaboration.Emoji>;
     readonly MarkSign: fc.Arbitrary<Collaboration.MarkSign>;
     readonly MarkTarget: fc.Arbitrary<Collaboration.MarkTarget>;
     readonly OpenMarkTarget: fc.Arbitrary<Collaboration.OpenMarkTarget>;
@@ -97,6 +98,7 @@ export interface Arbitraries {
 /** Checks of the invariants and requirements of Collaboration that the DSL does not express, as your code implements them. */
 export interface DeclaredChecks {
     readonly AgentRun?: Partial<Collaboration.AgentRunDeclaredChecks>;
+    readonly Emoji?: Partial<Collaboration.EmojiDeclaredChecks>;
     readonly Revision?: Partial<Collaboration.RevisionDeclaredChecks>;
     readonly TakeRevision?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
     readonly RestoreRevision?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
@@ -140,7 +142,7 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
     readonly AgentRun?: Collaboration.AgentRunCommands;
     readonly Mark?: Collaboration.MarkCommands;
     readonly Request?: Collaboration.RequestCommands;
@@ -193,7 +195,8 @@ export function arbitraries(options: Options = {}): Arbitraries {
         WorkspacePath: () => testing.valid(given.WorkspacePath ?? testing.collide(testing.cast<Collaboration.WorkspacePath>(testing.base('String', { pattern: "^[^/\\\\]+(/[^/\\\\]+)*$" })), seed), (v) => Collaboration.checkWorkspacePath(v).length === 0, 'Collaboration.WorkspacePath'),
         SourceLanguage: () => given.SourceLanguage ?? fc.constantFrom<Collaboration.SourceLanguage>('Dt', 'Dtes'),
         MarkId: () => given.MarkId ?? testing.collide(testing.cast<Collaboration.MarkId>(testing.base('UUID', {})), seed),
-        MarkSign: () => given.MarkSign ?? fc.constantFrom<Collaboration.MarkSign>('Vote', 'Agree', 'Doubt', 'Like', 'Seen'),
+        Emoji: () => testing.valid(given.Emoji ?? testing.collide(testing.cast<Collaboration.Emoji>(testing.base('String', { minLength: 1, maxLength: 64 })), seed), (v) => Collaboration.checkEmojiWith(testing.declared<Collaboration.EmojiDeclaredChecks>(['singleEmoji'], declared.Emoji))(v).length === 0, 'Collaboration.Emoji'),
+        MarkSign: () => given.MarkSign ?? testing.cast<Collaboration.MarkSign>(fc.oneof(fc.record({ kind: fc.constant('Vote' as const) }), fc.record({ kind: fc.constant('Reaction' as const), emoji: a.Emoji }))),
         MarkTarget: () => given.MarkTarget ?? testing.cast<Collaboration.MarkTarget>(fc.oneof(fc.record({ kind: fc.constant('Message' as const), request: a.RequestId }), fc.record({ kind: fc.constant('Turn' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('QuestionOption' as const), run: a.AgentRunId, question: a.ReplyKey, option: a.ReplyKey }), fc.record({ kind: fc.constant('AssumptionChoice' as const), run: a.AgentRunId, assumption: a.Tally, alternative: a.ReplyKey }, { requiredKeys: ['kind', 'run', 'assumption'] }))),
         OpenMarkTarget: () => given.OpenMarkTarget ?? testing.cast<Collaboration.OpenMarkTarget>(a.MarkTarget),
         PlacedMark: () => testing.withExamples(testing.valid(given.PlacedMark ?? testing.cast<Collaboration.PlacedMark>(fc.record({ state: fc.constant('Placed' as const), id: a.MarkId, session: a.SessionId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, placedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkPlacedMark(v).length === 0, 'Collaboration.PlacedMark'), options.examples?.Mark?.states?.Placed, Collaboration.checkPlacedMark, 'Collaboration.PlacedMark'),
@@ -338,6 +341,16 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => () => [],
                 make: impl.make.MarkId,
+            }, options) : []),
+            ...(impl.make.Emoji ? testing.primitiveCases({
+                type: 'Collaboration.Emoji',
+                base: 'String',
+                hints: { minLength: 1, maxLength: 64 },
+                invariants: ['bounded', 'singleEmoji'],
+                declared: ['singleEmoji'],
+                check: Collaboration.checkEmojiWith,
+                make: impl.make.Emoji,
+                given: declared.Emoji,
             }, options) : []),
             ...(impl.make.RequestId ? testing.primitiveCases({
                 type: 'Collaboration.RequestId',

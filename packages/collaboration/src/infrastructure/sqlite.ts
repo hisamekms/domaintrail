@@ -6,7 +6,7 @@ import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqli
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
 import type { Identity, IdentityKey, IdentityMode } from '../application/identity.js';
-import { markKey } from '../domain/marks.js';
+import { markKey, signKey } from '../domain/marks.js';
 import type {
     AccessStore,
     EventOutbox,
@@ -166,6 +166,29 @@ export const MIGRATIONS: readonly string[] = [
     `
     ALTER TABLE requests ADD COLUMN reply_to TEXT REFERENCES agent_runs(id);
     CREATE INDEX requests_by_reply_to ON requests(reply_to) WHERE reply_to IS NOT NULL;
+    `,
+    // ---------- reactions as emoji ----------
+    // reactions are emoji the participants choose (ADR 0026, appendix "Votes and reactions"): a sign is the vote or a
+    // reaction with its emoji (`{ "kind": "Reaction", "emoji": "👍" }`), and the `sign` column its key (`signKey`:
+    // `Vote` or the emoji). The four named reactions become emoji — Agree 👍, Doubt 🤔, Like ❤️, Seen 👀 — in the
+    // marks and in the outbox's MarkPlaced / MarkRemoved, so that a page replaying them reads the same signs. The
+    // mapping is one to one: the unique index holds.
+    `
+    CREATE TEMP TABLE legacy_signs (name TEXT PRIMARY KEY, emoji TEXT NOT NULL);
+    INSERT INTO legacy_signs VALUES ('Agree', '👍'), ('Doubt', '🤔'), ('Like', '❤️'), ('Seen', '👀');
+    UPDATE marks
+       SET data = json_set(data, '$.sign', json_object('kind', 'Reaction', 'emoji', (SELECT emoji FROM legacy_signs WHERE name = marks.sign))),
+           sign = (SELECT emoji FROM legacy_signs WHERE name = marks.sign)
+     WHERE sign IN (SELECT name FROM legacy_signs);
+    UPDATE marks SET data = json_set(data, '$.sign', json_object('kind', 'Vote')) WHERE sign = 'Vote' AND json_type(data, '$.sign') = 'text';
+    UPDATE outbox
+       SET payload = json_set(payload, '$.sign', json(CASE json_extract(payload, '$.sign')
+               WHEN 'Vote' THEN json_object('kind', 'Vote')
+               ELSE json_object('kind', 'Reaction', 'emoji', (SELECT emoji FROM legacy_signs WHERE name = json_extract(payload, '$.sign')))
+           END))
+     WHERE type IN ('MarkPlaced', 'MarkRemoved') AND json_type(payload, '$.sign') = 'text'
+       AND (json_extract(payload, '$.sign') = 'Vote' OR json_extract(payload, '$.sign') IN (SELECT name FROM legacy_signs));
+    DROP TABLE legacy_signs;
     `,
 ];
 
@@ -460,7 +483,7 @@ function marks(db: DatabaseSync): MarkRepository {
                     session: mark.session,
                     participant: mark.participant,
                     key: markKey(mark.target),
-                    sign: mark.sign,
+                    sign: signKey(mark.sign),
                     state: mark.state,
                     data: encodeJson(mark),
                 }),

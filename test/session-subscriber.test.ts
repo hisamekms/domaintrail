@@ -76,6 +76,7 @@ const sessionConfig = (): ResolvedSessionConfig => ({
     identity: 'dev',
     agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
+    quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
 });
 

@@ -1,6 +1,7 @@
 // Votes and reactions (ADR 0026, appendix "Votes and reactions"): one mechanism, "who marked what with which sign", with
-// rules per kind of target. The pure rules (domain/marks.ts), the use case over node:sqlite and the real workspace,
-// the migration of a database written before marks, and the session server's route and WebSocket broadcast.
+// rules per kind of target; a reaction is any one emoji. The pure rules (domain/marks.ts), the use case over node:sqlite
+// and the real workspace, the migrations of a database written before marks and before emoji, and the session server's
+// route and WebSocket broadcast.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,7 +17,12 @@ import {
     markCommands,
     markKey,
     markTargetStatus,
+    makeEmoji,
+    MAX_REACTION_EMOJI,
+    reactionRoom,
     signFits,
+    signKey,
+    VOTE,
     type MarkRun,
     type MarkTargetData,
 } from '@domaintrail/collaboration/domain/marks';
@@ -25,10 +31,22 @@ import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blob
 import { createUnitOfWork, MIGRATIONS, openDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
 import { createModelValidator } from '@domaintrail/collaboration/infrastructure/validator';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { isNormalEmoji, isSingleEmoji, normalizeEmoji, readEmoji } from '@domaintrail/modeling/core/emoji';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
 import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
-import { assumptionVoteLines, canVote, markIndex, names, questionVoteLines, reactionsOn, tallyOf } from '@domaintrail/web/session/marks';
+import {
+    assumptionVoteLines,
+    canVote,
+    markIndex,
+    names,
+    questionVoteLines,
+    quickReactions,
+    reaction,
+    reactionFits,
+    reactionsOn,
+    tallyOf,
+} from '@domaintrail/web/session/marks';
 import { applyEvent } from '@domaintrail/web/session/state';
 
 const dirs: string[] = [];
@@ -44,6 +62,12 @@ const error = <E>(r: { ok: true } | { ok: false; error: E }): E => {
     if (r.ok) throw new Error('expected an error');
     return r.error;
 };
+
+/** As many different emoji as a message or a turn holds. */
+const TWENTY: readonly string[] = ['😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗', '😙', '🥲', '😚', '🙂'];
+
+/** A reaction's sign with an emoji (in the form kept). */
+const react = (emoji: string): C.MarkSign => ({ kind: 'Reaction', emoji: value(makeEmoji(emoji)) });
 
 // ---- the rules ----
 
@@ -71,6 +95,48 @@ const choice = (alternative?: string, r = 'r1', assumption = 0): MarkTargetData 
     ...(alternative !== undefined && { alternative }),
 });
 
+describe('one emoji (a reaction)', () => {
+    test.each([
+        ['👍', '👍'],
+        ['❤', '❤️'],
+        ['❤️', '❤️'],
+        ['👨‍👩‍👧‍👦', '👨‍👩‍👧‍👦'],
+        ['👍🏽', '👍🏽'],
+        ['☝🏽', '☝🏽'],
+        ['🇯🇵', '🇯🇵'],
+        ['1⃣', '1️⃣'],
+        ['#️⃣', '#️⃣'],
+        ['🏳‍🌈', '🏳️‍🌈'],
+        ['🏃🏽‍♂', '🏃🏽‍♂️'],
+        ['🏴󠁧󠁢󠁳󠁣󠁴󠁿', '🏴󠁧󠁢󠁳󠁣󠁴󠁿'],
+        [' 🎉 ', '🎉'],
+    ])('%s is one emoji, kept as %s', (input, kept) => {
+        expect(readEmoji(input)).toBe(kept);
+        expect(isNormalEmoji(kept)).toBe(true);
+        expect(String(value(makeEmoji(kept)))).toBe(kept);
+    });
+
+    test.each([['ok'], ['1'], ['a'], ['👍👍'], ['👍 ❤️'], ['🇯'], ['👍\u0301'], [''], ['\u200D'], ['🏽'], ['👍'.repeat(20)]])('%j is not', (input) => {
+        expect(readEmoji(input)).toBeUndefined();
+    });
+
+    test('❤ and ❤️ are the same reaction: only the kept form is an Emoji', () => {
+        expect(normalizeEmoji('❤')).toBe(normalizeEmoji('❤️'));
+        expect(isSingleEmoji('❤')).toBe(true);
+        expect(error(makeEmoji('❤'))).toMatchObject({ type: 'InvalidEmoji', invariant: 'singleEmoji' });
+        expect(error(makeEmoji('x'.repeat(65)))).toMatchObject({ invariant: 'bounded' });
+    });
+
+    test(`at most ${MAX_REACTION_EMOJI} different emoji on a target; one already there always fits; votes are not limited`, () => {
+        expect(TWENTY).toHaveLength(MAX_REACTION_EMOJI);
+        const placed = TWENTY.map((e) => ({ sign: react(e) }));
+        expect(reactionRoom(placed.slice(1), react('🙂'))).toBe(true);
+        expect(reactionRoom(placed, react('🙃'))).toBe(false);
+        expect(reactionRoom(placed, react('😀'))).toBe(true);
+        expect(reactionRoom(placed, VOTE)).toBe(true);
+    });
+});
+
 describe('the rules of marks', () => {
     const requests = [{ id: 'm1' }, { id: 'm2' }];
 
@@ -81,11 +147,11 @@ describe('the rules of marks', () => {
     });
 
     test('votes go on options and assumptions, reactions on messages and turns', () => {
-        expect(signFits(option('a'), 'Vote')).toBe(true);
-        expect(signFits(choice(), 'Vote')).toBe(true);
-        expect(signFits(option('a'), 'Like')).toBe(false);
-        expect(signFits({ kind: 'Message', request: 'm1' }, 'Agree')).toBe(true);
-        expect(signFits({ kind: 'Turn', run: 'r1' }, 'Vote')).toBe(false);
+        expect(signFits(option('a'), VOTE)).toBe(true);
+        expect(signFits(choice(), VOTE)).toBe(true);
+        expect(signFits(option('a'), react('❤️'))).toBe(false);
+        expect(signFits({ kind: 'Message', request: 'm1' }, react('👍'))).toBe(true);
+        expect(signFits({ kind: 'Turn', run: 'r1' }, VOTE)).toBe(false);
     });
 
     test("a question's options are open while its run waits for an answer and nothing took over its requests", () => {
@@ -148,19 +214,19 @@ describe('the rules of marks', () => {
     test('setting a mark: placed once, taken off, moved within its group; setting it as it is changes nothing', () => {
         const runs = [run('r1', 'NeedsClarification', ['m1'], { reply: asking })];
         const groupOf = (t: MarkTargetData): string | undefined => exclusiveGroup(t, runs);
-        const mark = (target: MarkTargetData, sign: C.MarkSign = 'Vote') => ({ participant: 'p', target, sign });
-        expect(markChange([], option('a'), 'Vote', true, groupOf)).toEqual({ place: true, remove: [] });
-        expect(markChange([mark(option('a'))], option('a'), 'Vote', true, groupOf)).toEqual({ place: false, remove: [] });
-        expect(markChange([mark(option('a'))], option('a'), 'Vote', false, groupOf)).toEqual({ place: false, remove: [mark(option('a'))] });
-        expect(markChange([], option('a'), 'Vote', false, groupOf)).toEqual({ place: false, remove: [] });
+        const mark = (target: MarkTargetData, sign: C.MarkSign = VOTE) => ({ participant: 'p', target, sign });
+        expect(markChange([], option('a'), VOTE, true, groupOf)).toEqual({ place: true, remove: [] });
+        expect(markChange([mark(option('a'))], option('a'), VOTE, true, groupOf)).toEqual({ place: false, remove: [] });
+        expect(markChange([mark(option('a'))], option('a'), VOTE, false, groupOf)).toEqual({ place: false, remove: [mark(option('a'))] });
+        expect(markChange([], option('a'), VOTE, false, groupOf)).toEqual({ place: false, remove: [] });
         // single choice: the vote moves
-        expect(markChange([mark(option('a'))], option('b'), 'Vote', true, groupOf)).toEqual({ place: true, remove: [mark(option('a'))] });
+        expect(markChange([mark(option('a'))], option('b'), VOTE, true, groupOf)).toEqual({ place: true, remove: [mark(option('a'))] });
         // multiple choice: any number
-        expect(markChange([mark(option('x', 'q2'))], option('y', 'q2'), 'Vote', true, groupOf)).toEqual({ place: true, remove: [] });
-        // reactions: each sign on its own
+        expect(markChange([mark(option('x', 'q2'))], option('y', 'q2'), VOTE, true, groupOf)).toEqual({ place: true, remove: [] });
+        // reactions: each emoji on its own
         const message: MarkTargetData = { kind: 'Message', request: 'm1' };
-        expect(markChange([mark(message, 'Agree')], message, 'Like', true, groupOf)).toEqual({ place: true, remove: [] });
-        expect(markChange([mark(message, 'Agree')], message, 'Agree', false, groupOf).remove).toHaveLength(1);
+        expect(markChange([mark(message, react('👍'))], message, react('❤️'), true, groupOf)).toEqual({ place: true, remove: [] });
+        expect(markChange([mark(message, react('👍'))], message, react('👍'), false, groupOf).remove).toHaveLength(1);
     });
 
     test('the place command: the sign must fit the target, and the facilitator does not vote', () => {
@@ -177,16 +243,16 @@ describe('the rules of marks', () => {
             question: value(C.makeReplyKey('q1')),
             option: value(C.makeReplyKey('a')),
         };
-        expect(error(markCommands.place(id, session, who, 'Facilitator', open(target), 'Vote', at))).toEqual({ type: 'FacilitatorDoesNotVote' });
-        expect(error(markCommands.place(id, session, who, 'Participant', open(target), 'Like', at))).toEqual({ type: 'MarkNotForTarget' });
-        const placed = value(markCommands.place(id, session, who, 'Participant', open(target), 'Vote', at)).Placed;
-        expect(placed.aggregate).toMatchObject({ state: 'Placed', sign: 'Vote', target });
+        expect(error(markCommands.place(id, session, who, 'Facilitator', open(target), VOTE, at))).toEqual({ type: 'FacilitatorDoesNotVote' });
+        expect(error(markCommands.place(id, session, who, 'Participant', open(target), react('❤️'), at))).toEqual({ type: 'MarkNotForTarget' });
+        const placed = value(markCommands.place(id, session, who, 'Participant', open(target), VOTE, at)).Placed;
+        expect(placed.aggregate).toMatchObject({ state: 'Placed', sign: VOTE, target });
         expect(placed.events.MarkPlaced).toMatchObject({ type: 'MarkPlaced', markId: id, participant: who });
         const removed = value(markCommands.remove(placed.aggregate, open(target), at)).Removed;
         expect(removed.aggregate).toMatchObject({ state: 'Removed', removedAt: at });
         // the facilitator reacts like anyone
         const turn = open({ kind: 'Turn', run: target.run });
-        expect(value(markCommands.place(id, session, who, 'Facilitator', turn, 'Agree', at)).Placed.aggregate.sign).toBe('Agree');
+        expect(value(markCommands.place(id, session, who, 'Facilitator', turn, react('👍'), at)).Placed.aggregate.sign).toEqual(react('👍'));
     });
 });
 
@@ -303,7 +369,7 @@ describe('setting marks', () => {
         const run = await ended(f, 'clarification');
         const opt = (q: string, o: string): C.MarkTarget => ({ kind: 'QuestionOption', run, question: key(q), option: key(o) });
         const set = (participant: C.ParticipantId, target: C.MarkTarget, placed = true) =>
-            f.use.setMark({ session: f.id, participant, target, sign: 'Vote', placed });
+            f.use.setMark({ session: f.id, participant, target, sign: VOTE, placed });
 
         const first = value(await set(ann, opt('q1', 'a')));
         expect(first.placed).toMatchObject({ participant: ann, target: opt('q1', 'a') });
@@ -335,7 +401,7 @@ describe('setting marks', () => {
         const f = await fixture();
         const run = await ended(f, 'clarification');
         const target: C.MarkTarget = { kind: 'QuestionOption', run, question: key('q1'), option: key('a') };
-        value(await f.use.setMark({ session: f.id, participant: ann, target, sign: 'Vote', placed: true }));
+        value(await f.use.setMark({ session: f.id, participant: ann, target, sign: VOTE, placed: true }));
         value(
             await f.use.queueRun({
                 session: f.id,
@@ -344,8 +410,8 @@ describe('setting marks', () => {
                 answer: { answerTo: run, answer: { answers: [{ question: 'q1', options: ['a'] }] } },
             }),
         );
-        expect(error(await f.use.setMark({ session: f.id, participant: bob, target, sign: 'Vote', placed: true }))).toEqual({ type: 'MarkTargetClosed' });
-        expect(error(await f.use.setMark({ session: f.id, participant: ann, target, sign: 'Vote', placed: false }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, participant: bob, target, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, participant: ann, target, sign: VOTE, placed: false }))).toEqual({ type: 'MarkTargetClosed' });
         expect(value(await f.use.sessionState({ session: f.id })).marks).toHaveLength(1);
     });
 
@@ -354,10 +420,10 @@ describe('setting marks', () => {
         const run = await ended(f, 'completed');
         const keep: C.MarkTarget = { kind: 'AssumptionChoice', run, assumption: value(C.makeTally(0)) };
         const all: C.MarkTarget = { ...keep, alternative: key('all') };
-        value(await f.use.setMark({ session: f.id, participant: ann, target: keep, sign: 'Vote', placed: true }));
-        expect(value(await f.use.setMark({ session: f.id, participant: ann, target: all, sign: 'Vote', placed: true })).removed).toHaveLength(1);
+        value(await f.use.setMark({ session: f.id, participant: ann, target: keep, sign: VOTE, placed: true }));
+        expect(value(await f.use.setMark({ session: f.id, participant: ann, target: all, sign: VOTE, placed: true })).removed).toHaveLength(1);
         value(await f.use.queueRun({ session: f.id, requests: [f.message], queuedBy: facilitator, note: text('前提「Only drafts.」は採らず…') }));
-        expect(error(await f.use.setMark({ session: f.id, participant: bob, target: keep, sign: 'Vote', placed: true }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, participant: bob, target: keep, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
     });
 
     test('refused: the facilitator voting, a sign that does not fit, a target not in the session, a stranger, a closed session', async () => {
@@ -366,29 +432,52 @@ describe('setting marks', () => {
         const target: C.MarkTarget = { kind: 'QuestionOption', run, question: key('q1'), option: key('a') };
         const set = (participant: C.ParticipantId, t: C.MarkTarget, sign: C.MarkSign) =>
             f.use.setMark({ session: f.id, participant, target: t, sign, placed: true });
-        expect(error(await set(facilitator, target, 'Vote'))).toEqual({ type: 'FacilitatorDoesNotVote' });
-        expect(error(await set(ann, target, 'Agree'))).toEqual({ type: 'MarkNotForTarget' });
-        expect(error(await set(ann, { kind: 'Message', request: f.message }, 'Vote'))).toEqual({ type: 'MarkNotForTarget' });
-        expect(error(await set(ann, { ...target, option: key('zz') }, 'Vote'))).toEqual({ type: 'MarkTargetNotFound' });
-        expect(error(await set(ann, { kind: 'Turn', run: C.makeAgentRunId('00000000-0000-4000-8000-0000000000ff') }, 'Like'))).toEqual({
+        expect(error(await set(facilitator, target, VOTE))).toEqual({ type: 'FacilitatorDoesNotVote' });
+        expect(error(await set(ann, target, react('👍')))).toEqual({ type: 'MarkNotForTarget' });
+        expect(error(await set(ann, { kind: 'Message', request: f.message }, VOTE))).toEqual({ type: 'MarkNotForTarget' });
+        expect(error(await set(ann, { ...target, option: key('zz') }, VOTE))).toEqual({ type: 'MarkTargetNotFound' });
+        expect(error(await set(ann, { kind: 'Turn', run: C.makeAgentRunId('00000000-0000-4000-8000-0000000000ff') }, react('❤️')))).toEqual({
             type: 'MarkTargetNotFound',
         });
-        expect(error(await set(value(C.makeParticipantId('stranger')), { kind: 'Message', request: f.message }, 'Like'))).toMatchObject({
+        expect(error(await set(value(C.makeParticipantId('stranger')), { kind: 'Message', request: f.message }, react('❤️')))).toMatchObject({
             type: 'NotAParticipant',
         });
         // anyone reacts, the facilitator too, with several signs on one message
-        value(await set(facilitator, { kind: 'Message', request: f.message }, 'Agree'));
-        value(await set(facilitator, { kind: 'Message', request: f.message }, 'Seen'));
-        value(await set(ann, { kind: 'Turn', run }, 'Doubt'));
-        expect(value(await f.use.sessionState({ session: f.id })).marks.map((m) => m.sign)).toEqual(['Agree', 'Seen', 'Doubt']);
+        value(await set(facilitator, { kind: 'Message', request: f.message }, react('👍')));
+        value(await set(facilitator, { kind: 'Message', request: f.message }, react('👀')));
+        value(await set(ann, { kind: 'Turn', run }, react('🤔')));
+        expect(value(await f.use.sessionState({ session: f.id })).marks.map((m) => signKey(m.sign))).toEqual(['👍', '👀', '🤔']);
         value(await f.use.closeSession({ session: f.id }));
-        expect(error(await set(ann, { kind: 'Message', request: f.message }, 'Like'))).toEqual({ type: 'SessionAlreadyClosed' });
+        expect(error(await set(ann, { kind: 'Message', request: f.message }, react('❤️')))).toEqual({ type: 'SessionAlreadyClosed' });
+    });
+
+    test(`a message holds at most ${MAX_REACTION_EMOJI} different emoji: the next new one is refused, one already there is not`, async () => {
+        const f = await fixture();
+        const message: C.MarkTarget = { kind: 'Message', request: f.message };
+        const set = (participant: C.ParticipantId, emoji: string) =>
+            f.use.setMark({ session: f.id, participant, target: message, sign: react(emoji), placed: true });
+        for (const [i, e] of TWENTY.entries()) value(await set(i % 2 === 0 ? ann : bob, e));
+        expect(error(await set(ann, '🙃'))).toEqual({ type: 'ReactionLimitReached', limit: value(C.makeTally(MAX_REACTION_EMOJI)) });
+        // joining an emoji there is fine; taking one off makes room
+        value(await set(ann, '😁'));
+        value(await f.use.setMark({ session: f.id, participant: ann, target: message, sign: react('😀'), placed: false }));
+        value(await set(ann, '🙃'));
+        // another target has its own room
+        value(
+            await f.use.setMark({
+                session: f.id,
+                participant: ann,
+                target: { kind: 'Turn', run: await ended(f, 'completed') },
+                sign: react('🙃'),
+                placed: true,
+            }),
+        );
     });
 });
 
 // ---- persistence ----
 
-describe('the marks table (migration 4)', () => {
+describe('the marks table (migration 4) and reactions as emoji', () => {
     test('a database written before marks is upgraded in place: its session loads, and marks are kept from then on', async () => {
         const dir = await workspace({});
         const file = path.join(dir, 'session.db');
@@ -420,7 +509,7 @@ describe('the marks table (migration 4)', () => {
             session: sid,
             participant: value(C.makeParticipantId('ann')),
             target: { kind: 'Message', request: C.makeRequestId('00000000-0000-4000-8000-000000000003') },
-            sign: 'Like',
+            sign: react('❤️'),
             placedAt: new Date('2026-11-01T09:00:00Z'),
         };
         await uow.transaction((s) => s.marks.save(mark));
@@ -438,6 +527,76 @@ describe('the marks table (migration 4)', () => {
             ['00000000-0000-4000-8000-000000000005'],
             'Removed',
         ]);
+        db.close();
+    });
+
+    test('a database with the four named reactions: they become 👍 🤔 ❤️ 👀 in the marks and the outbox, votes stay votes', async () => {
+        const dir = await workspace({});
+        const file = path.join(dir, 'session.db');
+        // the schema with marks, before emoji: the version that added the marks table
+        const version = MIGRATIONS.findIndex((m) => m.includes('CREATE TABLE marks')) + 1;
+        const old = new DatabaseSync(file);
+        for (const m of MIGRATIONS.slice(0, version)) old.exec(m);
+        old.exec(`PRAGMA user_version = ${version}`);
+        const sid = '00000000-0000-4000-8000-000000000001';
+        const target = { kind: 'Message', request: '00000000-0000-4000-8000-000000000003' };
+        const vote = { kind: 'QuestionOption', run: '00000000-0000-4000-8000-000000000009', question: 'q1', option: 'a' };
+        const at = { $date: '2026-11-01T09:00:00.000Z' };
+        const rows: [string, string, string, string, object][] = [
+            ['1', 'ann', 'Agree', 'Placed', target],
+            ['2', 'ann', 'Doubt', 'Placed', target],
+            ['3', 'bob', 'Like', 'Placed', target],
+            ['4', 'bob', 'Seen', 'Removed', target],
+            ['5', 'bob', 'Vote', 'Placed', vote],
+        ];
+        old.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(sid, 'Open', JSON.stringify({ state: 'Open', id: sid }));
+        const insert = old.prepare('INSERT INTO marks (id, session_id, seq, participant, target_key, sign, state, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        const outbox = old.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)');
+        for (const [n, participant, sign, state, t] of rows) {
+            const id = `00000000-0000-4000-8000-00000000010${n}`;
+            const data = { state, id, session: sid, participant, target: t, sign, placedAt: at, ...(state === 'Removed' && { removedAt: at }) };
+            insert.run(id, sid, Number(n), participant, markKey(t as MarkTargetData), sign, state, JSON.stringify(data));
+            const event = { type: 'MarkPlaced', markId: id, session: sid, participant, target: t, sign, placedAt: at };
+            outbox.run(sid, 'MarkPlaced', JSON.stringify(event), '2026-11-01T09:00:00.000Z');
+        }
+        outbox.run(sid, 'RequestDismissed', JSON.stringify({ type: 'RequestDismissed', sign: 'Agree' }), '2026-11-01T09:00:00.000Z');
+        old.close();
+
+        const db = openDatabase(file);
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
+        const columns = db.prepare('SELECT sign, state FROM marks ORDER BY seq').all();
+        expect(columns.map((r) => [r.sign, r.state])).toEqual([
+            ['👍', 'Placed'],
+            ['🤔', 'Placed'],
+            ['❤️', 'Placed'],
+            ['👀', 'Removed'],
+            ['Vote', 'Placed'],
+        ]);
+        const uow = createUnitOfWork(db);
+        const id = C.makeSessionId(sid);
+        const placed = await uow.transaction((s) => s.marks.placedBySession(id));
+        expect(placed.map((m) => m.sign)).toEqual([react('👍'), react('🤔'), react('❤️'), VOTE]);
+        expect(placed[0].placedAt).toEqual(new Date('2026-11-01T09:00:00.000Z'));
+        const events = await uow.transaction((s) => s.outbox.readAfter(0, 100, id));
+        expect(events.map((e): unknown => ('sign' in e.event ? e.event.sign : undefined))).toEqual([
+            react('👍'),
+            react('🤔'),
+            react('❤️'),
+            react('👀'),
+            VOTE,
+            // another event is left as it was
+            'Agree',
+        ]);
+        // the unique index holds for the emoji: a second 👍 of ann's on the message is refused
+        const again: C.PlacedMark = { ...placed[0], id: C.makeMarkId('00000000-0000-4000-8000-000000000200') };
+        expect(
+            await uow
+                .transaction((s) => s.marks.save(again))
+                .then(
+                    () => 'saved',
+                    () => 'refused',
+                ),
+        ).toBe('refused');
         db.close();
     });
 });
@@ -489,6 +648,7 @@ describe('the marks route and its broadcast', () => {
                 identity: 'dev',
                 agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
                 maxParticipants: 50,
+                quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
                 classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
             },
         });
@@ -540,7 +700,7 @@ describe('the marks route and its broadcast', () => {
         };
         try {
             await waitFor('session.state', 1);
-            const vote = (o: string) => ({ target: { kind: 'QuestionOption', run, question: 'q1', option: o }, sign: 'Vote', placed: true });
+            const vote = (o: string) => ({ target: { kind: 'QuestionOption', run, question: 'q1', option: o }, sign: { kind: 'Vote' }, placed: true });
             // the facilitator's answer is the decision
             const refused = await api(ada, 'marks', vote('a'));
             expect([refused.status, ((await refused.json()) as { error: { type: string } }).error.type]).toEqual([403, 'FacilitatorDoesNotVote']);
@@ -548,22 +708,25 @@ describe('the marks route and its broadcast', () => {
             expect(placed.status).toBe(200);
             const moved = (await (await api(bob, 'marks', vote('b'))).json()) as { placed: { id: string }; removed: { id: string }[] };
             expect(moved.removed).toHaveLength(1);
-            expect((await api(ada, 'marks', { target: { kind: 'Message', request }, sign: 'Agree', placed: true })).status).toBe(200);
+            expect((await api(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Reaction', emoji: '❤' }, placed: true })).status).toBe(200);
             await waitFor('mark.placed', 3);
             await waitFor('mark.removed', 1);
-            const events = received.filter((m) => m.type.startsWith('mark.')).map((m) => [m.type, (m.event as { sign: string }).sign]);
+            const events = received.filter((m) => m.type.startsWith('mark.')).map((m) => [m.type, signKey((m.event as { sign: C.MarkSign }).sign)]);
             expect(events).toEqual([
                 ['mark.placed', 'Vote'],
                 ['mark.removed', 'Vote'],
                 ['mark.placed', 'Vote'],
-                ['mark.placed', 'Agree'],
+                // ❤ (text presentation) is kept as ❤️
+                ['mark.placed', '❤️'],
             ]);
             // a page that loads now sees the marks
             const state = (await (await api(bob, 'state')).json()) as SessionStateBody;
             expect(state.marks.map((m) => [m.sign, m.target.kind])).toEqual([
-                ['Vote', 'QuestionOption'],
-                ['Agree', 'Message'],
+                [{ kind: 'Vote' }, 'QuestionOption'],
+                [{ kind: 'Reaction', emoji: '❤️' }, 'Message'],
             ]);
+            // the quick reactions of the config (the default here) come with the state
+            expect(state.quickReactions).toEqual(['👍', '👀', '🤔', '🎉', '❤️', '🙏']);
         } finally {
             ws.close();
         }
@@ -574,17 +737,27 @@ describe('the marks route and its broadcast', () => {
             const e = ((await res.json()) as { error: { type: string; field?: string } }).error;
             return [res.status, e.field ?? e.type];
         };
-        expect(await bad({ target: { kind: 'Turn', run }, sign: 'Wave', placed: true })).toEqual([400, 'sign']);
-        expect(await bad({ target: { kind: 'Turn', run: 'x' }, sign: 'Like', placed: true })).toEqual([400, 'target.run']);
-        expect(await bad({ target: { kind: 'Turn', run, extra: 1 }, sign: 'Like', placed: true })).toEqual([400, 'target.extra']);
-        expect(await bad({ target: { kind: 'Turn', run }, sign: 'Like' })).toEqual([400, 'placed']);
-        expect(await bad({ target: { kind: 'Turn', run }, sign: 'Vote', placed: true })).toEqual([400, 'MarkNotForTarget']);
-        expect(await bad({ target: { kind: 'Turn', run: crypto.randomUUID() }, sign: 'Like', placed: true })).toEqual([404, 'MarkTargetNotFound']);
+        const like = { kind: 'Reaction', emoji: '👍' };
+        const turn = { kind: 'Turn', run };
+        expect(await bad({ target: turn, sign: 'Like', placed: true })).toEqual([400, 'sign']);
+        expect(await bad({ target: turn, sign: { kind: 'Wave' }, placed: true })).toEqual([400, 'sign.kind']);
+        expect(await bad({ target: turn, sign: { kind: 'Vote', emoji: '👍' }, placed: true })).toEqual([400, 'sign.emoji']);
+        expect(await bad({ target: turn, sign: { ...like, size: 2 }, placed: true })).toEqual([400, 'sign.size']);
+        for (const emoji of ['ok', '👍👍', '1', '', 7, '👍'.repeat(40)])
+            expect(await bad({ target: turn, sign: { kind: 'Reaction', emoji }, placed: true })).toEqual([400, 'sign.emoji']);
+        expect(await bad({ target: { kind: 'Turn', run: 'x' }, sign: like, placed: true })).toEqual([400, 'target.run']);
+        expect(await bad({ target: { kind: 'Turn', run, extra: 1 }, sign: like, placed: true })).toEqual([400, 'target.extra']);
+        expect(await bad({ target: turn, sign: like })).toEqual([400, 'placed']);
+        expect(await bad({ target: turn, sign: { kind: 'Vote' }, placed: true })).toEqual([400, 'MarkNotForTarget']);
+        expect(await bad({ target: { kind: 'Turn', run: crypto.randomUUID() }, sign: like, placed: true })).toEqual([404, 'MarkTargetNotFound']);
+        // a ZWJ sequence, a skin tone, a flag and a keycap are one emoji each
+        for (const emoji of ['👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣'])
+            expect((await api(bob, 'marks', { target: turn, sign: { kind: 'Reaction', emoji }, placed: true })).status).toBe(200);
         expect((await fetch(`${server.url}api/session/marks`, { method: 'POST', headers: json, body: '{}' })).status).toBe(401);
 
         // answered: closed
         expect((await api(ada, 'runs', { requests: [request], answerTo: run, answer: { answers: [{ question: 'q1', options: ['b'] }] } })).status).toBe(201);
-        expect(await bad({ target: { kind: 'QuestionOption', run, question: 'q1', option: 'a' }, sign: 'Vote', placed: true })).toEqual([
+        expect(await bad({ target: { kind: 'QuestionOption', run, question: 'q1', option: 'a' }, sign: { kind: 'Vote' }, placed: true })).toEqual([
             409,
             'MarkTargetClosed',
         ]);
@@ -606,25 +779,39 @@ describe("the page's derivations", () => {
     });
     const message = { kind: 'Message', request: 'm1' } as const;
     const marks = [
-        mark('1', 'ann', message, 'Like'),
-        mark('2', 'bob', message, 'Agree'),
-        mark('3', 'me', message, 'Agree'),
-        mark('4', 'ann', { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' }, 'Vote'),
-        mark('5', 'bob', { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' }, 'Vote'),
+        mark('1', 'ann', message, reaction('❤️')),
+        mark('2', 'bob', message, reaction('👍')),
+        mark('3', 'me', message, reaction('👍')),
+        mark('4', 'ann', { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' }, VOTE),
+        mark('5', 'bob', { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' }, VOTE),
     ];
     const nameOf = (id: string): string => id.toUpperCase();
 
-    test('counts, who in the order they marked, and mine; reactions in the fixed order', () => {
+    test('counts, who in the order they marked, and mine; the emoji in the order each first appeared', () => {
         const index = markIndex({ marks }, 'me');
-        expect(tallyOf(index, message, 'Agree')).toEqual({ count: 2, who: ['bob', 'me'], mine: true });
-        expect(tallyOf(index, message, 'Seen')).toEqual({ count: 0, who: [], mine: false });
-        expect(reactionsOn(index, message).map((r) => [r.sign, r.tally.count, r.tally.mine])).toEqual([
-            ['Agree', 2, true],
-            ['Like', 1, false],
+        expect(tallyOf(index, message, reaction('👍'))).toEqual({ count: 2, who: ['bob', 'me'], mine: true });
+        expect(tallyOf(index, message, reaction('👀'))).toEqual({ count: 0, who: [], mine: false });
+        expect(reactionsOn(index, message).map((r) => [r.emoji, r.tally.count, r.tally.mine])).toEqual([
+            ['❤️', 1, false],
+            ['👍', 2, true],
         ]);
-        expect(names(tallyOf(index, message, 'Agree'), nameOf, '、')).toBe('BOB、ME');
+        // votes are not reactions
+        expect(reactionsOn(index, { kind: 'QuestionOption', run: 'r1', question: 'q1', option: 'a' })).toEqual([]);
+        expect(names(tallyOf(index, message, reaction('👍')), nameOf, '、')).toBe('BOB、ME');
         // a state from before marks has none
         expect(markIndex({} as Pick<SessionStateBody, 'marks'>, 'me').size).toBe(0);
+    });
+
+    test('whether an emoji fits: any while a target has fewer than the limit, then only those there', () => {
+        const full = markIndex({ marks: TWENTY.map((e, i) => mark(String(i), 'ann', message, reaction(e))) }, 'me');
+        expect(reactionFits(full, message, '😀')).toBe(true);
+        expect(reactionFits(full, message, '🙃')).toBe(false);
+        expect(reactionFits(markIndex({ marks }, 'me'), message, '🙃')).toBe(true);
+    });
+
+    test("the quick reactions: the session's, or the default ones (a state from before them)", () => {
+        expect(quickReactions({ quickReactions: ['🔥', '✅'] })).toEqual(['🔥', '✅']);
+        expect(quickReactions({})).toEqual(['👍', '👀', '🤔', '🎉', '❤️', '🙏']);
     });
 
     test("the lines that keep a closed vote's counts in a tooltip", () => {
@@ -637,7 +824,7 @@ describe("the page's derivations", () => {
             ],
         };
         expect(questionVoteLines(index, 'r1', question, nameOf, ', ')).toEqual(['A ♡ 2: ANN, BOB']);
-        const kept = markIndex({ marks: [mark('6', 'ann', { kind: 'AssumptionChoice', run: 'r2', assumption: 0 }, 'Vote')] }, 'me');
+        const kept = markIndex({ marks: [mark('6', 'ann', { kind: 'AssumptionChoice', run: 'r2', assumption: 0 }, VOTE)] }, 'me');
         expect(assumptionVoteLines(kept, 'r2', 0, [{ id: 'x', label: 'X' }], 'As is', nameOf, ', ')).toEqual(['As is ♡ 1: ANN']);
     });
 
@@ -658,15 +845,23 @@ describe("the page's derivations", () => {
         const placed = {
             type: 'mark.placed',
             seq: 2,
-            event: { type: 'MarkPlaced', markId: '9', session: 's', participant: 'ann', target: message, sign: 'Like', placedAt: '2026-11-01T09:00:00.000Z' },
+            event: {
+                type: 'MarkPlaced',
+                markId: '9',
+                session: 's',
+                participant: 'ann',
+                target: message,
+                sign: reaction('❤️'),
+                placedAt: '2026-11-01T09:00:00.000Z',
+            },
         } as const;
         const once = applyEvent(base, placed).state;
-        expect(once.marks).toEqual([mark('9', 'ann', message, 'Like')]);
+        expect(once.marks).toEqual([mark('9', 'ann', message, reaction('❤️'))]);
         expect(applyEvent(once, placed).state).toBe(once);
         const removed = {
             type: 'mark.removed',
             seq: 3,
-            event: { type: 'MarkRemoved', markId: '9', participant: 'ann', target: message, sign: 'Like', removedAt: '2026-11-01T09:01:00.000Z' },
+            event: { type: 'MarkRemoved', markId: '9', participant: 'ann', target: message, sign: reaction('❤️'), removedAt: '2026-11-01T09:01:00.000Z' },
         } as const;
         expect(applyEvent(once, removed)).toEqual({ state: { ...once, seq: 3, marks: [] }, refetch: false });
     });

@@ -2,8 +2,23 @@ context Collaboration {
   /// 印の識別子。
   id MarkId "印ID": UUID
 
-  /// 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応はメッセージと AI のターンに誰でも付ける。
-  enum MarkSign "印の種類" { Vote "票" Agree "賛成" Doubt "疑問" Like "いいね" Seen "了解" }
+  /// 反応に使う絵文字1つ（書記素1つ）。ZWJ でつないだ組・肌の色・国旗・キーキャップも1つと数える。アプリは絵文字に意味を
+  /// 与えない。正規化した形で持つ: NFC で、テキスト表示が既定の絵文字には VS16（U+FE0F）を付けた完全修飾の形（❤ と ❤️ は
+  /// 同じ反応）。
+  primitive Emoji "絵文字": String {
+    invariant bounded "長すぎない" { length(value) >= 1 and length(value) <= 64 }
+    /// 書記素1つの絵文字で、正規化した形（`@domaintrail/modeling/core/emoji`）。
+    invariant singleEmoji "正規化した絵文字1つ"
+  }
+
+  /// 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応（絵文字）はメッセージと AI のターンに誰でも付ける。
+  union MarkSign "印の種類" {
+    Vote "票" {}
+    /// 利用者が選んだ絵文字。どの絵文字にもアプリは意味を与えない。
+    Reaction "反応" {
+      emoji: Emoji
+    }
+  }
 
   /// 印を付けるもの。
   union MarkTarget "印の対象" {
@@ -33,7 +48,8 @@ context Collaboration {
   verified OpenMarkTarget "付け外しできる対象" of MarkTarget for SessionId errors MarkTargetNotFound, MarkTargetClosed
 
   /// 参加者が対象に付ける印。票と反応は同じ仕組み（だれが・なにに・どの印を）で、対象の種類ごとの規則（同じ組で1つだけ、
-  /// 締め切り、だれが付けられるか）はコード（`domain/marks.ts`）が決める。外した印は残し、付け直しは新しい印になる。
+  /// 締め切り、だれが付けられるか、1つの対象に付く絵文字の種類の上限）はコード（`domain/marks.ts`）が決める。外した印は残し、
+  /// 付け直しは新しい印になる。
   aggregate Mark "印" {
     id: MarkId
     references session: SessionId -> Session
@@ -44,7 +60,7 @@ context Collaboration {
 
     /// 票は問いの選択肢と前提の選び方に、反応はメッセージと AI のターンに付ける。
     invariant fitsTarget "印の種類が対象に合う" {
-      (sign == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign != MarkSign.Vote implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+      (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
     }
 
     state Placed "付いている"
@@ -55,11 +71,11 @@ context Collaboration {
     create command place(id: MarkId, session: ActiveSession, participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, placedAt: Timestamp) "印を付ける"
       -> Placed
       requires fitsTarget "印の種類が対象に合う" {
-        (sign == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign != MarkSign.Vote implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+        (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
       } else MarkNotForTarget
       /// ファシリテーターは票を入れない（回答が決定になる）。
       requires participantsVote "票は参加者だけ" {
-        sign == MarkSign.Vote implies role == ParticipantRole.Participant
+        sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
       } else FacilitatorDoesNotVote
       emits MarkPlaced
 
@@ -97,4 +113,10 @@ context Collaboration {
 
   /// ファシリテーターは票を入れない。
   error FacilitatorDoesNotVote "ファシリテーターの票"
+
+  /// 1つの対象（メッセージ・AI のターン）に付く絵文字の種類は上限まで（`domain/marks.ts` の `MAX_REACTION_EMOJI`）。
+  /// 付いている絵文字を付けるのは上限に関わらずできる。
+  error ReactionLimitReached "反応の種類の上限" {
+    limit: Tally "上限"
+  }
 }
