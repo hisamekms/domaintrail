@@ -160,6 +160,12 @@ export function useSessionPage(input: {
         // only joining opens it; closing it afterwards is the reader's choice
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inSession]);
+    // the collab ended: the chat opens, with its summary
+    const ended = session !== undefined && (session.status === 'closed' || session.state.session.state === 'Closed');
+    useEffect(() => {
+        if (ended) setConversationOpen(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ended]);
     // what came since the chat was last shown: the floating button counts it
     const items = useMemo(() => (session ? streamItems(session.state) : []), [session?.state]);
     const latest = latestAt(items);

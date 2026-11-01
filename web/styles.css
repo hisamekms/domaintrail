@@ -4199,44 +4199,14 @@ del.was.block {
     cursor: default;
 }
 
-/* the participants: one button in the header, a list on demand */
+/* the participants: the first part of the collab menu (below) */
 .chat-people {
     position: relative;
     min-width: 0;
 }
-.session-chat button.chat-people-button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 100%;
-    padding: 2px 6px 2px 2px;
-    border: 1px solid transparent;
-    border-radius: 14px;
-    background: none;
-}
-.session-chat button.chat-people-button:hover,
-.session-chat button.chat-people-button[aria-expanded='true'] {
-    border-color: var(--border);
-    background: var(--hover);
-}
 .chat-status-slot {
     margin-left: auto;
     display: flex;
-}
-.chat-people-popover {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    z-index: 40;
-    width: 17.5rem;
-    max-width: calc(100vw - 24px);
-    max-height: 26.25rem;
-    overflow: auto;
-    padding: 6px;
-    background: var(--panel);
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px var(--shadow);
 }
 .chat-people-list {
     list-style: none;
@@ -4445,6 +4415,172 @@ del.was.block {
     flex: none;
     width: 22px;
     height: 22px;
+}
+
+/* ---------- collab menu ---------- */
+
+/* one button in the chat's head (avatars, online count, コラボ中, ▾) opening the participants and the collab's actions */
+.collab-menu {
+    position: relative;
+    min-width: 0;
+}
+.session-chat button.collab-menu-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 2px 6px 2px 2px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    background: none;
+    color: inherit;
+}
+.session-chat button.collab-menu-button:hover,
+.session-chat button.collab-menu-button[aria-expanded='true'] {
+    border-color: var(--border);
+    background: var(--hover);
+}
+.collab-menu-state {
+    flex: none;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--added) 16%, transparent);
+    color: var(--added);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+    white-space: nowrap;
+}
+.collab-menu-chevron {
+    flex: none;
+    color: var(--muted);
+}
+.collab-menu-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 40;
+    width: 17.5rem;
+    max-width: calc(100vw - 24px);
+    max-height: min(32rem, calc(100vh - 80px));
+    overflow: auto;
+    padding: 4px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px var(--shadow);
+}
+.collab-menu-heading {
+    margin: 4px 6px 2px;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+}
+.collab-menu-popover .chat-people {
+    padding: 0 2px;
+}
+.chat-person:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+.collab-menu-actions {
+    display: flex;
+    flex-direction: column;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+.session-chat .collab-menu-actions > button {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: inherit;
+    font-size: 0.8125rem;
+    text-align: left;
+    white-space: nowrap;
+}
+.session-chat .collab-menu-actions > button:hover,
+.session-chat .collab-menu-actions > button:focus-visible {
+    background: var(--hover);
+    outline: none;
+}
+.session-chat .collab-menu-actions > button.danger {
+    color: var(--error);
+}
+/* the menu's note (a link copied) opens under the button, from its left */
+.collab-menu-note {
+    left: 0;
+    right: auto;
+}
+.collab-ended {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* ending: what is unfinished, then 終える; ended: the summary */
+.collab-dialog {
+    width: min(30rem, calc(100vw - 32px));
+}
+.collab-dialog-body h3 {
+    margin: 0 0 6px;
+    font-size: 0.8125rem;
+}
+.collab-dialog-body section + section {
+    margin-top: 14px;
+}
+.collab-dialog-buttons {
+    justify-content: flex-end;
+}
+.collab-end-confirm.primary.danger {
+    background: var(--error);
+    border-color: var(--error);
+    color: #fff;
+}
+.collab-unfinished {
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+.collab-unfinished ul {
+    margin: 0;
+    padding-left: 1.2em;
+}
+.collab-summary-duration {
+    font-weight: normal;
+    font-size: 0.875rem;
+}
+.collab-summary-units {
+    margin: 0;
+    padding-left: 1.4em;
+}
+.collab-summary-units > li {
+    margin: 0 0 6px;
+}
+.collab-summary-units > li > span {
+    display: block;
+}
+.collab-summary-title {
+    overflow-wrap: anywhere;
+}
+.collab-summary-people {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+}
+.collab-summary-people > li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.collab-summary-kept {
+    margin: 14px 0 0;
 }
 
 /* ---------- the left pane's lists, the legend's button, the inspector's head ---------- */

@@ -15,9 +15,7 @@ import {
     CircleSlash,
     CircleX,
     Clock,
-    Ellipsis,
     LoaderCircle,
-    LogOut,
     MessagesSquare,
     SendHorizontal,
     Ban,
@@ -51,7 +49,7 @@ import {
     type PersonCandidate,
 } from './mentions';
 import { useTargetNaming } from './naming';
-import { ParticipantsButton } from './participants';
+import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { ReplyText } from './reply';
 import { parseReplyText, referenceText } from './references';
@@ -163,6 +161,16 @@ export function SessionChat(props: {
         }
     };
     const [view, setView] = useState<'chat' | 'history'>('chat');
+    // the collab ended: its summary, shown once to everyone (and again from the notice)
+    const ended = session.status === 'closed' || state.session.state === 'Closed';
+    const summary = useCollabSummary(session, ended);
+    const [summaryShown, setSummaryShown] = useState(false);
+    const [summaryOpen, setSummaryOpen] = useState(false);
+    useEffect(() => {
+        if (!summary || summaryShown) return;
+        setSummaryShown(true);
+        setSummaryOpen(true);
+    }, [summary, summaryShown]);
     // the reply being written (to an AI turn): its chip above the composer; the composer takes the focus when it starts
     const [replyDraft, setReplyDraft] = useState<ReplyDraft | undefined>();
     const [replyFocus, setReplyFocus] = useState(0);
@@ -237,9 +245,8 @@ export function SessionChat(props: {
         });
     }, []);
 
-    // a person shown among the participants (a mention of them clicked): `n` changes on each click
-    const [personFocus, setPersonFocus] = useState<{ readonly id: string; readonly n: number } | undefined>();
-    const showPerson = useCallback((id: string): void => setPersonFocus((f) => ({ id, n: (f?.n ?? 0) + 1 })), []);
+    // a person shown among the participants (a mention of them clicked): the collab menu opens at them
+    const showPerson = useCallback((id: string): void => openPeople(id), []);
 
     const context: ChatContextValue = {
         session,
@@ -269,10 +276,11 @@ export function SessionChat(props: {
                     status={status}
                     now={now}
                     control={control}
+                    live={live}
+                    units={units}
                     location={props.location}
                     viewScope={props.viewScope}
                     onOpenView={props.onOpenView}
-                    personFocus={personFocus}
                     onLeave={() => void leave()}
                     onClose={props.onClose}
                     tx={tx}
@@ -285,7 +293,17 @@ export function SessionChat(props: {
                     ))}
                 </div>
                 {session.status === 'signed-out' && <p className="session-note chat-notice">{tx.signedOut}</p>}
-                {(session.status === 'closed' || state.session.state === 'Closed') && <p className="session-note chat-notice">{tx.closed}</p>}
+                {ended && (
+                    <p className="session-note chat-notice collab-ended">
+                        {tx.closed}
+                        {summary && (
+                            <button className="chat-small" onClick={() => setSummaryOpen(true)}>
+                                {tx.collab.showSummary}
+                            </button>
+                        )}
+                    </p>
+                )}
+                {summary && summaryOpen && <CollabSummaryDialog summary={summary} tx={tx} onClose={() => setSummaryOpen(false)} />}
                 {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
                 {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
                 {/* both stay mounted, so that switching keeps the stream's scroll and the history's open units */}
@@ -326,10 +344,11 @@ function ChatHeader(props: {
     status: AgentStatus;
     now: number;
     control: boolean;
+    live: boolean;
+    units: readonly ChangeUnit[];
     location: ViewLocation;
     viewScope: ViewScope;
     onOpenView: (target: ViewTarget) => void;
-    personFocus: { readonly id: string; readonly n: number } | undefined;
     onLeave: () => void;
     onClose: () => void;
     tx: Tx;
@@ -340,7 +359,15 @@ function ChatHeader(props: {
     const runningRun = session.state.runs.find((r) => r.state === 'Running');
     return (
         <div className="chat-header">
-            <ParticipantsButton session={session} location={props.location} scope={props.viewScope} onOpenView={props.onOpenView} focus={props.personFocus} />
+            <CollabMenu
+                session={session}
+                location={props.location}
+                scope={props.viewScope}
+                units={props.units}
+                live={props.live}
+                onOpenView={props.onOpenView}
+                onLeave={props.onLeave}
+            />
             {/* idle says nothing: only running, a question or a queued run shows */}
             <span className="chat-status-slot" aria-live="polite">
                 {status.kind !== 'idle' && (
@@ -353,12 +380,6 @@ function ChatHeader(props: {
                     </span>
                 )}
             </span>
-            {props.control && <SessionMenu />}
-            {session.status !== 'signed-out' && (
-                <button className="icon-button" onClick={props.onLeave} data-tooltip={tx.leave} aria-label={tx.leave}>
-                    <LogOut size={15} aria-hidden />
-                </button>
-            )}
             <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
                 <X size={16} aria-hidden />
             </button>
@@ -372,72 +393,6 @@ function CancelButton({ run }: { run: string }) {
         <button className="run-card-cancel" onClick={() => void actions.cancel(run)} aria-label={tx.chat.cancelRun} data-tooltip={tx.chat.cancelRun}>
             <X size={11} aria-hidden />
         </button>
-    );
-}
-
-/** The session's menu (the facilitator's): record the workspace, a link to hand the role over, close the session. */
-function SessionMenu() {
-    const { tx, revisions } = useChat();
-    const [open, setOpen] = useState(false);
-    const [note, setNote] = useState<string | undefined>();
-    const root = useRef<HTMLDivElement>(null);
-    useDismiss(open, root, () => setOpen(false));
-    const pick = (f: () => void | Promise<void>) => (): void => {
-        setOpen(false);
-        void f();
-    };
-    return (
-        <div className="pane-menu" ref={root}>
-            <button
-                className="icon-button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-label={tx.chat.sessionMenu}
-                data-tooltip={tx.chat.sessionMenu}
-                onClick={() => setOpen(!open)}
-            >
-                <Ellipsis size={16} aria-hidden />
-            </button>
-            {open && (
-                <div className="pane-menu-list" role="menu">
-                    <button role="menuitem" onClick={pick(() => revisions.take())}>
-                        {tx.takeRevision}
-                    </button>
-                    <button
-                        role="menuitem"
-                        onClick={pick(async () => {
-                            try {
-                                const { link } = await sessionApi.facilitatorLink();
-                                await navigator.clipboard?.writeText(link).catch(() => undefined);
-                                setNote(tx.chat.linkIssued(link));
-                            } catch (e) {
-                                setNote(tx.error(failure(e)));
-                            }
-                        })}
-                    >
-                        {tx.chat.handOver}
-                    </button>
-                    <button
-                        role="menuitem"
-                        className="danger"
-                        onClick={pick(async () => {
-                            if (!window.confirm(tx.chat.closeConfirm)) return;
-                            await sessionApi.close().catch((e: unknown) => setNote(tx.error(failure(e))));
-                        })}
-                    >
-                        {tx.chat.closeSession}
-                    </button>
-                </div>
-            )}
-            {note && (
-                <div className="pane-menu-list session-menu-note" role="status">
-                    <p className="small">{note}</p>
-                    <button className="chat-small" onClick={() => setNote(undefined)}>
-                        {tx.restoreFlow.close}
-                    </button>
-                </div>
-            )}
-        </div>
     );
 }
 

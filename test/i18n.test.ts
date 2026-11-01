@@ -34,7 +34,7 @@ const paths = (value: unknown): string[] =>
 
 /**
  * Latin words allowed in Japanese messages: abbreviations, the DSL's keywords and file names, which are written as
- * they are in Japanese too, git's (`git`, and the refs `main` and `HEAD` given as examples), and the names of keys on
+ * they are in Japanese too (the workspace's `.domaintrail` directory among them), git's (`git`, and the refs `main` and `HEAD` given as examples), and the names of keys on
  * the keyboard. `X` is the sample argument.
  */
 const LATIN_IN_JA = new Set([
@@ -59,6 +59,7 @@ const LATIN_IN_JA = new Set([
     'Esc',
     'Shift',
     'U',
+    'domaintrail',
 ]);
 
 describe('i18n', () => {
