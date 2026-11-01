@@ -137,7 +137,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
     if (sourceModel) {
         const sink = new DiagnosticSink(resolveFile);
         checkNames(sourceModel, new RuleSink(sink.items));
-        checkShared(index, sink);
+        checkShared(sourceModel, new RuleSink(sink.items));
         checkStructure(index, sink);
         checkUnions(index, sink);
         checkFieldSets(sourceModel!, new RuleSink(sink.items));
