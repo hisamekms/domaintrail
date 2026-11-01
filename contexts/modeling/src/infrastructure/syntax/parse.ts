@@ -1,0 +1,226 @@
+// Parsing and linking the `.dt` sources of a workspace with Langium (the grammar, the scoping): the documents, the index
+// over their ASTs, and the diagnostics of the syntax and of the links, with what to write instead of a name that does
+// not resolve. Modeling's analysis (application/analyze.ts) builds the models on it and runs the rules on the model as
+// written.
+import * as path from 'node:path';
+import { AstUtils, URI, isCompositeCstNode, type AstNode, type LangiumDocument } from 'langium';
+import { didYouMean, suggestFrom, type Candidate, type Diagnostic, type SourceFile } from '@domaintrail/kernel';
+import type { ModelingRuleId } from '../../domain/rule-ids.js';
+import {
+    isAggregate,
+    isContext,
+    isEntity,
+    isEnumDecl,
+    isErrorDecl,
+    isEventDecl,
+    isFieldSet,
+    isIdType,
+    isPolicy,
+    isPrimitiveDecl,
+    isUnionDecl,
+    isValueObject,
+    isVerifiedDecl,
+    type ContextElement,
+    type Model,
+    type Policy,
+} from './generated/ast.js';
+import { createDomainServices } from './domain-module.js';
+import type { FileResolver } from './diagnostic-sink.js';
+import { elementIdOf } from './element-id.js';
+import { ModelIndex, commandsOf, statesOf } from './model-index.js';
+
+/** A parsed `.dt` document. */
+export type DomainDocument = LangiumDocument<Model>;
+
+/** The `.dt` sources of a workspace, parsed and linked. */
+export interface ParsedDomain {
+    /** The documents, in the order of the sources. */
+    documents: DomainDocument[];
+    index: ModelIndex;
+    /** The diagnostics of the syntax (SYNTAX) and of the links (M001, M006, M007, M016, M023), in the order found. */
+    diagnostics: Diagnostic[];
+    /** True when every `.dt` file parsed without lexer/parser errors. */
+    syntaxOk: boolean;
+    /** The path handed in for a document's URI. */
+    resolveFile: FileResolver;
+}
+
+/** Maps the property of an unresolved cross-reference to the rule that covers it. */
+const LINK_RULES: Record<string, ModelingRuleId> = {
+    from: 'M006',
+    to: 'M006',
+    event: 'M007', // `emits Event`
+    errors: 'M007',
+    error: 'M007', // `requires … else Error`
+    fieldSets: 'M016',
+};
+
+/** Parses and links a set of `.dt` sources as one workspace, with Langium's built-in validation only. */
+export async function parseDomain(sources: readonly SourceFile[]): Promise<ParsedDomain> {
+    const { shared } = createDomainServices();
+    const factory = shared.workspace.LangiumDocumentFactory;
+    const fileOf = new Map<string, string>();
+
+    const documents = sources.map((s) => {
+        const uri = URI.file(path.resolve('/__domaintrail__', s.path));
+        fileOf.set(uri.toString(), s.path);
+        const doc = factory.fromString<Model>(s.text, uri);
+        shared.workspace.LangiumDocuments.addDocument(doc);
+        return doc;
+    });
+
+    await shared.workspace.DocumentBuilder.build(documents, { validation: { categories: ['built-in'] } });
+
+    const resolveFile = (uri: string): string => fileOf.get(uri) ?? uri;
+    const index = new ModelIndex(documents.map((d) => d.parseResult.value));
+    const diagnostics: Diagnostic[] = [];
+    let syntaxOk = true;
+    for (const doc of documents) {
+        for (const d of doc.diagnostics ?? []) {
+            // Langium's diagnostic data (typed `any` by the LSP types)
+            const data: { code?: string; property?: string; refText?: string } | undefined = d.data;
+            const isLink = data?.code === 'linking-error';
+            if (!isLink) syntaxOk = false;
+            const property = data?.property ?? '';
+            const node = isLink ? nodeAt(doc, d.range.start.line, d.range.start.character) : undefined;
+            const policy = node && AstUtils.getContainerOfType(node, isPolicy);
+            const link = policy ? policyLink(index, policy, property, data?.refText ?? '') : undefined;
+            if (link === null) continue;
+            const hint = link ? link.hint : node && linkHint(index, node, property, data?.refText ?? '');
+            diagnostics.push({
+                file: resolveFile(doc.uri.toString()),
+                start: { line: d.range.start.line + 1, column: d.range.start.character + 1 },
+                end: { line: d.range.end.line + 1, column: d.range.end.character + 1 },
+                severity: d.severity === 2 ? 'warning' : 'error',
+                code: link ? 'M023' : isLink ? (LINK_RULES[property] ?? 'M001') : 'SYNTAX',
+                message: link
+                    ? link.message
+                    : isLink
+                      ? linkMessage(property, data?.refText ?? '')
+                      : typeof d.message === 'string'
+                        ? d.message
+                        : d.message.value,
+                ...(hint ? { hint } : {}),
+                elementId: node && elementIdOf(node),
+            });
+        }
+    }
+    return { documents, index, diagnostics, syntaxOk, resolveFile };
+}
+
+const LINK_KINDS: Record<string, string> = {
+    from: 'state',
+    to: 'state',
+    event: 'event',
+    errors: 'error',
+    error: 'error',
+    fieldSets: 'field set',
+    target: 'aggregate',
+    tagType: 'enum',
+    decl: 'type',
+};
+
+function linkMessage(property: string, refText: string): string {
+    const kind = LINK_KINDS[property] ?? 'element';
+    const hint = refText.includes('.') ? '' : kind === 'state' ? ' in this aggregate' : ' in this context (use Context.Name for other contexts)';
+    return `Cannot resolve ${kind} '${refText}'${hint}.`;
+}
+
+/** What each cross-reference property may point to (states are looked up in the aggregate instead). */
+const LINK_TARGETS: Record<string, (el: ContextElement) => boolean> = {
+    event: isEventDecl, // `emits Event`
+    errors: isErrorDecl,
+    error: isErrorDecl,
+    fieldSets: isFieldSet,
+    target: isAggregate,
+    tagType: isEnumDecl,
+    decl: (el) =>
+        isIdType(el) || isPrimitiveDecl(el) || isVerifiedDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
+};
+
+const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'];
+
+/**
+ * The names of the right kind visible where an unresolved reference is: for a simple name the elements of its context,
+ * of shared contexts and (qualified) of other contexts; for a qualified name every qualified name.
+ */
+function linkHint(index: ModelIndex, node: AstNode, property: string, refText: string): string | undefined {
+    if (property === 'from' || property === 'to') {
+        const agg = AstUtils.getContainerOfType(node, isAggregate);
+        return (
+            agg &&
+            suggestFrom(
+                refText,
+                statesOf(agg).map((s) => s.name),
+                `a state of '${agg.name}'`,
+            )
+        );
+    }
+    const accepts = LINK_TARGETS[property];
+    if (!accepts) return undefined;
+    const ctx = AstUtils.getContainerOfType(node, isContext)?.name ?? '';
+    const elements = index.elements.filter(accepts);
+    const candidates: Candidate[] = [];
+    if (refText.includes('.')) {
+        for (const el of elements) candidates.push({ name: `${el.$container.name}.${el.name}` });
+    } else {
+        if (property === 'decl') candidates.push(...PRIMITIVE_TYPES.map((name) => ({ name })));
+        for (const el of elements) {
+            const owner = el.$container.name;
+            const visible = owner === ctx || index.isShared(owner);
+            candidates.push(visible ? { name: el.name } : { name: `${owner}.${el.name}`, key: el.name });
+        }
+    }
+    return didYouMean(refText, candidates);
+}
+
+/**
+ * M023: the unresolved names of a policy, with what to write instead (`null`: not reported, for the command of an
+ * aggregate that is itself unresolved). Its aggregate is one of its own context, so an
+ * aggregate of another context means the policy is declared in the wrong context; its command is one of that aggregate.
+ */
+function policyLink(index: ModelIndex, policy: Policy, property: string, refText: string): { message: string; hint?: string } | null {
+    const ctx = policy.$container.name;
+    if (property === 'event') {
+        return {
+            message: `Policy '${policy.name}' reacts to event '${refText}', which does not exist${refText.includes('.') ? '' : ` in context '${ctx}' (use Context.Name for other contexts)`}.`,
+            hint: linkHint(index, policy, 'event', refText),
+        };
+    }
+    if (property === 'aggregate') {
+        const elsewhere = index.aggregates.filter((a) => a.name === refText && a.$container.name !== ctx);
+        if (elsewhere.length) {
+            const owner = elsewhere[0].$container.name;
+            return {
+                message: `Policy '${policy.name}' runs a command of '${owner}.${refText}', but a policy runs a command of its own context '${ctx}'.`,
+                hint: `declare the policy in context '${owner}' (the context that reacts), or run a command of an aggregate of '${ctx}'`,
+            };
+        }
+        const local = index.aggregates.filter((a) => a.$container.name === ctx).map((a) => a.name);
+        return {
+            message: `Policy '${policy.name}' runs a command of aggregate '${refText}', which is not an aggregate of context '${ctx}'.`,
+            hint: suggestFrom(refText, local, `an aggregate of '${ctx}'`),
+        };
+    }
+    const agg = policy.aggregate.ref;
+    if (!agg) return null; // the aggregate is reported, and the command cannot be looked up
+    const commands = agg && isAggregate(agg) ? commandsOf(agg).map((c) => c.name) : [];
+    return {
+        message: `Policy '${policy.name}' runs '${policy.aggregate.$refText}.${refText}', but '${policy.aggregate.$refText}' has no command '${refText}'.`,
+        hint: suggestFrom(refText, commands, `a command of '${policy.aggregate.$refText}'`),
+    };
+}
+
+function nodeAt(doc: LangiumDocument, line: number, character: number): AstNode | undefined {
+    const root = doc.parseResult.value.$cstNode;
+    if (!root) return undefined;
+    const offset = doc.textDocument.offsetAt({ line, character });
+    let node = root;
+    for (;;) {
+        const children = isCompositeCstNode(node) ? node.content : undefined;
+        const next = children?.find((c) => c.offset <= offset && offset < c.end);
+        if (!next) break;
+        node = next;
+    }
+    return node.astNode;
+}
