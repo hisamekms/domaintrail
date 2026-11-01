@@ -101,7 +101,7 @@
         "fast-check": "4.10.2",
       },
     },
-    "packages/workspace": {
+    "platform/workspace": {
       "name": "@domaintrail/workspace",
       "dependencies": {
         "@domaintrail/modeling": "workspace:*",
@@ -152,7 +152,7 @@
 
     "@domaintrail/web": ["@domaintrail/web@workspace:web"],
 
-    "@domaintrail/workspace": ["@domaintrail/workspace@workspace:packages/workspace"],
+    "@domaintrail/workspace": ["@domaintrail/workspace@workspace:platform/workspace"],
 
     "@floating-ui/core": ["@floating-ui/core@1.8.0", "", { "dependencies": { "@floating-ui/utils": "^0.2.12" } }, "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ=="],
 

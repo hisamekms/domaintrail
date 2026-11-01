@@ -10,7 +10,6 @@ import { Glob } from 'bun';
 import pkg from '../package.json' with { type: 'json' };
 
 const ROOT = path.join(import.meta.dir, '..');
-const SRC = path.join(ROOT, 'packages');
 const EXTERNAL = Object.keys(pkg.dependencies).flatMap((name) => [name, `${name}/*`]);
 
 const dirs: string[] = [];
@@ -85,11 +84,11 @@ function node(args: string[]): { code: number; out: string } {
 describe('collaboration on Node', () => {
     test('the sources the CLI bundles use no Bun API', async () => {
         const offending: string[] = [];
-        for (const dir of ['collaboration/src', 'workspace/src']) {
-            for await (const rel of new Glob('**/*.ts').scan({ cwd: path.join(SRC, dir) })) {
+        for (const dir of ['packages/collaboration/src', 'platform/workspace/src']) {
+            for await (const rel of new Glob('**/*.ts').scan({ cwd: path.join(ROOT, dir) })) {
                 // the generated contract tests register with bun:test; the unit tests run on Bun and are not bundled
                 if (rel.startsWith('generated/tests/') || rel.endsWith('.test.ts') || rel === 'test-helpers.ts') continue;
-                const source = await readFile(path.join(SRC, dir, rel), 'utf8');
+                const source = await readFile(path.join(ROOT, dir, rel), 'utf8');
                 if (/\bBun\.|from ['"]bun(:[\w-]+)?['"]/.test(source)) offending.push(`${dir}/${rel}`);
             }
         }

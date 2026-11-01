@@ -1,4 +1,4 @@
-// The workspace adapter of the session's snapshots (packages/workspace/src/infrastructure/snapshot.ts): it reads the
+// The workspace adapter of the session's snapshots (platform/workspace/src/infrastructure/snapshot.ts): it reads the
 // sources `dt check` reads, reports symbolic links instead of following them, and writes a snapshot back only inside
 // the root, never through a link, and only over the sources it expects.
 import { afterAll, describe, expect, test } from 'bun:test';

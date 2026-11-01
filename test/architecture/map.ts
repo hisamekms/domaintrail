@@ -174,8 +174,8 @@ export const MAP: Record<string, Module> = {
     },
     workspace: {
         kind: 'platform',
-        dir: 'packages/workspace',
-        sources: 'packages/workspace/src',
+        dir: 'platform/workspace',
+        sources: 'platform/workspace/src',
         upstream: ['modeling'],
         exceptions: {
             // the platform knows no context: since T6 it receives the configuration's values (the sources, the
