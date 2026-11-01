@@ -164,6 +164,64 @@ export function optional<T>(arb: fc.Arbitrary<T>): fc.Arbitrary<T | undefined> {
     return fc.option(arb, { nil: undefined });
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Recursive types (ADR 0028, decision 8)
+
+/**
+ * How deep the values of a cycle of types go: fast-check's depth constraints, shared by the choices through which the
+ * cycle may end (a union's variants, an optional field, a list that may be empty), biased towards shallow values.
+ */
+export interface Depth {
+    readonly depthIdentifier: string;
+    readonly maxDepth: number;
+    readonly depthSize: 'small';
+}
+
+/**
+ * The arbitraries of the types on one cycle (`Expr` and `Call`, each holding the other), built together with
+ * `fc.letrec` when first asked for. `id` names the cycle (it identifies its depth, also from the other contexts on it);
+ * values are at most `maxRecursionDepth` levels deep: a value of depth 1 holds no value of the cycle. `build` gets
+ * `tie`, the arbitrary of a type of the cycle, and the depth for `variants`, `optionalAt` and `manyAt`.
+ */
+export function recursive<T extends Record<string, unknown>>(
+    id: string,
+    maxRecursionDepth: number,
+    build: (tie: fc.LetrecTypedTie<T>, depth: Depth) => fc.LetrecValue<T>,
+): () => fc.LetrecValue<T> {
+    const depth: Depth = { depthIdentifier: `domaintrail:${id}`, maxDepth: Math.max(0, maxRecursionDepth - 1), depthSize: 'small' };
+    const builder: fc.LetrecTypedBuilder<T> = (tie) => build(tie, depth);
+    let built: fc.LetrecValue<T> | undefined;
+    return () => (built ??= fc.letrec<T>(builder as Parameters<typeof fc.letrec<T>>[0]));
+}
+
+/** The variants of a recursive union: the first ends the cycle, and is the only one drawn once the depth is reached. */
+export function variants(depth: Depth, first: fc.Arbitrary<unknown>, ...others: fc.Arbitrary<unknown>[]): fc.Arbitrary<unknown> {
+    return fc.oneof(depth, first, ...others);
+}
+
+/** An optional field holding a value of its cycle: absent once the depth is reached (the record is `compact`ed). */
+export function optionalAt<T>(depth: Depth, arb: fc.Arbitrary<T>): fc.Arbitrary<T | undefined> {
+    return fc.option(arb, { nil: undefined, ...depth });
+}
+
+/** A list that may be empty, of values of its cycle: empty once the depth is reached, else 1 to `upper` elements. */
+export function manyAt<T>(depth: Depth, arb: fc.Arbitrary<T>, upper?: number): fc.Arbitrary<T[]> {
+    return fc.oneof(depth, fc.constant<T[]>([]), fc.array(arb, { minLength: 1, maxLength: upper ?? 4 }));
+}
+
+/** Leaves out the properties of a record that are undefined (an optional field that `optionalAt` drew absent). */
+export function compact<T>(arb: fc.Arbitrary<T>): fc.Arbitrary<T> {
+    return arb.map((v) => Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined)) as T);
+}
+
+/**
+ * The arbitrary of a type of the cycle in another context, asked for only when a value is drawn: the arbitraries of
+ * the two contexts refer to each other, and building them at once would not end.
+ */
+export function defer<T>(arb: () => fc.Arbitrary<T>): fc.Arbitrary<T> {
+    return fc.constant(undefined).chain(() => arb());
+}
+
 /** Bounds read from the invariants of a domain primitive, to generate mostly valid values. */
 export interface Hints {
     readonly ge?: number;

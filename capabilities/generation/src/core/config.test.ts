@@ -1,7 +1,7 @@
 // The generation's sections of domaintrail.jsonc, `generate.ts` and `lintHint` (composed with the others and read from a
 // file: apps/dt/src/config/config.test.ts; through the CLI: test/config-cli.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { policyModes, resolveGenerationConfig, staysInside, unknownTsContexts, validateGenerationConfig } from './config.js';
+import { policyModes, resolveGenerationConfig, staysInside, unknownTestsTypes, unknownTsContexts, validateGenerationConfig } from './config.js';
 
 const refusal = (config: Record<string, unknown>): string | undefined => {
     try {
@@ -56,6 +56,17 @@ describe('the generation sections', () => {
         expect(unknownTsContexts(c, ['A', 'X'])).toBeUndefined();
     });
 
+    test('a type in generate.ts.tests.types the model does not have', () => {
+        const c = resolveGenerationConfig({
+            generate: { ts: { tests: { maxRecursionDepth: 3, types: { 'M.Expr': { maxRecursionDepth: 2 }, 'M.Nope': { maxRecursionDepth: 5 } } } } },
+        });
+        expect(c.tsTests).toEqual({ maxRecursionDepth: 3, types: { 'M.Expr': { maxRecursionDepth: 2 }, 'M.Nope': { maxRecursionDepth: 5 } } });
+        expect(unknownTestsTypes(c, ['M.Expr', 'M.Doc'])).toBe("'generate.ts.tests.types' names 'M.Nope', which is not a type of the model.");
+        expect(unknownTestsTypes(c, [])).toBe("'generate.ts.tests.types' names 'M.Expr', 'M.Nope', which are not types of the model.");
+        expect(unknownTestsTypes(c, ['M.Expr', 'M.Nope'])).toBeUndefined();
+        expect(unknownTestsTypes(resolveGenerationConfig({}), [])).toBeUndefined();
+    });
+
     test('an output directory stays inside the root', () => {
         expect(staysInside('src/gen')).toBe(true);
         for (const out of ['../x', '/tmp/x', 'C:\\x', 'a/../../b', 'a\\..\\b']) expect(staysInside(out)).toBe(false);
@@ -90,6 +101,21 @@ describe('the generation sections', () => {
         [{ generate: { ts: { tests: { runner: 'mocha' } } } }, "'generate.ts.tests.runner' must be one of 'bun', 'vitest', 'jest', 'node'"],
         [{ generate: { ts: { tests: { out: '../t' } } } }, "'generate.ts.tests.out' must stay inside the directory of the config file: '../t'"],
         [{ generate: { ts: { tests: { dir: 't' } } } }, "unknown key 'generate.ts.tests.dir'"],
+        [{ generate: { ts: { tests: { maxRecursionDepth: 0 } } } }, "'generate.ts.tests.maxRecursionDepth' must be an integer of at least 1"],
+        [{ generate: { ts: { tests: { maxRecursionDepth: 2.5 } } } }, "'generate.ts.tests.maxRecursionDepth' must be an integer of at least 1"],
+        [{ generate: { ts: { tests: { maxRecursionDepth: '4' } } } }, "'generate.ts.tests.maxRecursionDepth' must be an integer of at least 1"],
+        [{ generate: { ts: { tests: { types: [] } } } }, "'generate.ts.tests.types' must be an object keyed by qualified type name (Context.Type)"],
+        [
+            { generate: { ts: { tests: { types: { Expr: { maxRecursionDepth: 2 } } } } } },
+            "'generate.ts.tests.types.Expr' must be named by a qualified type name (Context.Type)",
+        ],
+        [{ generate: { ts: { tests: { types: { 'M.Expr': 2 } } } } }, "'generate.ts.tests.types.M.Expr' must be an object"],
+        [{ generate: { ts: { tests: { types: { 'M.Expr': {} } } } } }, "'generate.ts.tests.types.M.Expr' needs 'maxRecursionDepth'"],
+        [{ generate: { ts: { tests: { types: { 'M.Expr': { depth: 2 } } } } } }, "unknown key 'generate.ts.tests.types.M.Expr.depth'"],
+        [
+            { generate: { ts: { tests: { types: { 'M.Expr': { maxRecursionDepth: -1 } } } } } },
+            "'generate.ts.tests.types.M.Expr.maxRecursionDepth' must be an integer of at least 1",
+        ],
     ])('%j is refused', (config, message) => {
         expect(refusal(config)).toBe(message);
     });

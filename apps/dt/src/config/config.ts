@@ -10,6 +10,7 @@ import {
     GENERATION_CONFIG_KEYS,
     type ResolvedGenerationConfig,
     resolveGenerationConfig,
+    unknownTestsTypes,
     unknownTsContexts,
     validateGenerationConfig,
 } from '@domaintrail/generation';
@@ -98,6 +99,12 @@ export const CONFIG_FILE_FORMAT = {
  */
 export function checkTsContexts(config: ResolvedConfig, contexts: readonly string[]): void {
     const wrong = unknownTsContexts(config, contexts);
+    if (wrong !== undefined) throw new ConfigError(`${config.file ?? 'config'}: ${wrong}`);
+}
+
+/** Throws a ConfigError when `generate.ts.tests.types` names a type the model does not have (known after checking). */
+export function checkTestsTypes(config: ResolvedConfig, types: readonly string[]): void {
+    const wrong = unknownTestsTypes(config, types);
     if (wrong !== undefined) throw new ConfigError(`${config.file ?? 'config'}: ${wrong}`);
 }
 

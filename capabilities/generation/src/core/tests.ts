@@ -37,6 +37,10 @@ export interface TestsOptions {
      * another directory import their tests from `<module>/tests` (ADR 0028).
      */
     modules?: Readonly<Record<string, string>>;
+    /** How deep values of recursive types go (absent: `DEFAULT_MAX_RECURSION_DEPTH`). */
+    maxRecursionDepth?: number;
+    /** Per type, by qualified name: its own `maxRecursionDepth`. */
+    types?: TypeTestsOptions;
 }
 
 interface File {
@@ -82,62 +86,99 @@ function arbitraryParts(el: ElementModel): string[] {
     return types.flatMap((t) => (t.kind === 'ref' ? [t.ref] : []));
 }
 
-/**
- * What the contract tests leave out until they generate values of recursive types (`tests.maxRecursionDepth`, planned):
- * the recursive types (on a cycle of field types, M012 lets values and unions be), and every type whose arbitrary
- * would need one of theirs (qualified names, in declaration order).
- */
-export function untestedTypes(model: DomainModel): { recursive: string[]; types: string[] } {
-    const parts = new Map<string, string[]>(model.elements.map((e) => [e.id, arbitraryParts(e)]));
-    const reaches = (from: string, to: string): boolean => {
-        const seen = new Set<string>();
-        const stack = [...(parts.get(from) ?? [])];
-        while (stack.length) {
-            const id = stack.pop()!;
-            if (id === to) return true;
-            if (seen.has(id)) continue;
-            seen.add(id);
-            stack.push(...(parts.get(id) ?? []));
-        }
-        return false;
-    };
-    const recursive = [...parts.keys()].filter((id) => reaches(id, id));
-    const types = [...parts.keys()].filter((id) => recursive.some((r) => id === r || reaches(id, r)));
-    return { recursive, types };
-}
+/** `generate.ts.tests.maxRecursionDepth` when not configured: a binary tree of depth 4 has at most 15 nodes. */
+export const DEFAULT_MAX_RECURSION_DEPTH = 4;
+
+/** The per-type settings of the contract tests (`generate.ts.tests.types`), by qualified type name. */
+export type TypeTestsOptions = Readonly<Record<string, { readonly maxRecursionDepth?: number }>>;
 
 /**
- * The cases the contract tests leave out: commands with an input of an untested type, required policies of an untested
- * event.
+ * Types on one cycle of field types (M012 lets value objects and unions be recursive), whose arbitraries are defined
+ * together (ADR 0028, decision 8).
  */
-function untestedCases(model: DomainModel, untested: ReadonlySet<string>, policies: Readonly<Record<string, PolicyMode>>): string[] {
-    const out: string[] = [];
-    for (const el of model.elements) {
-        if (el.kind === 'aggregate') for (const c of el.commands) if (!testable(el, c, untested)) out.push(`${el.id}.${c.name}`);
-        if (el.kind === 'policy' && policies[el.context] === 'required' && untested.has(el.policy.event)) out.push(`policy ${el.id}`);
+export interface Cycle {
+    /** Its first type in declaration order (qualified), which names it. */
+    readonly id: string;
+    /** Its types, qualified, in declaration order (possibly of several contexts). */
+    readonly members: readonly string[];
+    /** The greatest depth its types ask for (`types.<T>.maxRecursionDepth`, else `maxRecursionDepth`). */
+    readonly maxRecursionDepth: number;
+    /** Per union of the cycle, the variant drawn once the depth is reached: one whose values end the cycle. */
+    readonly ending: ReadonlyMap<string, string>;
+}
+
+/** Whether a field of a type on a cycle may end it: not of a type of the cycle, optional, or a list that may be empty. */
+const endsCycle = (f: FieldModel, members: ReadonlySet<string>): boolean =>
+    f.type.kind !== 'ref' || !members.has(f.type.ref) || f.cardinality === 'optional' || bounds(f).lower === 0;
+
+/**
+ * The cycles of the model's types, by each of their types (qualified names). A cycle uses the greatest of the depths
+ * of its types: a per-type setting asks to reach at least that depth.
+ */
+export function recursiveCycles(model: DomainModel, maxRecursionDepth: number = DEFAULT_MAX_RECURSION_DEPTH, types: TypeTestsOptions = {}): Map<string, Cycle> {
+    const parts = new Map<string, string[]>(model.elements.map((e) => [e.id, arbitraryParts(e)]));
+    // Tarjan's strongly connected components of the graph of parts
+    const index = new Map<string, number>();
+    const low = new Map<string, number>();
+    const stack: string[] = [];
+    const components: string[][] = [];
+    const visit = (id: string): void => {
+        index.set(id, index.size);
+        low.set(id, index.get(id)!);
+        stack.push(id);
+        for (const next of parts.get(id) ?? []) {
+            if (!parts.has(next)) continue;
+            if (!index.has(next)) {
+                visit(next);
+                low.set(id, Math.min(low.get(id)!, low.get(next)!));
+            } else if (stack.includes(next)) low.set(id, Math.min(low.get(id)!, index.get(next)!));
+        }
+        if (low.get(id) !== index.get(id)) return;
+        const component: string[] = [];
+        for (let top = stack.pop()!; ; top = stack.pop()!) {
+            component.push(top);
+            if (top === id) break;
+        }
+        components.push(component);
+    };
+    for (const id of parts.keys()) if (!index.has(id)) visit(id);
+    const order = new Map([...parts.keys()].map((id, i) => [id, i]));
+    const out = new Map<string, Cycle>();
+    for (const component of components) {
+        if (component.length === 1 && !parts.get(component[0])!.includes(component[0])) continue;
+        const members = component.sort((x, y) => order.get(x)! - order.get(y)!);
+        const set = new Set(members);
+        const els = members.map((id) => elementOf(model, id)!);
+        // the types whose values end the cycle once the depth is reached, as M012 finds that they have a finite value
+        const ended = new Set<string>();
+        const ending = new Map<string, string>();
+        const ends = (fields: readonly FieldModel[]): boolean => fields.every((f) => endsCycle(f, set) || (f.type.kind === 'ref' && ended.has(f.type.ref)));
+        for (let grew = true; grew;) {
+            grew = false;
+            for (const el of els) {
+                if (ended.has(el.id)) continue;
+                const variant = el.kind === 'union' ? el.variants.find((v) => ends(v.fields)) : undefined;
+                if (el.kind === 'union' ? !variant : !ends(fieldsOf(el))) continue;
+                if (variant) ending.set(el.id, variant.name);
+                ended.add(el.id);
+                grew = true;
+            }
+        }
+        const depth = Math.max(...members.map((id) => types[id]?.maxRecursionDepth ?? maxRecursionDepth));
+        const cycle: Cycle = { id: members[0], members, maxRecursionDepth: depth, ending };
+        for (const id of members) out.set(id, cycle);
     }
     return out;
 }
 
-/** Whether a command's case can be generated: its aggregate and parameters have arbitraries. */
-const testable = (agg: AggregateModel, c: CommandModel, untested: ReadonlySet<string>): boolean =>
-    !untested.has(agg.id) && c.params.every((p) => p.type.kind !== 'ref' || !untested.has(p.type.ref));
-
 /**
- * The warning of `dt generate ts` when the contract tests are generated for a model with recursive types: what they
- * leave out (empty without recursive types).
+ * The warnings of `dt generate ts` about the contract tests: a type in `generate.ts.tests.types` that is on no cycle,
+ * whose `maxRecursionDepth` is then unused (a name that is no type of the model is a configuration error).
  */
-export function testsWarnings(model: DomainModel, policies: Readonly<Record<string, PolicyMode>> = {}): string[] {
-    const { recursive, types } = untestedTypes(model);
-    if (!recursive.length) return [];
-    const others = types.filter((t) => !recursive.includes(t));
-    const cases = untestedCases(model, new Set(types), policies);
-    return [
-        `the contract tests generate no values of recursive types yet (${recursive.join(', ')}): ` +
-            `no arbitrary is generated for ${[...recursive, ...others].join(', ')}` +
-            (cases.length ? `, and these cases are left out: ${cases.join(', ')}` : '') +
-            '.',
-    ];
+export function testsWarnings(model: DomainModel, types: TypeTestsOptions = {}): string[] {
+    const cycles = recursiveCycles(model);
+    const unused = Object.keys(types).filter((t) => elementOf(model, t) && !cycles.has(t));
+    return unused.map((t) => `'generate.ts.tests.types' names '${t}', which is not a recursive type: its 'maxRecursionDepth' is not used.`);
 }
 
 /**
@@ -148,7 +189,7 @@ export function testsWarnings(model: DomainModel, policies: Readonly<Record<stri
  * `from`.
  */
 export function generateTests(model: DomainModel, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
-    const untested = new Set(untestedTypes(model).types);
+    const cycles = recursiveCycles(model, opts.maxRecursionDepth, opts.types);
     const dirOf = (ctx: string): string => posix.normalize(opts.dirs?.[ctx] ?? opts.dir);
     // the tests of another context: next to these, from its package (`<module>/tests`), or by relative path
     const testsOf = (from: string, ctx: string): string => {
@@ -169,7 +210,7 @@ export function generateTests(model: DomainModel, header: string, opts: TestsOpt
                     header,
                     (c) => moduleOf(dir, c),
                     opts.policies?.[ctx] === 'required',
-                    untested,
+                    cycles,
                     (c) => testsOf(dir, c),
                     (c) => contexts.includes(c),
                 ).emit(),
@@ -269,6 +310,8 @@ class TestsEmitter {
     private readonly others = new Set<string>();
     /** Contexts whose types the policy cases check. */
     private readonly checked = new Set<string>();
+    /** The cycle whose arbitraries are being written: its types are `tie`d, and its ends drawn with the depth. */
+    private cycle: Cycle | undefined;
 
     constructor(
         private readonly model: DomainModel,
@@ -277,8 +320,8 @@ class TestsEmitter {
         private readonly moduleOf: (ctx: string) => string,
         /** Whether the context's policies are required: `contract` then tests their handlers. */
         private readonly policiesRequired: boolean,
-        /** The types without an arbitrary (`untestedTypes`): their cases are left out. */
-        private readonly untested: ReadonlySet<string> = new Set(),
+        /** The cycles of recursive types (`recursiveCycles`), by each of their types. */
+        private readonly cycles: ReadonlyMap<string, Cycle> = new Map(),
         /** Import specifier of another context's tests. */
         private readonly testsOf: (ctx: string) => string = (c) => `./${c}.js`,
         /** Whether another context's tests are in the same directory as these. */
@@ -301,7 +344,22 @@ class TestsEmitter {
 
     private baseArb(f: FieldModel): string {
         if (f.type.kind === 'primitive') return `testing.cast<${this.tsBase(f.type.name)}>(scalar.${f.type.name})`;
+        if (this.onCycle(f)) {
+            const el = elementOf(this.model, f.type.ref);
+            // a type of the cycle in another context: asked for when drawn (that context's arbitraries use this one's)
+            return el?.context === this.ctx ? `tie('${el.name}')` : `testing.defer(() => ${this.arb(f.type.ref)})`;
+        }
         return this.arb(f.type.ref);
+    }
+
+    /** Whether a field holds a type of the cycle being written. */
+    private onCycle(f: FieldModel): boolean {
+        return f.type.kind === 'ref' && !!this.cycle?.members.includes(f.type.ref);
+    }
+
+    /** An optional field of the cycle: drawn with the depth, absent once it is reached (in a `compact`ed record). */
+    private optionalAt(f: FieldModel): boolean {
+        return f.cardinality === 'optional' && this.onCycle(f);
     }
 
     private tsBase(name: string): string {
@@ -312,16 +370,20 @@ class TestsEmitter {
     private fieldArb(f: FieldModel, param: boolean): string {
         const b = this.baseArb(f);
         if (f.cardinality === 'one') return b;
+        if (!param && this.optionalAt(f)) return `testing.optionalAt(depth, ${b})`;
         if (f.cardinality === 'optional') return param ? `testing.optional(${b})` : b;
         const { lower, upper } = bounds(f);
+        if (!param && lower === 0 && this.onCycle(f)) return `testing.manyAt(depth, ${b}${upper !== undefined ? `, ${upper}` : ''})`;
         return `testing.many(${b}, ${lower}${upper !== undefined ? `, ${upper}` : ''})`;
     }
 
     private record(head: string[], fields: readonly FieldModel[]): string {
         const props = [...head, ...fields.map((f) => `${f.name}: ${this.fieldArb(f, false)}`)];
-        const optional = fields.some((f) => f.cardinality === 'optional');
-        const required = [...head.map((h) => h.slice(0, h.indexOf(':'))), ...fields.filter((f) => f.cardinality !== 'optional').map((f) => f.name)];
-        return `fc.record({ ${props.join(', ')} }${optional ? `, { requiredKeys: [${required.map((n) => `'${n}'`).join(', ')}] }` : ''})`;
+        const isOptional = (f: FieldModel): boolean => f.cardinality === 'optional' && !this.optionalAt(f);
+        const optional = fields.some(isOptional);
+        const required = [...head.map((h) => h.slice(0, h.indexOf(':'))), ...fields.filter((f) => !isOptional(f)).map((f) => f.name)];
+        const record = `fc.record({ ${props.join(', ')} }${optional ? `, { requiredKeys: [${required.map((n) => `'${n}'`).join(', ')}] }` : ''})`;
+        return fields.some((f) => this.optionalAt(f)) ? `testing.compact(${record})` : record;
     }
 
     /** `(v) => <check>(v).length === 0`, with the declared checks of the options (others assumed to hold). */
@@ -335,19 +397,58 @@ class TestsEmitter {
         return `${this.ctx}.${checkWithName(typeName)}(testing.declared<${this.ctx}.${declaredChecksName(checkOwner)}>([${names.join(', ')}], declared.${checkOwner}))`;
     }
 
-    /** The entries of `Arbitraries` and their definitions. */
-    private arbitraries(): { members: string[]; defs: string[] } {
+    /** The name of the arbitraries of a cycle's types in this context (`testing.recursive`). */
+    private cycleName(cycle: Cycle): string {
+        const first = cycle.members.map((id) => elementOf(this.model, id)!).find((el) => el.context === this.ctx)!;
+        return `cycle${first.name}`;
+    }
+
+    /**
+     * The entries of `Arbitraries`, their definitions, and those of the cycles of recursive types: the arbitraries of a
+     * cycle's types are built together (`testing.recursive`), and the entries read them from there.
+     */
+    private arbitraries(): { members: string[]; defs: string[]; cycles: string[] } {
         const members: string[] = [];
         const defs: string[] = [];
+        const cycles: string[] = [];
+        const written = new Set<Cycle>();
+        for (const el of this.els) {
+            const cycle = this.cycles.get(el.id);
+            if (!cycle) {
+                this.define(el, (name, def) => {
+                    members.push(`readonly ${name}: fc.Arbitrary<${this.type(name)}>;`);
+                    defs.push(`${name}: () => ${def},`);
+                });
+                continue;
+            }
+            members.push(`readonly ${el.name}: fc.Arbitrary<${this.type(el.name)}>;`);
+            defs.push(`${el.name}: () => ${this.cycleName(cycle)}().${el.name},`);
+            if (written.has(cycle)) continue;
+            written.add(cycle);
+            cycles.push(this.cycleDef(cycle));
+        }
+        return { members, defs, cycles };
+    }
+
+    /** The arbitraries of a cycle's types in this context, built together with `fc.letrec`. */
+    private cycleDef(cycle: Cycle): string {
+        const els = cycle.members.map((id) => elementOf(this.model, id)!).filter((el) => el.context === this.ctx);
+        const entries: string[] = [];
+        this.cycle = cycle;
+        for (const el of els) this.define(el, (name, def) => entries.push(`    ${name}: ${def},`));
+        this.cycle = undefined;
+        const text = entries.join('\n');
+        const params = `${/\btie\(/.test(text) ? 'tie' : '_tie'}, ${/\bdepth\b/.test(text) ? 'depth' : '_depth'}`;
+        const types = els.map((el) => `${el.name}: ${this.type(el.name)}`).join('; ');
+        return `const ${this.cycleName(cycle)} = testing.recursive<{ ${types} }>('${cycle.id}', ${cycle.maxRecursionDepth}, (${params}) => ({\n${text}\n}));`;
+    }
+
+    /** The arbitraries an element defines (an aggregate's per state, too), passed to `add` with their names. */
+    private define(el: ElementModel, add: (name: string, def: string) => void): void {
         const ctx = this.ctx;
-        const add = (name: string, def: string): void => {
-            members.push(`readonly ${name}: fc.Arbitrary<${this.type(name)}>;`);
-            defs.push(`${name}: () => ${def},`);
-        };
         const valid = (name: string, raw: string, holds: string | undefined): string =>
             holds ? `testing.valid(given.${name} ?? ${raw}, ${holds}, '${ctx}.${name}')` : `given.${name} ?? ${raw}`;
-        for (const el of this.els) {
-            if (this.untested.has(el.id)) continue;
+        {
             switch (el.kind) {
                 case 'id':
                 case 'primitive': {
@@ -382,8 +483,12 @@ class TestsEmitter {
                 }
                 case 'union': {
                     const tag = el.discriminator;
-                    const variants = el.variants.map((v) => this.record([`${tag}: fc.constant('${v.name}' as const)`], v.fields));
-                    const raw = variants.length ? `testing.cast<${this.type(el.name)}>(fc.oneof(${variants.join(', ')}))` : 'fc.constant(undefined as never)';
+                    // on a cycle, the variant that ends it comes first: the one drawn once the depth is reached
+                    const ending = this.cycle?.ending.get(el.id);
+                    const ordered = ending ? [...el.variants.filter((v) => v.name === ending), ...el.variants.filter((v) => v.name !== ending)] : el.variants;
+                    const variants = ordered.map((v) => this.record([`${tag}: fc.constant('${v.name}' as const)`], v.fields));
+                    const choice = this.cycle ? `testing.variants(depth, ${variants.join(', ')})` : `fc.oneof(${variants.join(', ')})`;
+                    const raw = variants.length ? `testing.cast<${this.type(el.name)}>(${choice})` : 'fc.constant(undefined as never)';
                     const invs = unionInvariants(el);
                     add(el.name, valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined));
                     break;
@@ -415,7 +520,6 @@ class TestsEmitter {
                 }
             }
         }
-        return { members, defs };
     }
 
     /** Names of the slots for constraints without an expression, by the type or command they belong to. */
@@ -584,13 +688,10 @@ class TestsEmitter {
 
     emit(): string {
         const ctx = this.ctx;
-        const { members, defs } = this.arbitraries();
+        const { members, defs, cycles } = this.arbitraries();
         const primitives = this.els.filter((e) => e.kind === 'id' || e.kind === 'primitive');
         const aggregates = this.els.filter((e): e is AggregateModel => e.kind === 'aggregate' && e.commands.length > 0);
-        const cases = (agg: AggregateModel): CommandModel[] => agg.commands.filter((c) => testable(agg, c, this.untested));
-        const tested = aggregates.filter((agg) => cases(agg).length);
         const policies = this.policiesRequired ? this.els.filter((e): e is PolicyElement => e.kind === 'policy') : [];
-        const policyCases = policies.filter((p) => !this.untested.has(p.policy.event));
         const indent = (text: string, pad: string): string =>
             text
                 .split('\n')
@@ -600,18 +701,16 @@ class TestsEmitter {
             ...(primitives.length
                 ? [`impl.make && testing.suite('domain primitives', [\n${primitives.map((p) => indent(this.primitiveCase(p), '    ')).join('\n')}\n]),`]
                 : []),
-            ...tested.map(
+            ...aggregates.map(
                 (agg) =>
-                    `impl.${agg.name} && testing.suite('${agg.name}', [\n${cases(agg)
-                        .map((c) => indent(this.commandCase(agg, c), '    '))
-                        .join('\n')}\n]),`,
+                    `impl.${agg.name} && testing.suite('${agg.name}', [\n${agg.commands.map((c) => indent(this.commandCase(agg, c), '    ')).join('\n')}\n]),`,
             ),
-            ...(policyCases.length ? [`testing.suite('policies', [\n${policyCases.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
+            ...(policies.length ? [`testing.suite('policies', [\n${policies.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
         ];
         // the contexts of the options: those whose tests are next to these, and those of another package that are used
         // (a package's tests import only the packages it depends on)
         const all: string[] = contextNames(this.model).filter((c) => c === ctx || this.nextTo(c) || this.others.has(c));
-        const defsText = defs.join('\n');
+        const defsText = [...cycles, ...defs].join('\n');
         const groupsText = groups.join('\n');
         // the helpers a function body uses (for `noUnusedLocals`)
         const locals = (text: string, declaredToo: boolean): string[] => {
@@ -674,6 +773,7 @@ class TestsEmitter {
             `/** The arbitraries of ${ctx}, with the overrides, declared checks and examples of the options. */`,
             `export function arbitraries(options: Options = {}): Arbitraries {`,
             ...locals(defsText, true),
+            ...cycles.map((c) => indent(c, '    ')),
             `    const a: Arbitraries = testing.lazy<Arbitraries>({`,
             ...defs.map((d) => `        ${d}`),
             `    });`,
@@ -689,7 +789,7 @@ class TestsEmitter {
             ` * Inputs are generated from the types (deterministic: a fixed seed unless one is passed).`,
             ` */`,
             `export function contract(impl: Implementation, options: Options = {}): testing.Suite {`,
-            ...(tested.length || /\ba\./.test(groupsText) ? [`    const a = arbitraries(options);`] : []),
+            ...(aggregates.length || /\ba\./.test(groupsText) ? [`    const a = arbitraries(options);`] : []),
             ...locals(groupsText, true),
             `    return testing.suite('${ctx}', [`,
             ...groups.map((g) => indent(g, '        ')),

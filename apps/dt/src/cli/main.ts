@@ -6,7 +6,7 @@ import { formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
-import { checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
+import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
 import { SessionError, type CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
@@ -186,6 +186,10 @@ Examples:
                 return;
             }
             checkTsContexts(cfg, contextNames(a.model));
+            checkTestsTypes(
+                cfg,
+                a.model.elements.map((e) => e.id),
+            );
             const defaultOut = path.resolve(cfg.root, opts.out ?? cfg.tsOut);
             const outOf = (ctx: string): string => (ctx in cfg.tsContexts ? path.resolve(cfg.root, cfg.tsContexts[ctx]) : defaultOut);
             // contract tests (ADR 0020) only when configured; by default in `tests` below the output directory
@@ -200,10 +204,15 @@ Examples:
             }
             const dirs = Object.fromEntries(contextNames(a.model).map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
             const tests = testsOut
-                ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) }
+                ? {
+                      dir: toPosix(path.relative(cfg.root, testsOut)),
+                      ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }),
+                      ...(cfg.tsTests?.maxRecursionDepth !== undefined && { maxRecursionDepth: cfg.tsTests.maxRecursionDepth }),
+                      ...(cfg.tsTests?.types && { types: cfg.tsTests.types }),
+                  }
                 : undefined;
             const policies = policyModes(cfg, contextNames(a.model));
-            if (tests) for (const w of testsWarnings(a.model, policies)) io.err(`Warning: ${w}`);
+            if (tests) for (const w of testsWarnings(a.model, tests.types)) io.err(`Warning: ${w}`);
             const files = generateTypeScript(a.model, dirs, tests, policies, cfg.tsModules).map((f) => ({
                 ...f,
                 file: path.resolve(cfg.root, f.path),

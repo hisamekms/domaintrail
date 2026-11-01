@@ -170,6 +170,25 @@ describe('output directories per context', () => {
         expect(await ls(dir)).toEqual(['c.dt', 'domaintrail.json', 's.dt']);
     });
 
+    test('generate.ts.tests.types: a type the model does not have is a config error, one that is not recursive a warning', async () => {
+        const recursive = { 'r.dt': 'context R { value Tree { children: Tree[0..*] } }' };
+        const types = (t: object) => config({ out: 'gen', tests: { maxRecursionDepth: 3, types: t } });
+        const dir = await project({ 'domaintrail.json': types({ 'R.Nope': { maxRecursionDepth: 2 } }), ...recursive });
+        const r = await run('-r', dir, 'generate', 'ts');
+        expect(r.code).toBe(2);
+        expect(r.err.at(-1)).toBe(`${path.join(dir, 'domaintrail.json')}: 'generate.ts.tests.types' names 'R.Nope', which is not a type of the model.`);
+
+        await writeFile(path.join(dir, 'domaintrail.json'), types({ 'R.Tree': { maxRecursionDepth: 2 } }));
+        const ok = await run('-r', dir, 'generate', 'ts');
+        expect(ok).toMatchObject({ code: 0, err: [] });
+        expect(await Bun.file(path.join(dir, 'gen', 'tests', 'R.ts')).text()).toContain(`testing.recursive<{ Tree: R.Tree }>('R.Tree', 2,`);
+
+        await writeFile(path.join(dir, 'r.dt'), 'context R { value Tree { size: Int } }');
+        const warned = await run('-r', dir, 'generate', 'ts');
+        expect(warned.code).toBe(0);
+        expect(warned.err).toContain("Warning: 'generate.ts.tests.types' names 'R.Tree', which is not a recursive type: its 'maxRecursionDepth' is not used.");
+    });
+
     test('files of earlier runs that are no longer generated are removed; hand-written files stay', async () => {
         const dir = await project({ 'domaintrail.json': config({ out: 'gen', contexts: { C: { out: 'shared/gen' } } }), ...SPLIT_MODEL });
         expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);

@@ -82,9 +82,33 @@
                 "runner": {
                   "description": "Writes _register.ts, which registers a generated suite with this test runner.",
                   "enum": ["bun", "vitest", "jest", "node"]
+                },
+                "maxRecursionDepth": {
+                  "description": "How deep the drawn values of recursive types go: how many times a value nests through its cycle of types, counted where the cycle could end (a union's variant, an optional field, a list that may be empty). Values are biased towards shallow ones. A binary tree of depth 4 has at most 15 nodes.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 4
+                },
+                "types": {
+                  "description": "Settings per type, by qualified name (Context.Type). Types on one cycle use the greatest maxRecursionDepth among them.",
+                  "type": "object",
+                  "propertyNames": { "pattern": "^[^.]+\\.[^.]+$" },
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["maxRecursionDepth"],
+                    "properties": {
+                      "maxRecursionDepth": {
+                        "description": "How deep the drawn values of this recursive type go; overrides maxRecursionDepth.",
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    }
+                  },
+                  "examples": [{ "Modeling.Expr": { "maxRecursionDepth": 3 } }]
                 }
               },
-              "examples": [{ "runner": "vitest" }]
+              "examples": [{ "runner": "vitest" }, { "maxRecursionDepth": 3, "types": { "Modeling.Expr": { "maxRecursionDepth": 5 } } }]
             }
           }
         }
