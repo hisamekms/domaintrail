@@ -16,6 +16,16 @@ const readme = await readFile(path.join(ROOT, 'README.md'), 'utf8');
 const blocks = (lang: string, markdown = guide): string[] => [...markdown.matchAll(new RegExp('^```' + lang + '\\n([\\s\\S]*?)^```', 'gm'))].map((m) => m[1]);
 
 /** The `dt` blocks as files of one workspace, named by their first line (`// sales/order.dt`). */
+/** Every rule ID, as its owners declare them: Modeling's (`ModelingRuleId`) and Storming's (`StormingRuleId`), joined. */
+async function ruleIds(): Promise<string> {
+    const union = async (file: string[], name: string): Promise<string> =>
+        new RegExp(`export type ${name} =([^;]*);`).exec(await readFile(path.join(ROOT, ...file), 'utf8'))![1];
+    return [
+        await union(['packages', 'modeling', 'src', 'model', 'rule-ids.ts'], 'ModelingRuleId'),
+        await union(['packages', 'modeling', 'src', 'storming', 'rule-ids.ts'], 'StormingRuleId'),
+    ].join('');
+}
+
 function workspace(): Record<string, string> {
     const files: Record<string, string> = {};
     for (const block of blocks('dt')) {
@@ -75,9 +85,7 @@ describe('dt guide', () => {
     });
 
     test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
-        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'kernel', 'diagnostics.ts'), 'utf8');
-        const union = /export type RuleId =([^;]*);/.exec(source)![1];
-        const rules = [...union.matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
+        const rules = [...(await ruleIds()).matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
         const examples = blocks('dtes').flatMap((b) => {
             const code = /^\/\/ (S\d{3})\n/.exec(b)?.[1];
             return code ? [[code, b] as const] : [];
@@ -91,9 +99,7 @@ describe('dt guide', () => {
     });
 
     test('its rules table lists every diagnostic code', async () => {
-        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'kernel', 'diagnostics.ts'), 'utf8');
-        const union = /export type RuleId =([^;]*);/.exec(source)![1];
-        const codes = [...union.matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]);
+        const codes = [...new Set([...(await ruleIds()).matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]))];
         expect(codes.length).toBeGreaterThan(10);
         for (const code of codes) expect(guide).toContain(`| ${code} |`);
     });

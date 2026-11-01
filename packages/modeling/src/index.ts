@@ -56,6 +56,7 @@ export { commandsWithOutcome, fieldSetUsers, fieldUseText, fieldUses, identityOf
 export { elementIdOf } from './model/ids.js';
 export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './model/aggregates.js';
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './model/diff.js';
+export type { ModelingRuleId } from './model/rule-ids.js';
 
 // ---- the kernel: diagnostics, suggestions, sources and locations, names (T8: shared/kernel) ---------------------
 export {
@@ -66,7 +67,7 @@ export {
     type Diagnostic,
     type JsonDiagnostic,
     type Position,
-    type RuleId,
+    type RuleCode,
     type Severity,
 } from './kernel/diagnostics.js';
 export { closest, didYouMean, type Candidate } from './kernel/suggest.js';
@@ -104,6 +105,7 @@ export {
     type SemanticEdgeKind,
     type SemanticGraph,
 } from './storming/semantic.js';
+export type { StormingRuleId } from './storming/rule-ids.js';
 
 // ---- use cases: the project analysis (T8: capabilities/analysis) ------------------------------------------------
 export { analyze, isStormingFile, type Analysis } from './analysis/analyze.js';

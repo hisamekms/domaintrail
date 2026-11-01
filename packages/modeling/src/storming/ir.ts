@@ -7,7 +7,8 @@
  * - the **semantic graph** and the **occurrences** (`./semantic.ts`): what it means, its valid elements and relations;
  * - the **render graph** (`@domaintrail/visualization`): what the projection makes of it for the Live View.
  */
-import type { Diagnostic, Position, RuleId, Severity } from '../kernel/diagnostics.js';
+import type { Diagnostic, Position, Severity } from '../kernel/diagnostics.js';
+import type { StormingRuleId } from './rule-ids.js';
 
 // ---- Storming IR ----
 
@@ -135,7 +136,7 @@ export const esElementId = (stormingId: string, localId?: string): string => (lo
 /** A diagnostic at a range of a `.dtes` file. */
 export function esDiagnostic(
     severity: Severity,
-    code: RuleId,
+    code: StormingRuleId,
     message: string,
     range: SourceRange,
     extra: { hint?: string; elementId?: string } = {},

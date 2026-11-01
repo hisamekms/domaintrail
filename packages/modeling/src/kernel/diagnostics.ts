@@ -1,56 +1,10 @@
 export type Severity = 'error' | 'warning';
 
 /**
- * Rule IDs from the spec (M001–M012), plus M013 (identity field), M014 (shared contexts), M015 (unions), M016 (field sets),
- * M017 (events carry the ID of their aggregate), M018 (invariants and requirements without an expression),
- * M019 (parameters named like fields their command's requirements see),
- * M020 (factories take the new aggregate's ID as a parameter), M021 (the fields a command `changes`),
- * M022 (event and error fields named after their source), M023 (policies), M024 (verified types),
- * L001–L003 (Japanese names), S001–S014 (the Event Storming DSL `.dtes`, ADR 0024) and SYNTAX for lexer/parser errors.
+ * The code of a diagnostic: `SYNTAX` for lexer and parser errors, otherwise the ID of the rule that reports it. Each
+ * context owns its rule IDs (Modeling's `ModelingRuleId`, Storming's `StormingRuleId`); the kernel knows none of them.
  */
-export type RuleId =
-    | 'SYNTAX'
-    | 'M001'
-    | 'M002'
-    | 'M003'
-    | 'M004'
-    | 'M005'
-    | 'M006'
-    | 'M007'
-    | 'M008'
-    | 'M009'
-    | 'M010'
-    | 'M011'
-    | 'M012'
-    | 'M013'
-    | 'M014'
-    | 'M015'
-    | 'M016'
-    | 'M017'
-    | 'M018'
-    | 'M019'
-    | 'M020'
-    | 'M021'
-    | 'M022'
-    | 'M023'
-    | 'M024'
-    | 'L001'
-    | 'L002'
-    | 'L003'
-    | 'S001'
-    | 'S002'
-    | 'S003'
-    | 'S004'
-    | 'S005'
-    | 'S006'
-    | 'S007'
-    | 'S008'
-    | 'S009'
-    | 'S010'
-    | 'S011'
-    | 'S012'
-    | 'S013'
-    | 'S014';
+export type RuleCode = string;
 
 export interface Position {
     /** 1-based */
@@ -65,7 +19,7 @@ export interface Diagnostic {
     start: Position;
     end: Position;
     severity: Severity;
-    code: RuleId;
+    code: RuleCode;
     message: string;
     /** One line on what to change, when the message does not say it (e.g. `did you mean 'OrderConfirmed'?`). */
     hint?: string;
@@ -91,7 +45,7 @@ export interface JsonDiagnostic {
     endLine: number;
     endColumn: number;
     severity: Severity;
-    code: RuleId;
+    code: RuleCode;
     message: string;
     hint?: string;
 }

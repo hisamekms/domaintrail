@@ -119,9 +119,20 @@ export const MAP: Record<string, Module> = {
         dir: 'packages/modeling',
         sources: 'packages/modeling/src',
         upstream: [],
-        // the typed model with its dependencies and diff; Storming's IR, semantic graph and occurrences (T8:
-        // contexts/storming)
-        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'model/aggregates', 'model/diff', 'storming/ir', 'storming/semantic'],
+        // the typed model with its dependencies and diff, Modeling's rule IDs; Storming's IR, semantic graph and
+        // occurrences, its rule IDs (T8: contexts/storming)
+        published: [
+            'model/model',
+            'model/dependencies',
+            'model/usages',
+            'model/ids',
+            'model/aggregates',
+            'model/diff',
+            'model/rule-ids',
+            'storming/ir',
+            'storming/semantic',
+            'storming/rule-ids',
+        ],
         // diagnostics, suggestions, sources and locations, `camel` (T8: shared/kernel)
         kernel: 'kernel',
         inner: {

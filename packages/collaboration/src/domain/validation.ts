@@ -1,11 +1,11 @@
 // The validation of a snapshot, per DSL (ADR 0026): the summary a revision keeps, the diagnostics a run added
 // compared with its base, and the run success rule that decides between Completed and Failed.
-import { type Diagnostic, isStormingFile, type RuleId } from '@domaintrail/modeling';
+import { type Diagnostic, isStormingFile, type StormingRuleId } from '@domaintrail/modeling';
 import { Collaboration } from '../generated/index.js';
 import { comparePaths } from './snapshot.js';
 
 /** The `.dtes` diagnostics that check a `ref` against the `.dt` model (ADR 0024: S010–S013): the link warnings. */
-export const LINK_RULES: ReadonlySet<RuleId> = new Set<RuleId>(['S010', 'S011', 'S012', 'S013']);
+export const LINK_RULES: ReadonlySet<string> = new Set<StormingRuleId>(['S010', 'S011', 'S012', 'S013']);
 
 /** A count as a `Tally`; throws on a negative or fractional number (a programming error, never input). */
 export function tally(n: number): Collaboration.Tally {

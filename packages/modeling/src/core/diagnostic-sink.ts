@@ -1,5 +1,6 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
-import type { Diagnostic, RuleId, Severity } from '../kernel/diagnostics.js';
+import type { Diagnostic, Severity } from '../kernel/diagnostics.js';
+import type { ModelingRuleId } from '../model/rule-ids.js';
 import { elementIdOf } from '../model/ids.js';
 
 /** Converts a Langium document URI back into the path that was handed to the analyzer. */
@@ -10,7 +11,7 @@ export class DiagnosticSink {
 
     constructor(private readonly fileOf: FileResolver) {}
 
-    report(severity: Severity, code: RuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
+    report(severity: Severity, code: ModelingRuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
         const cst = selectCst(node, property, index);
         const doc = AstUtils.getDocument(node);
         const range = cst?.range ?? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } };
@@ -26,11 +27,11 @@ export class DiagnosticSink {
         });
     }
 
-    error(code: RuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
+    error(code: ModelingRuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
         this.report('error', code, message, node, property, index, hint);
     }
 
-    warning(code: RuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
+    warning(code: ModelingRuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
         this.report('warning', code, message, node, property, index, hint);
     }
 }

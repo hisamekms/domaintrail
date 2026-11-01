@@ -22,6 +22,7 @@ import { createDomainServices } from '../language/domain-module.js';
 import { buildModel } from '../model/build.js';
 import { elementIdOf } from '../model/ids.js';
 import type { DomainModel } from '../model/model.js';
+import type { ModelingRuleId } from '../model/rule-ids.js';
 import { checkChanges, checkCommands, checkFactoryIds } from './checker/commands.js';
 import { checkEventIds } from './checker/events.js';
 import { checkFieldSets } from './checker/field-sets.js';
@@ -34,7 +35,7 @@ import { checkShared } from './checker/shared.js';
 import { checkStructure } from './checker/structure.js';
 import { checkUnions } from './checker/unions.js';
 import { checkVerified } from './checker/verified.js';
-import { compareDiagnostics, dedupeDiagnostics, type Diagnostic, type RuleId } from '../kernel/diagnostics.js';
+import { compareDiagnostics, dedupeDiagnostics, type Diagnostic } from '../kernel/diagnostics.js';
 import type { SourceFile } from '../kernel/source.js';
 import { didYouMean, suggestFrom, type Candidate } from '../kernel/suggest.js';
 import { DiagnosticSink, type FileResolver } from './diagnostic-sink.js';
@@ -58,7 +59,7 @@ export interface DomainAnalysis {
 }
 
 /** Maps the property of an unresolved cross-reference to the rule that covers it. */
-const LINK_RULES: Record<string, RuleId> = {
+const LINK_RULES: Record<string, ModelingRuleId> = {
     from: 'M006',
     to: 'M006',
     event: 'M007', // `emits Event`
