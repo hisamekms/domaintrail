@@ -2,8 +2,10 @@
 // file: packages/presentation/src/config/config.test.ts).
 import { describe, expect, test } from 'bun:test';
 import {
+    ACCESS_CHECKS,
     type ResolvedClassifierConfig,
     resolveCollaborationConfig,
+    validateAccessNeeded,
     validateCollaborationConfig,
     validateIdentityConfig,
     validatePreviousRunsConfig,
@@ -16,6 +18,12 @@ const refusal = (session: Record<string, unknown>): string | undefined => {
     };
     try {
         validateIdentityConfig(session, fail);
+        const access = session.access;
+        if (access !== undefined) {
+            if (typeof access !== 'object' || access === null || Array.isArray(access)) return fail("'session.access' must be an object");
+            for (const check of Object.values(ACCESS_CHECKS)) check(access as Record<string, unknown>, fail);
+        }
+        validateAccessNeeded(session, fail);
         if (typeof session.agent === 'object' && session.agent !== null) validatePreviousRunsConfig(session.agent as Record<string, unknown>, fail);
         validateCollaborationConfig(session, fail);
         return undefined;
@@ -43,24 +51,22 @@ describe("Collaboration's settings", () => {
         });
     });
 
-    test('access: the team, the audience and the explicit hosts and origins', () => {
+    test("access: the team, the audience, the public URL (the hosts and origins allowed are the app's)", () => {
         const session = {
             identity: 'access',
-            access: { teamDomain: 'team.cloudflareaccess.com', audience: 'aud', publicUrl: 'https://s.example.com', allowedHosts: ['s.example.com'] },
+            access: { teamDomain: 'team.cloudflareaccess.com', audience: 'aud', publicUrl: 'https://s.example.com', avatarHosts: ['img.example.com'] },
             agent: { maxPreviousRunDiff: 4096 },
             maxParticipants: 5,
         } as const;
         expect(refusal(session)).toBeUndefined();
-        expect(resolveCollaborationConfig({ ...session, access: { ...session.access, allowedHosts: [...session.access.allowedHosts] } })).toEqual({
+        expect(resolveCollaborationConfig({ ...session, access: { ...session.access, avatarHosts: [...session.access.avatarHosts] } })).toEqual({
             identity: 'access',
             access: {
                 teamDomain: 'team.cloudflareaccess.com',
                 audience: 'aud',
                 publicUrl: 'https://s.example.com',
-                allowedHosts: ['s.example.com'],
-                allowedOrigins: [],
                 acceptCookie: false,
-                avatarHosts: [],
+                avatarHosts: ['img.example.com'],
             },
             maxPreviousRunDiff: 4096,
             maxParticipants: 5,
@@ -92,17 +98,8 @@ describe("Collaboration's settings", () => {
         [{ identity: 'basic' }, "'session.identity' must be one of 'dev', 'access'"],
         [{ identity: 'access' }, "'session.identity' \"access\" needs 'session.access' with 'teamDomain' and 'audience'"],
         [{ access: [] }, "'session.access' must be an object"],
-        [{ access: { teamDomain: 't', audience: 'a', token: 'x' } }, "unknown key 'session.access.token'"],
         [{ access: { teamDomain: 't' } }, "'session.access.audience' must be a non-empty string"],
         [{ access: { teamDomain: 't', audience: 'a', publicUrl: 'nope' } }, "'session.access.publicUrl' must be a URL"],
-        [
-            { access: { teamDomain: 't', audience: 'a', allowedOrigins: ['https://x.example/path'] } },
-            "'session.access.allowedOrigins' must hold origins like 'https://example.com': 'https://x.example/path'",
-        ],
-        [
-            { access: { teamDomain: 't', audience: 'a', allowedHosts: ['*.example.com'] } },
-            "'session.access.allowedHosts' must hold host names only: '*.example.com'",
-        ],
         [
             { access: { teamDomain: 'https://t.example.com/path', audience: 'a' } },
             "'session.access.teamDomain' must be a host name like '<team>.cloudflareaccess.com': 'https://t.example.com/path'",

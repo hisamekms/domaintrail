@@ -127,6 +127,20 @@ describe('config file', () => {
         ['{ "session": { "token": "x" } }', "unknown key 'session.token'"],
         ['{ "session": { "port": 70000 } }', "'session.port' must be a port number"],
         ['{ "session": { "host": "" } }', "'session.host' must be a string"],
+        ['{ "session": { "access": [] } }', "'session.access' must be an object"],
+        ['{ "session": { "access": { "teamDomain": "t", "audience": "a", "token": "x" } } }', "unknown key 'session.access.token'"],
+        [
+            '{ "session": { "access": { "teamDomain": "t", "audience": "a", "allowedHosts": ["*.example.com"] } } }',
+            "'session.access.allowedHosts' must hold host names only: '*.example.com'",
+        ],
+        [
+            '{ "session": { "access": { "teamDomain": "t", "audience": "a", "allowedHosts": "h" } } }',
+            "'session.access.allowedHosts' must be an array of host names",
+        ],
+        [
+            '{ "session": { "access": { "teamDomain": "t", "audience": "a", "allowedOrigins": ["https://x.example/path"] } } }',
+            "'session.access.allowedOrigins' must hold origins like 'https://example.com': 'https://x.example/path'",
+        ],
         ['{ "session": { "agent": [] } }', "'session.agent' must be an object"],
         ['{ "session": { "agent": { "token": "x" } } }', "unknown key 'session.agent.token'"],
         ['{ "session": { "agent": { "port": 70000 } } }', "'session.agent.port' must be a port number"],
@@ -155,6 +169,16 @@ describe('config file', () => {
         ['{ "session": { "identity": "basic", "token": "x" } }', "unknown key 'session.token'"],
         ['{ "session": { "identity": "basic", "host": "" } }', "'session.host' must be a string"],
         ['{ "session": { "agent": { "port": -1 }, "identity": "basic" } }', "'session.identity' must be one of"],
+        // in the access settings: Collaboration's and the app's keys in one order
+        ['{ "session": { "access": { "allowedHosts": ["*"], "audience": "a" } } }', "'session.access.teamDomain' must be a non-empty string"],
+        ['{ "session": { "access": { "teamDomain": "t", "audience": "a", "allowedHosts": ["*"], "publicUrl": "x" } } }', "'session.access.publicUrl'"],
+        ['{ "session": { "access": { "teamDomain": "t", "audience": "a", "acceptCookie": 1, "allowedHosts": ["*"] } } }', "'session.access.allowedHosts'"],
+        ['{ "session": { "access": { "teamDomain": "t", "audience": "a", "allowedOrigins": ["x"], "acceptCookie": 1 } } }', "'session.access.acceptCookie'"],
+        ['{ "session": { "access": { "teamDomain": "t", "audience": "a", "allowedOrigins": ["x"], "avatarHosts": ["*"] } } }', "'session.access.avatarHosts'"],
+        [
+            '{ "session": { "identity": "access", "access": { "teamDomain": "t", "audience": "a", "allowedOrigins": ["x"] } } }',
+            "'session.access.allowedOrigins'",
+        ],
         ['{ "session": { "agent": { "allowedTools": 1, "port": -1 } } }', "'session.agent.port' must be a port number"],
         ['{ "session": { "agent": { "maxPreviousRunDiff": -1, "dt": [] } } }', "'session.agent.dt' must be a command"],
         ['{ "session": { "classifier": { "model": "x" }, "agent": { "maxPreviousRunDiff": -1 } } }', "'session.agent.maxPreviousRunDiff'"],

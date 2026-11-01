@@ -1,5 +1,6 @@
 // Collaboration's settings in the `session` section of domaintrail.jsonc (ADR 0026; ADR 0027, Project analysis and
-// configuration: Collaboration owns the identity mode and the participant limit): `identity` and `access`,
+// configuration: Collaboration owns the identity mode and the participant limit): `identity` and `access` (but its
+// `allowedHosts` and `allowedOrigins`: the app's connection guards, ADR 0027, Authorization),
 // `maxParticipants`, `quickReactions`, `classifier`, and `agent.maxPreviousRunDiff` (despite its place, what the run
 // pipeline and the agent API give the agent of the previous runs: `domain/previous-runs`). Their types, defaults and
 // validation; the app composes them with the other sections and reports the first error (`fail` throws).
@@ -25,7 +26,7 @@ export const MAX_QUICK_REACTIONS = 8;
 export const COLLABORATION_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
     '': ['session'],
     session: ['identity', 'access', 'agent', 'maxParticipants', 'quickReactions', 'classifier'],
-    'session.access': ['teamDomain', 'audience', 'publicUrl', 'allowedHosts', 'allowedOrigins', 'acceptCookie', 'avatarHosts'],
+    'session.access': ['teamDomain', 'audience', 'publicUrl', 'acceptCookie', 'avatarHosts'],
     'session.agent': ['maxPreviousRunDiff'],
     'session.classifier': ['enabled', 'provider', 'model', 'accountId', 'apiTokenEnv', 'threshold'],
 };
@@ -34,7 +35,7 @@ export const COLLABORATION_CONFIG_KEYS: Readonly<Record<string, readonly string[
 export interface CollaborationConfigFile {
     /** `dev` (loopback only, a name picked on the first visit) or `access` (Cloudflare Access). Default: `dev`. */
     identity?: SessionIdentity;
-    /** Cloudflare Access, required with `identity: "access"`. */
+    /** Cloudflare Access, required with `identity: "access"` (with the app's `allowedHosts` and `allowedOrigins`). */
     access?: {
         /** `<team>.cloudflareaccess.com`: the issuer of the tokens. */
         teamDomain: string;
@@ -42,10 +43,6 @@ export interface CollaborationConfigFile {
         audience: string;
         /** The public URL of the session (the tunnel's). Not used to allow anything: its host and origin must also be in `allowedHosts` and `allowedOrigins`. */
         publicUrl?: string;
-        /** Host names the server answers to besides loopback. Default: none. */
-        allowedHosts?: string[];
-        /** Origins (`https://host[:port]`) whose pages may call the server besides loopback. Default: none. */
-        allowedOrigins?: string[];
         /** Whether the `CF_Authorization` cookie is accepted when the `Cf-Access-Jwt-Assertion` header is absent. Default: false. */
         acceptCookie?: boolean;
         /** Hosts an avatar (the identity's `https` picture) may come from. Default: none, the page shows initials. */
@@ -82,13 +79,11 @@ export interface CollaborationConfigFile {
     };
 }
 
-/** `session.access` resolved. */
+/** Collaboration's part of `session.access` resolved. */
 export interface ResolvedAccessConfig {
     teamDomain: string;
     audience: string;
     publicUrl?: string;
-    allowedHosts: string[];
-    allowedOrigins: string[];
     acceptCookie: boolean;
     avatarHosts: string[];
 }
@@ -117,39 +112,43 @@ export interface ResolvedCollaborationConfig {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === 'string' && s.trim() !== '');
 
-/** Checks `session.identity` and `session.access` (`session`: an object). */
+/** Checks `session.identity` (`session`: an object). */
 export function validateIdentityConfig(session: Record<string, unknown>, fail: (msg: string) => never): void {
     if (session.identity !== undefined && !(SESSION_IDENTITIES as readonly unknown[]).includes(session.identity))
         fail(`'session.identity' must be one of ${SESSION_IDENTITIES.map((m) => `'${m}'`).join(', ')}`);
-    const access = session.access;
-    if (access !== undefined) {
-        if (!isObject(access)) return fail("'session.access' must be an object");
-        for (const key of Object.keys(access)) if (!COLLABORATION_CONFIG_KEYS['session.access'].includes(key)) fail(`unknown key 'session.access.${key}'`);
+}
+
+/**
+ * The checks of Collaboration's keys of `session.access` (an object), by key: the app runs them with its own keys of
+ * the section in one order (the first error wins). `teamDomain` and `audience` are required.
+ */
+export const ACCESS_CHECKS: Readonly<Record<string, (access: Record<string, unknown>, fail: (msg: string) => never) => void>> = {
+    teamDomain: (access: Record<string, unknown>, fail: (msg: string) => never): void => {
         if (typeof access.teamDomain !== 'string' || !access.teamDomain.trim()) fail("'session.access.teamDomain' must be a non-empty string");
         if (!/^(https:\/\/)?[a-z0-9.-]+\/?$/i.test(access.teamDomain))
             fail(`'session.access.teamDomain' must be a host name like '<team>.cloudflareaccess.com': '${access.teamDomain}'`);
+    },
+    audience: (access: Record<string, unknown>, fail: (msg: string) => never): void => {
         if (typeof access.audience !== 'string' || !access.audience.trim()) fail("'session.access.audience' must be a non-empty string");
+    },
+    publicUrl: (access: Record<string, unknown>, fail: (msg: string) => never): void => {
         if (access.publicUrl !== undefined && (typeof access.publicUrl !== 'string' || !URL.canParse(access.publicUrl)))
             fail("'session.access.publicUrl' must be a URL");
-        if (access.allowedHosts !== undefined) {
-            if (!isStringList(access.allowedHosts)) return fail("'session.access.allowedHosts' must be an array of host names");
-            for (const h of access.allowedHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.allowedHosts' must hold host names only: '${h}'`);
-        }
+    },
+    acceptCookie: (access: Record<string, unknown>, fail: (msg: string) => never): void => {
         if (access.acceptCookie !== undefined && typeof access.acceptCookie !== 'boolean') fail("'session.access.acceptCookie' must be a boolean");
-        if (access.avatarHosts !== undefined) {
-            if (!isStringList(access.avatarHosts)) return fail("'session.access.avatarHosts' must be an array of host names");
-            for (const h of access.avatarHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.avatarHosts' must hold host names only: '${h}'`);
-        }
-        if (access.allowedOrigins !== undefined) {
-            if (!isStringList(access.allowedOrigins)) return fail("'session.access.allowedOrigins' must be an array of origins");
-            for (const o of access.allowedOrigins) {
-                const origin = URL.canParse(o) ? new URL(o) : undefined;
-                if (!origin || !['http:', 'https:'].includes(origin.protocol) || origin.origin !== o)
-                    fail(`'session.access.allowedOrigins' must hold origins like 'https://example.com': '${o}'`);
-            }
-        }
-    }
-    if (session.identity === 'access' && access === undefined) fail("'session.identity' \"access\" needs 'session.access' with 'teamDomain' and 'audience'");
+    },
+    avatarHosts: (access: Record<string, unknown>, fail: (msg: string) => never): void => {
+        if (access.avatarHosts === undefined) return;
+        if (!isStringList(access.avatarHosts)) return fail("'session.access.avatarHosts' must be an array of host names");
+        for (const h of access.avatarHosts) if (!/^[a-z0-9.-]+$/i.test(h)) fail(`'session.access.avatarHosts' must hold host names only: '${h}'`);
+    },
+};
+
+/** Checks that the identity mode `access` comes with `session.access` (`session`: an object). */
+export function validateAccessNeeded(session: Record<string, unknown>, fail: (msg: string) => never): void {
+    if (session.identity === 'access' && session.access === undefined)
+        fail("'session.identity' \"access\" needs 'session.access' with 'teamDomain' and 'audience'");
 }
 
 /** Checks `session.agent.maxPreviousRunDiff` (`agent`: an object). */
@@ -208,8 +207,6 @@ export function resolveCollaborationConfig(session: CollaborationConfigFile = {}
                 teamDomain: access.teamDomain,
                 audience: access.audience,
                 ...(access.publicUrl !== undefined && { publicUrl: access.publicUrl }),
-                allowedHosts: access.allowedHosts ?? [],
-                allowedOrigins: access.allowedOrigins ?? [],
                 acceptCookie: access.acceptCookie ?? false,
                 avatarHosts: access.avatarHosts ?? [],
             },

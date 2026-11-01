@@ -67,8 +67,10 @@ export {
 export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
 // its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
 export {
+    ACCESS_CHECKS,
     COLLABORATION_CONFIG_KEYS,
     resolveCollaborationConfig,
+    validateAccessNeeded,
     validateCollaborationConfig,
     validateIdentityConfig,
     validatePreviousRunsConfig,
