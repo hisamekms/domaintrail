@@ -40,8 +40,12 @@ export const SURFACES: Record<Kind, readonly string[]> = {
     app: ['.', './protocol'],
 };
 
-/** What a package.json `exports` may list (ADR 0027, Enforcement). */
-export const EXPORTS = ['.', './protocol'] as const;
+/**
+ * What a package.json `exports` may list (ADR 0027, Enforcement). `./tests` is the generated contract tests of the
+ * context a package's generated code holds (`<out>/tests/<Context>.ts`), from which the contract tests of other
+ * packages draw its values (ADR 0028): no kind takes it in its code (SURFACES), only tests do.
+ */
+export const EXPORTS = ['.', './protocol', './tests'] as const;
 
 /** The rules the architecture test checks; each names what an exception of that rule holds. */
 export type Rule =
@@ -76,8 +80,10 @@ export type Rule =
      */
     | 'syntax'
     /**
-     * an import by a package's generated code (`generated`) of anything but its own files, or an import of it by the
-     * rest of the package that is not type-only — `<file under the sources>: <specifier>`
+     * an import by a package's generated code (`generated`) of anything but its own files and the modules of the
+     * contexts that the root domaintrail.jsonc writes into other packages (`generate.ts.contexts.<Ctx>.module`), or an
+     * import of it by the rest of the package that is not type-only (but by the index.ts of a package that publishes it,
+     * `publishesGenerated`) — `<file under the sources>: <specifier>`
      */
     | 'generated';
 
@@ -105,6 +111,12 @@ export interface Module {
      * is broken.
      */
     generated?: string;
+    /**
+     * Whether its index.ts exports its generated code, values included: the module of a context that the generated
+     * code of other packages imports (ADR 0028). Its index.ts may import the generated code's values; the rest of the
+     * package still imports only its types.
+     */
+    publishesGenerated?: boolean;
     /** The violations it still has, by rule; the comment of each group names the task that removes it. */
     exceptions?: Partial<Record<Rule, readonly string[]>>;
 }
@@ -120,7 +132,8 @@ export const MAP: Record<string, Module> = {
         upstream: ['kernel'],
         // the typed model with its dependencies and diff, the stable IDs, Modeling's rule IDs
         published: ['domain/model', 'domain/dependencies', 'domain/usages', 'domain/ids', 'domain/aggregates', 'domain/diff', 'domain/rule-ids'],
-        // the types of what it publishes, generated from contexts/modeling/model (T11)
+        // the types of what it publishes, generated from contexts/modeling/model (T11); it imports the kernel's context
+        // from @domaintrail/kernel (its `Location`, ADR 0028)
         generated: 'generated',
     },
     storming: {
@@ -182,8 +195,12 @@ export const MAP: Record<string, Module> = {
         kind: 'kernel',
         dir: 'shared/kernel',
         sources: 'shared/kernel/src',
-        // diagnostics, suggestions, sources and locations, `camel`: everyone may take it, it imports nothing (T3, T8)
+        // diagnostics, suggestions, sources and locations, `camel`: everyone may take it, it imports nothing (T3, T8);
+        // its types generated from shared/kernel/model and exported whole, for the generated code that imports them
+        // (ADR 0028)
         upstream: [],
+        generated: 'generated',
+        publishesGenerated: true,
     },
     dt: {
         kind: 'app',

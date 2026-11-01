@@ -16,17 +16,6 @@ context Modeling {
   /// The name of a bounded context.
   primitive ContextName: String
 
-  /// Where a declaration is in its source: a structural copy of the kernel's `Location` (a later feature imports the
-  /// kernel's context instead).
-  value Location {
-    /// Path as given to the analysis (usually relative to the workspace root).
-    file: String
-    /// 1-based first line of the declaration.
-    line: Int
-    /// 1-based last line of the declaration.
-    endLine: Int
-  }
-
   /// Display name and description shared by declarations.
   fields Described {
     /// Japanese (display) name.

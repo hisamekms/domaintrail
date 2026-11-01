@@ -145,6 +145,9 @@
         "@domaintrail/kernel": "workspace:*",
         "langium": "4.4.0",
       },
+      "devDependencies": {
+        "fast-check": "4.10.2",
+      },
     },
     "contexts/storming": {
       "name": "@domaintrail/storming",
@@ -164,6 +167,9 @@
     },
     "shared/kernel": {
       "name": "@domaintrail/kernel",
+      "devDependencies": {
+        "fast-check": "4.10.2",
+      },
     },
   },
   "packages": {

@@ -55,7 +55,6 @@ export {
     type FieldsElement,
     type InvariantModel,
     type LabelSource,
-    type Location,
     type OutcomePatternModel,
     type PolicyElement,
     type PolicyModel,

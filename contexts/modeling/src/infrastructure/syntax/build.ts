@@ -1,4 +1,5 @@
 import { AstUtils, type AstNode } from 'langium';
+import type { Location } from '@domaintrail/kernel';
 import {
     isAggregate,
     isBinaryExpr,
@@ -72,7 +73,6 @@ import type {
     ExprModel,
     FieldModel,
     InvariantModel,
-    Location,
     QualifiedName,
     RequirementModel,
     StateModel,

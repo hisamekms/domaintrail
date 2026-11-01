@@ -24,7 +24,6 @@ export type {
     FieldModel,
     InvariantModel,
     LabelSource,
-    Location,
     OutcomePatternModel,
     PolicyModel,
     PrimitiveName,

@@ -1,8 +1,4 @@
-/** A name that could have been meant: `name` is what to write, `key` what the unresolved name is compared with. */
-export interface Candidate {
-    name: string;
-    key?: string;
-}
+import type { Candidate } from './generated/Kernel.js';
 
 /** At most this many names are suggested. */
 const MAX_SUGGESTIONS = 3;

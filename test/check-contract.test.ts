@@ -5,7 +5,9 @@
  * keep every diagnostic: rule, message, hint, range, order, the stream it goes to, and the exit code. A deliberate
  * change updates the snapshots with `bun test -u` and says why in its commit.
  */
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
 import { EXAMPLES } from './helpers.js';
@@ -23,8 +25,25 @@ const CASES: Record<string, string> = {
     'examples/shop': EXAMPLES,
 };
 
+const dirs: string[] = [];
+afterAll(async () => {
+    for (const d of dirs) await rm(d, { recursive: true, force: true });
+});
+
+/**
+ * A fixture copied outside the repository: it has no config file, and in place the root domaintrail.jsonc (DomainTrail's
+ * own model) would be found above it.
+ */
+async function outside(fixture: string): Promise<string> {
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-check-'));
+    dirs.push(dir);
+    await cp(fixture, dir, { recursive: true });
+    return dir;
+}
+
 /** What one run printed, line by line with its stream, and its exit code; the root is `<root>`. */
-async function check(root: string, ...args: string[]): Promise<{ code: number; lines: string[] }> {
+async function check(fixture: string, ...args: string[]): Promise<{ code: number; lines: string[] }> {
+    const root = fixture === EXAMPLES ? fixture : await outside(fixture);
     const lines: string[] = [];
     const io = { out: (l: string) => lines.push(`out: ${l}`), err: (l: string) => lines.push(`err: ${l}`) };
     const code = await runCli(['-r', root, 'check', ...args], io, cliDeps());
