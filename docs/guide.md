@@ -2476,10 +2476,15 @@ order, with their frozen votes — with ✓ on what was chosen (その他 in own
 and `回答 name · time` under the questions; the amber bar is gone. An assumption whose alternative was picked shows ✓ on
 it, the others muted, and `選択 name · time → #5` under it (#5 goes to the run that picked it); one left as it was (a
 later run without a pick) keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
-every AI turn, anyone (the facilitator too) can **react**: hover the message (on touch it is always there, faint) and
-☺+ at its right end offers 👍 賛成, 🤔 疑問・引っかかる, ♡ いいね and ✓ 了解・見た, with who reacted under them. The
-reactions placed show under the message as icons with counts; a click toggles yours; the tooltip names who. Several
-kinds per message, no closing, and neither votes nor reactions count as unread or notify anyone. A page that joins late
+every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
+there, faint) and ☺+ at its right end offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
+and ＋, a small field where any one emoji can be typed or pasted (the OS emoji picker works there; Enter adds it, Escape
+closes the field), with who reacted under them. The app gives no emoji a meaning. A reaction is exactly one emoji — a
+ZWJ sequence (👨‍👩‍👧‍👦), a skin tone (👍🏽), a flag (🇯🇵) or a keycap (1️⃣) counts as one; text and two emoji are refused —
+kept in one form, so ❤ and ❤️ are the same reaction. The reactions placed show under the message as emoji with counts, in
+the order they first appeared; yours has its count in violet with a faint violet outline; a click toggles yours; the
+tooltip shows the emoji and who. A message or a turn holds at most 20 different emoji (adding to one already there is
+always possible). No closing, and neither votes nor reactions count as unread or notify anyone. A page that joins late
 gets every vote and reaction with the session's state.
 
 **Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
@@ -2588,6 +2593,8 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       // "maxPreviousRunDiff": 20480
     },
     "maxParticipants": 50,
+    // the emoji ☺+ offers first in the chat (1 to 8, each one emoji, distinct); any other can be typed there
+    "quickReactions": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"],
     // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
     "classifier": {
       "enabled": false,

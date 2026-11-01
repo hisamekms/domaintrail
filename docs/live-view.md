@@ -178,8 +178,10 @@ The chat has two views:
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
   run waits; the facilitator sees the counts and decides. An answered question keeps its options, with ✓ on what was
   chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked alternative has ✓ and
-  `選択 name · time → #n`. Anyone reacts to a message or an AI turn (☺+ on hover:
-  賛成, 疑問, いいね, 了解). Counts are small; who marked is in the tooltip and, for a vote, in a list on a click.
+  `選択 name · time → #n`. Anyone reacts to a message or an AI turn with any one emoji
+  (☺+ on hover: the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
+  meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
+  who marked is in the tooltip and, for a vote, in a list on a click.
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ AI #3 への返信 ✕`), the targets of its
   messages to start with; the posted reply shows `↩ AI #3: …` on top, a click going to the card. Replies are applied
   like any message, and the run made from them continues the replied run's card; the agent gets that run's messages,

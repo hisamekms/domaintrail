@@ -665,14 +665,14 @@ assumed, and to answer its questions by choosing. The reply is now structured da
 ## Appendix: votes and reactions (amendment)
 
 *Decided by the maintainer*: participants signal a preference on a question's options and an assumption's choices
-(votes, ♡), anyone reacts to a message or an AI turn (👍 賛成, 🤔 疑問・引っかかる, ♡ いいね, ✓ 了解・見た); the facilitator
-decides. Both are **one mechanism**: a mark is who (a participant) marked what (a target) with which sign.
+(votes, ♡), anyone reacts to a message or an AI turn with an emoji (see "Reactions are emoji" below: at first four
+named reactions); the facilitator decides. Both are **one mechanism**: a mark is who (a participant) marked what (a target) with which sign.
 
 - **Model** (`model/mark.dt`, generated code regenerated). Aggregate `Mark` (`participant`, `target: MarkTarget`, `sign:
   MarkSign`, `placedAt`; `Placed` → `Removed { removedAt }`), the union `MarkTarget` — `Message { request }`, `Turn
   { run }`, `QuestionOption { run, question, option }` (the reply's keys), `AssumptionChoice { run, assumption,
-  alternative? }` (the assumption's index in the reply, which has no key; no alternative = keep it as it is) —, the enum
-  `MarkSign` (`Vote`, `Agree`, `Doubt`, `Like`, `Seen`), events `MarkPlaced` / `MarkRemoved`. The invariant `fitsTarget`
+  alternative? }` (the assumption's index in the reply, which has no key; no alternative = keep it as it is) —, the
+  union `MarkSign` (`Vote`, `Reaction { emoji }`; at first an enum of `Vote` and four named reactions), events `MarkPlaced` / `MarkRemoved`. The invariant `fitsTarget`
   (the vote on options and assumptions, the reactions on messages and turns) and the requirement `participantsVote`
   (`FacilitatorDoesNotVote`; the role is the session's, never the caller's word) are the DSL's; `place` and `remove` take
   the verified `OpenMarkTarget` (`MarkTargetNotFound`, `MarkTargetClosed`), made in `application/verifications.ts`. A
@@ -680,7 +680,7 @@ decides. Both are **one mechanism**: a mark is who (a participant) marked what (
   sent or ended, and a mark is many people's.
 - **Rules per kind of target** (`domain/marks.ts`, pure, over plain shapes so that the page decides the same way):
   exclusive groups — one vote per participant in a single-choice question and in an assumption group (the assumption
-  and its alternatives), moved by voting another; any number in a multiple-choice question; each reaction on its own.
+  and its alternatives), moved by voting another; any number in a multiple-choice question; each emoji on its own.
   **Closing is derived, never stored**: a reaction never closes. A vote is open while its run is the latest run to have
   handled its requests — no later run (in queue order) answers it (`input.answer.answerTo`) or bundles any of its
   requests, a run cancelled before it started (no base revision) not counting — and the run is `NeedsClarification` (a
@@ -703,14 +703,48 @@ decides. Both are **one mechanism**: a mark is who (a participant) marked what (
   not carry them (not in `AGENT_EVENT_TYPES`), and the agent API is unchanged. `session.state` and `GET
   /api/session/state` carry `marks` (the placed ones), so a late joiner or a reload sees them.
 - **Page** (`web/session/marks.ts`, pure and tested; `mark-controls.tsx`). Within the chat's decoration budget: counts
-  small and muted, line icons (lucide), no pills; my own mark in the clickable violet (a filled ♥ for my vote), never
-  red. Who marked is never always shown: the count's tooltip names them, and a click on a vote's count opens a small
-  list (for touch). A reaction's click toggles mine, so its names are in its tooltip and, for touch, in the ☺+ popover,
-  which lists who placed each reaction under the four choices. Participants see a clarification's questions as rows
+  small and muted, no pills; my own vote in the clickable violet (a filled ♥), never red; reactions as below. Who
+  marked is never always shown: the count's tooltip names them, and a click on a vote's count opens a small list (for
+  touch). A reaction's click toggles mine, so its names are in its tooltip and, for touch, in the ☺+ popover, which
+  lists who placed each reaction under the choices. Participants see a clarification's questions as rows
   with ♡ (no "other": they write in the chat); the facilitator's answer form shows the counts and never preselects.
   After closing, the answer line's tooltip (and the note line of an alternative picked) keeps the counts and names.
   No optimistic change: the server broadcasts the change before it answers; a mark being set is not clickable again
   until then. Votes and reactions are not unread items and notify no one.
+
+### Reactions are emoji (amendment)
+
+*Decided by the maintainer*: the four named reactions (賛成, 疑問, いいね, 了解) gave the app a vocabulary people did not
+choose. A reaction is now **any one emoji the participant picks; the app assigns none a meaning** and shows no names.
+
+- **Model.** `MarkSign` is the union `Vote | Reaction { emoji: Emoji }`. The primitive `Emoji` is bounded in the DSL
+  (1 to 64 UTF-16 units) and has the declared check `singleEmoji`, implemented by `@domaintrail/modeling/core/emoji`
+  (shared by the config, the server and the page): exactly one grapheme (`Intl.Segmenter`), made only of
+  `\p{Emoji}` / `\p{Emoji_Component}` characters, with a pictograph (`\p{Extended_Pictographic}`, so ZWJ sequences,
+  skin tones and tag sequences), a flag (two regional indicators) or a keycap; at most 64 UTF-8 bytes. Text, a lone
+  component, a digit and two emoji are refused at the boundary (400 `sign.emoji`).
+- **Normalization.** An emoji is kept NFC and **fully qualified**: every VS16 (U+FE0F) is dropped, then added back after
+  each emoji character whose default presentation is text (`\p{Emoji}` without `\p{Emoji_Presentation}`) unless a
+  skin tone follows. So ❤ and ❤️ (and 1⃣ / 1️⃣, 🏳‍🌈 / 🏳️‍🌈) are the same reaction, kept in the form the emoji pickers
+  insert and every platform draws as an emoji. The route normalizes what it is sent; `Emoji` accepts only the kept
+  form, so two forms never reach the store.
+- **Limit.** At most `MAX_REACTION_EMOJI` (20) different emoji on one message or turn: a new 21st is refused by
+  `setMark` with `ReactionLimitReached { limit }` (409); joining an emoji already there always works, and taking the
+  last of one off makes room. The page disables the choices that would not fit.
+- **Wire.** `sign` is `{ "kind": "Vote" }` or `{ "kind": "Reaction", "emoji": "👍" }` — the generated union as JSON,
+  like `target` — in `POST /api/session/marks` and in `mark.placed` / `mark.removed`. `session.state` also carries
+  `quickReactions`.
+- **Persistence.** The `sign` column holds `signKey(sign)`: `Vote` or the emoji, so the unique partial index is one
+  placed mark per participant, target and emoji. Migration 6 (after the replies' 5) rewrites a database's marks and
+  its outbox's `MarkPlaced` / `MarkRemoved`: Agree → 👍, Doubt → 🤔, Like → ❤️, Seen → 👀, a vote's `"Vote"` → `{ "kind":
+  "Vote" }`; the mapping is one to one, so the index holds (tested on a database built with migrations 1 to 4).
+- **Config.** `session.quickReactions`: the emoji ☺+ offers first, 1 to 8, each one emoji, distinct after
+  normalization; default 👍 👀 🤔 🎉 ❤️ 🙏. Any other emoji can be typed or pasted in ☺+'s ＋ field (no emoji-picker
+  library: the OS picker works in the field); Enter adds it, Escape closes the field.
+- **Page.** Reactions are drawn as colored emoji — an exception to the decoration budget, since the emoji is the
+  content — each with a small muted count and no pill, in the order each first appeared. Mine, which colour can no
+  longer say, has its count in violet and a faint violet outline and background. The tooltip is the emoji and the
+  names.
 
 ## Appendix: replies to runs (amendment)
 
