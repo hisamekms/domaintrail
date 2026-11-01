@@ -14,7 +14,7 @@ import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timelin
 import { occurrenceNode, selectionOf, targetKey, targetOfSelection, WORKSPACE_TARGET } from './targets';
 import { exampleSources, viewPayloads } from '../test-helpers';
 
-const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
 /** The render graph of a view of the sample, as the view service sends it to the page. */
 const sampleViews = (await viewPayloads([{ path: 'es.dtes', text: SAMPLE }]))[0].stormings[0].views;

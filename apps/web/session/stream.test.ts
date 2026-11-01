@@ -286,7 +286,7 @@ describe("the composer's draft", () => {
     });
 });
 
-const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
 const storming = parsed[0];
 const model = (await analyze(await exampleSources())).model as DomainModel;

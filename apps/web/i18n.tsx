@@ -462,7 +462,7 @@ const ja = {
         confirm: '確認済みにする',
         confirmHint: '確認は印です。ほかの操作を止めません',
         restore: '復元…',
-        // the chat's collab menu, the end and its summary (web/session/collab-menu.tsx)
+        // the chat's collab menu, the end and its summary (apps/web/session/collab-menu.tsx)
         collab: {
             menu: 'コラボのメニュー',
             state: 'コラボ中',

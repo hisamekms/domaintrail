@@ -1,4 +1,4 @@
-// Where the others are (web/session/views.ts): the view a location stands for, its name, whether it opens here, the
+// Where the others are (apps/web/session/views.ts): the view a location stands for, its name, whether it opens here, the
 // participants' rows, and the chat's small layout rules.
 import { describe, expect, test } from 'bun:test';
 import type { Me, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';

@@ -585,11 +585,11 @@ const OUTSIDE_IMPORTS = (
 ).flat();
 
 describe('integration tests, scripts and bin/', () => {
-    test('import the packages only through their entries (. and ./protocol), never by a path into packages/ or web/', () => {
+    test('import the packages only through their entries (. and ./protocol), never by a path into a package', () => {
         expect(OUTSIDE_IMPORTS.length).toBeGreaterThan(0);
         const wrong = OUTSIDE_IMPORTS.filter((i) =>
             i.resolved
-                ? i.resolved.startsWith('packages/') || i.resolved.startsWith('web/')
+                ? Object.values(MAP).some((m) => i.resolved!.startsWith(`${m.dir}/`))
                 : i.specifier.startsWith('@domaintrail/') && !(EXPORTS as readonly string[]).includes(foreign('', i)!.entry),
         );
         expect(show(wrong)).toEqual([]);

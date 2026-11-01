@@ -1,4 +1,4 @@
-// The selection as suggested targets of the request being written (web/session/suggestions.ts): merged with the
+// The selection as suggested targets of the request being written (apps/web/session/suggestions.ts): merged with the
 // confirmed chips, dismissed until the selection changes, within the limit of targets, and the `C` key.
 import { describe, expect, test } from 'bun:test';
 import { MAX_REQUEST_TARGETS, type ComposerValue } from './mentions';

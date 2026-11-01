@@ -6,7 +6,7 @@ import { analyze, type Analysis, type SourceFile } from '@domaintrail/modeling';
 import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
-export const EXAMPLES = path.join(import.meta.dir, '..', 'examples', 'shop');
+export const EXAMPLES = path.join(import.meta.dir, '..', '..', 'examples', 'shop');
 
 /** Analyzes inline sources; keys are file names. */
 export function check(files: Record<string, string>): Promise<Analysis> {

@@ -3239,7 +3239,7 @@ details.deps > .sub {
     padding-bottom: 4px;
 }
 
-/* ---------- tooltips (web/tooltip.tsx) ---------- */
+/* ---------- tooltips (apps/web/tooltip.tsx) ---------- */
 
 .tooltip {
     position: fixed;
@@ -5272,7 +5272,7 @@ del.was.block {
     color: var(--muted);
 }
 
-/* ---------- votes and reactions (web/session/mark-controls.tsx) ---------- */
+/* ---------- votes and reactions (apps/web/session/mark-controls.tsx) ---------- */
 
 /* a row with a vote at its right end: a question's option */
 .vote-row {
@@ -5515,7 +5515,7 @@ del.was.block {
     flex: none;
 }
 
-/* ---------- the canvas's bottom-left controls (web/view/canvas-controls.tsx) ---------- */
+/* ---------- the canvas's bottom-left controls (apps/web/view/canvas-controls.tsx) ---------- */
 
 /* the legend opens upward from the bar; the canvas stays draggable around them */
 .canvas-controls {
@@ -5660,7 +5660,7 @@ del.was.block {
     filter: brightness(0.9);
 }
 
-/* what an edge under the pointer means (web/view/canvas-controls.tsx EdgeHint) */
+/* what an edge under the pointer means (apps/web/view/canvas-controls.tsx EdgeHint) */
 .edge-hint {
     position: fixed;
     z-index: 1000;

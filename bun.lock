@@ -38,6 +38,23 @@
         "web-tree-sitter": "0.27.1",
       },
     },
+    "apps/web": {
+      "name": "@domaintrail/web",
+      "dependencies": {
+        "@domaintrail/collaboration": "workspace:*",
+        "@domaintrail/modeling": "workspace:*",
+        "@domaintrail/visualization": "workspace:*",
+        "lucide-react": "1.62.0",
+        "react": "19.3.1",
+        "react-dom": "19.3.1",
+        "tldraw": "5.5.2",
+      },
+      "devDependencies": {
+        "@tldraw/tlschema": "5.5.2",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+      },
+    },
     "capabilities/agent": {
       "name": "@domaintrail/agent",
       "dependencies": {
@@ -109,23 +126,6 @@
         "ignore": "7.0.14",
       },
     },
-    "web": {
-      "name": "@domaintrail/web",
-      "dependencies": {
-        "@domaintrail/collaboration": "workspace:*",
-        "@domaintrail/modeling": "workspace:*",
-        "@domaintrail/visualization": "workspace:*",
-        "lucide-react": "1.62.0",
-        "react": "19.3.1",
-        "react-dom": "19.3.1",
-        "tldraw": "5.5.2",
-      },
-      "devDependencies": {
-        "@tldraw/tlschema": "5.5.2",
-        "@types/react": "19.3.0",
-        "@types/react-dom": "19.3.0",
-      },
-    },
   },
   "packages": {
     "@chevrotain/cst-dts-gen": ["@chevrotain/cst-dts-gen@13.2.0", "", { "dependencies": { "@chevrotain/gast": "13.2.0", "@chevrotain/types": "13.2.0" } }, "sha512-bA9dvWlhAUcHkNwU+8w9yiUxJPlj/Lm3VqS7MD+NbIR/7LmpNLuK/AWNFdCo/T3SK5ND0/UHf3IJvl/Jn/i6yg=="],
@@ -150,7 +150,7 @@
 
     "@domaintrail/visualization": ["@domaintrail/visualization@workspace:capabilities/visualization"],
 
-    "@domaintrail/web": ["@domaintrail/web@workspace:web"],
+    "@domaintrail/web": ["@domaintrail/web@workspace:apps/web"],
 
     "@domaintrail/workspace": ["@domaintrail/workspace@workspace:platform/workspace"],
 

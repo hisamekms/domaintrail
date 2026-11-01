@@ -1,4 +1,4 @@
-// The collab menu and the end of a collab (web/session/collab.ts): what the menu offers to whom, what is unfinished
+// The collab menu and the end of a collab (apps/web/session/collab.ts): what the menu offers to whom, what is unfinished
 // when the facilitator ends it, and the summary everyone sees then.
 import { describe, expect, test } from 'bun:test';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';

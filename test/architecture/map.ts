@@ -204,8 +204,8 @@ export const MAP: Record<string, Module> = {
     },
     web: {
         kind: 'app',
-        dir: 'web',
-        sources: 'web',
+        dir: 'apps/web',
+        sources: 'apps/web',
         upstream: ['collaboration', 'modeling', 'visualization'],
     },
 };

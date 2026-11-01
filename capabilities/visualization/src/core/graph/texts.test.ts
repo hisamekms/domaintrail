@@ -36,7 +36,7 @@ const SALES = `context Sales "販売" {
 const englishIn = (text: string): string[] => (text.replace(/<[^>]*>/g, '').match(/[A-Za-z]+/g) ?? []).filter((w) => !LATIN_IN_JA.has(w));
 
 /**
- * Latin words allowed in Japanese texts (as in web/i18n.test.ts): abbreviations, the DSL's keywords and file names, which are written as
+ * Latin words allowed in Japanese texts (as in apps/web/i18n.test.ts): abbreviations, the DSL's keywords and file names, which are written as
  * they are in Japanese too (the workspace's `.domaintrail` directory among them), git's (`git`, and the refs `main` and `HEAD` given as examples), and the names of keys on
  * the keyboard. `X` is the sample argument.
  */

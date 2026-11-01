@@ -22,7 +22,7 @@ type Target = NonNullable<Parameters<SessionClient['send']>[1]['targets']>[numbe
 export const PEOPLE = { facilitator: 'ooyama_F', sato: '佐藤', suzuki: '鈴木', tanaka: '田中', takahashi: '高橋' } as const;
 export type Person = keyof typeof PEOPLE;
 
-/** The note a page writes when the facilitator picks another alternative of an assumption (`alternativeNote` of web/i18n.tsx, ja). */
+/** The note a page writes when the facilitator picks another alternative of an assumption (`alternativeNote` of apps/web/i18n.tsx, ja). */
 export const alternativeNote = (assumption: string, alternative: string): string =>
     `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`;
 

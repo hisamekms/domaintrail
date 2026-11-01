@@ -1,4 +1,4 @@
-// The request composer's targets and mentions (web/session/mentions.ts): the chips as the one source of the targets,
+// The request composer's targets and mentions (apps/web/session/mentions.ts): the chips as the one source of the targets,
 // mentions kept in step with them, the people mentioned likewise, the keys (IME composition included), the `#`
 // candidates (elements) and the `@` ones (people).
 import { describe, expect, test } from 'bun:test';
@@ -212,7 +212,7 @@ describe('the composer keys', () => {
     });
 });
 
-const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
 const stormings = [{ id: parsed[0].id, storming: parsed[0] }] as unknown as StormingView[];
 const workspace = await exampleSources();

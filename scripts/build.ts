@@ -21,7 +21,7 @@ async function build(config: Bun.BuildConfig): Promise<void> {
 await rm(DIST, { recursive: true, force: true });
 
 await build({
-    entrypoints: [path.join(ROOT, 'web', 'index.html')],
+    entrypoints: [path.join(ROOT, 'apps', 'web', 'index.html')],
     outdir: path.join(DIST, 'web'),
     minify: true,
     define: { 'process.env.NODE_ENV': '"production"' },

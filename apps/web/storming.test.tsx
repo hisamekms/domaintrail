@@ -6,7 +6,7 @@ import { createViewService, ElkLayoutEngine, type ViewService } from '@domaintra
 import { I18nProvider } from './i18n';
 import { StormingDetails } from './storming';
 
-const SAMPLE = await readFile(path.join(import.meta.dir, '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
 /** The view service of a workspace holding `delivery.dtes`, without git or saved layouts. */
 const viewService = (): ViewService =>

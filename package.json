@@ -39,7 +39,7 @@
     "contexts/*",
     "capabilities/*",
     "platform/*",
-    "web"
+    "apps/*"
   ],
   "scripts": {
     "langium:generate": "langium generate --file packages/modeling/langium-config.json",
@@ -49,7 +49,7 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "bun test",
-    "test:unit": "bun test ./packages ./contexts ./capabilities ./platform ./web",
+    "test:unit": "bun test ./packages ./contexts ./capabilities ./platform ./apps",
     "test:it": "bun test ./test",
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
