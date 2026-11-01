@@ -1,19 +1,34 @@
 import { afterAll, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { agentDtArguments, dtShim, findProgram, inside, launcherScript, withPathFirst } from './dt-shim.js';
+import { createClaudeCodeRunner } from './claude-code.js';
+import { agentDtArguments, dtShim, findProgram, inside, launcherScript, pinDt, withPathFirst, writeDtShim } from './dt-shim.js';
+import { createDtTools } from './dt-tools.js';
 
 const dirs: string[] = [];
 afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
+const gone = (p: string): Promise<boolean> =>
+    stat(p).then(
+        () => false,
+        () => true,
+    );
 const scratch = async (): Promise<string> => {
     const dir = realpathSync(await mkdtemp(path.join(tmpdir(), 'domaintrail-agent-dt-')));
     dirs.push(dir);
     return dir;
 };
+const failure = (p: Promise<unknown>): Promise<string> =>
+    p.then(
+        () => 'succeeded',
+        (e: unknown) => String(e),
+    );
+const run = { prompt: 'p', allowedTools: ['Bash(dt fmt:*)'], requests: 1 };
+const node = realpathSync(findProgram('node') ?? process.execPath);
 
 describe("the agent's dt (session.agent.dt)", () => {
     test('the shim only starts the runtime on the launcher; the pinned dt is JSON in the launcher, spawned without a shell in a private directory', () => {
@@ -76,5 +91,90 @@ describe("the agent's dt (session.agent.dt)", () => {
             ['fmt', '/etc/x.dt'],
         ])
             expect(agentDtArguments(given, root, root).ok).toBe(false);
+    });
+
+    test.skipIf(process.platform === 'win32')(
+        '`dt …` on that PATH runs the pinned dt on the workspace from a private directory, or refuses what the agent may not ask',
+        async () => {
+            const tools = await scratch();
+            const echo = path.join(tools, 'echo dt.mjs');
+            await writeFile(echo, 'console.log(JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) }));\n');
+            const root = await scratch();
+            const shim = await writeDtShim(pinDt({ command: 'node', args: [echo] }, root), root);
+            const dt = (args: string[]): ReturnType<typeof spawnSync> =>
+                spawnSync('dt', args, { cwd: root, env: withPathFirst(process.env, shim.dir), encoding: 'utf8' });
+            try {
+                expect((await stat(shim.dir)).mode & 0o777).toBe(0o700);
+                expect((await stat(path.join(shim.dir, 'dt'))).mode & 0o777).toBe(0o700);
+                const ran = JSON.parse(String(dt(['check', 'a.dt']).stdout)) as { cwd: string; args: string[] };
+                expect(ran.args).toEqual(['-r', root, 'check', path.join(root, 'a.dt')]);
+                expect(realpathSync(ran.cwd)).toBe(realpathSync(shim.dir));
+                for (const bad of [['fmt', '--cwd', '/'], ['generate'], ['fmt', '../x.dt']]) {
+                    const r = dt(bad);
+                    expect(r.status).toBe(2);
+                    expect(String(r.stdout)).toBe('');
+                    expect(String(r.stderr)).toContain('Use `dt fmt` or `dt check`');
+                }
+            } finally {
+                await shim.dispose();
+            }
+            expect(await gone(shim.dir)).toBe(true);
+        },
+    );
+
+    test.skipIf(process.platform === 'win32')(
+        'the agent runs `dt` from its PATH: the shim, removed once the run ends; refused once what it runs changed',
+        async () => {
+            const root = await scratch();
+            const tools = await scratch();
+            const echo = path.join(tools, 'echo.mjs');
+            await writeFile(echo, "console.log('dt ' + process.argv.slice(2).join(' '));\n");
+            // a fake agent: runs `dt fmt` as the prompt allows, and writes what it printed into the workspace
+            const agent = path.join(tools, 'agent.mjs');
+            await writeFile(
+                agent,
+                [
+                    "import { execFileSync } from 'node:child_process';",
+                    "import { writeFileSync } from 'node:fs';",
+                    "const out = execFileSync('dt', ['fmt'], { encoding: 'utf8' });",
+                    "writeFileSync('ran.txt', out + process.env.PATH.split(':')[0]);",
+                    "console.log(JSON.stringify({ type: 'result', result: 'ok' }));",
+                ].join('\n'),
+            );
+            const runner = await createClaudeCodeRunner({
+                root,
+                command: { command: 'node', args: [agent] },
+                dt: pinDt({ command: 'node', args: [echo] }, root),
+            });
+            const outcome = await runner.run({ ...run, signal: new AbortController().signal });
+            expect(outcome.exitCode).toBe(0);
+            const [line, shimDir] = (await readFile(path.join(root, 'ran.txt'), 'utf8')).split('\n');
+            expect(line).toBe(`dt -r ${root} fmt`);
+            expect(path.basename(shimDir)).toStartWith('domaintrail-dt-');
+            expect(await gone(shimDir)).toBe(true);
+            await writeFile(echo, 'console.log("something else");\n');
+            expect(await failure(runner.run({ ...run, signal: new AbortController().signal }))).toContain('changed since the subscriber started');
+            await writeFile(path.join(root, 'dt.js'), '');
+            expect(await failure(createClaudeCodeRunner({ root, dt: { runtime: node, script: path.join(root, 'dt.js') } }))).toContain('inside the workspace');
+        },
+    );
+
+    test('dt fmt / dt check after the agent run on the workspace from a fresh private directory, removed afterwards', async () => {
+        const root = await scratch();
+        const tools = await scratch();
+        const record = path.join(tools, 'record.mjs');
+        const out = path.join(tools, 'out.json');
+        await writeFile(
+            record,
+            `import { statSync, writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(out)}, JSON.stringify({ cwd: process.cwd(), mode: statSync('.').mode & 0o777, args: process.argv.slice(2) }));\n`,
+        );
+        const dtTools = createDtTools({ dt: { command: node, args: [record] }, root, log: () => {} });
+        expect(await dtTools.check()).toBe(true);
+        const ran = JSON.parse(await readFile(out, 'utf8')) as { cwd: string; mode: number; args: string[] };
+        expect(inside(root, ran.cwd)).toBe(false);
+        expect(path.basename(ran.cwd)).toStartWith('domaintrail-dt-run-');
+        expect(ran.mode).toBe(0o700);
+        expect(await gone(ran.cwd)).toBe(true);
+        expect(ran.args).toEqual(['-r', root, 'check']);
     });
 });

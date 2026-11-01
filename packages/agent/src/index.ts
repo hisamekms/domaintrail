@@ -8,7 +8,7 @@ export { type AgentApi, type AgentInvocation, type AgentOutcome, type AgentRunne
 
 // ---- adapters, for the app that wires them ---------------------------------------------------------------------
 export { createClaudeCodeRunner, type AgentCommand } from './infrastructure/claude-code.js';
-export { dtCommandOf, pinDt, writeDtShim, type PinnedDt } from './infrastructure/dt-shim.js';
+export { dtCommandOf, pinDt, type PinnedDt } from './infrastructure/dt-shim.js';
 export { createDtTools, type DtCommand } from './infrastructure/dt-tools.js';
 export { createHttpAgentApi } from './infrastructure/http-agent-api.js';
 export { randomNonce, systemClock } from './infrastructure/system.js';
