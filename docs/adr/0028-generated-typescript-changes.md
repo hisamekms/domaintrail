@@ -192,7 +192,7 @@ comment goes. Types are unchanged.
   read and write converts between them.
 - Leaving it as it is.
 
-### 5. The testing support becomes a package, `@domaintrail/testing`
+### 5. The testing support moves into the package, as `domaintrail/testing`
 
 **Today.** Two support files are written into every project, the same for every model: `_runtime.ts` (137 lines,
 one per output directory, ADR 0012) and, with the contract tests, `tests/_testing.ts` (581 lines; its source is
@@ -202,9 +202,12 @@ one per output directory, ADR 0012) and, with the contract tests, `tests/_testin
 **Decision.** *Decided by the maintainer:*
 
 - The runtime stays copied: production code does not depend on domaintrail.
-- The testing support becomes a package, `@domaintrail/testing`, a dev dependency of the user's project. Generated tests
-  import it instead of `./_testing.js`, and `tests/_testing.ts` is no longer written. The generated code states the
-  version of the package it needs, and the package is released with domaintrail, with the same version.
+- The testing support is moved out of the generated files and into a package that the user's project has as a
+  dev dependency. Generated tests import it instead of `./_testing.js`, and `tests/_testing.ts` is no longer written.
+  The generated code states the version it needs.
+- The maintainer chose to ship it as a subpath of domaintrail itself, `domaintrail/testing` (an entry in the
+  package's `exports`), not as a package of its own. The plan had named `@domaintrail/testing`, but the npm scope
+  `@domaintrail` does not exist.
 
 **Why.** The testing support is code, not something derived from the model: a fix to it should reach users by
 updating a dependency, not by regenerating, and 581 lines of it should not sit in every user's repository. The runtime
@@ -219,6 +222,10 @@ is small and on the production path, where a dependency on the tool is not wante
 - Package both: production code would depend on the tool, and a runtime of another version than the generated code
   would be a skew found at run time.
 - Trim the copy: smaller, but still copied and still fixed only by regenerating.
+- A package of its own (`@domaintrail/testing`, or the unscoped `domaintrail-testing`): it needs an npm scope or one
+  more package to publish, with its own 2FA and trusted publisher setup, and it could be installed at a version other
+  than domaintrail's. A project that generates code already has domaintrail as a dev dependency to run `dt`, and only
+  the tests import the subpath, so production code still does not depend on domaintrail.
 
 ### 6. The context parameter of a factory stays required
 
@@ -389,7 +396,7 @@ the domain's.
   longer holds for an ID or primitive on `UUID` (decision 1).
 - [ADR 0020](0020-generated-checks-and-contract-tests.md): D1 gains `check<Aggregate>Common` (decision 2) and the
   `'uuid'` invariant of IDs and primitives on `UUID` (decision 1); D3 draws recursive values (decision 8) and command
-  parameters as records (decision 7); D4 and Layout: the generic helpers are the package `@domaintrail/testing`, not
+  parameters as records (decision 7); D4 and Layout: the generic helpers are `domaintrail/testing`, not
   `tests/_testing.ts` (decision 5), and `generate.ts.tests` gains `maxRecursionDepth` and `types` (decision 8).
 - [ADR 0023](0023-verified-types.md), Generated TypeScript: why the context parameter is required (decision 6), and
   what a rejected promise of a factory means (decision 10).
@@ -399,37 +406,59 @@ the domain's.
 - The examples of command types in ADR 0018 and 0019 (`ConfirmOrder = (order: DraftOrder, at: Timestamp) => …`) show
   positional parameters; the generated code takes an object (decision 7). Their text is not rewritten.
 
-## Details left to the tasks
+## Details settled before the tasks
 
-The maintainer decided the points above. These details follow from them but were not decided one by one; the shapes
-written above are the expected ones, and the task settles each, recording a different choice in its pull request:
+The maintainer decided the points above. The details below follow from them; they were settled before the tasks
+started, decided by principle and, where a trade-off remained (G5's package, G6's optional parameters), by the
+maintainer. A task that finds one of them unworkable records a different choice in its pull request.
 
-- G1: the exact form accepted as a UUID (the 8-4-4-4-12 hexadecimal form in either case, any version, is expected, so
-  that `crypto.randomUUID()` and UUIDv7 both pass); the place of `'uuid'` among the invariants (first is expected);
-  what happens when a type declares an invariant of its own named `uuid`.
-- G2: whether `check<Aggregate>Common` is also written when the aggregate has states but no invariants of its own.
-- G3: the names of the generator's own temporaries (`$0` in `contains`), which no `.dt` names; what counts as a clash
-  for a lambda variable (another variable in scope, the check's parameter, a reserved word, a name the module
-  imports).
-- G4: a `{@link}` to a context the module does not otherwise import.
-- G5: where the package lives in the workspace and how it is published (`docs/releasing.md`); how the generated code
-  states the version it needs and what reports a mismatch; whether fast-check becomes a peer dependency of the
-  package; what `tests/index.ts` re-exports; removing a `tests/_testing.ts` left by an earlier version.
-- G6: the name of the parameters object in the generated types; how an optional parameter is typed in it (a required
-  key `note: string | undefined`, for the reason of decision 6, or an optional property); whether the requirement
-  checks (`check<Command>Requires(aggregate, …params)`, ADR 0020 D1) take the object too.
-- G7: the depth used for a cycle of types whose per-type settings differ.
-- G8: whether `import` excludes `out` and `policies`; how the contract tests of a context using an imported one get
-  its arbitraries (today they import the other context's `tests/<Ctx>.ts`, which is not generated for an imported
-  context); how the kernel's hand-written types and its `.dt` stay one.
+- G1:
+  - A UUID is the 8-4-4-4-12 hexadecimal form of RFC 9562, in either case, of any version, so that
+    `crypto.randomUUID()` and UUIDv7 both pass.
+  - `'uuid'` comes first among the invariants: the form of the base type is what the other invariants assume.
+  - `uuid` is reserved: a type on `UUID` that declares an invariant of its own named `uuid` is an error, since it would
+    clash with the generated one.
+  - `examples/shop` and the guide use UUIDs for IDs.
+- G2: `check<Aggregate>Common` is written for every aggregate with states, even with no invariants of its own (it then
+  returns no errors): the public functions do not change shape with the content of the model.
+- G3:
+  - The generator's own temporaries keep the `$` prefix (`$0`): a `.dt` name cannot start with `$`, so they never clash.
+  - A lambda variable clashes with another variable in scope, the check's parameter, a reserved word of TypeScript, or
+    a name the module imports.
+- G4: a `{@link}` to a context the module does not otherwise import adds a type-only import of it
+  (`import type * as Billing from …`), so that the link resolves in editors.
+- G5:
+  - The support lives in domaintrail's own package and is exported as `domaintrail/testing`, released with it. No
+    new package is published; `docs/releasing.md` is unchanged except to mention the subpath.
+  - The subpath exports its version. The generated tests state the version they were generated with and compare it
+    at load, failing with a message that says to regenerate or to install the matching domaintrail.
+  - fast-check stays what the user's project installs; `domaintrail/testing` declares it as an optional peer
+    dependency, since only contract tests need it.
+  - `tests/index.ts` re-exports the generated contexts' tests and no longer the support.
+  - The generator removes a `tests/_testing.ts` it wrote earlier (recognised by its generated header).
+- G6:
+  - The parameters object's type is named `<Command><Aggregate>Params` (`CancelOrderParams`).
+  - An optional parameter is an optional property (`note?: Note`): leaving it out means "not given", which is what
+    the model says, unlike the context of decision 6, whose omission would change the check's meaning. A misspelt
+    key is still caught by the excess property check of object literals.
+  - The requirement checks take the object too (`check<Command>Requires(aggregate, params)`).
+- G7: a cycle of types whose per-type settings differ uses the greatest depth among them: a per-type setting asks to
+  reach at least that depth.
+- G8:
+  - `import` excludes `out` and `policies`: nothing is generated for an imported context, so both are an error next
+    to it.
+  - The setting may also be an object, `import: { module, tests }`, naming the module of the imported context's
+    contract-test support. The contract tests of a context using an imported one draw its values from there; when they
+    need them and `tests` is not given, it is an error.
+  - The kernel's hand-written types are replaced by the code generated from its `.dt`, so that it is defined once.
 
 ## Consequences
 
 - Three breaking changes (G1, G5, G6) in one release, with the changelog stating each and what to change: handle the
-  `Result` of `make<Id>` and use UUIDs in fixtures; add `@domaintrail/testing`; pass command parameters as an object.
+  `Result` of `make<Id>` and use UUIDs in fixtures; import `domaintrail/testing` (domaintrail as a dev dependency); pass command parameters as an object.
 - The generated checks read like the model, once per invariant; references are navigable.
-- Contract tests reach recursive types, and a project with contract tests depends on a package released with
-  domaintrail, at the same version.
+- Contract tests reach recursive types, and a project with contract tests imports `domaintrail/testing` from its dev
+  dependency on domaintrail.
 - A context can be described in one package and used by others through `.dt`; Modeling's copy of `Location` goes.
 - What a factory's failure means is written down, for factories and policy handlers alike: the domain's answers in the
   `Result`, the infrastructure's in the rejection.
