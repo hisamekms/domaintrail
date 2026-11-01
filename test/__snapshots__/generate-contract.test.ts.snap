@@ -80,8 +80,11 @@ export const makeInvoiceId: MakeInvoiceId = (value) => value as InvoiceId;
 export interface InvoiceCommon {
     /** 請求書ID */
     readonly id: InvoiceId;
-    /** 注文 */
-    readonly order: Sales.OrderId; // -> Sales.Order
+    /**
+     * 注文
+     * @see {@link Sales.Order}
+     */
+    readonly order: Sales.OrderId;
     /** 請求金額 */
     readonly billedAmount: Common.Money;
 }
@@ -737,8 +740,11 @@ export interface OrderCommon {
     readonly id: OrderId;
     /** 明細 */
     readonly items: readonly OrderItem[];
-    /** 顧客 */
-    readonly customer: CustomerId; // -> Sales.Customer
+    /**
+     * 顧客
+     * @see {@link Customer}
+     */
+    readonly customer: CustomerId;
     /** 備考 */
     readonly note?: string;
 }

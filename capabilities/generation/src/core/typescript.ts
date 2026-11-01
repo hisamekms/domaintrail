@@ -316,6 +316,8 @@ class ContextEmitter {
     private readonly imports = new Set<string>();
     /** Contexts whose module is imported as a value (its generated checks are called), not only for types. */
     private readonly valueImports = new Set<string>();
+    /** Contexts named by a `{@link}` in a doc comment; imported for types only, so that the link resolves in editors. */
+    private readonly linked = new Set<string>();
     private readonly out: string[] = [];
     private readonly checks: CheckWriter;
     /** The `…Input` types written, once each. */
@@ -416,7 +418,11 @@ class ContextEmitter {
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
             ...(values.length ? [`import { ${values.join(', ')} } from './_runtime.js';`] : []),
-            ...[...this.imports].sort().map((c) => `import ${this.valueImports.has(c) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`),
+            ...[...new Set([...this.imports, ...this.linked])].sort().flatMap((c) => [
+                // a context only linked is otherwise unused: TypeScript counts the link, linters do not
+                ...(this.imports.has(c) ? [] : ['// oxlint-disable-next-line no-unused-vars -- only named by {@link} in doc comments']),
+                `import ${this.valueImports.has(c) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`,
+            ]),
         ];
         return [HEADER, ...imports, '', body].join('\n');
     }
@@ -874,10 +880,13 @@ class ContextEmitter {
 
     private property(f: FieldModel): string[] {
         const doc = [f.label, f.doc].filter(Boolean).join(' — ');
-        const prefix = doc ? [`/** ${oneLine(doc)} */`] : [];
-        const ref = f.kind === 'references' && f.target ? ` // -> ${f.target}` : '';
-        if (f.cardinality === 'optional') return [...prefix, `readonly ${f.name}?: ${this.fieldType(f)};${ref}`];
-        return [...prefix, `readonly ${f.name}: ${this.fieldType(f)};${ref}`];
+        // The target of `references`, linked by the name this module uses for it (a link to another context imports its
+        // types), so that hover and go-to-definition reach it.
+        const see = f.kind === 'references' && f.target ? `@see {@link ${this.link(f.target)}}` : '';
+        const lines = [...(doc ? [oneLine(doc)] : []), ...(see ? [see] : [])];
+        const prefix = lines.length > 1 ? ['/**', ...lines.map((l) => ` * ${l}`), ' */'] : lines.map((l) => `/** ${l} */`);
+        if (f.cardinality === 'optional') return [...prefix, `readonly ${f.name}?: ${this.fieldType(f)};`];
+        return [...prefix, `readonly ${f.name}: ${this.fieldType(f)};`];
     }
 
     private fieldType(f: FieldModel): string {
@@ -904,6 +913,15 @@ class ContextEmitter {
         if (ctx === this.ctx) return name;
         this.imports.add(ctx);
         return `${ctx}.${name}`;
+    }
+
+    /** The name of a qualified element in a `{@link}`, as {@link ContextEmitter.ref} names it, importing other contexts for the link only. */
+    private link(qname: string): string {
+        const dot = qname.indexOf('.');
+        const ctx = qname.slice(0, dot);
+        if (ctx === this.ctx) return qname.slice(dot + 1);
+        this.linked.add(ctx);
+        return qname;
     }
 
     /** Emits a JSDoc block (single line when short); nothing for an empty list. */

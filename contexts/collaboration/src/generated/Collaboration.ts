@@ -464,8 +464,11 @@ export function equalAlternativePick(a: AlternativePick, b: AlternativePick): bo
 export interface AgentRunCommon {
     /** エージェント実行ID */
     readonly id: AgentRunId;
-    /** セッション */
-    readonly session: SessionId; // -> Collaboration.Session
+    /**
+     * セッション
+     * @see {@link Session}
+     */
+    readonly session: SessionId;
     /** 凍結した入力 */
     readonly input: RunInput;
     /** 登録した人 */
@@ -1847,8 +1850,11 @@ export type MakeOpenMarkTarget = (value: MarkTarget, context: SessionId) => Prom
 export interface MarkCommon {
     /** 印ID */
     readonly id: MarkId;
-    /** セッション */
-    readonly session: SessionId; // -> Collaboration.Session
+    /**
+     * セッション
+     * @see {@link Session}
+     */
+    readonly session: SessionId;
     /** 参加者 */
     readonly participant: ParticipantId;
     /** 印の対象 */
@@ -2214,8 +2220,11 @@ export type MakeMentionableParticipant = (value: ParticipantId, context: Session
 export interface RequestCommon {
     /** 依頼ID */
     readonly id: RequestId;
-    /** セッション */
-    readonly session: SessionId; // -> Collaboration.Session
+    /**
+     * セッション
+     * @see {@link Session}
+     */
+    readonly session: SessionId;
     /** 依頼者 */
     readonly author: ParticipantId;
     /** 対象 */
@@ -2224,8 +2233,11 @@ export interface RequestCommon {
     readonly body: Text;
     /** 送信日時 */
     readonly sentAt: Timestamp;
-    /** 返信先 — AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。 */
-    readonly replyTo?: AgentRunId; // -> Collaboration.AgentRun
+    /**
+     * 返信先 — AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。
+     * @see {@link AgentRun}
+     */
+    readonly replyTo?: AgentRunId;
     /** 言及した人 — 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。 */
     readonly mentions: readonly ParticipantId[];
 }
@@ -2750,8 +2762,11 @@ export function equalRevisionOrigin(a: RevisionOrigin, b: RevisionOrigin): boole
 export interface RevisionCommon {
     /** リビジョンID */
     readonly id: RevisionId;
-    /** セッション */
-    readonly session: SessionId; // -> Collaboration.Session
+    /**
+     * セッション
+     * @see {@link Session}
+     */
+    readonly session: SessionId;
     /** 由来 */
     readonly origin: RevisionOrigin;
     /** 内容ハッシュ */

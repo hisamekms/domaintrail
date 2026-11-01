@@ -347,3 +347,27 @@ export const plain: shared.Decimal = '1';
         expect(r.code).toBe(0);
     });
 });
+
+describe('a context imported only for a {@link}', () => {
+    test('compiles with no unused imports reported', async () => {
+        const a = await check({
+            'common.dt': 'context Common {\n  id AccountId: UUID\n}\n',
+            'sales.dt': 'context Sales {\n  aggregate Account { id: Common.AccountId }\n}\n',
+            'billing.dt':
+                'context Billing {\n  id InvoiceId: UUID\n  aggregate Invoice {\n    id: InvoiceId\n    references account: Common.AccountId -> Sales.Account\n  }\n}\n',
+        });
+        expect(a.diagnostics).toEqual([]);
+        const work = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
+        try {
+            const files = generateTypeScript(a.model!);
+            // Sales is named only by the link of Invoice.account (its ID type is Common's)
+            expect(files.find((f) => f.path === 'Billing.ts')!.content).toContain("import type * as Sales from './Sales.js';");
+            for (const f of files) await writeFile(path.join(work, f.path), f.content);
+            const r = tscIn(work, '--noUnusedLocals', 'Billing.ts');
+            expect(r.output).toBe('');
+            expect(r.code).toBe(0);
+        } finally {
+            await rm(work, { recursive: true, force: true });
+        }
+    });
+});

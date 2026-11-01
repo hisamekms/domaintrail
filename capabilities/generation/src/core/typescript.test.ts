@@ -302,6 +302,48 @@ describe('links to the DSL', () => {
     });
 });
 
+describe('the target of references', () => {
+    const SOURCES = {
+        'common.dt': 'context Common {\n  id AccountId: UUID\n}\n',
+        'sales.dt': `context Sales {
+  id CustomerId: UUID
+  aggregate Customer { id: CustomerId }
+  id OrderId: UUID
+  aggregate Account { id: Common.AccountId }
+  aggregate Order {
+    id: OrderId
+    references customer: CustomerId -> Customer "顧客"
+    references payer: CustomerId? -> Customer
+  }
+}
+`,
+        'billing.dt': `context Billing {
+  id InvoiceId: UUID
+  aggregate Invoice {
+    id: InvoiceId
+    references account: Common.AccountId -> Sales.Account
+  }
+}
+`,
+    };
+
+    test('is linked from the doc comment of the field, by the name the module uses for it', async () => {
+        const a = await check(SOURCES);
+        expect(a.diagnostics).toEqual([]);
+        const files = generateTypeScript(a.model!);
+        const sales = files.find((f) => f.path === 'Sales.ts')!.content;
+        expect(sales).toContain('    /**\n     * 顧客\n     * @see {@link Customer}\n     */\n    readonly customer: CustomerId;\n');
+        expect(sales).toContain('    /** @see {@link Customer} */\n    readonly payer?: CustomerId;\n');
+        expect(sales).not.toContain('// ->');
+        // a context linked but not otherwise used is imported for its types, so that the link resolves in editors
+        const billing = files.find((f) => f.path === 'Billing.ts')!.content;
+        expect(billing).toContain('    /** @see {@link Sales.Account} */\n    readonly account: Common.AccountId;\n');
+        expect(billing).toContain(
+            "import type * as Common from './Common.js';\n// oxlint-disable-next-line no-unused-vars -- only named by {@link} in doc comments\nimport type * as Sales from './Sales.js';\n",
+        );
+    });
+});
+
 describe('generated output safety', () => {
     test('labels cannot break out of comments in generated code', async () => {
         const evil = 'x\\nexport const injected = 1;';

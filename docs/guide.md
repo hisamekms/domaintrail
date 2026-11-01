@@ -1129,7 +1129,10 @@ a verified type its base with a property of its own and the contract of its fact
 [Reactions to events](#reactions-to-events-policies)). A field set is an interface that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
 `…Common`). The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's
 place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:51`); editing the `.dt` sources
-moves these lines, and generating again rewrites them.
+moves these lines, and generating again rewrites them. The JSDoc of a `references` field links its target by the name
+the module uses for it (`@see {@link Customer}`, `@see {@link Sales.Order}` from another context), so that hover and
+go-to-definition reach the aggregate; a context named only by such a link is imported for its types
+(`import type * as Sales from './Sales.js'`, with a comment that tells linters the import is used).
 
 The examples in this section are generated from `examples/shop` in the repository, a fuller version of the Sales
 context of the DSL examples (with labels, and `emits NoteChanged?` on `changeNote`).
