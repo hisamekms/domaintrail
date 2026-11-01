@@ -5,7 +5,6 @@ import type { ModelIndex } from '../infrastructure/syntax/model-index.js';
 import { parseDomain, type DomainDocument } from '../infrastructure/syntax/parse.js';
 import type { DomainModel } from '../domain/model.js';
 import type { SourceModel } from '../domain/source-model.js';
-import { DiagnosticSink } from '../infrastructure/syntax/diagnostic-sink.js';
 import { RuleSink } from '../domain/diagnostics.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';
 import { checkEventIds } from '../domain/rules/events.js';
@@ -37,8 +36,7 @@ export interface DomainAnalysis {
     model?: DomainModel;
     /**
      * The model as written, with the sites of every declaration, member, expression and reference: what Modeling's
-     * rules and the generator's name check read (T10 of docs/plans/0027-boundaries.md moves them onto it). Present
-     * whenever the `.dt` sources parse.
+     * rules and the generator's name check read. Present whenever the `.dt` sources parse.
      */
     sourceModel?: SourceModel;
     /** The path handed in for a document's URI, for the checks that report on the documents afterwards. */
@@ -52,26 +50,25 @@ export interface DomainAnalysis {
 export async function analyzeDomain(sources: readonly SourceFile[]): Promise<DomainAnalysis> {
     const { documents, index, diagnostics, syntaxOk, resolveFile } = await parseDomain(sources);
 
-    // built before the rules run: they move onto it one by one (T10 of docs/plans/0027-boundaries.md), reporting through
-    // a `RuleSink` (domain/diagnostics.ts) that shares the list of `sink`, so that the diagnostics keep their order
+    // Modeling's rules read the model as written and report after the syntax and the links, in this order (the
+    // diagnostics keep it where `compareDiagnostics` sees no difference)
     const sourceModel = syntaxOk ? buildSourceModel(index, resolveFile) : undefined;
     if (sourceModel) {
-        const sink = new DiagnosticSink(resolveFile);
-        checkNames(sourceModel, new RuleSink(sink.items));
-        checkShared(sourceModel, new RuleSink(sink.items));
-        checkStructure(sourceModel, new RuleSink(sink.items));
-        checkUnions(sourceModel, new RuleSink(sink.items));
-        checkFieldSets(sourceModel, new RuleSink(sink.items));
-        checkVerified(sourceModel, new RuleSink(sink.items));
-        checkCommands(sourceModel, new RuleSink(sink.items));
-        checkFactoryIds(sourceModel, new RuleSink(sink.items));
-        checkChanges(sourceModel, new RuleSink(sink.items));
-        checkEventIds(sourceModel, new RuleSink(sink.items));
-        checkPayloadNames(sourceModel, new RuleSink(sink.items));
-        checkPolicies(sourceModel, new RuleSink(sink.items));
-        checkInvariants(sourceModel, new RuleSink(sink.items));
-        checkLabels(sourceModel, new RuleSink(sink.items));
-        diagnostics.push(...sink.items);
+        const rules = new RuleSink(diagnostics);
+        checkNames(sourceModel, rules);
+        checkShared(sourceModel, rules);
+        checkStructure(sourceModel, rules);
+        checkUnions(sourceModel, rules);
+        checkFieldSets(sourceModel, rules);
+        checkVerified(sourceModel, rules);
+        checkCommands(sourceModel, rules);
+        checkFactoryIds(sourceModel, rules);
+        checkChanges(sourceModel, rules);
+        checkEventIds(sourceModel, rules);
+        checkPayloadNames(sourceModel, rules);
+        checkPolicies(sourceModel, rules);
+        checkInvariants(sourceModel, rules);
+        checkLabels(sourceModel, rules);
     }
 
     const model = syntaxOk ? buildModel(index, resolveFile) : undefined;
