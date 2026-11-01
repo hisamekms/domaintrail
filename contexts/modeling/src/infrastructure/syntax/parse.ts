@@ -25,7 +25,7 @@ import {
     type Policy,
 } from './generated/ast.js';
 import { createDomainServices } from './domain-module.js';
-import type { FileResolver } from './diagnostic-sink.js';
+import type { FileResolver } from './site.js';
 import { elementIdOf } from './element-id.js';
 import { ModelIndex, commandsOf, statesOf } from './model-index.js';
 

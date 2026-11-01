@@ -1,7 +1,7 @@
 // The static types of values over the model as written (source-model.ts), for the rules that compare types: the
 // expressions (M008, M009), the commands (M021), the payloads (M022), and the multiplicities the structure checks
-// (M005, M013, M020). The same as `infrastructure/syntax/types.ts` over the AST, which the checkers use until each moves
-// onto the model as written (T10 of docs/plans/0027-boundaries.md).
+// (M005, M013, M020); the Typed Model's multiplicities (infrastructure/syntax/build.ts) take `cardinality` and
+// `multiplicityText` too.
 import type { Cardinality, PrimitiveName } from './model.js';
 import type {
     EntityDecl,

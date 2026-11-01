@@ -1,6 +1,6 @@
 import { buildModel } from '../infrastructure/syntax/build.js';
 import { buildSourceModel } from '../infrastructure/syntax/build-source.js';
-import type { FileResolver } from '../infrastructure/syntax/diagnostic-sink.js';
+import type { FileResolver } from '../infrastructure/syntax/site.js';
 import type { ModelIndex } from '../infrastructure/syntax/model-index.js';
 import { parseDomain, type DomainDocument } from '../infrastructure/syntax/parse.js';
 import type { DomainModel } from '../domain/model.js';

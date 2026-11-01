@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
 import { hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
-import type { Site } from './domain/source-model.js';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
 
@@ -16,10 +15,6 @@ export async function check(files: Record<string, string>): Promise<Checked> {
     const a = await analyzeDomain(Object.entries(files).map(([p, text]) => ({ path: p, text })));
     return { ...a, ok: a.syntaxOk && !hasErrors(a.diagnostics) };
 }
-
-/** The key of a site: its range and its element. */
-export const siteKey = (s: Pick<Site, 'file' | 'start' | 'end' | 'elementId'>): string =>
-    `${s.file}:${s.start.line}:${s.start.column}-${s.end.line}:${s.end.column} ${s.elementId ?? ''}`;
 
 /** Analyzes a single context body wrapped in `context Sales { ... }`. */
 export function checkSales(body: string): Promise<Checked> {

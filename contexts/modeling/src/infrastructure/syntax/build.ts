@@ -42,7 +42,8 @@ import {
 } from './generated/ast.js';
 import { LabelResolver, docComment } from './labels.js';
 import { expressionText } from './format.js';
-import { cardinality, multiplicityText } from './types.js';
+import { cardinality, multiplicityText } from '../../domain/types.js';
+import type { FileResolver } from './site.js';
 import { regexSource } from './regex-source.js';
 import {
     commandsOf,
@@ -75,8 +76,6 @@ import type {
     TypeExpr,
     VariantModel,
 } from '../../domain/model.js';
-
-export type FileResolver = (uri: string) => string;
 
 /** Builds the Typed Model. Tolerates unresolved references so that the view can render models with semantic errors. */
 export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel {

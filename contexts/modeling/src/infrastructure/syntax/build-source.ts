@@ -1,6 +1,6 @@
 // The AST → model as written mapping (domain/source-model.ts): every declaration with its sites, its expressions as
-// trees and its references resolved to the declarations they name. A site is what `DiagnosticSink` reports for the
-// same node and property (both use `siteOf`), so that a rule moved onto the model reports the same ranges.
+// trees and its references resolved to the declarations they name. A site is the range of a node or of one of its
+// properties (`siteOf`), where Modeling's rules report.
 import type { AstNode, Reference } from 'langium';
 import {
     isAggregate,
@@ -55,7 +55,7 @@ import {
 } from './generated/ast.js';
 import { docComment } from './labels.js';
 import type { FieldLike, ModelIndex } from './model-index.js';
-import { siteOf, type FileResolver } from './diagnostic-sink.js';
+import { siteOf, type FileResolver } from './site.js';
 import { regexSource } from './regex-source.js';
 import { commandId, elementId, stateId } from '../../domain/ids.js';
 import type * as src from '../../domain/source-model.js';

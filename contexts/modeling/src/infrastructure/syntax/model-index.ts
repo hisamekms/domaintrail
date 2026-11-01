@@ -1,25 +1,15 @@
 import {
     isAggregate,
     isCommand,
-    isEntity,
-    isEnumDecl,
-    isErrorDecl,
-    isEventDecl,
     isFieldSet,
-    isIdType,
     isInvariant,
-    isPrimitiveDecl,
     isState,
-    isUnionDecl,
-    isValueObject,
-    isVerifiedDecl,
     type Aggregate,
     type Command,
     type Context,
     type ContextElement,
     type DataMember,
     type Entity,
-    type EnumDecl,
     type Expression,
     type ErrorDecl,
     type EventDecl,
@@ -34,7 +24,6 @@ import {
     type State,
     type UnionDecl,
     type ValueObject,
-    type VerifiedDecl,
 } from './generated/ast.js';
 
 export type FieldLike = Field | OwnsField | ReferenceField;
@@ -75,55 +64,12 @@ export class ModelIndex {
         return this.fragments.some((c) => c.name === ctx && c.shared);
     }
 
-    /** Resolves a simple name as seen from `ctx`: its own elements first, then shared contexts. */
-    lookupVisible(ctx: string, name: string): ContextElement | undefined {
-        return this.lookup(`${ctx}.${name}`) ?? this.sharedContexts.map((s) => this.lookup(`${s}.${name}`)).find(Boolean);
-    }
-
-    elementsOf(ctx: string): ContextElement[] {
-        return this.elements.filter((e) => e.$container.name === ctx);
-    }
-
     lookup(qname: string): ContextElement | undefined {
         return this.byQName.get(qname)?.[0];
     }
 
-    duplicates(): ContextElement[][] {
-        return [...this.byQName.values()].filter((l) => l.length > 1);
-    }
-
     get aggregates(): Aggregate[] {
         return this.elements.filter(isAggregate);
-    }
-    get unions(): UnionDecl[] {
-        return this.elements.filter(isUnionDecl);
-    }
-    get entities(): Entity[] {
-        return this.elements.filter(isEntity);
-    }
-    get valueObjects(): ValueObject[] {
-        return this.elements.filter(isValueObject);
-    }
-    get idTypes(): IdType[] {
-        return this.elements.filter(isIdType);
-    }
-    get primitives(): PrimitiveDecl[] {
-        return this.elements.filter(isPrimitiveDecl);
-    }
-    get verifieds(): VerifiedDecl[] {
-        return this.elements.filter(isVerifiedDecl);
-    }
-    get enums(): EnumDecl[] {
-        return this.elements.filter(isEnumDecl);
-    }
-    get events(): EventDecl[] {
-        return this.elements.filter(isEventDecl);
-    }
-    get errors(): ErrorDecl[] {
-        return this.elements.filter(isErrorDecl);
-    }
-    get fieldSets(): FieldSet[] {
-        return this.elements.filter(isFieldSet);
     }
 }
 
@@ -151,19 +97,16 @@ export const statesOf = (agg: Aggregate): State[] => agg.members.filter(isState)
 export const commandsOf = (agg: Aggregate): Command[] => agg.members.filter(isCommand);
 
 /** Discriminator property of a union declared without `by`. */
-export const DEFAULT_DISCRIMINATOR = 'kind';
+const DEFAULT_DISCRIMINATOR = 'kind';
 
 export const discriminatorOf = (u: UnionDecl): string => u.discriminator ?? DEFAULT_DISCRIMINATOR;
 
-/** Fields of every variant of a union. */
-export const variantFields = (u: UnionDecl): FieldLike[] => u.variants.flatMap((v) => fieldsOf(v.members));
-
-export type DomainPrimitive = IdType | PrimitiveDecl;
+type DomainPrimitive = IdType | PrimitiveDecl;
 
 /** Name used for the anonymous constraint form `primitive X: Int { value > 0 }`. */
-export const ANONYMOUS_CONSTRAINT = 'valid';
+const ANONYMOUS_CONSTRAINT = 'valid';
 
-export interface PrimitiveInvariant {
+interface PrimitiveInvariant {
     name: string;
     label?: string;
     expr: Expression | undefined;
@@ -175,9 +118,4 @@ export interface PrimitiveInvariant {
 export function primitiveInvariants(p: DomainPrimitive): PrimitiveInvariant[] {
     if (p.constraint) return [{ name: ANONYMOUS_CONSTRAINT, expr: p.constraint, node: p.constraint }];
     return p.invariants.map((i) => ({ name: i.name, label: i.label, expr: i.expr, node: i }));
-}
-
-export function identityField(el: Aggregate | Entity): FieldLike | undefined {
-    const members = isAggregate(el) ? commonFields(el) : fieldsOf(el.members);
-    return members.find((m) => m.name === 'id');
 }

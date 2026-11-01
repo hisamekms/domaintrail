@@ -256,7 +256,7 @@ const RULES: Record<Rule, RuleText> = {
         section: 'Layout',
         statement: `the kernel (shared/kernel) is kept small: it imports only its own files and ${PURE_BUILTINS.join(', ')}, no Langium and no other module.`,
         fix: () =>
-            'keep the kernel to plain types and functions: leave what needs Langium or the model in the module that uses it (as `DiagnosticSink` in core/), or pass it in as a value',
+            "keep the kernel to plain types and functions: leave what needs Langium or the model in the module that uses it (as `RuleSink` in Modeling's domain/), or pass it in as a value",
     },
 };
 
