@@ -15,7 +15,8 @@ import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blob
 import { createUnitOfWork, openDatabase, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
 import { createModelValidator } from '@domaintrail/collaboration/infrastructure/validator';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
-import type { Actor } from '@domaintrail/collaboration/application/actor';
+import { actorOf, type Actor } from '@domaintrail/collaboration/application/actor';
+import { FACILITATOR_PARTICIPANT } from '@domaintrail/collaboration/application/identity';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -925,5 +926,55 @@ describe('revisions', () => {
             ['current', 'stale'],
             [],
         ]);
+    });
+});
+
+describe('who may do what (ADR 0027): the actor of every use case, the rules in the commands', () => {
+    const FACILITATOR_ONLY: C.FacilitatorOnly = { type: 'FacilitatorOnly' };
+
+    test('only the facilitator queues, cancels, takes, confirms, restores and closes; nothing changes on a refusal', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const request = run.input.requests[0].request;
+        const before = await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 });
+
+        expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
+        expect(error(await s.use.cancelRun({ run: run.id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
+        expect(error(await s.use.takeRevision({ session: id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
+        expect(error(await s.use.confirmRevision({ revision: start.id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
+        await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(guest), recordExternalChanges: true }))).toEqual(
+            FACILITATOR_ONLY,
+        );
+        expect(error(await s.use.closeSession({ session: id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
+
+        // the restore was refused before the workspace was read: no revision recorded on the way, nothing written
+        expect(await s.read('sales/sales.dt')).toContain('state Cancelled');
+        expect(await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 })).toEqual(before);
+        expect((await s.use.restoreOperations({ session: id })).map((o) => [o.by, o.result, o.reason])).toEqual([[guest, 'Refused', 'FacilitatorOnly']]);
+        const state = value(await s.use.sessionState({ session: id }));
+        expect([state.session.state, state.runs.map((r) => r.state), state.revisions.map((r) => [r.origin.kind, r.state])]).toEqual([
+            'Open',
+            ['Queued'],
+            [['SessionStart', 'Recorded']],
+        ]);
+
+        expect(value(await s.use.cancelRun({ run: run.id, actor: actor(facilitator) })).state).toBe('Cancelled');
+        expect(value(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) })).state).toBe('Confirmed');
+        expect(value(await s.use.closeSession({ session: id, actor: actor(facilitator) })).state).toBe('Closed');
+    });
+
+    test('the actor of an identity: the facilitator when it holds the role, a participant otherwise', () => {
+        const ada = { provider: 'dev' as const, subject: 'ada' };
+        const bob = { provider: 'access' as const, subject: 'bob' };
+        expect(actorOf(ada, ada)).toEqual({ kind: 'participant', participant: FACILITATOR_PARTICIPANT, role: 'Facilitator', identity: ada });
+        expect(actorOf(bob, ada)).toEqual({ kind: 'participant', participant: value(C.makeParticipantId('access:bob')), role: 'Participant', identity: bob });
+        expect(actorOf(ada, undefined)).toEqual({
+            kind: 'participant',
+            participant: value(C.makeParticipantId('dev:ada')),
+            role: 'Participant',
+            identity: ada,
+        });
     });
 });
