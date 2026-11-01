@@ -4,8 +4,8 @@
 // reply says of each, ✓ ◐ – ?, when there are several); a click goes to the message, a hover marks it. The facilitator
 // answers a question by choosing, picks another alternative of an assumption, cancels a run, and through the card's
 // menu confirms its result, restores the workspace as it was before it or compares the two.
-import { Fragment, useRef, useState, type ReactNode } from 'react';
-import { Bot, Reply, CircleX, Ellipsis, RotateCcw, X } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
+import { Bot, Circle, CircleDot, Reply, CircleX, Ellipsis, RotateCcw, Square, SquareCheck, X } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
@@ -413,8 +413,28 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
 }
 
 /**
- * The assumptions of a reply as text — 「前提: …」 and 「別案: A / B」 —; the facilitator picks an alternative (a link) to
- * run the requests again with it.
+ * The mark at the start of a row of choices, the shape of what the facilitator answers with: a circle for one of a
+ * group (a single-choice question's option, an assumption kept or one of its alternatives), a square for a
+ * multiple-choice question's option. Outline while nothing was decided (or nothing in the group was chosen), filled for
+ * what was chosen; never violet (it is not clickable). The icon is hidden from screen readers, which hear 選択 / 未選択
+ * once something was decided.
+ */
+function ChoiceMark({ multiple = false, state, size = 13 }: { multiple?: boolean; state: 'open' | 'chosen' | 'unchosen'; size?: number }) {
+    const { tx } = useChat();
+    const chosen = state === 'chosen';
+    const Icon = multiple ? (chosen ? SquareCheck : Square) : chosen ? CircleDot : Circle;
+    return (
+        <span className="choice-mark">
+            <Icon size={size} aria-hidden />
+            {state !== 'open' && <span className="visually-hidden">{chosen ? tx.chat.choice.chosen : tx.chat.choice.unchosen}</span>}
+        </span>
+    );
+}
+
+/**
+ * The assumptions of a reply, each as a group of rows one of which is taken — 「前提: …」 (kept as it is) and each
+ * 「別案: …」 — with ○ at their start and the votes at their right; the facilitator picks an alternative (a link) to
+ * run the requests again with it. Once picked, the alternative has ◉ and the rest are muted.
  */
 function Assumptions({
     run,
@@ -427,58 +447,61 @@ function Assumptions({
     reply: ReplyView;
     offer: boolean;
     votes: boolean;
-    /** The alternative the facilitator picked: ✓ on it, the others muted, and who picked it under the assumption. */
+    /** The alternative the facilitator picked: ◉ on it, the others muted, and who picked it under the assumption. */
     picked: PickedAlternative | undefined;
 }) {
     const { tx, actions, onNavigate } = useChat();
     const r = tx.chat.reply;
     return (
         <ul className="reply-assumptions">
-            {reply.assumptions.map((a, i) => (
-                <li key={i} className={`reply-assumption${picked?.assumption === i ? ' decided' : ''}`}>
-                    <span className="reply-assumption-line">
-                        <span className="reply-text">
-                            <span className="reply-label">{r.assumption}: </span>
-                            <ReplyText text={a.text} onNavigate={onNavigate} />
-                        </span>
-                        {/* ♡ on the assumption itself: keep it as it is */}
-                        {votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />}
-                    </span>
-                    {a.alternatives.length > 0 && (
-                        <span className="reply-alternatives">
-                            <span className="reply-label">{r.alternatives}: </span>
-                            {a.alternatives.map((alt, j) => (
-                                <Fragment key={alt.id}>
-                                    {j > 0 && ' / '}
-                                    {offer ? (
-                                        <button
-                                            className="reply-alternative pickable"
-                                            disabled={actions.busy}
-                                            data-tooltip={tx.chat.pickAlternative}
-                                            onClick={() => void actions.pick(run, i, alt.id, tx.chat.alternativeNote(a.text, alt.label))}
-                                        >
-                                            <ReplyText text={alt.label} onNavigate={onNavigate} />
-                                        </button>
-                                    ) : (
-                                        <span
-                                            className={`reply-alternative${picked?.assumption !== i ? '' : picked.alternative === alt.id ? ' chosen' : ' unchosen'}`}
-                                        >
-                                            {picked?.assumption === i && picked.alternative === alt.id && (
-                                                <span className="decided-mark" role="img" aria-label={tx.chat.picked}>
-                                                    ✓{' '}
+            {reply.assumptions.map((a, i) => {
+                const decided = picked?.assumption === i;
+                const state = (alternative: string | undefined): 'open' | 'chosen' | 'unchosen' =>
+                    !decided ? 'open' : picked.alternative === alternative ? 'chosen' : 'unchosen';
+                const kept = state(undefined);
+                return (
+                    <li key={i} className={`reply-assumption${decided ? ' decided' : ''}`}>
+                        <ul className="reply-choices">
+                            {/* ♡ on the assumption itself: keep it as it is */}
+                            <li className={`reply-choice vote-row ${kept}`}>
+                                <ChoiceMark state={kept} size={12} />
+                                <span className="reply-text">
+                                    <span className="reply-label">{r.assumption}: </span>
+                                    <ReplyText text={a.text} onNavigate={onNavigate} />
+                                </span>
+                                {votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />}
+                            </li>
+                            {a.alternatives.map((alt) => {
+                                const s = state(alt.id);
+                                return (
+                                    <li key={alt.id} className={`reply-choice vote-row ${s}`}>
+                                        <ChoiceMark state={s} size={12} />
+                                        <span className="reply-text">
+                                            <span className="reply-label">{r.alternative}: </span>
+                                            {offer ? (
+                                                <button
+                                                    className="reply-alternative pickable"
+                                                    disabled={actions.busy}
+                                                    data-tooltip={tx.chat.pickAlternative}
+                                                    onClick={() => void actions.pick(run, i, alt.id, tx.chat.alternativeNote(a.text, alt.label))}
+                                                >
+                                                    <ReplyText text={alt.label} onNavigate={onNavigate} />
+                                                </button>
+                                            ) : (
+                                                <span className="reply-alternative">
+                                                    <ReplyText text={alt.label} onNavigate={onNavigate} />
                                                 </span>
                                             )}
-                                            <ReplyText text={alt.label} onNavigate={onNavigate} />
                                         </span>
-                                    )}
-                                    {votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i, alternative: alt.id }} />}
-                                </Fragment>
-                            ))}
-                        </span>
-                    )}
-                    {picked?.assumption === i && <DecidedLine label={tx.chat.picked} by={picked.by} run />}
-                </li>
-            ))}
+                                        {votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i, alternative: alt.id }} />}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                        {decided && <DecidedLine label={tx.chat.picked} by={picked.by} run />}
+                    </li>
+                );
+            })}
         </ul>
     );
 }
@@ -506,9 +529,9 @@ function DecidedLine({ label, by, run = false }: { label: string; by: Decider; r
 
 /**
  * A run's questions once a later run took over their requests, as they were asked — the same options in the same
- * order, without anything to choose —: ✓ on what was answered (and その他 with the own words as a last row), the other
- * options muted, the votes frozen at the right, and who answered and when after the last question. Left unanswered,
- * no ✓ and no line.
+ * order, without anything to choose —: the filled mark (◉ or ☑) on what was answered (and その他 with the own words as a
+ * last row), the other options muted with the outline mark, the votes frozen at the right, and who answered and when
+ * after the last question. Left unanswered, nothing filled and no line.
  */
 function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyView; state: Exclude<QuestionsState, { kind: 'open' }> }) {
     const { tx, onNavigate } = useChat();
@@ -525,12 +548,10 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
                             </p>
                             <ul className="reply-options" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
                                 {q.options.map((o) => {
-                                    const chosen = answer?.chosen.includes(o.id) ?? false;
+                                    const state = !answers ? 'open' : answer?.chosen.includes(o.id) ? 'chosen' : 'unchosen';
                                     return (
-                                        <li key={o.id} className={`reply-option vote-row decided-option${answers ? (chosen ? ' chosen' : ' unchosen') : ''}`}>
-                                            <span className="decided-mark" {...(chosen && { role: 'img', 'aria-label': tx.chat.answered })}>
-                                                {chosen ? '✓' : ''}
-                                            </span>
+                                        <li key={o.id} className={`reply-option vote-row decided-option ${state}`}>
+                                            <ChoiceMark multiple={q.multiple} state={state} />
                                             <span>
                                                 <span className="reply-option-label">
                                                     <ReplyText text={o.label} onNavigate={onNavigate} />
@@ -547,9 +568,7 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
                                 })}
                                 {answer?.text !== undefined && (
                                     <li className="reply-option vote-row decided-option chosen">
-                                        <span className="decided-mark" role="img" aria-label={tx.chat.answered}>
-                                            ✓
-                                        </span>
+                                        <ChoiceMark multiple={q.multiple} state="chosen" />
                                         <span className="decided-other">
                                             {tx.chat.answeredOther}: {answer.text}
                                         </span>
@@ -567,7 +586,8 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
 
 /**
  * A run's questions for whoever is not answering them (the participants, and everyone once the session closed): each
- * with its options as plain rows and the votes at their right — a participant's ♡ while the run waits for the answer.
+ * with its options as rows with the outline mark of their kind (○ one, ☐ several: filled once answered) and the votes
+ * at their right — a participant's ♡ while the run waits for the answer.
  * Choosing is the facilitator's (the answer form); "other" is not offered here (participants write in the chat).
  */
 function QuestionVotes({ run, reply }: { run: RunJson; reply: ReplyView }) {
@@ -582,6 +602,7 @@ function QuestionVotes({ run, reply }: { run: RunJson; reply: ReplyView }) {
                     <ul className="reply-options" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
                         {q.options.map((o) => (
                             <li key={o.id} className="reply-option vote-row">
+                                <ChoiceMark multiple={q.multiple} state="open" />
                                 <span>
                                     <span className="reply-option-label">
                                         <ReplyText text={o.label} onNavigate={onNavigate} />

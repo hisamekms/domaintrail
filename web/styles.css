@@ -4352,7 +4352,7 @@ del.was.block {
     font-size: 0.75rem;
     line-height: 1.5;
 }
-/* an assumption as text: 「前提: …」 and 「別案: A / B」 */
+/* an assumption as a group of rows: 「前提: …」, then each 「別案: …」 */
 .reply-assumption {
     margin-top: 2px;
     color: var(--text-soft);
@@ -4425,9 +4425,16 @@ del.was.block {
     line-height: 1.5;
     cursor: default;
 }
+/* the facilitator's radio or checkbox: the size and place of the mark the other rows have (.choice-mark) */
 .reply-option input {
     flex: none;
     margin: 2px 0 0;
+}
+.reply-option input:is([type='radio'], [type='checkbox']) {
+    width: 13px;
+    height: 13px;
+    margin: calc((1.5em - 13px) / 2) 0 0;
+    font: inherit;
 }
 .reply-option-detail {
     display: block;
@@ -5012,19 +5019,26 @@ del.was.block {
 }
 /* ---------- answered questions and chosen alternatives ---------- */
 
-/* a question once answered (or left): the same rows as when it was asked, ✓ where the radio was, the rest muted */
-.reply-option.decided-option > .decided-mark {
+/* the mark at the start of a row of choices: ○ / ☐ outline and muted, ◉ / ☑ once chosen in the text's colour; centred
+   on the row's first line, where the facilitator's radio or checkbox is */
+.choice-mark {
     flex: none;
-    width: 13px;
+    display: inline-flex;
+    align-items: center;
+    height: 1.5em;
+    color: var(--muted);
 }
-.reply-option.decided-option > .decided-mark + span {
+.choice-mark > svg {
+    display: block;
+}
+.chosen > .choice-mark {
+    color: var(--text);
+}
+.reply-option > .choice-mark + span {
     flex: 1;
     min-width: 0;
 }
-.decided-mark {
-    color: var(--text);
-    text-align: center;
-}
+/* a question once answered (or left): the same rows as when it was asked, the chosen ones filled, the rest muted */
 .decided-option.chosen {
     color: var(--text);
 }
@@ -5038,12 +5052,36 @@ del.was.block {
     white-space: pre-wrap;
     word-break: break-word;
 }
-/* an alternative picked: ✓ before it, the other alternatives muted */
-.reply-alternative.chosen {
+/* an assumption's rows: 前提 and its alternatives one under the other; once one is picked, it in the text's colour and
+   the others muted */
+.reply-choices {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.reply-choice + .reply-choice {
+    margin-top: 2px;
+}
+.reply-choice > .reply-text {
+    flex: 1;
+    min-width: 0;
+}
+.reply-choice.chosen {
     color: var(--text);
 }
-.reply-alternative.unchosen {
+.reply-choice.unchosen {
     color: var(--muted);
+}
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 /* who decided and when: small and muted, under what was decided */
 .decided-line {
@@ -5082,8 +5120,7 @@ del.was.block {
     align-items: flex-start;
     gap: 6px;
 }
-.vote-row > .reply-option,
-.vote-row > span:first-child {
+.vote-row > .reply-option {
     flex: 1;
     min-width: 0;
 }
@@ -5113,9 +5150,6 @@ del.was.block {
 .reply-assumption + .reply-assumption {
     margin-top: 0.375rem;
 }
-.reply-alternatives .vote-mark {
-    margin-left: 3px;
-}
 .vote-heart {
     display: inline-grid;
     place-items: center;
@@ -5138,16 +5172,6 @@ del.was.block {
 }
 .session-chat button.mark-count:hover {
     text-decoration: underline;
-}
-/* an assumption: its text, and its vote (kept as it is) at the right */
-.reply-assumption-line {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-}
-.reply-assumption-line > .reply-text {
-    flex: 1;
-    min-width: 0;
 }
 /* who voted: a small list under the count (a click, for touch) */
 .mark-who {

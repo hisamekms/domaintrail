@@ -176,9 +176,10 @@ The chat has two views:
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
   restore and comparison from a card's ⋯ and the session's actions from the head's ⋯.
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
-  run waits; the facilitator sees the counts and decides. An answered question keeps its options, with ✓ on what was
-  chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked alternative has ✓ and
-  `選択 name · time → #n`. Anyone reacts to a message or an AI turn with any one emoji
+  run waits; the facilitator sees the counts and decides. Options start with ○ (single choice) or ☐ (multiple), and
+  an assumption's 前提 and 別案 stand one under the other, each with ○. An answered question keeps its options, with
+  the filled mark (◉, ☑) on what was chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked
+  alternative has ◉ and `選択 name · time → #n`. Anyone reacts to a message or an AI turn with any one emoji
   (☺+ on hover: the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
   meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
   who marked is in the tooltip and, for a vote, in a list on a click.
