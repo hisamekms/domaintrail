@@ -129,6 +129,9 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         }
     }
 
+    // built before the rules run: they move onto it one by one (T10 of docs/plans/0027-boundaries.md), reporting through
+    // a `RuleSink` (domain/diagnostics.ts) that shares the list of `sink`, so that the diagnostics keep their order
+    const sourceModel = syntaxOk ? buildSourceModel(index, resolveFile) : undefined;
     if (syntaxOk) {
         const sink = new DiagnosticSink(resolveFile);
         checkNames(index, sink);
@@ -149,7 +152,6 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
     }
 
     const model = syntaxOk ? buildModel(index, resolveFile) : undefined;
-    const sourceModel = syntaxOk ? buildSourceModel(index, resolveFile) : undefined;
     diagnostics.sort(compareDiagnostics);
     return {
         files: sources.map((s) => s.path),

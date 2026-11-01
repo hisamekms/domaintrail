@@ -8,9 +8,11 @@ import { elementIdOf } from './element-id.js';
 export type FileResolver = (uri: string) => string;
 
 export class DiagnosticSink {
-    readonly items: Diagnostic[] = [];
-
-    constructor(private readonly fileOf: FileResolver) {}
+    /** `items`: where to add the diagnostics; a list shared with the rules on the model as written keeps their order. */
+    constructor(
+        private readonly fileOf: FileResolver,
+        readonly items: Diagnostic[] = [],
+    ) {}
 
     report(severity: Severity, code: ModelingRuleId, message: string, node: AstNode, property?: string, index?: number, hint?: string): void {
         const { file, start, end, elementId } = siteOf(node, this.fileOf, property, index);

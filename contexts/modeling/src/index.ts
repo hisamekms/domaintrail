@@ -58,8 +58,8 @@ export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } fro
 export type { ModelingRuleId } from './domain/rule-ids.js';
 
 // ---- the model as written, for the rules: what `DomainAnalysis.sourceModel` holds ------------------------------
-// (not published language: Modeling's rules and, from T10, the generator's name check read it; its lookups and the
-// static types stay inside until then, since the syntax's helpers below still have their names)
+// (not published language: Modeling's rules and, from T10, the generator's name check read it and report through
+// `RuleSink`; its lookups and member helpers stay inside until then, since the syntax's below still have their names)
 export type {
     AggregateDecl,
     AggregateMember,
@@ -101,6 +101,7 @@ export type {
     WithFieldSets,
     WithMembers,
 } from './domain/source-model.js';
+export { RuleSink } from './domain/diagnostics.js';
 
 // ---- use cases: Modeling's analysis of the `.dt` sources -------------------------------------------------------
 export { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
