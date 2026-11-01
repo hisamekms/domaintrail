@@ -3,7 +3,7 @@ import { commonFields, fieldsOf, includedFields, statesOf, type FieldDecl, type 
 
 /**
  * M016: field sets (`fields Name { ... }`) and `with`.
- *   - only aggregates, entities and events take field sets; a field set does not include others
+ *   - only aggregates, entities, value objects and events take field sets; a field set does not include others
  *   - a field set holds plain fields only (no `owns`, `references` or invariants), and no `id`: identity is declared
  *     by each aggregate and entity itself (M013)
  *   - a field name comes from one place only: the element itself or one of its field sets
@@ -32,16 +32,13 @@ export function checkFieldSets(model: SourceModel, rules: RuleSink): void {
 
     for (const el of model.elements) {
         if (!('fieldSets' in el) || el.fieldSets.length === 0) continue;
-        if (el.kind === 'fieldSet' || el.kind === 'valueObject' || el.kind === 'error') {
-            const what =
-                el.kind === 'fieldSet'
-                    ? `field set '${el.name}' cannot include other field sets`
-                    : `${el.kind === 'valueObject' ? 'value object' : 'error'} '${el.name}' cannot take field sets`;
+        if (el.kind === 'fieldSet' || el.kind === 'error') {
+            const what = el.kind === 'fieldSet' ? `field set '${el.name}' cannot include other field sets` : `error '${el.name}' cannot take field sets`;
             const hint =
                 el.kind === 'fieldSet'
                     ? `list the field sets on the elements that use '${el.name}' instead`
                     : `remove 'with' and declare the fields in '${el.name}'`;
-            rules.error('M016', `'with' is only for aggregates, entities and events; ${what}.`, el.fieldSets[0]!.at, hint);
+            rules.error('M016', `'with' is only for aggregates, entities, value objects and events; ${what}.`, el.fieldSets[0]!.at, hint);
             continue;
         }
         checkUses(el, rules);

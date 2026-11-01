@@ -193,6 +193,10 @@ describe('ownership (M003, M004, M012)', () => {
         expect(await through('value Rule { expr: Expr } union Expr { lit { value: Int } rule { rule: Rule } }')).toEqual([]);
         expect(await through('value A { b: B } value B { a: A[1..*] }')).toEqual(['Recursive value without a finite value: A -> B -> A.']);
         expect(await through('union Expr { not { operand: Expr } }')).toEqual(['Recursive value without a finite value: Expr -> Expr.']);
+        expect(await through('fields Up { parent: Node? } value Node with Up { name: String }')).toEqual([]);
+        expect(await through('fields Up { parent: Node } value Node with Up { name: String }')).toEqual([
+            'Recursive value without a finite value: Node -> Node.',
+        ]);
         expect(await through('value Tree { children: Tree[0..*] } value Pair { left: Pair  tree: Tree }')).toEqual([
             'Recursive value without a finite value: Pair -> Pair.',
         ]);

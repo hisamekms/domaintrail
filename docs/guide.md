@@ -402,8 +402,8 @@ shared context Common "共通" { // shared kernel: usable by simple name from ev
 <!-- topic: field-sets -->
 ### Field sets
 
-Fields that several aggregates, entities or events have for the same domain reason are written once as a field set
-and taken on with `with`.
+Fields that several aggregates, entities, value objects or events have for the same domain reason are written once as
+a field set and taken on with `with`.
 
 ```dt
 // common/tenancy.dt
@@ -453,7 +453,7 @@ context Expenses "経費" {
 
 - `fields Name "label" { ... }` holds plain fields, written like any other field (type, multiplicity, label, `///`).
   No `owns`, `references`, invariants, `with` or `id` inside (M016).
-- `with A, B` after the name and label of an `aggregate`, `entity` or `event` (only those, M016). A field set is
+- `with A, B` after the name and label of an `aggregate`, `entity`, `value` or `event` (only those, M016). A field set is
   referenced like a type: by name in its own context and from shared contexts, as `Context.Name` otherwise.
 - The fields come first, in the order of `with`, and then count as the element's own: invariants see them, and an
   aggregate's states share them. A name may come from one place only, the element or one of its field sets (M016).
@@ -2124,7 +2124,7 @@ storming](#diagnostics-of-a-storming).
 | M013 | aggregates and entities have an `id` field of their own ID type |
 | M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
 | M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
-| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
+| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities, value objects and events, each field name from one place |
 | M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |

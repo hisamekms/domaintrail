@@ -187,7 +187,7 @@ export interface EnumDecl extends ElementBase {
     values: EnumValueDecl[];
 }
 
-/** Elements that may name field sets with `with` (only aggregates, entities and events may, M016). */
+/** Elements that may name field sets with `with` (only aggregates, entities, value objects and events may, M016). */
 interface WithFieldSetsBase extends ElementBase {
     /** `with A, B`: each reference with its site as a property of the element (`fieldSets`, index i). */
     fieldSets: Ref<FieldSetDecl>[];

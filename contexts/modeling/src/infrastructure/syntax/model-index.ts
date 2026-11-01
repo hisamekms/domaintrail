@@ -73,7 +73,7 @@ export class ModelIndex {
     }
 }
 
-/** Elements that may name field sets with `with` (only aggregates, entities and events may, see M016). */
+/** Elements that may name field sets with `with` (only aggregates, entities, value objects and events may, see M016). */
 export type WithFieldSets = Aggregate | Entity | EventDecl | ValueObject | ErrorDecl | FieldSet;
 
 /** The field sets an element names with `with`, resolved, each once, in order. */

@@ -66,17 +66,39 @@ describe('field sets', () => {
         expect(a.model!.elements['Sales.V'].fields.map((f) => f.name)).toEqual(['fields', 'with']);
     });
 
-    test('M016: with only on aggregates, entities and events', async () => {
+    test('M016: with only on aggregates, entities, value objects and events', async () => {
         const a = await checkSales(`
   fields F { x: Int }
   fields G with F { y: Int }
   value V with F { v: Int }
   error E with F`);
         expect(only(a, 'M016').map((d) => d.message)).toEqual([
-            "'with' is only for aggregates, entities and events; field set 'G' cannot include other field sets.",
-            "'with' is only for aggregates, entities and events; value object 'V' cannot take field sets.",
-            "'with' is only for aggregates, entities and events; error 'E' cannot take field sets.",
+            "'with' is only for aggregates, entities, value objects and events; field set 'G' cannot include other field sets.",
+            "'with' is only for aggregates, entities, value objects and events; error 'E' cannot take field sets.",
         ]);
+    });
+
+    test('a value object takes field sets: its fields come first, its invariants see them, a name comes from one place', async () => {
+        const a = await checkSales(`
+  fields Described { label: String  doc: String? }
+  value State with Described {
+    name: String
+    invariant named { length(name) > 0 and length(label) > 0 }
+  }
+  value Twice with Described { label: String }`);
+        expect(only(a, 'M016').map((d) => d.message)).toEqual(["Field 'label' of 'Twice' is already taken from field set 'Described'."]);
+        const v = a.model!.elements['Sales.State'];
+        expect(v.fieldSets).toEqual(['Sales.Described']);
+        expect(v.fields.map((f) => `${f.name}${f.fieldSet ? ` (${f.fieldSet})` : ''}`)).toEqual(['label (Sales.Described)', 'doc (Sales.Described)', 'name']);
+        expect(a.diagnostics.filter((d) => d.code !== 'M016')).toEqual([]);
+    });
+
+    test('a value object of a shared context takes field sets of shared contexts only (M014)', async () => {
+        const a = await check({
+            'a.dt': `shared context Common { fields Audit { at: Timestamp } value Stamp with Audit, Sales.Local { by: String } }
+context Sales { fields Local { note: String } }`,
+        });
+        expect(only(a, 'M014').map((d) => d.message)).toEqual(["Shared context 'Common' cannot depend on 'Sales.Local' of a non-shared context."]);
     });
 
     test('M016: a field set holds plain fields only, and no id', async () => {

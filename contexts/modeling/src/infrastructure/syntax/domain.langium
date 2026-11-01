@@ -48,12 +48,12 @@ EnumValue:
 ValueObject:
     'value' name=ID label=STRING? WithFieldSets? ('{' members+=DataMember* '}')?;
 
-// Fields that several aggregates, entities or events take on with `with`: plain fields only.
+// Fields that several aggregates, entities, value objects or events take on with `with`: plain fields only.
 FieldSet:
     'fields' name=ID label=STRING? WithFieldSets? '{' members+=DataMember* '}';
 
-// `with A, B`: the fields of field sets, placed before the element's own fields. Only aggregates, entities and events
-// take field sets; elsewhere (and nested in a field set) it is reported by M016.
+// `with A, B`: the fields of field sets, placed before the element's own fields. Only aggregates, entities, value
+// objects and events take field sets; elsewhere (and nested in a field set) it is reported by M016.
 fragment WithFieldSets:
     'with' fieldSets+=[FieldSet:QualifiedName] (',' fieldSets+=[FieldSet:QualifiedName])*;
 

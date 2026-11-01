@@ -4,6 +4,7 @@ import {
     commonFields,
     fieldsOf,
     identityField,
+    includedFields,
     lookupVisible,
     statesOf,
     variantFields,
@@ -27,6 +28,11 @@ function allFields(el: Owner): FieldDecl[] {
     if (el.kind === 'aggregate') return [...commonFields(el), ...statesOf(el).flatMap((s) => fieldsOf(s.members))];
     if (el.kind === 'union') return variantFields(el);
     return fieldsOf(el.members);
+}
+
+/** The fields a value holds, for its cycles: a value object's include those of its field sets. */
+function heldFields(el: Owner): FieldDecl[] {
+    return el.kind === 'valueObject' ? [...includedFields(el).map((x) => x.field), ...allFields(el)] : allFields(el);
 }
 
 /** The ID type an aggregate is identified by, as written in its `id` field (or the conventional name). */
@@ -239,7 +245,7 @@ function checkCycles(owners: Owner[], rules: RuleSink): void {
     const reported = new Set<FieldDecl>();
     const visit = (el: Owner, path: Owner[]): void => {
         state.set(el, 'visiting');
-        for (const f of allFields(el)) {
+        for (const f of heldFields(el)) {
             if (f.kind === 'references') continue;
             const decl = f.type?.decl?.target;
             if (!isOwnable(decl)) continue;
@@ -283,7 +289,7 @@ function finiteValues(owners: readonly Owner[]): Set<Owner> {
         grew = false;
         for (const v of values) {
             if (finite.has(v)) continue;
-            const ok = v.kind === 'union' ? v.variants.some((x) => fieldsOf(x.members).every(has)) : fieldsOf(v.members).every(has);
+            const ok = v.kind === 'union' ? v.variants.some((x) => fieldsOf(x.members).every(has)) : heldFields(v).every(has);
             if (ok) {
                 finite.add(v);
                 grew = true;

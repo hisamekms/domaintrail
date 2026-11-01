@@ -36,12 +36,16 @@ export function checkShared(model: SourceModel, rules: RuleSink): void {
                 `move '${el.name}' to a context that is not shared`,
             );
         }
-        for (const ref of typeRefsIn(el)) {
-            const target = ref.decl?.target;
+        // the types it holds, and the field sets it takes (`with`)
+        const uses = [
+            ...typeRefsIn(el).map((ref) => ({ target: ref.decl?.target, at: ref.at })),
+            ...('fieldSets' in el ? el.fieldSets.map((r) => ({ target: r.target, at: r.at })) : []),
+        ];
+        for (const { target, at } of uses) {
             const targetCtx = target?.context;
             if (target && targetCtx && !shared.has(targetCtx)) {
                 const hint = `move '${target.name}' into a shared context, or move '${el.name}' out of '${ctx}'`;
-                rules.error('M014', `Shared context '${ctx}' cannot depend on '${targetCtx}.${target.name}' of a non-shared context.`, ref.at, hint);
+                rules.error('M014', `Shared context '${ctx}' cannot depend on '${targetCtx}.${target.name}' of a non-shared context.`, at, hint);
             }
         }
         const prev = definedIn.get(el.name);

@@ -89,6 +89,20 @@ describe('field sets: generated TypeScript', () => {
         expect(ts(a, 'Billing')).toMatch(/export interface Invoice extends Sales\.Performed \{\n    readonly id: InvoiceId;\n\}/);
     });
 
+    test('a value object takes field sets: it extends them, its equality and checks see their fields', async () => {
+        const v = await checkSales(`
+  fields Described { label: String  doc: String? }
+  value Term with Described {
+    name: String
+    invariant named { length(name) > 0 and length(label) > 0 }
+  }`);
+        expect(v.diagnostics).toEqual([]);
+        const sales = ts(v, 'Sales');
+        expect(sales).toMatch(/export interface Term extends Described \{\n    readonly name: string;\n\}/);
+        expect(sales).toContain('return a.label === b.label && sameOptional(a.doc, b.doc, ($0: string, $1: string) => $0 === $1) && a.name === b.name;');
+        expect(sales).toContain("if (!((term.name.length > 0) && (term.label.length > 0))) violated.push('named');");
+    });
+
     test('unions of the events, the aggregates and the events of each aggregate', () => {
         const sales = ts(a, 'Sales');
         expect(sales).toContain(

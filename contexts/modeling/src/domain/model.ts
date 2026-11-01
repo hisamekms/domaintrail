@@ -193,7 +193,7 @@ export interface ElementModel extends Described {
     tagType?: string;
     variants?: VariantModel[];
     /**
-     * Aggregates, entities and events: the field sets named with `with` (qualified names). Their fields come first in
+     * Aggregates, entities, value objects and events: the field sets named with `with` (qualified names). Their fields come first in
      * `fields`, marked with `fieldSet`.
      */
     fieldSets?: string[];
