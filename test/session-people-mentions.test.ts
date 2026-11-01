@@ -17,7 +17,7 @@ import {
     openSessionDatabase,
 } from '@domaintrail/collaboration';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
-import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 
 const dirs: string[] = [];

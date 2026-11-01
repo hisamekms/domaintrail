@@ -4,6 +4,7 @@
 // (`MAX_REACTION_EMOJI`); whether a vote can still change (the rules of `domain/marks.ts`, the same as the server's).
 // Everything is derived from the session's state on the page.
 import {
+    DEFAULT_QUICK_REACTIONS,
     isVoteTarget,
     markKey,
     type MarkSignData,
@@ -11,11 +12,11 @@ import {
     type MarkTargetData,
     markTargetStatus,
     MAX_REACTION_EMOJI,
+    readEmoji,
     signKey,
     VOTE,
 } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { DEFAULT_QUICK_REACTIONS, readEmoji } from '@domaintrail/modeling';
 
 export { MAX_REACTION_EMOJI, markKey, readEmoji, signKey, VOTE, type MarkTargetData };
 export type Sign = MarkSignData;

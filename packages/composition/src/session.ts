@@ -35,7 +35,7 @@ import {
 } from '@domaintrail/collaboration';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { DEFAULT_SOURCES, type ResolvedSessionConfig } from '@domaintrail/modeling';
+import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import {
     type Connection,
     createAgentApi,
@@ -53,6 +53,7 @@ import {
     SessionError,
     sessionHostPolicy,
     stateBody,
+    type ResolvedSessionConfig,
 } from '@domaintrail/presentation';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';

@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { createClaudeCodeRunner } from './claude-code.js';
-import { agentDtArguments, dtShim, findProgram, inside, launcherScript, pinDt, withPathFirst, writeDtShim } from './dt-shim.js';
+import { agentDtArguments, checkDtOutsideWorkspace, dtShim, findProgram, inside, launcherScript, pinDt, withPathFirst, writeDtShim } from './dt-shim.js';
 import { createDtTools } from './dt-tools.js';
 
 const dirs: string[] = [];
@@ -70,6 +70,31 @@ describe("the agent's dt (session.agent.dt)", () => {
         expect(inside(root, path.join(`${root}-other`, 'x.js'))).toBe(false);
         expect(inside(root, root)).toBe(true);
         expect(inside(root, base)).toBe(false);
+    });
+
+    test('the configured dt (relative to the config file) runs nothing inside the workspace, symbolic links followed', async () => {
+        const root = await scratch();
+        const outside = await scratch();
+        await mkdir(path.join(root, 'tools'));
+        await symlink(path.join(root, 'tools'), path.join(outside, 'link'));
+        const refusal = (dt: readonly string[] | undefined): string | undefined => {
+            try {
+                checkDtOutsideWorkspace(dt, root, (msg) => {
+                    throw new Error(msg);
+                });
+                return undefined;
+            } catch (e) {
+                return e instanceof Error ? e.message : String(e);
+            }
+        };
+        expect(refusal(undefined)).toBeUndefined();
+        expect(refusal(['node', `../${path.basename(outside)}/dt.js`])).toBeUndefined();
+        expect(refusal([path.join(outside, 'dt')])).toBeUndefined();
+        expect(refusal(['node', './tools/dt.js'])).toBe(
+            `'session.agent.dt' may not run anything inside the workspace (${path.join(root, 'tools', 'dt.js')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
+        );
+        for (const dt of [['node', `${path.join(outside, 'link')}/dt.js`], ['node', '..evil/dt.js'], ['./tools/dt.js']])
+            expect(refusal(dt)).toContain("'session.agent.dt' may not run anything inside the workspace");
     });
 
     test("the agent's arguments: fmt or check, then .dt / .dtes files of the workspace; no option; -r is the launcher's", async () => {

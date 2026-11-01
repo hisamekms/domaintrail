@@ -47,6 +47,8 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+// the rule of the `Emoji` primitive: what counts as one emoji and the form it is kept in (the page decides alike)
+export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
 export { createCollaboration, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
@@ -63,6 +65,17 @@ export {
     type IdentityProvider,
 } from './application/identity.js';
 export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
+// its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
+export {
+    COLLABORATION_CONFIG_KEYS,
+    resolveCollaborationConfig,
+    validateCollaborationConfig,
+    validateIdentityConfig,
+    validatePreviousRunsConfig,
+    type ClefModel,
+    type CollaborationConfigFile,
+    type ResolvedCollaborationConfig,
+} from './application/config.js';
 export { type Clock, type CollaborationDeps, type OutboxEntry, type SignIn, type Stores } from './application/ports.js';
 
 // ---- infrastructure, for the app that wires it -----------------------------------------------------------------

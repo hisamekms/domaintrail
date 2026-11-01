@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
-import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { statusOf } from '@domaintrail/presentation';
 
 const DT = `context Shop {

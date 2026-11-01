@@ -2,7 +2,7 @@
 // Workers AI REST API (`POST https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}`
 // with `{ model, state, questions }`, answered `{ answers: { <id>: { type: "noul", noul: <probability> } } }`, wrapped in
 // Cloudflare's `{ result, success }`). Neither the message nor the token is logged.
-import type { ClefModel } from '@domaintrail/modeling';
+import type { ClefModel } from '../application/config.js';
 import type { MessageClassifier } from '../application/classifier.js';
 
 export interface ClefOptions {

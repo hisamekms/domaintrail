@@ -131,13 +131,6 @@ export const MAP: Record<string, Module> = {
             // checks (T4)
             analysis: { becomes: 'capabilities/analysis', upstream: ['storming'] },
         },
-        exceptions: {
-            'pure-core-io': [
-                // the configuration: split by owner, and the `realpathSync` check of `session.agent.dt` out of the pure
-                // validation (T6)
-                'core/config.ts: node:fs',
-            ],
-        },
     },
     collaboration: {
         kind: 'context',
@@ -152,10 +145,6 @@ export const MAP: Record<string, Module> = {
                 // `analysis`, which a context may not import; the validator goes behind Collaboration's ModelValidator
                 // port, implemented in the app (T8)
                 '@domaintrail/modeling/analysis/analyze',
-                // not Modeling's language: the rule of Collaboration's `Emoji` primitive (`isNormalEmoji`) and the
-                // `session.classifier` setting (`ClefModel`) move to Collaboration (T6)
-                '@domaintrail/modeling/core/emoji',
-                '@domaintrail/modeling/core/config',
             ],
         },
     },
@@ -188,7 +177,7 @@ export const MAP: Record<string, Module> = {
         kind: 'app',
         dir: 'packages/presentation',
         sources: 'packages/presentation/src',
-        upstream: ['collaboration', 'modeling', 'visualization'],
+        upstream: ['agent', 'collaboration', 'modeling', 'visualization'],
     },
     composition: {
         kind: 'app',

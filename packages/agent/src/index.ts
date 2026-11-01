@@ -8,7 +8,16 @@ export { type AgentApi, type AgentInvocation, type AgentOutcome, type AgentRunne
 
 // ---- adapters, for the app that wires them ---------------------------------------------------------------------
 export { createClaudeCodeRunner, type AgentCommand } from './infrastructure/claude-code.js';
-export { dtCommandOf, pinDt, type PinnedDt } from './infrastructure/dt-shim.js';
+export { checkDtOutsideWorkspace, dtCommandOf, pinDt, type PinnedDt } from './infrastructure/dt-shim.js';
+// the adapters' settings in domaintrail.jsonc, `session.agent.allowedTools` and `session.agent.dt` (T6), composed by the app
+export {
+    AGENT_CONFIG_KEYS,
+    DEFAULT_AGENT_TOOLS,
+    resolveAgentConfig,
+    validateAgentConfig,
+    type AgentConfigFile,
+    type ResolvedAgentConfig,
+} from './infrastructure/config.js';
 export { createDtTools, type DtCommand } from './infrastructure/dt-tools.js';
 export { createHttpAgentApi } from './infrastructure/http-agent-api.js';
 export { randomNonce, systemClock } from './infrastructure/system.js';

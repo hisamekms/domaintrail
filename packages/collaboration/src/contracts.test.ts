@@ -11,7 +11,7 @@ import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, se
 import { hashBytes, snapshotFile, snapshotHash } from './domain/snapshot.js';
 import { tally } from './domain/validation.js';
 import { makeEmoji, markCommands } from './domain/marks.js';
-import { isNormalEmoji } from '@domaintrail/modeling';
+import { isNormalEmoji } from './domain/emoji.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`invalid example: ${JSON.stringify(r.error)}`);

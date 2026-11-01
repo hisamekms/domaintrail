@@ -1,8 +1,8 @@
 // Votes and reactions (ADR 0026, appendix "Votes and reactions"): the pure rules of marks and the emoji of a reaction
 // (the use case and the route: test/session-marks.test.ts; the migrations: infrastructure/migrations.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { isNormalEmoji, readEmoji } from '@domaintrail/modeling';
 import { Collaboration as C } from '../generated/index.js';
+import { readEmoji } from './emoji.js';
 import {
     exclusiveGroup,
     laterRunOf,
@@ -75,14 +75,9 @@ describe('one emoji (a reaction)', () => {
         ['🏃🏽‍♂', '🏃🏽‍♂️'],
         ['🏴󠁧󠁢󠁳󠁣󠁴󠁿', '🏴󠁧󠁢󠁳󠁣󠁴󠁿'],
         [' 🎉 ', '🎉'],
-    ])('%s is one emoji, kept as %s', (input, kept) => {
+    ])('%s, kept as %s, is an Emoji', (input, kept) => {
         expect(readEmoji(input)).toBe(kept);
-        expect(isNormalEmoji(kept)).toBe(true);
         expect(String(value(makeEmoji(kept)))).toBe(kept);
-    });
-
-    test.each([['ok'], ['1'], ['a'], ['👍👍'], ['👍 ❤️'], ['🇯'], ['👍\u0301'], [''], ['\u200D'], ['🏽'], ['👍'.repeat(20)]])('%j is not', (input) => {
-        expect(readEmoji(input)).toBeUndefined();
     });
 
     test('❤ and ❤️ are the same reaction: only the kept form is an Emoji', () => {

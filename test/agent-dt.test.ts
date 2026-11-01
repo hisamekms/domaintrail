@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { pinDt } from '@domaintrail/agent';
-import { ConfigError } from '@domaintrail/modeling';
+import { CONFIG_FILE_FORMAT, ConfigError } from '@domaintrail/presentation';
 import { loadConfig } from '@domaintrail/workspace';
 
 const dirs: string[] = [];
@@ -58,7 +58,7 @@ describe("the agent's dt (session.agent.dt)", () => {
         // in the config: the shapes, the script relative to the config file, nothing inside the workspace
         const configured = async (dt: unknown): Promise<string> => {
             await writeFile(path.join(root, 'domaintrail.json'), JSON.stringify({ session: { agent: { dt } } }));
-            return loadConfig({ start: root }).then(
+            return loadConfig({ start: root }, CONFIG_FILE_FORMAT).then(
                 (c) => JSON.stringify(c.session.agent.dt),
                 (e: unknown) => (e instanceof ConfigError ? `ConfigError ${String(e)}` : String(e)),
             );

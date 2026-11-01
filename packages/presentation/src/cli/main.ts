@@ -4,8 +4,6 @@ import { Command, InvalidArgumentError, Option } from 'commander';
 import {
     type Analysis,
     analyze,
-    checkTsContexts,
-    ConfigError,
     formatDiagnostic,
     formatDomain,
     formatStorming,
@@ -14,9 +12,9 @@ import {
     jsonDiagnostic,
     type JsonDiagnostic,
     policyModes,
-    type ResolvedConfig,
     staysInside,
 } from '@domaintrail/modeling';
+import { checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
 import { SessionError, type CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';

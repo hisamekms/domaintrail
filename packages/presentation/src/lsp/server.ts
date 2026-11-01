@@ -67,10 +67,7 @@ import {
     analyze,
     ast,
     commandsOf,
-    CONFIG_FILES,
-    ConfigError,
     DEFAULT_SOURCES,
-    defaultConfig,
     type Diagnostic,
     docComment,
     DomainGeneratedModule,
@@ -83,8 +80,8 @@ import {
     formatStorming,
     LabelResolver,
     ModelIndex,
-    type ResolvedConfig,
 } from '@domaintrail/modeling';
+import { CONFIG_FILES, ConfigError, defaultConfig, type ResolvedConfig } from '../config/config.js';
 
 export interface LanguageServerOptions {
     /** Explicit `--root`: where to look for the config, instead of the client's workspace folder. */

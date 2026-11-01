@@ -16,7 +16,7 @@
 //
 // Pure, and over the plain shapes of the runs and requests, so that the server (the generated types) and the page
 // (their JSON) decide the same way.
-import { isNormalEmoji } from '@domaintrail/modeling';
+import { isNormalEmoji } from './emoji.js';
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 
 /** A target as JSON carries it (the generated `MarkTarget` without its brands). */

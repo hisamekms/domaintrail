@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { analyze, DEFAULT_AGENT_TOOLS, formatDomain, formatStorming, generateTypeScript, resolveConfig } from '@domaintrail/modeling';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { analyze, formatDomain, formatStorming, generateTypeScript } from '@domaintrail/modeling';
+import { resolveConfig } from '@domaintrail/presentation';
 import { loadWorkspace } from '@domaintrail/workspace';
 import { EXAMPLES, check } from './helpers.js';
 

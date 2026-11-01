@@ -1,5 +1,25 @@
-import { type CliDeps, type CliIO, consoleIO, type LanguageServerFiles, runCli, startLanguageServer } from '@domaintrail/presentation';
-import { createGeneratedOutput, findDomainFiles, hasCastLintRule, LINT_HINT, loadConfig, loadWorkspace, SourceScope } from '@domaintrail/workspace';
+import {
+    type CliDeps,
+    type CliIO,
+    CONFIG_FILE_FORMAT,
+    consoleIO,
+    type LanguageServerFiles,
+    type ResolvedConfig,
+    runCli,
+    startLanguageServer,
+} from '@domaintrail/presentation';
+import {
+    createGeneratedOutput,
+    findDomainFiles,
+    hasCastLintRule,
+    LINT_HINT,
+    loadConfig as readConfig,
+    loadWorkspace,
+    SourceScope,
+} from '@domaintrail/workspace';
+
+/** domaintrail.jsonc, read by the workspace and resolved by the sections' owners as the app composes them. */
+const loadConfig = (opts: { start: string; configPath?: string }): Promise<ResolvedConfig> => readConfig(opts, CONFIG_FILE_FORMAT);
 
 /** The language server's view of the workspace: the config and the sources, as `dt check` finds them. */
 const languageServerFiles: LanguageServerFiles = {

@@ -93,6 +93,18 @@ export {
 
 // ---- use cases: the project analysis (T8: capabilities/analysis) ------------------------------------------------
 export { analyze, isStormingFile, type Analysis } from './analysis/analyze.js';
+// its section of domaintrail.jsonc, `sources` (T6), composed by the app; the workspace receives `sourceSelection`
+export {
+    DEFAULT_SOURCES,
+    IGNORED_DIRS,
+    resolveSourcesConfig,
+    sourceMatcher,
+    sourceSelection,
+    SOURCES_CONFIG_KEYS,
+    validateSourcesConfig,
+    type ResolvedSourcesConfig,
+    type SourcesConfigFile,
+} from './analysis/sources.js';
 
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './format/format.js';
@@ -101,27 +113,17 @@ export { formatStorming } from './storming/format.js';
 // ---- use cases: the TypeScript generator (T8: capabilities/generation) ------------------------------------------
 export { GENERATED_MARKER, generateTypeScript, type GeneratedFile, type PolicyMode } from './generator/typescript.js';
 export { aggregateParamName } from './generator/naming.js';
-
-// ---- the configuration of domaintrail.jsonc (T6: each section to its owner, composed by the app) ----------------
+// its sections of domaintrail.jsonc, `generate` and `lintHint` (T6), composed by the app
 export {
-    checkTsContexts,
-    CONFIG_FILES,
-    ConfigError,
-    DEFAULT_AGENT_TOOLS,
-    DEFAULT_SOURCES,
-    defaultConfig,
-    IGNORED_DIRS,
+    GENERATION_CONFIG_KEYS,
     policyModes,
-    resolveConfig,
-    sourceMatcher,
+    resolveGenerationConfig,
     staysInside,
-    type ClefModel,
-    type ResolvedConfig,
-    type ResolvedSessionConfig,
-} from './core/config.js';
-
-// ---- not Modeling's language: the emoji rule of Collaboration's `Emoji` (T6: moves to collaboration) ------------
-export { DEFAULT_QUICK_REACTIONS, isNormalEmoji, MAX_EMOJI_BYTES, readEmoji } from './core/emoji.js';
+    unknownTsContexts,
+    validateGenerationConfig,
+    type GenerationConfigFile,
+    type ResolvedGenerationConfig,
+} from './generator/config.js';
 
 // ---- the syntax, for the language server (T8: Modeling's and Storming's infrastructure/syntax) -----------------
 export * as ast from './language/generated/ast.js';

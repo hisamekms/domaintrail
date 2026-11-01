@@ -6,6 +6,7 @@ import {
     Collaboration,
     err,
     makeEmoji,
+    MAX_EMOJI_BYTES,
     MAX_REQUEST_MENTIONS,
     MAX_REQUEST_TARGETS,
     ok,
@@ -15,10 +16,10 @@ import {
     REPLY_LIMITS,
     type ReplyOutcome,
     type Result,
+    readEmoji,
     toAgentReply,
     VOTE,
 } from '@domaintrail/collaboration';
-import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling';
 
 /** Why an input was refused. */
 export interface InvalidInput {

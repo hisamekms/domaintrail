@@ -23,7 +23,7 @@ import {
     VOTE,
 } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
 

@@ -78,6 +78,7 @@
     "packages/presentation": {
       "name": "@domaintrail/presentation",
       "dependencies": {
+        "@domaintrail/agent": "workspace:*",
         "@domaintrail/collaboration": "workspace:*",
         "@domaintrail/modeling": "workspace:*",
         "@domaintrail/visualization": "workspace:*",
