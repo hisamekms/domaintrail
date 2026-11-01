@@ -3,10 +3,9 @@
 // it ended. Everything is derived from the session's state the page already holds: after the end the server
 // identifies no one any more, so the summary needs no call.
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { changeUnits, shownUnits, type ChangeUnit } from './history';
-import { bodyText } from './mentions';
+import { changeUnits, shownUnits, unitName, type ChangeUnit } from './history';
 import { listedParticipants, type Peers } from './presence';
-import { oneLine, participantNames } from './stream';
+import { participantNames } from './stream';
 
 type RevisionJson = SessionStateBody['revisions'][number];
 
@@ -69,12 +68,11 @@ export function unfinishedWork(state: Pick<SessionStateBody, 'runs' | 'revisions
 const TITLE_LENGTH = 60;
 
 /**
- * A change unit's title. For now the first request's text on one line (its mentions as `@name`), cut at 60
- * characters; the one place to switch to a derived title of the unit.
+ * A change unit's title in the summary: its name (`unitName`: the title the AI gave its first run that has one, else
+ * the head of its first message), cut at 60 characters.
  */
 export function unitTitle(unit: ChangeUnit): string {
-    const first = unit.runs[0].run.input.requests[0];
-    const text = oneLine(bodyText(first.body, first.targets.length));
+    const text = unitName(unit).text;
     return text.length > TITLE_LENGTH ? `${text.slice(0, TITLE_LENGTH - 1)}…` : text;
 }
 

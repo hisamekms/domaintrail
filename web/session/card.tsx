@@ -12,7 +12,7 @@ import { OtherDialog } from './answer-other';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { useChat, type Tx } from './chat-context';
 import { pickedAlternative, questionsState, type Decider, type PickedAlternative, type QuestionsState } from './decisions';
-import type { ChangeUnit } from './history';
+import { unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
@@ -39,7 +39,10 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     const status = statusOf(last.message);
     const cancellable = control && (last.run.state === 'Queued' || last.run.state === 'Running');
     const queuedBy = nameOf(first.run.queuedBy);
-    // an AI turn: the AI's avatar and name, the runs' numbers and time; the state only when it is not simply done
+    // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
+    const title = unitName(unit);
+    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); the
+    // state only when it is not simply done
     return (
         <div className={`run-card status-${status}${compact ? ' compact' : ''}`} data-card={unit.key}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
@@ -49,11 +52,16 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                 <div className="run-card-head">
                     <span className="chat-who">{tx.chat.agent}</span>
                     <span className="run-card-meta">
-                        <span className="run-card-number">{first.number === last.number ? `#${first.number}` : `#${first.number}–${last.number}`}</span>
-                        {' · '}
-                        <time dateTime={first.run.queuedAt}>{time(first.run.queuedAt)}</time>
-                        {' · '}
-                        <span data-tooltip={tx.chat.queued(queuedBy)}>{queuedBy}</span>
+                        {/* in 履歴, the heading above already names it */}
+                        {title.kind === 'title' && !compact && (
+                            <>
+                                <span className="run-card-title">{title.text}</span>
+                                {' · '}
+                            </>
+                        )}
+                        <time dateTime={first.run.queuedAt} data-tooltip={tx.chat.queued(queuedBy)}>
+                            {time(first.run.queuedAt)}
+                        </time>
                     </span>
                     {status !== 'done' && (
                         <span className={`run-card-status status-${status}`}>
@@ -177,10 +185,12 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
     const picked = done && done.assumptions.length > 0 ? pickedAlternative(run.run, runs) : undefined;
     return (
         <div className={`run-section${first ? '' : ' chained'}`} data-item={`run:${run.run.id}`}>
-            {/* a run that continues the card: its number and time, quietly */}
+            {/* a run that continues the card: its time, quietly (its number, for precision, in the tooltip) */}
             {!first && (
                 <div className="run-section-number">
-                    #{run.number} · <time dateTime={run.run.queuedAt}>{time(run.run.queuedAt)}</time>
+                    <time dateTime={run.run.queuedAt} data-tooltip={`${tx.chat.run(run.number)} · ${tx.chat.queued(nameOf(run.run.queuedBy))}`}>
+                        {time(run.run.queuedAt)}
+                    </time>
                 </div>
             )}
             {run.answer && !answerShown && <AnswerLine run={run} />}
@@ -559,21 +569,20 @@ function Assumptions({
 }
 
 /**
- * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); for a pick, the run it
- * queued as a link that goes to it (`→ #5`).
+ * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); for a pick, its time is a
+ * link to the run it queued (that run continues the same card, so it has no number to show).
  */
 function DecidedLine({ label, by, run = false }: { label: string; by: Decider; run?: boolean }) {
     const { tx, nameOf, jump } = useChat();
     return (
         <p className="decided-line">
-            {label} {nameOf(by.by)} · <time dateTime={by.at}>{time(by.at)}</time>
-            {run && (
-                <>
-                    {' → '}
-                    <button type="button" className="decided-run" onClick={() => jump(`run:${by.run}`)} data-tooltip={tx.chat.goToRun(by.number)}>
-                        #{by.number}
-                    </button>
-                </>
+            {label} {nameOf(by.by)} ·{' '}
+            {run ? (
+                <button type="button" className="decided-run" onClick={() => jump(`run:${by.run}`)} data-tooltip={tx.chat.goToRun}>
+                    <time dateTime={by.at}>{time(by.at)}</time>
+                </button>
+            ) : (
+                <time dateTime={by.at}>{time(by.at)}</time>
             )}
         </p>
     );

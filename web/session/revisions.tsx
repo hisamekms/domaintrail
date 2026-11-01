@@ -30,8 +30,10 @@ type RestoreFlow =
 
 /** What the chat's menus do with revisions: compare two, confirm one, restore one (asked first), record the workspace. */
 export interface RevisionTools {
-    /** The restore's box and the comparison's dialog, while one is under way: placed in the chat. */
+    /** The restore's box, while one is under way: placed in the chat. */
     readonly node: ReactNode;
+    /** The comparison's dialog, while one is open: placed outside the tabs, so that 履歴 opens it too. */
+    readonly dialog: ReactNode;
     compare(before: string, after: string): void;
     confirm(revision: string): void;
     restore(revision: string): void;
@@ -111,11 +113,11 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
                     {tx.error(error)}
                 </p>
             )}
-            {comparing && <ComparisonDialog pair={comparing} n={n} entries={entries} onClose={() => setComparing(undefined)} />}
         </>
     );
     return {
         node,
+        dialog: comparing && <ComparisonDialog pair={comparing} n={n} entries={entries} onClose={() => setComparing(undefined)} />,
         compare: (before, after) => setComparing([before, after]),
         confirm: (revision) => void act(() => sessionApi.confirmRevision(revision)),
         restore: (revision) => setFlow({ step: 'confirm', revision }),

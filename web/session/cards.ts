@@ -1,9 +1,9 @@
 // A card of the chat, without React (ADR 0026, amendment: messages and apply): one change unit (`history.ts`), its
 // runs one under the other — what each run was asked (a quote of each message applied, with what the reply says of
 // it), the facilitator's note or answer, and the agent's message — and the mark an applied message shows of its latest
-// run (`✓ #3`). Everything is derived from the session's state on the page.
+// run (`✓`, the card's name in its tooltip). Everything is derived from the session's state on the page.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import type { ChangeUnit } from './history';
+import { unitName, type ChangeUnit } from './history';
 import { agentMessage, type AgentMessage, type RequestProgress, type revisionLookup } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -76,9 +76,9 @@ export type MarkState = 'queued' | 'running' | 'clarification' | 'done' | 'parti
 
 export interface MessageMark {
     readonly state: MarkState;
-    /** The run's number, and the card it is on (`ChangeUnit.key`). */
-    readonly run: number;
+    /** The card it is on (`ChangeUnit.key`), and what that card is called (`unitName`). */
     readonly card: string;
+    readonly name: string;
 }
 
 const PROGRESS: Record<RequestProgress, MarkState> = { Done: 'done', Partial: 'partial', Skipped: 'skipped', Question: 'question' };
@@ -104,16 +104,16 @@ function markState(run: RunJson, request: string): MarkState {
     }
 }
 
-/** The mark of every applied message, by its ID: its latest run (the last queued) and that run's card. */
+/** The mark of every applied message, by its ID: its latest run's state (the last queued), and that run's card and its name. */
 export function messageMarks(units: readonly ChangeUnit[]): Map<string, MessageMark> {
-    const latest = new Map<string, { run: RunJson; number: number; card: string }>();
+    const latest = new Map<string, { run: RunJson; unit: ChangeUnit }>();
     for (const unit of units)
-        for (const { run, number } of unit.runs)
+        for (const { run } of unit.runs)
             for (const r of run.input.requests) {
                 const seen = latest.get(r.request);
-                if (!seen || run.queuedAt >= seen.run.queuedAt) latest.set(r.request, { run, number, card: unit.key });
+                if (!seen || run.queuedAt >= seen.run.queuedAt) latest.set(r.request, { run, unit });
             }
-    return new Map([...latest].map(([request, { run, number, card }]) => [request, { state: markState(run, request), run: number, card }]));
+    return new Map([...latest].map(([request, { run, unit }]) => [request, { state: markState(run, request), card: unit.key, name: unitName(unit).text }]));
 }
 
 /** The cards whose runs moved on since the reader last saw them (`seen`: each card's `updatedAt` then). */

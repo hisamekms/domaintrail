@@ -1,10 +1,15 @@
 // The session's runs grouped into "change units", without React: one card of the chat, and one row of its 履歴. A
 // unit is one run, or a run followed by the runs that continue it (the answer to its question, the replies to it, an
 // alternative picked, the same messages applied again), and so on. Everything is derived from the session's state on the page.
+//
+// People read a unit as one chunk of change, so it is named, not numbered: its title is the one the AI gave its first
+// run that has one (the runs that continue it never rename it), else the head of the first message it applied.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { MAX_REQUEST_MENTIONS, plainBody } from '@domaintrail/collaboration/domain/body';
 
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
+type FrozenRequest = RunJson['input']['requests'][number];
 
 /** How a unit ended, from its latest run; `changed`/`unchanged` for a completed one, by the files the unit changed. */
 export type UnitOutcome = 'changed' | 'unchanged' | 'clarification' | 'declined' | 'failed' | 'cancelled' | 'running' | 'queued';
@@ -31,11 +36,24 @@ export interface ChangeUnit {
      * once); `undefined` when no run's revisions are known.
      */
     readonly files: number | undefined;
+    /** The sources the unit's runs changed, sorted (each once); `undefined` when no run's revisions are known. */
+    readonly paths: readonly string[] | undefined;
+    /**
+     * The revisions the unit went from and to — the base of its first run that recorded them, the result of its last —
+     * for comparing what the whole chunk changed; `undefined` when no run recorded them.
+     */
+    readonly span: { readonly base: string; readonly result: string } | undefined;
+    /** The title the AI gave the unit's first run that has one (the runs that continue it do not rename it). */
+    readonly title: string | undefined;
     /** What the AI says about the unit: its latest run's reply summary, else its question. */
     readonly summary: string | undefined;
-    /** Who sent the requests, in order of first appearance. */
+    /** Who sent the requests of the unit's first run (whose chunk it is), in order of first appearance. */
     readonly requesters: readonly string[];
 }
+
+/** The reply of a run that has ended with one (completed, asked, declined). */
+const replyOf = (run: RunJson): Extract<RunJson, { state: 'Completed' }>['reply'] =>
+    run.state === 'Completed' || run.state === 'NeedsClarification' || run.state === 'Declined' ? run.reply : undefined;
 
 /** When a run last changed state. */
 export function runAt(run: RunJson): string {
@@ -131,10 +149,12 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
             if (changed) paths = new Set([...(paths ?? []), ...changed]);
         }
         const files = paths?.size;
-        const reply = last.state === 'Completed' || last.state === 'NeedsClarification' || last.state === 'Declined' ? last.reply : undefined;
+        const recorded = runsOf.flatMap(({ run }) => revisionsOf(run) ?? []);
+        const span = recorded.length > 0 ? { base: recorded[0].base, result: recorded[recorded.length - 1].result } : undefined;
+        const reply = replyOf(last);
         const summary = reply?.summary ?? (last.state === 'NeedsClarification' ? last.question : undefined);
         const requesters: string[] = [];
-        for (const { run } of runsOf) for (const r of run.input.requests) if (!requesters.includes(r.author)) requesters.push(r.author);
+        for (const r of runsOf[0].run.input.requests) if (!requesters.includes(r.author)) requesters.push(r.author);
         return {
             key: runsOf[0].run.id,
             runs: runsOf,
@@ -142,6 +162,9 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
             start: runsOf[0].run.queuedAt,
             outcome: outcomeOf(last, files),
             files,
+            paths: paths && [...paths].sort(),
+            span,
+            title: runsOf.map(({ run }) => replyOf(run)?.title).find((t) => t !== undefined),
             summary,
             requesters,
         };
@@ -152,4 +175,39 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
 /** The units the history shows: those that changed files, or all of them. */
 export function shownUnits(units: readonly ChangeUnit[], all: boolean): ChangeUnit[] {
     return all ? [...units] : units.filter((u) => (u.files ?? 0) > 0);
+}
+
+/**
+ * A request's text on one line, its tokens (elements and people, `body.ts`) as the names they were written with,
+ * without sign nor number. A frozen request does not keep whom it mentioned, so every person token is read as one.
+ */
+export const requestHead = (r: Pick<FrozenRequest, 'body' | 'targets'>): string =>
+    plainBody(r.body, { targets: r.targets.length, people: MAX_REQUEST_MENTIONS }, true).replace(/\s+/g, ' ').trim();
+
+/**
+ * What a unit is called: its title, else the head of the first message its first run applied (on one line; the page
+ * cuts it to the room). `kind` tells which, for the look and the tooltip.
+ */
+export function unitName(unit: Pick<ChangeUnit, 'title' | 'runs'>): { readonly kind: 'title' | 'request'; readonly text: string } {
+    if (unit.title !== undefined) return { kind: 'title', text: unit.title };
+    const first = unit.runs[0]?.run.input.requests[0];
+    return { kind: 'request', text: first ? requestHead(first) : '' };
+}
+
+/** Who asked for a unit, as its heading says it: one or two names, or the first and how many others. */
+export type Requesters =
+    | { readonly kind: 'none' }
+    | { readonly kind: 'names'; readonly names: readonly string[] }
+    | { readonly kind: 'more'; readonly first: string; readonly others: number };
+
+/** The requesters of a unit for its heading (names already resolved): up to two by name, else the first and a count. */
+export function requestersOf(names: readonly string[]): Requesters {
+    if (names.length === 0) return { kind: 'none' };
+    if (names.length <= 2) return { kind: 'names', names };
+    return { kind: 'more', first: names[0], others: names.length - 1 };
+}
+
+/** The first `max` of a list for one line, and how many are left out (「ほか n」). */
+export function cutList<T>(items: readonly T[], max: number): { readonly shown: readonly T[]; readonly more: number } {
+    return items.length <= max ? { shown: items, more: 0 } : { shown: items.slice(0, max), more: items.length - max };
 }

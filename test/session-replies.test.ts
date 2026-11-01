@@ -22,7 +22,7 @@ import type { AgentPreviousRun, EventMessage, Json, SessionStateBody } from '@do
 import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
 import { changeUnits } from '@domaintrail/web/session/history';
-import { isReplyable, replyReference, replyTargets, runNumber } from '@domaintrail/web/session/replies';
+import { isReplyable, replyReference, replyTargets } from '@domaintrail/web/session/replies';
 import { applyEvent } from '@domaintrail/web/session/state';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
 
@@ -782,11 +782,20 @@ describe("the page's replies", () => {
     test('which turns can be replied to; the reference a reply shows; what a reply starts with', () => {
         const states = ['Completed', 'Failed', 'Declined', 'Cancelled', 'NeedsClarification', 'Queued', 'Running'] as const;
         expect(states.filter((s) => isReplyable({ ...x, state: s } as RunJson))).toEqual(['Completed', 'Failed', 'Declined', 'Cancelled']);
-        expect(runNumber(state([other, x]), 'o')).toBe(2);
-        expect(runNumber(state([x]), 'nope')).toBeUndefined();
         const units = changeUnits(state([x, other, run('y', 5, [r1], done(6))]));
-        expect(replyReference(units, 'x')).toEqual({ run: 'x', number: 1, summary: 'Added @{Sales.Order:cancel} and more.', state: 'Completed', card: 'x' });
-        expect(replyReference(units, 'y')).toMatchObject({ number: 3, summary: undefined, card: 'x' });
+        // a run is named by its card: no title, so the head of the card's first message
+        expect(replyReference(units, 'x')).toEqual({
+            run: 'x',
+            name: 'body of m1',
+            summary: 'Added @{Sales.Order:cancel} and more.',
+            state: 'Completed',
+            card: 'x',
+        });
+        expect(replyReference(units, 'y')).toMatchObject({ name: 'body of m1', summary: undefined, card: 'x' });
+        // with a title, the card's title, for a run that continues it too
+        const titled = { ...x, reply: { title: '注文の取消', summary: 'Added.', requests: [], questions: [], assumptions: [] } } as RunJson;
+        const named = changeUnits(state([titled, run('y', 5, [r1], done(6))]));
+        expect(replyReference(named, 'y')).toMatchObject({ name: '注文の取消', card: 'x' });
         expect(replyReference(units, 'nope')).toBeUndefined();
         // the targets of the replied run's requests, each once
         expect(replyTargets(x).map((t) => t.target)).toEqual([

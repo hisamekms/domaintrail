@@ -4693,32 +4693,8 @@ del.was.block {
     color: var(--accent);
     animation: spin 1s linear infinite;
 }
-.chat-unit-runs {
-    font-weight: 600;
-}
-.chat-unit-files {
-    padding: 0 6px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--added) 14%, transparent);
-    color: var(--added);
-    font-size: 0.6875rem;
-    font-weight: 600;
-}
 .chat-unit-line .chat-time {
     margin-left: auto;
-}
-.chat-unit-summary {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.45;
-}
-.chat-unit.open .chat-unit-summary {
-    display: block;
-}
-.chat-unit-who {
-    font-size: 0.75rem;
 }
 .chat-unit-body {
     padding: 0 10px 10px;
@@ -4895,7 +4871,7 @@ del.was.block {
 .chat-message-side:empty {
     display: none;
 }
-/* the applied mark (`✓ #2`): small muted text, a click goes to the card */
+/* the applied mark (`✓`, the card's name in its tooltip): small muted text, a click goes to the card */
 .session-chat button.chat-mark {
     padding: 0 2px;
     border: none;
@@ -5916,4 +5892,97 @@ del.was.block {
 .answer-other-dialog button.answer-other-button:disabled {
     opacity: 0.5;
     cursor: default;
+}
+
+/* ---------- chunk titles ---------- */
+
+/* 履歴: a chunk's heading — its title (plain text weight: names of people are the only bold), its time span muted at
+   the right; under it, muted and small, whose requests and how much; then the files it changed as a violet link */
+.chat-unit-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--text);
+}
+.chat-unit-line > .chat-time {
+    flex: none;
+    margin-left: auto;
+}
+.chat-unit-facts {
+    padding-left: 20px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+.chat-unit-changes {
+    display: flex;
+    align-items: baseline;
+    gap: 2px;
+    margin: -4px 0 0;
+    padding: 0 12px 8px 32px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+.session-chat button.chat-unit-changes-link {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--violet-text);
+    cursor: pointer;
+}
+.session-chat button.chat-unit-changes-link:hover {
+    text-decoration: underline;
+}
+.chat-unit-more {
+    flex: none;
+}
+/* the chat: an AI turn's title beside its name, muted like the rest of the row and cut to one line */
+.run-card-meta {
+    display: inline-flex;
+    align-items: baseline;
+    min-width: 0;
+    max-width: 100%;
+    white-space: pre;
+}
+.run-card-title {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+/* the name row stays one line: the title gives way (cut with …) before the name, the state and the tools at the right */
+.run-card-head {
+    flex-wrap: nowrap;
+}
+.run-card-head > .chat-who,
+.run-card-head > .run-card-status,
+.run-card-head > .run-card-tools {
+    flex: none;
+}
+.run-card-head > .run-card-meta {
+    flex: 0 1 auto;
+    overflow: hidden;
+}
+.run-card-meta > time {
+    flex: none;
+}
+/* a reply's reference names the card: the name takes at most half the line, the summary the rest */
+.chat-reply-ref-run {
+    max-width: 50%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+/* the "updated" pill names the card: one line, cut */
+.chat-updated-pill {
+    max-width: calc(100% - 32px);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }

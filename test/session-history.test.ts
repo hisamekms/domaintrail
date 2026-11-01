@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { answerBody } from '@domaintrail/web/session/actions';
 import { cardRuns, messageMarks, quoteDisplay, updatedCards } from '@domaintrail/web/session/cards';
-import { changedPaths, changeUnits, shownUnits } from '@domaintrail/web/session/history';
+import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unitName } from '@domaintrail/web/session/history';
 import { latestAt, revisionLookup, streamItems, unreadCount } from '@domaintrail/web/session/stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -151,6 +151,88 @@ describe('the history of changes', () => {
         );
         expect(changeUnits({ runs: [done, fewer, picked], revisions }).map((u) => u.runs.map((r) => r.number))).toEqual([[1, 3], [2]]);
     });
+
+    describe('a chunk is named, not numbered', () => {
+        const titled = (title: string | undefined, summary: string): object => ({
+            reply: { ...(title !== undefined && { title }), outcome: 'done', summary, requests: [], questions: [], assumptions: [] },
+        });
+        const completed = (minute: number, base: string, result: string, more: object = {}): object => ({
+            state: 'Completed',
+            baseRevision: base,
+            startedAt: at(minute),
+            resultRevision: result,
+            changed: base !== result,
+            report: {},
+            finishedAt: at(minute + 1),
+            ...more,
+        });
+        const asking = (minute: number, base: string, result: string, title?: string): object => ({
+            state: 'NeedsClarification',
+            baseRevision: base,
+            startedAt: at(minute),
+            question: 'Which?',
+            resultRevision: result,
+            finishedAt: at(minute + 1),
+            reply: { ...(title !== undefined && { title }), outcome: 'clarification', summary: 'Which?', requests: [], questions: [], assumptions: [] },
+        });
+
+        test("its title is the first run's that has one; the runs continuing it never rename it", () => {
+            const first = run('run1', 1, [qa, qb], asking(1, 'r0', 'r1', '請求書の税区分'));
+            const second = run('run2', 3, [qa, qb], completed(3, 'r1', 'r2', titled('別の題', 'Done.')));
+            const [unit] = changeUnits({ runs: [first, second], revisions });
+            expect(unit.title).toBe('請求書の税区分');
+            expect(unitName(unit)).toEqual({ kind: 'title', text: '請求書の税区分' });
+            // the first run without a title (it asked before titles, or is still running): the next run's title names it
+            const untitledFirst = run('run1', 1, [qa, qb], asking(1, 'r0', 'r1'));
+            expect(changeUnits({ runs: [untitledFirst, second], revisions })[0].title).toBe('別の題');
+        });
+
+        test('without any title (legacy replies, or no reply yet): the head of the first message, on one line, mentions as names', () => {
+            const mentioning = {
+                ...request('qm', 'dev:a'),
+                body: '#請求書[1] の\n税区分を  @佐藤[p1] と見直す',
+                targets: [{ target: { kind: 'DtElement', element: 'Billing.Invoice' }, sourceRevision: 'r0', label: '請求書' }],
+            } as unknown as RequestJson;
+            const legacy = run(
+                'run1',
+                1,
+                [mentioning, qb],
+                completed(1, 'r0', 'r1', { reply: { summary: 'Done.', requests: [], questions: [], assumptions: [] } }),
+            );
+            const [unit] = changeUnits({ runs: [legacy], revisions });
+            expect(unit.title).toBeUndefined();
+            expect(unitName(unit)).toEqual({ kind: 'request', text: '請求書 の 税区分を 佐藤 と見直す' });
+            // a token past the request's targets stays as written; one written before `#`, with `@`, is an element too
+            expect(requestHead({ body: '#x[2] stays', targets: [] })).toBe('#x[2] stays');
+            expect(requestHead({ body: '@請求書[1] old', targets: mentioning.targets })).toBe('請求書 old');
+            const queued = run('run2', 2, [qc], { state: 'Queued' });
+            expect(unitName(changeUnits({ runs: [queued], revisions })[0])).toEqual({ kind: 'request', text: 'body of qc' });
+        });
+
+        test("the heading's facts: whose requests (the first run's), how many runs, the files changed across the chunk and its span", () => {
+            const first = run('run1', 1, [qa, qb], asking(1, 'r0', 'r1', 't'));
+            // a reply by someone else continues the chunk: it is still the first run's requesters' chunk
+            const qd = request('qd', 'dev:d');
+            const second = run('run2', 3, [qa, qb], completed(3, 'r1', 'r2'));
+            const third = run('run3', 8, [qd], completed(8, 'r2', 'r2'), { requests: [{ ...frozen(qd), replyTo: 'run2' }] });
+            const [unit] = changeUnits({ runs: [first, second, third], revisions });
+            expect(unit.runs.map((r) => r.run.id)).toEqual(['run1', 'run2', 'run3']);
+            expect(unit.requesters).toEqual(['dev:a', 'dev:b']);
+            expect(unit.paths).toEqual(['a.dt', 'b.dt', 'c.dt']);
+            expect(unit.files).toBe(3);
+            expect(unit.span).toEqual({ base: 'r0', result: 'r2' });
+            // no run recorded revisions: neither files nor span
+            const cancelled = run('run4', 9, [qc], { state: 'Cancelled', cancelledBy: 'x', cancelledAt: at(9) });
+            expect(changeUnits({ runs: [cancelled], revisions })[0]).toMatchObject({ paths: undefined, span: undefined });
+            // up to two people by name, else the first and how many others
+            expect(requestersOf([])).toEqual({ kind: 'none' });
+            expect(requestersOf(['佐藤', '鈴木'])).toEqual({ kind: 'names', names: ['佐藤', '鈴木'] });
+            expect(requestersOf(['佐藤', '鈴木', '田中'])).toEqual({ kind: 'more', first: '佐藤', others: 2 });
+            // the changed files on one line: the first few and 「ほか n」
+            expect(cutList(['a', 'b', 'c'], 3)).toEqual({ shown: ['a', 'b', 'c'], more: 0 });
+            expect(cutList(['a', 'b', 'c', 'd', 'e'], 3)).toEqual({ shown: ['a', 'b', 'c'], more: 2 });
+        });
+    });
 });
 
 describe('the floating chat button', () => {
@@ -225,17 +307,17 @@ describe('the cards of the chat', () => {
         expect(quoteDisplay(cardRuns(single, revisionLookup({ revisions, runs: [one] })), 0)).toEqual({ quotes: true, perRequest: false });
     });
 
-    test("an applied message shows its latest run's state and number, and the card it is on; a message never applied none", () => {
+    test("an applied message shows its latest run's state, and the card it is on with its name; a message never applied none", () => {
         const units = changeUnits({ runs: [asked], revisions });
         expect(Object.fromEntries(messageMarks(units))).toEqual({
-            qa: { state: 'done', run: 1, card: 'run1' },
-            qb: { state: 'question', run: 1, card: 'run1' },
+            qa: { state: 'done', card: 'run1', name: 'body of qa' },
+            qb: { state: 'question', card: 'run1', name: 'body of qa' },
         });
         const later = changeUnits({ runs: [asked, answered], revisions });
-        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', run: 2, card: 'run1' });
+        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run1', name: 'body of qa' });
         expect(messageMarks(later).has('qc')).toBe(false);
         const failed = run('run3', 9, [qc], { state: 'Failed', baseRevision: 'r0', startedAt: at(9), reason: 'AgentError', finishedAt: at(10) });
-        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', run: 1, card: 'run3' });
+        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', card: 'run3', name: 'body of qc' });
     });
 
     test('the cards that moved on since the reader last saw them', () => {

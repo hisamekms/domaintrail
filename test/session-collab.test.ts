@@ -133,10 +133,11 @@ describe('ending a collab', () => {
 });
 
 describe('the summary of a collab', () => {
-    test('a unit is titled by its first request on one line, elements as #name, cut at 60 characters', () => {
+    test("a unit is titled by its name: the AI's title, else its first request on one line, cut at 60 characters", () => {
         const units = changeUnits(state('Open'));
         const first = units.find((u) => u.key === 'run1');
-        expect(first && unitTitle(first)).toBe('#注文 に キャンセルの イベントを足してください');
+        expect(first && unitTitle(first)).toBe('注文 に キャンセルの イベントを足してください');
+        if (first) expect(unitTitle({ ...first, title: '注文の取消' })).toBe('注文の取消');
         const long = changeUnits({ runs: [run('x', 1, [request('ql', 'dev:a', 'あ'.repeat(80))], { state: 'Queued' })], revisions: [] })[0];
         expect(unitTitle(long)).toBe(`${'あ'.repeat(59)}…`);
     });
@@ -144,7 +145,7 @@ describe('the summary of a collab', () => {
     test('lists the units that changed files in the order they started, who asked, who took part and how long', () => {
         const summary = collabSummary(state('Closed'), me, NO_PEERS);
         expect(summary.units).toEqual([
-            { key: 'run1', title: '#注文 に キャンセルの イベントを足してください', files: 1, requesters: ['Ann'] },
+            { key: 'run1', title: '注文 に キャンセルの イベントを足してください', files: 1, requesters: ['Ann'] },
             { key: 'run2', title: 'body of qb', files: 1, requesters: ['Bob'] },
             { key: 'run3', title: 'body of qc', files: 1, requesters: ['Ann', 'Bob'] },
         ]);

@@ -32,7 +32,7 @@ import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
-import { changeUnits, shownUnits, type ChangeUnit, type UnitOutcome } from './history';
+import { changeUnits, cutList, requestersOf, shownUnits, unitName, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
     composerKey,
@@ -51,9 +51,8 @@ import {
 import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
-import { ReplyText } from './reply';
 import { parseReplyText, referenceText } from './references';
-import { isReplyable, replyReference, replyTargets, runNumber, type ReplyDraft } from './replies';
+import { isReplyable, replyReference, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { latestRevision } from './state';
 import {
@@ -179,9 +178,9 @@ export function SessionChat(props: {
             draft: replyDraft,
             start: (id: string): void => {
                 const run = state.runs.find((r) => r.id === id);
-                const number = runNumber(state, id);
-                if (!run || number === undefined || !isReplyable(run)) return;
-                setReplyDraft({ run: id, number });
+                const ref = replyReference(units, id);
+                if (!run || !ref || !isReplyable(run)) return;
+                setReplyDraft({ run: id, name: ref.name });
                 // the targets start with the replied run's requests' (editable as usual)
                 composer.setValue(addChips(composer.value, replyTargets(run)).value);
                 setView('chat');
@@ -334,6 +333,7 @@ export function SessionChat(props: {
                 <div className="chat-view" role="tabpanel" hidden={view !== 'history'}>
                     <History units={units} />
                 </div>
+                {revisions.dialog}
             </div>
         </ChatProvider>
     );
@@ -427,9 +427,9 @@ function Stream({ items }: { items: StreamItem[] }) {
     }, [signature]);
 
     // a card that moved on while out of sight: a pill at the bottom goes to it
-    const cards = items.flatMap((i) => (i.kind === 'card' ? [{ key: i.key, updatedAt: i.updatedAt, number: i.unit.runs[0].number }] : []));
+    const cards = items.flatMap((i) => (i.kind === 'card' ? [{ key: i.key, updatedAt: i.updatedAt, name: unitName(i.unit).text }] : []));
     const seen = useRef(new Map<string, string>());
-    const [pill, setPill] = useState<{ key: string; number: number } | undefined>();
+    const [pill, setPill] = useState<{ key: string; name: string } | undefined>();
     useEffect(() => {
         const el = ref.current;
         const changed = updatedCards(cards, seen.current);
@@ -440,7 +440,7 @@ function Stream({ items }: { items: StreamItem[] }) {
             return item && !inViewOf(el, item);
         });
         const last = hidden.at(-1);
-        if (last) setPill({ key: last, number: cards.find((c) => c.key === last)?.number ?? 0 });
+        if (last) setPill({ key: last, name: cards.find((c) => c.key === last)?.name ?? '' });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
     const onScroll = (el: HTMLElement): void => {
@@ -487,7 +487,7 @@ function Stream({ items }: { items: StreamItem[] }) {
                         setPill(undefined);
                     }}
                 >
-                    {tx.chat.cardUpdated(pill.number)}
+                    <span className="chat-updated-pill-text">{tx.chat.cardUpdated(pill.name)}</span>
                 </button>
             )}
         </div>
@@ -548,8 +548,8 @@ const MARK_GLYPH: Record<MarkState, string> = {
 };
 
 /**
- * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓ #3`,
- * a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
+ * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓`;
+ * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
@@ -586,9 +586,10 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 <button
                     className={`chat-mark mark-${mark.state}`}
                     onClick={() => jump(`card:${mark.card}`)}
-                    data-tooltip={tx.chat.markHint(mark.run, tx.chat.marks[mark.state])}
+                    aria-label={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
+                    data-tooltip={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
                 >
-                    {MARK_GLYPH[mark.state]} #{mark.run}
+                    {MARK_GLYPH[mark.state]}
                 </button>
             )}
             {control && !selection.active && (
@@ -678,8 +679,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
 }
 
 /**
- * The run a reply replies to, on one muted line at the top of the message: `↩ AI #3: the head of what it said`; a click
- * goes to its card (scrolled to and flashed, as a quote does).
+ * The run a reply replies to, on one muted line at the top of the message: `↩ <its card's name>: the head of what it
+ * said`; a click goes to its card (scrolled to and flashed, as a quote does).
  */
 function ReplyReferenceLine({ run }: { run: string }) {
     const { tx, jump, replies } = useChat();
@@ -695,8 +696,8 @@ function ReplyReferenceLine({ run }: { run: string }) {
                   .map((seg) => (seg.kind === 'text' ? seg.text : referenceText(seg, naming).text))
                   .join('');
     return (
-        <button className="chat-reply-ref" onClick={() => jump(`card:${ref.card}`)} data-tooltip={r.referenceHint(ref.number)}>
-            <span className="chat-reply-ref-run">↩ {r.reference(ref.number)}:</span> <span className="chat-reply-ref-head">{head}</span>
+        <button className="chat-reply-ref" onClick={() => jump(`card:${ref.card}`)} data-tooltip={r.referenceHint(ref.name)}>
+            <span className="chat-reply-ref-run">↩ {r.reference(ref.name)}:</span> <span className="chat-reply-ref-head">{head}</span>
         </button>
     );
 }
@@ -791,12 +792,10 @@ function SelectionBar() {
 function UndoBar() {
     const { tx, actions, session } = useChat();
     const run = session.state.runs.find((r) => r.id === actions.undo?.run);
-    const sorted = [...session.state.runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
-    const number = run ? sorted.indexOf(run) + 1 : undefined;
     const queued = !run || run.state === 'Queued';
     return (
         <div className="chat-undo" role="status">
-            <span>{tx.chat.appliedAs(number)}</span>
+            <span>{tx.chat.appliedAs}</span>
             {queued && (
                 <button className="chat-small" onClick={() => actions.undoNow()}>
                     {tx.chat.undo}
@@ -821,8 +820,9 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
 };
 
 /**
- * 履歴: the change units, newest first — the runs that changed files, or all of them (すべて). A unit's row says what
- * the AI did; opened, it shows the unit's card (compact) and a link to it in the chat. The card's own menu is the
+ * 履歴: the change units, newest first — the runs that changed files, or all of them (すべて). A unit's heading names
+ * the chunk (its title, else its first message) with its time span, whose requests they were, how many runs and files,
+ * and the files it changed (a link to compare them); opened, it shows the unit's card (compact) and a link to it in the chat. The card's own menu is the
  * place of the facilitator's actions on a unit.
  */
 function History({ units: all }: { units: readonly ChangeUnit[] }) {
@@ -856,13 +856,16 @@ function History({ units: all }: { units: readonly ChangeUnit[] }) {
 }
 
 function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean; onToggle: () => void }) {
-    const { tx, nameOf, onNavigate, jump } = useChat();
+    const { tx, nameOf, jump, revisions } = useChat();
     const h = tx.chat.history;
-    const first = unit.runs[0];
-    const last = unit.runs[unit.runs.length - 1];
     const Icon = OUTCOME_ICONS[unit.outcome];
-    const requesters = unit.requesters.map(nameOf).join(', ');
-    const summary = unit.summary ?? fallbackSummary(last.run, nameOf, tx);
+    const name = unitName(unit);
+    const asked = requestersOf(unit.requesters.map(nameOf));
+    const who =
+        asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
+    const facts = [who, h.runs(unit.runs.length), unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined].filter((x) => x !== undefined);
+    const changed = cutList(unit.paths ?? [], 3);
+    const span = unit.span;
     // the card is mounted the first time the unit opens, and stays so that it folds away as it closes
     const [mounted, setMounted] = useState(open);
     if (open && !mounted) setMounted(true);
@@ -871,21 +874,39 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
             <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={onToggle}>
                 <span className="chat-unit-line">
                     <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />
-                    <span className="chat-unit-runs">{h.runs(first.number, last.number)}</span>
-                    {unit.files !== undefined && unit.files > 0 && <span className="chat-unit-files">{h.files(unit.files)}</span>}
-                    <time className="chat-time" dateTime={unit.at}>
-                        {time(unit.at)}
-                    </time>
+                    <span
+                        className={`chat-unit-title${name.kind === 'request' ? ' untitled' : ''}`}
+                        {...(name.kind === 'request' && { 'data-tooltip': h.untitledHint })}
+                    >
+                        {name.text}
+                    </span>
+                    <span className="chat-time">
+                        <time dateTime={unit.start}>{time(unit.start)}</time>
+                        {time(unit.at) !== time(unit.start) && (
+                            <>
+                                –<time dateTime={unit.at}>{time(unit.at)}</time>
+                            </>
+                        )}
+                    </span>
                     <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
                 </span>
-                {/* opened, the card says it */}
-                {summary && !open && (
-                    <span className="chat-unit-summary">
-                        {unit.summary !== undefined ? <ReplyText text={unit.summary} onNavigate={onNavigate} /> : summary}
-                    </span>
-                )}
-                {requesters && <span className="chat-unit-who muted">{h.requesters(requesters)}</span>}
+                <span className="chat-unit-facts">{facts.join(' · ')}</span>
             </button>
+            {/* what the chunk changed: its files (the page knows them, not the elements), a link to compare the whole chunk */}
+            {changed.shown.length > 0 && span && (
+                <p className="chat-unit-changes">
+                    →{' '}
+                    <button
+                        type="button"
+                        className="chat-unit-changes-link"
+                        onClick={() => revisions.compare(span.base, span.result)}
+                        data-tooltip={`${h.changedFilesHint}: ${(unit.paths ?? []).join(', ')}`}
+                    >
+                        {changed.shown.map(baseName).join(h.separator)}
+                    </button>
+                    {changed.more > 0 && <span className="chat-unit-more"> {h.more(changed.more)}</span>}
+                </p>
+            )}
             {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}
             <div className="chat-unit-fold" inert={!open}>
                 <div className="chat-unit-fold-inner">
@@ -908,22 +929,8 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
     );
 }
 
-/** What a unit's row says when the AI said nothing (no structured reply): the run's state, as the chat says it. */
-function fallbackSummary(run: ChangeUnit['runs'][number]['run'], nameOf: (id: string) => string, tx: Tx): string | undefined {
-    const says = tx.chat.agentSays;
-    switch (run.state) {
-        case 'Completed':
-            return run.changed ? says.completedChanged(undefined) : says.completedUnchanged;
-        case 'Failed':
-            return tx.failureReasons[run.reason];
-        case 'Cancelled':
-            return says.cancelled(nameOf(run.cancelledBy));
-        case 'Queued':
-            return says.queued;
-        default:
-            return undefined;
-    }
-}
+/** A path's last segment (`billing.dt` of `src/billing.dt`). */
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
 /**
  * The floating button opening the conversation while it is closed, with the agent's state as a mark (a spinner while
@@ -1203,7 +1210,7 @@ function Composer(props: {
             <ComposerResizer {...size} label={tx.chat.resizeInput} />
             {reply && (
                 <div className="chat-reply-chip motion-pop motion-pop-up" role="status">
-                    <span className="chat-reply-chip-text">↩ {tx.chat.replies.replyingTo(reply.number)}</span>
+                    <span className="chat-reply-chip-text">↩ {tx.chat.replies.replyingTo(reply.name)}</span>
                     <button className="chat-chip-remove" onClick={onReplyDone} aria-label={tx.chat.replies.cancel} data-tooltip={tx.chat.replies.cancel}>
                         <X size={12} aria-hidden />
                     </button>
