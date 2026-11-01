@@ -1,10 +1,10 @@
 node_modules/
 .domaintrail/
 generated/
-# the collaboration contracts are generated and committed (ADR 0026; test/collaboration-contracts.test.ts)
-!contexts/collaboration/src/generated/
-# so is what Modeling publishes (ADR 0027; test/modeling-contracts.test.ts)
+# the code generated from DomainTrail's own model is committed (ADR 0026, 0027, 0028; test/self-contracts.test.ts)
+!shared/kernel/src/generated/
 !contexts/modeling/src/generated/
+!contexts/collaboration/src/generated/
 *.log
 .DS_Store
 dist/

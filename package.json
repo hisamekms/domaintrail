@@ -25,6 +25,13 @@
     "dt": "dist/dt.js",
     "domaintrail": "dist/dt.js"
   },
+  "exports": {
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "schema",
@@ -54,7 +61,7 @@
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
     "session:seed": "bun ./scripts/session-seed.ts",
-    "version": "bun ./scripts/zed-version.ts && git add editors/zed",
+    "version": "bun ./scripts/zed-version.ts && git add editors/zed && bun run langium:generate && bun ./bin/dt.ts generate ts && git add shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated",
     "prepack": "bun run build"
   },
   "dependencies": {
@@ -66,6 +73,14 @@
     "picomatch": "4.0.7",
     "vscode-languageserver": "10.1.2",
     "ws": "8.22.0"
+  },
+  "peerDependencies": {
+    "fast-check": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fast-check": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@domaintrail/agent": "workspace:*",

@@ -334,6 +334,10 @@ context Sales {
   with the numbers `count(…)` and `length(…)` compute (`count(approvedBy) >= policy.requiredApprovals`); not with
   another domain primitive or a plain field or parameter of its base type (M009).
 - Only IDs can be identity fields and reference types. Domain primitives cannot be owned.
+- An ID or domain primitive on `UUID` holds a UUID: 8-4-4-4-12 hexadecimal digits (RFC 9562), in either case, of any
+  version. Its constructor checks it as the invariant `uuid`, before those declared, so `makeOrderId('order-1')` is an
+  `InvalidOrderId`; an invariant of its own cannot be named `uuid` (M002). A plain field or parameter of type `UUID` is
+  a `string`, unchecked.
 - The generated code includes the constructor: `makeQuantity` checks the invariants and returns the first one
   violated (`makeSkuWith(checks)` when an invariant has no expression); see [Generated checks](#generated-checks).
 
@@ -374,8 +378,8 @@ context Sales {
 - Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
   passes through an optional field (`?`), a list that may be empty (`[0..*]`), or a union with a variant out of it
   (`union Expr { lit { value: Int } not { operand: Expr } }`). Otherwise, and for any cycle through an entity or an
-  aggregate, it is M012. The generated types, equality and checks handle nesting; the contract tests generate no
-  values of recursive types yet (see [Generated tests](#generated-tests)).
+  aggregate, it is M012. The generated types, equality and checks handle nesting, and the contract tests draw nested
+  values up to a maximum depth (see [Generated tests](#generated-tests)).
 
 <!-- topic: shared -->
 ### Shared contexts
@@ -1013,6 +1017,15 @@ export type MakeAvailableEmail = (value: Common.EmailAddress, context: CustomerI
 - The factory `Make<Name>` is async (the check reads repositories and services) and returns a `Result`: the value, or
   one of `errors` (`never` without `errors`, still a `Result`, so every factory is called the same way). Its second
   parameter is the context of `for`: required with `for X`, `X | undefined` with `for X?`, absent without `for`.
+  With `for X?` the parameter is still required, and a call with no context passes `undefined` explicitly: were it
+  optional, a call that forgot the context would compile, and the check would then not leave out the one it should —
+  `changeEmail` would report a customer's own address as taken. The factory's JSDoc says so.
+- **Two kinds of failure.** The errors of the `Result` are the domain's answers, those named in `errors`: the use case
+  returns them, and its callers branch on them. A **rejected promise** means the check could not be made — the
+  repository is down, the outside service timed out: not an answer of the domain, of open-ended kinds, and what to do
+  with it (fail the request, retry) belongs to the application's edge, the HTTP handler or the job runner (below). Do
+  not turn it into a domain error inside the factory or the use case. The same holds for policy handlers (see
+  [Reactions to events](#reactions-to-events-policies)).
 - **You write the factory**, with your repositories and services. It is the only code that may assert the type
   (`email as Sales.AvailableEmail`); a cast anywhere else defeats the purpose — the same weakness as the constructors
   of domain primitives.
@@ -1028,6 +1041,26 @@ export function verifications(customers: CustomerRepository): Verifications {
             return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
         },
     };
+}
+```
+
+A use case returns the domain's answers in its `Result` and lets a rejection pass; the edge that called it handles
+the rejection:
+
+```ts
+// the edge of the application: an HTTP handler around the use case (a job runner would retry it instead)
+async function postCustomer(request: Request): Promise<Response> {
+    const { name, email } = await request.json();
+    try {
+        const r = await shop.app.registerCustomer(name, email); // shop = createShop(…), as in examples/shop
+        // the domain's answers (InvalidEmailAddress, EmailTaken, …): the client can act on them
+        if (!r.ok) return Response.json(r.error, { status: 422 });
+        return Response.json(r.value, { status: 201 });
+    } catch (e) {
+        // the check could not be made (MakeAvailableEmail's repository failed): not an answer, so no domain error
+        console.error(e);
+        return new Response('temporarily unavailable', { status: 503, headers: { 'Retry-After': '5' } });
+    }
 }
 ```
 
@@ -1129,7 +1162,10 @@ a verified type its base with a property of its own and the contract of its fact
 [Reactions to events](#reactions-to-events-policies)). A field set is an interface that the elements using it extend (`interface Expense extends Common.Tenanted`; for a stateful aggregate, its
 `…Common`). The JSDoc of every declaration that comes from the DSL ends with `@see <file>:<line>`, the declaration's
 place as `dt check` prints it (relative to the config root, e.g. `@see sales/order.dt:51`); editing the `.dt` sources
-moves these lines, and generating again rewrites them.
+moves these lines, and generating again rewrites them. The JSDoc of a `references` field links its target by the name
+the module uses for it (`@see {@link Customer}`, `@see {@link Sales.Order}` from another context), so that hover and
+go-to-definition reach the aggregate; a context named only by such a link is imported for its types
+(`import type * as Sales from './Sales.js'`, with a comment that tells linters the import is used).
 
 The examples in this section are generated from `examples/shop` in the repository, a fuller version of the Sales
 context of the DSL examples (with labels, and `emits NoteChanged?` on `changeNote`).
@@ -1143,11 +1179,26 @@ Unions to name groups of them, each generated only when it has a member:
 | `Aggregate` | every aggregate of the context |
 | `<Aggregate>Event` (`OrderEvent`) | the events the aggregate's commands may emit (also of other contexts) |
 
+A command takes its parameters as **one object** after the aggregate, typed `<Command><Aggregate>Params`
+(`ConfirmOrderParams`): a call names each parameter (`commands.confirm(order, { at })`), so two parameters of one type
+cannot be swapped unnoticed, and reordering them in `.dt` breaks no caller. An optional parameter is an optional
+property (`note?: string`), left out when not given; a misspelt name is an excess property, a compile error. A command
+without parameters takes none (`commands.start(work)`); a factory takes only the object
+(`commands.place({ id, customer })`). The labels of the parameters are on the properties:
+
 ```ts
+/**
+ * The parameters of Order.confirm, by name.
+ * @see sales/order.dt:51
+ */
+export interface ConfirmOrderParams {
+    /** 日時 */
+    readonly at: Timestamp;
+}
+
 /**
  * Order.confirm (Draft -> Confirmed)
  * 注文を確定する
- * @param at 日時
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
@@ -1155,7 +1206,7 @@ Unions to name groups of them, each generated only when it has a member:
  */
 export type ConfirmOrder = (
     order: DraftOrder,
-    at: Timestamp,
+    params: ConfirmOrderParams,
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
@@ -1172,8 +1223,7 @@ so a value holds exactly one outcome:
 ```ts
 export type ProgressWork = (
     work: InProgressWork,
-    step: StepId,
-    at: Timestamp,
+    params: ProgressWorkParams,
 ) => Result<
     | {
           readonly InProgress: {
@@ -1224,7 +1274,7 @@ caller with a `DraftOrder` gets a `DraftOrder` back, never a `ConfirmedOrder`; a
 ```ts
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
-    note: string | undefined,
+    params: ChangeNoteOrderParams,
 ) => {
     /** @emits NoteChanged? — at most once when the command succeeds */
     readonly Draft: Result<{
@@ -1263,7 +1313,7 @@ instead.
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
-    readonly Draft: (order: DraftOrder, at: Timestamp) => Result<{
+    readonly Draft: (order: DraftOrder, params: ConfirmOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedAt: Timestamp };
             readonly events: { readonly OrderConfirmed: OrderConfirmed };
@@ -1280,7 +1330,8 @@ field: `items` in the `set` of `confirm` is reported as
 `Property 'confirmedAt' is missing in type '{}' …`. The JSDoc lists `@changes` and, per outcome, what is set, carried
 over and dropped.
 
-`decide(shape, decision)` calls the handler of the aggregate's `state` with the command's arguments. For the outcome
+`decide(shape, decision)` calls the handler of the aggregate's `state` with the command's arguments (the aggregate and
+the parameters object; destructure it where that reads better, `(order, { at }) => …`). For the outcome
 it returns, it makes the aggregate from the fields of `set`, the other fields of the target state taken from the input
 (the common fields and the carried-over state-specific fields) and the target `state`; the input's other fields are
 dropped. A factory's aggregate is its `state` and `set`. Events and errors pass through unchanged. The shape is the
@@ -1309,12 +1360,12 @@ const noteChanged = (order: Sales.Order, note: string | undefined) =>
     note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
 
 export const changeNote: Sales.OrderCommands['changeNote'] = decide<Sales.ChangeNoteOrderDecision>(Sales.OrderShape, {
-    Draft: (order, note) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
-    Confirmed: (order, note) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
+    Draft: (order, { note }) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
+    Confirmed: (order, { note }) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
 });
 
 export const confirm: Sales.OrderCommands['confirm'] = decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
-    Draft: (order, at) => {
+    Draft: (order, { at }) => {
         if (order.items.length === 0) return err({ type: 'EmptyOrder' });
         return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
     },
@@ -1339,7 +1390,7 @@ export interface OrderStore {
 }
 
 export async function confirm(commands: Sales.OrderCommands, store: OrderStore, order: Sales.DraftOrder, at: Date): Promise<Sales.EmptyOrder | undefined> {
-    const r = commands.confirm(order, at); // the time is a parameter: the command is pure
+    const r = commands.confirm(order, { at }); // the time is a parameter: the command is pure
     if (!r.ok) return r.error;
     const { aggregate, events } = outcome(r.value);
     await store.save(aggregate, eventList(events));
@@ -1363,7 +1414,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  */
 export type AcceptReview = (
     review: ReviewingReview | EscalatedReview,
-    person: PersonId,
+    params: AcceptReviewParams,
 ) => Result<{
     readonly Accepted: {
         readonly aggregate: AcceptedReview;
@@ -1418,7 +1469,7 @@ a domain type, a verified type or `Decimal`. Make them instead:
 
 | Type | Make it with |
 |---|---|
-| ID, domain primitive | `make<Name>` (generated; or your own `Make<Name>`), e.g. `Sales.makeOrderId('order-1')` |
+| ID, domain primitive | `make<Name>` (generated; or your own `Make<Name>`), e.g. `Sales.makeOrderId(crypto.randomUUID())` |
 | verified type | its factory `Make<Name>`, which you write (see [Verified types](#verified-types)) |
 | `Decimal` | `parseDecimal(text)` from the runtime: digits with an optional `-` and fraction, else `undefined` |
 
@@ -1476,20 +1527,28 @@ the string's `length`, Decimals (carried as strings) and Ints compared as number
 
 | Generated | For | Returns |
 |---|---|---|
-| `check<Name>(value)` | a domain primitive with invariants | the violated invariants, in declaration order (empty: valid) |
-| `make<Name>` | every domain primitive and ID | implements `Make<Name>`: `Invalid<Name>` with the **first** violated invariant |
+| `check<Name>(value)` | a domain primitive with invariants or on `UUID` | the violated invariants, in declaration order after `uuid` (empty: valid) |
+| `make<Name>` | every domain primitive and ID | implements `Make<Name>`: `Invalid<Name>` with the **first** violated invariant (on `UUID`, `uuid` when the value is not a UUID) |
 | `check<Name>(x)` | a value object, entity or union with invariants (a union: those of its variant) | the violated invariants |
 | `check<State><Aggregate>(x)`, `check<Aggregate>(x)` | an aggregate with invariants | per state, the aggregate's and the state's violated invariants; `check<Aggregate>` for any state |
-| `check<Command>Requires(aggregate, …params)` | a command with requirements | the name of the first requirement that does not hold, or `undefined` |
+| `check<Aggregate>Common(x)` | every aggregate with states, also without invariants | the aggregate's own violated invariants, once (the check of each state reports them first) |
+| `check<Command>Requires(aggregate, params)` | a command with requirements (a factory: `(params)`) | the name of the first requirement that does not hold, or `undefined`; it takes the command's parameters object as it is |
 | `equal<Name>(a, b)` | every value object, entity and union | the equality of `==`, `unique` and `contains` |
 
 ```ts
 /** The first requirement of Order.confirm that does not hold, in declaration order; `undefined` when all hold. */
-export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'hasItems' | undefined {
+export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrderParams): 'hasItems' | undefined {
     if (!(order.items.length > 0)) return 'hasItems';
     return undefined;
 }
 ```
+
+The translation reads like the `.dt` it comes from: a violated `A implies B` is tested as `A && !B`
+(`if (order.reason === 'Other' && !(order.note !== undefined))`), lambda variables keep their names
+(`(item) => item.quantity > 0`; the second element of `unique(items, item => item.sku)` is `item2`), and strings are in
+single quotes. A parameter of the command is read from the parameters object (`params.reason`). A lambda variable gets
+a number (`item2`) only when its name would clash with another variable in scope, the check's parameters, a reserved word of TypeScript or a name the module imports; the generator's own temporaries
+start with `$` (`$0`), which a `.dt` name cannot.
 
 A constraint without an expression cannot be generated. Instead the check gets a **slot**: a type naming the
 function your code provides, and a `…With` variant that takes it and combines it with the generated parts, in
@@ -1507,8 +1566,11 @@ export const makeSku = Sales.makeSkuWith({ reserved: (value) => !RESERVED.has(va
 
 The same holds for the other checks: `<Type>DeclaredChecks` and `check<Type>With(checks)` for value types and
 aggregates (one object per aggregate, keyed by invariant name, for all its states), and
-`<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements. A type without such a
-constraint has only the plain function.
+`<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements (a requirement's slot takes the
+aggregate and the parameters object, as the check). A type without such a
+constraint has only the plain function. The slot of an aggregate's own invariant takes `<Aggregate>Common` (an
+invariant of the aggregate holds in every state, so it reads only the common fields), the slot of a state's invariant
+that state's type; `check<Aggregate>CommonWith` exists when the aggregate's own invariants have a slot.
 
 <!-- topic: tests -->
 ### Generated tests
@@ -1518,7 +1580,7 @@ With `generate.ts.tests` in the config, `dt generate ts` also writes **contract 
 
 | | Checks |
 |---|---|
-| T1 | `make<Name>` accepts exactly the values that hold the invariants, with values at and next to each bound of ranges and lengths and strings for regular expressions, and reports the first one violated |
+| T1 | `make<Name>` accepts exactly the values that hold the invariants, with values at and next to each bound of ranges and lengths, strings for regular expressions, and on `UUID` UUIDs and strings next to one, and reports the first one violated |
 | T2 | when a requirement does not hold, the command returns the `else` error of the first such requirement; when all hold, none of the `else` errors |
 | T3 | after a successful command, the aggregate holds the invariants of its state (the aggregate's and the state's) |
 | T4 | events whose bounds the types do not express (`X[2..5]`) are emitted that many times |
@@ -1531,8 +1593,15 @@ aggregates per state. A parameter of a verified type gets values of its base typ
 passed); `arbitraries` overrides it like any other type (`{ Sales: { AvailableEmail: … } }`). **Inputs are always valid**: only values that hold their invariants are used, and parameters
 are values of their types; what a command does with invalid input is outside its contract. Values of one type are
 drawn often from a small pool, so that duplicates, `contains` and `!=` are decided both ways. Runs are deterministic
-(fixed seed, configurable), and a failure shows the shrunk counterexample and the seed. Install fast-check as a dev
-dependency of your project; generated product code does not use it.
+(fixed seed, configurable), and a failure shows the shrunk counterexample and the seed.
+
+The generic helpers of the tests are **`domaintrail/testing`**, a subpath of the domaintrail package, which your
+project already has as a dev dependency to run `dt`. Install fast-check as a dev dependency too (an optional peer
+dependency of domaintrail); generated product code uses neither. Each test module states the version of domaintrail
+that generated it and, when it is loaded, fails unless `domaintrail/testing` is compatible with it (as with
+`^<version>`: at least as new, of the same minor version while the major is 0): after upgrading domaintrail, run
+`dt generate ts` again. `tests/index.ts` exports the suites of the contexts and `register`; the helpers themselves
+(`cases`, `suite`, the types `Suite` and `TestCase`) are imported from `domaintrail/testing`.
 
 Per context, `tests/<Context>.ts` exports `contract(impl, options?)`, returning a suite of named test cases
 (`{ name, children }` of `{ name, run, todo? }`) for any runner, and `arbitraries(options?)`. `impl` lists what to
@@ -1569,10 +1638,10 @@ const ok = <T>(r: { ok: true; value: T } | { ok: false }): T => {
 const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     state: 'Confirmed',
     id,
-    customer: makeCustomerId('customer-1'),
+    customer: ok(makeCustomerId('5f0c3a2e-8d41-4b7a-9e6f-1c2d3e4f5a6b')),
     items: [
         {
-            id: makeOrderItemId('item-1'),
+            id: ok(makeOrderItemId('0b9d7c6e-2f13-4a85-b1c4-7e8f9a0b1c2d')),
             sku: ok(makeSku('ABC-0001')),
             quantity: ok(makeQuantity(3)),
             unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' },
@@ -1581,7 +1650,8 @@ const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     confirmedAt: new Date('2026-10-24T09:00:00Z'),
 });
 let invoices = 0;
-const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => makeInvoiceId(`invoice-${++invoices}`) });
+const invoiceId = (): string => `00000000-0000-4000-8000-${String(++invoices).padStart(12, '0')}`;
+const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => ok(makeInvoiceId(invoiceId())) });
 
 register(Billing.contract({ make: { InvoiceId: makeInvoiceId }, Invoice: invoiceCommands, policies }));
 register(Common.contract({ make: { EmailAddress: makeEmailAddress, Amount: makeAmount } }));
@@ -1597,17 +1667,39 @@ Options, all optional:
   constraints without an expression, by context and type or command type; the same functions your code passes to the
   `…With` checks. A constraint whose check is not passed is listed as a **todo** case ("not expressed in the DSL and
   not checked"), and the tests accept either outcome where it would decide.
-- `examples: { Order: { states: { Draft: [order] }, commands: { confirm: [[order, at]] } } }`: valid aggregates per
-  state (mixed into the generated ones) and arguments per command (run first, before the generated ones). Examples
-  must hold their invariants; one that does not fails the case.
+- `examples: { Order: { states: { Draft: [order] }, commands: { confirm: [[order, { at }]] } } }`: valid aggregates per
+  state (mixed into the generated ones) and arguments per command, as the command takes them: the aggregate and the
+  parameters object (run first, before the generated ones). Examples must hold their invariants; one that does not
+  fails the case.
 
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
 
-**Recursive value types** have no generated arbitrary yet: `dt generate ts` warns, and the contract tests leave out
-the arbitraries of those types and of the types holding them, and the cases that need one (a command with such a
-parameter or of an aggregate holding one, a required policy reacting to such an event). Test those commands in your
-own tests.
+**Recursive value types** (a tree, an expression) are drawn like the others, built with `fc.letrec`: the types on one
+cycle (`Expr` and `Call`, each holding the other, even in different contexts) are defined together. Values are biased
+towards shallow ones, which keeps runs fast and counterexamples small, and go at most `maxRecursionDepth` deep: how
+many times a value nests through its cycle, counted where the cycle could end — a union's variant (a variant out of the
+cycle, such as `lit`, is the only one drawn once the depth is reached), an optional field (then absent), a list that may
+be empty (then empty). A value of depth 1 holds no other; a binary tree of depth 4 has at most 15 nodes. The depth is
+set in the config, overall and per type by qualified name; the types of one cycle use the greatest depth among them:
+
+```jsonc
+"tests": {
+  "maxRecursionDepth": 4, // the default
+  "types": { "Modeling.Expr": { "maxRecursionDepth": 3 } }
+}
+```
+
+Raise the depth when the rules only show in deeper values; lower it when runs are slow. A recursive type whose
+invariants reject most drawn values (a tree that must be balanced, an expression that must type-check) stops with the
+message naming the type, as any other: pass its arbitrary in `arbitraries`. Inside a cycle, the arbitrary passed is used
+for the nested values too, so it may build its values itself, with `fc.letrec` or from smaller valid ones:
+
+```ts
+// balanced trees: built by height, so every value holds the invariant
+const tree = fc.letrec<{ t: Tree }>((tie) => ({ t: fc.oneof({ depthSize: 'small', maxDepth: 3 }, fc.constant({ children: [] }), tie('t').map((c) => ({ children: [c, c] }))) })).t;
+register(M.contract(impl, { arbitraries: { M: { Tree: tree } } }));
+```
 
 **Outside the generated tests** is what happens around the commands, which your own tests cover (as
 `examples/shop/src/app.test.ts` does): the factories of verified types (`MakeAvailableEmail`, with your repositories and
@@ -1683,6 +1775,32 @@ directory instead, e.g. a shared context into a package used by several applicat
 its own `_runtime.ts` and an `index.ts` re-exporting only the contexts in it; a module imports other contexts by
 relative path (`import type * as Common from '../../packages/shared/src/generated/Common.js'`). The runtimes are
 identical, so values typed with one are accepted where the other is expected.
+
+When those directories are packages of a monorepo, a relative path crosses from one package into another. Give the
+context the module through which its package exports its generated code, next to its `out`:
+
+```jsonc
+{
+  "generate": {
+    "ts": {
+      "contexts": { "Common": { "out": "packages/shared/src/generated", "module": "@acme/shared" } },
+      "tests": {},
+    },
+  },
+}
+```
+
+- Generated code in another output directory imports the context from the module (`import type * as Common from
+  '@acme/shared'`; a value import when a generated check calls one of its functions); code in the same directory keeps
+  the relative path. The package exports the context's generated module under that name (an entry pointing at
+  `Common.ts`, or an index that exports all of it).
+- With contract tests, the context's tests are written into its package, `<out>/tests` (with their own `index.ts`,
+  and `_register.ts` with a runner; the package needs domaintrail and fast-check as dev dependencies), and the tests of other directories take its arbitraries from `<module>/tests`: the
+  package exports its `tests/Common.ts` under that name. The options of a context's tests name the contexts whose tests
+  are next to them and those of other packages they draw values from, so a package's tests import only the packages
+  it depends on.
+- `module` needs `out`. Keep one configuration for the whole repository: every context is still read, checked and
+  generated together, and the Live View shows them all.
 
 Each run replaces the files generated before (recognized by their header). The files written are recorded in
 `.domaintrail/generated.json` under the root, and generated files of earlier runs that are no longer written (an output
@@ -2110,7 +2228,7 @@ storming](#diagnostics-of-a-storming).
 |---|---|
 | SYNTAX | lexer / parser errors (in `.dt` and `.dtes` files) |
 | M001 | types, aggregates and names in invariants and requirements resolve |
-| M002 | names are unique in their scope (also across files of one context) |
+| M002 | names are unique in their scope (also across files of one context); a type on `UUID` declares no invariant named `uuid`, the generated one |
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
 | M005 | a reference's ID type matches the identity of the target aggregate |
@@ -2276,7 +2394,7 @@ generation refused) is an `error` message in the document, e.g. `{ "error": "Roo
 |---|---|
 | 0 | success (`check`: no errors; warnings are allowed) |
 | 1 | the model or a storming has errors, no `.dt` or `.dtes` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, or the root / a file could not be read |
-| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
+| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` or a type in `generate.ts.tests.types` that the model does not have) or an unknown `generate` target |
 
 <!-- topic: config -->
 ## Configuration
@@ -2300,10 +2418,17 @@ relative to the config file, and its directory becomes the root. Without a confi
       "out": "src/domain/generated",                        // default: "generated/domain"
       // policies: "optional" (a handler type each) or "required" (also <Context>PolicyHandlers, which the contract tests take)
       "policies": "optional",                               // default: "optional"
-      // per context: a directory of its own instead of "out", and/or its own "policies" (both optional)
+      // per context: a directory of its own instead of "out" (with "module": the name its package exports it by),
+      // and/or its own "policies" (all optional; see dt guide output-dirs)
       "contexts": { "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } },
-      // contract tests, written only with this key (optional); needs fast-check in your project
-      "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
+      // contract tests, written only with this key (optional); they import domaintrail/testing and need fast-check
+      "tests": {
+        "out": "src/domain/generated/tests", // default: <out>/tests
+        "runner": "vitest",                 // bun, vitest, jest, node
+        // how deep drawn values of recursive types go, overall and per type (a cycle uses its greatest)
+        "maxRecursionDepth": 4,             // default: 4
+        "types": { "Sales.Category": { "maxRecursionDepth": 3 } }
+      }
     }
   },
   "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
@@ -2315,7 +2440,9 @@ only; contexts listed in `generate.ts.contexts` keep their own directories. Sour
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in
 `generate.ts.contexts` that is not a context of the model is a config error, reported by `generate ts` once the model
-has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`). The policies of a context
+has been checked; so is a name in `generate.ts.tests.types` that is not a type of the model, and one that is not a
+recursive type is warned about. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`); the tests of
+a context with a `module` go into `<its out>/tests`. The policies of a context
 are `generate.ts.contexts.<Context>.policies` if given, else `generate.ts.policies`, else `optional` (see
 [Reactions to events](#reactions-to-events-policies)).
 

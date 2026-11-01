@@ -12,6 +12,7 @@ import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
 import { UnsafeSessionPath } from './session-dir.js';
 import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
+import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 /** The error a promise rejects with (fails when it resolves). */
 async function thrown(p: Promise<unknown>): Promise<Error> {
@@ -43,13 +44,13 @@ const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T 
 const at = new Date('2026-10-31T09:00:00Z');
 const plus = (ms: number): Date => new Date(at.getTime() + ms);
 const facilitator = value(C.makeParticipantId('facilitator'));
-const sessionId = C.makeSessionId('00000000-0000-4000-8000-000000000001');
-const otherSession = C.makeSessionId('00000000-0000-4000-8000-000000000002');
-const request = C.makeRequestId('00000000-0000-4000-8000-000000000010');
-const revision = C.makeRevisionId('00000000-0000-4000-8000-000000000020');
+const sessionId = knownSessionId('00000000-0000-4000-8000-000000000001');
+const otherSession = knownSessionId('00000000-0000-4000-8000-000000000002');
+const request = knownRequestId('00000000-0000-4000-8000-000000000010');
+const revision = knownRevisionId('00000000-0000-4000-8000-000000000020');
 
 function openSession(stores: Stores, id: C.SessionId): void {
-    const { Open } = value(sessionCommands.start(id, facilitator, value(C.makeDisplayName('Ada')), at));
+    const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), startedAt: at }));
     stores.sessions.save(Open.aggregate);
     stores.outbox.append(id, [Open.events.SessionStarted], at);
 }
@@ -57,7 +58,7 @@ function openSession(stores: Stores, id: C.SessionId): void {
 function queued(id: number, session: C.SessionId = sessionId): C.QueuedAgentRun {
     return {
         state: 'Queued',
-        id: C.makeAgentRunId(`00000000-0000-4000-8000-0000000001${String(id).padStart(2, '0')}`),
+        id: knownAgentRunId(`00000000-0000-4000-8000-0000000001${String(id).padStart(2, '0')}`),
         session,
         input: {
             requests: [{ request, author: facilitator, targets: [], body: value(C.makeText('x')) }],
@@ -209,7 +210,7 @@ describe('the run queue', () => {
     test('serial: a running run blocks claims, and the store refuses a second running run or lease of a session', async () => {
         const { uow, runs } = await queue();
         await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), at));
-        const running = value(agentRunCommands.start(runs[0], revision, at)).Running.aggregate;
+        const running = value(agentRunCommands.start(runs[0], { baseRevision: revision, startedAt: at })).Running.aggregate;
         await uow.transaction((s) => {
             s.runs.save(running);
             s.runs.endLease(running.id, 'done');
@@ -217,7 +218,7 @@ describe('the run queue', () => {
         // no lease left, but a running run: no claim
         expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t2'), at))).toBeUndefined();
         expect((await uow.transaction((s) => s.runs.active(sessionId, at)))?.run.id).toBe(running.id);
-        const second = value(agentRunCommands.start(runs[1], revision, at)).Running.aggregate;
+        const second = value(agentRunCommands.start(runs[1], { baseRevision: revision, startedAt: at })).Running.aggregate;
         expect(await thrown(uow.transaction((s) => s.runs.save(second)))).toMatchObject(errorLike(/UNIQUE/));
         expect((await uow.transaction((s) => s.runs.load(runs[1].id)))?.run.state).toBe('Queued');
     });
@@ -310,7 +311,7 @@ describe('rows written before requests had several targets', () => {
             );
         const stored = JSON.stringify(db.prepare('SELECT data FROM requests').all());
         const uow = createUnitOfWork(db);
-        const session = C.makeSessionId(fixture.session.id);
+        const session = knownSessionId(fixture.session.id);
         const element: unknown = {
             target: { kind: 'DtElement', element: 'Billing.Invoice' },
             sourceRevision: revision,
@@ -368,7 +369,7 @@ describe("rows written before the agent's reply was structured", () => {
                 at.toISOString(),
             );
         const uow = createUnitOfWork(db);
-        const session = C.makeSessionId(fixture.session.id);
+        const session = knownSessionId(fixture.session.id);
         const { runs, events } = await uow.transaction((st) => ({ runs: st.runs.listBySession(session), events: st.outbox.readAfter(0, 10, session) }));
         expect(runs.map((r) => r.state)).toEqual(['NeedsClarification', 'Completed']);
         const [asked, done] = runs;

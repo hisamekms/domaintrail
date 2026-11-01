@@ -443,7 +443,7 @@ set is a compile error that names it.
 import { Booking, decide, err, ok } from '../generated/domain/index.js';
 
 export const reservationCommands: Booking.ReservationCommands = {
-    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, (id, room, slot, attendees) =>
+    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, ({ id, room, slot, attendees }) =>
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
@@ -453,9 +453,10 @@ export const reservationCommands: Booking.ReservationCommands = {
     ),
 
     confirm: decide<Booking.ConfirmReservationDecision>(Booking.ReservationShape, {
-        Requested: (reservation, capacity, at) => {
+        Requested: (reservation, params) => {
             // the requirement's expression stays the DSL's: the generated check evaluates it
-            if (Booking.checkConfirmReservationRequires(reservation, capacity, at)) return err({ type: 'RoomTooSmall' });
+            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'RoomTooSmall' });
+            const { at } = params;
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
@@ -468,7 +469,10 @@ export const reservationCommands: Booking.ReservationCommands = {
 ```
 
 The decision of `confirm` has one handler per source state (here only `Requested`), so that a command that runs in
-several states is written the same way. `dt guide decide` explains the shape of the results.
+several states is written the same way. A command takes its parameters as one object after the aggregate
+(`Booking.ConfirmReservationParams`), and passes it on as it is to its generated check of requirements; a call names
+each parameter (`reservationCommands.confirm(reservation, { capacity, at })`). `dt guide decide` explains the shape of
+the results.
 
 ### Make domain values
 
@@ -486,13 +490,17 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
     if (Booking.checkSlot(slot).length > 0) throw new Error('a slot is 1 to 8 hours');
-    const id = Booking.makeReservationId(crypto.randomUUID()); // an ID has no invariants: it cannot fail
-    return reservationCommands.request(id, Booking.makeRoomId(input.room), slot, attendees.value);
+    const room = Booking.makeRoomId(input.room); // Result: an ID on UUID checks that the value is a UUID
+    if (!room.ok) return room;
+    const id = Booking.makeReservationId(crypto.randomUUID());
+    if (!id.ok) return id;
+    return reservationCommands.request({ id: id.value, room: room.value, slot, attendees: attendees.value });
 }
 ```
 
 - `make<Name>` exists for every ID and domain primitive. It returns a `Result` when the type has invariants
-  (`makeHeadcount`), the value itself when it has none (`makeReservationId`).
+  (`makeHeadcount`) or a `UUID` base, whose form it checks as the invariant `'uuid'` (`makeRoomId('room-1')` is an
+  `InvalidRoomId`); the value itself otherwise.
 - `check<Name>` returns the invariants a value violates (`checkSlot`): value objects are plain objects.
 - A `Decimal` is made with `parseDecimal(text)` from the runtime (`undefined` when the text is not a number).
 - Where IDs and times come from is the application's choice; the command only takes them.
@@ -502,7 +510,8 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
 The generated tests check what the types cannot: the values. They generate inputs with fast-check and use the
 generated checks as the oracle — the constructors accept exactly the valid values, a command returns the error of the
 first requirement that does not hold, an aggregate made by a command holds the invariants of its state, and commands
-are pure. Register them with one test file:
+are pure. Their helpers come with domaintrail, as `domaintrail/testing`, and they need fast-check, installed above.
+Register them with one test file:
 
 ```ts
 // src/contract.test.ts

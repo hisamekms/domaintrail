@@ -1,31 +1,12 @@
-export type Severity = 'error' | 'warning';
+// The functions over diagnostics. Their types (`Diagnostic`, `Position`, `Severity`, `JsonDiagnostic`) are the kernel's
+// context in model/kernel.dt, generated into ./generated (ADR 0028).
+import type { Diagnostic, JsonDiagnostic } from './generated/Kernel.js';
 
 /**
  * The code of a diagnostic: `SYNTAX` for lexer and parser errors, otherwise the ID of the rule that reports it. Each
  * context owns its rule IDs (Modeling's `ModelingRuleId`, Storming's `StormingRuleId`); the kernel knows none of them.
  */
-export type RuleCode = string;
-
-export interface Position {
-    /** 1-based */
-    line: number;
-    /** 1-based */
-    column: number;
-}
-
-export interface Diagnostic {
-    /** File path as given to the analyzer (usually relative to the workspace root). */
-    file: string;
-    start: Position;
-    end: Position;
-    severity: Severity;
-    code: RuleCode;
-    message: string;
-    /** One line on what to change, when the message does not say it (e.g. `did you mean 'OrderConfirmed'?`). */
-    hint?: string;
-    /** Stable ID of the nearest model element (e.g. `Sales.Order`), when known. */
-    elementId?: string;
-}
+export type RuleCode = Diagnostic['code'];
 
 export function hasErrors(diagnostics: readonly Diagnostic[]): boolean {
     return diagnostics.some((d) => d.severity === 'error');
@@ -37,19 +18,7 @@ export function formatDiagnostic(d: Diagnostic): string {
     return d.hint ? `${line}\n  hint: ${d.hint}` : line;
 }
 
-/** A diagnostic as written by `dt check --format json` (see schema/diagnostics.schema.json). */
-export interface JsonDiagnostic {
-    file: string;
-    line: number;
-    column: number;
-    endLine: number;
-    endColumn: number;
-    severity: Severity;
-    code: RuleCode;
-    message: string;
-    hint?: string;
-}
-
+/** The diagnostic as written by `dt check --format json` (see schema/diagnostics.schema.json). */
 export function jsonDiagnostic(d: Diagnostic): JsonDiagnostic {
     return {
         file: d.file,

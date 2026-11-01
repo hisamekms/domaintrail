@@ -18,7 +18,7 @@ import type {
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { contextNames, elementOf, elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
-import { CheckWriter, type DomainPrimitive } from './checks.js';
+import { CheckWriter, primitiveInvariants, type DomainPrimitive } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
 import {
     AGGREGATE_TYPE,
@@ -39,6 +39,8 @@ import {
     invalidTypeName,
     makeTypeName,
     outputsVary,
+    paramsArgName,
+    paramsTypeName,
     policyHandlersName,
     policyTypeName,
     shapeName,
@@ -213,16 +215,21 @@ export type Timestamp = Date;
  * Generates one module per bounded context, plus a runtime and an index in every directory written to.
  * `dirs` places contexts in directories (`/`-separated, relative to the output directory; default: the output
  * directory itself); each index re-exports only the contexts in its directory. With `tests`, also the contract tests
- * (ADR 0020) into `tests.dir`. `policies` gives the mode of each context's policies (absent: `optional`). Requires a
- * model without errors.
+ * (ADR 0020) into `tests.dir`. `policies` gives the mode of each context's policies (absent: `optional`). `modules`
+ * gives the module of each context written into another package (ADR 0028): code in another directory imports the
+ * context from it, and the context's tests are written into `<its directory>/tests`. Requires a model without errors.
  */
 export function generateTypeScript(
     model: DomainModel,
     dirs: Readonly<Record<string, string>> = {},
     tests?: TestsOptions,
     policies: Readonly<Record<string, PolicyMode>> = {},
+    modules: Readonly<Record<string, string>> = {},
 ): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
+    // a context of another package by its module, one of the same directory by relative path
+    const moduleOf = (from: string, ctx: string): string => (modules[ctx] && dirOf(ctx) !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx));
+    const testsDirs = Object.fromEntries(Object.keys(modules).map((c) => [c, posix.join(dirOf(c), 'tests')]));
     const files: GeneratedFile[] = [];
     for (const dir of new Set(contextNames(model).map(dirOf))) {
         const contexts = contextNames(model).filter((c) => dirOf(c) === dir);
@@ -230,7 +237,7 @@ export function generateTypeScript(
         for (const ctx of contexts) {
             files.push({
                 path: posix.join(dir, `${ctx}.ts`),
-                content: new ContextEmitter(model, ctx, (other) => moduleSpecifier(dir, dirOf(other), other), policies[ctx] ?? 'optional').emit(),
+                content: new ContextEmitter(model, ctx, (other) => moduleOf(dir, other), policies[ctx] ?? 'optional').emit(),
             });
         }
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
@@ -238,7 +245,10 @@ export function generateTypeScript(
     }
     if (tests)
         files.push(
-            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies }, (from, ctx) => moduleSpecifier(from, dirOf(ctx), ctx)),
+            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies, dirs: testsDirs, modules }, (from, ctx) =>
+                // the tests in a context's own package import it by relative path
+                modules[ctx] && testsDirs[ctx] !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx),
+            ),
         );
     return files;
 }
@@ -316,6 +326,8 @@ class ContextEmitter {
     private readonly imports = new Set<string>();
     /** Contexts whose module is imported as a value (its generated checks are called), not only for types. */
     private readonly valueImports = new Set<string>();
+    /** Contexts named by a `{@link}` in a doc comment; imported for types only, so that the link resolves in editors. */
+    private readonly linked = new Set<string>();
     private readonly out: string[] = [];
     private readonly checks: CheckWriter;
     /** The `…Input` types written, once each. */
@@ -416,7 +428,11 @@ class ContextEmitter {
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
             ...(values.length ? [`import { ${values.join(', ')} } from './_runtime.js';`] : []),
-            ...[...this.imports].sort().map((c) => `import ${this.valueImports.has(c) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`),
+            ...[...new Set([...this.imports, ...this.linked])].sort().flatMap((c) => [
+                // a context only linked is otherwise unused: TypeScript counts the link, linters do not
+                ...(this.imports.has(c) ? [] : ['// oxlint-disable-next-line no-unused-vars -- only named by {@link} in doc comments']),
+                `import ${this.valueImports.has(c) ? '' : 'type '}* as ${c} from '${this.moduleOf(c)}';`,
+            ]),
         ];
         return [HEADER, ...imports, '', body].join('\n');
     }
@@ -519,13 +535,14 @@ class ContextEmitter {
      */
     private primitive(p: DomainPrimitive): void {
         const base = PRIMITIVES[p.base];
+        const invariants = primitiveInvariants(p);
         const summary = p.kind === 'id' && !p.label ? [`Identifier of ${p.name}.`] : [];
-        const make = `make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}`;
+        const make = `make${p.name}${invariants.some((i) => !i.source) ? 'With' : ''}`;
         const noCast = `Make it with \`${make}\`; never \`as ${p.name}\` (see dt guide lint).`;
-        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), noCast, seeLine(p.location)]);
+        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(invariants), noCast, seeLine(p.location)]);
         this.line(`export type ${p.name} = ${base} & { readonly __domain: '${p.id}' };`);
         this.out.push('');
-        if (p.invariants.length === 0) {
+        if (invariants.length === 0) {
             this.jsdoc([`Creates a ${p.name}. It has no invariants, so creation cannot fail.`, seeLine(p.location)]);
             this.line(`export type ${makeTypeName(p)} = (value: ${base}) => ${p.name};`);
             this.push(this.checks.primitive(p));
@@ -536,11 +553,11 @@ class ContextEmitter {
         this.line(`    readonly type: '${invalidTypeName(p)}';`);
         this.line(`    readonly value: ${base};`);
         this.line(`    /** The violated invariant. */`);
-        this.line(`    readonly invariant: ${p.invariants.map((i) => `'${i.name}'`).join(' | ')};`);
+        this.line(`    readonly invariant: ${invariants.map((i) => `'${i.name}'`).join(' | ')};`);
         this.line('}');
         this.out.push('');
         this.jsdoc([
-            `Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`,
+            `Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`,
             seeLine(p.location),
         ]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);
@@ -567,6 +584,12 @@ class ContextEmitter {
         const given = context ? `, given the ${contextType}${context.optional ? ' (or `undefined`)' : ''} the check needs` : '';
         this.jsdoc([
             `Checks a value of ${base}${given}, and returns it as ${v.name} when the check passes. Written by hand (with repositories and services): the only code that may assert the type.`,
+            ...(context?.optional
+                ? [
+                      `The context is required even when there is none: pass \`undefined\` explicitly. Were it optional, a call that forgot it would compile, and the check would then not leave out the one it should (e.g. report an aggregate's own value as taken).`,
+                  ]
+                : []),
+            `The errors of the \`Result\` are the domain's answers${errors.length ? `: ${or(errors.map((e) => this.ref(e)))}` : ', none here'}. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).`,
             seeLine(v.location),
         ]);
         const params = [`value: ${base}`, ...(context ? [`context: ${contextType}${context.optional ? ' | undefined' : ''}`] : [])];
@@ -686,7 +709,8 @@ class ContextEmitter {
         const generic = stateful && outputsVary(c.factory, transitions, c.emits);
         const input = stateUnion(transitions.flatMap((t) => t.from));
         const self = aggregateParamName(agg);
-        const params = c.params.map((p) => `${p.name}: ${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}`);
+        // the parameters as one object (`params: CancelOrderParams`), and none without parameters
+        const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
         // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name; the
         // contract holds the aggregate, the decision what to `set`
@@ -705,10 +729,16 @@ class ContextEmitter {
         const transition = c.factory
             ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
             : transitions.map((t) => `${t.from.join(' | ')} -> ${t.to.join(' | ')}`).join('; ');
+        if (c.params.length) {
+            this.jsdoc([`The parameters of ${agg.name}.${c.name}, by name.`, seeLine(c.location)]);
+            this.line(`export interface ${paramsTypeName(agg, c)} {`);
+            for (const l of c.params.flatMap((f) => this.property(f))) this.line(`    ${l}`);
+            this.line('}');
+            this.out.push('');
+        }
         this.jsdoc([
             `${agg.name}.${c.name}${transition ? ` (${transition})` : ''}${c.factory ? ' — factory' : ''}`,
             ...describedLines(c),
-            ...c.params.filter((p) => p.label || p.doc).map((p) => `@param ${p.name} ${[p.label, p.doc].filter(Boolean).join(' — ')}`),
             ...requires,
             ...changes,
             ...this.emitsLines(c.emits.map((e) => ({ e, when: e.when }))),
@@ -769,8 +799,8 @@ class ContextEmitter {
         const sources = unique(c.transitions.flatMap((t) => t.from));
         const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
-        const ps = c.params.map((p) => ({ name: p.name, type: `${this.fieldType(p)}${p.cardinality === 'optional' ? ' | undefined' : ''}` }));
-        return this.checks.requires(agg, c, commandTypeName(agg, c), subject, ps);
+        const params = c.params.length ? { name: paramsArgName(agg), type: paramsTypeName(agg, c) } : undefined;
+        return this.checks.requires(agg, c, commandTypeName(agg, c), subject, params);
     }
 
     /** The entries of `emits` for a source state, with `when` reduced to what still selects among its targets. */
@@ -874,10 +904,13 @@ class ContextEmitter {
 
     private property(f: FieldModel): string[] {
         const doc = [f.label, f.doc].filter(Boolean).join(' — ');
-        const prefix = doc ? [`/** ${oneLine(doc)} */`] : [];
-        const ref = f.kind === 'references' && f.target ? ` // -> ${f.target}` : '';
-        if (f.cardinality === 'optional') return [...prefix, `readonly ${f.name}?: ${this.fieldType(f)};${ref}`];
-        return [...prefix, `readonly ${f.name}: ${this.fieldType(f)};${ref}`];
+        // The target of `references`, linked by the name this module uses for it (a link to another context imports its
+        // types), so that hover and go-to-definition reach it.
+        const see = f.kind === 'references' && f.target ? `@see {@link ${this.link(f.target)}}` : '';
+        const lines = [...(doc ? [oneLine(doc)] : []), ...(see ? [see] : [])];
+        const prefix = lines.length > 1 ? ['/**', ...lines.map((l) => ` * ${l}`), ' */'] : lines.map((l) => `/** ${l} */`);
+        if (f.cardinality === 'optional') return [...prefix, `readonly ${f.name}?: ${this.fieldType(f)};`];
+        return [...prefix, `readonly ${f.name}: ${this.fieldType(f)};`];
     }
 
     private fieldType(f: FieldModel): string {
@@ -904,6 +937,15 @@ class ContextEmitter {
         if (ctx === this.ctx) return name;
         this.imports.add(ctx);
         return `${ctx}.${name}`;
+    }
+
+    /** The name of a qualified element in a `{@link}`, as {@link ContextEmitter.ref} names it, importing other contexts for the link only. */
+    private link(qname: string): string {
+        const dot = qname.indexOf('.');
+        const ctx = qname.slice(0, dot);
+        if (ctx === this.ctx) return qname.slice(dot + 1);
+        this.linked.add(ctx);
+        return qname;
     }
 
     /** Emits a JSDoc block (single line when short); nothing for an empty list. */

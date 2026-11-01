@@ -26,10 +26,10 @@ const ok = <T>(r: { ok: true; value: T } | { ok: false }): T => {
 const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     state: 'Confirmed',
     id,
-    customer: makeCustomerId('customer-1'),
+    customer: ok(makeCustomerId('5f0c3a2e-8d41-4b7a-9e6f-1c2d3e4f5a6b')),
     items: [
         {
-            id: makeOrderItemId('item-1'),
+            id: ok(makeOrderItemId('0b9d7c6e-2f13-4a85-b1c4-7e8f9a0b1c2d')),
             sku: ok(makeSku('ABC-0001')),
             quantity: ok(makeQuantity(3)),
             unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' },
@@ -38,7 +38,8 @@ const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     confirmedAt: new Date('2026-10-24T09:00:00Z'),
 });
 let invoices = 0;
-const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => makeInvoiceId(`invoice-${++invoices}`) });
+const invoiceId = (): string => `00000000-0000-4000-8000-${String(++invoices).padStart(12, '0')}`;
+const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => ok(makeInvoiceId(invoiceId())) });
 
 register(Billing.contract({ make: { InvoiceId: makeInvoiceId }, Invoice: invoiceCommands, policies }));
 register(Common.contract({ make: { EmailAddress: makeEmailAddress, Amount: makeAmount } }));

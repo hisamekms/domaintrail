@@ -59,6 +59,7 @@ describe('config file', () => {
             lintHint: true,
             tsOut: 'generated/domain',
             tsContexts: {},
+            tsModules: {},
             tsPolicies: { project: 'optional', contexts: {} },
             view: { port: 4321, host: '127.0.0.1' },
             session: SESSION_DEFAULTS,
@@ -93,6 +94,7 @@ describe('config file', () => {
             lintHint: true,
             tsOut: 'src/gen',
             tsContexts: { C: 'shared/gen' },
+            tsModules: {},
             tsPolicies: { project: 'optional', contexts: {} },
             view: { port: 8080, host: '127.0.0.1' },
             session: {

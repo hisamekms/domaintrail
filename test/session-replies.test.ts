@@ -14,6 +14,7 @@ import {
     type CollaborationUseCases,
     createCollaboration,
     createUnitOfWork,
+    knownAgentRunId,
     openSessionBlobs,
     openSessionDatabase,
     toAgentReply,
@@ -201,7 +202,7 @@ describe('replying to a run', () => {
         const { lease } = value(await f.use.claimNextRun({ session: f.id, owner: 'agent', leaseMs: 30_000 }));
         value(await f.use.startRun({ run: queued, token: lease.token }));
         expect(error(await reply(queued))).toEqual({ type: 'RunNotReplyable', run: queued });
-        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ff');
+        const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ff');
         expect(error(await reply(unknown))).toEqual({ type: 'RunNotFound', run: unknown });
 
         // a run of another session (a session started later in the same workspace)
@@ -241,7 +242,7 @@ describe('replying to a run', () => {
         const small = value(await f.use.previousRuns({ run: replies, maxDiff: 10 }));
         expect(small[0].changes).toEqual({ kind: 'files', files: [{ path: 'sales/sales.dt', status: 'changed' }], added: 3, removed: 0, diffOmitted: true });
         // the run itself must exist
-        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000fe');
+        const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000fe');
         expect(error(await f.use.previousRuns({ run: unknown, maxDiff: 1 }))).toEqual({ type: 'NotFound', aggregate: 'AgentRun', id: unknown });
     });
 

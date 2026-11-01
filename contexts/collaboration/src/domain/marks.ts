@@ -183,13 +183,14 @@ export function markChange<M extends MarkFacts>(
 
 /** The commands of a mark, checked against the generated contracts as the other aggregates' (`commands.ts`). */
 export const markCommands: Collaboration.MarkCommands = {
-    place: decide<Collaboration.PlaceMarkDecision>(Collaboration.MarkShape, (id, session, participant, role, target, sign, placedAt) => {
-        switch (Collaboration.checkPlaceMarkRequires(id, session, participant, role, target, sign, placedAt)) {
+    place: decide<Collaboration.PlaceMarkDecision>(Collaboration.MarkShape, (params) => {
+        switch (Collaboration.checkPlaceMarkRequires(params)) {
             case 'fitsTarget':
                 return err({ type: 'MarkNotForTarget' });
             case 'participantsVote':
                 return err({ type: 'FacilitatorDoesNotVote' });
         }
+        const { id, session, participant, target, sign, placedAt } = params;
         return ok({
             Placed: {
                 set: { id, session, participant, target, sign, placedAt },
@@ -199,7 +200,7 @@ export const markCommands: Collaboration.MarkCommands = {
     }),
 
     remove: decide<Collaboration.RemoveMarkDecision>(Collaboration.MarkShape, {
-        Placed: (mark, _open, removedAt) =>
+        Placed: (mark, { removedAt }) =>
             ok({
                 Removed: {
                     set: { removedAt },

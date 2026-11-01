@@ -29,6 +29,15 @@ describe('generated TypeScript names (M011)', () => {
         ]);
     });
 
+    test('collision with the parameters object of a command; a command without parameters has none', async () => {
+        const a = await checkSales(
+            `${ORDER.replace('Draft -> Done', 'Draft -> Done\n    command archive() Done -> Done')} value FinishOrderParams value ArchiveOrderParams`,
+        );
+        expect(only(a, 'M011').map((d) => d.message)).toEqual([
+            "Generated TypeScript name 'FinishOrderParams' for value object 'FinishOrderParams' collides with the parameters of 'Order.finish'.",
+        ]);
+    });
+
     test('reserved discriminant and parameter names', async () => {
         const a = await checkSales(`${ORDER.replace('finish(at: Timestamp)', 'finish(order: Timestamp, default: Int)')} event E { type: String }`);
         expect(only(a, 'M011').map((d) => d.message)).toEqual([

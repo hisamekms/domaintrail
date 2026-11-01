@@ -45,24 +45,33 @@
               "default": "optional"
             },
             "contexts": {
-              "description": "Settings per context, keyed by context name (an unknown name is an error): a directory of its own instead of 'out' (which gets its own _runtime.ts and an index.ts of its contexts; imports between contexts use relative paths), and how its policies are generated.",
+              "description": "Settings per context, keyed by context name (an unknown name is an error): a directory of its own instead of 'out' (which gets its own _runtime.ts and an index.ts of its contexts; imports between contexts use relative paths, or the context's 'module'), and how its policies are generated.",
               "type": "object",
               "additionalProperties": {
                 "type": "object",
                 "additionalProperties": false,
                 "anyOf": [{ "required": ["out"] }, { "required": ["policies"] }],
+                "dependentRequired": { "module": ["out"] },
                 "properties": {
                   "out": { "description": "Output directory of this context, inside the directory of this file.", "type": "string" },
+                  "module": {
+                    "description": "The module through which the package that 'out' is in exports this context's generated code (ADR 0028), e.g. '@acme/kernel'. Generated code in another output directory imports the context from it instead of by relative path, and its contract tests from '<module>/tests'; this context's contract tests are written into <out>/tests. Needs 'out'.",
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "policies": {
                     "description": "Whether the policies of this context must be implemented; overrides generate.ts.policies.",
                     "enum": ["optional", "required"]
                   }
                 }
               },
-              "examples": [{ "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } }]
+              "examples": [
+                { "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } },
+                { "Kernel": { "out": "packages/kernel/src/generated", "module": "@acme/kernel" } }
+              ]
             },
             "tests": {
-              "description": "Contract tests generated from the model (ADR 0020), written only when this key is present: fast-check arbitraries of the types and a runner-agnostic suite per context. Your project needs fast-check as a (dev) dependency.",
+              "description": "Contract tests generated from the model (ADR 0020), written only when this key is present: fast-check arbitraries of the types and a runner-agnostic suite per context. They import domaintrail/testing (a subpath of the domaintrail package); your project needs fast-check as a (dev) dependency.",
               "type": "object",
               "additionalProperties": false,
               "properties": {
@@ -73,9 +82,33 @@
                 "runner": {
                   "description": "Writes _register.ts, which registers a generated suite with this test runner.",
                   "enum": ["bun", "vitest", "jest", "node"]
+                },
+                "maxRecursionDepth": {
+                  "description": "How deep the drawn values of recursive types go: how many times a value nests through its cycle of types, counted where the cycle could end (a union's variant, an optional field, a list that may be empty). Values are biased towards shallow ones. A binary tree of depth 4 has at most 15 nodes.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 4
+                },
+                "types": {
+                  "description": "Settings per type, by qualified name (Context.Type). Types on one cycle use the greatest maxRecursionDepth among them.",
+                  "type": "object",
+                  "propertyNames": { "pattern": "^[^.]+\\.[^.]+$" },
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["maxRecursionDepth"],
+                    "properties": {
+                      "maxRecursionDepth": {
+                        "description": "How deep the drawn values of this recursive type go; overrides maxRecursionDepth.",
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    }
+                  },
+                  "examples": [{ "Modeling.Expr": { "maxRecursionDepth": 3 } }]
                 }
               },
-              "examples": [{ "runner": "vitest" }]
+              "examples": [{ "runner": "vitest" }, { "maxRecursionDepth": 3, "types": { "Modeling.Expr": { "maxRecursionDepth": 5 } } }]
             }
           }
         }

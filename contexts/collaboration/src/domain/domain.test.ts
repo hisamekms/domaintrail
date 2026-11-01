@@ -13,6 +13,7 @@ import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, worksp
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from './targets.js';
 import { diagnosticsDiff, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
 import { check } from '../test-helpers.js';
+import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -225,31 +226,37 @@ describe('transitions', () => {
     const facilitator = value(C.makeParticipantId('facilitator'));
     const guest = value(C.makeParticipantId('guest'));
     const name = value(C.makeDisplayName('Ada'));
-    const sessionId = C.makeSessionId('00000000-0000-4000-8000-000000000001');
-    const base = C.makeRevisionId('00000000-0000-4000-8000-000000000002');
-    const result = C.makeRevisionId('00000000-0000-4000-8000-000000000003');
+    const sessionId = knownSessionId('00000000-0000-4000-8000-000000000001');
+    const base = knownRevisionId('00000000-0000-4000-8000-000000000002');
+    const result = knownRevisionId('00000000-0000-4000-8000-000000000003');
 
     test('a session starts with its facilitator, admits a newcomer once, and closes', () => {
-        const open = value(sessionCommands.start(sessionId, facilitator, name, at)).Open.aggregate;
+        const open = value(sessionCommands.start({ id: sessionId, facilitator, name, startedAt: at })).Open.aggregate;
         expect(open.participants).toEqual([{ id: facilitator, name, role: 'Facilitator', joinedAt: at }]);
-        const joined = value(sessionCommands.join(open, guest, name, later)).Open.aggregate;
+        const joined = value(sessionCommands.join(open, { participant: guest, name, joinedAt: later })).Open.aggregate;
         expect(joined.participants.map((p) => [p.id, p.role])).toEqual([
             [facilitator, 'Facilitator'],
             [guest, 'Participant'],
         ]);
-        expect(sessionCommands.join(joined, guest, name, later)).toEqual({ ok: false, error: { type: 'AlreadyJoined', participant: guest } });
-        expect(value(sessionCommands.close(joined, 'Facilitator', later)).Closed.aggregate).toMatchObject({ state: 'Closed', closedAt: later });
-        expect(sessionCommands.close(joined, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
+        expect(sessionCommands.join(joined, { participant: guest, name, joinedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'AlreadyJoined', participant: guest },
+        });
+        expect(value(sessionCommands.close(joined, { closedByRole: 'Facilitator', closedAt: later })).Closed.aggregate).toMatchObject({
+            state: 'Closed',
+            closedAt: later,
+        });
+        expect(sessionCommands.close(joined, { closedByRole: 'Participant', closedAt: later })).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
     });
 
     const running: C.RunningAgentRun = {
         state: 'Running',
-        id: C.makeAgentRunId('00000000-0000-4000-8000-000000000005'),
+        id: knownAgentRunId('00000000-0000-4000-8000-000000000005'),
         session: sessionId,
         input: {
             requests: [
                 {
-                    request: C.makeRequestId('00000000-0000-4000-8000-000000000004'),
+                    request: knownRequestId('00000000-0000-4000-8000-000000000004'),
                     author: guest,
                     targets: [],
                     body: value(C.makeText('x')),
@@ -270,7 +277,7 @@ describe('transitions', () => {
     });
 
     test('finish completes a run that meets the success rule and fails one that does not, with its report', () => {
-        const done = value(agentRunCommands.finish(running, report(0), result, true, undefined, later));
+        const done = value(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: true, finishedAt: later }));
         expect(done.Completed?.aggregate).toMatchObject({ state: 'Completed', resultRevision: result, changed: true, baseRevision: base });
         expect(done.Completed?.events.RunCompleted).toEqual({
             type: 'RunCompleted',
@@ -279,46 +286,91 @@ describe('transitions', () => {
             changed: true,
             finishedAt: later,
         });
-        const failed = value(agentRunCommands.finish(running, report(2), base, false, undefined, later));
+        const failed = value(agentRunCommands.finish(running, { report: report(2), resultRevision: base, changed: false, finishedAt: later }));
         expect(failed.Failed?.aggregate).toMatchObject({ state: 'Failed', reason: 'RuleNotMet', report: report(2), resultRevision: base });
-        expect(agentRunCommands.finish(running, report(0), base, true, undefined, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
-        expect(agentRunCommands.finish(running, report(0), result, false, undefined, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
+        expect(agentRunCommands.finish(running, { report: report(0), resultRevision: base, changed: true, finishedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'ChangedMismatch' },
+        });
+        expect(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: false, finishedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'ChangedMismatch' },
+        });
     });
 
     test("fail needs a reason other than the rule; cancel, the facilitator's, keeps the base revision of a running run", () => {
-        expect(agentRunCommands.fail(running, 'RuleNotMet', later)).toEqual({ ok: false, error: { type: 'ReportRequired' } });
-        const failed = value(agentRunCommands.fail(running, 'LeaseExpired', later)).Failed.aggregate;
+        expect(agentRunCommands.fail(running, { reason: 'RuleNotMet', finishedAt: later })).toEqual({ ok: false, error: { type: 'ReportRequired' } });
+        const failed = value(agentRunCommands.fail(running, { reason: 'LeaseExpired', finishedAt: later })).Failed.aggregate;
         expect(failed).toMatchObject({ state: 'Failed', reason: 'LeaseExpired', finishedAt: later });
         expect('report' in failed).toBe(false);
-        expect(value(agentRunCommands.cancel(running, facilitator, 'Facilitator', later)).Cancelled.aggregate).toMatchObject({
+        expect(
+            value(agentRunCommands.cancel(running, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).Cancelled.aggregate,
+        ).toMatchObject({
             baseRevision: base,
             cancelledBy: facilitator,
         });
-        expect(agentRunCommands.cancel(running, guest, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
+        expect(agentRunCommands.cancel(running, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
+            ok: false,
+            error: { type: 'FacilitatorOnly' },
+        });
         const { baseRevision: _b, startedAt: _s, ...rest } = running;
         const queued: C.QueuedAgentRun = { ...rest, state: 'Queued' };
-        expect('baseRevision' in value(agentRunCommands.cancel(queued, facilitator, 'Facilitator', later)).Cancelled.aggregate).toBe(false);
-        expect(agentRunCommands.cancel(queued, guest, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
+        expect(
+            'baseRevision' in
+                value(agentRunCommands.cancel(queued, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).Cancelled.aggregate,
+        ).toBe(false);
+        expect(agentRunCommands.cancel(queued, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
+            ok: false,
+            error: { type: 'FacilitatorOnly' },
+        });
     });
 
     test('take and restore require the content hash of the files; restore, the facilitator', () => {
         const files = [snapshotFile(path('a.dt'), bytes('context A {}'))];
         const validation = summarize([], false);
-        const id = C.makeRevisionId('00000000-0000-4000-8000-000000000006');
-        expect(revisionCommands.take(id, sessionId, { kind: 'Manual', takenBy: facilitator }, snapshotHash([]), files, validation, at)).toEqual({
+        const id = knownRevisionId('00000000-0000-4000-8000-000000000006');
+        expect(
+            revisionCommands.take({
+                id,
+                session: sessionId,
+                origin: { kind: 'Manual', takenBy: facilitator },
+                contentHash: snapshotHash([]),
+                files,
+                validation,
+                takenAt: at,
+            }),
+        ).toEqual({
             ok: false,
             error: { type: 'ContentHashMismatch' },
         });
         expect(
-            revisionCommands.take(id, sessionId, { kind: 'Restored', restoredFrom: base, preRestore: result }, snapshotHash(files), files, validation, at),
+            revisionCommands.take({
+                id,
+                session: sessionId,
+                origin: { kind: 'Restored', restoredFrom: base, preRestore: result },
+                contentHash: snapshotHash(files),
+                files,
+                validation,
+                takenAt: at,
+            }),
         ).toEqual({ ok: false, error: { type: 'RestoreNeedsCheck' } });
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for MakeRestorableRevision's check
         const restorable = base as C.RestorableRevision;
-        expect(revisionCommands.restore(id, sessionId, restorable, result, snapshotHash(files), files, validation, 'Participant', at)).toEqual({
+        const restoreParams = {
+            id,
+            session: sessionId,
+            restoredFrom: restorable,
+            preRestore: result,
+            contentHash: snapshotHash(files),
+            files,
+            validation,
+            takenAt: at,
+        };
+        expect(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Participant' })).toEqual({
             ok: false,
             error: { type: 'FacilitatorOnly' },
         });
-        const restored = value(revisionCommands.restore(id, sessionId, restorable, result, snapshotHash(files), files, validation, 'Facilitator', at)).Recorded;
+        const restored = value(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Facilitator' })).Recorded;
         expect(restored.aggregate.origin).toEqual({ kind: 'Restored', restoredFrom: base, preRestore: result });
         expect(restored.events.RevisionRestored).toMatchObject({ restoredFrom: base, preRestore: result });
     });
@@ -515,7 +567,7 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         });
         expect(readAnswer({ answers: [{ question: 'q1', options: ['a', 'a'] }] })).toMatchObject({ ok: false, error: { path: 'answer.answers[0].options' } });
         const reply = toAgentReply({ outcome: 'clarification', summary: 's', requests: [], questions: [{ ...question, requests: [] }], assumptions: [] });
-        const run = C.makeAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000009');
+        const run = knownAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000009');
         const answer = readAnswer({ answers: [{ question: 'q1', options: ['a'], text: 'and more' }] });
         if (!answer.ok) throw new Error(answer.error.message);
         const resolved = resolveAnswer(answer.value, run, reply);
@@ -530,9 +582,9 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         });
     });
     test('a pick is of a completed run with assumptions, one of its alternatives, with its requests queued again', () => {
-        const id = C.makeAgentRunId('00000000-0000-4000-8000-00000000000a');
-        const m = C.makeRequestId('00000000-0000-4000-8000-000000000001');
-        const n = C.makeRequestId('00000000-0000-4000-8000-000000000002');
+        const id = knownAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const m = knownRequestId('00000000-0000-4000-8000-000000000001');
+        const n = knownRequestId('00000000-0000-4000-8000-000000000002');
         const assumption = { text: 'With tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] };
         const run = (state: string, assumptions: unknown[] = [assumption]): C.AgentRun =>
             ({
@@ -557,7 +609,7 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
         expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
         expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'PickMismatch', run: id } });
-        expect(resolvePick(pick(), run('Completed'), [m, n, C.makeRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
+        expect(resolvePick(pick(), run('Completed'), [m, n, knownRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
             ok: false,
             error: { type: 'PickMismatch', run: id },
         });

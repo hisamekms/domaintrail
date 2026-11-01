@@ -5,6 +5,9 @@ import {
     checkAgentReplyDeep,
     Collaboration,
     err,
+    knownAgentRunId,
+    knownRequestId,
+    knownRevisionId,
     makeEmoji,
     MAX_EMOJI_BYTES,
     MAX_REQUEST_MENTIONS,
@@ -12,11 +15,11 @@ import {
     ok,
     type PickData,
     readAnswer,
+    readEmoji,
     readReply,
     REPLY_LIMITS,
     type ReplyOutcome,
     type Result,
-    readEmoji,
     toAgentReply,
     VOTE,
 } from '@domaintrail/collaboration';
@@ -190,7 +193,7 @@ export function targetSnapshot(v: unknown, field = 'target'): Result<Collaborati
     }
     const snapshot: Collaboration.TargetSnapshot = {
         target: target.value,
-        sourceRevision: Collaboration.makeRevisionId(revision.value),
+        sourceRevision: knownRevisionId(revision.value),
         ...(label !== undefined && { label }),
         ...(range && { range }),
     };
@@ -243,7 +246,7 @@ export function requestIds(v: unknown, field = 'requests'): Result<Collaboration
     for (const [i, raw] of v.entries()) {
         const id = uuid(raw, `${field}[${i}]`);
         if (!id.ok) return id;
-        ids.push(Collaboration.makeRequestId(id.value));
+        ids.push(knownRequestId(id.value));
     }
     return ok(ids);
 }
@@ -254,7 +257,7 @@ export function requestIds(v: unknown, field = 'requests'): Result<Collaboration
  * `replyAboutInput`).
  */
 export function agentReply(v: unknown, outcome: ReplyOutcome, field = 'reply'): Result<Collaboration.AgentReply, InvalidInput> {
-    const read = readReply(v, (x) => (uuid(x, field).ok ? Collaboration.makeRequestId(String(x)) : undefined), MAX_RUN_REQUESTS);
+    const read = readReply(v, (x) => (uuid(x, field).ok ? knownRequestId(String(x)) : undefined), MAX_RUN_REQUESTS);
     if (!read.ok) return invalid(read.error.path, read.error.message);
     if (read.value.outcome !== outcome) return invalid(`${field}.outcome`, `Expected '${outcome}'.`);
     const reply = toAgentReply(read.value);
@@ -294,7 +297,7 @@ export function pick(v: unknown, field = 'pick'): Result<PickData, InvalidInput>
     if (!assumption.ok) return assumption;
     const alternative = replyKey(v.alternative, `${field}.alternative`);
     if (!alternative.ok) return alternative;
-    return ok({ pickOf: Collaboration.makeAgentRunId(of.value), assumption: assumption.value, alternative: alternative.value });
+    return ok({ pickOf: knownAgentRunId(of.value), assumption: assumption.value, alternative: alternative.value });
 }
 
 /** What a mark is on: a message, an AI turn, a question's option, or an assumption's choice (none: kept as it is). */
@@ -310,19 +313,19 @@ export function markTarget(v: unknown, field = 'target'): Result<Collaboration.M
         case 'Message': {
             const o = only(['kind', 'request']);
             if (!o.ok) return o;
-            const request = id('request', Collaboration.makeRequestId);
+            const request = id('request', knownRequestId);
             return request.ok ? ok({ kind: 'Message', request: request.value }) : request;
         }
         case 'Turn': {
             const o = only(['kind', 'run']);
             if (!o.ok) return o;
-            const run = id('run', Collaboration.makeAgentRunId);
+            const run = id('run', knownAgentRunId);
             return run.ok ? ok({ kind: 'Turn', run: run.value }) : run;
         }
         case 'QuestionOption': {
             const o = only(['kind', 'run', 'question', 'option']);
             if (!o.ok) return o;
-            const run = id('run', Collaboration.makeAgentRunId);
+            const run = id('run', knownAgentRunId);
             if (!run.ok) return run;
             const question = replyKey(v.question, `${field}.question`);
             if (!question.ok) return question;
@@ -333,7 +336,7 @@ export function markTarget(v: unknown, field = 'target'): Result<Collaboration.M
         case 'AssumptionChoice': {
             const o = only(['kind', 'run', 'assumption', 'alternative']);
             if (!o.ok) return o;
-            const run = id('run', Collaboration.makeAgentRunId);
+            const run = id('run', knownAgentRunId);
             if (!run.ok) return run;
             const assumption = assumptionNumber(v.assumption, `${field}.assumption`);
             if (!assumption.ok) return assumption;

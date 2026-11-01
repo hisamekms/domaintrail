@@ -16,10 +16,21 @@ import { EXPORTS, MAP, MAY_DEPEND_ON, SURFACES, type Kind, type Rule } from './a
 const ROOT = path.join(import.meta.dir, '..');
 const MAP_FILE = 'test/architecture/map.ts';
 
-/** Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js). */
+/**
+ * Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js); the generator
+ * reads domaintrail's version from the root package.json, which the generated contract tests state.
+ */
 const OUTSIDE_PACKAGE: Record<string, string[]> = {
     'apps/dt/src/cli/main.ts': ['docs/guide.md'],
+    'capabilities/generation/src/core/tests.ts': ['package.json'],
 };
+
+/**
+ * The support of the generated contract tests, a subpath of the root package (ADR 0028, decision 5) that a package's
+ * generated tests import without declaring it: the root tsconfig.json maps it to its source, `testing/`.
+ */
+const ROOT_SUBPATHS = ['domaintrail/testing'];
+const isGeneratedTest = (file: string): boolean => /\/generated\/tests\//.test(file);
 
 /** What a file under `domain/`, `core/` or `application/` may not import besides builtins: the file system, the network, layout. */
 const IO_PACKAGES = ['chokidar', 'ws', 'elkjs'];
@@ -50,8 +61,19 @@ interface Import {
     names: string[] | 'all';
 }
 
-/** A unit test next to the code, or a helper of the unit tests (CONTRIBUTING.md, Tests): not part of the package's code. */
-const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file) || path.posix.basename(file) === 'test-helpers.ts';
+/**
+ * A unit test next to the code, a helper of the unit tests (CONTRIBUTING.md, Tests), or a generated contract test
+ * (`<out>/tests/`, run by the unit tests): not part of the package's code.
+ */
+const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file) || path.posix.basename(file) === 'test-helpers.ts' || isGeneratedTest(file);
+
+/** The contexts that the root domaintrail.jsonc writes into packages, with the module each package exports it by. */
+const ROOT_CONFIG = Bun.JSONC.parse(await readFile(path.join(ROOT, 'domaintrail.jsonc'), 'utf8')) as {
+    generate?: { ts?: { contexts?: Record<string, { out?: string; module?: string }> } };
+};
+const CONTEXT_MODULES = Object.entries(ROOT_CONFIG.generate?.ts?.contexts ?? {}).flatMap(([context, c]) =>
+    c.out !== undefined && c.module !== undefined ? [{ context, out: c.out, module: c.module }] : [],
+);
 
 /**
  * The module specifiers of a file's import and export declarations and dynamic imports, with the names they take. A
@@ -211,7 +233,8 @@ const RULES: Record<Rule, RuleText> = {
     },
     exports: {
         section: 'Dependency rules, Enforcement',
-        statement: 'a package.json `exports` lists only `.` (published language and use cases) and `./protocol` (wire types).',
+        statement:
+            'a package.json `exports` lists only `.` (published language and use cases), `./protocol` (wire types) and `./tests` (the generated contract tests of its context, for the tests of other packages; ADR 0028).',
         fix: () =>
             'give the package an index.ts (and a protocol.ts for its wire types), export them as `.` and `./protocol`, and change the imports of every other package to them',
     },
@@ -255,7 +278,7 @@ const RULES: Record<Rule, RuleText> = {
     generated: {
         section: 'Modeling',
         statement:
-            "a package's generated code (`generated`, from its own `.dt`) imports only its own files, and the rest of the package imports only its types (`import type`), so that the tool runs from the committed output even when the generator is broken.",
+            "a package's generated code (`generated`, from its own `.dt`) imports only its own files and the modules of the contexts it imports from other packages (`generatedImports`, ADR 0028), and the rest of the package imports only its types (`import type`; the index.ts of a package whose generated code others import may export its values, `publishesGenerated`), so that the tool runs from the committed output even when the generator is broken.",
         fix: () => 'import the generated types with `import type`, and write what needs a value (a constructor, a check) by hand next to them',
     },
     kernel: {
@@ -382,7 +405,13 @@ describe('dependencies', () => {
         for (const name of NAMES) {
             const manifest = MANIFESTS[name];
             const declared = new Set([manifest.name, ...Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })]);
-            const undeclared = IMPORTS[name].filter((i) => !i.resolved && !isBuiltin(i.specifier) && !declared.has(packageName(i.specifier)));
+            const undeclared = IMPORTS[name].filter(
+                (i) =>
+                    !i.resolved &&
+                    !isBuiltin(i.specifier) &&
+                    !declared.has(packageName(i.specifier)) &&
+                    !(isGeneratedTest(i.file) && ROOT_SUBPATHS.includes(i.specifier)),
+            );
             expect(show(undeclared)).toEqual([]);
         }
     });
@@ -419,7 +448,7 @@ describe('dependencies', () => {
 // ---- the public surface ----------------------------------------------------------------------------------------
 
 describe('public surface', () => {
-    test('exports lists only . and ./protocol (exports)', () => {
+    test('exports lists only ., ./protocol and ./tests (exports)', () => {
         const violations = NAMES.flatMap((name) => {
             const { exports } = MANIFESTS[name];
             const keys = exports === undefined ? [] : typeof exports === 'string' ? ['.'] : Object.keys(exports);
@@ -449,13 +478,16 @@ describe('public surface', () => {
         expectNoProblems('public-surface', violations);
     });
 
-    test('a package others depend on exports its src/index.ts as `.`, and its src/protocol.ts as `./protocol` when it has one', async () => {
+    test('a package others depend on exports its src/index.ts as `.`, its src/protocol.ts as `./protocol` when it has one, and the generated tests of its context as `./tests`, if at all', async () => {
         const depended = new Set(NAMES.flatMap((name) => MAP[name].upstream));
         for (const name of NAMES) {
             const { exports } = MANIFESTS[name];
-            const entries = exports === undefined ? {} : typeof exports === 'string' ? { '.': exports } : exports;
+            const entries: Record<string, string> = exports === undefined ? {} : typeof exports === 'string' ? { '.': exports } : exports;
             const protocol = await Bun.file(path.join(ROOT, MAP[name].sources, 'protocol.ts')).exists();
-            const expected = depended.has(name) ? { '.': './src/index.ts', ...(protocol && { './protocol': './src/protocol.ts' }) } : entries;
+            // the contract tests of the context the root domaintrail.jsonc writes into the package
+            const own = CONTEXT_MODULES.find((c) => c.module === `@domaintrail/${name}`);
+            const tests = own && './tests' in entries && { './tests': `./${path.posix.relative(MAP[name].dir, own.out)}/tests/${own.context}.ts` };
+            const expected = depended.has(name) ? { '.': './src/index.ts', ...(protocol && { './protocol': './src/protocol.ts' }), ...tests } : entries;
             expect({ name, exports: entries }).toEqual({ name, exports: expected });
         }
     });
@@ -551,10 +583,35 @@ describe('layers', () => {
                 const dir = `${MAP[name].sources}/${MAP[name].generated}/`;
                 const reached = imp.resolved?.startsWith(dir) ?? false;
                 const inside = imp.file.startsWith(dir);
-                return (inside ? !reached : reached && !imp.typeOnly) ? [atFile(name, imp)] : [];
+                // the module of a context imported instead of generated (ADR 0028)
+                const imported = !imp.resolved && CONTEXT_MODULES.some((c) => c.module === imp.specifier && !c.out.startsWith(`${MAP[name].sources}/`));
+                // the index.ts of a package whose generated code other packages import
+                const publishing = MAP[name].publishesGenerated === true && imp.file === `${MAP[name].sources}/index.ts`;
+                return (inside ? !reached && !imported : reached && !imp.typeOnly && !publishing) ? [atFile(name, imp)] : [];
             });
         expect(all.some(({ name, imp }) => owners.includes(name) && imp.resolved?.startsWith(`${MAP[name].sources}/${MAP[name].generated}/`))).toBe(true);
         expectNoProblems('generated', violations);
+    });
+
+    test('the root domaintrail.jsonc writes each context into the package of its module, and generated code imports a module that publishes it', () => {
+        expect(CONTEXT_MODULES.length).toBeGreaterThan(0);
+        for (const { context, out, module } of CONTEXT_MODULES) {
+            const owner = NAMES.find((n) => out.startsWith(`${MAP[n].sources}/`));
+            expect({ context, module, owner }).toEqual({ context, module, owner: module.replace('@domaintrail/', '') });
+        }
+        // the generated code of other packages takes the context's values through the package's index.ts
+        const imported = new Set(
+            NAMES.filter((name) => MAP[name].generated).flatMap((name) =>
+                IMPORTS[name]
+                    .filter((i) => i.file.startsWith(`${MAP[name].sources}/${MAP[name].generated}/`) && CONTEXT_MODULES.some((c) => c.module === i.specifier))
+                    .map((i) => i.specifier),
+            ),
+        );
+        for (const m of imported)
+            expect({ module: m, publishesGenerated: MAP[packageName(m).replace('@domaintrail/', '')]?.publishesGenerated }).toEqual({
+                module: m,
+                publishesGenerated: true,
+            });
     });
 
     test('the kernel imports only its own files and the pure builtins: no Langium, no other module (kernel)', () => {
@@ -587,7 +644,9 @@ describe('tests', () => {
             const manifest = MANIFESTS[name];
             const declared = new Set(Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }));
             const wrong = UNIT_TEST_IMPORTS[name].filter((i) =>
-                i.resolved ? !i.resolved.startsWith(`${MAP[name].sources}/`) : !isBuiltin(i.specifier) && !declared.has(packageName(i.specifier)),
+                i.resolved
+                    ? !i.resolved.startsWith(`${MAP[name].sources}/`)
+                    : !isBuiltin(i.specifier) && !declared.has(packageName(i.specifier)) && !(isGeneratedTest(i.file) && ROOT_SUBPATHS.includes(i.specifier)),
             );
             expect(show(wrong)).toEqual([]);
         }
@@ -601,8 +660,8 @@ describe('tests', () => {
     });
 });
 
-/** The code outside the packages that imports them: the integration tests, the scripts, bin/. */
-const OUTSIDE = ['test', 'scripts', 'bin'];
+/** The code outside the packages that imports them: the integration tests, the scripts, bin/, testing/ (its subpath). */
+const OUTSIDE = ['test', 'scripts', 'bin', 'testing'];
 const OUTSIDE_IMPORTS = (
     await Promise.all(
         OUTSIDE.map(async (dir) => {
@@ -615,7 +674,7 @@ const OUTSIDE_IMPORTS = (
     )
 ).flat();
 
-describe('integration tests, scripts and bin/', () => {
+describe('integration tests, scripts, bin/ and testing/', () => {
     test('import the packages only through their entries (. and ./protocol), never by a path into a package', () => {
         expect(OUTSIDE_IMPORTS.length).toBeGreaterThan(0);
         const wrong = OUTSIDE_IMPORTS.filter((i) =>

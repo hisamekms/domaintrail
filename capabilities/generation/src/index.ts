@@ -5,8 +5,8 @@
 // ---- use cases: the TypeScript generator -----------------------------------------------------------------------
 export { GENERATED_MARKER, generateTypeScript, type GeneratedFile, type PolicyMode } from './core/typescript.js';
 export { aggregateParamName } from './core/naming.js';
-// what the contract tests leave out (recursive types), for the warning of `dt generate ts`
-export { testsWarnings } from './core/tests.js';
+// the warnings of `dt generate ts` about the contract tests' settings (a per-type depth of a type that is not recursive)
+export { testsWarnings, type TypeTestsOptions } from './core/tests.js';
 // its check of the `.dt` sources (M011), which the project analysis runs
 export { checkGeneratedNames } from './core/tsnames.js';
 
@@ -16,8 +16,10 @@ export {
     policyModes,
     resolveGenerationConfig,
     staysInside,
+    unknownTestsTypes,
     unknownTsContexts,
     validateGenerationConfig,
     type GenerationConfigFile,
     type ResolvedGenerationConfig,
+    type TestsConfig,
 } from './core/config.js';

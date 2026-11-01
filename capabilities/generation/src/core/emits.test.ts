@@ -102,7 +102,7 @@ describe('emits in the generated TypeScript', () => {
  */
 export type ProgressWork = (
     work: InProgressWork,
-    at: Timestamp,
+    params: ProgressWorkParams,
 ) => Result<
     | {
           readonly InProgress: {

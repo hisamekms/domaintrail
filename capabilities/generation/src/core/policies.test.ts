@@ -1,13 +1,11 @@
 // What policies make of the generated TypeScript, its contract tests run, and the generator's check of their names
 // (M011) (the DSL and its checks: contexts/modeling/src/domain/rules/policies.test.ts).
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript, type PolicyMode } from './typescript.js';
-import { check } from '../test-helpers.js';
-
-const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
+import { check, linkNodeModules } from '../test-helpers.js';
 
 const SALES = `context Sales {
   id OrderId: UUID
@@ -115,22 +113,24 @@ describe('generated policy cases', async () => {
     });
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-policies-'));
     dirs.push(dir);
-    await symlink(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
+    await linkNodeModules(dir);
     for (const f of generateTypeScript((await model()).model!, {}, { dir: 'tests' }, { Billing: 'required' })) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }
     const tests = await import(path.join(dir, 'tests', 'index.ts'));
+    const testing = await import(path.join(dir, 'node_modules', 'domaintrail', 'testing', 'index.ts'));
 
+    const INVOICE = '7d444840-9dc0-41d1-9a5f-0c3e4ae1e6f2';
     /** Correct handlers; `change` replaces some. */
     const handlers = (change: Record<string, unknown> = {}) => ({
-        BillConfirmedOrder: async (e: { orderId: string }) => ({ id: `invoice-${e.orderId}`, order: e.orderId, total: { amount: 3 } }),
-        SendConfirmed: async (e: { at: Date }) => ({ invoice: 'invoice-1', sentAt: e.at, lines: [1, 2] }),
+        BillConfirmedOrder: async (e: { orderId: string }) => ({ id: INVOICE, order: e.orderId, total: { amount: 3 } }),
+        SendConfirmed: async (e: { at: Date }) => ({ invoice: INVOICE, sentAt: e.at, lines: [1, 2] }),
         ...change,
     });
     const failures = async (policies: object): Promise<Record<string, string>> => {
         const out: Record<string, string> = {};
-        for (const c of tests.cases(tests.Billing.contract({ policies }, { runs: 20 }))) {
+        for (const c of testing.cases(tests.Billing.contract({ policies }, { runs: 20 }))) {
             try {
                 await c.run();
             } catch (e) {
@@ -151,13 +151,16 @@ describe('generated policy cases', async () => {
         expect(await broken(async (e: { orderId: string }) => ({ order: e.orderId, total: { amount: 3 } }))).toContain(
             "resolved to an input that the command does not accept: 'id' is missing.",
         );
-        expect(await broken(async (e: { orderId: string }) => ({ id: 'i', order: e.orderId, total: { amount: -1 } }))).toContain(
+        expect(await broken(async (e: { orderId: string }) => ({ id: INVOICE, order: e.orderId, total: { amount: -1 } }))).toContain(
             '\'total\' is not a valid value of its type: {"amount":-1}',
+        );
+        expect(await broken(async (e: { orderId: string }) => ({ id: `invoice-${e.orderId}`, order: e.orderId, total: { amount: 3 } }))).toContain(
+            "'id' is not a valid value of its type: \"invoice-",
         );
         expect(await broken(async () => Promise.reject(new Error('no order')))).toContain(
             'rejected with no order; the handler of a policy resolves every event to the input of its command.',
         );
-        const send = await failures(handlers({ SendConfirmed: async (e: { at: Date }) => ({ invoice: 'i', sentAt: e.at, lines: [] }) }));
+        const send = await failures(handlers({ SendConfirmed: async (e: { at: Date }) => ({ invoice: INVOICE, sentAt: e.at, lines: [] }) }));
         expect(Object.values(send)[0]).toContain("'lines' has 0 elements; declared [1..3]");
     });
 });

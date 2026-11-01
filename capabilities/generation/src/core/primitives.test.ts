@@ -21,10 +21,11 @@ const DECLS = `
 
 describe('domain primitives: the name check of the generator (M011)', () => {
     test('generated constructor names are checked for collisions (M011)', async () => {
-        const a = await checkSales(`${DECLS} value MakeQuantity event InvalidEmail`);
+        const a = await checkSales(`${DECLS} value MakeQuantity event InvalidEmail error InvalidOrderId`);
         expect(only(a, 'M011').map((d) => d.message)).toEqual([
             "Generated TypeScript name 'MakeQuantity' for value object 'MakeQuantity' collides with the constructor of 'Quantity'.",
             "Generated TypeScript name 'InvalidEmail' for event 'InvalidEmail' collides with the error of 'Email'.",
+            "Generated TypeScript name 'InvalidOrderId' for error 'InvalidOrderId' collides with the error of 'OrderId'.",
         ]);
     });
 });
@@ -52,7 +53,12 @@ describe('generated TypeScript for domain primitives', () => {
             "    readonly type: 'InvalidEmailAddress';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'format' | 'maxLength';",
         );
         expect(common).toContain('export type MakeEmailAddress = (value: string) => Result<EmailAddress, InvalidEmailAddress>;');
-        expect(sales).toContain('export type MakeOrderId = (value: string) => OrderId;');
+        // an ID on UUID checks the form: the invariant 'uuid'
+        expect(sales).toContain(
+            "export interface InvalidOrderId {\n    readonly type: 'InvalidOrderId';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'uuid';\n}",
+        );
+        expect(sales).toContain('export type MakeOrderId = (value: string) => Result<OrderId, InvalidOrderId>;');
+        expect(sales).toContain(' * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version');
         expect(common).toContain(' * @invariant format (形式): matches(value, "^[^@\\s]+@[^@\\s]+$")');
     });
 });

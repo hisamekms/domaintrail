@@ -6,7 +6,7 @@ import { formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
-import { checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
+import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
 import { SessionError, type CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';
@@ -146,6 +146,8 @@ block generation, which reads the .dt files only. Files generated before are rep
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
 directories in the config, it must stay inside the root (exit 2 otherwise) and not lead through a symlink.
+A context with generate.ts.contexts.<Context>.module is imported from that module by the code of other directories,
+and its contract tests are written into <its out>/tests.
 With generate.ts.tests in the config, also writes the contract tests (fast-check arbitraries and a suite per
 context, by default into <out>/tests); see \`dt guide tests\`.
 With --format json, prints one JSON document like \`check\`, with the directories written ("written") or why
@@ -184,6 +186,10 @@ Examples:
                 return;
             }
             checkTsContexts(cfg, contextNames(a.model));
+            checkTestsTypes(
+                cfg,
+                a.model.elements.map((e) => e.id),
+            );
             const defaultOut = path.resolve(cfg.root, opts.out ?? cfg.tsOut);
             const outOf = (ctx: string): string => (ctx in cfg.tsContexts ? path.resolve(cfg.root, cfg.tsContexts[ctx]) : defaultOut);
             // contract tests (ADR 0020) only when configured; by default in `tests` below the output directory
@@ -198,14 +204,28 @@ Examples:
             }
             const dirs = Object.fromEntries(contextNames(a.model).map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
             const tests = testsOut
-                ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) }
+                ? {
+                      dir: toPosix(path.relative(cfg.root, testsOut)),
+                      ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }),
+                      ...(cfg.tsTests?.maxRecursionDepth !== undefined && { maxRecursionDepth: cfg.tsTests.maxRecursionDepth }),
+                      ...(cfg.tsTests?.types && { types: cfg.tsTests.types }),
+                  }
                 : undefined;
             const policies = policyModes(cfg, contextNames(a.model));
-            if (tests) for (const w of testsWarnings(a.model, policies)) io.err(`Warning: ${w}`);
-            const files = generateTypeScript(a.model, dirs, tests, policies).map((f) => ({
+            if (tests) for (const w of testsWarnings(a.model, tests.types)) io.err(`Warning: ${w}`);
+            const files = generateTypeScript(a.model, dirs, tests, policies, cfg.tsModules).map((f) => ({
                 ...f,
                 file: path.resolve(cfg.root, f.path),
             }));
+            // Every directory written to, those the generator chose included (the contract tests of a context with a
+            // `module`, in <its out>/tests), checked the same way before anything is written.
+            for (const dir of new Set(files.map((f) => path.dirname(f.file)))) {
+                const linked = await deps.generatedOutput.symlinkOnPath(cfg.root, dir);
+                if (linked) {
+                    fail(`Generation skipped: ${linked} is a symlink; an output directory must be a plain directory inside ${cfg.root}.`, 1);
+                    return;
+                }
+            }
             const foreign = await deps.generatedOutput.foreignFiles(files.map((f) => f.file));
             if (foreign.length) {
                 const names = foreign.map((f) => path.relative(process.cwd(), f) || f);

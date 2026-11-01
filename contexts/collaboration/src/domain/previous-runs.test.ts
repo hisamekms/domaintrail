@@ -4,6 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import { Collaboration as C } from '../generated/index.js';
 import { laterRunOf } from './marks.js';
 import { boundChanges, fileDiff, previousRunIds } from './previous-runs.js';
+import { knownAgentRunId, knownRequestId } from './ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -49,9 +50,9 @@ describe('the budget of previous runs', () => {
         const other = { id: 'z', state: 'Queued', input: { requests: [{ request: 's' }], pick: { pickOf: 'w' } } };
         expect(laterRunOf(done, [done, other])).toBeUndefined();
         expect(laterRunOf(done, [done, other, pick])?.id).toBe('y');
-        const frozen = { request: C.makeRequestId('00000000-0000-4000-8000-000000000001'), author: facilitator, targets: [], body: text('m') };
-        const x = C.makeAgentRunId('00000000-0000-4000-8000-00000000000a');
-        const y = C.makeAgentRunId('00000000-0000-4000-8000-00000000000b');
+        const frozen = { request: knownRequestId('00000000-0000-4000-8000-000000000001'), author: facilitator, targets: [], body: text('m') };
+        const x = knownAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const y = knownAgentRunId('00000000-0000-4000-8000-00000000000b');
         const alternative = { id: value(C.makeReplyKey('net')), label: text('Without tax') };
         const pickOf = (of: C.AgentRunId): C.AlternativePick => ({ pickOf: of, assumption: value(C.makeTally(0)), text: text('With tax'), alternative });
         expect(previousRunIds({ requests: [frozen], pick: pickOf(x) })).toEqual([x]);

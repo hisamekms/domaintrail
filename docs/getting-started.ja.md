@@ -434,7 +434,7 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 import { Booking, decide, err, ok } from '../generated/domain/index.js';
 
 export const reservationCommands: Booking.ReservationCommands = {
-    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, (id, room, slot, attendees) =>
+    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, ({ id, room, slot, attendees }) =>
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
@@ -444,9 +444,10 @@ export const reservationCommands: Booking.ReservationCommands = {
     ),
 
     confirm: decide<Booking.ConfirmReservationDecision>(Booking.ReservationShape, {
-        Requested: (reservation, capacity, at) => {
+        Requested: (reservation, params) => {
             // 要件の式は DSL のものを使う: 生成されたチェックが評価する
-            if (Booking.checkConfirmReservationRequires(reservation, capacity, at)) return err({ type: 'RoomTooSmall' });
+            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'RoomTooSmall' });
+            const { at } = params;
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
@@ -459,7 +460,9 @@ export const reservationCommands: Booking.ReservationCommands = {
 ```
 
 `confirm` の決定は遷移元の状態ごとにハンドラーを 1 つ持ちます（ここでは `Requested` だけ）。複数の状態で動くコマンドも
-同じ形で書けるようにするためです。結果の形は `dt guide decide` で説明しています。
+同じ形で書けるようにするためです。コマンドは集約のあとにパラメーターを 1 つのオブジェクトで受け取り
+（`Booking.ConfirmReservationParams`）、生成された要件のチェックにもそのまま渡します。呼び出しでは各パラメーターを名前で
+書きます（`reservationCommands.confirm(reservation, { capacity, at })`）。結果の形は `dt guide decide` で説明しています。
 
 ### ドメインの値を作る
 
@@ -477,13 +480,17 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
     if (Booking.checkSlot(slot).length > 0) throw new Error('a slot is 1 to 8 hours');
-    const id = Booking.makeReservationId(crypto.randomUUID()); // ID には不変条件がないので失敗しない
-    return reservationCommands.request(id, Booking.makeRoomId(input.room), slot, attendees.value);
+    const room = Booking.makeRoomId(input.room); // Result: UUID の ID は値が UUID であることを確かめる
+    if (!room.ok) return room;
+    const id = Booking.makeReservationId(crypto.randomUUID());
+    if (!id.ok) return id;
+    return reservationCommands.request({ id: id.value, room: room.value, slot, attendees: attendees.value });
 }
 ```
 
-- `make<Name>` はすべての ID とドメインプリミティブにあります。不変条件がある型（`makeHeadcount`）では `Result` を、
-  ない型（`makeReservationId`）では値そのものを返します。
+- `make<Name>` はすべての ID とドメインプリミティブにあります。不変条件がある型（`makeHeadcount`）と、基底が `UUID`
+  の型では `Result` を返します。`UUID` の型はその形を不変条件 `'uuid'` として確かめます（`makeRoomId('room-1')` は
+  `InvalidRoomId`）。それ以外では値そのものを返します。
 - `check<Name>` は値が破っている不変条件を返します（`checkSlot`）。値オブジェクトはただのオブジェクトです。
 - `Decimal` はランタイムの `parseDecimal(text)` で作ります（数でない文字列なら `undefined`）。
 - ID や時刻をどこから得るかはアプリケーションが決めます。コマンドは受け取るだけです。
@@ -492,7 +499,8 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
 
 生成されたテストは、型では確かめられないこと、つまり値を検査します。fast-check で入力を生成し、生成されたチェックを
 正解として使います。コンストラクタがちょうど正しい値だけを受け付けること、コマンドが成り立たない最初の要件のエラーを
-返すこと、コマンドが作った集約がその状態の不変条件を満たすこと、コマンドが純粋であること。テストファイル 1 つで登録します。
+返すこと、コマンドが作った集約がその状態の不変条件を満たすこと、コマンドが純粋であること。補助関数は domaintrail に
+`domaintrail/testing` として含まれ、上で入れた fast-check を使います。テストファイル 1 つで登録します。
 
 ```ts
 // src/contract.test.ts

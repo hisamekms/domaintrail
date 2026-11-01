@@ -47,6 +47,8 @@ export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
 /** What a command decides, e.g. `ConfirmOrderDecision`: implemented by the user, turned into the command by `decide`. */
 export const decisionTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Decision`;
+/** The parameters of a command as one object, e.g. `CancelOrderParams`; a command without parameters has none. */
+export const paramsTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Params`;
 /** The fields of an aggregate as data for `decide`, e.g. `OrderShape`. */
 export const shapeName = (agg: Named): string => `${agg.name}Shape`;
 /**
@@ -65,6 +67,8 @@ export function outputsVary(factory: boolean, transitions: readonly OutcomePatte
     return new Set(transitions.flatMap((t) => t.from.map((f) => output(f, t.to)))).size > 1;
 }
 export const aggregateParamName = (agg: Named): string => camel(agg.name);
+/** The name of a command's parameters object in its contract and checks: `params`, unless the aggregate is `Params`. */
+export const paramsArgName = (agg: Named): string => (aggregateParamName(agg) === 'params' ? 'parameters' : 'params');
 /** The handler of a policy, e.g. `BillConfirmedOrderPolicy`: from the event to the input of its command. */
 export const policyTypeName = (policy: Named): string => `${policy.name}Policy`;
 /** What the application needs to run a command that a policy runs, e.g. `IssueInvoiceInput`. */
@@ -136,10 +140,11 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
             if (el.kind === 'id' || el.kind === 'primitive') {
                 out.push({ name: makeTypeName(el), origin: `the constructor of '${el.name}'`, at });
                 const invs = written.primitiveInvariants(el);
-                if (invs.length) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, at });
+                const checked = invs.length > 0 || el.base === 'UUID'; // a UUID base adds the invariant 'uuid'
+                if (checked) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, at });
                 const declared = invs.some((i) => !i.expr);
                 out.push({ name: `make${el.name}${declared ? 'With' : ''}`, origin: `the generated constructor of '${el.name}'`, at });
-                if (invs.length) out.push(...checkNames(el.name, declared, at));
+                if (checked) out.push(...checkNames(el.name, declared, at));
             } else if (el.kind === 'verified') {
                 out.push({ name: makeTypeName(el), origin: `the factory of '${el.name}'`, at });
             } else if (el.kind === 'valueObject' || el.kind === 'entity' || el.kind === 'union') {
@@ -161,6 +166,8 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         out.push({ name: shapeName(el), origin: `the shape of '${el.name}'`, at });
         if (states.length > 0) {
             out.push({ name: commonTypeName(el), origin: `common fields of '${el.name}'`, at });
+            const commonDeclared = written.invariantsOf(el.members).some((i) => !i.expr);
+            out.push({ name: `check${commonTypeName(el)}${commonDeclared ? 'With' : ''}`, origin: `the check of the invariants of '${el.name}'`, at });
             for (const s of states) {
                 out.push({ name: stateTypeName(el, s), origin: `state '${el.name}.${s.name}'`, at: s.nameAt });
             }
@@ -178,6 +185,7 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         for (const c of commands) {
             const cat = c.nameAt;
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, at: cat });
+            if (c.params.length) out.push({ name: paramsTypeName(el, c), origin: `the parameters of '${el.name}.${c.name}'`, at: cat });
             out.push({ name: decisionTypeName(el, c), origin: `the decision of '${el.name}.${c.name}'`, at: cat });
             if (!c.requirements.length) continue;
             const t = commandTypeName(el, c);

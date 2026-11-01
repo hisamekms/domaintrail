@@ -9,7 +9,7 @@ import { connect } from 'node:net';
 import * as path from 'node:path';
 import { cliDeps, startViewServer, type ViewServer, runCli } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { tempCopyOfExamples } from './helpers.js';
+import { tempCopyOfExamples, withoutVersion } from './helpers.js';
 
 let dir: string;
 let server: ViewServer;
@@ -127,7 +127,7 @@ describe('dt generate ts', () => {
         for (const f of files) {
             const file = path.join(f.parentPath, f.name);
             hashes[path.relative(out, file).split(path.sep).join('/')] = createHash('sha256')
-                .update(await readFile(file))
+                .update(withoutVersion(await readFile(file, 'utf8')))
                 .digest('hex');
         }
         expect(Object.fromEntries(Object.entries(hashes).sort(([a], [b]) => a.localeCompare(b)))).toMatchSnapshot();

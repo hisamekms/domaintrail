@@ -18,6 +18,7 @@ import {
     type MarkRun,
     type MarkTargetData,
 } from './marks.js';
+import { knownAgentRunId, knownMarkId, knownSessionId } from './ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -190,27 +191,34 @@ describe('the rules of marks', () => {
 
     test('the place command: the sign must fit the target, and the facilitator does not vote', () => {
         const at = new Date('2026-11-01T09:00:00Z');
-        const id = C.makeMarkId('00000000-0000-4000-8000-000000000001');
+        const id = knownMarkId('00000000-0000-4000-8000-000000000001');
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for what the factories check
-        const session = C.makeSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession;
+        const session = knownSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession;
         const who = value(C.makeParticipantId('p'));
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for what the factories check
         const open = (t: C.MarkTarget): C.OpenMarkTarget => t as C.OpenMarkTarget;
         const target: C.MarkTarget = {
             kind: 'QuestionOption',
-            run: C.makeAgentRunId('00000000-0000-4000-8000-000000000003'),
+            run: knownAgentRunId('00000000-0000-4000-8000-000000000003'),
             question: value(C.makeReplyKey('q1')),
             option: value(C.makeReplyKey('a')),
         };
-        expect(error(markCommands.place(id, session, who, 'Facilitator', open(target), VOTE, at))).toEqual({ type: 'FacilitatorDoesNotVote' });
-        expect(error(markCommands.place(id, session, who, 'Participant', open(target), react('❤️'), at))).toEqual({ type: 'MarkNotForTarget' });
-        const placed = value(markCommands.place(id, session, who, 'Participant', open(target), VOTE, at)).Placed;
+        expect(error(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: open(target), sign: VOTE, placedAt: at }))).toEqual({
+            type: 'FacilitatorDoesNotVote',
+        });
+        expect(
+            error(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: react('❤️'), placedAt: at })),
+        ).toEqual({ type: 'MarkNotForTarget' });
+        const placed = value(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: VOTE, placedAt: at })).Placed;
         expect(placed.aggregate).toMatchObject({ state: 'Placed', sign: VOTE, target });
         expect(placed.events.MarkPlaced).toMatchObject({ type: 'MarkPlaced', markId: id, participant: who });
-        const removed = value(markCommands.remove(placed.aggregate, open(target), at)).Removed;
+        const removed = value(markCommands.remove(placed.aggregate, { open: open(target), removedAt: at })).Removed;
         expect(removed.aggregate).toMatchObject({ state: 'Removed', removedAt: at });
         // the facilitator reacts like anyone
         const turn = open({ kind: 'Turn', run: target.run });
-        expect(value(markCommands.place(id, session, who, 'Facilitator', turn, react('👍'), at)).Placed.aggregate.sign).toEqual(react('👍'));
+        expect(
+            value(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: turn, sign: react('👍'), placedAt: at })).Placed.aggregate
+                .sign,
+        ).toEqual(react('👍'));
     });
 });
