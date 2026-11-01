@@ -66,7 +66,13 @@ export type Rule =
      * an import by a file of the kernel of anything but the kernel's own files and the pure builtins (Langium, the
      * model, any other module) — `<file>: <specifier>`
      */
-    | 'kernel';
+    | 'kernel'
+    /**
+     * an import across the inner modules of a package (`inner`): by the rest of the package, of an inner module; by an
+     * inner module, of another one it does not list in its `upstream`, or of a module it lists in `never` —
+     * `<file>: <specifier>`
+     */
+    | 'inner-modules';
 
 export interface Module {
     kind: Kind;
@@ -92,6 +98,14 @@ export interface Module {
      * imports nothing outside it but the pure builtins (rule `kernel`).
      */
     kernel?: string;
+    /**
+     * The modules that lie inside its sources until T8 moves them into packages of their own, by directory (as `kernel`
+     * for the shared kernel): the module each becomes, the other inner modules it may import (`upstream`), and the
+     * modules of the package it must not import (`never`, without `.js`). The rest of the package is the package
+     * itself, which an inner module may import; it imports no inner module (index.ts, the entry, exports them all).
+     * So the move adds no cycle (rule `inner-modules`).
+     */
+    inner?: Record<string, { becomes: string; upstream: readonly string[]; never?: readonly string[] }>;
     /** The violations it still has, by rule; the comment of each group names the task that removes it. */
     exceptions?: Partial<Record<Rule, readonly string[]>>;
 }
@@ -109,6 +123,14 @@ export const MAP: Record<string, Module> = {
         published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'storming/ir'],
         // diagnostics, suggestions, sources and locations (T8: shared/kernel)
         kernel: 'kernel',
+        inner: {
+            // Storming reads Modeling's typed model, which knows nothing of it; its analysis takes the model as its
+            // input and does not run Modeling's analysis (T4)
+            storming: { becomes: 'contexts/storming', upstream: [], never: ['core/analyze'] },
+            // the project analysis runs Modeling's analysis, then Storming's with the model, and the generation's
+            // checks (T4)
+            analysis: { becomes: 'capabilities/analysis', upstream: ['storming'] },
+        },
         exceptions: {
             'pure-core-io': [
                 // the configuration: split by owner, and the `realpathSync` check of `session.agent.dt` out of the pure
