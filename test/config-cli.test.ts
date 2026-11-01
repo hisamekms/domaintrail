@@ -1,5 +1,5 @@
 // The configuration through the CLI: what check and generate read from it and write (loading it:
-// packages/workspace/src/infrastructure/config.test.ts).
+// packages/presentation/src/config/config.test.ts, the sections by their owners).
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

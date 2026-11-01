@@ -100,7 +100,7 @@ async function importsIn(file: string): Promise<Import[]> {
 
 /**
  * What a package's index.ts (its `.` entry) exports, by name: the module of its sources each name comes from
- * (`core/emoji`). index.ts names everything it exports (`export { a, type B } from './x.js'`, `export * as ns from`), so
+ * (`domain/emoji`). index.ts names everything it exports (`export { a, type B } from './x.js'`, `export * as ns from`), so
  * that the rules can tell which module an import through `.` reaches.
  */
 async function surfaceOf(name: string): Promise<Map<string, string> | undefined> {

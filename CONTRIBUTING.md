@@ -39,12 +39,12 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `packages/modeling/src` | `language` (Langium grammars, generated parser/AST, scoping), `kernel` (`Diagnostic`, the suggestions, `SourceFile`, `Location`: ADR 0027's shared kernel, which imports nothing outside it), `core` (Modeling's analysis of the `.dt` sources, the diagnostic sink, validation rules in `checker/`, the config's types and validation), `analysis` (the project analysis: Modeling's and Storming's analyses and the generation's checks combined, ADR 0027's capability `analysis`), `model` (the Typed Model), `generator` (TypeScript generator, generated checks and contract tests), `format` (`dt fmt`), `storming` (the Event Storming DSL) |
-| `packages/workspace/src` | the workspace on disk: sources and `.gitignore`, config loading, the output of `dt generate ts`, the file and git ref watchers |
+| `packages/modeling/src` | `language` (Langium grammars, generated parser/AST, scoping), `kernel` (`Diagnostic`, the suggestions, `SourceFile`, `Location`: ADR 0027's shared kernel, which imports nothing outside it), `core` (Modeling's analysis of the `.dt` sources, the diagnostic sink, validation rules in `checker/`), `analysis` (the project analysis: Modeling's and Storming's analyses and the generation's checks combined, ADR 0027's capability `analysis`; the config's `sources` section), `model` (the Typed Model), `generator` (TypeScript generator, generated checks and contract tests; the config's `generate` and `lintHint` sections), `format` (`dt fmt`), `storming` (the Event Storming DSL) |
+| `packages/workspace/src` | the workspace on disk: sources and `.gitignore` (which files are sources is given by the app), finding and reading the config file (its format given by the app), the output of `dt generate ts`, the file and git ref watchers |
 | `packages/visualization/src` | the Live View's model: graph IR and diff, the storming views, the view service and its ports, the ELK layout, the layout file and git adapters, `protocol.ts` |
-| `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check) |
-| `packages/collaboration` | collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions), `application` (use cases, ports), `infrastructure` (`node:sqlite` store, blobs, validator) |
-| `packages/agent/src` | `dt session subscribe` (ADR 0026): `application` (the subscriber and the run pipeline over its ports, the prompt), `infrastructure` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan) |
+| `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports and hosts are the app's own) |
+| `packages/collaboration` | collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, validator) |
+| `packages/agent/src` | `dt session subscribe` (ADR 0026): `application` (the subscriber and the run pipeline over its ports, the prompt), `infrastructure` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan; their settings `session.agent.allowedTools` and `session.agent.dt`) |
 | `packages/composition/src` | the wiring: `cli.ts` (`runDt`, called by `bin/dt.ts`), `view.ts` (`startViewServer`) |
 | `web` | the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `shared` |
 | `docs` | the guide (`dt guide`), Getting started, the Live View, the ADRs, releasing |
@@ -66,6 +66,11 @@ Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, 
   the declared dependencies, the entries, the versions, the layers (`domain/`, `application/`, `infrastructure/`) and
   the kernel (modeling's `kernel/` until it becomes `shared/kernel`) and the inner modules (modeling's `storming/` and
   `analysis/`, which its own code does not import). A new package gets an entry in the map.
+- `domaintrail.jsonc` is split by owner (ADR 0027, Project analysis and configuration): each section's type, defaults
+  and validation live with the package that uses it, as `validate…(section, fail)` and `resolve…(section)` and its
+  keys; `packages/presentation/src/config` composes them (the checks in a fixed order, the first error wins) and the
+  workspace reads the file. A new setting goes to its owner and into `schema/domaintrail.schema.json`, which a test
+  compares with the composed keys.
 
 ## Tests
 

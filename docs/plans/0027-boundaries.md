@@ -199,6 +199,49 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `session.classifier` → collaboration (`application/classifier`, `infrastructure/clef`, which imports `ClefModel`
   from `core/config` today). `schema/domaintrail.schema.json` is written by hand and no test compares it with the
   code.
+  **T6 (done).** *Decided by the maintainer:* the owners proposed above, `session.agent.dt`'s `realpathSync` check out
+  of the pure validation into the agent's adapter, and `core/emoji.ts` into Collaboration's domain. `core/config.ts`
+  is gone. Each owner exports its section's file type, resolved type, keys (by where they sit in the file),
+  `validate…(section, fail)` (`fail` throws; the owner knows no `ConfigError`) and `resolve…(section)`: the analysis
+  `sources` and `respectGitignore` (`analysis/sources.ts`, with `DEFAULT_SOURCES`, `IGNORED_DIRS`, `sourceMatcher` and
+  `sourceSelection`); the generation `generate` and `lintHint` (`generator/config.ts`, with `RUNNERS` and
+  `POLICY_MODES` from the generator itself, `policyModes`, `staysInside` and `unknownTsContexts`; so nothing in `core`
+  imports the generator for the configuration any more); Collaboration `identity`, `access`, `maxParticipants`,
+  `quickReactions`, `classifier` (`ClefModel` with it) and `agent.maxPreviousRunDiff`
+  (`collaboration/src/application/config.ts`; `domain/emoji.ts`, exported from its `.`, which web and presentation now
+  use); the agent `agent.allowedTools` (`DEFAULT_AGENT_TOOLS`) and `agent.dt` (`agent/src/infrastructure/config.ts`:
+  the settings of its adapters, and the architecture test keeps `node:*` in the agent to `infrastructure/`, which
+  `dt`'s paths need; the check that `dt` lies outside the workspace is `checkDtOutsideWorkspace` in `dt-shim.ts`, on the
+  shim's `inside`); the app `view`, `session.port`, `session.host` and `session.agent.port`
+  (`presentation/src/config/server.ts`). The composition is `presentation/src/config/` (`config.ts`, `session.ts`):
+  the keys merged from the owners, the checks in the former order (the top level's unknown keys, the analysis, the
+  generation, `view`, then the session: its keys, port and host, identity and access, the agent's keys, port, tools,
+  `dt`, the previous runs' diff, the classifier, the participants, the quick reactions; then the disk check of `dt`),
+  `ConfigError` with the file name, `parseJsonc`, `CONFIG_FILES`, `defaultConfig`, `resolveConfig`, `checkTsContexts`
+  and `CONFIG_FILE_FORMAT`. It is in presentation, not composition, because the CLI and the language server read
+  `ResolvedConfig` and catch `ConfigError` and an app imports no other app (composition → presentation is the existing
+  exception); both become apps/dt in T8. Presentation now declares `agent` (its config section and the adapter's
+  check). The workspace receives values: `loadConfig(opts, format)` and `findConfigFile(start, files)` with the
+  format from the app, a `SourceSelection` (`matches`, `ignoredDirs`, `respectGitignore`; the app builds it with the
+  analysis's `sourceSelection`) for `SourceScope`, `findDomainFiles`, `loadWorkspace`, `createWorkspaceReader`,
+  `createWorkspaceSnapshot` and `createWorkspaceWatcher`, and `createGeneratedOutput(marker)` (the app passes
+  `GENERATED_MARKER`; the manifest's `staysInside` is the workspace's own). It imports from modeling only the kernel's
+  `SourceFile` type. The resolved configuration (values and key order) and every message are unchanged.
+  `schema/domaintrail.schema.json` stays hand-written; `presentation/src/config/config.test.ts` checks that it
+  describes exactly the composed keys at every level (`generate.ts.contexts.*` included). *In the map:* `public-surface`
+  3 → 1 (collaboration → `analysis/analyze`, T8), `pure-core-io` 1 → 0, `kinds` 2 unchanged (workspace → modeling now
+  only for the kernel's `SourceFile`, until T8; composition → presentation), `kernel` 0, `inner-modules` 0;
+  presentation's upstream gains `agent`. *Tests:* each owner's cases are next to it (`analysis/sources.test.ts`,
+  `generator/config.test.ts`, collaboration's `application/config.test.ts` and `domain/emoji.test.ts` — the emoji rule's
+  cases, from `domain/marks.test.ts` —, the agent's `infrastructure/config.test.ts` and the `dt` check in
+  `dt-shim.test.ts`); the composition's (defaults, key order, the first error across owners, the file name, the schema)
+  in `presentation/src/config/config.test.ts`; finding and reading the file in workspace's `config.test.ts` (a format
+  of its own); workspace's unit tests give a selection of their own (`test-helpers.ts`). The integration tests take
+  `DEFAULT_AGENT_TOOLS` from agent, `ResolvedSessionConfig`, `resolveConfig`, `parseJsonc`, `ConfigError` from
+  presentation and pass `sourceSelection()` to the workspace. 1251 → 1322 passing (7 todo); T0 baselines unchanged.
+  *Left:* `parseJsonc` is exported by presentation only for the documentation's tests; `session.access` went to
+  Collaboration whole (the identity mode's settings), though its `allowedHosts`/`allowedOrigins` feed the app's
+  connection guards.
 - **T7 — domain knowledge out of visualization (P2).** The items of the code map marked T7. `markLineChanges`, the trie
   and rendering stay.
 - **T12 — authorization.** Before T8, to keep the moves last. `Actor` in Collaboration; `dismiss` and the
@@ -275,7 +318,7 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
 - T8 (from T3): whether `RuleId`, the union of Modeling's and Storming's rule IDs, stays in the kernel.
 - T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
 - T6 (from T0): where `core/emoji.ts` goes — Collaboration's domain (proposed) or `shared/kernel` — and the owners of
-  the sections #23 added.
+  the sections #23 added — *decided by the maintainer:* Collaboration's domain, and the owners proposed (done in T6).
 - T2 (from T0): how the tests and `scripts/session-seed*` reach what is not public — *decided by the maintainer:* unit
   tests move next to the code and read it relatively; integration tests and the scripts use the entries only (done in
   T2).

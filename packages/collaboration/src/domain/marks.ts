@@ -35,7 +35,7 @@ export const VOTE = { kind: 'Vote' } as const satisfies Collaboration.MarkSign;
 /** Most different emoji on one message or turn: placing one more is refused (`ReactionLimitReached`). */
 export const MAX_REACTION_EMOJI = 20;
 
-/** The `Emoji` primitive's constructor: one emoji, in the form reactions are kept (`@domaintrail/modeling/core/emoji`). */
+/** The `Emoji` primitive's constructor: one emoji, in the form reactions are kept (`./emoji.ts`). */
 export const makeEmoji: Collaboration.MakeEmoji = Collaboration.makeEmojiWith({ singleEmoji: isNormalEmoji });
 
 /** One text per sign, equal exactly for equal signs: `Vote`, or the reaction's emoji (the store's column and unique index, the page's maps). */

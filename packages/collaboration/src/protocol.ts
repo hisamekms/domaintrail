@@ -168,7 +168,7 @@ export interface SendRequestBody {
  * assumption's choice, a reaction on a message or an AI turn — placed or taken off (`placed`). `sign` is
  * `{ "kind": "Vote" }` or `{ "kind": "Reaction", "emoji": "👍" }`: any one emoji (one grapheme, at most
  * `MAX_EMOJI_BYTES` bytes), kept and sent back in one form (NFC, fully qualified: ❤ and ❤️ are the same reaction,
- * `@domaintrail/modeling/core/emoji`). Placing a vote moves my vote of the same single-choice question or assumption.
+ * `domain/emoji.ts`). Placing a vote moves my vote of the same single-choice question or assumption.
  * The facilitator does not vote (`FacilitatorDoesNotVote`); a vote that closed is refused (`MarkTargetClosed`); an
  * emoji new to a target that has `MAX_REACTION_EMOJI` different ones is refused (`ReactionLimitReached`, 409).
  * → 200 `MarkSetBody`; the change reaches every page as `mark.placed` / `mark.removed`.
