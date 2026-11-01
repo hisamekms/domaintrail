@@ -420,3 +420,32 @@ export function resolveAnswer(
     if (!first) return err({ path: 'answer.answers', message: 'Answer at least one question.' });
     return ok({ answerTo, answers: [first, ...rest] });
 }
+
+// ---- The facilitator's pick of an alternative ----
+
+/** A pick as the page sends it: the completed run, its assumption (by its index in the reply) and the alternative (by its key). */
+export interface PickData {
+    readonly pickOf: Collaboration.AgentRunId;
+    readonly assumption: Collaboration.Tally;
+    readonly alternative: Collaboration.ReplyKey;
+}
+
+/**
+ * The pick of an alternative of `run`'s assumptions, frozen with the assumption's text and the alternative: the run is
+ * completed with a reply that has assumptions, the assumption and the alternative are its reply's, and the requests
+ * queued again are that run's requests (each once, in any order). The run is the session's: the caller loads it so.
+ */
+export function resolvePick(
+    pick: PickData,
+    run: Collaboration.AgentRun,
+    requests: readonly Collaboration.RequestId[],
+): Result<Collaboration.AlternativePick, Collaboration.RunNotPickable | Collaboration.AlternativeNotFound | Collaboration.PickMismatch> {
+    if (run.state !== 'Completed' || !run.reply || run.reply.assumptions.length === 0) return err({ type: 'RunNotPickable', run: run.id });
+    const assumption = run.reply.assumptions[pick.assumption];
+    const alternative = assumption?.alternatives.find((a) => a.id === pick.alternative);
+    if (!assumption || !alternative) return err({ type: 'AlternativeNotFound', run: run.id });
+    const own = new Set(run.input.requests.map((r) => r.request));
+    const again = new Set(requests);
+    if (again.size !== own.size || [...again].some((r) => !own.has(r))) return err({ type: 'PickMismatch', run: run.id });
+    return ok({ pickOf: run.id, assumption: pick.assumption, text: assumption.text, alternative });
+}

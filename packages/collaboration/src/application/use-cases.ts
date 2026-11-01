@@ -8,7 +8,7 @@ import { Collaboration, eventList, err, ok, type Result } from '../generated/ind
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
-import { resolveAnswer, type AnswerData } from '../domain/reply.js';
+import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
@@ -143,7 +143,7 @@ export const MAX_COMPARISON_DIFF = 512 * 1024;
 /** The least budget a file's diff is started with: below it, the rest of the comparison's diffs are omitted. */
 const MIN_DIFF_ROOM = 2 * 1024;
 
-/** A run that a run continues (its messages reply to it, or its answer answers it), with what it changed. */
+/** A run that a run continues (its messages reply to it, its answer answers it, or it picked one of its alternatives), with what it changed. */
 export interface PreviousRun {
     readonly run: Collaboration.AgentRun;
     readonly changes: PreviousRunChanges;
@@ -259,6 +259,11 @@ export interface CollaborationUseCases {
         readonly note?: Collaboration.Text;
         /** The answer to the questions of a run of the session that needs clarification, frozen into the input. */
         readonly answer?: { readonly answerTo: AgentRunId; readonly answer: AnswerData };
+        /**
+         * The alternative picked of an assumption of a completed run of the session, frozen into the input: the requests
+         * are that run's requests, queued again (`domain/reply.ts` `resolvePick`).
+         */
+        readonly pick?: PickData;
         readonly queuedBy: ParticipantId;
     }): Promise<
         Result<
@@ -274,6 +279,11 @@ export interface CollaborationUseCases {
             | NotFound
             | NothingToAnswer
             | InvalidAnswer
+            | Collaboration.RunNotFound
+            | Collaboration.RunOfAnotherSession
+            | Collaboration.RunNotPickable
+            | Collaboration.AlternativeNotFound
+            | Collaboration.PickMismatch
         >
     >;
     /** Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. */
@@ -365,9 +375,9 @@ export interface CollaborationUseCases {
         readonly after: RevisionId;
     }): Promise<Result<Comparison, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
     /**
-     * The runs a run continues — those its messages reply to, then the one its answer answers, as its frozen input names
-     * them — each with what it changed from its base to its result revision: a unified diff while the diffs of all of
-     * them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
+     * The runs a run continues — those its messages reply to, then the one its answer answers, then the one it picked an
+     * alternative of, as its frozen input names them — each with what it changed from its base to its result revision:
+     * a unified diff while the diffs of all of them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
      */
     previousRuns(input: { readonly run: AgentRunId; readonly maxDiff: number }): Promise<Result<readonly PreviousRun[], NotFound>>;
     /** The restores attempted in the session, in order. */
@@ -661,7 +671,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async queueRun({ session, requests, note, answer, queuedBy }) {
+        async queueRun({ session, requests, note, answer, pick, queuedBy }) {
             return uow.transaction(async (stores) => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
@@ -674,6 +684,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     const resolved = resolveAnswer(answer.answer, to.id, to.reply);
                     if (!resolved.ok) return err({ type: 'InvalidAnswer', field: resolved.error.path, message: resolved.error.message });
                     answered = resolved.value;
+                }
+                let picked: Collaboration.AlternativePick | undefined;
+                if (pick) {
+                    const of = stores.runs.load(pick.pickOf)?.run;
+                    if (!of) return err({ type: 'RunNotFound', run: pick.pickOf });
+                    if (of.session !== session) return err({ type: 'RunOfAnotherSession', run: pick.pickOf });
+                    const resolved = resolvePick(pick, of, requests);
+                    if (!resolved.ok) return resolved;
+                    picked = resolved.value;
                 }
                 const pending: Collaboration.PendingRequest[] = [];
                 const frozen: Collaboration.FrozenRequest[] = [];
@@ -694,7 +713,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     Collaboration.makeAgentRunId(ids.newId()),
                     active.value,
                     bundled,
-                    { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }) },
+                    { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }), ...(picked && { pick: picked }) },
                     queuedBy,
                     at,
                 );

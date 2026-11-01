@@ -464,6 +464,75 @@ describe('agent replies', () => {
         // a run that is not waiting for an answer has nothing to answer
         expect(error(await queue([{ question: 'q1', options: ['draft'] }], next.id))).toEqual({ type: 'NothingToAnswer', run: next.id });
     });
+
+    test("the facilitator's pick of an alternative is checked against the completed run and frozen into the next run's input", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const tally = (n: number): C.Tally => value(C.makeTally(n));
+        const key = (k: string): C.ReplyKey => value(C.makeReplyKey(k));
+        const pickOf = (of: C.AgentRunId, assumption = 1, alternative = 'any', requests: C.RequestId[] = [request]) =>
+            s.use.queueRun({
+                session: id,
+                requests,
+                queuedBy: facilitator,
+                note: text('redo it'),
+                pick: { pickOf: of, assumption: tally(assumption), alternative: key(alternative) },
+            });
+        // not completed yet: nothing to pick
+        expect(error(await pickOf(run.id))).toEqual({ type: 'RunNotPickable', run: run.id });
+        const assumptions = [
+            { text: 'Only drafts.', requests: [request], alternatives: [] },
+            {
+                text: 'Cancel keeps the order.',
+                requests: [request],
+                alternatives: [
+                    { id: 'delete', label: 'Delete it' },
+                    { id: 'any', label: 'Any state' },
+                ],
+            },
+        ];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+
+        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        expect(error(await pickOf(unknown))).toEqual({ type: 'RunNotFound', run: unknown });
+        // an assumption or an alternative the reply does not have
+        expect(error(await pickOf(run.id, 2))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 0, 'any'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'other'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        // the requests queued again are the run's, no fewer and no more
+        const other = value(await s.use.sendRequest({ session: id, author: guest, targets: [], body: text('Also rename it.') }));
+        expect(error(await pickOf(run.id, 1, 'any', [request, other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'any', [other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
+        expect(value(await s.use.sessionState({ session: id })).runs).toHaveLength(1);
+
+        const next = value(await pickOf(run.id));
+        expect(next.input.pick as unknown).toEqual({
+            pickOf: run.id,
+            assumption: 1,
+            text: 'Cancel keeps the order.',
+            alternative: { id: 'any', label: 'Any state' },
+        });
+        expect(next.input.note as unknown).toBe('redo it');
+        // the agent is given the run it picked from, with what it changed
+        const previous = value(await s.use.previousRuns({ run: next.id, maxDiff: 100_000 }));
+        expect(previous.map((p) => p.run.id)).toEqual([run.id]);
+        expect(previous[0].changes.kind).toBe('diff');
+        // a run that did not complete (queued) cannot be picked from
+        expect(error(await pickOf(next.id))).toEqual({ type: 'RunNotPickable', run: next.id });
+    });
+
+    test("a pick of another session's run is refused", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const assumptions = [{ text: 'Only drafts.', requests: [request], alternatives: [{ id: 'all', label: 'Any state' }] }];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+        value(await s.use.closeSession({ session: id }));
+        const { id: second } = await started(s);
+        const mine = value(await s.use.sendRequest({ session: second, author: guest, targets: [], body: text('Again.') }));
+        const pick = { pickOf: run.id, assumption: value(C.makeTally(0)), alternative: value(C.makeReplyKey('all')) };
+        expect(error(await s.use.queueRun({ session: second, requests: [mine.id], queuedBy: facilitator, pick }))).toEqual({
+            type: 'RunOfAnotherSession',
+            run: run.id,
+        });
+    });
 });
 
 describe('revisions', () => {

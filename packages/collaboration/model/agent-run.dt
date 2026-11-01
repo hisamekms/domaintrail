@@ -34,6 +34,7 @@ context Collaboration {
     requests: FrozenRequest[1..*] "依頼"
     note: Text? "ファシリテーターの補足"
     answer: Answer? "前の実行の問いへの回答"
+    pick: AlternativePick? "前の実行の前提で選んだ別案"
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
   }
@@ -123,6 +124,15 @@ context Collaboration {
     answers: AnsweredQuestion[1..*] "答え"
 
     invariant distinctQuestions "問いは1回" { unique(answers, a => a.question) }
+  }
+
+  /// ファシリテーターが、完了した実行の前提の代わりに選んだ別案。その実行の依頼をそのまま束ねてやり直す実行の入力に凍結する。
+  /// 前提は返答の中の番号（返答は保存したら変わらない）、別案はそのキーで指し、登録のときに前提の文と別案を写し取る。
+  value AlternativePick "別案の選択" {
+    pickOf: AgentRunId "選んだ実行"
+    assumption: Tally "前提の番号"
+    text: Text "前提"
+    alternative: ReplyAlternative "選んだ別案"
   }
 
   /// ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
@@ -327,6 +337,21 @@ context Collaboration {
 
   /// 成功の条件を満たさない失敗は、報告とともに finish で終える。
   error ReportRequired "報告が必要"
+
+  /// 別案を選んだ実行は、完了していないか、返答に前提がない（別案を選べるのは前提のある完了の実行）。
+  error RunNotPickable "別案を選べない実行" {
+    run: AgentRunId
+  }
+
+  /// 選んだ前提の番号または別案のキーが、その実行の返答にない。
+  error AlternativeNotFound "返答にない別案" {
+    run: AgentRunId
+  }
+
+  /// 別案を選んでやり直す実行の依頼が、選んだ実行の依頼と同じでない。
+  error PickMismatch "選んだ実行と依頼の不一致" {
+    run: AgentRunId
+  }
 
   /// エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
   error InvalidReply "返答の不整合"

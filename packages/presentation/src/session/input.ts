@@ -7,6 +7,7 @@ import {
     REPLY_LIMITS,
     toAgentReply,
     type AnswerData,
+    type PickData,
     type ReplyOutcome,
 } from '@domaintrail/collaboration/domain/reply';
 import { makeEmoji, VOTE } from '@domaintrail/collaboration/domain/marks';
@@ -254,6 +255,28 @@ function replyKey(v: unknown, field: string): Result<Collaboration.ReplyKey, Inv
     return k.ok ? k : invalid(field, 'Letters, digits, _ and - only.');
 }
 
+/** An assumption's number: its index in the reply, 0 to `REPLY_LIMITS.assumptions` - 1. */
+function assumptionNumber(n: unknown, field: string): Result<Collaboration.Tally, InvalidInput> {
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n >= REPLY_LIMITS.assumptions)
+        return invalid(field, `Expected an assumption's number, 0 to ${REPLY_LIMITS.assumptions - 1}.`);
+    const assumption = Collaboration.makeTally(n);
+    return assumption.ok ? assumption : invalid(field, 'Expected a number.');
+}
+
+/** The alternative picked of a completed run's assumption: `{ pickOf, assumption, alternative }` (its number and the alternative's key). */
+export function pick(v: unknown, field = 'pick'): Result<PickData, InvalidInput> {
+    if (!isObject(v)) return invalid(field, 'Expected { "pickOf": …, "assumption": …, "alternative": … }.');
+    const keys = ['pickOf', 'assumption', 'alternative'];
+    if (!body(v, keys).ok) return invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
+    const of = uuid(v.pickOf, `${field}.pickOf`);
+    if (!of.ok) return of;
+    const assumption = assumptionNumber(v.assumption, `${field}.assumption`);
+    if (!assumption.ok) return assumption;
+    const alternative = replyKey(v.alternative, `${field}.alternative`);
+    if (!alternative.ok) return alternative;
+    return ok({ pickOf: Collaboration.makeAgentRunId(of.value), assumption: assumption.value, alternative: alternative.value });
+}
+
 /** What a mark is on: a message, an AI turn, a question's option, or an assumption's choice (none: kept as it is). */
 export function markTarget(v: unknown, field = 'target'): Result<Collaboration.MarkTarget, InvalidInput> {
     if (!isObject(v)) return invalid(field, 'Expected a mark target.');
@@ -292,11 +315,8 @@ export function markTarget(v: unknown, field = 'target'): Result<Collaboration.M
             if (!o.ok) return o;
             const run = id('run', Collaboration.makeAgentRunId);
             if (!run.ok) return run;
-            const n = v.assumption;
-            if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n >= REPLY_LIMITS.assumptions)
-                return invalid(`${field}.assumption`, `Expected an assumption's number, 0 to ${REPLY_LIMITS.assumptions - 1}.`);
-            const assumption = Collaboration.makeTally(n);
-            if (!assumption.ok) return invalid(`${field}.assumption`, 'Expected a number.');
+            const assumption = assumptionNumber(v.assumption, `${field}.assumption`);
+            if (!assumption.ok) return assumption;
             if (v.alternative === undefined) return ok({ kind: 'AssumptionChoice', run: run.value, assumption: assumption.value });
             const alternative = replyKey(v.alternative, `${field}.alternative`);
             if (!alternative.ok) return alternative;

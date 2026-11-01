@@ -48,6 +48,7 @@ export interface MarkRun {
     readonly input: {
         readonly requests: readonly { readonly request: string; readonly replyTo?: string }[];
         readonly answer?: { readonly answerTo: string };
+        readonly pick?: { readonly pickOf: string };
     };
     /** Absent for a queued run, and for a run cancelled before it started. */
     readonly baseRevision?: string;
@@ -96,9 +97,9 @@ export function reactionRoom(placed: readonly { readonly sign: MarkSignData }[],
 const undone = (run: MarkRun): boolean => run.state === 'Cancelled' && run.baseRevision === undefined;
 
 /**
- * The first run after `run` (in queue order) that answers it, bundles one of its requests or bundles a reply to it,
- * leaving out runs cancelled before they started: the run that took over its requests (and continues its card), which
- * closes its votes.
+ * The first run after `run` (in queue order) that answers it, picks one of its alternatives, bundles one of its requests
+ * or bundles a reply to it, leaving out runs cancelled before they started: the run that took over its requests (and
+ * continues its card), which closes its votes. A pick bundles the run's requests again, so it took over by them too.
  */
 export function laterRunOf(run: MarkRun, runs: readonly MarkRun[]): MarkRun | undefined {
     const at = runs.findIndex((r) => r.id === run.id);
@@ -106,7 +107,13 @@ export function laterRunOf(run: MarkRun, runs: readonly MarkRun[]): MarkRun | un
     const mine = new Set(run.input.requests.map((r) => r.request));
     return runs
         .slice(at + 1)
-        .find((r) => !undone(r) && (r.input.answer?.answerTo === run.id || r.input.requests.some((q) => mine.has(q.request) || q.replyTo === run.id)));
+        .find(
+            (r) =>
+                !undone(r) &&
+                (r.input.answer?.answerTo === run.id ||
+                    r.input.pick?.pickOf === run.id ||
+                    r.input.requests.some((q) => mine.has(q.request) || q.replyTo === run.id)),
+        );
 }
 
 /** `open`: it can be marked now; `closed`: a vote whose decision was made (frozen); `missing`: not in the session. */

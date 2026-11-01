@@ -285,6 +285,23 @@ describe('the budget of previous runs', () => {
         expect(laterRunOf(replied, [replied, unrelated])).toBeUndefined();
         expect(laterRunOf(replied, [replied, unrelated, reply])?.id).toBe('y');
     });
+
+    test('a pick closes the votes of the run it picked from, and that run is a previous run of it', () => {
+        const done = { id: 'x', state: 'Completed', input: { requests: [{ request: 'm' }] }, baseRevision: 'b' };
+        const pick = { id: 'y', state: 'Queued', input: { requests: [{ request: 'm' }], pick: { pickOf: 'x' } } };
+        const other = { id: 'z', state: 'Queued', input: { requests: [{ request: 's' }], pick: { pickOf: 'w' } } };
+        expect(laterRunOf(done, [done, other])).toBeUndefined();
+        expect(laterRunOf(done, [done, other, pick])?.id).toBe('y');
+        const frozen = { request: C.makeRequestId('00000000-0000-4000-8000-000000000001'), author: facilitator, targets: [], body: text('m') };
+        const x = C.makeAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const y = C.makeAgentRunId('00000000-0000-4000-8000-00000000000b');
+        const alternative = { id: value(C.makeReplyKey('net')), label: text('Without tax') };
+        const pickOf = (of: C.AgentRunId): C.AlternativePick => ({ pickOf: of, assumption: value(C.makeTally(0)), text: text('With tax'), alternative });
+        expect(previousRunIds({ requests: [frozen], pick: pickOf(x) })).toEqual([x]);
+        // after the runs replied to, once
+        expect(previousRunIds({ requests: [{ ...frozen, replyTo: y }], pick: pickOf(x) })).toEqual([y, x]);
+        expect(previousRunIds({ requests: [{ ...frozen, replyTo: x }], pick: pickOf(x) })).toEqual([x]);
+    });
 });
 
 describe('the reply_to column (migration 5)', () => {
@@ -330,6 +347,9 @@ describe('the reply_to column (migration 5)', () => {
         const loaded = await uow.transaction((s) => s.requests.load(C.makeRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
         expect(loaded?.replyTo).toBeUndefined();
+        // a run frozen before picks were recorded loads as it was: no pick
+        const oldRun = await uow.transaction((s) => s.runs.load(C.makeAgentRunId(runId))?.run);
+        expect(oldRun?.input).toEqual(run.input as unknown as C.RunInput);
         expect(db.prepare('SELECT reply_to FROM requests WHERE id = ?').get(rid)).toEqual({ reply_to: null });
 
         // a reply keeps its run in the column; a reply to a run the database does not hold is refused
@@ -630,6 +650,56 @@ describe('the requests route and the agent API with replies', () => {
         expect(last.started.previousRuns.map((p) => p.run.id)).toEqual([run]);
         const state = (await (await api(bob, 'state')).json()) as { requests: { id: string; replyTo?: string }[] };
         expect(state.requests.find((r) => r.id === reply.id)?.replyTo).toBe(run);
+        // runs are serial: end it for the next test
+        expect((await agent(`runs/${both}/finish`, { token: last.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
+    });
+
+    test('only the facilitator picks an alternative; the pick is checked, frozen, and gives the agent the run picked from', async () => {
+        const request = ((await (await api(bob, 'requests', { targets: [], body: 'Add a total.' })).json()) as { request: { id: string } }).request.id;
+        const run = ((await (await api(ada, 'runs', { requests: [request] })).json()) as { run: { id: string } }).run.id;
+        const { token } = await start(run);
+        const reply = {
+            outcome: 'done',
+            summary: 'Added a total.',
+            requests: [{ request, status: 'done' }],
+            assumptions: [{ text: 'The total includes tax', requests: [request], alternatives: [{ id: 'net', label: 'Without tax' }] }],
+        };
+        expect((await agent(`runs/${run}/finish`, { token, exitCode: 0, formatted: true, checked: true, reply })).status).toBe(200);
+
+        const pick = (assumption: unknown, alternative: unknown, requests: string[] = [request]) => ({
+            requests,
+            note: 'Redo it without tax.',
+            pick: { pickOf: run, assumption, alternative },
+        });
+        const refused = async (who: string, body: unknown): Promise<[number, string]> => {
+            const res = await api(who, 'runs', body);
+            const e = ((await res.json()) as { error: { type: string; field?: string } }).error;
+            return [res.status, e.field ?? e.type];
+        };
+        expect(await refused(bob, pick(0, 'net'))).toEqual([403, 'FacilitatorOnly']);
+        expect(await refused(ada, pick(-1, 'net'))).toEqual([400, 'pick.assumption']);
+        expect(await refused(ada, pick(0, 'not a key'))).toEqual([400, 'pick.alternative']);
+        expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: run, assumption: 0, alternative: 'net', extra: 1 } })).toEqual([400, 'pick.extra']);
+        expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: crypto.randomUUID(), assumption: 0, alternative: 'net' } })).toEqual([
+            404,
+            'RunNotFound',
+        ]);
+        expect(await refused(ada, pick(0, 'gross'))).toEqual([400, 'AlternativeNotFound']);
+        const other = ((await (await api(bob, 'requests', { targets: [], body: 'And a subtotal.' })).json()) as { request: { id: string } }).request.id;
+        expect(await refused(ada, pick(0, 'net', [request, other]))).toEqual([400, 'PickMismatch']);
+
+        const queued = await api(ada, 'runs', pick(0, 'net'));
+        expect(queued.status).toBe(201);
+        const picked = ((await queued.json()) as { run: { id: string; input: { note: string; pick: unknown } } }).run;
+        expect(picked.input).toMatchObject({
+            note: 'Redo it without tax.',
+            pick: { pickOf: run, assumption: 0, text: 'The total includes tax', alternative: { id: 'net', label: 'Without tax' } },
+        });
+        // a run that is not completed has nothing to pick
+        expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: picked.id, assumption: 0, alternative: 'net' } })).toEqual([409, 'RunNotPickable']);
+        const next = await start(picked.id);
+        expect(next.started.previousRuns.map((p) => [p.run.id, p.run.state])).toEqual([[run, 'Completed']]);
+        expect((await agent(`runs/${picked.id}/finish`, { token: next.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
     });
 });
 

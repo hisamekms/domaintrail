@@ -193,13 +193,23 @@ export interface AnswerBody {
 
 /**
  * `POST /api/session/runs`: the requests to bundle, in order, and the facilitator's note; with `answerTo` (a run of the
- * session that needs clarification) and `answer`, the answer to its questions, frozen into the new run's input.
+ * session that needs clarification) and `answer`, the answer to its questions, frozen into the new run's input; with
+ * `pick`, the alternative picked of a completed run's assumption (its number in the reply, the alternative's key),
+ * frozen into the input with the assumption's text and the alternative — the requests are then that run's requests.
  */
 export interface QueueRunBody {
     readonly requests: readonly string[];
     readonly note?: string;
     readonly answerTo?: string;
     readonly answer?: AnswerBody;
+    readonly pick?: PickBody;
+}
+
+/** The alternative picked of a completed run's assumption (`QueueRunBody.pick`). */
+export interface PickBody {
+    readonly pickOf: string;
+    readonly assumption: number;
+    readonly alternative: string;
 }
 
 /**
@@ -299,8 +309,8 @@ export interface AgentLeaseBody {
 }
 
 /**
- * A run the started run continues (ADR 0026, "replies to runs"): a run its messages reply to, or the run its answer
- * answers, with what it changed from its base to its result revision — a unified diff, or the files only past
+ * A run the started run continues (ADR 0026, "replies to runs"): a run its messages reply to, the run its answer
+ * answers, or the run it picked an alternative of, with what it changed from its base to its result revision — a unified diff, or the files only past
  * `session.agent.maxPreviousRunDiff` characters for all of them.
  */
 export interface AgentPreviousRun {

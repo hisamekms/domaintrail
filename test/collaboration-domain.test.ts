@@ -16,7 +16,17 @@ import {
     MAX_LINE_CHARS,
     MAX_OUTPUT_LINES,
 } from '@domaintrail/collaboration/domain/compare';
-import { checkAgentReplyDeep, readAnswer, readReply, REPLY_LIMITS, requestNumber, resolveAnswer, toAgentReply } from '@domaintrail/collaboration/domain/reply';
+import {
+    checkAgentReplyDeep,
+    readAnswer,
+    readReply,
+    REPLY_LIMITS,
+    requestNumber,
+    resolveAnswer,
+    resolvePick,
+    toAgentReply,
+    type PickData,
+} from '@domaintrail/collaboration/domain/reply';
 import { sha256Hex } from '@domaintrail/collaboration/domain/sha256';
 import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from '@domaintrail/collaboration/domain/snapshot';
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from '@domaintrail/collaboration/domain/targets';
@@ -528,6 +538,39 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         expect(resolveAnswer({ answers: [{ question: 'q1', options: ['z'] }] }, run, reply)).toMatchObject({
             ok: false,
             error: { path: 'answer.answers[0].options[0]' },
+        });
+    });
+    test('a pick is of a completed run with assumptions, one of its alternatives, with its requests queued again', () => {
+        const id = C.makeAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const m = C.makeRequestId('00000000-0000-4000-8000-000000000001');
+        const n = C.makeRequestId('00000000-0000-4000-8000-000000000002');
+        const assumption = { text: 'With tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] };
+        const run = (state: string, assumptions: unknown[] = [assumption]): C.AgentRun =>
+            ({
+                id,
+                state,
+                input: { requests: [{ request: m }, { request: n }] },
+                ...(state === 'Completed' && { reply: { summary: 's', requests: [], questions: [], assumptions } }),
+            }) as unknown as C.AgentRun;
+        const pick = (assumptionAt = 0, alternative = 'net'): PickData => {
+            const tally = C.makeTally(assumptionAt);
+            const key = C.makeReplyKey(alternative);
+            if (!tally.ok || !key.ok) throw new Error('not a pick');
+            return { pickOf: id, assumption: tally.value, alternative: key.value };
+        };
+        expect(resolvePick(pick(), run('Completed'), [n, m]) as unknown).toEqual({
+            ok: true,
+            value: { pickOf: id, assumption: 0, text: 'With tax', alternative: { id: 'net', label: 'Without tax' } },
+        });
+        expect(resolvePick(pick(), run('Completed', []), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        for (const state of ['Queued', 'Running', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled'])
+            expect(resolvePick(pick(), run(state), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'PickMismatch', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m, n, C.makeRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
+            ok: false,
+            error: { type: 'PickMismatch', run: id },
         });
     });
 });

@@ -1,16 +1,17 @@
 // The runs a run continues (ADR 0026, amendment "replies to runs"), decided without I/O: the runs its messages reply
-// to and the run its answer answers, in the order the input names them, and what each changed, bounded for the
-// agent's prompt. The input names the runs only (frozen at queueing); what they changed is measured from their base and
+// to, the run its answer answers and the run it picked an alternative of, in the order the input names them, and what
+// each changed, bounded for the agent's prompt. The input names the runs only (frozen at queueing); what they changed is measured from their base and
 // result revisions when the run starts, and given as a unified diff of the changed sources — or, when the diffs of all
 // of them together exceed the budget (`session.agent.maxPreviousRunDiff`), as the list of the files each changed.
 import type { Collaboration } from '../generated/index.js';
 import type { FileStatus, LineDiff } from './compare.js';
 
-/** The runs a run's input continues: those its messages reply to, then the run its answer answers; each once. */
+/** The runs a run's input continues: those its messages reply to, then the run its answer answers, then the run it picked an alternative of; each once. */
 export function previousRunIds(input: Collaboration.RunInput): Collaboration.AgentRunId[] {
     const ids: Collaboration.AgentRunId[] = [];
     for (const r of input.requests) if (r.replyTo !== undefined && !ids.includes(r.replyTo)) ids.push(r.replyTo);
     if (input.answer && !ids.includes(input.answer.answerTo)) ids.push(input.answer.answerTo);
+    if (input.pick && !ids.includes(input.pick.pickOf)) ids.push(input.pick.pickOf);
     return ids;
 }
 

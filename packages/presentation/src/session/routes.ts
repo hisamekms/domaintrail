@@ -13,10 +13,11 @@ import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
-import type { AnswerData } from '@domaintrail/collaboration/domain/reply';
+import type { AnswerData, PickData } from '@domaintrail/collaboration/domain/reply';
 import {
     answer as answerInput,
     body,
+    pick as pickInput,
     displayName,
     markSign,
     markTarget,
@@ -85,6 +86,8 @@ export function statusOf(type: string): number {
         case 'UnknownRevision':
         case 'InvalidReply':
         case 'InvalidAnswer':
+        case 'AlternativeNotFound':
+        case 'PickMismatch':
         case 'MarkNotForTarget':
             return 400;
         case 'Unauthenticated':
@@ -374,7 +377,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/runs$/,
             role: 'facilitator',
             handle: async ({ req, res, auth }) => {
-                const raw = await input(req, res, ['requests', 'note', 'answerTo', 'answer']);
+                const raw = await input(req, res, ['requests', 'note', 'answerTo', 'answer', 'pick']);
                 if (!raw) return;
                 const ids = checked(res, requestIds(raw.requests));
                 if (!ids) return;
@@ -393,12 +396,19 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     if (!a) return;
                     answered = { answerTo: Collaboration.makeAgentRunId(to), answer: a };
                 }
+                // an alternative picked of a completed run's assumption: its requests queued again (checked by the use case)
+                let picked: PickData | undefined;
+                if (raw.pick !== undefined) {
+                    picked = checked(res, pickInput(raw.pick));
+                    if (!picked) return;
+                }
                 const queued = await use.queueRun({
                     session,
                     requests: ids,
                     queuedBy: who(auth).participant.id,
                     ...(note && { note }),
                     ...(answered && { answer: answered }),
+                    ...(picked && { pick: picked }),
                 });
                 await answer(res, queued, 201, (run) => ({ run }));
             },

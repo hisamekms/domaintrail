@@ -10,7 +10,7 @@ import { claudeArguments, resultOf, toolNames } from '@domaintrail/agent/infrast
 import { REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration/domain/reply';
 import { parseSse } from '@domaintrail/agent/infrastructure/http-agent-api';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
-import type { Json } from '@domaintrail/collaboration/protocol';
+import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
 
 const REVISION = '00000000-0000-4000-8000-000000000000';
@@ -101,6 +101,54 @@ describe('the prompt', () => {
             { question: 'Name?', inTheirOwnWords: 'Cancel' },
         ]);
         expect(buildPrompt(run, names, 'n')).toContain('`answersToYourQuestions`, when present, answers your questions');
+    });
+
+    test('the alternative picked of an earlier assumption is in the block, pointing at the run it was assumed in', () => {
+        const pickOf = crypto.randomUUID();
+        const run: Json<Collaboration.RunInput> = {
+            ...input([frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x')]),
+            note: 'Redo it without tax.',
+            pick: { pickOf, assumption: 1, text: 'The amount includes tax', alternative: { id: 'net', label: 'Without tax' } },
+        };
+        const data = block(buildPrompt(run, names, 'n'), 'n') as { pickedAlternative: unknown; facilitatorNote: unknown };
+        // without the previous run (not given): the pick alone
+        expect(data.pickedAlternative).toEqual({ insteadOfYourAssumption: 'The amount includes tax', alternative: 'Without tax' });
+        expect(data.facilitatorNote).toBe('Redo it without tax.');
+        const previous: AgentPreviousRun = {
+            run: {
+                state: 'Completed',
+                id: pickOf,
+                session: crypto.randomUUID(),
+                input: input([frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x')]),
+                queuedBy: 'dev:a',
+                queuedAt: '2026-10-31T09:00:00.000Z',
+                baseRevision: crypto.randomUUID(),
+                startedAt: '2026-10-31T09:00:00.000Z',
+                report: { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+                resultRevision: crypto.randomUUID(),
+                changed: true,
+                reply: {
+                    summary: 'Done.',
+                    requests: [],
+                    questions: [],
+                    assumptions: [{ text: 'The amount includes tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] }],
+                },
+                finishedAt: '2026-10-31T09:01:00.000Z',
+            } as Json<Collaboration.AgentRun>,
+            changes: { kind: 'diff', files: [], diff: '' },
+        };
+        const prompt = buildPrompt(run, names, 'n', [previous]);
+        const withPrevious = block(prompt, 'n') as { pickedAlternative: unknown; previousRuns: { number: number; yourReply: unknown }[] };
+        expect(withPrevious.pickedAlternative).toEqual({
+            insteadOfYourAssumption: 'The amount includes tax',
+            alternative: 'Without tax',
+            assumedInPreviousRun: 1,
+        });
+        expect(withPrevious.previousRuns[0]).toMatchObject({
+            number: 1,
+            yourReply: { assumptions: [{ assumption: 'The amount includes tax', alternatives: ['Without tax'] }] },
+        });
+        expect(prompt).toContain('`pickedAlternative`, when present, rejects an assumption you made');
     });
 
     test('an unknown author is "a participant"; the rules follow the DSLs the requests are about', () => {
