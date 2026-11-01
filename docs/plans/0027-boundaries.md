@@ -482,6 +482,43 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
 - **T11 — Modeling in its own `.dt`.** `contexts/modeling/model/*.dt` for the typed model (not the AST and its
   mapping), generated code committed in `src/generated`, the domain built on it, a test that fails when generating
   again differs (as `test/collaboration-contracts.test.ts`), and the bootstrap steps.
+  **T11 (done).** *Decided by the maintainer:* T11 may change the Typed Model's shape (it is the Live View payload),
+  deliberately and in one commit with every consumer; three DSL additions come first, each in its own commit with
+  tests. *The DSL:* (1) the declaration keywords (`context`, `event`, `error`, `errors`, `emits`, `aggregate`,
+  `command`, `state`, `owns`, `references`, `enum`, `union`, `entity`, `primitive`, `create`, `shared`, `terms`,
+  `invariant`) name fields, parameters, terms, commands and discriminators (`FeatureName`); enum values, variants and
+  members after `.` may be any word, the words of expressions and the primitive types included (`ValueName`: a value is
+  read only after a `.`, and `BinaryOp`'s `and`, `or`, `implies` and `PrimitiveName`'s values need it). Both grammars
+  follow (the tree-sitter test checks both lists); `parser-messages.ts` says "a name" or "a type" instead of every
+  keyword that may be one, a keyword read neither way is one error at the keyword saying what may follow (the parser's
+  recovery after it is dropped, `parse.ts`), a declaration keyword read as a field's name says that a `}` may be
+  missing; the T0 snapshot of `dt check` over a syntax error changed on purpose (two errors became one). (2) M012 lets
+  value objects and unions be recursive when each has a finite value (through `?`, a list that may be empty, or a
+  union's variant out of the cycle); cycles through entities and aggregates stay errors. The contract tests generate no
+  values of recursive types yet (planned: `tests.maxRecursionDepth`): they leave out those arbitraries, those of the
+  types holding them and the cases that need one, and `dt generate ts` warns. The walks over nested values already stop
+  at a type seen before (a test of the views over a recursive model). (3) value objects take field sets (`with`; M016,
+  M014 for shared contexts, M012 through their fields).
+  *The Typed Model:* `contexts/modeling/model/*.dt` (`context.dt`: `ElementId` (`id` on String), `QualifiedName`,
+  `ContextName` (`primitive`), `Location` (a structural copy of the kernel's: *a later feature imports the kernel's
+  context instead*), the field set `Described`; `model.dt`: `DomainModel { contexts, elements }`, `ContextModel`,
+  `ElementModel` as a union by `kind` (each kind exactly its parts; the common parts written in every variant, as a
+  union takes no `with`), the members; `expressions.dt`: `ExprModel` (recursive), `BinaryOp`, `Quantifier`;
+  `analysis.dt`: `ModelDiff`, the dependency types, `ModelingRuleId`), generated into `contexts/modeling/src/generated`
+  (committed, `.gitignore` exception; `domaintrail.jsonc` without tests). The domain imports it with `import type` only:
+  the map's new `generated` entry and rule (generated code imports only its own files, the rest of its package only its
+  types). `test/modeling-contracts.test.ts` (clean, formatted, generating again gives the committed files);
+  CONTRIBUTING's Bootstrap. *Hand-written in `domain/`:* the helpers (lookups by ID and name with a cached index, the
+  per-kind accessors, `allFieldsOf`, `outcomeFields`, emits, policies, `BINARY_OP_TEXT`), the ID builders
+  (`domain/ids.ts`: the one cast to the branded types), the dependencies, the aggregates' dependencies and owners, the
+  diff, the usages (`FieldUse` and `Named` stay TypeScript types: they hold references to model values); the Typed
+  Model is still built from the AST (`infrastructure/syntax/build.ts`), the model as written stays out of `.dt`.
+  *Consumers:* generation, visualization, storming's link, collaboration's targets, `dt show` (its JSON embeds the new
+  element shape), the language server (the syntax's `commandsOf` left `.`), the Live View page. Generated TypeScript of
+  examples/shop and Collaboration byte-identical; every graph hash of the Live View payload unchanged; the T0 payload
+  snapshots changed on purpose (the model's hash only). 1353 → 1372 passing (7 todo; unit 1000 → 1015, integration
+  353 → 357). *For T13:* the package table and the boundary rules in CONTRIBUTING (the rule `generated`), ADR 0027's
+  status; `editors/zed`'s grammar `rev` points at a commit before the keyword change (point it at the merged commit).
 - **T13 — wrap-up.** `CONTRIBUTING.md` (the package table, the boundary rules, the bootstrap steps), ADR 0027's status
   to implemented, this plan reconciled with what was built.
 
@@ -519,7 +556,9 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
   one project per context, `docComment` in each context's syntax (done in T8).
 - T8 (from T3): whether `RuleId`, the union of Modeling's and Storming's rule IDs, stays in the kernel — *decided by the
   maintainer:* split per context, a plain code in the kernel (done in T8).
-- T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
+- T11: how much of the typed model the `.dt` can express today — *decided by the maintainer:* all of what Modeling
+  publishes, with three DSL additions and a reshaped Typed Model; what stays hand-written is listed in the task (done
+  in T11).
 - T6 (from T0): where `core/emoji.ts` goes — Collaboration's domain (proposed) or `shared/kernel` — and the owners of
   the sections #23 added — *decided by the maintainer:* Collaboration's domain, and the owners proposed (done in T6).
 - T2 (from T0): how the tests and `scripts/session-seed*` reach what is not public — *decided by the maintainer:* unit
