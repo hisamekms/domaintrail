@@ -33,6 +33,7 @@ import { RunCard } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
+import { ComposerResizer, useComposerSize } from './composer-resizer';
 import { changeUnits, shownUnits, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
@@ -1046,6 +1047,7 @@ function Composer(props: {
     const naming = useTargetNaming();
     const value = composer.value;
     const input = useRef<HTMLTextAreaElement | null>(null);
+    const size = useComposerSize(input);
     const [caret, setCaret] = useState(0);
     const [active, setActive] = useState(0);
     // the `@` whose candidates were closed with Esc: they stay closed until another `@`
@@ -1150,6 +1152,7 @@ function Composer(props: {
 
     return (
         <div className="chat-composer">
+            <ComposerResizer {...size} label={tx.chat.resizeInput} />
             {reply && (
                 <div className="chat-reply-chip motion-pop motion-pop-up" role="status">
                     <span className="chat-reply-chip-text">↩ {tx.chat.replies.replyingTo(reply.number)}</span>
@@ -1191,7 +1194,7 @@ function Composer(props: {
                 <textarea
                     ref={input}
                     className="session-text chat-input"
-                    rows={3}
+                    rows={size.rows}
                     maxLength={10_000}
                     placeholder={tx.chat.placeholder}
                     value={value.text}

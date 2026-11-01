@@ -4625,6 +4625,55 @@ del.was.block {
     vertical-align: -1px;
 }
 
+/* ---------- composer size ---------- */
+
+/* The composer's height is its text's rows (session/composer-resizer.tsx: 6 to start, 2 at least, at most 60% of the
+   pillar), so it follows the text size; the stream above gives way (flex). The handle lies on the composer's top edge:
+   dragging it up grows the text. A grip shows on hover and focus. */
+.chat-composer {
+    position: relative;
+}
+.chat-composer-resizer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -4px;
+    height: 8px;
+    z-index: 25;
+    cursor: ns-resize;
+    touch-action: none;
+    outline: none;
+}
+.chat-composer-resizer::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2.5rem;
+    height: 3px;
+    margin: -1.5px 0 0 -1.25rem;
+    border-radius: 2px;
+    background: var(--resizer);
+    opacity: 0;
+    transition: opacity var(--motion-pop) var(--motion-ease-standard);
+}
+.chat-composer-resizer:hover,
+.chat-composer-resizer:active {
+    background: linear-gradient(var(--resizer), var(--resizer)) center / 100% 1px no-repeat;
+}
+.chat-composer-resizer:hover::after,
+.chat-composer-resizer:active::after,
+.chat-composer:focus-within .chat-composer-resizer::after {
+    opacity: 1;
+}
+.chat-composer-resizer:focus-visible::after {
+    opacity: 1;
+    background: var(--accent);
+}
+.resizing .chat-composer-resizer::after {
+    transition: none;
+}
+
 /* ---------- the chat's messages, cards and the facilitator's controls ---------- */
 
 .chat-stream-wrap {

@@ -187,6 +187,9 @@ The chat has two views:
   messages to start with; the posted reply shows `↩ AI #3: …` on top, a click going to the card. Replies are applied
   like any message, and the run made from them continues the replied run's card; the agent gets that run's messages,
   reply and diff as context.
+  The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
+  rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
+  brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
 - **履歴**: the history of changes, newest first. Each row is one run that changed files — or a run that asked a
   question together with the run queued again to answer it — with its number, time, outcome, what the AI says about
   it, the number of files it changed (measured from the revisions) and who asked. Opened, it shows the run's card, and
