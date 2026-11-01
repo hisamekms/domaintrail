@@ -1,7 +1,7 @@
 import * as posix from 'node:path/posix';
 import * as testingSource from './testing/_testing.js' with { type: 'text' };
 import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel } from '@domaintrail/modeling';
-import { elementsIn } from '@domaintrail/modeling';
+import { elementList, elementsIn } from '@domaintrail/modeling';
 import {
     aggregateInvariants,
     checkName,
@@ -64,6 +64,71 @@ export function register(suite: Suite): void {
 `;
 }
 
+/** The types whose arbitraries an element's arbitrary is made of (qualified names): those of its fields, its base. */
+function arbitraryParts(el: ElementModel): string[] {
+    const fields = [...el.fields, ...(el.states ?? []).flatMap((s) => s.fields), ...(el.variants ?? []).flatMap((v) => v.fields)];
+    const types = [...fields.map((f) => f.type), ...(el.verified ? [el.verified.of] : [])];
+    return types.flatMap((t) => (t.kind === 'ref' ? [t.ref] : []));
+}
+
+/**
+ * What the contract tests leave out until they generate values of recursive types (`tests.maxRecursionDepth`, planned):
+ * the recursive types (on a cycle of field types, M012 lets values and unions be), and every type whose arbitrary
+ * would need one of theirs (qualified names, in declaration order).
+ */
+export function untestedTypes(model: DomainModel): { recursive: string[]; types: string[] } {
+    const parts = new Map(elementList(model).map((e) => [e.id, arbitraryParts(e)]));
+    const reaches = (from: string, to: string): boolean => {
+        const seen = new Set<string>();
+        const stack = [...(parts.get(from) ?? [])];
+        while (stack.length) {
+            const id = stack.pop()!;
+            if (id === to) return true;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            stack.push(...(parts.get(id) ?? []));
+        }
+        return false;
+    };
+    const recursive = [...parts.keys()].filter((id) => reaches(id, id));
+    const types = [...parts.keys()].filter((id) => recursive.some((r) => id === r || reaches(id, r)));
+    return { recursive, types };
+}
+
+/**
+ * The cases the contract tests leave out: commands with an input of an untested type, required policies of an untested
+ * event.
+ */
+function untestedCases(model: DomainModel, untested: ReadonlySet<string>, policies: Readonly<Record<string, PolicyMode>>): string[] {
+    const out: string[] = [];
+    for (const el of elementList(model)) {
+        for (const c of el.commands ?? []) if (!testable(el, c, untested)) out.push(`${el.id}.${c.name}`);
+        if (el.policy && policies[el.context] === 'required' && untested.has(el.policy.event)) out.push(`policy ${el.id}`);
+    }
+    return out;
+}
+
+/** Whether a command's case can be generated: its aggregate and parameters have arbitraries. */
+const testable = (agg: ElementModel, c: CommandModel, untested: ReadonlySet<string>): boolean =>
+    !untested.has(agg.id) && c.params.every((p) => p.type.kind !== 'ref' || !untested.has(p.type.ref));
+
+/**
+ * The warning of `dt generate ts` when the contract tests are generated for a model with recursive types: what they
+ * leave out (empty without recursive types).
+ */
+export function testsWarnings(model: DomainModel, policies: Readonly<Record<string, PolicyMode>> = {}): string[] {
+    const { recursive, types } = untestedTypes(model);
+    if (!recursive.length) return [];
+    const others = types.filter((t) => !recursive.includes(t));
+    const cases = untestedCases(model, new Set(types), policies);
+    return [
+        `the contract tests generate no values of recursive types yet (${recursive.join(', ')}): ` +
+            `no arbitrary is generated for ${[...recursive, ...others].join(', ')}` +
+            (cases.length ? `, and these cases are left out: ${cases.join(', ')}` : '') +
+            '.',
+    ];
+}
+
 /**
  * The contract tests (ADR 0020): per context a module with fast-check arbitraries of its types and `contract(impl)`,
  * the runner-agnostic suite; `_testing.ts` with the generic helpers, an index, and an adapter for the runner if one is
@@ -72,10 +137,11 @@ export function register(suite: Suite): void {
 export function generateTests(model: DomainModel, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
     const dir = opts.dir;
     const files: File[] = [{ path: posix.join(dir, '_testing.ts'), content: `${header}\n${TESTING}` }];
+    const untested = new Set(untestedTypes(model).types);
     for (const ctx of model.contexts) {
         files.push({
             path: posix.join(dir, `${ctx}.ts`),
-            content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required').emit(),
+            content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required', untested).emit(),
         });
     }
     if (opts.runner) files.push({ path: posix.join(dir, '_register.ts'), content: adapter(header, opts.runner) });
@@ -179,6 +245,8 @@ class TestsEmitter {
         private readonly moduleOf: (ctx: string) => string,
         /** Whether the context's policies are required: `contract` then tests their handlers. */
         private readonly policiesRequired: boolean,
+        /** The types without an arbitrary (`untestedTypes`): their cases are left out. */
+        private readonly untested: ReadonlySet<string> = new Set(),
     ) {
         this.els = elementsIn(model, ctx);
     }
@@ -243,6 +311,7 @@ class TestsEmitter {
         const valid = (name: string, raw: string, holds: string | undefined): string =>
             holds ? `testing.valid(given.${name} ?? ${raw}, ${holds}, '${ctx}.${name}')` : `given.${name} ?? ${raw}`;
         for (const el of this.els) {
+            if (this.untested.has(el.id)) continue;
             switch (el.kind) {
                 case 'id':
                 case 'primitive': {
@@ -474,7 +543,10 @@ class TestsEmitter {
         const { members, defs } = this.arbitraries();
         const primitives = this.els.filter((e) => e.kind === 'id' || e.kind === 'primitive');
         const aggregates = this.els.filter((e) => e.kind === 'aggregate' && e.commands?.length);
+        const cases = (agg: ElementModel): CommandModel[] => (agg.commands ?? []).filter((c) => testable(agg, c, this.untested));
+        const tested = aggregates.filter((agg) => cases(agg).length);
         const policies = this.policiesRequired ? this.els.filter((e) => e.kind === 'policy') : [];
+        const policyCases = policies.filter((p) => !this.untested.has(p.policy!.event));
         const indent = (text: string, pad: string): string =>
             text
                 .split('\n')
@@ -484,11 +556,13 @@ class TestsEmitter {
             ...(primitives.length
                 ? [`impl.make && testing.suite('domain primitives', [\n${primitives.map((p) => indent(this.primitiveCase(p), '    ')).join('\n')}\n]),`]
                 : []),
-            ...aggregates.map(
+            ...tested.map(
                 (agg) =>
-                    `impl.${agg.name} && testing.suite('${agg.name}', [\n${(agg.commands ?? []).map((c) => indent(this.commandCase(agg, c), '    ')).join('\n')}\n]),`,
+                    `impl.${agg.name} && testing.suite('${agg.name}', [\n${cases(agg)
+                        .map((c) => indent(this.commandCase(agg, c), '    '))
+                        .join('\n')}\n]),`,
             ),
-            ...(policies.length ? [`testing.suite('policies', [\n${policies.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
+            ...(policyCases.length ? [`testing.suite('policies', [\n${policyCases.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
         ];
         const all = this.model.contexts;
         const defsText = defs.join('\n');
@@ -566,7 +640,7 @@ class TestsEmitter {
             ` * Inputs are generated from the types (deterministic: a fixed seed unless one is passed).`,
             ` */`,
             `export function contract(impl: Implementation, options: Options = {}): testing.Suite {`,
-            ...(aggregates.length || /\ba\./.test(groupsText) ? [`    const a = arbitraries(options);`] : []),
+            ...(tested.length || /\ba\./.test(groupsText) ? [`    const a = arbitraries(options);`] : []),
             ...locals(groupsText, true),
             `    return testing.suite('${ctx}', [`,
             ...groups.map((g) => indent(g, '        ')),

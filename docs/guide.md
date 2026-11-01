@@ -371,6 +371,11 @@ context Sales {
   Variants hold value fields and invariants (seeing their own fields); entities and aggregates are not allowed.
 - In invariants, `payer.kind` compares with `Payer.COMPANY` (or the bound enum's values); variant fields are not
   accessible from outside the union.
+- Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
+  passes through an optional field (`?`), a list that may be empty (`[0..*]`), or a union with a variant out of it
+  (`union Expr { lit { value: Int } not { operand: Expr } }`). Otherwise, and for any cycle through an entity or an
+  aggregate, it is M012. The generated types, equality and checks handle nesting; the contract tests generate no
+  values of recursive types yet (see [Generated tests](#generated-tests)).
 
 <!-- topic: shared -->
 ### Shared contexts
@@ -1599,6 +1604,11 @@ Options, all optional:
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
 
+**Recursive value types** have no generated arbitrary yet: `dt generate ts` warns, and the contract tests leave out
+the arbitraries of those types and of the types holding them, and the cases that need one (a command with such a
+parameter or of an aggregate holding one, a required policy reacting to such an event). Test those commands in your
+own tests.
+
 **Outside the generated tests** is what happens around the commands, which your own tests cover (as
 `examples/shop/src/app.test.ts` does): the factories of verified types (`MakeAvailableEmail`, with your repositories and
 services), the constraints without an expression where you pass no check, and the application — loading, saving,
@@ -2110,7 +2120,7 @@ storming](#diagnostics-of-a-storming).
 | M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `count(…)` / `length(…)` |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
-| M012 | the ownership graph has no cycles |
+| M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
 | M013 | aggregates and entities have an `id` field of their own ID type |
 | M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
 | M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |

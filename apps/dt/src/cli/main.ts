@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { formatDomain } from '@domaintrail/modeling';
 import { formatStorming, isStormingFile } from '@domaintrail/storming';
-import { generateTypeScript, policyModes, staysInside } from '@domaintrail/generation';
+import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
@@ -200,7 +200,9 @@ Examples:
             const tests = testsOut
                 ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) }
                 : undefined;
-            const files = generateTypeScript(a.model, dirs, tests, policyModes(cfg, a.model.contexts)).map((f) => ({
+            const policies = policyModes(cfg, a.model.contexts);
+            if (tests) for (const w of testsWarnings(a.model, policies)) io.err(`Warning: ${w}`);
+            const files = generateTypeScript(a.model, dirs, tests, policies).map((f) => ({
                 ...f,
                 file: path.resolve(cfg.root, f.path),
             }));

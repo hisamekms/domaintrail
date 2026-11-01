@@ -180,10 +180,22 @@ describe('ownership (M003, M004, M012)', () => {
         expect(codes(a)).toContain('M004');
     });
 
-    test('M012 ownership cycle', async () => {
-        const a = await checkSales(`${ORDER} value A { owns b: B } value B { c: C } value C { owns a: A? }`);
-        const [d] = only(a, 'M012');
-        expect(d.message).toBe('Ownership cycle: A -> B -> C -> A.');
+    test('M012 ownership cycle through an entity', async () => {
+        const a = await checkSales(`${ORDER} id EId: UUID entity E { id: EId owns v: V? } value V { owns e: E }`);
+        expect(only(a, 'M012').map((d) => d.message)).toEqual(['Ownership cycle: E -> V -> E.']);
+    });
+
+    test('M012 a recursive value type is allowed when each value on the cycle has a finite value', async () => {
+        const through = async (body: string): Promise<string[]> => only(await checkSales(`${ORDER} ${body}`), 'M012').map((d) => d.message);
+        expect(await through('value A { owns b: B } value B { c: C } value C { owns a: A? }')).toEqual([]);
+        expect(await through('value Tree { children: Tree[0..*] }')).toEqual([]);
+        expect(await through('union Expr { lit { value: Int } not { operand: Expr } and { left: Expr  right: Expr } }')).toEqual([]);
+        expect(await through('value Rule { expr: Expr } union Expr { lit { value: Int } rule { rule: Rule } }')).toEqual([]);
+        expect(await through('value A { b: B } value B { a: A[1..*] }')).toEqual(['Recursive value without a finite value: A -> B -> A.']);
+        expect(await through('union Expr { not { operand: Expr } }')).toEqual(['Recursive value without a finite value: Expr -> Expr.']);
+        expect(await through('value Tree { children: Tree[0..*] } value Pair { left: Pair  tree: Tree }')).toEqual([
+            'Recursive value without a finite value: Pair -> Pair.',
+        ]);
     });
 });
 

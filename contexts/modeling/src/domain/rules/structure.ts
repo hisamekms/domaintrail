@@ -18,7 +18,7 @@ import {
     type UnionDecl,
     type ValueObjectDecl,
 } from '../source-model.js';
-import { multiplicityText } from '../types.js';
+import { cardinality, multiplicityText } from '../types.js';
 
 type Owner = AggregateDecl | EntityDecl | ValueObjectDecl | UnionDecl;
 
@@ -228,8 +228,13 @@ function checkOwningAggregates(aggregates: readonly AggregateDecl[], entities: r
     }
 }
 
-/** M012: the ownership graph (owns + embedded value objects) is acyclic. */
+/**
+ * M012: the ownership graph (owns + embedded values) has no cycle through an entity or an aggregate. A cycle of value
+ * objects and unions alone is a recursive value type: allowed when each of them has a finite value (the cycle passes
+ * through `?`, a list that may be empty, or a union with a variant out of it).
+ */
 function checkCycles(owners: Owner[], rules: RuleSink): void {
+    const finite = finiteValues(owners);
     const state = new Map<Owner, 'visiting' | 'done'>();
     const reported = new Set<FieldDecl>();
     const visit = (el: Owner, path: Owner[]): void => {
@@ -239,10 +244,16 @@ function checkCycles(owners: Owner[], rules: RuleSink): void {
             const decl = f.type?.decl?.target;
             if (!isOwnable(decl)) continue;
             if (state.get(decl) === 'visiting') {
-                if (!reported.has(f)) {
-                    reported.add(f);
-                    const chain = [...path, el];
-                    const cycle = [...chain.slice(chain.indexOf(decl)), decl].map((x) => x.name).join(' -> ');
+                const chain = [...path, el];
+                const members = chain.slice(chain.indexOf(decl));
+                const values = members.every(isValueType);
+                if ((values && members.every((m) => finite.has(m))) || reported.has(f)) continue;
+                reported.add(f);
+                const cycle = [...members, decl].map((x) => x.name).join(' -> ');
+                if (values) {
+                    const hint = `make a field on the cycle optional ('?') or a list that may be empty ('[0..*]'), or give a union a variant out of it`;
+                    rules.error('M012', `Recursive value without a finite value: ${cycle}.`, f.typeAt, hint);
+                } else {
                     const hint = `break the cycle: remove one of its fields, or make that part an aggregate and refer to it with 'references'`;
                     rules.error('M012', `Ownership cycle: ${cycle}.`, f.typeAt, hint);
                 }
@@ -253,4 +264,31 @@ function checkCycles(owners: Owner[], rules: RuleSink): void {
         state.set(el, 'done');
     };
     for (const el of owners) if (!state.has(el)) visit(el, []);
+}
+
+/**
+ * The value objects and unions that have a finite value: a value object whose required fields (one, or a list of at
+ * least one) all have one, a union with a variant whose required fields all have one. Fields of other types have one.
+ */
+function finiteValues(owners: readonly Owner[]): Set<Owner> {
+    const finite = new Set<Owner>();
+    const has = (f: FieldDecl): boolean => {
+        const decl = f.type?.decl?.target;
+        if (f.kind === 'references' || !isValueType(decl)) return true;
+        const c = cardinality(f.multiplicity);
+        return c === 'optional' || c === 'many' || finite.has(decl);
+    };
+    const values = owners.filter(isValueType);
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const v of values) {
+            if (finite.has(v)) continue;
+            const ok = v.kind === 'union' ? v.variants.some((x) => fieldsOf(x.members).every(has)) : fieldsOf(v.members).every(has);
+            if (ok) {
+                finite.add(v);
+                grew = true;
+            }
+        }
+    }
+    return finite;
 }
