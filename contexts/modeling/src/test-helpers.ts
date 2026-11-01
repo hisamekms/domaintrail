@@ -6,7 +6,6 @@ import { hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
 import type { Site, SourceModel } from './domain/source-model.js';
 import { DiagnosticSink } from './infrastructure/syntax/diagnostic-sink.js';
-import { checkChanges, checkCommands, checkFactoryIds } from './domain/rules/commands.js';
 import { checkEventIds } from './domain/rules/events.js';
 import { checkInvariants } from './domain/rules/expressions.js';
 import { checkLabels } from './domain/rules/labels.js';
@@ -62,20 +61,7 @@ export function sitesOf(model: SourceModel): Set<string> {
 export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
     if (!a.syntaxOk) return [];
     const sink = new DiagnosticSink(a.resolveFile);
-    for (const rule of [
-        checkNames,
-        checkShared,
-        checkStructure,
-        checkUnions,
-        checkCommands,
-        checkFactoryIds,
-        checkChanges,
-        checkEventIds,
-        checkPayloadNames,
-        checkPolicies,
-        checkInvariants,
-        checkLabels,
-    ])
+    for (const rule of [checkNames, checkShared, checkStructure, checkUnions, checkEventIds, checkPayloadNames, checkPolicies, checkInvariants, checkLabels])
         rule(a.index, sink);
     return sink.items;
 }
