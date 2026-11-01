@@ -1480,6 +1480,7 @@ the string's `length`, Decimals (carried as strings) and Ints compared as number
 | `make<Name>` | every domain primitive and ID | implements `Make<Name>`: `Invalid<Name>` with the **first** violated invariant |
 | `check<Name>(x)` | a value object, entity or union with invariants (a union: those of its variant) | the violated invariants |
 | `check<State><Aggregate>(x)`, `check<Aggregate>(x)` | an aggregate with invariants | per state, the aggregate's and the state's violated invariants; `check<Aggregate>` for any state |
+| `check<Aggregate>Common(x)` | every aggregate with states, also without invariants | the aggregate's own violated invariants, once (the check of each state reports them first) |
 | `check<Command>Requires(aggregate, …params)` | a command with requirements | the name of the first requirement that does not hold, or `undefined` |
 | `equal<Name>(a, b)` | every value object, entity and union | the equality of `==`, `unique` and `contains` |
 
@@ -1515,7 +1516,8 @@ export const makeSku = Sales.makeSkuWith({ reserved: (value) => !RESERVED.has(va
 The same holds for the other checks: `<Type>DeclaredChecks` and `check<Type>With(checks)` for value types and
 aggregates (one object per aggregate, keyed by invariant name, for all its states), and
 `<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements. A type without such a
-constraint has only the plain function.
+constraint has only the plain function. `check<Aggregate>Common` has the `…With` form when an invariant of the aggregate
+itself has a slot; it then takes the aggregate, the argument of that slot, rather than `<Aggregate>Common`.
 
 <!-- topic: tests -->
 ### Generated tests
