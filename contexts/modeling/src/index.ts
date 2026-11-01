@@ -59,8 +59,8 @@ export type { ModelingRuleId } from './domain/rule-ids.js';
 
 // ---- the model as written, for the rules: what `DomainAnalysis.sourceModel` holds ------------------------------
 // (not published language: Modeling's rules and the generator's name check read it and report through `RuleSink`;
-// its lookups and member helpers are the namespace `written` (`written.commandsOf`), apart from the syntax's of the
-// same names below, which the language server reads)
+// its lookups and member helpers are the namespace `written` (`written.commandsOf`), apart from the syntax's
+// `commandsOf` below, which the language server reads)
 export type {
     AggregateDecl,
     AggregateMember,
@@ -112,12 +112,9 @@ export { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
 export { formatDomain, FormatError } from './infrastructure/syntax/format.js';
 
 // ---- the syntax, for the language server -----------------------------------------------------------------------
-// (and, until T10, for the TypeScript generator's name check and naming, which read the AST index and report through
-// the diagnostic sink: exceptions `foreign-infrastructure` of generation in test/architecture/map.ts)
 export * as ast from './infrastructure/syntax/generated/ast.js';
 export { DomainGeneratedModule, DomainGeneratedSharedModule } from './infrastructure/syntax/generated/module.js';
 export { DomainModule } from './infrastructure/syntax/domain-module.js';
 export { docComment, LabelResolver } from './infrastructure/syntax/labels.js';
-export { commandsOf, includedFields, invariantsOf, ModelIndex, primitiveInvariants, statesOf } from './infrastructure/syntax/model-index.js';
+export { commandsOf, ModelIndex } from './infrastructure/syntax/model-index.js';
 export { elementIdOf } from './infrastructure/syntax/element-id.js';
-export { DiagnosticSink, type FileResolver } from './infrastructure/syntax/diagnostic-sink.js';
