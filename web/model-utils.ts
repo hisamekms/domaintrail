@@ -1,6 +1,6 @@
 import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import { PRIMITIVE_LABELS, typeText } from '@domaintrail/visualization/domain/graph/build';
-import { type CommandModel, type DomainModel, type ElementKind, type ElementModel, type StateModel, type TypeExpr } from '@domaintrail/modeling/model/model';
+import type { CommandModel, DomainModel, ElementKind, ElementModel, StateModel, TypeExpr } from '@domaintrail/modeling';
 import { ownerElement } from './render';
 
 export type Select = (id: string) => void;
@@ -138,8 +138,7 @@ export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter)
     });
 }
 
-export { commandsWithOutcome, fieldSetUsers } from '@domaintrail/modeling/model/usages';
-export { policiesReactingTo, policiesRunning } from '@domaintrail/modeling/model/model';
+export { commandsWithOutcome, fieldSetUsers, policiesReactingTo, policiesRunning } from '@domaintrail/modeling';
 
 /** The command a policy runs (`Agg:command`), with its aggregate, when both resolve. */
 export function policyTarget(model: DomainModel, p: ElementModel): { agg: ElementModel; command: CommandModel } | undefined {

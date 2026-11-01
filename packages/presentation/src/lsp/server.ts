@@ -63,18 +63,28 @@ import {
     type WorkspaceEdit,
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { CONFIG_FILES, ConfigError, DEFAULT_SOURCES, defaultConfig, type ResolvedConfig } from '@domaintrail/modeling/core/config';
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import { LabelResolver, docComment } from '@domaintrail/modeling/core/labels';
-import { ModelIndex, commandsOf } from '@domaintrail/modeling/core/model-index';
-import * as ast from '@domaintrail/modeling/language/generated/ast';
-import { DomainGeneratedModule, DomainGeneratedSharedModule, EventStormingGeneratedModule } from '@domaintrail/modeling/language/generated/module';
-import { DomainModule } from '@domaintrail/modeling/language/domain-module';
-import { EventStormingModule } from '@domaintrail/modeling/storming/language/module';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { elementIdOf } from '@domaintrail/modeling/model/ids';
+import {
+    analyze,
+    ast,
+    commandsOf,
+    CONFIG_FILES,
+    ConfigError,
+    DEFAULT_SOURCES,
+    defaultConfig,
+    type Diagnostic,
+    docComment,
+    DomainGeneratedModule,
+    DomainGeneratedSharedModule,
+    DomainModule,
+    elementIdOf,
+    EventStormingGeneratedModule,
+    EventStormingModule,
+    formatDomain,
+    formatStorming,
+    LabelResolver,
+    ModelIndex,
+    type ResolvedConfig,
+} from '@domaintrail/modeling';
 
 export interface LanguageServerOptions {
     /** Explicit `--root`: where to look for the config, instead of the client's workspace folder. */

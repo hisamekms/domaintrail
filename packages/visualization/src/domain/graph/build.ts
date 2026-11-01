@@ -1,6 +1,17 @@
-import type { CommandModel, DomainModel, ElementModel, FieldModel, TypeExpr, VariantModel } from '@domaintrail/modeling/model/model';
-import { contextDependencies, representative, supportingContexts } from '@domaintrail/modeling/model/dependencies';
-import { allFieldsOf, elementList, emitApplies } from '@domaintrail/modeling/model/model';
+import {
+    allFieldsOf,
+    type CommandModel,
+    contextDependencies,
+    type DomainModel,
+    elementList,
+    type ElementModel,
+    emitApplies,
+    type FieldModel,
+    representative,
+    supportingContexts,
+    type TypeExpr,
+    type VariantModel,
+} from '@domaintrail/modeling';
 import {
     CHAR_WIDTH,
     CONTAINER_PADDING,

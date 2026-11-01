@@ -1,4 +1,4 @@
-import { didYouMean } from '@domaintrail/modeling/core/suggest';
+import { didYouMean } from '@domaintrail/modeling';
 
 /** A section of the guide, named by the `<!-- topic: name -->` line above its heading. */
 export interface GuideTopic {

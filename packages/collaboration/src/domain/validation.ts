@@ -1,7 +1,6 @@
 // The validation of a snapshot, per DSL (ADR 0026): the summary a revision keeps, the diagnostics a run added
 // compared with its base, and the run success rule that decides between Completed and Failed.
-import { isStormingFile } from '@domaintrail/modeling/core/analyze';
-import type { Diagnostic, RuleId } from '@domaintrail/modeling/core/diagnostics';
+import { type Diagnostic, isStormingFile, type RuleId } from '@domaintrail/modeling';
 import { Collaboration } from '../generated/index.js';
 import { comparePaths } from './snapshot.js';
 

@@ -1,4 +1,4 @@
-import type { DomainModel, ElementModel } from '@domaintrail/modeling/model/model';
+import type { DomainModel, ElementModel } from '@domaintrail/modeling';
 import { bodyWidth } from './build.js';
 import { LINE_HEIGHT, type Graph, type GraphLine, type GraphNode } from './ir.js';
 

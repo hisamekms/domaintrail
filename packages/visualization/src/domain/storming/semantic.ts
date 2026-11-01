@@ -3,7 +3,7 @@
  * Invalid input (reported by the validator) is left out rather than guessed: of two declarations with one ID only the
  * first counts, and a relation to a missing element or one of the wrong kind is dropped.
  */
-import { RELATION_RULES, declarations, type AnyDeclaration, type NodeElement, type Storming, type Timeline } from '@domaintrail/modeling/storming/ir';
+import { type AnyDeclaration, declarations, type NodeElement, RELATION_RULES, type Storming, type Timeline } from '@domaintrail/modeling';
 import { semanticEdgeKey, type SemanticEdge, type SemanticEdgeKind, type SemanticGraph } from './ir.js';
 
 /** The declaration that owns each ID: the first one, as the validator reports the others (S001). */

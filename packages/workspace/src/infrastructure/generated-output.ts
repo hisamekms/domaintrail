@@ -1,7 +1,6 @@
 import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { staysInside } from '@domaintrail/modeling/core/config';
-import { GENERATED_MARKER } from '@domaintrail/modeling/generator/typescript';
+import { GENERATED_MARKER, staysInside } from '@domaintrail/modeling';
 
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
 export interface GeneratedFile {

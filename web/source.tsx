@@ -1,7 +1,6 @@
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import type { DomainModel, Location } from '@domaintrail/modeling/model/model';
+import type { Diagnostic, DomainModel, Location } from '@domaintrail/modeling';
 import { highlight, type Token } from './highlight';
 import { useT } from './i18n';
 

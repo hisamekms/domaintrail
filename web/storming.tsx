@@ -1,13 +1,11 @@
 import { ChevronRight, Microscope, Telescope, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import { declarations, type AnyDeclaration, type NodeElement, type Storming } from '@domaintrail/modeling/storming/ir';
+import { type AnyDeclaration, declarations, type Diagnostic, type DomainModel, type NodeElement, type Storming } from '@domaintrail/modeling';
 import { VIEW_LEVELS, type EventOccurrence, type RenderGraph, type ViewLevel, type ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
 import { buildSemanticGraph, firstDeclarations, stormingTimelines } from '@domaintrail/visualization/domain/storming/semantic';
 import { timelineOccurrences } from '@domaintrail/visualization/domain/storming/trie';
 import { stormingViewKey } from '@domaintrail/visualization/domain/storming/graph';
 import type { DisplayMode, LaidOutGraph } from '@domaintrail/visualization/domain/graph/ir';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { useT } from './i18n';
 import { fileSelection, nameIn, type Select } from './model-utils';

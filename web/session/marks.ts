@@ -15,7 +15,7 @@ import {
     type MarkTargetData,
 } from '@domaintrail/collaboration/domain/marks';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { DEFAULT_QUICK_REACTIONS, readEmoji } from '@domaintrail/modeling/core/emoji';
+import { DEFAULT_QUICK_REACTIONS, readEmoji } from '@domaintrail/modeling';
 
 export { MAX_REACTION_EMOJI, markKey, readEmoji, signKey, VOTE, type MarkTargetData };
 export type Sign = MarkSignData;

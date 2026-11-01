@@ -1,25 +1,31 @@
-import { closest, didYouMean, type Candidate } from '@domaintrail/modeling/core/suggest';
-import { aggregateParamName } from '@domaintrail/modeling/generator/naming';
 import {
+    aggregateParamName,
+    type Candidate,
+    closest,
+    type CommandModel,
+    commandsWithOutcome,
+    didYouMean,
+    type DomainModel,
+    type ElementKind,
+    type ElementModel,
     elementsIn,
     emitApplies,
+    type EmitModel,
+    type FieldModel,
+    fieldSetUsers,
+    fieldUses,
+    fieldUseText,
+    identityOf,
+    type InvariantModel,
+    type Location,
     outcomeFields,
     outcomePatternText,
     policiesReactingTo,
     policiesRunning,
-    type CommandModel,
-    type DomainModel,
-    type ElementKind,
-    type ElementModel,
-    type EmitModel,
-    type FieldModel,
-    type InvariantModel,
-    type Location,
     type StateModel,
     type TermModel,
     type TypeExpr,
-} from '@domaintrail/modeling/model/model';
-import { commandsWithOutcome, fieldSetUsers, fieldUses, fieldUseText, identityOf } from '@domaintrail/modeling/model/usages';
+} from '@domaintrail/modeling';
 
 /**
  * `dt show`: the resolved model of one element (or a context, a state, a command), from the Typed Model.

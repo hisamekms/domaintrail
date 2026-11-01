@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling/core/config';
+import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import { SourceScope } from './files.js';
 
 export interface SnapshotScan {

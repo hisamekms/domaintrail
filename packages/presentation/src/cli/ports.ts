@@ -1,5 +1,4 @@
-import type { SourceFile } from '@domaintrail/modeling/core/analyze';
-import type { ResolvedConfig, ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
+import type { ResolvedConfig, ResolvedSessionConfig, SourceFile } from '@domaintrail/modeling';
 import type { LanguageServerOptions } from '../lsp/server.js';
 
 /**

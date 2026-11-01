@@ -1,12 +1,22 @@
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { analyze, isStormingFile, type Analysis } from '@domaintrail/modeling/core/analyze';
-import { ConfigError, checkTsContexts, policyModes, staysInside, type ResolvedConfig } from '@domaintrail/modeling/core/config';
-import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/modeling/core/diagnostics';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import {
+    type Analysis,
+    analyze,
+    checkTsContexts,
+    ConfigError,
+    formatDiagnostic,
+    formatDomain,
+    formatStorming,
+    generateTypeScript,
+    isStormingFile,
+    jsonDiagnostic,
+    type JsonDiagnostic,
+    policyModes,
+    type ResolvedConfig,
+    staysInside,
+} from '@domaintrail/modeling';
 import { guideTopic, parseGuide, quickReference } from './guide.js';
 import { SessionError, type CliDeps } from './ports.js';
 import { lookup, showJson, showText } from './show.js';

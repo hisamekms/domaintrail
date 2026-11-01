@@ -1,9 +1,8 @@
 import { Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
+import type { Diagnostic, DomainModel, ElementModel, FieldModel, InvariantModel } from '@domaintrail/modeling';
 import type { ModelDiff } from '@domaintrail/visualization/domain/graph/diff';
 import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
-import type { DomainModel, ElementModel, FieldModel, InvariantModel } from '@domaintrail/modeling/model/model';
 import { useT, type Messages } from './i18n';
 import { PersistenceBadge } from './behavior';
 import { ContextList } from './context-picker';

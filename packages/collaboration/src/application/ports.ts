@@ -1,9 +1,7 @@
 // The ports of the collaboration application (ADR 0025's rule: defined on the consumer's side, implemented
 // structurally by the adapters). The stores are synchronous and used inside one transaction of a `UnitOfWork`; the
 // workspace, the blobs and the validator are asynchronous and used between transactions, never inside one.
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import type { Storming } from '@domaintrail/modeling/storming/ir';
+import type { Diagnostic, DomainModel, Storming } from '@domaintrail/modeling';
 import type { Collaboration } from '../generated/index.js';
 import type { Identity, IdentityKey } from './identity.js';
 

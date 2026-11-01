@@ -13,7 +13,7 @@ import {
 import { makeEmoji, VOTE } from '@domaintrail/collaboration/domain/marks';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
 import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration/domain/body';
-import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling/core/emoji';
+import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
 /** Why an input was refused. */

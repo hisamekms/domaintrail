@@ -14,7 +14,7 @@ import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan'
 import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/system';
 import { AGENT_FILE, readAgentCredential, type AgentCredential } from '@domaintrail/collaboration/infrastructure/session-files';
 import { SESSION_DIR } from '@domaintrail/collaboration/infrastructure/session-dir';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling/core/config';
+import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import { SessionError } from '@domaintrail/presentation/cli/ports';
 import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
 import { processAlive } from './process.js';

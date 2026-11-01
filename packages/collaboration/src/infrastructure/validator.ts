@@ -1,5 +1,5 @@
 // The model validator of the snapshots: the analysis `dt check` makes (`analyze`, both DSLs).
-import { analyze } from '@domaintrail/modeling/core/analyze';
+import { analyze } from '@domaintrail/modeling';
 import type { ModelValidator } from '../application/ports.js';
 
 export function createModelValidator(): ModelValidator {

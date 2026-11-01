@@ -9,7 +9,7 @@
 // it mentions (`people`, sent as `mentions`): picking one after `@` adds them, deleting their mentions removes them.
 // The body stays plain text: the stream reads the tokens back with `parseBody` (`domain/body.ts`) and renders them as
 // text and links, never as HTML.
-import { declarations } from '@domaintrail/modeling/storming/ir';
+import { declarations } from '@domaintrail/modeling';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';

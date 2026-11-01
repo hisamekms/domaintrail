@@ -3,7 +3,7 @@
  * of none, and the other elements of the level with their semantic edges. Sharing an event node between occurrences is
  * a drawing optimization only: every render edge is either the drawing of a semantic edge or a timeline `sequence` edge.
  */
-import type { NodeElementKind, Storming } from '@domaintrail/modeling/storming/ir';
+import type { NodeElementKind, Storming } from '@domaintrail/modeling';
 import {
     LEVEL_KINDS,
     semanticEdgeKey,

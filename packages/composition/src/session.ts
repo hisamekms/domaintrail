@@ -23,7 +23,7 @@ import { readServerAddress, removeSessionFiles, writeAgentCredential, writeServe
 import { createUnitOfWork, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
 import { randomIds, randomSecrets, systemClock } from '@domaintrail/collaboration/infrastructure/system';
 import { createModelValidator } from '@domaintrail/collaboration/infrastructure/validator';
-import { DEFAULT_SOURCES, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
+import { DEFAULT_SOURCES, type ResolvedSessionConfig } from '@domaintrail/modeling';
 import { SessionError } from '@domaintrail/presentation/cli/ports';
 import { isLoopbackBind, sessionHostPolicy } from '@domaintrail/presentation/http/access';
 import { createApiRoutes } from '@domaintrail/presentation/http/routes';

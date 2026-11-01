@@ -1,14 +1,14 @@
 import {
     allFieldsOf,
-    emitSuffix,
-    emittedEvents,
-    policiesReactingTo,
-    policiesRunning,
     type CommandModel,
     type DomainModel,
     type ElementModel,
+    emitSuffix,
+    emittedEvents,
     type FieldModel,
-} from '@domaintrail/modeling/model/model';
+    policiesReactingTo,
+    policiesRunning,
+} from '@domaintrail/modeling';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
 import { diffRows, rowClass, type RowChange } from './row-diff';

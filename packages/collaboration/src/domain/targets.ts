@@ -1,8 +1,7 @@
 // Whether the target of a request still resolves in a model (ADR 0026, ModelTarget): a target is never re-bound, so a
 // path that no longer matches is shown as stale. Render node IDs are never involved: `.dt` elements are looked up by
 // model ID, storming elements by storming and local ID, occurrences by timeline, event and step path.
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import { declarations, type Storming } from '@domaintrail/modeling/storming/ir';
+import { declarations, type DomainModel, type Storming } from '@domaintrail/modeling';
 import type { Collaboration } from '../generated/index.js';
 
 /** What a target is resolved against: the analysis of one snapshot of the workspace. */

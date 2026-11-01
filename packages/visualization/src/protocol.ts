@@ -1,9 +1,7 @@
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import type { Storming } from '@domaintrail/modeling/storming/ir';
+import type { Diagnostic, DomainModel, Storming } from '@domaintrail/modeling';
 import type { RenderGraph } from './domain/storming/ir.js';
 import type { ModelDiff } from './domain/graph/diff.js';
 import type { LaidOutGraph, TransitionLabels } from './domain/graph/ir.js';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
 import type { GitCommit } from './application/ports.js';
 
 export type ViewStatus = 'ok' | 'invalid' | 'syntax-error' | 'empty';

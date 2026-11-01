@@ -11,7 +11,7 @@ import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/syst
 import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
 import { readCredential } from '@domaintrail/composition/subscriber';
 import { plainQuestion, readReply, requestNumber, type ReplyData } from '@domaintrail/collaboration/domain/reply';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling/core/config';
+import { DEFAULT_SOURCES } from '@domaintrail/modeling';
 import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
 
 /** A reply as a scenario writes it: requests by their number in the run (from 1); `questions` and `assumptions` optional. */
