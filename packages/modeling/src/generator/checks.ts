@@ -1,6 +1,7 @@
 import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PrimitiveName } from '../model/model.js';
 import type { Location } from '../kernel/source.js';
-import { camel, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
+import { camel } from '../kernel/names.js';
+import { invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality

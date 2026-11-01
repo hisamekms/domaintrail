@@ -57,7 +57,7 @@ export { elementIdOf } from './model/ids.js';
 export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './model/aggregates.js';
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './model/diff.js';
 
-// ---- the kernel: diagnostics, suggestions, sources and locations (T8: shared/kernel) ----------------------------
+// ---- the kernel: diagnostics, suggestions, sources and locations, names (T8: shared/kernel) ---------------------
 export {
     compareDiagnostics,
     formatDiagnostic,
@@ -70,6 +70,7 @@ export {
     type Severity,
 } from './kernel/diagnostics.js';
 export { closest, didYouMean, type Candidate } from './kernel/suggest.js';
+export { camel } from './kernel/names.js';
 export { type Location, type SourceFile } from './kernel/source.js';
 
 // ---- published language: Storming's IR (T8: contexts/storming) -------------------------------------------------

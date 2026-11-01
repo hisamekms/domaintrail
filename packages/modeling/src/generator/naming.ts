@@ -11,6 +11,7 @@ import {
     isVerifiedDecl,
 } from '../language/generated/ast.js';
 import { commandsOf, invariantsOf, primitiveInvariants, statesOf, type ModelIndex } from '../core/model-index.js';
+import { camel } from '../kernel/names.js';
 import { emitApplies, type OutcomePatternModel } from '../model/model.js';
 
 /** Names exported by the shared runtime module and imported into every context file. */
@@ -48,7 +49,6 @@ export const VERIFIED_PREFIX = 'verified:';
 export const STATE_TAG = 'state';
 
 export const pascal = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-export const camel = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
 
 interface Named {
     name: string;

@@ -122,7 +122,7 @@ export const MAP: Record<string, Module> = {
         // the typed model with its dependencies and diff; Storming's IR, semantic graph and occurrences (T8:
         // contexts/storming)
         published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'model/aggregates', 'model/diff', 'storming/ir', 'storming/semantic'],
-        // diagnostics, suggestions, sources and locations (T8: shared/kernel)
+        // diagnostics, suggestions, sources and locations, `camel` (T8: shared/kernel)
         kernel: 'kernel',
         inner: {
             // Storming reads Modeling's typed model, which knows nothing of it; its analysis takes the model as its
