@@ -3,8 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '../../generator/typescript.js';
-import { check } from '../../test-helpers.js';
+import { generateTypeScript } from './typescript.js';
+import { check } from './test-helpers.js';
 
 const SALES = `context Sales "販売" {
   id UserId: UUID
@@ -59,7 +59,7 @@ export const wrong: Sales.Details = { type: 'PRINTING', details: { planned: 3 } 
 export const name = (a: Sales.Actor): string => (a.kind === 'EXTERNAL_PARTY' ? a.name : a.userId);
 `,
             );
-            const tsc = path.join(import.meta.dir, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
+            const tsc = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
             const r = Bun.spawnSync([tsc, '--noEmit', '--strict', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', 'use.ts'], {
                 cwd: dir,
             });

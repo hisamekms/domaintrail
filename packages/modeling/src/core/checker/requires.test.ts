@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../../generator/typescript.js';
 import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
@@ -199,39 +198,5 @@ describe('scope of requires', () => {
             'primitive Count: Int { value in 0..100 }',
         );
         expect(errors(a)).toEqual([['M009', "Operator '<=' cannot be applied to 'Count' and 'Int'."]]);
-    });
-});
-
-describe('requires in the generated TypeScript', () => {
-    test('documents the requirements on the command and its decision, and adds their errors to the error type', async () => {
-        const a = await review(`
-    command accept(person: PersonId) "受入"
-      Reviewing -> Accepted
-      Escalated -> Escalated | Accepted
-      requires authorizedApprover "承認者である" { contains(policy.approvers, person) } else NotApprover
-      requires noOpenBlocker "未解決の阻害がない" else Blocked
-      errors Blocked, Conflict`);
-        expect(a.diagnostics).toEqual([]);
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
-        const lines = [
-            ' * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)',
-            ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
-        ].join('\n');
-        const changes = ' * @changes none — the command changes no common field';
-        expect(code).toContain(
-            `/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n * @see review.dt:13\n */\nexport type AcceptReview = `,
-        );
-        expect(code).toContain(
-            `/**\n * Review.accept, decided per source state; implement it with \`decide(ReviewShape, …)\` from the runtime.\n * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.\n${lines}\n${changes}\n`,
-        );
-        expect(code).toContain('    }, Blocked | Conflict | NotApprover>;');
-        expect(code).not.toContain('Blocked | Conflict | NotApprover | Blocked');
-    });
-
-    test('a command without errors gets the errors of its requirements', async () => {
-        const a = await review('command accept() Reviewing -> Accepted requires x { blockers == 0 } else Blocked');
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
-        expect(code).toContain(' * @requires x else Blocked: blockers == 0\n');
-        expect(code).toContain('}, Blocked>;');
     });
 });

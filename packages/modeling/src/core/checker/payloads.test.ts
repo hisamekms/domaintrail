@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '../../analysis/analyze.js';
+import { analyzeDomain } from '../analyze.js';
 import { checkSales, exampleSources, only } from '../../test-helpers.js';
 
 /** The M022 messages of a context body, each with its hint. */
@@ -186,7 +186,7 @@ ${decls}`;
     });
 
     test('the shop example has no M022 (and no warning at all)', async () => {
-        const a = await analyze(await exampleSources());
+        const a = await analyzeDomain(await exampleSources());
         expect(a.diagnostics.filter((d) => d.severity === 'warning')).toEqual([]);
     });
 });

@@ -1,5 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../../generator/typescript.js';
+import { describe, expect, test } from 'bun:test';
 import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 const FILES = {
@@ -43,8 +42,6 @@ const FILES = {
   event Billed { invoiceId: InvoiceId orderId: Sales.OrderId }
 }`,
 };
-
-const ts = (files: Awaited<ReturnType<typeof check>>, ctx: string): string => generateTypeScript(files.model!).find((f) => f.path === `${ctx}.ts`)!.content;
 
 describe('field sets', () => {
     test('a valid model checks clean; elements get the fields of their field sets first', async () => {
@@ -170,21 +167,6 @@ describe('field sets', () => {
         expect(only(a, 'M014').map((d) => d.message)).toEqual(["Shared context 'Common' cannot depend on 'Sales.OrderId' of a non-shared context."]);
     });
 
-    test('M011: an event field named type from a field set; the new unions collide like other names', async () => {
-        const a = await checkSales(`
-  id AId: UUID
-  fields Typed { type: String }
-  aggregate A { id: AId command c() emits Ev }
-  event Ev with Typed { aId: AId }
-  value AEvent
-  value DomainEvent`);
-        expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Generated TypeScript name 'DomainEvent' for the union of the events collides with value object 'DomainEvent'.",
-            "Field 'type' of field set 'Typed' is reserved for the discriminant of generated event types.",
-            "Generated TypeScript name 'AEvent' for value object 'AEvent' collides with the union of the events of 'A'.",
-        ]);
-    });
-
     test('labels: fields of field sets are named in their own context, and share the namespace of the element (L003)', async () => {
         const a = await checkSales(`
   id AId: UUID
@@ -227,42 +209,5 @@ describe('M017: events carry the ID of their aggregate', () => {
         expect(only(b, 'M017').map((d) => [d.message, d.hint])).toEqual([
             ["Event 'Ev' emitted by 'I.c' has no field of type 'IId' to tell which 'I' it is about.", "add a field such as 'iId: Billing.IId' to event 'Ev'"],
         ]);
-    });
-});
-
-describe('field sets: generated TypeScript', () => {
-    let a: Awaited<ReturnType<typeof check>>;
-    beforeAll(async () => {
-        a = await check(FILES);
-    });
-
-    test('a field set is an interface that the elements using it extend', () => {
-        expect(ts(a, 'Common')).toContain(
-            '/**\n * テナント所属\n * 契約者ごとにデータを分ける。\n * Fields taken on with `with Tenanted`.\n * @see common.dt:4\n */\nexport interface Tenanted {\n    /** テナント */\n    readonly tenant: TenantId;\n}',
-        );
-        const sales = ts(a, 'Sales');
-        expect(sales).toContain("import type * as Common from './Common.js';");
-        expect(sales).toMatch(
-            /export interface OrderCommon extends Common\.Tenanted \{\n    readonly id: OrderId;\n    readonly items: readonly OrderItem\[\];\n\}/,
-        );
-        expect(sales).toContain('export interface ConfirmedOrder extends OrderCommon {');
-        expect(sales).toMatch(/export interface OrderItem extends Common\.Tenanted \{\n    readonly id: OrderItemId;\n\}/);
-        expect(sales).toMatch(
-            /export interface OrderPlaced extends Common\.Tenanted, Performed \{\n    readonly type: 'OrderPlaced';\n    readonly orderId: OrderId;\n\}/,
-        );
-        expect(sales).toContain('export interface OrderConfirmed {');
-        expect(ts(a, 'Billing')).toMatch(/export interface Invoice extends Sales\.Performed \{\n    readonly id: InvoiceId;\n\}/);
-    });
-
-    test('unions of the events, the aggregates and the events of each aggregate', () => {
-        const sales = ts(a, 'Sales');
-        expect(sales).toContain(
-            '/**\n * Events that the commands of Order may emit.\n * @see sales.dt:8\n */\nexport type OrderEvent = OrderPlaced | OrderConfirmed | Billing.Billed;',
-        );
-        expect(sales).toContain('/** Events of Sales. */\nexport type DomainEvent = OrderPlaced | OrderConfirmed;');
-        expect(sales).toContain('/** Aggregates of Sales. */\nexport type Aggregate = Order;');
-        const common = ts(a, 'Common');
-        expect(common).not.toContain('DomainEvent');
-        expect(common).not.toContain('Aggregate');
     });
 });

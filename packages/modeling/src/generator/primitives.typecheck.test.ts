@@ -3,13 +3,13 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '../../generator/typescript.js';
-import { analyze } from '../../analysis/analyze.js';
-import { EXAMPLES, exampleSources } from '../../test-helpers.js';
+import { generateTypeScript } from './typescript.js';
+
+import { analyzeForGeneration, EXAMPLES, exampleSources } from './test-helpers.js';
 
 describe('generated TypeScript for domain primitives', () => {
     let dir: string;
-    const TSC = path.join(import.meta.dir, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
+    const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
     const tsc = (...files: string[]) => {
         const r = Bun.spawnSync(
             [
@@ -34,7 +34,7 @@ describe('generated TypeScript for domain primitives', () => {
 
     beforeAll(async () => {
         dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-dp-'));
-        const a = await analyze(await exampleSources());
+        const a = await analyzeForGeneration(await exampleSources());
         expect(a.diagnostics).toEqual([]);
         await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
         for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);

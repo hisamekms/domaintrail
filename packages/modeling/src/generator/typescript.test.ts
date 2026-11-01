@@ -2,15 +2,15 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { analyze } from '../analysis/analyze.js';
+
 import { generateTypeScript } from './typescript.js';
-import { check, exampleSources } from '../test-helpers.js';
+import { analyzeForGeneration, check, exampleSources } from './test-helpers.js';
 
 let dir: string;
 
 beforeAll(async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-gen-'));
-    const a = await analyze(await exampleSources());
+    const a = await analyzeForGeneration(await exampleSources());
     expect(a.ok).toBe(true);
     await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
     for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
@@ -219,7 +219,7 @@ describe('contexts generated into different directories', () => {
 
     beforeAll(async () => {
         split = await mkdtemp(path.join(tmpdir(), 'domaintrail-split-'));
-        const a = await analyze(await exampleSources());
+        const a = await analyzeForGeneration(await exampleSources());
         const dirs = { Common: SHARED, Sales: 'generated/domain', Billing: 'generated/domain' };
         for (const f of generateTypeScript(a.model!, dirs)) {
             await mkdir(path.dirname(path.join(split, f.path)), { recursive: true });
@@ -276,7 +276,7 @@ describe('invariants without an expression', () => {
 describe('links to the DSL', () => {
     test('every declaration that comes from the DSL ends its JSDoc with @see <file>:<line>, relative to the root', async () => {
         const ws = await exampleSources();
-        const a = await analyze(ws);
+        const a = await analyzeForGeneration(ws);
         const sources = new Map(ws.map((s) => [s.path.replace(/\\/g, '/'), s.text.split('\n')]));
         const unlinked: string[] = [];
         for (const f of generateTypeScript(a.model!).filter((f) => !f.path.startsWith('_') && f.path !== 'index.ts')) {

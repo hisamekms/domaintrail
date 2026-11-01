@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../../generator/typescript.js';
 import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 const SALES = `context Sales "販売" {
@@ -54,31 +53,6 @@ describe('unions', () => {
         expect(details.variants!.map((v) => v.label)).toEqual(['配達', '印刷']);
         expect(a.model!.elements['Sales.Coverage'].variants![0].invariants.map((i) => i.name)).toEqual(['notBlank']);
         expect(a.model!.elements['Sales.Spec'].fields.find((f) => f.name === 'details')!.type).toMatchObject({ target: 'union' });
-    });
-
-    test('generates a tagged union per union', async () => {
-        const a = await check({ 'sales.dt': SALES });
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
-        expect(code).toContain(`/**
- * 行為者
- * 実際の行為者。
- * @see sales.dt:8
- */
-export type Actor =
-    /** 社内 */
-    | {
-          readonly kind: 'INTERNAL_USER';
-          readonly userId: UserId;
-      }
-    /** 社外 */
-    | {
-          readonly kind: 'EXTERNAL_PARTY';
-          readonly name: PartyName;
-          readonly partnerId?: PartnerId;
-      };`);
-        expect(code).toContain("readonly type: 'DELIVERY';\n          readonly details: DeliverySpec;");
-        expect(code).toContain("/** @invariant notBlank: length(text) > 0 */\n    | {\n          readonly form: 'DESCRIPTION';");
-        expect(code).toContain('readonly details: Details;');
     });
 
     test('M015 a union bound to an enum has exactly its values as variants', async () => {

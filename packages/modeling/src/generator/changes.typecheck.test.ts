@@ -3,10 +3,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '../../generator/typescript.js';
-import { check } from '../../test-helpers.js';
+import { generateTypeScript } from './typescript.js';
+import { check } from './test-helpers.js';
 
-const TSC = path.join(import.meta.dir, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
+const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
 
 function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
     const r = Bun.spawnSync(

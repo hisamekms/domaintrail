@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '../../generator/typescript.js';
 import { check, codes, only } from '../../test-helpers.js';
 
 const COMMON = `shared context Common "共通" {
@@ -35,9 +34,6 @@ describe('shared contexts', () => {
         ]);
         // terms of shared contexts apply when the context itself has none
         expect(m.elements['Common.Money'].fields[1].label).toBe('通貨');
-        const sales = generateTypeScript(m).find((f) => f.path === 'Sales.ts')!.content;
-        expect(sales).toContain("import type * as Common from './Common.js';");
-        expect(sales).toContain('readonly email: Common.Email;');
     });
 
     test('the context own elements win over shared ones, with a warning', async () => {

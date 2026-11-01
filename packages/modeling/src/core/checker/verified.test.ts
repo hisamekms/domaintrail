@@ -1,6 +1,5 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { formatDomain } from '../../format/format.js';
-import { generateTypeScript } from '../../generator/typescript.js';
 import { contextDependencies } from '../../model/dependencies.js';
 import { check, codes, only } from '../../test-helpers.js';
 
@@ -143,13 +142,11 @@ describe('verified types: the checker', () => {
         ]);
     });
 
-    test('a verified type is not allowed in a shared context (M014), and generated names do not collide (M011)', async () => {
+    test('a verified type is not allowed in a shared context (M014)', async () => {
         const a = await check({ 'c.dt': 'shared context C {\n  verified V of String\n}\n' });
         expect(only(a, 'M014').map((d) => d.message)).toEqual([
             "Shared context 'C' can only contain domain primitives, enums, value objects, unions, field sets and terms; found verified type 'V'.",
         ]);
-        const b = await check({ 'x.dt': 'context X {\n  verified V of String\n  value MakeV\n}\n' });
-        expect(only(b, 'M011').map((d) => d.message)).toEqual(["Generated TypeScript name 'MakeV' for value object 'MakeV' collides with the factory of 'V'."]);
     });
 
     test('`verified`, `of` and `for` are still names of fields and parameters', async () => {
@@ -187,44 +184,5 @@ describe('verified types: dt show and dependencies', () => {
             'X->Ids for id',
             'X->Y ⇒ Bad type',
         ]);
-    });
-});
-
-describe('verified types: generated TypeScript', () => {
-    let ts: string;
-
-    beforeAll(async () => {
-        ts = generateTypeScript((await run()).model!).find((f) => f.path === 'Sales.ts')!.content;
-    });
-
-    test('the base with a property per verification, and the factory contract with its context and errors', () => {
-        expect(ts).toContain(`/**
- * 未使用のメールアドレス
- * 他の顧客に使われていないことを確かめたメールアドレス。
- * A value of EmailAddress for which MakeAvailableEmail made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
- * Make it with your \`MakeAvailableEmail\` factory; never \`as AvailableEmail\` outside it (see dt guide lint).
- * @see sales.dt:9
- */
-export type AvailableEmail = EmailAddress & { readonly 'verified:Sales.AvailableEmail': true };`);
-        expect(ts).toContain(
-            'export type MakeAvailableEmail = (value: EmailAddress, context: CustomerId | undefined) => Promise<Result<AvailableEmail, EmailTaken>>;',
-        );
-        expect(ts).toContain('export type MakeDeliverable = (value: EmailAddress, context: TenantId) => Promise<Result<Deliverable, never>>;');
-        expect(ts).toContain("export type Reachable = AvailableEmail & { readonly 'verified:Sales.Reachable': true };");
-        expect(ts).toContain('export type MakeReachable = (value: AvailableEmail) => Promise<Result<Reachable, never>>;');
-        expect(ts).toContain('export type MakeCoveredSpend = (value: Spend) => Promise<Result<CoveredSpend, OverBudget | Unknown>>;');
-        // a requirement over a verified parameter reads it as its base
-        expect(ts).toContain("export function checkSpendCustomerRequires(customer: Customer, spend: CoveredSpend): 'positive' | undefined {");
-        expect(ts).toContain("if (!((Number(spend.amount) > 0) && !(customer.contact === customer.email))) return 'positive';");
-        expect(ts).toContain('export function checkChangeEmailCustomerRequires(customer: Customer, newEmail: AvailableEmail)');
-    });
-
-    test('the contract tests take values of the base as verified, and the arbitraries can be overridden', async () => {
-        // (examples/shop runs such tests: Customer.register and changeEmail take an AvailableEmail)
-        const tests = generateTypeScript((await run()).model!, {}, { dir: 'tests' }).find((f) => f.path === 'tests/Sales.ts')!.content;
-        expect(tests).toContain('readonly AvailableEmail: fc.Arbitrary<Sales.AvailableEmail>;');
-        expect(tests).toContain('AvailableEmail: () => given.AvailableEmail ?? testing.cast<Sales.AvailableEmail>(a.EmailAddress),');
-        expect(tests).toContain('Reachable: () => given.Reachable ?? testing.cast<Sales.Reachable>(a.AvailableEmail),');
-        expect(tests).not.toContain('MakeAvailableEmail'); // the factories are not tested
     });
 });

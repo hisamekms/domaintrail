@@ -5,8 +5,8 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
-import { analyze } from '../analysis/analyze.js';
-import { check, EXAMPLES, exampleSources } from '../test-helpers.js';
+
+import { analyzeForGeneration, check, EXAMPLES, exampleSources } from './test-helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
 let dir: string;
@@ -40,7 +40,7 @@ function tscIn(cwd: string, ...files: string[]): { code: number; output: string 
 
 beforeAll(async () => {
     dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-gen-'));
-    const a = await analyze(await exampleSources());
+    const a = await analyzeForGeneration(await exampleSources());
     expect(a.ok).toBe(true);
     await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
     for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
@@ -310,7 +310,7 @@ describe('contexts generated into different directories', () => {
 
     beforeAll(async () => {
         split = await mkdtemp(path.join(tmpdir(), 'domaintrail-split-'));
-        const a = await analyze(await exampleSources());
+        const a = await analyzeForGeneration(await exampleSources());
         const dirs = { Common: SHARED, Sales: 'generated/domain', Billing: 'generated/domain' };
         for (const f of generateTypeScript(a.model!, dirs)) {
             await mkdir(path.dirname(path.join(split, f.path)), { recursive: true });

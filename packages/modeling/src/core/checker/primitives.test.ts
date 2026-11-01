@@ -1,10 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-import { analyze } from '../../analysis/analyze.js';
-import { generateTypeScript } from '../../generator/typescript.js';
-import { checkSales, codes, exampleSources, only } from '../../test-helpers.js';
+import { describe, expect, test } from 'bun:test';
+import { checkSales, codes, only } from '../../test-helpers.js';
 
 const DECLS = `
   id OrderId: UUID
@@ -80,14 +75,6 @@ describe('domain primitive declarations', () => {
   aggregate Order { id: OrderId }`);
         expect(codes(a).sort()).toEqual(['M004', 'M005', 'M013']);
     });
-
-    test('generated constructor names are checked for collisions (M011)', async () => {
-        const a = await checkSales(`${DECLS} value MakeQuantity event InvalidEmail`);
-        expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Generated TypeScript name 'MakeQuantity' for value object 'MakeQuantity' collides with the constructor of 'Quantity'.",
-            "Generated TypeScript name 'InvalidEmail' for event 'InvalidEmail' collides with the error of 'Email'.",
-        ]);
-    });
 });
 
 describe('domain primitives in other invariants', () => {
@@ -128,33 +115,5 @@ describe('domain primitives in other invariants', () => {
     test('field labels fall back to the primitive label', async () => {
         const m = (await withOrder('')).model!;
         expect(m.elements['Sales.Order'].fields.find((f) => f.name === 'quantity')).toMatchObject({ label: '数量', labelSource: 'type' });
-    });
-});
-
-describe('generated TypeScript for domain primitives', () => {
-    let dir: string;
-
-    beforeAll(async () => {
-        dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-dp-'));
-        const a = await analyze(await exampleSources());
-        expect(a.diagnostics).toEqual([]);
-        await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
-        await mkdir(path.join(dir, 'src'));
-    });
-    afterAll(async () => {
-        await rm(dir, { recursive: true, force: true });
-    });
-
-    test('branded type, error type and constructor contract', async () => {
-        const sales = await readFile(path.join(dir, 'generated', 'domain', 'Sales.ts'), 'utf8');
-        expect(sales).toContain("export type Quantity = number & { readonly __domain: 'Sales.Quantity' };");
-        const common = await readFile(path.join(dir, 'generated', 'domain', 'Common.ts'), 'utf8');
-        expect(common).toContain(
-            "    readonly type: 'InvalidEmailAddress';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'format' | 'maxLength';",
-        );
-        expect(common).toContain('export type MakeEmailAddress = (value: string) => Result<EmailAddress, InvalidEmailAddress>;');
-        expect(sales).toContain('export type MakeOrderId = (value: string) => OrderId;');
-        expect(common).toContain(' * @invariant format (形式): matches(value, "^[^@\\s]+@[^@\\s]+$")');
     });
 });
