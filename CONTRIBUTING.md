@@ -8,13 +8,13 @@ This page is about working on DomainTrail itself. To use it, start with the [REA
 Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.13 or later. `bun run dt` runs the
 CLI from source.
 
-The repository is a Bun workspace: the root package (the published CLI, `test/`) and the private packages
-`packages/*` and `web` (see [Repository layout](#repository-layout)). `bun install` at the root installs all of them
+The repository is a Bun workspace: the root package (the published CLI, `test/`) and the private packages under
+`contexts/`, `capabilities/`, `platform/`, `shared/` and `apps/` (see [Repository layout](#repository-layout)). `bun install` at the root installs all of them
 with the isolated linker (`bunfig.toml`), so each package resolves the dependencies its own `package.json` declares.
 
 ```bash
 bun install
-bun run langium:generate   # after editing a .langium grammar (and once after cloning); packages/modeling/langium-config.json
+bun run langium:generate   # after editing a .langium grammar (and once after cloning); one Langium project per context
 bun run typecheck
 bun run lint               # oxlint --type-aware, no narrowing casts without a reason (after `bun run dt -r examples/shop generate ts`)
 bun run fmt                # oxfmt (`fmt:check` in CI); the .dt files are formatted by `dt fmt`, the Markdown by hand
@@ -39,21 +39,25 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `packages/modeling/src` | `language` (Langium grammars, generated parser/AST, scoping), `kernel` (`Diagnostic`, the suggestions, `SourceFile`, `Location`, `camel`: ADR 0027's shared kernel, which imports nothing outside it), `core` (Modeling's analysis of the `.dt` sources, the diagnostic sink, validation rules in `checker/`), `analysis` (the project analysis: Modeling's and Storming's analyses and the generation's checks combined, ADR 0027's capability `analysis`; the config's `sources` section), `model` (the Typed Model, its dependencies between contexts and between aggregates, the diff of two models), `generator` (TypeScript generator, its name check M011 run by the project analysis, generated checks and contract tests; the config's `generate` and `lintHint` sections), `format` (`dt fmt`), `storming` (the Event Storming DSL: its IR, parser, validator, `.dt` linker, analysis, and its semantic graph and timeline occurrences) |
-| `packages/workspace/src` | the workspace on disk: sources and `.gitignore` (which files are sources is given by the app), finding and reading the config file (its format given by the app), the output of `dt generate ts`, the file and git ref watchers |
-| `packages/visualization/src` | the Live View's model: graph IR and the rows marked against the baseline, the storming views (the prefix trie, the render graph), the view service and its ports, the ELK layout, the layout file and git adapters, `protocol.ts` |
-| `packages/presentation/src` | `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `http` and `websocket` (the Live View server, its access check), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports, hosts and allowed hosts and origins are the app's own) |
-| `packages/collaboration` | collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r packages/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, validator) |
-| `packages/agent/src` | `dt session subscribe` (ADR 0026): `application` (the subscriber and the run pipeline over its ports, the prompt), `infrastructure` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan; their settings `session.agent.allowedTools` and `session.agent.dt`) |
-| `packages/composition/src` | the wiring: `cli.ts` (`runDt`, called by `bin/dt.ts`), `view.ts` (`startViewServer`) |
-| `web` | the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `shared` |
+| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `domain` (the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, the AST index, labels, the diagnostic sink, the AST → model mapping, the printer of `dt fmt`) |
+| `contexts/storming` | `@domaintrail/storming`, the Event Storming DSL `.dtes` (ADR 0024), upstream Modeling: `domain` (the IR, the validator, the link to the Typed Model, the semantic graph and timeline occurrences, its rule IDs, `isStormingFile`), `application` (its analysis against the Typed Model), `infrastructure/syntax` (its own grammar and Langium project, the parser into the IR, the printer) |
+| `contexts/collaboration` | `@domaintrail/collaboration`, collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r contexts/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports — the model validator among them —, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, identity) |
+| `capabilities/analysis` | `@domaintrail/analysis`, the project analysis behind `dt check` (ADR 0027's capability `analysis`): `application` (Modeling's and Storming's analyses and the generation's checks combined into one `Analysis`), `core` (the config's `sources` section) |
+| `capabilities/generation` | `@domaintrail/generation`: `core` (the TypeScript generator, generated checks and contract tests, naming, its name check M011 run by the project analysis; the config's `generate` and `lintHint` sections) |
+| `capabilities/visualization` | `@domaintrail/visualization`, the Live View's model: `core` (graph IR and the rows marked against the baseline, the storming views: the prefix trie, the render graph), `application` (the view service and its ports), `adapters` (the ELK layout, the layout file, git), `protocol.ts` |
+| `capabilities/agent` | `@domaintrail/agent`, `dt session subscribe` (ADR 0026): `core` (the subscriber and the run pipeline over its ports, the prompt), `adapters` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan; their settings `session.agent.allowedTools` and `session.agent.dt`) |
+| `platform/workspace` | `@domaintrail/workspace`, the workspace on disk: sources and `.gitignore` (which files are sources is given by the app), finding and reading the config file (its format given by the app), the output of `dt generate ts`, the file and git ref watchers |
+| `shared/kernel` | `@domaintrail/kernel`, ADR 0027's shared kernel: `Diagnostic` (its code a plain string; each context owns its rule IDs), the suggestions, `SourceFile`, `Location`, `camel`; it imports nothing |
+| `apps/dt` | `@domaintrail/dt`, the one binary: `main.ts` (`runDt`, called by `bin/dt.ts`, and `cliDeps`), `wiring` (the Live View server, the session server, the subscriber, the model validator, with every adapter wired), `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `server` (`http` and `websocket`: the Live View server and its access check; `session`: the session's routes, identities, presence, the agent API), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports, hosts and allowed hosts and origins are the app's own) |
+| `apps/web` | `@domaintrail/web`, the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `session`, `shared` |
 | `docs` | the guide (`dt guide`), Getting started, the Live View, the ADRs, releasing |
 | `examples/shop` | the complete example, also run by the tests |
 | `tree-sitter-domaintrail` | the tree-sitter grammar |
 | `editors/zed` | the Zed extension |
 
-Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, the layers and the ports are in
-[ADR 0025](docs/adr/0025-m0-refactoring.md). Its rules:
+Each package is `@domaintrail/<name>`, of a kind of [ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)
+(Layout): a context (`domain/`, `application/`, `infrastructure/`), a capability (`core/`, `application/`, `adapters/`),
+the platform, the shared kernel, or an app. Its rules:
 
 - A package declares in its `package.json` every package it imports, `@domaintrail/*` and third-party alike. A
   third-party dependency the CLI needs at run time is also in the root's `dependencies` (the bundle keeps those
@@ -62,13 +66,15 @@ Each package is `@domaintrail/<area>` (`web` is `@domaintrail/web`); the graph, 
   use cases, the adapters an app wires) and, where a package has wire types, `@domaintrail/<area>/protocol` (its
   `src/protocol.ts`). `exports` lists nothing else ([ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)).
   Inside a package, import relatively with `.js`.
-- `test/architecture.test.ts` enforces the boundary map of ADR 0027 (`test/architecture/map.ts`): the package graph,
-  the declared dependencies, the entries, the versions, the layers (`domain/`, `application/`, `infrastructure/`) and
-  the kernel (modeling's `kernel/` until it becomes `shared/kernel`) and the inner modules (modeling's `storming/`,
-  `analysis/` and `generator/`, which its own code does not import). A new package gets an entry in the map.
+- `test/architecture.test.ts` enforces the boundary map of ADR 0027 (`test/architecture/map.ts`): the kind and the
+  upstream of each package, the declared dependencies, the entries (a context takes only the published language of its
+  upstream contexts), the versions, the layers (`domain/` and `core/` import no I/O, no `application/` and no
+  technology; only an app imports another package's `infrastructure/` or `adapters/`), the kernel (it imports nothing)
+  and the syntax (Langium and `infrastructure/syntax/` stay out of `domain/` and `core/`; the checkers that still read
+  the AST are its exceptions until T10 of `docs/plans/0027-boundaries.md`). A new package gets an entry in the map.
 - `domaintrail.jsonc` is split by owner (ADR 0027, Project analysis and configuration): each section's type, defaults
   and validation live with the package that uses it, as `validate…(section, fail)` and `resolve…(section)` and its
-  keys; `packages/presentation/src/config` composes them (the checks in a fixed order, the first error wins) and the
+  keys; `apps/dt/src/config` composes them (the checks in a fixed order, the first error wins) and the
   workspace reads the file. A new setting goes to its owner and into `schema/domaintrail.schema.json`, which a test
   compares with the composed keys.
 
@@ -78,8 +84,8 @@ Three kinds of test, by what a test crosses:
 
 | Kind | What it tests | Where | Imports |
 |---|---|---|---|
-| **Unit test (UT)** | one package through that package's code only | next to the code: `packages/<pkg>/src/**/<module>.test.ts` (`web/**/<module>.test.ts` for the page) | its own package by relative paths; another package only through its entries (`.` / `./protocol`) |
-| **Integration test (IT)** | across packages: the composition's wiring, the app's HTTP and WebSocket servers on a port, the CLI as a child process (`node dist/dt.js`), the agent pipeline with a fake agent, the session seed, the baseline contract tests (generated output, `dt check`, Live View payloads, session error bodies), the architecture test | `test/` | the packages only through their entries (and `dist/`), plus the helpers in `test/` |
+| **Unit test (UT)** | one package through that package's code only | next to the code: `<kind>/<pkg>/src/**/<module>.test.ts` (`apps/web/**/<module>.test.ts` for the page) | its own package by relative paths; another package only through its entries (`.` / `./protocol`) |
+| **Integration test (IT)** | across packages: the app's wiring, the app's HTTP and WebSocket servers on a port, the CLI as a child process (`node dist/dt.js`), the agent pipeline with a fake agent, the session seed, the baseline contract tests (generated output, `dt check`, Live View payloads, session error bodies), the architecture test | `test/` | the packages only through their entries (and `dist/`), plus the helpers in `test/` |
 | **End-to-end test (E2E)** | `dt view` and `dt session` in a browser, as a user | `e2e/` (none yet) | |
 
 A unit test may use its package's own technology: temporary directories, fixture files, a file or in-memory SQLite
@@ -92,8 +98,8 @@ an integration test that goes through the entries.
 - Snapshots live in `__snapshots__/` next to their test (`bun test` puts them there), so a colocated test's snapshots
   move with it. The baseline snapshots (see `docs/plans/0027-boundaries.md`, Baseline) are in `test/__snapshots__/`.
 - Fixtures used by several tests or packages stay in `test/fixtures/`; a fixture only one package's unit tests read
-  lives in `packages/<pkg>/test-fixtures/`, outside its sources. Helpers shared by a package's unit tests are in
-  `packages/<pkg>/src/test-helpers.ts` (`web/test-helpers.ts`; counted as test code: the bundle and the layer rules
+  lives in `<kind>/<pkg>/test-fixtures/`, outside its sources. Helpers shared by a package's unit tests are in
+  `<kind>/<pkg>/src/test-helpers.ts` (`apps/web/test-helpers.ts`; counted as test code: the bundle and the layer rules
   ignore it).
 - `test/architecture.test.ts` checks the imports of the tests too: a unit test imports other packages only through
   their entries, and so does an integration test (or `dist/`). A package declares the test-only dependencies its unit
@@ -101,7 +107,7 @@ an integration test that goes through the entries.
 
 ```bash
 bun test               # all of them (CI)
-bun run test:unit      # the unit tests: packages/*/src and web
+bun run test:unit      # the unit tests: contexts, capabilities, platform, shared, apps
 bun run test:it        # the integration tests: test/
 ```
 
@@ -119,7 +125,7 @@ bun run test:it        # the integration tests: test/
 ## The tree-sitter grammar
 
 `tree-sitter-domaintrail/grammar.js` is a second grammar of the DSL, for editors that highlight with tree-sitter; the
-Langium grammar in `packages/modeling/src/language` stays the reference. After changing it, run:
+Langium grammar in `contexts/modeling/src/infrastructure/syntax` stays the reference. After changing it, run:
 
 ```bash
 bun run tree-sitter

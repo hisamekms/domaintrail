@@ -28,17 +28,17 @@ From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each p
 |---|---|---|
 | `language/domain.langium`, `language/generated`, `domain-module.ts`, `parser-messages.ts` | `contexts/modeling/src/infrastructure/syntax/` | T8 |
 | `storming/storming.langium`, `storming/language/module.ts` | `contexts/storming/src/infrastructure/syntax/` | T8 |
-| `model/` (`model.ts`, `build.ts`, `ids.ts`, `usages.ts`, `dependencies.ts`) | `contexts/modeling/src/domain/` (`build.ts`, the AST → model mapping, to `infrastructure/syntax/`) | T8, T9 |
+| `model/` (`model.ts`, `build.ts`, `ids.ts`, `usages.ts`, `dependencies.ts`) | `contexts/modeling/src/domain/` (`build.ts`, the AST → model mapping, to `infrastructure/syntax/`; `ids.ts`'s `elementIdOf`, which walks the AST, to `infrastructure/syntax/element-id.ts`) | T8, T9 |
 | `core/checker/*` except `tsnames.ts` | `contexts/modeling/src/domain/rules/` | T8; onto the typed model in T10 |
 | `core/checker/tsnames.ts`, `generator/naming.ts` | `capabilities/generation/src/core/` (since T5 `generator/tsnames.ts` next to `generator/naming.ts`; T8 moves them with the generator) | T5, T8 |
-| `core/model-index.ts`, `core/types.ts`, `core/labels.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
-| `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` | T3 |
-| `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/` (since T4 `analysis/analyze.ts`; Modeling's analysis of `.dt`, `analyzeDomain`, stays in `core/analyze.ts` and goes to `contexts/modeling`, its layer chosen in T8) | T4, T8 |
-| `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/`. Since #23 it also holds `session.agent.dt` (checked with `realpathSync`: the only I/O in the file), `session.agent.maxPreviousRunDiff`, `session.quickReactions` and `session.classifier`; see T6 | T6 |
+| `core/model-index.ts`, `core/types.ts`, `core/labels.ts`, `core/diagnostic-sink.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
+| `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` (`modeling/src/kernel/` in T3, `shared/kernel/src/` in T8) | T3, T8 |
+| `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/src/application/analyze.ts` (since T4 `analysis/analyze.ts`); `isStormingFile` to Storming's `domain/files.ts` (T8); Modeling's analysis of `.dt`, `analyzeDomain`, to `contexts/modeling/src/application/analyze.ts` (T8) | T4, T8 |
+| `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/src/core/sources.ts` (T8). Since #23 it also holds `session.agent.dt` (checked with `realpathSync`: the only I/O in the file), `session.agent.maxPreviousRunDiff`, `session.quickReactions` and `session.classifier`; see T6 | T6 |
 | `core/emoji.ts` (new in #23: one emoji, its normal form, `DEFAULT_QUICK_REACTIONS`) | not Modeling's language: the rule of Collaboration's `Emoji` primitive (`model/mark.dt`) and of `session.quickReactions`. Proposed: `collaboration/src/domain/emoji.ts` in T6, with the `session.quickReactions` section (T8 then moves it with `collaboration/`); the alternative is `shared/kernel` (see Open in the tasks) | T6 |
-| `format/format.ts` | `contexts/modeling/src/application/` (formatting) with its printer in `infrastructure/syntax/` | T8 |
-| `generator/` (`typescript.ts`, `checks.ts`, `tests.ts`, `testing/`) | `capabilities/generation/src/core/` | T8 |
-| `storming/` (`parse`, `validate`, `link`, `format`, `analyze`, `ir`) | `contexts/storming/src/` (`ir`, `validate`, `link` to `domain/`; `analyze` to `application/`; `parse`, `format` to `infrastructure/syntax/`) | T8 |
+| `format/format.ts` | `contexts/modeling/src/infrastructure/syntax/format.ts` (T8: the whole file is the printer, which works on the CST; no use case is left for `application/`) | T8 |
+| `generator/` (`typescript.ts`, `checks.ts`, `tests.ts`, `testing/`, `config.ts`) | `capabilities/generation/src/core/` | T8 |
+| `storming/` (`parse`, `validate`, `link`, `format`, `analyze`, `ir`, `semantic`) | `contexts/storming/src/` (`ir`, `validate`, `link`, `semantic`, `rule-ids`, `files` to `domain/`; `analyze` to `application/`; `parse`, `format` to `infrastructure/syntax/`) | T8 |
 | `langium-config.json` | one per context (see T8) | T8 |
 
 ### Other packages
@@ -50,11 +50,11 @@ From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each p
 | `visualization/domain/storming/semantic.ts`, `trie.ts`: `timelineOccurrences` | `contexts/storming/src/domain/` | T7 |
 | `visualization/domain/` (the rest) | `capabilities/visualization/src/core/` | T8 |
 | `visualization/application/`, `infrastructure/`, `protocol.ts` | `capabilities/visualization/src/application/`, `adapters/`, `protocol.ts` | T8 |
-| `collaboration/` | `contexts/collaboration/` (same inner layout) | T8 |
+| `collaboration/` | `contexts/collaboration/` (same inner layout; `infrastructure/validator.ts` to the app, `apps/dt/src/wiring/validator.ts`) | T8 |
 | `agent/application/`, `infrastructure/` | `capabilities/agent/src/core/`, `adapters/` | T8 |
 | `workspace/` | `platform/workspace/` | T8 |
-| `presentation/` (`cli`, `http`, `lsp`, `session`, `websocket`) | `apps/dt/src/` (`cli`, `lsp`, `server/{http,session,websocket}`) | T8 |
-| `composition/` | `apps/dt/src/` (`main.ts` and the wiring) | T8 |
+| `presentation/` (`cli`, `config`, `http`, `lsp`, `session`, `websocket`) | `apps/dt/src/` (`cli`, `config`, `lsp`, `server/{http,session,websocket}`) | T8 |
+| `composition/` | `apps/dt/src/` (`cli.ts` → `main.ts`; `view.ts`, `session.ts`, `subscriber.ts`, `validator.ts`, `process.ts`, `watcher-hold.ts` → `wiring/`) | T8 |
 | `web/` | `apps/web/` (inner layout unchanged in this plan) | T8 |
 | `scripts/session-seed.ts`, `scripts/session-seed/` (new in #23; `bun run session:seed`, `test/session-seed.test.ts`) | stays in `scripts/`; its deep imports (agent's application and infrastructure, `composition/subscriber`, collaboration's `domain/reply`, `domain/body`, `protocol`, `infrastructure/session-files`, modeling's `core/config`, workspace's `infrastructure/files`) go through public surfaces (T2) and new paths (T8) | T2, T8 |
 
@@ -312,6 +312,72 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `src/language/generated`), so `.dt` and `.dtes` share one generated `ast.ts`. Splitting them needs one Langium
   project per context, or the storming grammar importing the domain grammar's terminals; T8 chooses and records why.
   `docComment` (`core/labels.ts`) is used by both syntaxes; it goes where the grammars' shared parts go.
+  **T8 (done).** *Decided by the maintainer:* one Langium project per context, `docComment` in each context's
+  `infrastructure/syntax`, `RuleId` split per context, Collaboration's validator behind its port in the app. Eleven
+  packages, all `@domaintrail/<name>`:
+
+  | Package | Path | Kind | Upstream |
+  |---|---|---|---|
+  | `modeling` | `contexts/modeling` | context | kernel |
+  | `storming` | `contexts/storming` | context | kernel, modeling |
+  | `collaboration` | `contexts/collaboration` | context | kernel, modeling, storming |
+  | `analysis` | `capabilities/analysis` | capability | generation, kernel, modeling, storming |
+  | `generation` | `capabilities/generation` | capability | kernel, modeling |
+  | `visualization` | `capabilities/visualization` | capability | analysis, kernel, modeling, storming |
+  | `agent` | `capabilities/agent` | capability | collaboration |
+  | `workspace` | `platform/workspace` | platform | kernel |
+  | `kernel` | `shared/kernel` | kernel | — |
+  | `dt` | `apps/dt` | app | agent, analysis, collaboration, generation, kernel, modeling, storming, visualization, workspace |
+  | `web` | `apps/web` | app | analysis (its unit tests only, a devDependency), collaboration, kernel, modeling, storming, visualization |
+
+  *Inside:* Modeling: `domain/` (typed model, dependencies, usages, aggregates, diff, stable IDs, `rule-ids.ts`),
+  `domain/rules/` (the checkers), `application/analyze.ts` (`analyzeDomain`: parse, link diagnostics, the rules, the
+  model; it still uses Langium's documents, which no rule forbids in `application/`), `infrastructure/syntax/` (grammar,
+  generated AST, scoping, parser messages, AST index and `types.ts`, labels and `docComment`, the diagnostic sink, the AST
+  → model mapping `build.ts`, `element-id.ts` with `elementIdOf` split from `domain/ids.ts`, and `format.ts`: the
+  printer, whole, since formatting has no use case of its own). Storming: `domain/` (`ir`, `validate`, `link`,
+  `semantic`, `rule-ids`, `files` with `isStormingFile`, which Collaboration and the analysis take from Storming),
+  `application/analyze.ts`, `infrastructure/syntax/` (grammar, parser, printer with its own `FormatError`, its copies of
+  the parser messages and `docComment`). Analysis: `application/analyze.ts`, `core/sources.ts`. Generation: `core/` (the
+  generator, its config, naming, the name check behind `checkGeneratedNames(domain)`, so the analysis handles no AST).
+  Visualization and the agent: `domain/`/`application/` → `core/`, `infrastructure/` → `adapters/` (visualization keeps
+  `application/`). `apps/dt`: presentation's `cli/`, `config/`, `lsp/`, its servers under `server/{http,session,
+  websocket}`, composition's `cli.ts` → `main.ts` and the rest → `wiring/`.
+  *Langium:* `contexts/modeling/langium-config.json` (project `Domain`) and `contexts/storming/langium-config.json`
+  (project `EventStorming`), each generating into its own `infrastructure/syntax/generated/`; `bun run langium:generate`
+  runs both. The storming grammar keeps its copy of the five `.dt` terminals; `test/grammars.test.ts` (IT) compares the
+  two `.langium` files, and Storming's parser test checks its own terminals. The language server's shared services take
+  one `AstReflection` merging both generated ones (`DomainTrailAstReflection`; Storming's types all start with `Es`).
+  *RuleId:* the kernel's `Diagnostic.code` is `RuleCode` (a string); `ModelingRuleId` (SYNTAX, M…, L…) in Modeling's
+  `domain/rule-ids.ts`, `StormingRuleId` (SYNTAX, S…) in Storming's, both published; the diagnostic sink and Storming's
+  diagnostics are typed with their own; Collaboration's `LINK_RULES` is a set of `StormingRuleId`; `test/guide.test.ts`
+  joins both unions for the rules table and the S examples. Diagnostics text and JSON byte-identical.
+  *Collaboration's validator:* `createModelValidator` (the project analysis) is the app's (`apps/dt/src/wiring/
+  validator.ts`), implementing `ModelValidator`, now exported by Collaboration's `.`; Collaboration's unit tests analyze
+  with Modeling's and Storming's analyses (exported by their `.` as use cases).
+  *The kernel* is a kind of its own in the map: every kind may depend on it, it depends on nothing, the rule `kernel`
+  applies to the package and the test checks that its index exports every module. `inner` and the rule `inner-modules`
+  are gone with the last inner module. A new rule `syntax`: a file under `domain/` or `core/` imports neither Langium nor
+  `infrastructure/syntax/` (keyed by the file; `pure-core-layers` leaves those imports to it). `node:path/posix` counts
+  as pure, like `node:path`.
+  *The T10 exceptions*, the only ones left: `syntax` of modeling, one per checker file that still reads the AST
+  (`domain/rules/{commands,events,expressions,field-sets,labels,names,payloads,policies,shared,structure,unions,
+  verified}.ts`); generation's `syntax` `core/naming.ts` (Langium's `AstNode`) and `foreign-infrastructure` for what its
+  name check and naming take through modeling's `.` (`infrastructure/syntax/generated/ast`, `.../model-index`,
+  `.../diagnostic-sink`): *decided in T8*, Modeling exposes them on its `.` until T10 puts the name check on the typed
+  model. Removed: `kinds` 2 → 0 (composition → presentation, workspace → modeling), `public-surface` 1 → 0
+  (Collaboration → the analysis). *`statusOf`:* still exported by `@domaintrail/dt` for the T0 baseline
+  `test/session-errors-contract.test.ts`, unchanged.
+  *Tests:* before the moves, each future package's unit tests stopped importing the others': the checkers' tests use
+  Modeling's analysis, what they asserted of the generated TypeScript and M011 moved next to the generator (two mixed
+  tests became two each), `isStormingFile`'s test to Storming; Storming's terminal comparison with `.dt` became the IT
+  above. *Commits:* one per package moved (`git mv`, so `git log --follow` works), plus wiring commits: the tests' split,
+  the rule IDs, the validator; Modeling's move is two commits (the move with `domain/ids.ts` as a temporary `syntax`
+  exception, then `elementIdOf` to the syntax) so that `domain/ids.ts` keeps its history. `bunfig.toml`, the root
+  workspaces, `tsconfig.json`, `scripts/build.ts` (the page at `apps/web`), the lint and format ignores, dependabot's
+  comment follow; `scripts/tree-sitter.ts`, the workflows and `editors/zed` name no package path. The tree-sitter
+  grammar's comment still names `src/language/domain.langium`: it is hashed by `build-stamp.json` (`bun run tree-sitter`
+  rewrites the stamp). 1333 → 1336 passing (7 todo; unit 981 → 983, integration 352 → 353); T0 baselines byte-identical.
 - **T9 — the typed model for the checkers (P4).** The typed model gains what the checkers read from the AST
   (source locations of every element, member and expression; the expression tree; resolved references), built in
   `infrastructure/syntax`. No checker moves yet.
@@ -354,8 +420,10 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
 ## Open in the tasks
 
 - T5: where `camel` lives (kernel or model) — *decided by the maintainer:* the kernel (done in T5).
-- T8: one Langium project per context, or a shared grammar part; where `docComment` goes.
-- T8 (from T3): whether `RuleId`, the union of Modeling's and Storming's rule IDs, stays in the kernel.
+- T8: one Langium project per context, or a shared grammar part; where `docComment` goes — *decided by the maintainer:*
+  one project per context, `docComment` in each context's syntax (done in T8).
+- T8 (from T3): whether `RuleId`, the union of Modeling's and Storming's rule IDs, stays in the kernel — *decided by the
+  maintainer:* split per context, a plain code in the kernel (done in T8).
 - T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
 - T6 (from T0): where `core/emoji.ts` goes — Collaboration's domain (proposed) or `shared/kernel` — and the owners of
   the sections #23 added — *decided by the maintainer:* Collaboration's domain, and the owners proposed (done in T6).
