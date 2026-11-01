@@ -234,10 +234,6 @@ export interface CollaborationUseCases {
             | Collaboration.WorkspaceTarget
         >
     >;
-    dismissRequest(input: {
-        readonly request: Collaboration.RequestId;
-        readonly by: ParticipantId;
-    }): Promise<Result<Collaboration.DismissedRequest, NotFound | NotAllowed>>;
     /**
      * Places or takes off a participant's mark (a vote or a reaction; `placed`: whether it should be there). Placing
      * a vote moves the participant's vote of the same exclusive group; setting a mark to what it is changes nothing.
@@ -636,19 +632,6 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 stores.requests.save(Sent.aggregate);
                 publish(stores, session, Sent.events, at);
                 return ok(Sent.aggregate);
-            });
-        },
-
-        async dismissRequest({ request, by }) {
-            return uow.transaction((stores) => {
-                const found = stores.requests.load(request);
-                if (!found) return err(notFound('Request', request));
-                if (found.state !== 'Sent') return err(notAllowed('dismiss', found.state));
-                const at = clock.now();
-                const { Dismissed } = decided(requestCommands.dismiss(found, by, at));
-                stores.requests.save(Dismissed.aggregate);
-                publish(stores, found.session, Dismissed.events, at);
-                return ok(Dismissed.aggregate);
             });
         },
 

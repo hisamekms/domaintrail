@@ -2,8 +2,8 @@
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
 // PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
-// what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator, and
-// dismissing a request, take the role (and the participant) of who acts as parameters, from the use case's `Actor`.
+// what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator take
+// the role of who acts as a parameter, from the use case's `Actor`.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 import { holdsHashOfFiles } from './snapshot.js';
 import { succeeded } from './validation.js';
@@ -60,16 +60,6 @@ export const requestCommands: Collaboration.RequestCommands = {
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
             },
         });
-    }),
-
-    dismiss: decide<Collaboration.DismissRequestDecision>(Collaboration.RequestShape, {
-        Sent: (request, dismissedBy, dismissedAt) =>
-            ok({
-                Dismissed: {
-                    set: { dismissedBy, dismissedAt },
-                    events: { RequestDismissed: { type: 'RequestDismissed', requestId: request.id, dismissedBy, dismissedAt } },
-                },
-            }),
     }),
 };
 

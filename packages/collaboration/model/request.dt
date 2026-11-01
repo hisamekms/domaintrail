@@ -37,7 +37,8 @@ context Collaboration {
     }
 
     state Sent "送信済み"
-    /// 見送りは印で、依頼そのものは残る。
+    /// 見送りは印で、依頼そのものは残る。見送る操作はもうない（#23 で画面と経路から外し、ADR 0027 の T12 でコマンドも
+    /// 外した）。以前のセッションに残る見送り済みの依頼を読み、実行に束ねないために、状態は残す。
     state Dismissed "見送り" {
       dismissedBy: ParticipantId "見送った人"
       dismissedAt: Timestamp "見送り日時"
@@ -53,10 +54,6 @@ context Collaboration {
       requires atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 } else TooManyMentions
       requires distinctMentions "同じ人の言及は1回" { unique(mentions) } else DuplicateMention
       emits RequestSent
-
-    command dismiss(dismissedBy: ParticipantId, dismissedAt: Timestamp) "依頼を見送る"
-      Sent -> Dismissed
-      emits RequestDismissed
   }
 
   persistent event RequestSent "依頼送信" {
@@ -70,6 +67,7 @@ context Collaboration {
     mentions: ParticipantId[0..20] "言及した人"
   }
 
+  /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
   persistent event RequestDismissed "依頼見送り" {
     requestId: RequestId
     dismissedBy: ParticipantId

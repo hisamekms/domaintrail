@@ -118,7 +118,7 @@ export interface Examples {
     };
     readonly Request?: {
         readonly states?: { readonly Sent?: readonly Collaboration.SentRequest[]; readonly Dismissed?: readonly Collaboration.DismissedRequest[] };
-        readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly dismiss?: readonly Parameters<Collaboration.RequestCommands['dismiss']>[] };
+        readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[] };
     };
     readonly Revision?: {
         readonly states?: { readonly Recorded?: readonly Collaboration.RecordedRevision[]; readonly Confirmed?: readonly Collaboration.ConfirmedRevision[] };
@@ -601,19 +601,6 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'atMostTwentyTargets', error: 'TooManyTargets' }, { name: 'distinctTargets', error: 'DuplicateTarget' }, { name: 'noWorkspaceTarget', error: 'WorkspaceTarget' }, { name: 'atMostTwentyMentions', error: 'TooManyMentions' }, { name: 'distinctMentions', error: 'DuplicateMention' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkSendRequestRequires,
-                invariants: () => Collaboration.checkRequest,
-                declaredInvariants: [],
-                stateful: true,
-                counted: [],
-            }, options),
-            ...testing.commandCases({
-                name: 'Request.dismiss',
-                run: impl.Request.dismiss,
-                input: () => fc.tuple(fc.oneof(a.SentRequest), a.ParticipantId, testing.cast<Date>(scalar.Timestamp)),
-                examples: options.examples?.Request?.commands?.dismiss ?? [],
-                factory: false,
-                requires: [],
-                declaredRequires: [],
                 invariants: () => Collaboration.checkRequest,
                 declaredInvariants: [],
                 stateful: true,

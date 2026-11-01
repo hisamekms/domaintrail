@@ -111,6 +111,13 @@ async function started(s: Session): Promise<{ id: C.SessionId; start: C.Recorded
     return { id: open.id, start: revision };
 }
 
+/** A request dismissed in an older session: no command dismisses any more, but such rows still load (ADR 0027, T12). */
+async function dismissedBefore(s: Session, request: C.SentRequest): Promise<void> {
+    await s.deps.uow.transaction((stores) =>
+        stores.requests.save({ ...request, state: 'Dismissed', dismissedBy: facilitator, dismissedAt: new Date(s.clock.t) }),
+    );
+}
+
 async function queuedRun(s: Session, id: C.SessionId, start: C.RecordedRevision): Promise<C.QueuedAgentRun> {
     const target: C.TargetSnapshot = { target: { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }, sourceRevision: start.id };
     const request = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [target], body: text('Add a cancel command.') }));
@@ -139,7 +146,7 @@ describe('sessions and requests', () => {
         expect(value(await s.use.joinSession({ session: id, participant: guest, name })).joined).toBe(false);
     });
 
-    test('requests need an open session and a participant; a dismissed request cannot be bundled', async () => {
+    test('requests need an open session and a participant; a dismissed request of an older session cannot be bundled', async () => {
         const s = await session();
         const { id, start } = await started(s);
         const element = (name: string): C.TargetSnapshot => ({
@@ -185,12 +192,7 @@ describe('sessions and requests', () => {
         expect(two.targets).toHaveLength(20);
         const target: readonly C.TargetSnapshot[] = [];
         const sent = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: target, body: text('x') }));
-        value(await s.use.dismissRequest({ request: sent.id, by: facilitator }));
-        expect(error(await s.use.dismissRequest({ request: sent.id, by: facilitator }))).toEqual({
-            type: 'NotAllowed',
-            command: 'dismiss',
-            state: 'Dismissed',
-        });
+        await dismissedBefore(s, sent);
         expect(error(await s.use.queueRun({ session: id, requests: [sent.id], actor: actor(facilitator) }))).toEqual({
             type: 'RequestAlreadyDismissed',
             request: sent.id,
@@ -209,7 +211,9 @@ describe('sessions and requests', () => {
         expect(run.input.requests).toHaveLength(1);
         expect(run.input.requests[0]).toMatchObject({ author: guest, body: 'Add a cancel command.' });
         const request = run.input.requests[0].request;
-        value(await s.use.dismissRequest({ request, by: facilitator }));
+        const stored = await s.deps.uow.transaction((stores) => stores.requests.load(request));
+        if (stored?.state !== 'Sent') throw new Error('no sent request');
+        await dismissedBefore(s, stored);
         const state = value(await s.use.sessionState({ session: id }));
         expect(state.runs[0]).toEqual(run);
         expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(facilitator) }))).toMatchObject({ type: 'RequestAlreadyDismissed' });

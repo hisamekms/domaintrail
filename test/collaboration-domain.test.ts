@@ -5,7 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
-import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
+import { agentRunCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
 import {
     compareFiles,
     LINE_CUT,
@@ -262,20 +262,6 @@ describe('transitions', () => {
         expect(sessionCommands.join(joined, guest, name, later)).toEqual({ ok: false, error: { type: 'AlreadyJoined', participant: guest } });
         expect(value(sessionCommands.close(joined, 'Facilitator', later)).Closed.aggregate).toMatchObject({ state: 'Closed', closedAt: later });
         expect(sessionCommands.close(joined, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
-    });
-
-    test('a request is dismissed as a mark: it keeps its content', () => {
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for MakeActiveSession's check
-        const active = sessionId as C.ActiveSession;
-        const target: C.TargetSnapshot = {
-            target: { kind: 'DtesElement', storming: value(C.makeStormingName('S')), local: value(C.makeStormingLocalName('E')) },
-            sourceRevision: base,
-        };
-        const body = value(C.makeText('Split the timeline.'));
-        const sent = value(requestCommands.send(C.makeRequestId('00000000-0000-4000-8000-000000000004'), active, guest, [target], body, at, undefined, [])).Sent
-            .aggregate;
-        const dismissed = value(requestCommands.dismiss(sent, facilitator, later));
-        expect(dismissed.Dismissed.aggregate).toEqual({ ...sent, state: 'Dismissed', dismissedBy: facilitator, dismissedAt: later });
     });
 
     const running: C.RunningAgentRun = {

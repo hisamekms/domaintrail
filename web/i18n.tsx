@@ -391,8 +391,6 @@ const ja = {
         requests: (n: number) => `依頼（${n}）`,
         noRequests: '送られた依頼はまだありません。',
         selectRequest: '実行に含める',
-        dismiss: '見送る',
-        dismissed: '見送り',
         workspace: 'ワークスペース全体',
         targetStatus: { current: '最新', stale: '古い', unknown: '不明' } as Record<TargetStatus, string>,
         targetStatusHint: {
@@ -1083,8 +1081,6 @@ const en: Messages = {
         requests: (n) => `Requests (${n})`,
         noRequests: 'No request has been sent yet.',
         selectRequest: 'Include in a run',
-        dismiss: 'Dismiss',
-        dismissed: 'Dismissed',
         workspace: 'The whole workspace',
         targetStatus: { current: 'current', stale: 'stale', unknown: 'unknown' },
         targetStatusHint: {
