@@ -92,6 +92,18 @@ function keepInView(list: HTMLElement, item: HTMLElement): void {
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
 }
 
+/**
+ * Caps the candidates' height to the room above the text, within the chat's view (under its header and tabs): however
+ * tall the composer is, the list opens directly above the text and never over the header. It scrolls within itself.
+ */
+function fitAbove(list: HTMLElement): void {
+    const anchor = list.parentElement;
+    const view = list.closest('.chat-view');
+    if (!anchor || !view) return;
+    const room = anchor.getBoundingClientRect().top - view.getBoundingClientRect().top - 8;
+    list.style.maxHeight = `min(16.25rem, 45vh, ${Math.max(48, Math.floor(room))}px)`;
+}
+
 /** The current time, ticking every second while `active`. */
 function useNow(active: boolean): number {
     const [now, setNow] = useState(Date.now);
@@ -1143,10 +1155,21 @@ function Composer(props: {
     const hovered = useRef(false);
     useLayoutEffect(() => {
         const ul = list.current;
-        if (!ul || hovered.current) return;
+        if (!ul) return;
+        fitAbove(ul);
+        if (hovered.current) return;
         const item = ul.querySelector<HTMLElement>(`[data-index="${active}"]`);
         if (item) keepInView(ul, item);
-    }, [active, open, matches.length]);
+    }, [active, open, matches.length, size.rows]);
+    // the window resized (or the pane): the list still fits above the text
+    useEffect(() => {
+        if (!open) return;
+        const refit = (): void => {
+            if (list.current) fitAbove(list.current);
+        };
+        window.addEventListener('resize', refit);
+        return () => window.removeEventListener('resize', refit);
+    }, [open]);
     const track = (): void => setCaret(input.current?.selectionStart ?? 0);
     // the caret after a pick: placed as soon as the picked text is rendered, before the next key is handled
     const pendingCaret = useRef<number | undefined>(undefined);
