@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@domaintrail/analysis": "workspace:*",
-    "@tldraw/tlschema": "5.5.2",
+    "@tldraw/tlschema": "5.6.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0"
   }
