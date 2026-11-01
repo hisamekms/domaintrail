@@ -8,7 +8,10 @@ this page describes every pane.
 The screen has no header. It is laid out like an IDE: the left pane with its lists, the main canvas, and the inspector
 (right of the canvas, or below it); in a session, the chat is a pillar of its own at the right end. Panes are closed
 and opened with the icon buttons at their top (a closed inspector leaves a narrow rail with the buttons that open it)
-and resized by dragging; all of it is remembered per browser.
+and resized by dragging; all of it is remembered per browser. A pane slides in and out as it opens and closes (its
+content does not reflow on the way), and the canvas keeps what is at its center in place whenever its size changes
+(a pane, the window); the inspector moving between right and below fades out and back in. With the OS's "reduce
+motion" setting everything is instant.
 
 ## Left pane
 
