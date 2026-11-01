@@ -477,13 +477,17 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
     if (Booking.checkSlot(slot).length > 0) throw new Error('a slot is 1 to 8 hours');
-    const id = Booking.makeReservationId(crypto.randomUUID()); // ID には不変条件がないので失敗しない
-    return reservationCommands.request(id, Booking.makeRoomId(input.room), slot, attendees.value);
+    const room = Booking.makeRoomId(input.room); // Result: UUID の ID は値が UUID であることを確かめる
+    if (!room.ok) return room;
+    const id = Booking.makeReservationId(crypto.randomUUID());
+    if (!id.ok) return id;
+    return reservationCommands.request(id.value, room.value, slot, attendees.value);
 }
 ```
 
-- `make<Name>` はすべての ID とドメインプリミティブにあります。不変条件がある型（`makeHeadcount`）では `Result` を、
-  ない型（`makeReservationId`）では値そのものを返します。
+- `make<Name>` はすべての ID とドメインプリミティブにあります。不変条件がある型（`makeHeadcount`）と、基底が `UUID`
+  の型では `Result` を返します。`UUID` の型はその形を不変条件 `'uuid'` として確かめます（`makeRoomId('room-1')` は
+  `InvalidRoomId`）。それ以外では値そのものを返します。
 - `check<Name>` は値が破っている不変条件を返します（`checkSlot`）。値オブジェクトはただのオブジェクトです。
 - `Decimal` はランタイムの `parseDecimal(text)` で作ります（数でない文字列なら `undefined`）。
 - ID や時刻をどこから得るかはアプリケーションが決めます。コマンドは受け取るだけです。

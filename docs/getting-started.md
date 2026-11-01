@@ -486,13 +486,17 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
     if (Booking.checkSlot(slot).length > 0) throw new Error('a slot is 1 to 8 hours');
-    const id = Booking.makeReservationId(crypto.randomUUID()); // an ID has no invariants: it cannot fail
-    return reservationCommands.request(id, Booking.makeRoomId(input.room), slot, attendees.value);
+    const room = Booking.makeRoomId(input.room); // Result: an ID on UUID checks that the value is a UUID
+    if (!room.ok) return room;
+    const id = Booking.makeReservationId(crypto.randomUUID());
+    if (!id.ok) return id;
+    return reservationCommands.request(id.value, room.value, slot, attendees.value);
 }
 ```
 
 - `make<Name>` exists for every ID and domain primitive. It returns a `Result` when the type has invariants
-  (`makeHeadcount`), the value itself when it has none (`makeReservationId`).
+  (`makeHeadcount`) or a `UUID` base, whose form it checks as the invariant `'uuid'` (`makeRoomId('room-1')` is an
+  `InvalidRoomId`); the value itself otherwise.
 - `check<Name>` returns the invariants a value violates (`checkSlot`): value objects are plain objects.
 - A `Decimal` is made with `parseDecimal(text)` from the runtime (`undefined` when the text is not a number).
 - Where IDs and times come from is the application's choice; the command only takes them.

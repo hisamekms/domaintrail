@@ -334,6 +334,10 @@ context Sales {
   with the numbers `count(…)` and `length(…)` compute (`count(approvedBy) >= policy.requiredApprovals`); not with
   another domain primitive or a plain field or parameter of its base type (M009).
 - Only IDs can be identity fields and reference types. Domain primitives cannot be owned.
+- An ID or domain primitive on `UUID` holds a UUID: 8-4-4-4-12 hexadecimal digits (RFC 9562), in either case, of any
+  version. Its constructor checks it as the invariant `uuid`, before those declared, so `makeOrderId('order-1')` is an
+  `InvalidOrderId`; an invariant of its own cannot be named `uuid` (M002). A plain field or parameter of type `UUID` is
+  a `string`, unchecked.
 - The generated code includes the constructor: `makeQuantity` checks the invariants and returns the first one
   violated (`makeSkuWith(checks)` when an invariant has no expression); see [Generated checks](#generated-checks).
 
@@ -1450,7 +1454,7 @@ a domain type, a verified type or `Decimal`. Make them instead:
 
 | Type | Make it with |
 |---|---|
-| ID, domain primitive | `make<Name>` (generated; or your own `Make<Name>`), e.g. `Sales.makeOrderId('order-1')` |
+| ID, domain primitive | `make<Name>` (generated; or your own `Make<Name>`), e.g. `Sales.makeOrderId(crypto.randomUUID())` |
 | verified type | its factory `Make<Name>`, which you write (see [Verified types](#verified-types)) |
 | `Decimal` | `parseDecimal(text)` from the runtime: digits with an optional `-` and fraction, else `undefined` |
 
@@ -1508,8 +1512,8 @@ the string's `length`, Decimals (carried as strings) and Ints compared as number
 
 | Generated | For | Returns |
 |---|---|---|
-| `check<Name>(value)` | a domain primitive with invariants | the violated invariants, in declaration order (empty: valid) |
-| `make<Name>` | every domain primitive and ID | implements `Make<Name>`: `Invalid<Name>` with the **first** violated invariant |
+| `check<Name>(value)` | a domain primitive with invariants or on `UUID` | the violated invariants, in declaration order after `uuid` (empty: valid) |
+| `make<Name>` | every domain primitive and ID | implements `Make<Name>`: `Invalid<Name>` with the **first** violated invariant (on `UUID`, `uuid` when the value is not a UUID) |
 | `check<Name>(x)` | a value object, entity or union with invariants (a union: those of its variant) | the violated invariants |
 | `check<State><Aggregate>(x)`, `check<Aggregate>(x)` | an aggregate with invariants | per state, the aggregate's and the state's violated invariants; `check<Aggregate>` for any state |
 | `check<Aggregate>Common(x)` | every aggregate with states, also without invariants | the aggregate's own violated invariants, once (the check of each state reports them first) |
@@ -1559,7 +1563,7 @@ With `generate.ts.tests` in the config, `dt generate ts` also writes **contract 
 
 | | Checks |
 |---|---|
-| T1 | `make<Name>` accepts exactly the values that hold the invariants, with values at and next to each bound of ranges and lengths and strings for regular expressions, and reports the first one violated |
+| T1 | `make<Name>` accepts exactly the values that hold the invariants, with values at and next to each bound of ranges and lengths, strings for regular expressions, and on `UUID` UUIDs and strings next to one, and reports the first one violated |
 | T2 | when a requirement does not hold, the command returns the `else` error of the first such requirement; when all hold, none of the `else` errors |
 | T3 | after a successful command, the aggregate holds the invariants of its state (the aggregate's and the state's) |
 | T4 | events whose bounds the types do not express (`X[2..5]`) are emitted that many times |
@@ -1610,10 +1614,10 @@ const ok = <T>(r: { ok: true; value: T } | { ok: false }): T => {
 const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     state: 'Confirmed',
     id,
-    customer: makeCustomerId('customer-1'),
+    customer: ok(makeCustomerId('5f0c3a2e-8d41-4b7a-9e6f-1c2d3e4f5a6b')),
     items: [
         {
-            id: makeOrderItemId('item-1'),
+            id: ok(makeOrderItemId('0b9d7c6e-2f13-4a85-b1c4-7e8f9a0b1c2d')),
             sku: ok(makeSku('ABC-0001')),
             quantity: ok(makeQuantity(3)),
             unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' },
@@ -1622,7 +1626,8 @@ const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
     confirmedAt: new Date('2026-10-24T09:00:00Z'),
 });
 let invoices = 0;
-const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => makeInvoiceId(`invoice-${++invoices}`) });
+const invoiceId = (): string => `00000000-0000-4000-8000-${String(++invoices).padStart(12, '0')}`;
+const policies = billingPolicies({ loadOrder: async (id) => confirmed(id), newInvoiceId: () => ok(makeInvoiceId(invoiceId())) });
 
 register(Billing.contract({ make: { InvoiceId: makeInvoiceId }, Invoice: invoiceCommands, policies }));
 register(Common.contract({ make: { EmailAddress: makeEmailAddress, Amount: makeAmount } }));
@@ -2151,7 +2156,7 @@ storming](#diagnostics-of-a-storming).
 |---|---|
 | SYNTAX | lexer / parser errors (in `.dt` and `.dtes` files) |
 | M001 | types, aggregates and names in invariants and requirements resolve |
-| M002 | names are unique in their scope (also across files of one context) |
+| M002 | names are unique in their scope (also across files of one context); a type on `UUID` declares no invariant named `uuid`, the generated one |
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
 | M005 | a reference's ID type matches the identity of the target aggregate |
