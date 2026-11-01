@@ -434,7 +434,7 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 import { Booking, decide, err, ok } from '../generated/domain/index.js';
 
 export const reservationCommands: Booking.ReservationCommands = {
-    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, (id, room, slot, attendees) =>
+    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, ({ id, room, slot, attendees }) =>
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
@@ -444,9 +444,10 @@ export const reservationCommands: Booking.ReservationCommands = {
     ),
 
     confirm: decide<Booking.ConfirmReservationDecision>(Booking.ReservationShape, {
-        Requested: (reservation, capacity, at) => {
+        Requested: (reservation, params) => {
             // 要件の式は DSL のものを使う: 生成されたチェックが評価する
-            if (Booking.checkConfirmReservationRequires(reservation, capacity, at)) return err({ type: 'RoomTooSmall' });
+            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'RoomTooSmall' });
+            const { at } = params;
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
@@ -459,7 +460,9 @@ export const reservationCommands: Booking.ReservationCommands = {
 ```
 
 `confirm` の決定は遷移元の状態ごとにハンドラーを 1 つ持ちます（ここでは `Requested` だけ）。複数の状態で動くコマンドも
-同じ形で書けるようにするためです。結果の形は `dt guide decide` で説明しています。
+同じ形で書けるようにするためです。コマンドは集約のあとにパラメーターを 1 つのオブジェクトで受け取り
+（`Booking.ConfirmReservationParams`）、生成された要件のチェックにもそのまま渡します。呼び出しでは各パラメーターを名前で
+書きます（`reservationCommands.confirm(reservation, { capacity, at })`）。結果の形は `dt guide decide` で説明しています。
 
 ### ドメインの値を作る
 
@@ -481,7 +484,7 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!room.ok) return room;
     const id = Booking.makeReservationId(crypto.randomUUID());
     if (!id.ok) return id;
-    return reservationCommands.request(id.value, room.value, slot, attendees.value);
+    return reservationCommands.request({ id: id.value, room: room.value, slot, attendees: attendees.value });
 }
 ```
 

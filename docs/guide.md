@@ -1179,11 +1179,26 @@ Unions to name groups of them, each generated only when it has a member:
 | `Aggregate` | every aggregate of the context |
 | `<Aggregate>Event` (`OrderEvent`) | the events the aggregate's commands may emit (also of other contexts) |
 
+A command takes its parameters as **one object** after the aggregate, typed `<Command><Aggregate>Params`
+(`ConfirmOrderParams`): a call names each parameter (`commands.confirm(order, { at })`), so two parameters of one type
+cannot be swapped unnoticed, and reordering them in `.dt` breaks no caller. An optional parameter is an optional
+property (`note?: string`), left out when not given; a misspelt name is an excess property, a compile error. A command
+without parameters takes none (`commands.start(work)`); a factory takes only the object
+(`commands.place({ id, customer })`). The labels of the parameters are on the properties:
+
 ```ts
+/**
+ * The parameters of Order.confirm, by name.
+ * @see sales/order.dt:51
+ */
+export interface ConfirmOrderParams {
+    /** 日時 */
+    readonly at: Timestamp;
+}
+
 /**
  * Order.confirm (Draft -> Confirmed)
  * 注文を確定する
- * @param at 日時
  * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
@@ -1191,7 +1206,7 @@ Unions to name groups of them, each generated only when it has a member:
  */
 export type ConfirmOrder = (
     order: DraftOrder,
-    at: Timestamp,
+    params: ConfirmOrderParams,
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
@@ -1208,8 +1223,7 @@ so a value holds exactly one outcome:
 ```ts
 export type ProgressWork = (
     work: InProgressWork,
-    step: StepId,
-    at: Timestamp,
+    params: ProgressWorkParams,
 ) => Result<
     | {
           readonly InProgress: {
@@ -1260,7 +1274,7 @@ caller with a `DraftOrder` gets a `DraftOrder` back, never a `ConfirmedOrder`; a
 ```ts
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
-    note: string | undefined,
+    params: ChangeNoteOrderParams,
 ) => {
     /** @emits NoteChanged? — at most once when the command succeeds */
     readonly Draft: Result<{
@@ -1299,7 +1313,7 @@ instead.
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
-    readonly Draft: (order: DraftOrder, at: Timestamp) => Result<{
+    readonly Draft: (order: DraftOrder, params: ConfirmOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedAt: Timestamp };
             readonly events: { readonly OrderConfirmed: OrderConfirmed };
@@ -1316,7 +1330,8 @@ field: `items` in the `set` of `confirm` is reported as
 `Property 'confirmedAt' is missing in type '{}' …`. The JSDoc lists `@changes` and, per outcome, what is set, carried
 over and dropped.
 
-`decide(shape, decision)` calls the handler of the aggregate's `state` with the command's arguments. For the outcome
+`decide(shape, decision)` calls the handler of the aggregate's `state` with the command's arguments (the aggregate and
+the parameters object; destructure it where that reads better, `(order, { at }) => …`). For the outcome
 it returns, it makes the aggregate from the fields of `set`, the other fields of the target state taken from the input
 (the common fields and the carried-over state-specific fields) and the target `state`; the input's other fields are
 dropped. A factory's aggregate is its `state` and `set`. Events and errors pass through unchanged. The shape is the
@@ -1345,12 +1360,12 @@ const noteChanged = (order: Sales.Order, note: string | undefined) =>
     note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
 
 export const changeNote: Sales.OrderCommands['changeNote'] = decide<Sales.ChangeNoteOrderDecision>(Sales.OrderShape, {
-    Draft: (order, note) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
-    Confirmed: (order, note) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
+    Draft: (order, { note }) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
+    Confirmed: (order, { note }) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
 });
 
 export const confirm: Sales.OrderCommands['confirm'] = decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
-    Draft: (order, at) => {
+    Draft: (order, { at }) => {
         if (order.items.length === 0) return err({ type: 'EmptyOrder' });
         return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
     },
@@ -1375,7 +1390,7 @@ export interface OrderStore {
 }
 
 export async function confirm(commands: Sales.OrderCommands, store: OrderStore, order: Sales.DraftOrder, at: Date): Promise<Sales.EmptyOrder | undefined> {
-    const r = commands.confirm(order, at); // the time is a parameter: the command is pure
+    const r = commands.confirm(order, { at }); // the time is a parameter: the command is pure
     if (!r.ok) return r.error;
     const { aggregate, events } = outcome(r.value);
     await store.save(aggregate, eventList(events));
@@ -1399,7 +1414,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  */
 export type AcceptReview = (
     review: ReviewingReview | EscalatedReview,
-    person: PersonId,
+    params: AcceptReviewParams,
 ) => Result<{
     readonly Accepted: {
         readonly aggregate: AcceptedReview;
@@ -1517,12 +1532,12 @@ the string's `length`, Decimals (carried as strings) and Ints compared as number
 | `check<Name>(x)` | a value object, entity or union with invariants (a union: those of its variant) | the violated invariants |
 | `check<State><Aggregate>(x)`, `check<Aggregate>(x)` | an aggregate with invariants | per state, the aggregate's and the state's violated invariants; `check<Aggregate>` for any state |
 | `check<Aggregate>Common(x)` | every aggregate with states, also without invariants | the aggregate's own violated invariants, once (the check of each state reports them first) |
-| `check<Command>Requires(aggregate, …params)` | a command with requirements | the name of the first requirement that does not hold, or `undefined` |
+| `check<Command>Requires(aggregate, params)` | a command with requirements (a factory: `(params)`) | the name of the first requirement that does not hold, or `undefined`; it takes the command's parameters object as it is |
 | `equal<Name>(a, b)` | every value object, entity and union | the equality of `==`, `unique` and `contains` |
 
 ```ts
 /** The first requirement of Order.confirm that does not hold, in declaration order; `undefined` when all hold. */
-export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'hasItems' | undefined {
+export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrderParams): 'hasItems' | undefined {
     if (!(order.items.length > 0)) return 'hasItems';
     return undefined;
 }
@@ -1531,8 +1546,8 @@ export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'h
 The translation reads like the `.dt` it comes from: a violated `A implies B` is tested as `A && !B`
 (`if (order.reason === 'Other' && !(order.note !== undefined))`), lambda variables keep their names
 (`(item) => item.quantity > 0`; the second element of `unique(items, item => item.sku)` is `item2`), and strings are in
-single quotes. A lambda variable gets a number (`item2`) only when its name would clash with another variable in scope,
-the check's parameters, a reserved word of TypeScript or a name the module imports; the generator's own temporaries
+single quotes. A parameter of the command is read from the parameters object (`params.reason`). A lambda variable gets
+a number (`item2`) only when its name would clash with another variable in scope, the check's parameters, a reserved word of TypeScript or a name the module imports; the generator's own temporaries
 start with `$` (`$0`), which a `.dt` name cannot.
 
 A constraint without an expression cannot be generated. Instead the check gets a **slot**: a type naming the
@@ -1551,7 +1566,8 @@ export const makeSku = Sales.makeSkuWith({ reserved: (value) => !RESERVED.has(va
 
 The same holds for the other checks: `<Type>DeclaredChecks` and `check<Type>With(checks)` for value types and
 aggregates (one object per aggregate, keyed by invariant name, for all its states), and
-`<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements. A type without such a
+`<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements (a requirement's slot takes the
+aggregate and the parameters object, as the check). A type without such a
 constraint has only the plain function. The slot of an aggregate's own invariant takes `<Aggregate>Common` (an
 invariant of the aggregate holds in every state, so it reads only the common fields), the slot of a state's invariant
 that state's type; `check<Aggregate>CommonWith` exists when the aggregate's own invariants have a slot.
@@ -1651,9 +1667,10 @@ Options, all optional:
   constraints without an expression, by context and type or command type; the same functions your code passes to the
   `…With` checks. A constraint whose check is not passed is listed as a **todo** case ("not expressed in the DSL and
   not checked"), and the tests accept either outcome where it would decide.
-- `examples: { Order: { states: { Draft: [order] }, commands: { confirm: [[order, at]] } } }`: valid aggregates per
-  state (mixed into the generated ones) and arguments per command (run first, before the generated ones). Examples
-  must hold their invariants; one that does not fails the case.
+- `examples: { Order: { states: { Draft: [order] }, commands: { confirm: [[order, { at }]] } } }`: valid aggregates per
+  state (mixed into the generated ones) and arguments per command, as the command takes them: the aggregate and the
+  parameters object (run first, before the generated ones). Examples must hold their invariants; one that does not
+  fails the case.
 
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
