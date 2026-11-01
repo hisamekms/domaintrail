@@ -2,38 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
-import { CommandCard } from '@domaintrail/web/behavior';
-import { highlight } from '@domaintrail/web/highlight';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { namer } from '@domaintrail/web/model-utils';
-import { check, only } from './helpers.js';
-
-const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-
-function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
-    const r = Bun.spawnSync(
-        [
-            process.execPath,
-            TSC,
-            '--noEmit',
-            '--strict',
-            '--target',
-            'ES2023',
-            '--module',
-            'preserve',
-            '--moduleResolution',
-            'bundler',
-            '--lib',
-            'ES2023,DOM',
-            ...files,
-        ],
-        { cwd },
-    );
-    return { code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() };
-}
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check, only } from '../../test-helpers.js';
 
 /**
  * Work moves Draft -> Review -> Done -> Archived. `draftNo` is in Draft and Review (carried over between them),
@@ -158,37 +128,6 @@ describe('changes in the DSL', () => {
         expect(only(a, 'M002').map((d) => d.message)).toEqual(["Field 'title' is listed more than once in 'changes' of command 'x'."]);
         expect(only(a, 'M021').map((d) => [d.message, d.hint])).toEqual([["'Plain' has no field 'sise'.", "did you mean 'size'?"]]);
     });
-
-    test('changes is highlighted as a keyword; a change to it changes its command (and its aggregate)', async () => {
-        expect(
-            highlight('changes note emits X')[0]
-                .filter((t) => t.kind === 'keyword')
-                .map((t) => t.text),
-        ).toEqual(['changes', 'emits']);
-        const before = await work('command x() Draft -> Draft changes title');
-        const after = await work('command x() Draft -> Draft changes title, note');
-        expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Tasks.Work', 'Tasks.Work:x'], removed: [] });
-    });
-
-    test('the command card and the inspector list the fields it changes', async () => {
-        const a = await work(COMMANDS);
-        const agg = a.model!.elements['Tasks.Work'];
-        const card = (name: string) =>
-            renderToStaticMarkup(
-                <CommandCard
-                    agg={agg}
-                    c={agg.commands!.find((c) => c.name === name)!}
-                    model={a.model!}
-                    names={namer('name', a.model!)}
-                    tx={MESSAGES.ja}
-                    onSelect={() => {}}
-                />,
-            );
-        expect(card('rename')).toContain(
-            `<div class="bcard-caption">${MESSAGES.ja.changedFields}</div><div class="bcard-changes"><code class="bcard-change">title</code><code class="bcard-change">updatedAt</code></div>`,
-        );
-        expect(card('submit')).not.toContain('bcard-changes');
-    });
 });
 
 describe('changes in the generated TypeScript', () => {
@@ -272,87 +211,6 @@ export type RenameWorkDecision = {`,
         expect(code).toContain(
             "export const WorkShape: Shape = {\n    fields: ['updatedAt', 'id', 'title', 'note', 'tags'],\n    states: { Draft: ['draftNo'], Review: ['draftNo', 'reviewer'], Done: ['reviewer', 'doneAt'], Archived: ['reviewer'] },\n};",
         );
-    });
-
-    test('decisions that follow the contract compile into the commands with decide, without assertions', async () => {
-        await writeFile(
-            path.join(dir, 'src', 'ok.ts'),
-            `import { Tasks, decide, err, ok } from '../generated/index.js';
-
-export const work: Tasks.WorkCommands = {
-    open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, (id, title) => ok({ Draft: { set: { updatedAt: undefined, id, title, note: undefined, tags: [], draftNo: 1 }, events: {} } })),
-    rename: decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, {
-        Draft: (w, newTitle, at) => (newTitle === '' ? err({ type: 'NotReady' }) : ok({ Draft: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } })),
-        Review: (w, newTitle, at) => ok({ Review: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }),
-    }),
-    submit: decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer }, events: {} } }) }),
-    renumber: decide<Tasks.RenumberWorkDecision>(Tasks.WorkShape, {
-        Draft: (w, n) => ok({ Draft: { set: { draftNo: n }, events: {} } }),
-        // a command that changes a field only in some cases gives the old value in the others
-        Review: (w, n) => ok({ Review: { set: { draftNo: n > w.draftNo ? n : w.draftNo }, events: {} } }),
-    }),
-    finish: decide<Tasks.FinishWorkDecision>(Tasks.WorkShape, { Review: (w, at) => ok({ Done: { set: { doneAt: at }, events: {} } }) }),
-    archive: decide<Tasks.ArchiveWorkDecision>(Tasks.WorkShape, { Done: (w) => ok({ Archived: { set: { reviewer: w.reviewer }, events: {} } }) }),
-    clearNote: decide<Tasks.ClearNoteWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: { note: undefined }, events: {} } }) }),
-    touch: decide<Tasks.TouchWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: {}, events: {} } }) }),
-};
-
-export const tag: Tasks.TagCommands = {
-    make: decide<Tasks.MakeTagDecision>(Tasks.TagShape, (id, name, color) => ok({ Tag: { set: { id, name, color }, events: {} } })),
-    recolor: decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, color) => ok({ Tag: { set: { color }, events: {} } })),
-};
-`,
-        );
-        const r = tscIn(dir, 'src/ok.ts');
-        expect(r.output).toBe('');
-        expect(r.code).toBe(0);
-    });
-
-    test('a wrong set is a compile error whose message names the field', async () => {
-        const cases: [string, string][] = [
-            // a field not in changes
-            [
-                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, tags: [] }, events: {} } }) })`,
-                "'tags' does not exist in type '{ readonly reviewer: string; }'",
-            ],
-            // the new field of the target state left out
-            [
-                `decide<Tasks.FinishWorkDecision>(Tasks.WorkShape, { Review: () => ok({ Done: { set: {}, events: {} } }) })`,
-                "Property 'doneAt' is missing in type '{}'",
-            ],
-            // a field in changes left out (rule 5)
-            [
-                `decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, { Draft: (w, title, at) => ok({ Draft: { set: { title }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }), Review: (w, title, at) => ok({ Review: { set: { title, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }) })`,
-                "Property 'updatedAt' is missing in type '{ title: string; }'",
-            ],
-            // nothing to set
-            [
-                `decide<Tasks.TouchWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ Draft: { set: { title: 'x' }, events: {} } }) })`,
-                "'title' does not exist in type 'NoChanges'",
-            ],
-            // a carried-over field not in changes
-            [
-                `decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, reviewer) => ok({ Review: { set: { reviewer, draftNo: 2 }, events: {} } }) })`,
-                "'draftNo' does not exist in type '{ readonly reviewer: string; }'",
-            ],
-            // without states
-            [
-                `decide<Tasks.RecolorTagDecision>(Tasks.TagShape, (t, color) => ok({ Tag: { set: { color, name: 'x' }, events: {} } }))`,
-                "'name' does not exist in type '{ readonly color: string; }'",
-            ],
-        ];
-        await writeFile(
-            path.join(dir, 'src', 'wrong.ts'),
-            [`import { Tasks, decide, ok } from '../generated/index.js';`, ...cases.map(([body], i) => `export const c${i} = ${body};`), ''].join('\n'),
-        );
-        const r = tscIn(dir, 'src/wrong.ts');
-        expect(r.code).not.toBe(0);
-        const lines = r.output.split('\n');
-        cases.forEach(([, message], i) => {
-            const errors = lines.filter((l) => l.startsWith(`src/wrong.ts(${i + 2},`));
-            expect(errors.join('\n')).toContain(message);
-        });
-        expect(lines.filter((l) => l.startsWith('src/wrong.ts(')).length).toBe(cases.length);
     });
 
     test('decide makes the aggregates: carries over, drops, sets; a factory from set; without states; errors pass through', async () => {

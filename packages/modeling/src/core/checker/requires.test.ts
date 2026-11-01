@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
-import { highlight } from '@domaintrail/web/highlight';
-import { check, checkSales, codes, only } from './helpers.js';
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
 const review = (commands: string, extra = '') =>
@@ -235,27 +233,5 @@ describe('requires in the generated TypeScript', () => {
         const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
         expect(code).toContain(' * @requires x else Blocked: blockers == 0\n');
         expect(code).toContain('}, Blocked>;');
-    });
-});
-
-describe('requires in the Live View', () => {
-    test('a change to a requirement changes its command (and its aggregate)', async () => {
-        const before = await review('command accept() Reviewing -> Accepted requires x { blockers == 0 } else Blocked');
-        const after = await review('command accept() Reviewing -> Accepted requires x { blockers < 1 } else Blocked');
-        expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Review.Review', 'Review.Review:accept'], removed: [] });
-    });
-
-    test('when is highlighted as a keyword', () => {
-        const tokens = highlight('emits Done when Draft ->')[0]
-            .filter((t) => t.kind === 'keyword')
-            .map((t) => t.text);
-        expect(tokens).toEqual(['emits', 'when']);
-    });
-
-    test('requires and else are highlighted as keywords', () => {
-        const tokens = highlight('requires x { true } else Blocked')[0]
-            .filter((t) => t.kind === 'keyword')
-            .map((t) => t.text);
-        expect(tokens).toEqual(['requires', 'true', 'else']);
     });
 });

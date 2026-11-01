@@ -6,7 +6,7 @@ import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } fr
 import { MESSAGES } from './i18n';
 import { tabsFor } from './inspector';
 import { namer, resolve } from './model-utils';
-import { exampleSources } from './test-helpers';
+import { check, exampleSources } from './test-helpers';
 
 let model: DomainModel;
 let order: ElementModel;
@@ -159,5 +159,76 @@ describe('inspector tabs', () => {
         const other = Object.values(model.elements).find((e) => e.kind === 'valueObject')!;
         expect(tabsFor(resolve(model, other.id)!)).toEqual(['structure', 'references', 'source']);
         expect(tabsFor(resolve(model, command('confirm').id)!)).toEqual(['structure', 'states', 'behavior', 'source']);
+    });
+});
+
+describe('changes in the DSL', () => {
+    /**
+     * Work moves Draft -> Review -> Done -> Archived. `draftNo` is in Draft and Review (carried over between them),
+     * `reviewer` in Review and Done (carried over) and in Archived with another type (not carried over).
+     */
+    const work = (commands: string, extra = '') =>
+        check({
+            'tasks.dt': `context Tasks {
+      id WorkId: UUID
+      id TagId: UUID
+      event Renamed { workId: WorkId }
+      error NotReady
+      fields Audited { updatedAt: Timestamp? }
+      aggregate Work with Audited {
+        id: WorkId
+        title: String
+        note: String?
+        tags: String[0..*]
+        state Draft { draftNo: Int }
+        state Review { draftNo: Int reviewer: String }
+        state Done { reviewer: String doneAt: Timestamp }
+        state Archived { reviewer: String? }
+    ${commands}
+      }
+      aggregate Tag {
+        id: TagId
+        name: String
+        color: String
+        create command make(id: TagId, name: String, color: String)
+        command recolor(color: String) changes color
+      }
+      ${extra}
+    }
+    `,
+        });
+
+    const COMMANDS = `
+        create command open(id: WorkId, title: String) -> Draft
+        command rename(newTitle: String, at: Timestamp)
+          Draft -> Draft, Review -> Review
+          requires named { newTitle != "" } else NotReady
+          changes title, updatedAt
+          emits Renamed
+        command submit(reviewer: String) Draft -> Review
+        command renumber(n: Int) Draft -> Draft, Review -> Review changes draftNo
+        command finish(at: Timestamp) Review -> Done
+        command archive() Done -> Archived
+        command clearNote() Draft -> Draft changes note
+        command touch() Draft -> Draft`;
+
+    test('the command card and the inspector list the fields it changes', async () => {
+        const a = await work(COMMANDS);
+        const agg = a.model!.elements['Tasks.Work'];
+        const card = (name: string) =>
+            renderToStaticMarkup(
+                <CommandCard
+                    agg={agg}
+                    c={agg.commands!.find((c) => c.name === name)!}
+                    model={a.model!}
+                    names={namer('name', a.model!)}
+                    tx={MESSAGES.ja}
+                    onSelect={() => {}}
+                />,
+            );
+        expect(card('rename')).toContain(
+            `<div class="bcard-caption">${MESSAGES.ja.changedFields}</div><div class="bcard-changes"><code class="bcard-change">title</code><code class="bcard-change">updatedAt</code></div>`,
+        );
+        expect(card('submit')).not.toContain('bcard-changes');
     });
 });

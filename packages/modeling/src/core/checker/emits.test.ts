@@ -2,32 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { check, checkSales, codes, only } from './helpers.js';
-
-const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-
-function tscIn(cwd: string, ...files: string[]): { code: number; output: string } {
-    const r = Bun.spawnSync(
-        [
-            process.execPath,
-            TSC,
-            '--noEmit',
-            '--strict',
-            '--target',
-            'ES2023',
-            '--module',
-            'preserve',
-            '--moduleResolution',
-            'bundler',
-            '--lib',
-            'ES2023,DOM',
-            ...files,
-        ],
-        { cwd },
-    );
-    return { code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() };
-}
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 const WORK = `context Tasks {
   id WorkId: UUID
@@ -282,112 +258,6 @@ export type ProgressWork = (
         );
         // events that depend on the target only: the input state decides nothing, so a plain function
         expect(code).toContain('export type ProgressWork = (\n    work: InProgressWork,');
-    });
-
-    test('implementations that follow the contract compile; outcome and eventList type what they return', async () => {
-        await writeFile(
-            path.join(dir, 'src', 'ok.ts'),
-            `import { Tasks, decide, eventList, ok, outcome, err } from '../generated/index.js';
-const ev = <T extends string>(type: T, work: Tasks.Work) => ({ type, workId: work.id });
-
-export const commands: Tasks.WorkCommands = {
-    open: (id) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { WorkOpened: { type: 'WorkOpened', workId: id }, ItemAdded: [] } } }),
-    progress: (work, at) => {
-        if (at.getTime() < 0) return err({ type: 'NotReady' });
-        if (at.getTime() === 0) return ok({ InProgress: { aggregate: work, events: { StepRecorded: ev('StepRecorded', work) } } });
-        return ok({
-            Completed: {
-                aggregate: { ...work, state: 'Completed', completedAt: at },
-                events: { StepRecorded: ev('StepRecorded', work), WorkCompleted: ev('WorkCompleted', work) },
-            },
-        });
-    },
-    cancel: decide<Tasks.CancelWorkDecision>(Tasks.WorkShape, {
-        Draft: (work) => ok({ Cancelled: { set: {}, events: { WorkCancelled: ev('WorkCancelled', work) } } }),
-        InProgress: (work) => ok({ Cancelled: { set: {}, events: { WorkCancelled: ev('WorkCancelled', work), RefundRequested: ev('RefundRequested', work) } } }),
-    }),
-    add: (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [ev('ItemAdded', work)] } } }),
-    batch: (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [ev('ItemAdded', work), ev('ItemAdded', work)] } } }),
-    start: (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: {} } }),
-};
-
-declare const inProgress: Tasks.InProgressWork;
-declare const at: Date;
-const r = commands.progress(inProgress, at);
-if (r.ok) {
-    const o = outcome(r.value);
-    const to: 'InProgress' | 'Completed' = o.to;
-    if (o.to === 'Completed') {
-        const done: Tasks.CompletedWork = o.aggregate;
-        const completed: Tasks.WorkCompleted = o.events.WorkCompleted;
-    }
-    const all: readonly (Tasks.StepRecorded | Tasks.WorkCompleted)[] = eventList(o.events);
-    // @ts-expect-error not only steps
-    const steps: readonly Tasks.StepRecorded[] = eventList(o.events);
-}
-const s = commands.start({ state: 'Draft', id: inProgress.id });
-if (s.ok) {
-    const none: readonly never[] = eventList(outcome(s.value).events);
-}
-const events: readonly Tasks.WorkEvent[] = r.ok ? eventList(outcome(r.value).events) : [];
-`,
-        );
-        const r = tscIn(dir, 'src/ok.ts');
-        expect(r.output).toBe('');
-        expect(r.code).toBe(0);
-    });
-
-    test('a wrong implementation is a compile error whose message names the event', async () => {
-        const cases: Record<string, [string, string]> = {
-            missing: [
-                `ok({ Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { StepRecorded: step(work) } } })`,
-                "Property 'WorkCompleted' is missing in type",
-            ],
-            wrongOutcome: [
-                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`,
-                "'WorkCompleted' does not exist in type",
-            ],
-            undeclared: [
-                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), NoteChanged: { type: 'NoteChanged', workId: work.id } } } })`,
-                "'NoteChanged' does not exist in type",
-            ],
-            twoOutcomes: [
-                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work) } }, Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`,
-                "Types of property 'Completed' are incompatible",
-            ],
-        };
-        const noEvents = `export const start: Tasks.StartWork = (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: { StepRecorded: step(work) } } });`;
-        const empty = `export const add: Tasks.AddWork = (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [] } } });`;
-        await writeFile(
-            path.join(dir, 'src', 'wrong.ts'),
-            [
-                `import { ok, type Tasks } from '../generated/index.js';`,
-                `const step = (w: Tasks.Work): Tasks.StepRecorded => ({ type: 'StepRecorded', workId: w.id });`,
-                `const done = (w: Tasks.Work): Tasks.WorkCompleted => ({ type: 'WorkCompleted', workId: w.id });`,
-                ...Object.entries(cases).map(([name, [body]]) => `export const ${name}: Tasks.ProgressWork = (work, at) => ${body};`),
-                noEvents,
-                empty,
-                '',
-            ].join('\n'),
-        );
-        const r = tscIn(dir, 'src/wrong.ts');
-        expect(r.code).not.toBe(0);
-        const lines = r.output.split('\n');
-        const errorAt = (line: number) => lines.filter((l) => l.startsWith(`src/wrong.ts(${line},`)).join('\n');
-        Object.values(cases).forEach(([, message], i) => {
-            const at = lines.findIndex((l) => l.startsWith(`src/wrong.ts(${i + 4},`));
-            expect(at).toBeGreaterThanOrEqual(0);
-            // the message is the error line or one of the lines that elaborate it
-            const block = lines
-                .slice(
-                    at,
-                    lines.findIndex((l, j) => j > at && l.startsWith('src/')),
-                )
-                .join('\n');
-            expect(block).toContain(message);
-        });
-        expect(errorAt(8)).toContain("Type 'StepRecorded' is not assignable to type 'never'");
-        expect(r.output).toContain('Source has 0 element(s) but target requires 1.');
     });
 
     test('outcome and eventList: the key as `to`; events flattened, absent ones skipped, sorted by type', async () => {

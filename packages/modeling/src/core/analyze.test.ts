@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { EXAMPLES, check, checkSales, codes, only } from './helpers.js';
+import { analyze } from './analyze.js';
+import { check, checkSales, codes, exampleSources, only } from '../test-helpers.js';
 
 const ORDER = `
   id OrderId: UUID
@@ -18,7 +17,7 @@ const ORDER = `
 
 describe('examples', () => {
     test('the shop example is valid across multiple files and contexts, with its stormings', async () => {
-        const a = await analyze(await loadWorkspace(EXAMPLES));
+        const a = await analyze(await exampleSources());
         expect(a.files).toEqual([
             'billing/context.dt',
             'billing/invoice.dt',

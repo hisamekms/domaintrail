@@ -1,16 +1,6 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-import { buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { contextDependencies } from '@domaintrail/modeling/model/dependencies';
-import { OutcomeCard } from '@domaintrail/web/behavior';
-import { MESSAGES } from '@domaintrail/web/i18n';
-import { catalogSections, fieldSetUsers, namer } from '@domaintrail/web/model-utils';
-import { usagesOf } from '@domaintrail/web/usages';
-import { check, checkSales, codes, only } from './helpers.js';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {
@@ -241,15 +231,10 @@ describe('M017: events carry the ID of their aggregate', () => {
 });
 
 describe('field sets: generated TypeScript', () => {
-    let dir: string;
     let a: Awaited<ReturnType<typeof check>>;
     beforeAll(async () => {
         a = await check(FILES);
-        dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-fieldsets-'));
-        await mkdir(path.join(dir, 'generated'), { recursive: true });
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', f.path), f.content);
     });
-    afterAll(() => rm(dir, { recursive: true, force: true }));
 
     test('a field set is an interface that the elements using it extend', () => {
         expect(ts(a, 'Common')).toContain(
@@ -279,74 +264,5 @@ describe('field sets: generated TypeScript', () => {
         const common = ts(a, 'Common');
         expect(common).not.toContain('DomainEvent');
         expect(common).not.toContain('Aggregate');
-    });
-
-    test('compiles, and the extended fields are required', async () => {
-        await writeFile(
-            path.join(dir, 'use.ts'),
-            `import type { Common, Sales } from './generated/index.js';
-declare const tenant: Common.TenantId;
-declare const staff: Sales.StaffId;
-declare const order: Sales.OrderId;
-export const placed: Sales.OrderPlaced = { type: 'OrderPlaced', tenant, performedBy: staff, orderId: order };
-export const events: readonly Sales.OrderEvent[] = [placed];
-export const all: readonly Sales.DomainEvent[] = [placed];
-// @ts-expect-error the tenant comes from the field set and is required
-export const missing: Sales.OrderPlaced = { type: 'OrderPlaced', performedBy: staff, orderId: order };
-`,
-        );
-        const tsc = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-        const r = Bun.spawnSync(
-            [process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'use.ts'],
-            { cwd: dir },
-        );
-        expect(r.stdout.toString() + r.stderr.toString()).toBe('');
-        expect(r.exitCode).toBe(0);
-    });
-});
-
-describe('field sets: Live View', () => {
-    test('the structure diagram lists the fields of field sets first, with the field set faded after them', async () => {
-        const a = await check(FILES);
-        const node = buildStructureGraph(a.model!).nodes.find((n) => n.id === 'Sales.Order')!;
-        expect(node.lines.map((l) => l.key.ja.name)).toEqual(['tenant', 'id', '◆ items', '状態']);
-        expect(node.lines[0].origin?.ja).toEqual({ name: 'Tenanted', label: 'テナント所属', both: 'テナント所属' });
-        expect(node.lines.slice(1).every((l) => !l.origin)).toBe(true);
-    });
-
-    test("an event card's payload marks the fields of field sets", async () => {
-        const model = (await check(FILES)).model!;
-        const order = model.elements['Sales.Order'];
-        const html = renderToStaticMarkup(
-            <OutcomeCard
-                id="Sales.OrderPlaced"
-                commands={order.commands!.slice(0, 1)}
-                model={model}
-                names={namer('label', model)}
-                tx={MESSAGES.ja}
-                onSelect={() => {}}
-            />,
-        );
-        expect(html.match(/class="field-origin"[^>]*>[^<]*</g)?.map((m) => m.replace(/.*>/, '').replace('<', ''))).toEqual(['テナント所属', '実施記録']);
-    });
-
-    test('a field set is used by its elements and counts its field types once', async () => {
-        const a = await check(FILES);
-        const model = a.model!;
-        expect(fieldSetUsers(model, 'Common.Tenanted').map((e) => e.id)).toEqual(['Sales.Order', 'Sales.OrderItem', 'Sales.OrderPlaced']);
-        expect(usagesOf(model, 'Common.TenantId').map((u) => u.key)).toEqual(['Common.Tenanted.tenant']);
-        expect(usagesOf(model, 'Sales.StaffId').map((u) => u.key)).toEqual(['Sales.Performed.performedBy']);
-        const deps = contextDependencies(model).filter((d) => d.path === 'with');
-        expect(deps.map((d) => `${d.source} -> ${d.target}`)).toEqual([
-            'Sales.Order -> Common.Tenanted',
-            'Sales.OrderItem -> Common.Tenanted',
-            'Sales.OrderPlaced -> Common.Tenanted',
-            'Billing.Invoice -> Sales.Performed',
-        ]);
-        const sets = catalogSections(model).find((s) => s.key === 'fieldSets')!;
-        expect(sets.groups.map((g) => [g.context, g.items.map((e) => e.name)])).toEqual([
-            ['Common', ['Tenanted']],
-            ['Sales', ['Performed']],
-        ]);
     });
 });

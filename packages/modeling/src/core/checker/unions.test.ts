@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { VARIANT_INDENT, buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
-import { perLang } from '@domaintrail/visualization/domain/graph/ir';
-import { check, checkSales, codes, only } from './helpers.js';
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check, checkSales, codes, only } from '../../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   id UserId: UUID
@@ -84,33 +79,6 @@ export type Actor =
         expect(code).toContain("readonly type: 'DELIVERY';\n          readonly details: DeliverySpec;");
         expect(code).toContain("/** @invariant notBlank: length(text) > 0 */\n    | {\n          readonly form: 'DESCRIPTION';");
         expect(code).toContain('readonly details: Details;');
-    });
-
-    test('the generated union type-checks against hand-written code', async () => {
-        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-union-'));
-        try {
-            const a = await check({ 'sales.dt': SALES });
-            await mkdir(path.join(dir, 'gen'));
-            for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'gen', f.path), f.content);
-            await writeFile(
-                path.join(dir, 'use.ts'),
-                `import type { Sales } from './gen/index.js';
-export const actor: Sales.Actor = { kind: 'EXTERNAL_PARTY', name: 'x' as Sales.PartyName };
-export const details: Sales.Details = { type: 'PRINTING', details: { copies: 3 } };
-// @ts-expect-error the payload must match the variant
-export const wrong: Sales.Details = { type: 'PRINTING', details: { planned: 3 } };
-export const name = (a: Sales.Actor): string => (a.kind === 'EXTERNAL_PARTY' ? a.name : a.userId);
-`,
-            );
-            const tsc = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-            const r = Bun.spawnSync([tsc, '--noEmit', '--strict', '--module', 'nodenext', '--moduleResolution', 'nodenext', '--target', 'es2022', 'use.ts'], {
-                cwd: dir,
-            });
-            expect(r.stdout.toString() + r.stderr.toString()).toBe('');
-            expect(r.exitCode).toBe(0);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
     });
 
     test('M015 a union bound to an enum has exactly its values as variants', async () => {
@@ -200,19 +168,5 @@ export const name = (a: Sales.Actor): string => (a.kind === 'EXTERNAL_PARTY' ? a
         const v = a.model!.elements['Sales.U'].variants![0];
         expect(v.doc).toBe('説明');
         expect(v.fields[0].doc).toBeUndefined();
-    });
-
-    test('Structure View draws unions with their variants and value edges per variant', async () => {
-        const a = await check({ 'sales.dt': SALES });
-        const g = buildStructureGraph(a.model!);
-        const node = g.nodes.find((n) => n.id === 'Sales.Details')!;
-        expect(node).toMatchObject({ kind: 'union', stereotype: perLang({ ja: '«ユニオン»', en: '«union»' }), parent: 'Sales.Spec@boundary' });
-        expect(node.lines.map((l) => l.key.en.name)).toEqual(['type: DELIVERY', `${VARIANT_INDENT}details`, 'type: PRINTING', `${VARIANT_INDENT}details`]);
-        const edges = g.edges.filter((e) => e.source === 'Sales.Details').map((e) => [e.id, e.target, e.label?.en.name]);
-        expect(edges).toEqual([
-            ['Sales.Details.DELIVERY.details', 'Sales.DeliverySpec', 'DELIVERY.details'],
-            ['Sales.Details.PRINTING.details', 'Sales.PrintingSpec', 'PRINTING.details'],
-        ]);
-        expect(g.edges.find((e) => e.id === 'Sales.Spec.details')).toMatchObject({ kind: 'owns', target: 'Sales.Details' });
     });
 });

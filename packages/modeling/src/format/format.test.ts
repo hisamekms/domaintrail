@@ -1,14 +1,10 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { FormatError, formatDomain } from '@domaintrail/modeling/format/format';
-import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
+import { FormatError, formatDomain } from './format.js';
+import { check, exampleSources } from '../test-helpers.js';
 
-const ROOT = path.join(import.meta.dir, '..');
+const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
 const guide = await readFile(path.join(ROOT, 'docs', 'guide.md'), 'utf8');
 
 /** The `dt` blocks of the guide, by the file name in their first line. */
@@ -16,7 +12,7 @@ const guideFiles = (): Record<string, string> =>
     Object.fromEntries([...guide.matchAll(/^```dt\n([\s\S]*?)^```/gm)].map((m) => [/^\/\/ (\S+\.dt)\n/.exec(m[1])![1], m[1]]));
 
 const shopFiles = async (): Promise<Record<string, string>> =>
-    Object.fromEntries((await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt')).map((s) => [s.path, s.text]));
+    Object.fromEntries((await exampleSources()).filter((s) => s.path.endsWith('.dt')).map((s) => [s.path, s.text]));
 
 /** The Typed Model without the source locations, which formatting moves. */
 async function modelOf(files: Record<string, string>): Promise<unknown> {
@@ -134,7 +130,6 @@ context Sales { // trailing the brace
   id OrderId: UUID /* inline */ // trailing
   // own line
 
-
   // after blank lines (kept as one)
   enum Kind { A /* a */ B }
   aggregate Order {
@@ -234,66 +229,5 @@ context Sales { // trailing the brace
 
     test('refuses a file with syntax errors', () => {
         expect(() => formatDomain('context S { id X UUID }')).toThrow(FormatError);
-    });
-});
-
-describe('dt fmt', () => {
-    const dirs: string[] = [];
-    afterEach(async () => {
-        for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
-    });
-
-    async function run(...args: string[]): Promise<{ code: number; out: string[]; err: string[] }> {
-        const out: string[] = [];
-        const err: string[] = [];
-        const code = await runCli(args, { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
-        return { code, out, err };
-    }
-
-    test('examples/shop is formatted', async () => {
-        const r = await run('-r', EXAMPLES, 'fmt', '--check');
-        expect(r).toEqual({ code: 0, out: ['8 file(s) checked: 0 not formatted.'], err: [] });
-    });
-
-    test('--check lists the files to format and writes nothing; fmt writes them', async () => {
-        const dir = await tempCopyOfExamples();
-        dirs.push(dir);
-        const file = path.join(dir, 'billing', 'invoice.dt');
-        const original = await readFile(file, 'utf8');
-        await writeFile(file, scramble(original));
-        const checked = await run('-r', dir, 'fmt', '--check');
-        expect(checked).toEqual({ code: 1, out: ['billing/invoice.dt'], err: ['8 file(s) checked: 1 not formatted. Run `dt fmt` to format them.'] });
-        expect(await readFile(file, 'utf8')).toBe(scramble(original));
-        expect(await run('-r', dir, 'fmt')).toEqual({ code: 0, out: ['billing/invoice.dt', '8 file(s): 1 formatted.'], err: [] });
-        expect(await readFile(file, 'utf8')).toBe(original);
-    });
-
-    test('formats the files given, relative to the current directory', async () => {
-        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-fmt-'));
-        dirs.push(dir);
-        const file = path.join(dir, 'a.dt');
-        await writeFile(file, 'context A {   id X: UUID }');
-        const r = await run('fmt', file);
-        expect(r.code).toBe(0);
-        expect(await readFile(file, 'utf8')).toBe('context A {\n  id X: UUID\n}\n');
-    });
-
-    test('reports syntax errors like check and leaves the file untouched', async () => {
-        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-fmt-'));
-        dirs.push(dir);
-        await writeFile(path.join(dir, 'bad.dt'), 'context A { id X UUID }');
-        await writeFile(path.join(dir, 'good.dt'), 'context B { id Y: UUID }');
-        const r = await run('-r', dir, 'fmt');
-        expect(r.code).toBe(1);
-        expect(r.out).toEqual(['good.dt']);
-        expect(r.err[0]).toMatch(/^bad\.dt:1:\d+ - error SYNTAX: /);
-        expect(r.err.at(-1)).toBe('2 file(s): 1 formatted, 1 not formatted because of syntax errors.');
-        expect(await readFile(path.join(dir, 'bad.dt'), 'utf8')).toBe('context A { id X UUID }');
-    });
-
-    test('no .dt file is an error', async () => {
-        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-fmt-'));
-        dirs.push(dir);
-        expect((await run('-r', dir, 'fmt')).code).toBe(1);
     });
 });

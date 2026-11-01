@@ -2,13 +2,12 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { showJson, showText } from '@domaintrail/presentation/cli/show';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { generateTypeScript, type PolicyMode } from '@domaintrail/modeling/generator/typescript';
-import { contextDependencies, groupByContext } from '@domaintrail/modeling/model/dependencies';
-import { check } from './helpers.js';
+import { formatDomain } from '../../format/format.js';
+import { generateTypeScript, type PolicyMode } from '../../generator/typescript.js';
+import { contextDependencies, groupByContext } from '../../model/dependencies.js';
+import { check } from '../../test-helpers.js';
 
-const ROOT = path.join(import.meta.dir, '..');
+const ROOT = path.join(import.meta.dir, '..', '..', '..', '..', '..');
 
 const SALES = `context Sales {
   id OrderId: UUID
@@ -130,28 +129,6 @@ describe('policy declarations', () => {
             { from: 'Billing', to: 'Sales', kind: 'event', source: 'Billing.SendConfirmed', path: 'when OrderConfirmed', target: 'Sales.OrderConfirmed' },
         ]);
         expect(groupByContext(deps).map((g) => [g.from, g.to, g.ids, g.types, g.events])).toEqual([['Billing', 'Sales', 2, 0, 2]]);
-    });
-
-    test('dt show: a policy, the command it runs and the event it reacts to', async () => {
-        const m = (await model()).model!;
-        const el = (id: string) => ({ kind: 'element' as const, el: m.elements[id] });
-        expect(showText(m, el('Billing.BillConfirmedOrder'))).toEqual([
-            '/// 確定した注文は請求する。',
-            'policy Billing.BillConfirmedOrder "請求する" when Sales.OrderConfirmed -> Invoice.issue  // billing.dt:16',
-            '  event Sales.OrderConfirmed { orderId: OrderId, at: Timestamp }  // sales.dt:13',
-            '  create command Invoice.issue(id: InvoiceId, order: Sales.OrderId, total: Money, note: String?)  // billing.dt:12',
-            '  input { id: InvoiceId, order: Sales.OrderId, total: Money, note: String? }  // what the application needs to run it, eventually (any mechanism)',
-        ]);
-        expect(showText(m, el('Billing.SendConfirmed'))[3]).toBe(
-            '  input { invoice: InvoiceId, sentAt: Timestamp, lines: Amount[1..3] }  // what the application needs to run it, eventually (any mechanism)',
-        );
-        const invoice = m.elements['Billing.Invoice'];
-        expect(showText(m, { kind: 'command', agg: invoice, command: invoice.commands![0] })[1]).toBe(
-            '  // triggered by policy BillConfirmedOrder "請求する" when Sales.OrderConfirmed',
-        );
-        expect(showText(m, el('Sales.OrderConfirmed'))).toContain('  reacted to by (policy): Billing.BillConfirmedOrder, Billing.SendConfirmed');
-        const json = showJson(m, { kind: 'command', agg: invoice, command: invoice.commands![1] }) as { command: { triggeredBy: string[] } };
-        expect(json.command.triggeredBy).toEqual(['Billing.SendConfirmed']);
     });
 
     test('dt fmt keeps a policy on one line when it fits, else puts `when` on the next', () => {

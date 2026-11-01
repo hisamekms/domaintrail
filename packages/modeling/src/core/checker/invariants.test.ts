@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { checkSales, codes, only } from './helpers.js';
+import { checkSales, codes, only } from '../../test-helpers.js';
 
 const model = (aggregateInvariants: string, confirmedInvariants = '', extra = '') =>
     checkSales(`

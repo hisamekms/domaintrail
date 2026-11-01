@@ -90,7 +90,8 @@ describe('collaboration on Node', () => {
         const offending: string[] = [];
         for (const dir of ['collaboration/src', 'workspace/src']) {
             for await (const rel of new Glob('**/*.ts').scan({ cwd: path.join(SRC, dir) })) {
-                if (rel.startsWith('generated/tests/')) continue; // the generated contract tests register with bun:test
+                // the generated contract tests register with bun:test; the unit tests run on Bun and are not bundled
+                if (rel.startsWith('generated/tests/') || rel.endsWith('.test.ts') || rel === 'test-helpers.ts') continue;
                 const source = await readFile(path.join(SRC, dir, rel), 'utf8');
                 if (/\bBun\.|from ['"]bun(:[\w-]+)?['"]/.test(source)) offending.push(`${dir}/${rel}`);
             }

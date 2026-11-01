@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { EXAMPLES, checkSales, only } from './helpers.js';
+import { analyze } from '../analyze.js';
+import { checkSales, exampleSources, only } from '../../test-helpers.js';
 
 /** The M022 messages of a context body, each with its hint. */
 async function m022(body: string): Promise<string[]> {
@@ -187,7 +186,7 @@ ${decls}`;
     });
 
     test('the shop example has no M022 (and no warning at all)', async () => {
-        const a = await analyze(await loadWorkspace(EXAMPLES));
+        const a = await analyze(await exampleSources());
         expect(a.diagnostics.filter((d) => d.severity === 'warning')).toEqual([]);
     });
 });

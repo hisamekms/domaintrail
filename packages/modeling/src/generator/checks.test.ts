@@ -2,10 +2,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { check } from './helpers.js';
+import { generateTypeScript } from './typescript.js';
+import { check } from '../test-helpers.js';
 
-const ROOT = path.join(import.meta.dir, '..');
 const dirs: string[] = [];
 afterAll(async () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true });
@@ -20,27 +19,6 @@ async function generated(files: Record<string, string>): Promise<Record<string, 
     const out = generateTypeScript(a.model!);
     for (const f of out) await writeFile(path.join(dir, f.path), f.content);
     return import(path.join(dir, 'index.ts'));
-}
-
-/** Type-checks generated files strictly (also against unused parameters). */
-function tsc(dir: string, files: string[]): string {
-    const flags = [
-        '--ignoreConfig',
-        '--noEmit',
-        '--strict',
-        '--noUnusedLocals',
-        '--noUnusedParameters',
-        '--exactOptionalPropertyTypes',
-        '--target',
-        'ES2023',
-        '--module',
-        'preserve',
-        '--moduleResolution',
-        'bundler',
-        '--verbatimModuleSyntax',
-    ];
-    const r = Bun.spawnSync([process.execPath, path.join(ROOT, 'node_modules', '.bin', 'tsc'), ...flags, ...files], { cwd: dir });
-    return r.stdout.toString() + r.stderr.toString();
 }
 
 const MODEL = {
@@ -122,20 +100,6 @@ const yen = (amount: string) => ({ amount, currency: 'JPY' });
 const line = (id: string, sku: string, amount = '100') => ({ id, sku, quantity: 1, price: yen(amount) });
 
 describe('generated checks', () => {
-    test('type-check strictly, with unused parameters reported', async () => {
-        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-checks-tsc-'));
-        dirs.push(dir);
-        const a = await check(MODEL);
-        const files = generateTypeScript(a.model!);
-        for (const f of files) await writeFile(path.join(dir, f.path), f.content);
-        expect(
-            tsc(
-                dir,
-                files.map((f) => f.path),
-            ),
-        ).toBe('');
-    });
-
     test('ranges and Decimal values (carried as strings) compare as numbers', () => {
         expect(Sales.checkQuantity(1)).toEqual([]);
         expect(Sales.checkQuantity(999)).toEqual([]);

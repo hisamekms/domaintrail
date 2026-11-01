@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { parseStormings } from '@domaintrail/modeling/storming/parse';
-import { FormatError } from '@domaintrail/modeling/format/format';
+import { formatStorming } from './format.js';
+import { parseStormings } from './parse.js';
+import { FormatError } from '../format/format.js';
 
-const SAMPLE = await readFile(path.join(import.meta.dir, 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
 const lines = (...ls: string[]) => `${ls.join('\n')}\n`;
 

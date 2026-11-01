@@ -1,13 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import * as path from 'node:path';
-import { showJson, showText, lookup } from '@domaintrail/presentation/cli/show';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { contextDependencies } from '@domaintrail/modeling/model/dependencies';
-import { highlight } from '@domaintrail/web/highlight';
-import { check, codes, only } from './helpers.js';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { formatDomain } from '../../format/format.js';
+import { generateTypeScript } from '../../generator/typescript.js';
+import { contextDependencies } from '../../model/dependencies.js';
+import { check, codes, only } from '../../test-helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {
@@ -175,35 +170,10 @@ describe('verified types: the checker', () => {
 `,
         });
         expect(a.diagnostics).toEqual([]);
-        expect(
-            highlight('verified V of String for X?')[0]
-                .filter((t) => t.kind === 'keyword')
-                .map((t) => t.text),
-        ).toEqual(['verified', 'of', 'for']);
     });
 });
 
 describe('verified types: dt show and dependencies', () => {
-    test('show prints of, for and errors, and who uses it', async () => {
-        const m = (await run()).model!;
-        const target = lookup(m, 'AvailableEmail');
-        if (!('found' in target)) throw new Error('not found');
-        expect(showText(m, target.found)).toEqual([
-            '/// 他の顧客に使われていないことを確かめたメールアドレス。',
-            'verified Sales.AvailableEmail "未使用のメールアドレス" of EmailAddress for CustomerId? errors EmailTaken  // sales.dt:9',
-            '',
-            'used by',
-            '  type of: Sales.Customer.register(email), Sales.Customer.changeEmail(newEmail)',
-            '  verified as: Sales.Reachable',
-        ]);
-        const taken = lookup(m, 'EmailTaken');
-        if (!('found' in taken)) throw new Error('not found');
-        expect(showJson(m, taken.found)).toMatchObject({ usedBy: { returnedBy: ['Sales.AvailableEmail'] } });
-        const tenant = lookup(m, 'TenantId');
-        if (!('found' in tenant)) throw new Error('not found');
-        expect(showJson(m, tenant.found)).toMatchObject({ usedBy: { contextOf: ['Sales.Deliverable'] } });
-    });
-
     test('a verified type depends on the contexts of its base, context and errors', async () => {
         const a = await check({
             'common.dt': 'shared context Common {\n  primitive Email: String\n}\n',
@@ -221,47 +191,10 @@ describe('verified types: dt show and dependencies', () => {
 });
 
 describe('verified types: generated TypeScript', () => {
-    let dir: string;
     let ts: string;
-    const TSC = path.join(import.meta.dir, '..', 'node_modules', '.bin', 'tsc');
-    const tsc = (file: string, text: string) => {
-        const src = path.join(dir, 'src', file);
-        return writeFile(src, text).then(() => {
-            const r = Bun.spawnSync(
-                [
-                    process.execPath,
-                    TSC,
-                    '--noEmit',
-                    '--strict',
-                    '--target',
-                    'ES2023',
-                    '--module',
-                    'preserve',
-                    '--moduleResolution',
-                    'bundler',
-                    '--lib',
-                    'ES2023,DOM',
-                    `src/${file}`,
-                ],
-                { cwd: dir },
-            );
-            return r.stdout.toString() + r.stderr.toString();
-        });
-    };
 
     beforeAll(async () => {
-        dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-verified-'));
-        const a = await run();
-        await mkdir(path.join(dir, 'generated'), { recursive: true });
-        await mkdir(path.join(dir, 'src'));
-        for (const f of generateTypeScript(a.model!, {}, { dir: 'tests' })) {
-            await mkdir(path.dirname(path.join(dir, 'generated', f.path)), { recursive: true });
-            await writeFile(path.join(dir, 'generated', f.path), f.content);
-        }
-        ts = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
-    });
-    afterAll(async () => {
-        await rm(dir, { recursive: true, force: true });
+        ts = generateTypeScript((await run()).model!).find((f) => f.path === 'Sales.ts')!.content;
     });
 
     test('the base with a property per verification, and the factory contract with its context and errors', () => {
@@ -284,36 +217,6 @@ export type AvailableEmail = EmailAddress & { readonly 'verified:Sales.Available
         expect(ts).toContain("export function checkSpendCustomerRequires(customer: Customer, spend: CoveredSpend): 'positive' | undefined {");
         expect(ts).toContain("if (!((Number(spend.amount) > 0) && !(customer.contact === customer.email))) return 'positive';");
         expect(ts).toContain('export function checkChangeEmailCustomerRequires(customer: Customer, newEmail: AvailableEmail)');
-    });
-
-    test('skipping the check, or another check, is a compile error; storing the value as its base is not', async () => {
-        const out = await tsc(
-            'use.ts',
-            `import { Sales, decide, ok } from '../generated/index.js';
-declare const raw: Sales.EmailAddress;
-declare const available: Sales.AvailableEmail;
-declare const deliverable: Sales.Deliverable;
-declare const both: Sales.AvailableEmail & Sales.Deliverable;
-declare const register: Sales.RegisterCustomer;
-declare const id: Sales.CustomerId;
-// @ts-expect-error the check was skipped
-register(id, raw);
-// @ts-expect-error another check is not this one
-register(id, deliverable);
-register(id, available);
-register(id, both); // a value with both checks is either
-export const stored: Sales.EmailAddress = available;
-export const reach: Sales.Reachable extends Sales.AvailableEmail ? true : false = true; // a chain carries both
-export const changeEmail = decide<Sales.ChangeEmailCustomerDecision>(Sales.CustomerShape, (_c, email) => ok({ Customer: { set: { email }, events: {} } }));
-export const make: Sales.MakeAvailableEmail = async (value, customer) => (customer === undefined ? ok(value as Sales.AvailableEmail) : ok(value as Sales.AvailableEmail));
-`,
-        );
-        expect(out).toBe('');
-        const both = await tsc(
-            'both.ts',
-            `import type { Sales } from '../generated/index.js';\nexport const x: Sales.AvailableEmail & Sales.Deliverable = {} as never;\nexport const y: Sales.AvailableEmail & Sales.Deliverable = '' as unknown as Sales.AvailableEmail;\n`,
-        );
-        expect(both).toContain("Property ''verified:Sales.Deliverable'' is missing");
     });
 
     test('the contract tests take values of the base as verified, and the arbitraries can be overridden', async () => {
