@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { EventMessage, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { analyze, type DomainModel } from '@domaintrail/modeling';
-import { type LaidOutGraph, projectView } from '@domaintrail/visualization';
+import type { LaidOutGraph, ViewOptions } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from './drafts';
 import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from './location';
@@ -12,10 +12,13 @@ import { adopt, applyEvent, disconnected, INITIAL_SESSION, latestRevision, recei
 import { SessionApiError } from './api';
 import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timeline } from './timeline';
 import { occurrenceNode, selectionOf, targetKey, targetOfSelection, WORKSPACE_TARGET } from './targets';
-import { exampleSources } from '../test-helpers';
+import { exampleSources, viewPayloads } from '../test-helpers';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 const { stormings: parsed } = (await analyze([{ path: 'es.dtes', text: SAMPLE }])).stormings;
+/** The render graph of a view of the sample, as the view service sends it to the page. */
+const sampleViews = (await viewPayloads([{ path: 'es.dtes', text: SAMPLE }]))[0].stormings[0].views;
+const renderOf = (options: ViewOptions) => sampleViews[`${options.level}|${options.timelineId ?? ''}`].render;
 const storming = parsed[0];
 const stormingViews = [{ id: storming.id, storming }] as unknown as StormingView[];
 const workspace = await exampleSources();
@@ -117,7 +120,7 @@ describe('targets from the selection', () => {
     });
 
     test("an occurrence only in a timeline's view: the selected note's occurrence in that timeline", () => {
-        const render = projectView(storming, { level: 'design-level', timelineId: 'Normal' });
+        const render = renderOf({ level: 'design-level', timelineId: 'Normal' });
         const timelineView = { stormingId: storming.id, timelineId: 'Normal', render };
         const nodeOf = (eventId: string): string => render.nodes.find((n) => n.type === 'event' && n.eventId === eventId)!.id;
         const at = (eventId: string) =>
@@ -141,7 +144,7 @@ describe('targets from the selection', () => {
 
     test('an event in two timelines is two occurrences: their targets and keys differ, the element is the same', () => {
         const occurrenceIn = (timelineId: string) => {
-            const render = projectView(storming, { level: 'design-level', timelineId });
+            const render = renderOf({ level: 'design-level', timelineId });
             const node = render.nodes.find((n) => n.type === 'event' && n.eventId === 'ShipmentCancelled')!.id;
             return targetOfSelection({
                 ...ctx,
@@ -159,12 +162,12 @@ describe('targets from the selection', () => {
     });
 
     test('the integrated canvas, or a selection not drawn as that note, targets the element', () => {
-        const integrated = projectView(storming, { level: 'design-level' });
+        const integrated = renderOf({ level: 'design-level' });
         const note = integrated.nodes.find((n) => n.type === 'event' && n.eventId === 'ShipmentCancelled')!.id;
         // no timeline view: never an occurrence, whatever note is selected
         expect(targetOfSelection({ ...ctx, selected: 'es/DeliveryCancellation/ShipmentCancelled', selectedNode: note })?.target.kind).toBe('DtesElement');
         // a timeline view, but the selection came from elsewhere (the explorer: no note selected)
-        const render = projectView(storming, { level: 'design-level', timelineId: 'Normal' });
+        const render = renderOf({ level: 'design-level', timelineId: 'Normal' });
         const timelineView = { stormingId: storming.id, timelineId: 'Normal', render };
         expect(targetOfSelection({ ...ctx, selected: 'es/DeliveryCancellation/ShipmentCancelled', timelineView })?.target.kind).toBe('DtesElement');
         // another element in a timeline's view is an element

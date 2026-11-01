@@ -3,15 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { startViewServer, type ViewServer } from '@domaintrail/composition';
-import {
-    createFileLayoutStore,
-    createGitRevisions,
-    createViewService,
-    ElkLayoutEngine,
-    stormingGraphId,
-    stormingViewKey,
-    type ViewService,
-} from '@domaintrail/visualization';
+import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, stormingViewKey, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { createWorkspaceReader } from '@domaintrail/workspace';
 
@@ -55,7 +47,8 @@ describe('the Live View of a workspace with stormings', () => {
         ]);
         for (const [key, { render, graph }] of Object.entries(view.views)) {
             expect(stormingViewKey(render.options)).toBe(key);
-            expect(graph.id).toBe(stormingGraphId(view.id, render.options));
+            // one graph per storming, level and timeline, as the page receives it
+            expect(graph.id).toBe(`storming:${view.id}:${render.options.level}:${render.options.timelineId ?? '*'}`);
             expect(Object.keys(graph.nodeLayout).sort()).toEqual(graph.nodes.map((n) => n.id).sort());
         }
         await session.refresh();

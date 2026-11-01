@@ -1,16 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { diffModels } from '@domaintrail/visualization';
 import type { DomainModel } from '@domaintrail/modeling';
+import type { ModelDiff } from '@domaintrail/visualization';
 import { menuPlacement } from './baseline-picker';
 import { CommandCard } from './behavior';
 import { MESSAGES } from './i18n';
 import { Inspector, type InspectorProps, type InspectorTab } from './inspector';
 import { namer } from './model-utils';
 import { diffRows } from './row-diff';
-import { check } from './test-helpers';
+import { check, viewPayloads } from './test-helpers';
 
-const model = async (body: string): Promise<DomainModel> => (await check({ 'a.dt': `context A {\n${body}\n}\n` })).model!;
+const file = (body: string) => ({ path: 'a.dt', text: `context A {\n${body}\n}\n` });
+const model = async (body: string): Promise<DomainModel> => (await check({ [file(body).path]: file(body).text })).model!;
+/** What the view service marks as changed from `before` to `after`. */
+const diffOf = async (before: string, after: string): Promise<ModelDiff> => (await viewPayloads([file(before)], [file(after)]))[1].diff;
 
 const BEFORE = `
   id OrderId: UUID
@@ -41,13 +44,13 @@ const AFTER = `
     command reopen() Done -> Open
   }`;
 
-function inspect(after: DomainModel, before: DomainModel | null, selected: string, tab: InspectorTab): string {
+function inspect(after: DomainModel, before: DomainModel | null, selected: string, tab: InspectorTab, diff?: ModelDiff): string {
     const props: InspectorProps = {
         model: after,
         mode: 'name',
         selected,
         diagnostics: [],
-        diff: before ? diffModels(before, after) : { added: [], changed: [], removed: [] },
+        diff: diff ?? { added: [], changed: [], removed: [] },
         base: before,
         sources: [],
         sourceFocus: undefined,
@@ -84,7 +87,7 @@ describe('rows compared with the baseline', () => {
     });
 
     test('the structure tab marks fields, and strikes through the old type', async () => {
-        const html = inspect(await model(AFTER), await model(BEFORE), 'A.Order', 'structure');
+        const html = inspect(await model(AFTER), await model(BEFORE), 'A.Order', 'structure', await diffOf(BEFORE, AFTER));
         expect(marked(html, 'added').some((t) => t.startsWith('memo'))).toBe(true);
         expect(marked(html, 'removed').some((t) => t.startsWith('note'))).toBe(true);
         expect(marked(html, 'changed').some((t) => t.startsWith('total'))).toBe(true);
@@ -92,7 +95,7 @@ describe('rows compared with the baseline', () => {
     });
 
     test('the behaviour tab marks commands and their parts', async () => {
-        const html = inspect(await model(AFTER), await model(BEFORE), 'A.Order', 'behavior');
+        const html = inspect(await model(AFTER), await model(BEFORE), 'A.Order', 'behavior', await diffOf(BEFORE, AFTER));
         expect(html).toMatch(/class="bcard row-added"[\s\S]*?reopen/);
         expect(html).toMatch(/class="bcard row-removed"[\s\S]*?drop/);
         expect(html).toMatch(/class="bcard row-changed"[\s\S]*?close/);
@@ -103,12 +106,12 @@ describe('rows compared with the baseline', () => {
     test('nothing is marked without a baseline, or for an added element', async () => {
         const after = await model(AFTER);
         expect(inspect(after, null, 'A.Order', 'structure')).not.toContain('row-');
-        const before = await model(AFTER.replace('  event Placed { orderId: OrderId }\n', ''));
-        expect(inspect(after, before, 'A.Placed', 'structure')).not.toContain('row-');
+        const withoutPlaced = AFTER.replace('  event Placed { orderId: OrderId }\n', '');
+        expect(inspect(after, await model(withoutPlaced), 'A.Placed', 'structure', await diffOf(withoutPlaced, AFTER))).not.toContain('row-');
     });
 
     test('a removed item is shown from the baseline', async () => {
-        const html = inspect(await model(AFTER), await model(BEFORE), 'A.Order:drop', 'structure');
+        const html = inspect(await model(AFTER), await model(BEFORE), 'A.Order:drop', 'structure', await diffOf(BEFORE, AFTER));
         expect(html).toContain('inspector-removed');
         expect(html).toContain(MESSAGES.ja.removedFromBaseline);
     });
