@@ -9,9 +9,9 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
-import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
-import { statusOf } from '@domaintrail/presentation/session/routes';
+import { type SessionServer, startSessionServer } from '@domaintrail/composition';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling';
+import { statusOf } from '@domaintrail/presentation';
 
 const DT = `context Shop {
   id OrderId: UUID

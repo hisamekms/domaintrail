@@ -21,13 +21,17 @@ afterAll(async () => {
 const ENTRY = `
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { Collaboration as C } from '${SRC}/collaboration/src/generated/index.ts';
-import { createCollaboration } from '${SRC}/collaboration/src/application/use-cases.ts';
-import { openSessionBlobs } from '${SRC}/collaboration/src/infrastructure/blobs.ts';
-import { createUnitOfWork, openSessionDatabase } from '${SRC}/collaboration/src/infrastructure/sqlite.ts';
-import { randomIds, systemClock } from '${SRC}/collaboration/src/infrastructure/system.ts';
-import { createModelValidator } from '${SRC}/collaboration/src/infrastructure/validator.ts';
-import { createWorkspaceSnapshot } from '${SRC}/workspace/src/infrastructure/snapshot.ts';
+import {
+    Collaboration as C,
+    createCollaboration,
+    createModelValidator,
+    createUnitOfWork,
+    openSessionBlobs,
+    openSessionDatabase,
+    randomIds,
+    systemClock,
+} from '@domaintrail/collaboration';
+import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 
 const [root, step] = process.argv.slice(2);
 const must = (r) => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value; };

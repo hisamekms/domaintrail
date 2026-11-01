@@ -1,12 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
-import { markLineChanges } from '@domaintrail/visualization/domain/graph/diff';
-import { listRefs, sourcesAt } from '@domaintrail/visualization/infrastructure/git';
+import { createGitRevisions } from '@domaintrail/visualization';
 import type { Baseline, ViewPayload } from '@domaintrail/visualization/protocol';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
-import { check, tempCopyOfExamples } from './helpers.js';
+import { startViewServer, type ViewServer } from '@domaintrail/composition';
+import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;
 let server: ViewServer;
@@ -39,10 +37,11 @@ afterAll(async () => {
 
 describe('comparing with a git revision', () => {
     test('reads the sources of a commit below the root', async () => {
-        const files = await sourcesAt(dir, 'HEAD', ['**/*.dt']);
+        const revisions = createGitRevisions(dir);
+        const files = await revisions.sourcesAt((await revisions.resolveCommit('HEAD')).hash, ['**/*.dt']);
         expect(files.map((f) => f.path)).toContain('sales/order.dt');
         expect(files.find((f) => f.path === 'sales/order.dt')!.text).toContain('note: String?');
-        const refs = await listRefs(dir);
+        const refs = await revisions.listRefs();
         expect(refs.branches).toEqual(['main']);
         expect(refs.commits.map((c) => c.subject)).toEqual(['first']);
     });
@@ -90,22 +89,5 @@ describe('comparing with a git revision', () => {
         const s = await state();
         expect(s.baseline).toEqual({ kind: 'previous' });
         expect(s.base).toBeNull();
-    });
-});
-
-describe('markLineChanges', () => {
-    test('leaves graphs without a baseline and unchanged nodes as they are', async () => {
-        const a = (await check({ 'a.dt': 'context A {\n  value V { x: Int y: String }\n}\n' })).model!;
-        const b = (await check({ 'a.dt': 'context A {\n  value V { x: Int z: Bool }\n}\n' })).model!;
-        const g = buildStructureGraph(b);
-        expect(markLineChanges(g, undefined)).toBe(g);
-        expect(markLineChanges(g, buildStructureGraph(b)).nodes).toEqual(g.nodes);
-        const v = markLineChanges(g, buildStructureGraph(a)).nodes.find((n) => n.id === 'A.V')!;
-        expect(v.lines.map((l) => [l.key.en.name, l.change])).toEqual([
-            ['x', undefined],
-            ['y', 'removed'],
-            ['z', 'added'],
-        ]);
-        expect(v.height).toBe(g.nodes.find((n) => n.id === 'A.V')!.height + 21);
     });
 });

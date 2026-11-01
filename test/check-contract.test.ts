@@ -7,8 +7,8 @@
  */
 import { describe, expect, test } from 'bun:test';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps } from '@domaintrail/composition';
+import { runCli } from '@domaintrail/presentation';
 import { EXAMPLES } from './helpers.js';
 
 const FIXTURES = path.join(import.meta.dir, 'fixtures');

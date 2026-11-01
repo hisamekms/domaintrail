@@ -1,8 +1,7 @@
 import { cp, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { analyze, type Analysis } from '@domaintrail/modeling/core/analyze';
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
+import { type Analysis, analyze, type Diagnostic } from '@domaintrail/modeling';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', 'examples', 'shop');
 

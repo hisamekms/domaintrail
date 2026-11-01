@@ -7,13 +7,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
-import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
-import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import { startViewServer, type ViewServer } from '@domaintrail/composition';
+import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
+import { createWorkspaceReader } from '@domaintrail/workspace';
 
 const DT = `context Shop {
   id OrderId: UUID

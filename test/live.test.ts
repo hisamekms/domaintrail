@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
+import { startViewServer, type ViewServer } from '@domaintrail/composition';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
 
@@ -193,11 +193,11 @@ describe('layout persistence', () => {
     test('never writes through a symlinked layout directory or file', async () => {
         const { mkdtemp, symlink, writeFile: write, readFile: read, mkdir: mk, readlink, rm: remove } = await import('node:fs/promises');
         const { tmpdir } = await import('node:os');
-        const { createViewService } = await import('@domaintrail/visualization/application/view-service');
-        const { createFileLayoutStore } = await import('@domaintrail/visualization/infrastructure/file-layout-store');
-        const { createGitRevisions } = await import('@domaintrail/visualization/infrastructure/git');
-        const { createWorkspaceReader } = await import('@domaintrail/workspace/infrastructure/files');
-        const { ElkLayoutEngine } = await import('@domaintrail/visualization/infrastructure/elk');
+        const { createViewService } = await import('@domaintrail/visualization');
+        const { createFileLayoutStore } = await import('@domaintrail/visualization');
+        const { createGitRevisions } = await import('@domaintrail/visualization');
+        const { createWorkspaceReader } = await import('@domaintrail/workspace');
+        const { ElkLayoutEngine } = await import('@domaintrail/visualization');
         const base = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
         const outside = path.join(base, 'outside');
         await mk(outside);

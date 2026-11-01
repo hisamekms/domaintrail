@@ -8,9 +8,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
-import { errorAnswer } from '@domaintrail/presentation/session/routes';
-import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
+import { type SessionServer, startSessionServer } from '@domaintrail/composition';
+import { errorAnswer } from '@domaintrail/presentation';
+import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling';
 
 const DT = `context Shop {
   id OrderId: UUID

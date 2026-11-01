@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import type { Analysis } from '@domaintrail/modeling/core/analyze';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import type { ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
-import { projectView } from '@domaintrail/visualization/domain/storming/render';
+import { cliDeps } from '@domaintrail/composition';
+import { runCli } from '@domaintrail/presentation';
+import { type Analysis, formatStorming } from '@domaintrail/modeling';
+import { projectView, type ViewOptions } from '@domaintrail/visualization';
 import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
 
 /**

@@ -113,6 +113,7 @@ export {
     DEFAULT_SOURCES,
     defaultConfig,
     IGNORED_DIRS,
+    parseJsonc,
     policyModes,
     resolveConfig,
     sourceMatcher,

@@ -10,20 +10,31 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startSubscriber as startApplicationSubscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
-import type { AgentApi, StreamItem, WorkspaceFiles } from '@domaintrail/agent/application/ports';
-import { createClaudeCodeRunner } from '@domaintrail/agent/infrastructure/claude-code';
-import { createDtTools } from '@domaintrail/agent/infrastructure/dt-tools';
-import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
-import { systemClock } from '@domaintrail/agent/infrastructure/system';
-import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
+import {
+    type AgentApi,
+    createClaudeCodeRunner,
+    createDtTools,
+    createHttpAgentApi,
+    scanWorkspace,
+    startSubscriber as startApplicationSubscriber,
+    type StreamItem,
+    type SubscriberEnd,
+    systemClock,
+    type WorkspaceFiles,
+} from '@domaintrail/agent';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
-import { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from '@domaintrail/composition/subscriber';
-import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
-import { SessionError } from '@domaintrail/presentation/cli/ports';
+import {
+    readCredential,
+    type RunningSubscriber,
+    type SessionServer,
+    startSessionServer,
+    startSubscriber,
+    type SubscriberOptions,
+} from '@domaintrail/composition';
+import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling';
+import { SessionError } from '@domaintrail/presentation';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
+import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
 
 const ROOT = path.join(import.meta.dir, '..');

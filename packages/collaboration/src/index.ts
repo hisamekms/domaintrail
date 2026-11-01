@@ -46,11 +46,13 @@ export {
     type MarkStatus,
     type MarkTargetData,
 } from './domain/marks.js';
-export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+export { encodeOccurrencePath, MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+export { MAX_DIFF_BYTES } from './domain/compare.js';
+export { summarize } from './domain/validation.js';
 export { previousRunIds } from './domain/previous-runs.js';
 
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
-export { createCollaboration, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
+export { createCollaboration, MAX_COMPARISON_DIFF, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
 export {
@@ -69,7 +71,14 @@ export { type Clock, type CollaborationDeps, type OutboxEntry, type SignIn, type
 // ---- infrastructure, for the app that wires it -----------------------------------------------------------------
 export { openSessionBlobs } from './infrastructure/blobs.js';
 export { createClefClassifier } from './infrastructure/clef.js';
-export { createCloudflareAccess, type AccessAdapterOptions, type AccessTokenVerifier } from './infrastructure/identity.js';
+export {
+    createCloudflareAccess,
+    createJwksAccessVerifier,
+    type AccessAdapterOptions,
+    type AccessClaims,
+    type AccessSettings,
+    type AccessTokenVerifier,
+} from './infrastructure/identity.js';
 export { SESSION_DIR } from './infrastructure/session-dir.js';
 export {
     AGENT_FILE,

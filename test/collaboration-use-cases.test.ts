@@ -4,19 +4,27 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
-import type { CollaborationDeps } from '@domaintrail/collaboration/application/ports';
-import { createCollaboration, MAX_COMPARISON_DIFF, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
-import { MAX_DIFF_BYTES } from '@domaintrail/collaboration/domain/compare';
-import { toAgentReply, type ReplyData } from '@domaintrail/collaboration/domain/reply';
-import { encodeOccurrencePath } from '@domaintrail/collaboration/domain/targets';
-import { summarize } from '@domaintrail/collaboration/domain/validation';
-import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
-import { createUnitOfWork, openDatabase, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
-import { createModelValidator } from '@domaintrail/collaboration/infrastructure/validator';
-import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
-import { actorOf, type Actor } from '@domaintrail/collaboration/application/actor';
-import { FACILITATOR_PARTICIPANT } from '@domaintrail/collaboration/application/identity';
+import {
+    type Actor,
+    actorOf,
+    Collaboration as C,
+    type CollaborationDeps,
+    type CollaborationUseCases,
+    createCollaboration,
+    createModelValidator,
+    createUnitOfWork,
+    encodeOccurrencePath,
+    FACILITATOR_PARTICIPANT,
+    MAX_COMPARISON_DIFF,
+    MAX_DIFF_BYTES,
+    openDatabase,
+    openSessionBlobs,
+    openSessionDatabase,
+    type ReplyData,
+    summarize,
+    toAgentReply,
+} from '@domaintrail/collaboration';
+import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 
 const dirs: string[] = [];
 afterAll(async () => {

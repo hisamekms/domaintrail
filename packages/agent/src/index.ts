@@ -4,7 +4,7 @@
 
 // ---- application: the subscriber and its ports -----------------------------------------------------------------
 export { startSubscriber, type Subscriber, type SubscriberEnd, type SubscriberOptions } from './application/subscriber.js';
-export { type AgentInvocation, type AgentOutcome, type AgentRunner } from './application/ports.js';
+export { type AgentApi, type AgentInvocation, type AgentOutcome, type AgentRunner, type StreamItem, type WorkspaceFiles } from './application/ports.js';
 
 // ---- adapters, for the app that wires them ---------------------------------------------------------------------
 export { createClaudeCodeRunner, type AgentCommand } from './infrastructure/claude-code.js';

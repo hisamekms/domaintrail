@@ -14,14 +14,10 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { LaidOutGraph } from '@domaintrail/visualization/domain/graph/ir';
-import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
-import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type LaidOutGraph, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling/core/config';
-import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
+import { DEFAULT_SOURCES } from '@domaintrail/modeling';
+import { createWorkspaceReader } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers.js';
 
 const dirs: string[] = [];

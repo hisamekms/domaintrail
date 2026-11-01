@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Language, Parser, Query, type Node } from 'web-tree-sitter';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { loadWorkspace } from '@domaintrail/workspace';
 import { GRAMMAR_DIR, STAMP, hashes } from '../scripts/tree-sitter.js';
 import { EXAMPLES } from './helpers.js';
 

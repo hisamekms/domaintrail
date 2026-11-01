@@ -5,6 +5,8 @@
 // ---- the CLI ---------------------------------------------------------------------------------------------------
 export { consoleIO, runCli, type CliIO } from './cli/main.js';
 export { SessionError, type CliDeps } from './cli/ports.js';
+// the topics of `dt guide` in docs/guide.md (the documentation's tests compare the two)
+export { parseGuide } from './cli/guide.js';
 
 // ---- the language server (loaded only by `dt lsp`) -------------------------------------------------------------
 export { startLanguageServer } from './lsp/start.js';

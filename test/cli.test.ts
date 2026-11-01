@@ -3,8 +3,8 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps } from '@domaintrail/composition';
+import { runCli } from '@domaintrail/presentation';
 import { tempCopyOfExamples } from './helpers.js';
 
 const dirs: string[] = [];

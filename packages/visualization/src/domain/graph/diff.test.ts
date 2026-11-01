@@ -1,6 +1,7 @@
 // What the diff counts as a change of a command (the diff itself: build.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { diffModels } from './diff.js';
+import { buildStructureGraph } from './build.js';
+import { diffModels, markLineChanges } from './diff.js';
 import { check } from '../../test-helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
@@ -75,5 +76,22 @@ describe('changes in the DSL', () => {
         const before = await work('command x() Draft -> Draft changes title');
         const after = await work('command x() Draft -> Draft changes title, note');
         expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Tasks.Work', 'Tasks.Work:x'], removed: [] });
+    });
+});
+
+describe('markLineChanges', () => {
+    test('leaves graphs without a baseline and unchanged nodes as they are', async () => {
+        const a = (await check({ 'a.dt': 'context A {\n  value V { x: Int y: String }\n}\n' })).model!;
+        const b = (await check({ 'a.dt': 'context A {\n  value V { x: Int z: Bool }\n}\n' })).model!;
+        const g = buildStructureGraph(b);
+        expect(markLineChanges(g, undefined)).toBe(g);
+        expect(markLineChanges(g, buildStructureGraph(b)).nodes).toEqual(g.nodes);
+        const v = markLineChanges(g, buildStructureGraph(a)).nodes.find((n) => n.id === 'A.V')!;
+        expect(v.lines.map((l) => [l.key.en.name, l.change])).toEqual([
+            ['x', undefined],
+            ['y', 'removed'],
+            ['z', 'added'],
+        ]);
+        expect(v.height).toBe(g.nodes.find((n) => n.id === 'A.V')!.height + 21);
     });
 });

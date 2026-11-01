@@ -6,8 +6,8 @@ import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Glob } from 'bun';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps } from '@domaintrail/composition';
+import { runCli } from '@domaintrail/presentation';
 
 const PACKAGE = path.join(import.meta.dir, '..', 'packages', 'collaboration');
 const GENERATED = 'src/generated';
