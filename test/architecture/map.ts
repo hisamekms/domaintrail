@@ -113,9 +113,6 @@ export const MAP: Record<string, Module> = {
             // its index and the diagnostic sink from `infrastructure/syntax/` (and Langium), one entry per file; each
             // checker's task removes its entry
             syntax: [
-                // `elementIdOf` (the ID of the element an AST node lies in) moves to infrastructure/syntax in the next
-                // commit of T8
-                'domain/ids.ts',
                 'domain/rules/commands.ts',
                 'domain/rules/events.ts',
                 'domain/rules/expressions.ts',

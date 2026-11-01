@@ -20,7 +20,7 @@ import {
 } from '../infrastructure/syntax/generated/ast.js';
 import { createDomainServices } from '../infrastructure/syntax/domain-module.js';
 import { buildModel } from '../infrastructure/syntax/build.js';
-import { elementIdOf } from '../domain/ids.js';
+import { elementIdOf } from '../infrastructure/syntax/element-id.js';
 import type { DomainModel } from '../domain/model.js';
 import type { ModelingRuleId } from '../domain/rule-ids.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';

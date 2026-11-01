@@ -52,7 +52,7 @@ export {
     type DependencyKind,
 } from './domain/dependencies.js';
 export { commandsWithOutcome, fieldSetUsers, fieldUseText, fieldUses, identityOf, type FieldUse, type Named } from './domain/usages.js';
-export { commandId, elementIdOf } from './domain/ids.js';
+export { commandId } from './domain/ids.js';
 export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './domain/aggregates.js';
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './domain/diff.js';
 export type { ModelingRuleId } from './domain/rule-ids.js';
@@ -71,4 +71,5 @@ export { DomainGeneratedModule, DomainGeneratedSharedModule } from './infrastruc
 export { DomainModule } from './infrastructure/syntax/domain-module.js';
 export { docComment, LabelResolver } from './infrastructure/syntax/labels.js';
 export { commandsOf, includedFields, invariantsOf, ModelIndex, primitiveInvariants, statesOf } from './infrastructure/syntax/model-index.js';
+export { elementIdOf } from './infrastructure/syntax/element-id.js';
 export { DiagnosticSink, type FileResolver } from './infrastructure/syntax/diagnostic-sink.js';

@@ -1,7 +1,7 @@
 import { AstUtils, GrammarUtils, type AstNode, type CstNode } from 'langium';
 import type { Diagnostic, Severity } from '@domaintrail/kernel';
 import type { ModelingRuleId } from '../../domain/rule-ids.js';
-import { elementIdOf } from '../../domain/ids.js';
+import { elementIdOf } from './element-id.js';
 
 /** Converts a Langium document URI back into the path that was handed to the analyzer. */
 export type FileResolver = (uri: string) => string;
