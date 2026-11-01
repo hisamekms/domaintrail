@@ -6,11 +6,20 @@ import { hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
 import type { Site, SourceModel } from './domain/source-model.js';
 import { DiagnosticSink } from './infrastructure/syntax/diagnostic-sink.js';
+import type { ModelIndex } from './infrastructure/syntax/model-index.js';
+import { RuleSink } from './domain/diagnostics.js';
+import { checkChanges, checkCommands, checkFactoryIds } from './domain/rules/commands.js';
+import { checkEventIds } from './domain/rules/events.js';
+import { checkInvariants } from './domain/rules/expressions.js';
+import { checkFieldSets } from './domain/rules/field-sets.js';
 import { checkLabels } from './domain/rules/labels.js';
 import { checkNames } from './domain/rules/names.js';
+import { checkPayloadNames } from './domain/rules/payloads.js';
+import { checkPolicies } from './domain/rules/policies.js';
 import { checkShared } from './domain/rules/shared.js';
 import { checkStructure } from './domain/rules/structure.js';
 import { checkUnions } from './domain/rules/unions.js';
+import { checkVerified } from './domain/rules/verified.js';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
 
@@ -57,8 +66,28 @@ export function sitesOf(model: SourceModel): Set<string> {
 export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
     if (!a.syntaxOk) return [];
     const sink = new DiagnosticSink(a.resolveFile);
-    for (const rule of [checkNames, checkShared, checkStructure, checkUnions, checkLabels])
-        rule(a.index, sink);
+    const model = a.sourceModel!;
+    const rules = new RuleSink(sink.items);
+    // in the order `analyzeDomain` runs them; the rules still on the AST (until T10 moves them) take its index
+    const ast = (rule: (index: ModelIndex, sink: DiagnosticSink) => void) => (): void => rule(a.index, sink);
+    const written = (rule: (model: SourceModel, rules: RuleSink) => void) => (): void => rule(model, rules);
+    for (const run of [
+        ast(checkNames),
+        ast(checkShared),
+        ast(checkStructure),
+        ast(checkUnions),
+        written(checkFieldSets),
+        written(checkVerified),
+        written(checkCommands),
+        written(checkFactoryIds),
+        written(checkChanges),
+        written(checkEventIds),
+        written(checkPayloadNames),
+        written(checkPolicies),
+        written(checkInvariants),
+        ast(checkLabels),
+    ])
+        run();
     return sink.items;
 }
 
