@@ -178,6 +178,7 @@ export const MAP: Record<string, Module> = {
             'public-surface': [
                 // Collaboration's application, published language and generated contracts (T2)
                 '@domaintrail/collaboration/application/access',
+                '@domaintrail/collaboration/application/actor',
                 '@domaintrail/collaboration/application/identity',
                 '@domaintrail/collaboration/application/ports',
                 '@domaintrail/collaboration/application/use-cases',

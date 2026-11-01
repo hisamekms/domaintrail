@@ -79,7 +79,7 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `domain/reply` and `domain/body` at run time (listed as exceptions in the test); and collaboration imports
   modeling's `core/emoji` (run time) and `core/config` (the type `ClefModel`), which are not Modeling's published
   language — exception entries until T6. *Found in T1:* the map is `test/architecture/map.ts`. Besides the deep
-  imports (116 entries, T2) and `exports: ['./*']` (7 packages, T2), its exceptions are `workspace → modeling` (the
+  imports (117 entries, T2) and `exports: ['./*']` (7 packages, T2), its exceptions are `workspace → modeling` (the
   platform depends on a context: `SourceFile`, the configuration's defaults, `GENERATED_MARKER`; T3, T6),
   `composition → presentation` (an app depends on no other app; T8 merges them) and one I/O import in `modeling/core`
   (`config.ts`: `node:fs`, T6; `node:path` and `node:url` count as pure). No package but an app imports another's
