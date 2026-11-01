@@ -206,18 +206,21 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `sources` and `respectGitignore` (`analysis/sources.ts`, with `DEFAULT_SOURCES`, `IGNORED_DIRS`, `sourceMatcher` and
   `sourceSelection`); the generation `generate` and `lintHint` (`generator/config.ts`, with `RUNNERS` and
   `POLICY_MODES` from the generator itself, `policyModes`, `staysInside` and `unknownTsContexts`; so nothing in `core`
-  imports the generator for the configuration any more); Collaboration `identity`, `access`, `maxParticipants`,
+  imports the generator for the configuration any more); Collaboration `identity`, `access` (but its hosts and origins), `maxParticipants`,
   `quickReactions`, `classifier` (`ClefModel` with it) and `agent.maxPreviousRunDiff`
   (`collaboration/src/application/config.ts`; `domain/emoji.ts`, exported from its `.`, which web and presentation now
   use); the agent `agent.allowedTools` (`DEFAULT_AGENT_TOOLS`) and `agent.dt` (`agent/src/infrastructure/config.ts`:
   the settings of its adapters, and the architecture test keeps `node:*` in the agent to `infrastructure/`, which
   `dt`'s paths need; the check that `dt` lies outside the workspace is `checkDtOutsideWorkspace` in `dt-shim.ts`, on the
-  shim's `inside`); the app `view`, `session.port`, `session.host` and `session.agent.port`
-  (`presentation/src/config/server.ts`). The composition is `presentation/src/config/` (`config.ts`, `session.ts`):
+  shim's `inside`); the app `view`, `session.port`, `session.host`, `session.agent.port` and — *decided by the
+  maintainer:* the Host and Origin connection guards are the app's (ADR 0027, Authorization) —
+  `session.access.allowedHosts` and `allowedOrigins` (`presentation/src/config/server.ts`; Collaboration and the app
+  export their checks of `session.access` by key, run in one order). The composition is `presentation/src/config/` (`config.ts`, `session.ts`):
   the keys merged from the owners, the checks in the former order (the top level's unknown keys, the analysis, the
   generation, `view`, then the session: its keys, port and host, identity and access, the agent's keys, port, tools,
   `dt`, the previous runs' diff, the classifier, the participants, the quick reactions; then the disk check of `dt`),
-  `ConfigError` with the file name, `parseJsonc`, `CONFIG_FILES`, `defaultConfig`, `resolveConfig`, `checkTsContexts`
+  `ConfigError` with the file name, `parseJsonc` (not exported: the documentation's tests use `Bun.JSONC` and
+  `resolveConfig`), `CONFIG_FILES`, `defaultConfig`, `resolveConfig`, `checkTsContexts`
   and `CONFIG_FILE_FORMAT`. It is in presentation, not composition, because the CLI and the language server read
   `ResolvedConfig` and catch `ConfigError` and an app imports no other app (composition → presentation is the existing
   exception); both become apps/dt in T8. Presentation now declares `agent` (its config section and the adapter's
@@ -237,11 +240,9 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `dt-shim.test.ts`); the composition's (defaults, key order, the first error across owners, the file name, the schema)
   in `presentation/src/config/config.test.ts`; finding and reading the file in workspace's `config.test.ts` (a format
   of its own); workspace's unit tests give a selection of their own (`test-helpers.ts`). The integration tests take
-  `DEFAULT_AGENT_TOOLS` from agent, `ResolvedSessionConfig`, `resolveConfig`, `parseJsonc`, `ConfigError` from
-  presentation and pass `sourceSelection()` to the workspace. 1251 → 1322 passing (7 todo); T0 baselines unchanged.
-  *Left:* `parseJsonc` is exported by presentation only for the documentation's tests; `session.access` went to
-  Collaboration whole (the identity mode's settings), though its `allowedHosts`/`allowedOrigins` feed the app's
-  connection guards.
+  `DEFAULT_AGENT_TOOLS` from agent, `ResolvedSessionConfig`, `resolveConfig`, `ConfigError` from
+  presentation and pass `sourceSelection()` to the workspace; Modeling's `core/emoji.test.ts` (T2 follow-up) is folded
+  into collaboration's `domain/emoji.test.ts`. 1252 → 1330 passing (7 todo); T0 baselines unchanged.
 - **T7 — domain knowledge out of visualization (P2).** The items of the code map marked T7. `markLineChanges`, the trie
   and rendering stay.
 - **T12 — authorization.** Before T8, to keep the moves last. `Actor` in Collaboration; `dismiss` and the
