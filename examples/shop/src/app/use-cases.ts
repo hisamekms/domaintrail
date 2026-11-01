@@ -6,7 +6,7 @@ import { eventList, err, ok, outcome, parseDecimal, type Billing, type Common, t
 import { customerCommands } from '../domain/customer-commands.js';
 import { invoiceCommands } from '../domain/invoice-commands.js';
 import { orderCommands } from '../domain/order-commands.js';
-import { makeAmount, makeCustomerId, makeEmailAddress, makeOrderId, makeOrderItemId, makeQuantity, makeSku } from '../domain/primitives.js';
+import { idOf, makeAmount, makeCustomerId, makeEmailAddress, makeOrderId, makeOrderItemId, makeQuantity, makeSku } from '../domain/primitives.js';
 import type { Cause, DomainEvent, InMemoryEventStore } from './event-store.js';
 import type { Providers } from './providers.js';
 import type { CustomerRepository, InvoiceRepository, OrderRepository, Repository, VersionConflict, Versioned } from './repositories.js';
@@ -93,7 +93,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             if (!address.ok) return address;
             const available = await makeAvailableEmail(address.value, undefined); // a new customer: no one to leave out
             if (!available.ok) return available;
-            const r = customerCommands.register(makeCustomerId(providers.newId('customer')), name, available.value);
+            const r = customerCommands.register(idOf(makeCustomerId(providers.newId('customer'))), name, available.value);
             if (!r.ok) return r; // `never` today; kept so that an error added to the DSL is returned, not lost
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(customers, aggregate, undefined, eventList(emitted), cause);
@@ -129,7 +129,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
         async placeOrder(customer: Sales.CustomerId, cause = request()): Promise<Result<Sales.DraftOrder, AppError>> {
             const known = await load(customers, 'Customer', customer);
             if (!known.ok) return known;
-            const r = orderCommands.place(makeOrderId(providers.newId('order')), customer);
+            const r = orderCommands.place(idOf(makeOrderId(providers.newId('order'))), customer);
             if (!r.ok) return r;
             const { aggregate, events: emitted } = outcome(r.value);
             return commit(orders, aggregate, undefined, eventList(emitted), cause);
@@ -158,7 +158,7 @@ export function useCases({ customers, orders, invoices, events, providers }: Dep
             const order = loaded.value.aggregate;
             if (order.state !== 'Draft') return notAllowed('addItem', order.state);
             const item: Sales.OrderItem = {
-                id: makeOrderItemId(providers.newId('item')),
+                id: idOf(makeOrderItemId(providers.newId('item'))),
                 sku: sku.value,
                 quantity: quantity.value,
                 unitPrice: { amount: amount.value, currency: input.unitPrice.currency },

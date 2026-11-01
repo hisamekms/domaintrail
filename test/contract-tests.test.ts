@@ -380,7 +380,7 @@ describe('the shop example', () => {
         const demo = Bun.spawnSync([process.execPath, 'src/demo.ts'], { cwd: shop });
         expect(demo.stderr.toString()).toBe('');
         expect(demo.stdout.toString()).toContain(
-            'policy BillConfirmedOrder: issued invoice-1 for order-1: 3380 JPY',
+            'policy BillConfirmedOrder: issued 00000006-0000-4000-8000-000000000001 for 00000004-0000-4000-8000-000000000001: 3380 JPY',
         );
         expect(demo.exitCode).toBe(0);
     }, 30_000);
