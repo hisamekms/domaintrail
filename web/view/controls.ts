@@ -1,40 +1,18 @@
 import { useSyncExternalStore } from 'react';
 
-/** What the canvas shows at its bottom-left: the zoom controls (− % + ⤢ ◎) and the legend (its button and panel). */
-export interface ControlsVisibility {
-    readonly zoom: boolean;
-    readonly legend: boolean;
-}
-
 /**
- * The reader's choice from the canvas pane's menu (remembered per browser), and what the hide key put over it for
- * now (not remembered): pressing the key again goes back to the choice.
+ * Whether the canvas's bottom-left controls (− % + ⤢ ◎ and the legend) are collapsed into one » button. One state,
+ * remembered per browser: the bar's « and » buttons and the `U` key all toggle it (the key used to hide the controls
+ * only for now, over a separate choice of the canvas's menu; with that menu gone, there is nothing to come back to).
  */
 export interface ControlsState {
-    readonly chosen: ControlsVisibility;
-    readonly override: ControlsVisibility | null;
+    readonly collapsed: boolean;
 }
 
-export const ALL_SHOWN: ControlsVisibility = { zoom: true, legend: true };
-const NONE_SHOWN: ControlsVisibility = { zoom: false, legend: false };
+export const EXPANDED: ControlsState = { collapsed: false };
 
-/** What is shown: the key's override while there is one, else the reader's choice. */
-export const shownControls = (s: ControlsState): ControlsVisibility => s.override ?? s.chosen;
-
-/**
- * The hide key: hides everything shown for now, or — when nothing is shown — shows everything for now; pressed again,
- * it goes back to the reader's choice.
- */
-export function toggleTemporarily(s: ControlsState): ControlsState {
-    if (s.override) return { ...s, override: null };
-    const shown = shownControls(s);
-    return { ...s, override: shown.zoom || shown.legend ? NONE_SHOWN : ALL_SHOWN };
-}
-
-/** A choice from the menu: it starts from what is shown (the key's override ends) and is remembered. */
-export function choose(s: ControlsState, part: keyof ControlsVisibility, on: boolean): ControlsState {
-    return { chosen: { ...shownControls(s), [part]: on }, override: null };
-}
+/** «, », or the key: collapses the controls, or brings them back. */
+export const toggleCollapsed = (s: ControlsState): ControlsState => ({ collapsed: !s.collapsed });
 
 /** The zoom level as the cluster shows it (1 → `100%`). */
 export const formatZoom = (zoom: number): string => `${Math.round(zoom * 100)}%`;
@@ -44,7 +22,7 @@ export type CanvasShortcut = 'fitAll' | 'fitSelection' | 'toggleControls';
 
 /**
  * The canvas's keys: `Shift+1` fits everything, `Shift+2` the selection (tldraw's own keys for the same, which the
- * canvas takes over so that they fit as its buttons do), and `U` hides or shows the bottom-left controls for now
+ * canvas takes over so that they fit as its buttons do), and `U` collapses or brings back the bottom-left controls
  * (`H` is tldraw's hand tool). Nothing while typing, composing (IME) or with Ctrl / ⌘ / Alt; the digits are matched by
  * their key position, as Shift changes the character they type with the keyboard layout.
  */
@@ -71,19 +49,24 @@ export function takesText(el: Element | null): boolean {
     return el instanceof HTMLElement && el.isContentEditable;
 }
 
-/** localStorage key of the reader's choice (JSON, like the other persisted settings). */
+/** localStorage key of the state (JSON, like the other persisted settings). */
 export const CONTROLS_KEY = 'domaintrail.canvas.controls';
 
-/** The saved choice, if it is one; everything shown otherwise. */
-export function parseChosen(raw: string | null): ControlsVisibility {
+/**
+ * The saved state, if it is one; expanded otherwise. The former choice of what to show (`{ zoom, legend }`) reads as
+ * collapsed when both were hidden, else as expanded.
+ */
+export function parseControls(raw: string | null): ControlsState {
     try {
         const v: unknown = raw === null ? null : JSON.parse(raw);
-        if (v && typeof v === 'object' && 'zoom' in v && 'legend' in v && typeof v.zoom === 'boolean' && typeof v.legend === 'boolean')
-            return { zoom: v.zoom, legend: v.legend };
+        if (v && typeof v === 'object') {
+            if ('collapsed' in v && typeof v.collapsed === 'boolean') return { collapsed: v.collapsed };
+            if ('zoom' in v && 'legend' in v && typeof v.zoom === 'boolean' && typeof v.legend === 'boolean') return { collapsed: !v.zoom && !v.legend };
+        }
     } catch {
         // not JSON
     }
-    return ALL_SHOWN;
+    return EXPANDED;
 }
 
 // one state for every canvas of the page (the main canvas and the inspector's state diagram)
@@ -98,7 +81,7 @@ function current(): ControlsState {
         } catch {
             // storage unavailable (private mode, etc.)
         }
-        state = { chosen: parseChosen(raw), override: null };
+        state = parseControls(raw);
     }
     return state;
 }
@@ -106,18 +89,17 @@ function current(): ControlsState {
 function update(next: ControlsState): void {
     state = next;
     try {
-        localStorage.setItem(CONTROLS_KEY, JSON.stringify(next.chosen));
+        localStorage.setItem(CONTROLS_KEY, JSON.stringify(next));
     } catch {
         // storage unavailable (private mode, etc.)
     }
     for (const l of listeners) l();
 }
 
-/** The bottom-left controls' visibility, shared by every canvas of the page. */
+/** Whether the bottom-left controls are collapsed, shared by every canvas of the page. */
 export interface CanvasControls {
-    readonly shown: ControlsVisibility;
-    readonly choose: (part: keyof ControlsVisibility, on: boolean) => void;
-    readonly toggleTemporarily: () => void;
+    readonly collapsed: boolean;
+    readonly toggle: () => void;
 }
 
 const subscribe = (l: () => void): (() => void) => {
@@ -127,9 +109,5 @@ const subscribe = (l: () => void): (() => void) => {
 
 export function useCanvasControls(): CanvasControls {
     const s = useSyncExternalStore(subscribe, current, current);
-    return {
-        shown: shownControls(s),
-        choose: (part, on) => update(choose(current(), part, on)),
-        toggleTemporarily: () => update(toggleTemporarily(current())),
-    };
+    return { collapsed: s.collapsed, toggle: () => update(toggleCollapsed(current())) };
 }

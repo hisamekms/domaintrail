@@ -1,16 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MESSAGES } from '@domaintrail/web/i18n';
 import { legendRows } from '@domaintrail/web/legend';
-import {
-    ALL_SHOWN,
-    canvasShortcut,
-    choose,
-    formatZoom,
-    parseChosen,
-    shownControls,
-    toggleTemporarily,
-    type ControlsState,
-} from '@domaintrail/web/view/controls';
+import { canvasShortcut, EXPANDED, formatZoom, parseControls, toggleCollapsed } from '@domaintrail/web/view/controls';
 
 const key = (k: Partial<Parameters<typeof canvasShortcut>[0]>): Parameters<typeof canvasShortcut>[0] => ({
     key: '',
@@ -37,7 +28,7 @@ describe("the canvas's bottom-left controls", () => {
         expect(canvasShortcut(key({ key: '1', code: 'Digit1' }), false)).toBeNull();
     });
 
-    test('U hides or shows the controls; H stays the hand tool', () => {
+    test('U collapses or brings back the controls; H stays the hand tool', () => {
         expect(canvasShortcut(key({ key: 'u', code: 'KeyU' }), false)).toBe('toggleControls');
         expect(canvasShortcut(key({ key: 'U', code: 'KeyU', shiftKey: true }), false)).toBe('toggleControls');
         expect(canvasShortcut(key({ key: 'u', code: 'KeyU', repeat: true }), false)).toBeNull();
@@ -51,31 +42,19 @@ describe("the canvas's bottom-left controls", () => {
         expect(canvasShortcut(key({ key: '!', code: 'Digit1', shiftKey: true, ctrlKey: true }), false)).toBeNull();
     });
 
-    test('the key hides what is shown for now, and brings the choice back when pressed again', () => {
-        const s: ControlsState = { chosen: { zoom: true, legend: false }, override: null };
-        const hidden = toggleTemporarily(s);
-        expect(shownControls(hidden)).toEqual({ zoom: false, legend: false });
-        expect(hidden.chosen).toEqual(s.chosen);
-        expect(shownControls(toggleTemporarily(hidden))).toEqual({ zoom: true, legend: false });
+    test('«, » and U toggle one state: collapsed or expanded', () => {
+        expect(toggleCollapsed(EXPANDED)).toEqual({ collapsed: true });
+        expect(toggleCollapsed(toggleCollapsed(EXPANDED))).toEqual(EXPANDED);
     });
 
-    test('with nothing chosen, the key shows everything for now', () => {
-        const s: ControlsState = { chosen: { zoom: false, legend: false }, override: null };
-        expect(shownControls(toggleTemporarily(s))).toEqual(ALL_SHOWN);
-        expect(shownControls(toggleTemporarily(toggleTemporarily(s)))).toEqual({ zoom: false, legend: false });
-    });
-
-    test('a choice from the menu starts from what is shown and ends what the key did', () => {
-        const hidden = toggleTemporarily({ chosen: ALL_SHOWN, override: null });
-        expect(choose(hidden, 'legend', true)).toEqual({ chosen: { zoom: false, legend: true }, override: null });
-        expect(choose({ chosen: ALL_SHOWN, override: null }, 'zoom', false).chosen).toEqual({ zoom: false, legend: true });
-    });
-
-    test('the saved choice, or everything shown', () => {
-        expect(parseChosen(JSON.stringify({ zoom: false, legend: true }))).toEqual({ zoom: false, legend: true });
-        expect(parseChosen(null)).toEqual(ALL_SHOWN);
-        expect(parseChosen('{"zoom":1}')).toEqual(ALL_SHOWN);
-        expect(parseChosen('not json')).toEqual(ALL_SHOWN);
+    test('the saved state, or expanded; the former choice of what to show is collapsed only when both were hidden', () => {
+        expect(parseControls(JSON.stringify({ collapsed: true }))).toEqual({ collapsed: true });
+        expect(parseControls(JSON.stringify({ zoom: false, legend: false }))).toEqual({ collapsed: true });
+        expect(parseControls(JSON.stringify({ zoom: false, legend: true }))).toEqual(EXPANDED);
+        expect(parseControls(JSON.stringify({ zoom: true, legend: false }))).toEqual(EXPANDED);
+        expect(parseControls(null)).toEqual(EXPANDED);
+        expect(parseControls('{"zoom":1}')).toEqual(EXPANDED);
+        expect(parseControls('not json')).toEqual(EXPANDED);
     });
 });
 

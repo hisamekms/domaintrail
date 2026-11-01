@@ -97,12 +97,8 @@ const ja = {
         fitAll: '全体を表示（Shift+1）',
         fitSelection: '選択した要素に合わせる（Shift+2）',
         fitSelectionNone: '選択した要素に合わせる（何も選択していません）',
-    },
-    canvasMenu: {
-        label: 'キャンバスのメニュー',
-        display: '表示',
-        zoom: 'ズーム操作',
-        hideKey: 'U キーで一時的に隠す・戻す',
+        collapse: 'キャンバスの操作を畳む（U）',
+        expand: 'キャンバスの操作を表示（U）',
     },
     transitionLabels: '遷移のラベル',
     transitionLabelModes: {
@@ -724,12 +720,8 @@ const en: Messages = {
         fitAll: 'Fit everything (Shift+1)',
         fitSelection: 'Fit the selection (Shift+2)',
         fitSelectionNone: 'Fit the selection (nothing selected)',
-    },
-    canvasMenu: {
-        label: 'Canvas menu',
-        display: 'Show',
-        zoom: 'Zoom controls',
-        hideKey: 'Press U to hide or show them for now',
+        collapse: 'Collapse the canvas controls (U)',
+        expand: 'Show the canvas controls (U)',
     },
     transitionLabels: 'Transition labels',
     transitionLabelModes: {

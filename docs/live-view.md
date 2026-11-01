@@ -44,18 +44,19 @@ Views of the whole model, in tabs. Under the tabs, every view's toolbar puts the
 places, leaving out what the view does not have: at the left the subject (what is looked at: the storming and its
 timeline) and then the level (how much of it is drawn: icons, named in their tooltips); at the right
 「⏷ 絞り込み」 (what is hidden: the BCs, the kinds…, in a popover; while anything is narrowed the button shows how many
-narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除) and the canvas's menu ⋯ (canvas
-views only). On a narrow canvas the subject's names are cut short first (the whole name in a tooltip); 絞り込み and ⋯
-stay, and go onto a second row only when even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
+narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除). On a narrow canvas the
+subject's names are cut short first (the whole name in a tooltip); 絞り込み stays, and goes onto a second row only when
+even that is not enough. Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
 a storming that stopped parsing — are a strip over the canvas. Anything about one selected item is in the inspector.
 See [ADR 0007](adr/0007-pane-roles.md).
 
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
-nothing is selected) and 凡例 opens the legend upward. Hovering an edge (its line or arrowhead) tells what it means, in
-the legend's words for that view (「参照（ID で別の集約へ）」…). The menu ⋯ at the right end of the toolbar shows or hides
-ズーム操作 and 凡例 separately (remembered per browser; both off leaves nothing at the bottom-left), and `U` hides both
-for now and brings them back on the next press (`H` stays tldraw's hand tool). The keys do nothing while typing. The
+nothing is selected), the book (凡例, named in its tooltip) opens the legend upward, and « at the right end collapses the
+bar toward the corner, leaving only », which brings it back (the legend's panel is hidden while collapsed and keeps
+its own open or closed state). `U` does the same as « and » (`H` stays tldraw's hand tool), and the choice is
+remembered per browser. Hovering an edge (its line or arrowhead) tells what it means, in the legend's words for that
+view (「参照（ID で別の集約へ）」…). The keys do nothing while typing. The
 inspector's 状態遷移 diagram has the same controls.
 
 - **Context Map**: one node per bounded context and one edge per dependency between contexts, labeled with the number

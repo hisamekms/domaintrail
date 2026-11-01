@@ -12,6 +12,8 @@
     --text-soft: #44444f;
     --muted: #6b6b76;
     --hover: #f4f2fd;
+    /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
+    --hover-strong: #e6e6eb;
     --shadow: rgba(0, 0, 0, 0.12);
     --legend-bg: rgba(255, 255, 255, 0.92);
     --banner-bg: #fff4e5;
@@ -118,6 +120,7 @@
     --text-soft: #c4c4cc;
     --muted: #9a9aa6;
     --hover: #26243a;
+    --hover-strong: #383843;
     --shadow: rgba(0, 0, 0, 0.5);
     --legend-bg: rgba(30, 30, 36, 0.92);
     --banner-bg: #3a2d14;
@@ -2154,9 +2157,6 @@ svg.chat-launcher-mark {
     border: 1px solid var(--border);
     border-radius: 6px;
     white-space: nowrap;
-}
-.toolbar-button:hover {
-    background: var(--hover);
 }
 .toolbar-button-text {
     min-width: 0;
@@ -4855,7 +4855,7 @@ del.was.block {
     display: flex;
     align-items: center;
 }
-.canvas-controls-bar button {
+.canvas-controls .canvas-control {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -4870,11 +4870,7 @@ del.was.block {
     font: inherit;
     white-space: nowrap;
 }
-.canvas-controls-bar button:hover:not([aria-disabled='true']) {
-    background: var(--hover);
-    color: inherit;
-}
-.canvas-controls-bar button[aria-disabled='true'] {
+.canvas-controls .canvas-control[aria-disabled='true'] {
     opacity: 0.35;
     cursor: default;
 }
@@ -4886,52 +4882,77 @@ del.was.block {
     background: var(--violet-tint);
     color: var(--accent);
 }
+/*
+ * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
+ * motion: switch to the shared tokens
+ */
+.canvas-controls-bar {
+    clip-path: inset(0 0 0 0 round 8px);
+    transition:
+        clip-path 220ms ease-out,
+        opacity 220ms ease-out,
+        visibility 0s;
+}
+.canvas-controls.collapsed .canvas-controls-bar {
+    clip-path: inset(0 calc(100% - 1.875rem) 0 0 round 8px);
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        clip-path 160ms ease-in,
+        opacity 160ms ease-in,
+        visibility 0s linear 160ms;
+}
+.canvas-controls .canvas-expand {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: calc(1.625rem + 6px);
+    min-width: calc(1.625rem + 6px);
+    background: var(--legend-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px var(--shadow);
+    pointer-events: auto;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 160ms ease-in,
+        visibility 0s linear 160ms;
+}
+.canvas-controls.collapsed .canvas-expand {
+    opacity: 1;
+    visibility: visible;
+    transition:
+        opacity 220ms ease-out 60ms,
+        visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+    .canvas-controls-bar,
+    .canvas-controls .canvas-expand,
+    .canvas-controls.collapsed .canvas-controls-bar,
+    .canvas-controls.collapsed .canvas-expand {
+        transition: none;
+    }
+}
 
-/* the canvas pane's menu, at the right end of the view toolbar */
-.view-toolbar .canvas-menu > .icon-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 24px;
-    padding: 0;
-    border: none;
-    border-radius: 4px;
-    background: none;
-    color: var(--muted);
+/*
+ * one hover for the toolbars' buttons (the view toolbar, its levels, 絞り込み, and the canvas's bottom-left bar):
+ * a grey that shows, the text's colour; a pressed button keeps its colour, a little darker; a disabled one none
+ */
+:is(.view-toolbar .toolbar-button, .view-toolbar .segmented button, .canvas-controls .canvas-control):hover:not(
+        :disabled,
+        [aria-disabled='true'],
+        .active,
+        [aria-pressed='true']
+    ) {
+    background: var(--hover-strong);
+    color: var(--text);
 }
-.view-toolbar .canvas-menu > .icon-button:hover {
-    background: var(--hover);
-    color: inherit;
-}
-.view-toolbar .canvas-menu .pane-menu-list > button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border: none;
-    background: none;
-}
-.view-toolbar .canvas-menu .pane-menu-list > button:hover {
-    background: var(--hover);
-}
-.pane-menu-check {
-    display: inline-flex;
-    width: 14px;
-    color: var(--accent);
-}
-.pane-menu-heading {
-    padding: 4px 10px 2px;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--muted);
-}
-.pane-menu-note {
-    margin-top: 4px;
-    padding: 6px 10px 4px;
-    border-top: 1px solid var(--border);
-    font-size: 0.6875rem;
-    color: var(--muted);
+:is(.view-toolbar .toolbar-button, .view-toolbar .segmented button, .canvas-controls .canvas-control):is(.active, [aria-pressed='true']):hover:not(
+        :disabled,
+        [aria-disabled='true']
+    ) {
+    filter: brightness(0.9);
 }
 
 /* what an edge under the pointer means (web/view/canvas-controls.tsx EdgeHint) */

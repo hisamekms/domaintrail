@@ -11,7 +11,7 @@ import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
-import { CanvasControls, CanvasMenu, EdgeHint } from './canvas-controls';
+import { CanvasControls, EdgeHint } from './canvas-controls';
 import { fitAll, usePointerCursor } from './canvas';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
@@ -173,7 +173,6 @@ export function ViewWorkspace(props: {
                                 <CatalogFilters model={model} mode={mode} filter={catalogFilter} onChange={setCatalogFilter} />
                             </FilterPopover>
                         )}
-                        {isCanvas(view) && <CanvasMenu />}
                     </ToolbarEnd>
                 </div>
             </div>

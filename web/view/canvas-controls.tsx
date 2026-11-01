@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, Check, Ellipsis, Focus, Maximize, Minus, Plus } from 'lucide-react';
+import { BookOpen, ChevronsLeft, ChevronsRight, Focus, Maximize, Minus, Plus } from 'lucide-react';
 import { useValue, type Editor } from 'tldraw';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
-import { useDismiss } from '../shared/layout';
 import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
 
 const ANIMATION = { animation: { duration: 200 } };
@@ -15,8 +14,8 @@ function fitSelection(editor: Editor): void {
 
 /**
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
- * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection) and 凡例, which opens
- * the legend upward. The reader hides the zoom part and the legend separately (`CanvasMenu`), or both for now (`U`).
+ * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection), the legend's button,
+ * which opens it upward, and « , which collapses all of it into a » in the same corner (as `U` does, remembered).
  */
 export function CanvasControls(props: {
     editor: Editor | null;
@@ -28,7 +27,7 @@ export function CanvasControls(props: {
 }) {
     const { editor, fitAll, legend } = props;
     const t = useT();
-    const { shown, toggleTemporarily } = useCanvasControls();
+    const { collapsed, toggle } = useCanvasControls();
     const zoom = useValue('zoom level', () => editor?.getZoomLevel() ?? 1, [editor]);
     const selection = useValue('has selection', () => (editor?.getSelectedShapeIds().length ?? 0) > 0, [editor]);
 
@@ -36,60 +35,68 @@ export function CanvasControls(props: {
         if (!editor) return;
         if (action === 'fitAll') fitAll();
         else if (action === 'fitSelection') fitSelection(editor);
-        else toggleTemporarily();
+        else toggle();
     });
 
-    const showLegend = shown.legend && legend !== null;
-    if (!editor || (!shown.zoom && !showLegend)) return null;
+    if (!editor) return null;
     const center = editor.getViewportScreenCenter();
     const pct = formatZoom(zoom);
     return (
-        <div className="canvas-controls">
-            {showLegend && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
-            <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label}>
-                {shown.zoom && (
-                    <>
-                        <div className="canvas-controls-group">
-                            <ControlButton label={t.canvasControls.zoomOut} onClick={() => editor.zoomOut(center, ANIMATION)}>
-                                <Minus size={14} aria-hidden />
-                            </ControlButton>
-                            <button
-                                className="canvas-zoom-level"
-                                onClick={() => editor.resetZoom(center, ANIMATION)}
-                                data-tooltip={t.canvasControls.resetZoom}
-                                aria-label={t.canvasControls.zoomLevel(pct)}
-                            >
-                                {pct}
-                            </button>
-                            <ControlButton label={t.canvasControls.zoomIn} onClick={() => editor.zoomIn(center, ANIMATION)}>
-                                <Plus size={14} aria-hidden />
-                            </ControlButton>
-                        </div>
-                        <ControlButton label={t.canvasControls.fitAll} onClick={fitAll}>
-                            <Maximize size={14} aria-hidden />
-                        </ControlButton>
-                        <ControlButton
-                            label={selection ? t.canvasControls.fitSelection : t.canvasControls.fitSelectionNone}
-                            disabled={!selection}
-                            onClick={() => fitSelection(editor)}
-                        >
-                            <Focus size={14} aria-hidden />
-                        </ControlButton>
-                    </>
-                )}
-                {showLegend && (
+        <div className={`canvas-controls${collapsed ? ' collapsed' : ''}`}>
+            {legend && !collapsed && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
+            <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label} aria-hidden={collapsed} inert={collapsed}>
+                <div className="canvas-controls-group">
+                    <ControlButton label={t.canvasControls.zoomOut} onClick={() => editor.zoomOut(center, ANIMATION)}>
+                        <Minus size={14} aria-hidden />
+                    </ControlButton>
                     <button
-                        className={`canvas-legend-button${legend.open ? ' active' : ''}`}
+                        className="canvas-control canvas-zoom-level"
+                        onClick={() => editor.resetZoom(center, ANIMATION)}
+                        data-tooltip={t.canvasControls.resetZoom}
+                        aria-label={t.canvasControls.zoomLevel(pct)}
+                    >
+                        {pct}
+                    </button>
+                    <ControlButton label={t.canvasControls.zoomIn} onClick={() => editor.zoomIn(center, ANIMATION)}>
+                        <Plus size={14} aria-hidden />
+                    </ControlButton>
+                </div>
+                <ControlButton label={t.canvasControls.fitAll} onClick={fitAll}>
+                    <Maximize size={14} aria-hidden />
+                </ControlButton>
+                <ControlButton
+                    label={selection ? t.canvasControls.fitSelection : t.canvasControls.fitSelectionNone}
+                    disabled={!selection}
+                    onClick={() => fitSelection(editor)}
+                >
+                    <Focus size={14} aria-hidden />
+                </ControlButton>
+                {legend && (
+                    <button
+                        className={`canvas-control canvas-legend-button${legend.open ? ' active' : ''}`}
                         aria-pressed={legend.open}
                         aria-expanded={legend.open}
+                        aria-label={t.legend}
                         onClick={legend.onToggle}
                         data-tooltip={legend.open ? t.closeLegend : t.openLegend}
                     >
                         <BookOpen size={14} aria-hidden />
-                        {t.legend}
                     </button>
                 )}
+                <ControlButton label={t.canvasControls.collapse} onClick={toggle}>
+                    <ChevronsLeft size={14} aria-hidden />
+                </ControlButton>
             </div>
+            <button
+                className="canvas-control canvas-expand"
+                aria-label={t.canvasControls.expand}
+                data-tooltip={t.canvasControls.expand}
+                aria-hidden={!collapsed}
+                inert={!collapsed}
+                onClick={toggle}
+            >
+                <ChevronsRight size={14} aria-hidden />
+            </button>
         </div>
     );
 }
@@ -132,50 +139,6 @@ function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): 
         document.addEventListener('keydown', onKey, true);
         return () => document.removeEventListener('keydown', onKey, true);
     }, [active]);
-}
-
-/**
- * The canvas pane's menu (⋯ at the right end of its toolbar, like the inspector's): what shows at the canvas's
- * bottom-left. It stays in the toolbar whatever is hidden.
- */
-export function CanvasMenu() {
-    const t = useT();
-    const { shown, choose } = useCanvasControls();
-    const [open, setOpen] = useState(false);
-    const root = useRef<HTMLDivElement>(null);
-    useDismiss(open, root, () => setOpen(false));
-    const item = (part: 'zoom' | 'legend', label: string) => (
-        <button role="menuitemcheckbox" aria-checked={shown[part]} onClick={() => choose(part, !shown[part])}>
-            <span className="pane-menu-check">{shown[part] && <Check size={14} aria-hidden />}</span>
-            {label}
-        </button>
-    );
-    return (
-        <div className="pane-menu canvas-menu" ref={root}>
-            <button
-                className="icon-button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-label={t.canvasMenu.label}
-                data-tooltip={t.canvasMenu.label}
-                onClick={() => setOpen(!open)}
-            >
-                <Ellipsis size={16} aria-hidden />
-            </button>
-            {open && (
-                <div className="pane-menu-list" role="menu" aria-label={t.canvasMenu.label}>
-                    <div className="pane-menu-heading" role="presentation">
-                        {t.canvasMenu.display}
-                    </div>
-                    {item('zoom', t.canvasMenu.zoom)}
-                    {item('legend', t.legend)}
-                    <div className="pane-menu-note" role="presentation">
-                        {t.canvasMenu.hideKey}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
 }
 
 /** How long the pointer rests on an edge before its meaning shows. */
