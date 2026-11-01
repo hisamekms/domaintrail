@@ -13,15 +13,10 @@ import {
     createCollaboration,
     createModelValidator,
     createUnitOfWork,
-    encodeOccurrencePath,
     FACILITATOR_PARTICIPANT,
-    MAX_COMPARISON_DIFF,
-    MAX_DIFF_BYTES,
-    openDatabase,
     openSessionBlobs,
     openSessionDatabase,
     type ReplyData,
-    summarize,
     toAgentReply,
 } from '@domaintrail/collaboration';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
@@ -90,7 +85,8 @@ async function session(root?: string, database: 'memory' | 'file' = 'memory', cl
     const dir = root ?? (await workspace());
     let n = 0;
     const deps: CollaborationDeps = {
-        uow: createUnitOfWork(database === 'memory' ? openDatabase(':memory:') : await openSessionDatabase(dir)),
+        // 'memory': a database of its own, apart from the workspace; 'file': the workspace's session database
+        uow: createUnitOfWork(await openSessionDatabase(database === 'memory' ? await workspace({}) : dir)),
         workspace: createWorkspaceSnapshot(dir),
         blobs: await openSessionBlobs(dir),
         validator: createModelValidator(),
@@ -148,7 +144,7 @@ describe('sessions and requests', () => {
             ['sales/sales.dt', 'Dt'],
             ['stormings/returns.dtes', 'Dtes'],
         ]);
-        expect(start.validation).toEqual(summarize([], false));
+        expect(start.validation).toEqual({ dtErrors: 0, dtesErrors: 0, dtesWarnings: 0, linkWarnings: 0, stale: false } as unknown as typeof start.validation);
         const events = await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id));
         expect(events.map((e) => e.event.type)).toEqual(['SessionStarted', 'RevisionRecorded', 'ParticipantJoined']);
         expect(value(await s.use.joinSession({ session: id, participant: guest, name })).joined).toBe(false);
@@ -883,7 +879,8 @@ describe('revisions', () => {
     test('compare bounds its work: a blob over the limit is never read, and the diffs stop at the budget', async () => {
         const s = await session();
         const { id, start } = await started(s);
-        await s.write('sales/0-huge.dt', `// ${'x'.repeat(MAX_DIFF_BYTES)}\n`);
+        // over the 1 MiB a blob is read up to for a diff (domain/compare.ts)
+        await s.write('sales/0-huge.dt', `// ${'x'.repeat(1024 * 1024)}\n`);
         const row = (i: number): string => `// ${String(i).padStart(6, '0')} ${'y'.repeat(490)}`;
         for (const f of ['a', 'b', 'c']) await s.write(`sales/${f}.dt`, `${Array.from({ length: 900 }, (_, i) => row(i)).join('\n')}\n`);
         const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
@@ -900,7 +897,8 @@ describe('revisions', () => {
         const [a, b, last] = ['a', 'b', 'c'].map((f) => by.get(`sales/${f}.dt`)?.diff);
         expect([a?.kind === 'diff' && a.truncated, b?.kind === 'diff' && b.truncated, last, c.diffsOmitted]).toEqual([false, true, undefined, true]);
         const shown = [a, b].reduce((n, d) => n + (d?.kind === 'diff' ? d.unified.length : 0), 0);
-        expect(shown).toBeLessThanOrEqual(MAX_COMPARISON_DIFF);
+        // within the 512 KiB of diffs a comparison shows (application/use-cases.ts)
+        expect(shown).toBeLessThanOrEqual(512 * 1024);
     });
 
     test("targets of requests are current, stale or unknown in the workspace now; they're never re-bound", async () => {
@@ -922,7 +920,7 @@ describe('revisions', () => {
             storming: value(C.makeStormingName('Returns')),
             timeline: value(C.makeTimelineName('Normal')),
             eventName: value(C.makeStormingEventName('Received')),
-            occurrence: value(C.makeOccurrencePath(encodeOccurrencePath([1]))),
+            occurrence: value(C.makeOccurrencePath('1')),
         };
         const occurrence = await send(received);
         // one status per target, in the request's order; none for the whole workspace

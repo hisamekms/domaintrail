@@ -15,9 +15,8 @@ import {
     createCollaboration,
     createModelValidator,
     createUnitOfWork,
-    openDatabase,
     openSessionBlobs,
-    previousRunIds,
+    openSessionDatabase,
     toAgentReply,
 } from '@domaintrail/collaboration';
 import type { AgentPreviousRun } from '@domaintrail/collaboration/protocol';
@@ -86,7 +85,7 @@ async function fixture(): Promise<Fixture> {
     const root = await workspace({ 'sales/sales.dt': SALES });
     let n = 0;
     const deps: CollaborationDeps = {
-        uow: createUnitOfWork(openDatabase(':memory:')),
+        uow: createUnitOfWork(await openSessionDatabase(root)),
         workspace: createWorkspaceSnapshot(root),
         blobs: await openSessionBlobs(root),
         validator: createModelValidator(),
@@ -226,7 +225,6 @@ describe('replying to a run', () => {
         const replies = await runTo(f, [r1.id, r2.id, r3.id], 'running');
         const run = value(await f.use.sessionState({ session: f.id })).runs.find((r) => r.id === replies);
         expect(run?.input.requests.map((r) => r.replyTo)).toEqual([x, x, y]);
-        expect(run && previousRunIds(run.input)).toEqual([x, y]);
 
         const previous = value(await f.use.previousRuns({ run: replies, maxDiff: 20 * 1024 }));
         expect(previous.map((p) => p.run.id)).toEqual([x, y]);

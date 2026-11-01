@@ -46,13 +46,10 @@ export {
     type MarkStatus,
     type MarkTargetData,
 } from './domain/marks.js';
-export { encodeOccurrencePath, MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
-export { MAX_DIFF_BYTES } from './domain/compare.js';
-export { summarize } from './domain/validation.js';
-export { previousRunIds } from './domain/previous-runs.js';
+export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
 
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
-export { createCollaboration, MAX_COMPARISON_DIFF, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
+export { createCollaboration, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
 export {
@@ -82,6 +79,6 @@ export {
     writeServerAddress,
     type AgentCredential,
 } from './infrastructure/session-files.js';
-export { createUnitOfWork, openDatabase, openSessionDatabase } from './infrastructure/sqlite.js';
+export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';
 export { createModelValidator } from './infrastructure/validator.js';

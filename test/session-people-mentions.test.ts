@@ -13,8 +13,8 @@ import {
     createModelValidator,
     createUnitOfWork,
     MAX_REQUEST_MENTIONS,
-    openDatabase,
     openSessionBlobs,
+    openSessionDatabase,
 } from '@domaintrail/collaboration';
 import { type SessionServer, startSessionServer } from '@domaintrail/composition';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling';
@@ -72,7 +72,7 @@ describe('sending a message that mentions people', () => {
         const root = await workspace();
         let n = 0;
         use = createCollaboration({
-            uow: createUnitOfWork(openDatabase(':memory:')),
+            uow: createUnitOfWork(await openSessionDatabase(root)),
             workspace: createWorkspaceSnapshot(root),
             blobs: await openSessionBlobs(root),
             validator: createModelValidator(),

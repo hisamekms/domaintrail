@@ -16,8 +16,8 @@ import {
     createUnitOfWork,
     makeEmoji,
     MAX_REACTION_EMOJI,
-    openDatabase,
     openSessionBlobs,
+    openSessionDatabase,
     signKey,
     toAgentReply,
     VOTE,
@@ -99,7 +99,7 @@ async function fixture(): Promise<Fixture> {
     const root = await workspace({ 'sales/sales.dt': SALES });
     let n = 0;
     const deps: CollaborationDeps = {
-        uow: createUnitOfWork(openDatabase(':memory:')),
+        uow: createUnitOfWork(await openSessionDatabase(root)),
         workspace: createWorkspaceSnapshot(root),
         blobs: await openSessionBlobs(root),
         validator: createModelValidator(),
