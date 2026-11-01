@@ -1,11 +1,13 @@
 # ADR 0027: Domain boundaries and application boundaries — contexts, capabilities, platform, apps
 
-- Status: accepted, not implemented. Implementation waits until the large pull request in flight has landed. Decided
-  by the maintainer: the split into contexts and capabilities, the checkers moved onto the typed model, Modeling
-  described in its own `.dt`, protocols as a separate export, the boundary map as a TypeScript table first, the
-  project analysis as its own capability named `analysis`, the top-level names, and authorization written with
-  parameters and `requires` without new syntax, and one integration branch with one pull request (marked *Decided
-  by the maintainer*).
+- Status: accepted, implemented (2026-11-02; T0–T13 of [the plan](../plans/0027-boundaries.md) on
+  `refactor/boundaries`). What was built differently from the text below, and the decisions taken on the way, are in
+  [Implementation notes](#implementation-notes). Implementation waited until the large pull request in flight had
+  landed. Decided by the maintainer: the split into contexts and capabilities, the checkers moved onto the typed
+  model, Modeling described in its own `.dt`, protocols as a separate export, the boundary map as a TypeScript table
+  first, the project analysis as its own capability named `analysis`, the top-level names, and authorization written
+  with parameters and `requires` without new syntax, and one integration branch with one pull request (marked
+  *Decided by the maintainer*).
 - Date: 2026-11-01
 - Input: the code on `main` at `8a77a8d` (M0, ADR 0025, and M1, ADR 0026, merged). The facts were checked again
   against `main` at `9f28344` (#23 merged) in T0 of [the plan](../plans/0027-boundaries.md); those that changed are
@@ -279,6 +281,51 @@ CLI, DSL, HTTP and WebSocket unchanged, and passes typecheck, lint, tests and bu
 - The release with `.dtes` should go out before P3, or wait until after it: P3 moves every path.
 - *Decided by the maintainer:* as for M0, one integration branch and one pull request to `main`. The code map, the
   tasks and how each is checked are in [the plan](../plans/0027-boundaries.md).
+
+## Implementation notes
+
+Carried out on 2026-11-02 by the tasks T0–T13 of [the plan](../plans/0027-boundaries.md), whose task notes say how
+each step went. The decisions above hold; the sections above are left as they were decided. What differs from them, or
+was decided on the way (*decided by the maintainer* where marked in the plan):
+
+- **The packages** are the eleven of the Layout, each `@domaintrail/<name>`; `apps/dt` is `@domaintrail/dt`. The
+  package table and the rules as the architecture test enforces them are in `CONTRIBUTING.md` (Boundaries), which a
+  test compares with the map (`test/architecture/map.ts`). The map has no exceptions left.
+- **The kernel is a kind of its own** in the map: every kind may depend on it, and it depends on nothing (the rule
+  `kernel`). It holds `Diagnostic` with a plain code (`RuleCode`), the suggestions, `SourceFile`, `Location` and `camel`
+  (*decided*). The rule IDs are each context's: `ModelingRuleId` and `StormingRuleId` (*decided*).
+- **One Langium project per context** (*decided*): Storming's grammar keeps its own copy of the `.dt` terminals (a test
+  compares them), and each context's syntax has its own `docComment`. The language server merges both generated
+  reflections.
+- **The checkers run on the model as written, not on the Typed Model.** The rules need what the Typed Model leaves out
+  — duplicates, references as written and resolved to their declaration, a source range for every property they report
+  on — and the Typed Model is the Live View payload, deduplicated and resolved to names. So Modeling's domain has a
+  second model, `SourceModel` (`domain/source-model.ts`), with its static types and `RuleSink`; `infrastructure/syntax`
+  builds it from the AST, parses and reports the syntax's and the links' diagnostics (`parse.ts`). `DiagnosticSink`
+  and the checkers' use of `ModelIndex` are gone; the AST index stays in the syntax for the language server and the
+  builders. The Typed Model is still built from the AST, not from the model as written.
+- **Rules the text did not list**, added as the work needed them: `syntax` (Langium only under a context's
+  `infrastructure/syntax/` and in an app; `domain/` and `core/` import neither Langium nor the syntax), `generated` (a
+  package's generated code imports only its own files; the rest of the package imports only its types), `kernel`,
+  `application-io`, a context's `published` modules (a context takes only those from an upstream's `.`), and
+  `foreign-infrastructure` judged through `.` by the module an imported name comes from.
+- **Modeling in its own `.dt`** (`contexts/modeling/model`) describes what it publishes: the Typed Model, the diff, the
+  dependency types and `ModelingRuleId`. Its domain imports the generated code with `import type` only (the rule
+  `generated`), and keeps the helpers, the ID builders, the dependencies, the diff and the usages by hand. To express
+  it, the DSL gained three additions (*decided*; the Consequences list new DSL syntax as out of scope, meaning actors
+  and access declarations): the declaration keywords may name fields, parameters, terms, commands and discriminators,
+  and any keyword an enum value, a variant or a member after `.`; value objects and unions may be recursive when each
+  has a finite value (M012), and the contract tests leave out values of recursive types for now (`dt generate ts`
+  warns); value objects take field sets with `with`.
+- **The Typed Model was reshaped** (*decided*): `DomainModel` is `{ contexts, elements }` in declaration order,
+  `ElementModel` a union by `kind` with exactly each kind's parts, binary operators the enum `BinaryOp`, and stable IDs,
+  qualified names and context names distinct types. The Live View payload's model and the elements in
+  `dt show --format json` have the new shape; the generated TypeScript and every graph of the payload are unchanged.
+- **Configuration**: the owners of the sections #23 added are the ones the plan proposed (*decided*), and the Host and
+  Origin guards of `session.access` are the app's (*decided*), as the Authorization table says.
+- **Left for later**: the Typed Model built from the model as written; the kernel's `Location` imported by Modeling's
+  `.dt` instead of copied (a later feature); an `Actor` for the agent; values of recursive types in the contract tests
+  (`tests.maxRecursionDepth`); the map as a `.dt` context map (ADR 0006).
 
 ## Consequences
 
