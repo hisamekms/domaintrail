@@ -1,6 +1,7 @@
 # ADR 0028: Changes to the generated TypeScript
 
-- Status: accepted, not implemented (G1–G8 of [the plan](../plans/0028-generated-code.md), on `feat/generated-code`).
+- Status: accepted, implemented (2026-11-02; G0–G8 of [the plan](../plans/0028-generated-code.md) on
+  `feat/generated-code`; see [Implementation notes](#implementation-notes)).
   Every decision below was chosen by the maintainer among the alternatives listed with it (marked *Decided by the
   maintainer*).
 - Date: 2026-11-02
@@ -473,6 +474,51 @@ maintainer. A task that finds one of them unworkable records a different choice 
   - The kernel's hand-written types are replaced by the code generated from its `.dt`, so that it is defined once.
   - The bootstrap steps of CONTRIBUTING (regenerating Modeling's code, recovering from a broken generator) work from
     the root configuration.
+
+## Implementation notes
+
+What the tasks chose where the decisions and details above left room, or where they differ from them:
+
+- G1: the reserved name `uuid` is reported under M002 (names unique in their scope): the generated invariant holds
+  the name. The `@invariant uuid` line of the doc comment describes the form in words. Collaboration's IDs are on
+  `UUID`, so its use cases make them through `known<Id>` helpers that throw on a value that is not a UUID (a
+  programming error there, never input).
+- G2: the slot of an aggregate's own invariant without an expression takes `<Aggregate>Common`, as the check does
+  (decision 2), so the change is breaking.
+- G3: a lambda variable also avoids `Number` and `RegExp` (called by translated expressions), the check's own
+  variables (`checks`, `violated`) and the module's `equal<Name>` functions. As a module's imports are known only
+  after its body is written, every runtime name and every context name count as imported.
+- G4: an import written only for a `{@link}` is preceded by an `oxlint-disable-next-line no-unused-vars` comment:
+  tsc counts it as used, oxlint does not. The factory's comment gives a generic example of what an omitted context
+  would break.
+- G5:
+  - The support's source is `testing/index.ts` at the root, next to `bin/`: it belongs to the published package,
+    not to a workspace package. In the repository `domaintrail/testing` resolves through the root tsconfig's
+    `paths`; `examples/shop` resolves it through the built package, like a user's project.
+  - The version check accepts `^<version generated with>` (the same minor while the major is 0), not only the same
+    version: a patch release then leaves generated tests as they are. The tests comparing generated code ignore the
+    version.
+  - `npm version` regenerates DomainTrail's own generated code (the `version` script), so the release commit has
+    tests stating the new version (`docs/releasing.md`).
+- G6: the parameters object's argument is `params`, or `parameters` when the aggregate is named `Params`. A factory's
+  policy input is passed to it as it is.
+- G7:
+  - The depth counts how many times a value nests through its cycle, at the points where the cycle could end; a
+    value of depth 1 holds no other. A loop passing several such points gives shallower values, never deeper ones.
+  - A per-type setting replaces the overall depth for that type (it may also lower it); a cycle takes the greatest
+    value among its types. A name in `tests.types` that is not a type of the model is a configuration error; one
+    that is not recursive, a warning.
+  - Cycles across contexts are supported: each context builds its members and reaches the others' lazily, with one
+    depth counter per cycle.
+  - Modeling's arbitraries (its recursive expressions) are drawn by `contexts/modeling/src/contracts.test.ts`; its
+    contract tests have nothing else to test, as Modeling implements no factories or commands.
+- G8:
+  - Each context with a `module` gets its contract tests in `<out>/tests`, with their own `index.ts` and
+    `_register.ts`; other packages import them from `<module>/tests`, an export that only test code may import
+    (ADR 0027's boundary map lists it in `EXPORTS`, not in any kind's surface).
+  - Generation refuses a symlink on every directory it writes to, not only the configured ones.
+  - The rule `generated` takes the modules it allows from the root configuration's `module` entries.
+  - The kernel's `RuleCode` stays a plain string type (`Diagnostic['code']`): a primitive would brand it.
 
 ## Consequences
 

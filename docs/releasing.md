@@ -31,24 +31,18 @@ match.
    through pull requests.
 
 2. On an up-to-date `main`, bump the version, which commits (`chore(release): X.Y.Z`, `.npmrc`) and tags, and push.
-   `npm version` also sets the Zed extension's version (`scripts/zed-version.ts`, the `version` script: the extension,
-   its crate and lock entry, and the `dt` it installs), so they go into the same commit; `test/zed-version.test.ts`
-   fails if they differ. Only an admin can push this commit, bypassing the ruleset of `main`:
+   `npm version` runs the `version` script, so these go into the same commit:
+   - the Zed extension's version (`scripts/zed-version.ts`: the extension, its crate and lock entry, and the `dt` it
+     installs); `test/zed-version.test.ts` fails if they differ;
+   - DomainTrail's own generated code, regenerated from the root `domaintrail.jsonc`: its contract tests state the
+     version of domaintrail that generated them and fail when loaded with `domaintrail/testing` of another minor
+     version (`test/self-contracts.test.ts` ignores the version when it compares the output).
+
+   Only an admin can push this commit, bypassing the ruleset of `main`:
 
    ```bash
    git switch main && git pull --ff-only
    npm version patch   # or minor / major; commits and creates the vX.Y.Z tag
-   git push --follow-tags
-   ```
-
-   A **minor or major** version also regenerates Collaboration's committed contract tests in the release commit: they
-   state the version of domaintrail that generated them and fail when loaded with `domaintrail/testing` of another
-   minor version (a patch version leaves them as they are; the tests comparing generated code ignore the version):
-
-   ```bash
-   npm version minor --no-git-tag-version   # or major
-   bun run dt -r contexts/collaboration generate ts
-   git commit -am "chore(release): X.Y.Z" && git tag -a vX.Y.Z -m X.Y.Z
    git push --follow-tags
    ```
 

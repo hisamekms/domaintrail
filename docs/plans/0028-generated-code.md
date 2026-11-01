@@ -47,3 +47,39 @@ A review of what `dt generate ts` writes for `examples/shop` found seven points,
 
 G1, G2, G3, G4 and G8 can run in parallel; G2 and G3 both touch the checks' generation (`checks.ts`), so whichever lands
 second rebases.
+
+## For the next release
+
+The changelogs are written when releasing (`docs/releasing.md`), together with
+[plan 0027's list](0027-boundaries.md#for-the-next-release), whose line on recursive types ("The contract tests
+generate no values of recursive types yet") this work replaces. What it changes for users:
+
+- *Breaking:* an ID or domain primitive on `UUID` checks the form (RFC 9562, 8-4-4-4-12 hexadecimal digits, either
+  case, any version): `make<Name>` returns `Result<Name, Invalid<Name>>` with the invariant `'uuid'`, first, and
+  `check<Name>` / `Invalid<Name>` are generated for these types. An invariant named `uuid` on such a type is reported
+  (M002). *Upgrading:* handle the `Result` of `make<Id>` (a value that is a UUID by construction, such as one of
+  `crypto.randomUUID()`, may be unwrapped, a failure being a bug), and use UUIDs in fixtures.
+- *Breaking:* the slot of an aggregate's invariant declared without an expression takes `<Aggregate>Common`, the
+  fields of every state. *Upgrading:* type its implementation with `<Aggregate>Common`.
+- *Breaking:* the contract tests' support is no longer written into `tests/_testing.ts`: generated tests import
+  `domaintrail/testing`, a subpath of the domaintrail package (a dev dependency; fast-check is an optional peer
+  dependency), and check at load that it matches the domaintrail that generated them. `tests/index.ts` no longer
+  re-exports the support. A `tests/_testing.ts` written earlier is removed. *Upgrading:* import `cases`, `suite` and
+  the like from `domaintrail/testing`, and run `dt generate ts` again after upgrading domaintrail.
+- *Breaking:* a command takes its parameters as one object after the aggregate, typed `<Command><Aggregate>Params`
+  (an optional parameter is an optional property; a command without parameters takes none). The requirement checks
+  and the examples of commands take the object too. *Upgrading:* write `cancel(order, { reason })`,
+  `place({ id, customer })`, `Draft: (order, { reason }) => …`, `[order, { reason }]`.
+- *Added:* `check<Aggregate>Common`, the aggregate's invariants checked once; the check of each state calls it.
+- *Added:* the contract tests draw values of recursive types, up to `generate.ts.tests.maxRecursionDepth` (default 4),
+  set per type with `generate.ts.tests.types["Ctx.Type"].maxRecursionDepth`; `dt generate ts` no longer warns about
+  them.
+- *Added:* `generate.ts.contexts.<Ctx>.module`, next to `out`: generated code in other output directories imports the
+  context from that module, so contexts written into different packages of a monorepo use each other from one
+  configuration; their contract tests go to `<out>/tests`, imported from `<module>/tests`.
+- *Changed:* generated checks read like the model (`A implies B` violated as `A && !B`, lambda variables named as in
+  `.dt`, `'…'` quotes); the target of `references` is a `@see {@link …}` in the field's doc comment; the factories of
+  verified types say why their context is required and that a rejected promise is an infrastructure failure.
+- *Fixed:* generation refuses a symlink on every directory it writes to.
+- Internal, one line at most: DomainTrail's own model (the kernel, Modeling, Collaboration) is one configuration at the
+  root; contributors see `CONTRIBUTING.md`.
