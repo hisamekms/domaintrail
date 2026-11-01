@@ -1,7 +1,7 @@
 # Plan: changes to the generated TypeScript
 
-A review of what `dt generate ts` writes for `examples/shop` found seven points; the maintainer chose a solution for
-each. This plan records the choices and splits them into tasks. The decisions that change earlier ADRs (0001, 0020,
+A review of what `dt generate ts` writes for `examples/shop` found seven points, and ADR 0027's T11 left an eighth
+(contract tests for recursive types); the maintainer chose a solution for each. This plan records the choices and splits them into tasks. The decisions that change earlier ADRs (0001, 0020,
 0023) are written down in a new ADR first (G0).
 
 ## Landing
@@ -25,18 +25,20 @@ each. This plan records the choices and splits them into tasks. The decisions th
 | 4 | The target of `references` is only a trailing comment (`// -> Sales.Customer`) | The field's doc comment links it: `@see {@link Customer}` (`{@link Billing.Invoice}` across contexts). Types are unchanged |
 | 5 | `_runtime.ts` (137 lines) and `tests/_testing.ts` (581 lines) are copied into every project | The runtime stays copied (production code does not depend on domaintrail). The testing support becomes a package, `@domaintrail/testing`, a dev dependency; generated tests import it, and the generated code states the version it needs. It is released with domaintrail, same version |
 | 6 | The context of a verified type's factory with `for X?` is `context: X \| undefined`, so a call passes `undefined` explicitly | Kept. ADR 0023 and the factory's doc comment say why: an omitted context would compile, and the check would then not leave out the one it should (e.g. a customer's own address reported as taken) |
+| 8 | Recursive value types (allowed by M012 since ADR 0027's T11, which generates no contract tests for them) have no arbitraries | The contract tests draw recursive values with `fc.letrec`, biased towards shallow values (`depthSize: 'small'`), up to `generate.ts.tests.maxRecursionDepth` (default 4; a binary tree of depth 4 has at most 15 nodes), overridable per type (`tests.types["Ctx.Type"].maxRecursionDepth`, next to the existing arbitrary overrides). Cycles across several types are defined together. The guide says how to override the arbitrary of a type whose invariants reject too many drawn values |
 | 7 | Command parameters are positional (`place(id, customer)`, `cancel(order, reason)`); TypeScript has no named arguments, so parameters of one type can be swapped silently and reordering breaks callers | A command takes its parameters as one object, after the aggregate: `place({ id, customer })`, `cancel(order, { reason })`, and in a decision `Draft: (order, { reason }) => …`. A command without parameters takes none (`archive(order)`). Contract test inputs and examples become objects. The runtime cost (one small object per call) is negligible next to what a command allocates and the I/O around it |
 
 ## Tasks
 
 | Task | What | Compatibility | After |
 |---|---|---|---|
-| G0 | ADR 0028: decisions 1–7, amending ADR 0001 (type mapping of `UUID`), 0020 (contract test inputs, the testing package) and 0023 (the context parameter) | — | — |
+| G0 | ADR 0028: decisions 1–7, amending ADR 0001 (type mapping of `UUID`), 0020 (contract test inputs, the testing package, recursive arbitraries) and 0023 (the context parameter) | — | — |
 | G1 | Decision 1: the `UUID` check in `make<Name>` for IDs and primitives, the invariant name, the arbitraries, `examples/shop` and the guide | breaking | G0 |
 | G2 | Decision 2: `check<Aggregate>Common` | additive | G0 |
 | G3 | Decision 3: the expression translation (implies, lambda names, quotes) | same behaviour | G0 |
 | G4 | Decisions 4 and 6: `{@link}` for references; the context parameter's doc comment | same behaviour | G0 |
 | G5 | Decision 5: `@domaintrail/testing` (package, publishing, version check), generated tests importing it | breaking | G0 |
+| G7 | Decision 8: arbitraries for recursive types, `maxRecursionDepth` and its per-type override, cycles across types, the guide | additive | G5 (the testing support moves first) |
 | G6 | Decision 7: command parameters as one object, in commands, decisions, contract tests and examples | breaking | G5 (both change the contract tests' support) |
 
 G1, G2, G3 and G4 can run in parallel; G2 and G3 both touch the checks' generation (`checks.ts`), so whichever lands
