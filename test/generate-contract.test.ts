@@ -2,15 +2,16 @@
  * Baseline of ADR 0027 (plan T0): every file `dt generate ts` writes for examples/shop, as its config asks (the output
  * directory, Billing's required policies, the contract tests for bun), in full, so that a change shows as a diff. The
  * generator's moves (T5, T8) keep them byte for byte. `test/live-contract.test.ts` pins their hashes with `--out`;
- * `test/collaboration-contracts.test.ts` pins Collaboration's committed output. A deliberate change updates the
- * snapshots with `bun test -u` and says why in its commit.
+ * `test/collaboration-contracts.test.ts` pins Collaboration's committed output. The version of domaintrail that the
+ * contract tests state is left out (`withoutVersion`). A deliberate change updates the snapshots with `bun test -u` and
+ * says why in its commit.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Glob } from 'bun';
 import { cliDeps, runCli } from '@domaintrail/dt';
-import { tempCopyOfExamples } from './helpers.js';
+import { tempCopyOfExamples, withoutVersion } from './helpers.js';
 
 let dir: string;
 let run: { code: number; lines: string[] };
@@ -25,7 +26,7 @@ beforeAll(async () => {
     const relative = path.relative(process.cwd(), dir);
     run = { code, lines: lines.map((l) => l.replaceAll(relative, '<root>').replaceAll(dir, '<root>')) };
     const files = await Array.fromAsync(new Glob('generated/**/*').scan({ cwd: dir }));
-    for (const rel of files.sort()) written[rel] = await readFile(path.join(dir, rel), 'utf8');
+    for (const rel of files.sort()) written[rel] = withoutVersion(await readFile(path.join(dir, rel), 'utf8'));
 });
 
 afterAll(async () => {

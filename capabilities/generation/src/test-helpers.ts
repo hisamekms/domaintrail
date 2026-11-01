@@ -1,6 +1,6 @@
 // Helpers of the generator's unit tests: models of inline `.dt` sources and of examples/shop's, analyzed by Modeling with
 // the generator's own check (M011) added, as the project analysis does.
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyzeDomain, type DomainAnalysis } from '@domaintrail/modeling';
 import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '@domaintrail/kernel';
@@ -8,7 +8,23 @@ import type { SourceFile } from '@domaintrail/kernel';
 import { checkGeneratedNames } from './core/tsnames.js';
 import type { DomainModel, ElementModel } from '@domaintrail/modeling';
 
-export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
+const ROOT = path.join(import.meta.dir, '..', '..', '..');
+export const EXAMPLES = path.join(ROOT, 'examples', 'shop');
+
+/**
+ * Gives a temporary project `dir` a node_modules as if it had domaintrail as a dev dependency: the entries of this
+ * repository's node_modules (fast-check, the types of Bun), and a `domaintrail` whose `domaintrail/testing` (the
+ * support of the generated contract tests) is its source, testing/index.ts, so that no build is needed.
+ */
+export async function linkNodeModules(dir: string): Promise<void> {
+    const modules = path.join(dir, 'node_modules');
+    await mkdir(modules);
+    for (const entry of await readdir(path.join(ROOT, 'node_modules'))) await symlink(path.join(ROOT, 'node_modules', entry), path.join(modules, entry));
+    const pkg = path.join(modules, 'domaintrail');
+    await mkdir(pkg);
+    await writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name: 'domaintrail', type: 'module', exports: { './testing': './testing/index.ts' } }));
+    await symlink(path.join(ROOT, 'testing'), path.join(pkg, 'testing'));
+}
 
 /** Modeling's analysis with the generator's check, and whether it found no error. */
 export type Checked = DomainAnalysis & { ok: boolean };

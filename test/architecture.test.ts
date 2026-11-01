@@ -16,10 +16,21 @@ import { EXPORTS, MAP, MAY_DEPEND_ON, SURFACES, type Kind, type Rule } from './a
 const ROOT = path.join(import.meta.dir, '..');
 const MAP_FILE = 'test/architecture/map.ts';
 
-/** Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js). */
+/**
+ * Relative imports that leave their package: the CLI embeds the guide as text (bundled into dist/dt.js); the generator
+ * reads domaintrail's version from the root package.json, which the generated contract tests state.
+ */
 const OUTSIDE_PACKAGE: Record<string, string[]> = {
     'apps/dt/src/cli/main.ts': ['docs/guide.md'],
+    'capabilities/generation/src/core/tests.ts': ['package.json'],
 };
+
+/**
+ * The support of the generated contract tests, a subpath of the root package (ADR 0028, decision 5) that a package's
+ * generated tests import without declaring it: the root tsconfig.json maps it to its source, `testing/`.
+ */
+const ROOT_SUBPATHS = ['domaintrail/testing'];
+const isGeneratedTest = (file: string): boolean => /\/generated\/tests\//.test(file);
 
 /** What a file under `domain/`, `core/` or `application/` may not import besides builtins: the file system, the network, layout. */
 const IO_PACKAGES = ['chokidar', 'ws', 'elkjs'];
@@ -382,7 +393,13 @@ describe('dependencies', () => {
         for (const name of NAMES) {
             const manifest = MANIFESTS[name];
             const declared = new Set([manifest.name, ...Object.keys({ ...manifest.dependencies, ...manifest.devDependencies })]);
-            const undeclared = IMPORTS[name].filter((i) => !i.resolved && !isBuiltin(i.specifier) && !declared.has(packageName(i.specifier)));
+            const undeclared = IMPORTS[name].filter(
+                (i) =>
+                    !i.resolved &&
+                    !isBuiltin(i.specifier) &&
+                    !declared.has(packageName(i.specifier)) &&
+                    !(isGeneratedTest(i.file) && ROOT_SUBPATHS.includes(i.specifier)),
+            );
             expect(show(undeclared)).toEqual([]);
         }
     });
@@ -601,8 +618,8 @@ describe('tests', () => {
     });
 });
 
-/** The code outside the packages that imports them: the integration tests, the scripts, bin/. */
-const OUTSIDE = ['test', 'scripts', 'bin'];
+/** The code outside the packages that imports them: the integration tests, the scripts, bin/, testing/ (its subpath). */
+const OUTSIDE = ['test', 'scripts', 'bin', 'testing'];
 const OUTSIDE_IMPORTS = (
     await Promise.all(
         OUTSIDE.map(async (dir) => {
@@ -615,7 +632,7 @@ const OUTSIDE_IMPORTS = (
     )
 ).flat();
 
-describe('integration tests, scripts and bin/', () => {
+describe('integration tests, scripts, bin/ and testing/', () => {
     test('import the packages only through their entries (. and ./protocol), never by a path into a package', () => {
         expect(OUTSIDE_IMPORTS.length).toBeGreaterThan(0);
         const wrong = OUTSIDE_IMPORTS.filter((i) =>

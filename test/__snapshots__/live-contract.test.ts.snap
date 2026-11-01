@@ -64,11 +64,10 @@ exports[`dt generate ts writes the same files with the same contents for the exa
   "Sales.ts": "8cec97d8851436c3a88e563cc61cbb0a701773635e7666f379baebae84d1cb51",
   "_runtime.ts": "9d4b0588f6d9977ad9bcd860f2e1c05fcb631b065a52dd746e40b63e4f93fe6a",
   "index.ts": "4d3e88b042004cc4639047a0b4d04eef324ade013e3303a74d8497a3049c2baa",
-  "tests/Billing.ts": "3129ded531696e5cf8d9c370e1ba531ef249c6b4f8e8b6b6770de64f2dc17854",
-  "tests/Common.ts": "bd65f4279eee550abce6228680598caee4bf31b9645563b9b25a8a888d88c21a",
-  "tests/Sales.ts": "418141482dbce8a86c71b2eac993711cc41370459bd758c25de21163ad0ac3a1",
-  "tests/_register.ts": "5f285c2d2a92025b098e9161e91601531ba126bfbaf8841ea52fc159b71076a1",
-  "tests/_testing.ts": "9bf095db0590a7390550f887830673dd7d0ce2415b4ad786e5603904796e000b",
-  "tests/index.ts": "081a46db2c44a6e933fcc73873e7b8d3be8a56da89c81354000411fed7ffdd60",
+  "tests/Billing.ts": "026319a32eae3ebfe171776e5655676a9eddc949e4964c8fbdc8c0c8dc762645",
+  "tests/Common.ts": "f43f1386b0625654a6f60c89a82ccaa1ce35584e4d674e9e09a72a706f5fd96c",
+  "tests/Sales.ts": "d5b2484472ce17b76ccd749a0987dda18664261d4319337668c6784704fdf483",
+  "tests/_register.ts": "a4759a058cdfd7a6f1acf7894c28e6aaf9531db54e4d08c3a9d12e19be14a377",
+  "tests/index.ts": "1613702e388ac1b39f57bc7fa3163ac494d673b2ae4418274d1a1ca25303e005",
 }
 `;

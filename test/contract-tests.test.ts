@@ -1,10 +1,10 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
 import { generateTypeScript } from '@domaintrail/generation';
-import { check, tempCopyOfExamples } from './helpers.js';
+import { check, linkNodeModules, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const dirs: string[] = [];
@@ -38,11 +38,11 @@ function tsc(dir: string, files: string[], exact = true): string {
     return r.stdout.toString() + r.stderr.toString();
 }
 
-/** A temporary directory that resolves fast-check from this repository. */
+/** A temporary directory that resolves fast-check and domaintrail/testing from this repository. */
 async function tempDir(): Promise<string> {
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-contract-'));
     dirs.push(dir);
-    await symlink(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
+    await linkNodeModules(dir);
     return dir;
 }
 
@@ -122,6 +122,7 @@ const dir = await tempDir();
 }
 const domain = await import(path.join(dir, 'index.ts'));
 const tests = await import(path.join(dir, 'tests', 'index.ts'));
+const testing = await import(path.join(dir, 'node_modules', 'domaintrail', 'testing', 'index.ts'));
 const { Shop, decide, ok, err } = domain;
 
 const forbidden = (code: string): boolean => code.startsWith('Z');
@@ -162,7 +163,7 @@ const makeCartId = (v: string) => (UUID.test(v) ? ok(v) : err({ type: 'InvalidCa
 /** Runs every case of a suite: the error message of each that fails, by name; todo cases as 'todo'. */
 async function run(suite: unknown): Promise<Record<string, string | undefined>> {
     const out: Record<string, string | undefined> = {};
-    for (const c of tests.cases(suite)) {
+    for (const c of testing.cases(suite)) {
         if (c.todo) {
             out[c.name] = 'todo';
             continue;
@@ -358,16 +359,11 @@ describe('the shop example', () => {
     test('generates contract tests that pass against its implementation with bun:test', async () => {
         const shop = await tempCopyOfExamples();
         dirs.push(shop);
-        await symlink(path.join(ROOT, 'node_modules'), path.join(shop, 'node_modules'));
+        await linkNodeModules(shop);
         expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} }, cliDeps())).toBe(0);
         const manifest = JSON.parse(await readFile(path.join(shop, '.domaintrail', 'generated.json'), 'utf8'));
         expect(manifest.files).toEqual(
-            expect.arrayContaining([
-                'generated/domain/tests/_testing.ts',
-                'generated/domain/tests/_register.ts',
-                'generated/domain/tests/Sales.ts',
-                'generated/domain/tests/index.ts',
-            ]),
+            expect.arrayContaining(['generated/domain/tests/_register.ts', 'generated/domain/tests/Sales.ts', 'generated/domain/tests/index.ts']),
         );
         // all of src/ (domain, application, demo, tests), with the example's own tsconfig.json
         const typecheck = Bun.spawnSync([process.execPath, path.join(ROOT, 'node_modules', '.bin', 'tsc'), '-p', shop]);

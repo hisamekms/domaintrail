@@ -1,12 +1,14 @@
 // The collaboration contracts (ADR 0026): contexts/collaboration/model is a .dt model whose generated TypeScript is
 // committed in contexts/collaboration/src/generated. The model checks clean and is formatted, and generating it again
-// gives exactly the committed files: after changing the model, run `bun run dt -r contexts/collaboration generate ts`.
+// gives exactly the committed files, but for the version of domaintrail its contract tests state: after changing the
+// model, run `bun run dt -r contexts/collaboration generate ts`.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { Glob } from 'bun';
 import { cliDeps, runCli } from '@domaintrail/dt';
+import { withoutVersion } from './helpers.js';
 
 const PACKAGE = path.join(import.meta.dir, '..', 'contexts', 'collaboration');
 const GENERATED = 'src/generated';
@@ -53,6 +55,8 @@ describe('collaboration contracts', () => {
         const regenerated = await files(path.join(dir, GENERATED));
         expect(Object.keys(committed).length).toBeGreaterThan(0);
         expect(Object.keys(regenerated)).toEqual(Object.keys(committed));
-        for (const [file, text] of Object.entries(regenerated)) expect({ file, text }).toEqual({ file, text: committed[file] });
+        // but for the version of domaintrail its contract tests state, which a patch release leaves (docs/releasing.md)
+        for (const [file, text] of Object.entries(regenerated))
+            expect({ file, text: withoutVersion(text) }).toEqual({ file, text: withoutVersion(committed[file]) });
     });
 });

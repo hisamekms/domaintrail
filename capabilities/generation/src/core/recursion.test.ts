@@ -1,12 +1,12 @@
 // Recursive value types (M012 lets values and unions be recursive when they have a finite value): the generated types,
 // equality and checks work on them; the contract tests generate no values of them yet and leave out what needs one.
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { generateTypeScript } from './typescript.js';
 import { testsWarnings, untestedTypes } from './tests.js';
-import { check } from '../test-helpers.js';
+import { check, linkNodeModules } from '../test-helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
 
@@ -51,7 +51,9 @@ describe('recursive value types', async () => {
     const a = await check({ 'm.dt': MODEL });
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-recursion-'));
     dirs.push(dir);
-    await symlink(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
+    await linkNodeModules(dir);
+    // an ES module project, like domaintrail/testing (under nodenext, CommonJS would see fast-check's other types)
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
     for (const f of generateTypeScript(a.model!, {}, { dir: 'tests' }, { M: 'required' })) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
@@ -81,7 +83,8 @@ describe('recursive value types', async () => {
         expect(['Op', 'DocId', 'NoteId', 'Note'].every((n) => n in arbs)).toBe(true);
         expect(['Expr', 'Rule', 'Doc', 'OpenDoc', 'Opened'].filter((n) => n in arbs)).toEqual([]);
         const suite = tests.M.contract({ Note: { write: () => undefined, touch: () => undefined }, policies: {} });
-        const names: string[] = tests.cases(suite).map((c: { name: string }) => c.name);
+        const { cases } = await import(path.join(dir, 'node_modules', 'domaintrail', 'testing', 'index.ts'));
+        const names: string[] = cases(suite).map((c: { name: string }) => c.name);
         expect(names.some((n) => n.startsWith('M > Note > Note.write'))).toBe(true);
         expect(names.filter((n) => /touch|Doc|React/.test(n))).toEqual([]);
     });
