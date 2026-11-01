@@ -8,7 +8,6 @@ import type { Site, SourceModel } from './domain/source-model.js';
 import { DiagnosticSink } from './infrastructure/syntax/diagnostic-sink.js';
 import { checkChanges, checkCommands, checkFactoryIds } from './domain/rules/commands.js';
 import { checkEventIds } from './domain/rules/events.js';
-import { checkFieldSets } from './domain/rules/field-sets.js';
 import { checkInvariants } from './domain/rules/expressions.js';
 import { checkLabels } from './domain/rules/labels.js';
 import { checkNames } from './domain/rules/names.js';
@@ -69,7 +68,6 @@ export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
         checkShared,
         checkStructure,
         checkUnions,
-        checkFieldSets,
         checkVerified,
         checkCommands,
         checkFactoryIds,

@@ -24,6 +24,7 @@ import { buildSourceModel } from '../infrastructure/syntax/build-source.js';
 import { elementIdOf } from '../infrastructure/syntax/element-id.js';
 import type { DomainModel } from '../domain/model.js';
 import type { SourceModel } from '../domain/source-model.js';
+import { RuleSink } from '../domain/diagnostics.js';
 import type { ModelingRuleId } from '../domain/rule-ids.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';
 import { checkEventIds } from '../domain/rules/events.js';
@@ -138,7 +139,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkShared(index, sink);
         checkStructure(index, sink);
         checkUnions(index, sink);
-        checkFieldSets(index, sink);
+        checkFieldSets(sourceModel!, new RuleSink(sink.items));
         checkVerified(index, sink);
         checkCommands(index, sink);
         checkFactoryIds(index, sink);
