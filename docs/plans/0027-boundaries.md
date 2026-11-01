@@ -78,7 +78,11 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   the ADR and the fix. Since #23 the test's agent rule is no longer "types only": agent imports collaboration's
   `domain/reply` and `domain/body` at run time (listed as exceptions in the test); and collaboration imports
   modeling's `core/emoji` (run time) and `core/config` (the type `ClefModel`), which are not Modeling's published
-  language — exception entries until T6.
+  language — exception entries until T6. *Found in T1:* the map is `test/architecture/map.ts`. Besides the deep
+  imports (116 entries, T2) and `exports: ['./*']` (7 packages, T2), its exceptions are `workspace → modeling` (the
+  platform depends on a context: `SourceFile`, the configuration's defaults, `GENERATED_MARKER`; T3, T6) and three
+  I/O imports in `modeling/core` (`analyze.ts`: `node:path`, T4; `config.ts`: `node:fs`, `node:path`, T6). No package
+  but an app imports another's `infrastructure/`.
 - **T2 — public surfaces (P1).** An `index.ts` (and `protocol.ts` where there are wire types) per package; `exports`
   narrowed to `.` and `./protocol`; every deep import replaced. The architecture test checks the `exports`. Deep
   imports also come from outside the packages, which the architecture test does not read: `scripts/session-seed*`
