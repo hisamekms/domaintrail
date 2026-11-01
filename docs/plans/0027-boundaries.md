@@ -33,7 +33,7 @@ From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each p
 | `core/checker/tsnames.ts`, `generator/naming.ts` | `capabilities/generation/src/core/` | T5 |
 | `core/model-index.ts`, `core/types.ts`, `core/labels.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
 | `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` | T3 |
-| `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/` | T4 |
+| `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/` (since T4 `analysis/analyze.ts`; Modeling's analysis of `.dt`, `analyzeDomain`, stays in `core/analyze.ts` and goes to `contexts/modeling`, its layer chosen in T8) | T4, T8 |
 | `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/`. Since #23 it also holds `session.agent.dt` (checked with `realpathSync`: the only I/O in the file), `session.agent.maxPreviousRunDiff`, `session.quickReactions` and `session.classifier`; see T6 | T6 |
 | `core/emoji.ts` (new in #23: one emoji, its normal form, `DEFAULT_QUICK_REACTIONS`) | not Modeling's language: the rule of Collaboration's `Emoji` primitive (`model/mark.dt`) and of `session.quickReactions`. Proposed: `collaboration/src/domain/emoji.ts` in T6, with the `session.quickReactions` section (T8 then moves it with `collaboration/`); the alternative is `shared/kernel` (see Open in the tasks) | T6 |
 | `format/format.ts` | `contexts/modeling/src/application/` (formatting) with its printer in `infrastructure/syntax/` | T8 |
@@ -146,6 +146,31 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
 - **T4 — the analysis split (P2).** `core/analyze` into an analysis of `.dt` alone, the storming analysis taking the
   model, and an orchestrator (`modeling/src/analysis/`, moved to `capabilities/analysis` in T8) that runs both, links
   and adds the generation's checks. `core` no longer imports `storming`.
+  **T4 (done).** `core/analyze.ts` is Modeling's analysis of the `.dt` sources alone: `analyzeDomain` → `DomainAnalysis`
+  (files, documents, index, diagnostics sorted and deduplicated, `syntaxOk`, the model, and `resolveFile`, the document
+  URI → path map the later checks report with). `storming/analyze.ts` already took the model (`analyzeStormings(sources,
+  model)`) and is unchanged. The project analysis is `analysis/analyze.ts` (`analyze`, `Analysis`, `isStormingFile`, the
+  sources by language): `.dt`/`.dtes` by extension → `analyzeDomain` → `analyzeStormings` with its model → the
+  generation's checks (`checkTsNames`, M011, run over the index when the `.dt` sources parse; the file stays in
+  `core/checker/` until T5) → the diagnostics combined, sorted and deduplicated into the same `Analysis` as before
+  (identical results: M011 is reported only by that check and the `.dtes` diagnostics lie in other files, so the order
+  of equal keys does not change). `dedupe` went to the kernel (`dedupeDiagnostics`). The cycle `core/analyze → storming →
+  core` is gone: `core` imports nothing of `storming/` (Storming still imports Modeling: the model, `core/labels`'
+  `docComment`, the grammar, `FormatError`; T8). *In the map:* modeling has `inner` (as `kernel`, the directories that
+  are modules of their own until T8): `storming` (becomes contexts/storming; upstream none; `never: ['core/analyze']`)
+  and `analysis` (becomes capabilities/analysis; upstream `storming`); the new rule `inner-modules` rejects an import of
+  an inner module by the rest of the package (index.ts, the entry, aside), one between inner modules that `upstream`
+  does not list, and one of a `never` module (no exception). Collaboration's `public-surface` exception is re-keyed
+  `@domaintrail/modeling/core/analyze` → `@domaintrail/modeling/analysis/analyze` (until T8: the validator behind its
+  port). Exceptions unchanged: `kinds` 2, `public-surface` 3, `pure-core-io` 1, `kernel` 0, `inner-modules` 0.
+  *Tests:* the orchestration's tests (both languages, the shop example with its stormings, M011) are
+  `analysis/analyze.test.ts` (was `storming/analyze.test.ts`); `storming/analyze.test.ts` tests `analyzeStormings` with
+  a model given and without one; `core/analyze.test.ts` checks that Modeling's analysis takes `.dt` alone and leaves
+  M011 to the project analysis. Modeling's `test-helpers.ts` (`check`) and the checker and generator tests that analyze
+  `examples/shop` still use the project analysis (T8: per package). 1244 → 1251 passing (7 todo); T0 baselines
+  byte-identical. *For T5:* the orchestrator's `generationChecks` is where the generator's checks run; T5 moves
+  `checkTsNames` behind the generator and calls it from there (it reads the AST index and reports through
+  `DiagnosticSink` with `DomainAnalysis.resolveFile`, both still `core/`'s).
 - **T5 — generation's side (P2).** `checker/tsnames` and `generator/naming` behind the generator; the orchestrator runs
   the TypeScript name check. `checker/events` stops importing the generator (`camel` to the kernel or to the model).
   `core/config` stops importing the generator (T6 takes the options).
