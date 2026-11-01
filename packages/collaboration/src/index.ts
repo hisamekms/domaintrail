@@ -71,14 +71,7 @@ export { type Clock, type CollaborationDeps, type OutboxEntry, type SignIn, type
 // ---- infrastructure, for the app that wires it -----------------------------------------------------------------
 export { openSessionBlobs } from './infrastructure/blobs.js';
 export { createClefClassifier } from './infrastructure/clef.js';
-export {
-    createCloudflareAccess,
-    createJwksAccessVerifier,
-    type AccessAdapterOptions,
-    type AccessClaims,
-    type AccessSettings,
-    type AccessTokenVerifier,
-} from './infrastructure/identity.js';
+export { createCloudflareAccess, type AccessAdapterOptions, type AccessClaims, type AccessTokenVerifier } from './infrastructure/identity.js';
 export { SESSION_DIR } from './infrastructure/session-dir.js';
 export {
     AGENT_FILE,
