@@ -619,7 +619,8 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   queued. A clarification card offers the reply's options (radio or checkbox, plus その他 in own words) and 答えて再実行
   queues the same requests with `answerTo` + `answer` at once. **An assumption's alternative** is asked for in the
   run's **note** (`前提「…」は採らず、「…」としてやり直してください。`): `answer` is reserved for a run that asked
-  (`NothingToAnswer` otherwise), and a note needs no change to the model. Cancel is ✕ on the status (head) and on queued
+  (`NothingToAnswer` otherwise), and a note needs no change to the model (*amended*: the pick is now recorded as
+  `input.pick` too — see "Picks are recorded" below). Cancel is ✕ on the status (head) and on queued
   or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯; recording, a new
   facilitator link (`POST /api/session/facilitator/link`, what `dt session link` does) and closing the session in the
   head's ⋯.
@@ -791,3 +792,31 @@ and choices — never the previous run's reply or changes, even when answering.
   (✕, or Esc on an empty text, cancels) and adds the run's requests' targets to the composer's chips. The posted reply
   shows `↩ AI #3: <head of the summary>` on one muted line at its top (plain text, cut to the room), a click jumping to
   the card and flashing it. The continuation quotes the replies like other applied messages.
+
+### Picks are recorded (amendment)
+
+*Decided by the maintainer*: the card showed a picked alternative (✓, `選択 name · time → #n`) by matching the later
+run's note against the page's note template in each language — a guess that breaks when the template changes or the
+note is written by hand. The pick is now part of the frozen input.
+
+- **Model.** `RunInput.pick?: AlternativePick { pickOf: AgentRunId, assumption: Tally, text, alternative:
+  ReplyAlternative }`: the assumption by its index in the reply (a reply is immutable once stored; assumptions have no
+  key) and the alternative by its key, as `MarkTarget.AssumptionChoice` names them; its text and the alternative are
+  copied at queueing, as an answer copies its questions. New errors `RunNotPickable` (the run is not `Completed`, or
+  its reply has no assumptions), `AlternativeNotFound` and `PickMismatch` (the requests are not exactly the run's).
+- **Use case.** `queueRun` takes `pick { pickOf, assumption, alternative }`: the run must be the session's
+  (`RunNotFound`, `RunOfAnotherSession`), and `resolvePick` (`domain/reply.ts`, pure) checks the rest and freezes it.
+  The note stays: the agent and the people read it as before.
+- **API.** `POST /api/session/runs` takes `pick` (the facilitator only, as any queueing; each field checked:
+  `pick.pickOf`, `pick.assumption`, `pick.alternative`); 404 `RunNotFound` / `RunOfAnotherSession`, 409
+  `RunNotPickable`, 400 `AlternativeNotFound` / `PickMismatch`.
+- **Previous runs and prompt.** `previousRunIds` adds `pick.pickOf` after the runs replied to and the run answered
+  (each once), so the agent gets the run it assumed in with its reply and changes; the block gains `pickedAlternative {
+  insteadOfYourAssumption, alternative, assumedInPreviousRun? }` and rule 6 says to redo the requests with it.
+- **Cards and votes.** `pickedAlternative` (`web/session/decisions.ts`) reads `input.pick` of the run that took over;
+  a note is never read as a pick. A pick run joins the unit of `pick.pickOf` (`history.ts`) and closes its votes
+  (`laterRunOf`; it bundles the same requests, so this changes nothing but says it).
+- **No migration, no fallback.** Run inputs are stored as JSON, so the optional field needs no schema change; a run
+  stored before loads unchanged (tested, and on a copy of a live session's database). Runs picked through the note
+  only (between the messages appendix and this one, never released) show no ✓: their note line still says what was
+  asked.

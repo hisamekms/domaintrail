@@ -2443,7 +2443,7 @@ card under the one before (question → answer → result); a run of the same me
 stays where its first run was queued; when it changes out of sight, a pill at the bottom of the stream
 (「#3 が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
 when it says so, and その他 in own words) and 答えて再実行 queues the run's messages again with that answer at once; on a
-done card, an alternative of an assumption queues them again with a note asking for it; ✕ on a queued or running card
+done card, an alternative of an assumption queues them again with that pick and a note asking for it; ✕ on a queued or running card
 (or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
 it was before the run (asked first) or compares the two.
 
@@ -2525,7 +2525,8 @@ name in its tooltip), as a link to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
 summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). An answer chosen in the
 card is frozen into the next run as `answerTo` and `answer` (the question and the options as they were shown); another
-alternative is asked for in the run's note (the card recognizes the pick by that note, in either language of the page).
+alternative picked is frozen as `pick` (the run, the assumption and the alternative as they were shown), with a note
+asking for it; the agent is given the run it assumed in, and the card shows the pick with ✓.
 
 **Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
 Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
