@@ -1,7 +1,7 @@
 // Recursive value types (M012 lets values and unions be recursive when they have a finite value): every view of the
 // model ends, with one edge per field however deep the values nest.
 import { describe, expect, test } from 'bun:test';
-import { aggregateDependencies, owningAggregates } from '@domaintrail/modeling';
+import { aggregateDependencies, type ElementModel, elementOf, owningAggregates } from '@domaintrail/modeling';
 import { buildStateGraph, buildStructureGraph } from './build.js';
 import { buildContextMapGraph } from './context-map.js';
 import { check } from '../../test-helpers.js';
@@ -40,14 +40,17 @@ describe('recursive value types', () => {
         ).toEqual(
             ['M.Doc.draft', 'M.Doc.rule', 'M.Expr.not.operand', 'M.Expr.rule.rule', 'M.Rule.children', 'M.Rule.expr', 'N.Wrap.next', 'N.Wrap.rule'].sort(),
         );
-        expect(buildStateGraph(model.elements['M.Doc'], model).nodes.length).toBeGreaterThan(0);
+        expect(buildStateGraph(elementOf(model, 'M.Doc')!, model).nodes.length).toBeGreaterThan(0);
         expect(
             buildContextMapGraph(model)
                 .nodes.map((n) => n.id)
                 .sort(),
         ).toEqual(['map:M', 'map:N']);
         expect(aggregateDependencies(model)).toEqual([]);
-        const elements = Object.values(model.elements);
-        expect([...owningAggregates(elements, new Map(elements.map((e) => [e.id, e]))).keys()].sort()).toEqual(['M.Expr', 'M.Rule']);
+        const elements = model.elements;
+        expect([...owningAggregates(elements, new Map(elements.map((e): [string, ElementModel] => [e.id, e]))).keys()].map(String).sort()).toEqual([
+            'M.Expr',
+            'M.Rule',
+        ]);
     });
 });

@@ -1,11 +1,7 @@
-import type { DomainModel, ElementModel } from './model.js';
+import type { ModelDiff } from '../generated/Modeling.js';
+import { commandsOf, statesOf, type DomainModel, type ElementId, type ElementModel } from './model.js';
 
-/** What changed between two models: the stable IDs of the elements, states and commands added, changed and removed. */
-export interface ModelDiff {
-    added: string[];
-    changed: string[];
-    removed: string[];
-}
+export type { ModelDiff } from '../generated/Modeling.js';
 
 export const EMPTY_DIFF: ModelDiff = { added: [], changed: [], removed: [] };
 
@@ -13,22 +9,23 @@ export const EMPTY_DIFF: ModelDiff = { added: [], changed: [], removed: [] };
  * Fingerprints of every addressable item (elements, states, commands) by stable ID.
  * Source locations are excluded so that moving code around is not a change.
  */
-export function fingerprints(model: DomainModel): Map<string, string> {
-    const out = new Map<string, string>();
-    for (const el of Object.values(model.elements)) {
+export function fingerprints(model: DomainModel): Map<ElementId, string> {
+    const out = new Map<ElementId, string>();
+    for (const el of model.elements) {
         out.set(el.id, JSON.stringify(strip(el)));
-        for (const s of el.states ?? []) out.set(s.id, JSON.stringify({ ...s, location: undefined }));
-        for (const c of el.commands ?? []) out.set(c.id, JSON.stringify({ ...c, location: undefined }));
+        for (const s of statesOf(el)) out.set(s.id, JSON.stringify({ ...s, location: undefined }));
+        for (const c of commandsOf(el)) out.set(c.id, JSON.stringify({ ...c, location: undefined }));
     }
     return out;
 }
 
 function strip(el: ElementModel): unknown {
+    if (el.kind !== 'aggregate') return { ...el, location: undefined };
     return {
         ...el,
         location: undefined,
-        states: el.states?.map((s) => ({ ...s, location: undefined })),
-        commands: el.commands?.map((c) => ({ ...c, location: undefined })),
+        states: el.states.map((s) => ({ ...s, location: undefined })),
+        commands: el.commands.map((c) => ({ ...c, location: undefined })),
     };
 }
 
@@ -37,14 +34,14 @@ export function diffModels(prev: DomainModel | undefined, next: DomainModel): Mo
     if (!prev) return EMPTY_DIFF;
     const a = fingerprints(prev);
     const b = fingerprints(next);
-    const diff: ModelDiff = { added: [], changed: [], removed: [] };
+    const added: ElementId[] = [];
+    const changed: ElementId[] = [];
     for (const [id, fp] of b) {
         const old = a.get(id);
-        if (old === undefined) diff.added.push(id);
-        else if (old !== fp) diff.changed.push(id);
+        if (old === undefined) added.push(id);
+        else if (old !== fp) changed.push(id);
     }
-    for (const id of a.keys()) if (!b.has(id)) diff.removed.push(id);
-    return diff;
+    return { added, changed, removed: [...a.keys()].filter((id) => !b.has(id)) };
 }
 
 export const isEmptyDiff = (d: ModelDiff): boolean => !d.added.length && !d.changed.length && !d.removed.length;

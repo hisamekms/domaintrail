@@ -3,6 +3,8 @@ node_modules/
 generated/
 # the collaboration contracts are generated and committed (ADR 0026; test/collaboration-contracts.test.ts)
 !contexts/collaboration/src/generated/
+# so is what Modeling publishes (ADR 0027; test/modeling-contracts.test.ts)
+!contexts/modeling/src/generated/
 *.log
 .DS_Store
 dist/

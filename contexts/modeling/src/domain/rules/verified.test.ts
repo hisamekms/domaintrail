@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { formatDomain } from '../../infrastructure/syntax/format.js';
 import { contextDependencies } from '../dependencies.js';
-import { check, codes, only } from '../../test-helpers.js';
+import { check, codes, only, element } from '../../test-helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {
@@ -53,7 +53,7 @@ describe('verified types: the checker', () => {
         expect(a.diagnostics).toEqual([]);
         expect(formatDomain(sales())).toBe(sales());
         const m = a.model!;
-        expect(m.elements['Sales.AvailableEmail']).toMatchObject({
+        expect(element(m, 'Sales.AvailableEmail')).toMatchObject({
             kind: 'verified',
             label: '未使用のメールアドレス',
             doc: '他の顧客に使われていないことを確かめたメールアドレス。',
@@ -63,15 +63,15 @@ describe('verified types: the checker', () => {
                 errors: ['Sales.EmailTaken'],
             },
         });
-        expect(m.elements['Sales.Reachable'].verified).toEqual({
+        expect(element(m, 'Sales.Reachable').verified).toEqual({
             of: { kind: 'ref', ref: 'Sales.AvailableEmail', text: 'AvailableEmail', target: 'verified' },
             errors: [],
         });
-        expect(m.elements['Sales.Deliverable'].verified?.for).toMatchObject({ optional: false });
+        expect(element(m, 'Sales.Deliverable').verified?.for).toMatchObject({ optional: false });
         // the errors of the factory are not the command's
-        expect(m.elements['Sales.Customer'].commands!.find((c) => c.name === 'changeEmail')!.errors).toEqual(['Sales.Unchanged']);
+        expect(element(m, 'Sales.Customer').commands!.find((c) => c.name === 'changeEmail')!.errors).toEqual(['Sales.Unchanged']);
         // a parameter takes its label from the verified type
-        expect(m.elements['Sales.Customer'].commands![0].params[1]).toMatchObject({ label: '未使用のメールアドレス', labelSource: 'type' });
+        expect(element(m, 'Sales.Customer').commands![0].params[1]).toMatchObject({ label: '未使用のメールアドレス', labelSource: 'type' });
     });
 
     test('in expressions a verified value is a value of its base; M022 matches it by its base type', async () => {

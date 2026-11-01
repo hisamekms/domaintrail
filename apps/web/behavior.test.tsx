@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { type DomainModel, type ElementModel } from '@domaintrail/modeling';
+import { commandsOf, elementOf, statesOf, type DomainModel, type ElementModel, type QualifiedName } from '@domaintrail/modeling';
 import { analyze } from '@domaintrail/analysis';
 import { CommandCard, OutcomeCard, outcomesOf, PolicyReaction, Requirements } from './behavior';
 import { MESSAGES } from './i18n';
@@ -13,11 +13,11 @@ let model: DomainModel;
 let order: ElementModel;
 const tx = MESSAGES.ja;
 const names = () => namer('both', model);
-const command = (name: string) => order.commands!.find((c) => c.name === name)!;
+const command = (name: string) => commandsOf(order).find((c) => c.name === name)!;
 
 beforeAll(async () => {
     model = (await analyze(await exampleSources())).model!;
-    order = Object.values(model.elements).find((e) => e.name === 'Order')!;
+    order = model.elements.find((e) => e.name === 'Order')!;
 });
 
 const text = (node: ReactNode): string => (typeof node === 'string' ? node : renderToStaticMarkup(<>{node}</>)).replace(/<[^>]*>/g, '');
@@ -44,8 +44,8 @@ function clickOn(card: (onSelect: (id: string) => void) => ReactNode, label: str
 
 describe('behaviour cards', () => {
     test('a policy: its event and command, and the cards of the command it runs and of the event it reacts to', () => {
-        const policy = model.elements['Billing.BillConfirmedOrder'];
-        const invoice = model.elements['Billing.Invoice'];
+        const policy = elementOf(model, 'Billing.BillConfirmedOrder')!;
+        const invoice = elementOf(model, 'Billing.Invoice')!;
         expect(tabsFor({ kind: 'element', el: policy })).toEqual(['structure', 'source']);
         const reaction = (onSelect: (id: string) => void) => <PolicyReaction p={policy} model={model} names={names()} tx={tx} onSelect={onSelect} input />;
         expect(text(reaction(() => {}))).toContain(tx.eventually);
@@ -53,7 +53,7 @@ describe('behaviour cards', () => {
         expect(clickOn(reaction, '注文確定 OrderConfirmed')).toEqual(['Sales.OrderConfirmed']);
         expect(clickOn(reaction, '請求書を発行する Invoice.issue')).toEqual(['Billing.Invoice:issue']);
         const issue = (onSelect: (id: string) => void) => (
-            <CommandCard agg={invoice} c={invoice.commands!.find((c) => c.name === 'issue')!} model={model} names={names()} tx={tx} onSelect={onSelect} />
+            <CommandCard agg={invoice} c={commandsOf(invoice).find((c) => c.name === 'issue')!} model={model} names={names()} tx={tx} onSelect={onSelect} />
         );
         expect(text(issue(() => {}))).toContain(tx.triggeredBy);
         expect(clickOn(issue, '確定した注文に請求する BillConfirmedOrder')).toEqual(['Billing.BillConfirmedOrder']);
@@ -104,7 +104,7 @@ describe('behaviour cards', () => {
     test('clicking a command card selects the command, its states and its outcomes', () => {
         const card = (onSelect: (id: string) => void) => CommandCard({ agg: order, c: command('confirm'), model, names: names(), tx, onSelect });
         expect(clickOn(card, '注文を確定するconfirm')).toEqual([command('confirm').id]);
-        expect(clickOn(card, '確定済み')).toEqual([order.states!.find((s) => s.name === 'Confirmed')!.id]);
+        expect(clickOn(card, '確定済み')).toEqual([statesOf(order).find((s) => s.name === 'Confirmed')!.id]);
         expect(clickOn(card, '注文確定 OrderConfirmed')).toEqual([command('confirm').emits[0].event]);
         // once as the error of its requirement, once among the errors it may return
         expect(clickOn(card, '明細なし EmptyOrder', 2)).toEqual([command('confirm').errors[0], command('confirm').errors[0]]);
@@ -129,7 +129,7 @@ describe('behaviour cards', () => {
     });
 
     test('a requirement without an expression says it is not expressed in the DSL', () => {
-        const c = { ...command('addItem'), requires: [{ name: 'inStock', label: '在庫がある', error: 'Sales.DuplicateSku' }] };
+        const c = { ...command('addItem'), requires: [{ name: 'inStock', label: '在庫がある', error: 'Sales.DuplicateSku' as QualifiedName }] };
         const html = renderToStaticMarkup(<Requirements c={c} model={model} names={names()} tx={tx} onSelect={() => {}} />);
         expect(html).toContain(`<em class="not-in-dsl">${tx.notInDsl}</em>`);
         expect(html).not.toContain('<code>');
@@ -141,7 +141,7 @@ describe('behaviour cards', () => {
     });
 
     test('an event card shows its commands and payload, and selects them on click', () => {
-        const [id, commands] = [...outcomesOf(order.commands!, 'emits')].find(([e]) => e.endsWith('OrderCancelled'))!;
+        const [id, commands] = [...outcomesOf(commandsOf(order), 'emits')].find(([e]) => e.endsWith('OrderCancelled'))!;
         const card = (onSelect: (id: string) => void) => OutcomeCard({ id, commands, model, names: names(), tx, onSelect });
         const html = renderToStaticMarkup(<>{card(() => {})}</>);
         expect(html).toContain('persistence-badge');
@@ -157,7 +157,7 @@ describe('inspector tabs', () => {
     });
 
     test('other items keep their tabs', () => {
-        const other = Object.values(model.elements).find((e) => e.kind === 'valueObject')!;
+        const other = model.elements.find((e) => e.kind === 'valueObject')!;
         expect(tabsFor(resolve(model, other.id)!)).toEqual(['structure', 'references', 'source']);
         expect(tabsFor(resolve(model, command('confirm').id)!)).toEqual(['structure', 'states', 'behavior', 'source']);
     });
@@ -215,12 +215,12 @@ describe('changes in the DSL', () => {
 
     test('the command card and the inspector list the fields it changes', async () => {
         const a = await work(COMMANDS);
-        const agg = a.model!.elements['Tasks.Work'];
+        const agg = elementOf(a.model!, 'Tasks.Work')!;
         const card = (name: string) =>
             renderToStaticMarkup(
                 <CommandCard
                     agg={agg}
-                    c={agg.commands!.find((c) => c.name === name)!}
+                    c={commandsOf(agg).find((c) => c.name === name)!}
                     model={a.model!}
                     names={namer('name', a.model!)}
                     tx={MESSAGES.ja}

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
+import { elementOf, fieldsOf } from '@domaintrail/modeling';
 import { createGitRevisions } from '@domaintrail/visualization';
 import type { Baseline, ViewPayload } from '@domaintrail/visualization/protocol';
 import { startViewServer, type ViewServer } from '@domaintrail/dt';
@@ -51,9 +52,10 @@ describe('comparing with a git revision', () => {
         const baseline = s.baseline as Extract<Baseline, { kind: 'git' }>;
         expect(baseline).toMatchObject({ kind: 'git', ref: 'main', commit: { subject: 'first' } });
         expect(baseline.error).toBeUndefined();
-        expect(s.diff.added).toEqual(['Sales.Coupon']);
-        expect(s.diff.changed).toContain('Sales.Order');
-        expect(s.base?.model?.elements['Sales.Order'].fields.map((f) => f.name)).toContain('note');
+        expect(s.diff.added.map(String)).toEqual(['Sales.Coupon']);
+        expect(s.diff.changed.map(String)).toContain('Sales.Order');
+        const baseOrder = s.base?.model && elementOf(s.base.model, 'Sales.Order');
+        expect(baseOrder && fieldsOf(baseOrder).map((f) => f.name)).toContain('note');
         expect(s.base?.structure?.nodes.some((n) => n.id === 'Sales.Order')).toBe(true);
         // the Structure View's rows: the new field added, the removed one kept as a ghost where it was
         const rows = s.structure!.nodes.find((n) => n.id === 'Sales.Order')!.lines.map((l) => [l.key.en.name, l.change]);

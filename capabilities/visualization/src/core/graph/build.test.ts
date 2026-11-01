@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { analyze } from '@domaintrail/analysis';
+import { elementOf } from '@domaintrail/modeling';
 import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from './build.js';
 import { ElkLayoutEngine } from '../../adapters/elk.js';
 import { INTERNAL_PADDING, LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, anyLang, sameText, transitionText, type TransitionLabels } from './ir.js';
@@ -54,7 +55,7 @@ describe('Structure overview graph', () => {
 describe('State View graph', () => {
     test('states, factory start node and one edge per (from, to) pair; self transitions are listed in the state', async () => {
         const model = await exampleModel();
-        const g = buildStateGraph(model.elements['Sales.Order'], model);
+        const g = buildStateGraph(elementOf(model, 'Sales.Order')!, model);
         expect(g.nodes.map((n) => n.id)).toEqual([initialNodeId('Sales.Order'), 'Sales.Order#Draft', 'Sales.Order#Confirmed', 'Sales.Order#Cancelled']);
         const short = (id: string) => id.split(/[#@]/)[1];
         expect(g.edges.map((e) => `${short(e.source)}->${short(e.target)}:${e.label?.en.name}${e.events ? ` ⇒ ${e.events.en.name}` : ''}`)).toEqual([
@@ -91,14 +92,14 @@ describe('State View graph', () => {
 
     test('aggregates without states list their commands in their one box', async () => {
         const model = await exampleModel();
-        const g = buildStateGraph(model.elements['Sales.Customer'], model);
+        const g = buildStateGraph(elementOf(model, 'Sales.Customer')!, model);
         expect(g.edges.map((e) => `${e.source}->${e.target}`)).toEqual(['Sales.Customer@new->Sales.Customer']);
         expect(g.nodes.find((n) => n.id === 'Sales.Customer')!.internal?.map((t) => t.label.en.name)).toEqual(['rename(name)', 'changeEmail(email)']);
     });
 
     test('a command from several states is listed in each state it keeps, and drawn for the others', async () => {
         const m = (await check({ 'a.dt': MULTI })).model!;
-        const g = buildStateGraph(m.elements['S.A'], m);
+        const g = buildStateGraph(elementOf(m, 'S.A')!, m);
         const internal = Object.fromEntries(g.nodes.filter((n) => n.internal).map((n) => [n.id, n.internal!.map((t) => t.elementId)]));
         expect(internal).toEqual({ 'S.A#Open': ['S.A:touch', 'S.A:hold'], 'S.A#Held': ['S.A:touch'] });
         expect(g.edges.map((e) => e.id).filter((id) => /:(touch|hold)\|/.test(id))).toEqual([
@@ -130,7 +131,7 @@ describe('State View graph', () => {
 }`,
             })
         ).model!;
-        const g = buildStateGraph(m.elements['S.A'], m);
+        const g = buildStateGraph(elementOf(m, 'S.A')!, m);
         const internal = Object.fromEntries(g.nodes.filter((n) => n.internal).map((n) => [n.id, n.internal!.map((t) => t.id)]));
         expect(internal).toEqual({
             'S.A#Open': ['S.A:keep|S.A#Open->S.A#Open'],
@@ -149,8 +150,8 @@ describe('State View graph', () => {
 
     test('state boxes grow by the rows of their internal transitions, as the labels show them', async () => {
         const m = (await check({ 'a.dt': MULTI })).model!;
-        const height = (labels: TransitionLabels) => buildStateGraph(m.elements['S.A'], m, labels).nodes.find((n) => n.id === 'S.A#Open')!.height;
-        const plain = buildStateGraph(m.elements['S.A'], m).nodes.find((n) => n.id === 'S.A#Closed')!.height;
+        const height = (labels: TransitionLabels) => buildStateGraph(elementOf(m, 'S.A')!, m, labels).nodes.find((n) => n.id === 'S.A#Open')!.height;
+        const plain = buildStateGraph(elementOf(m, 'S.A')!, m).nodes.find((n) => n.id === 'S.A#Closed')!.height;
         // touch (no events) and hold (raises Held): one line each, plus the events line of hold in both
         expect(height('command')).toBe(plain + 2 * INTERNAL_PADDING + 2 * LINE_HEIGHT);
         expect(height('event')).toBe(height('command'));
@@ -169,8 +170,8 @@ describe('State View graph', () => {
 
     test('self transitions are not laid out as edges; two-line labels get room for both lines', async () => {
         const m = (await check({ 'a.dt': MULTI })).model!;
-        const both = await engine.layout(buildStateGraph(m.elements['S.A'], m, 'both'));
-        const command = await engine.layout(buildStateGraph(m.elements['S.A'], m, 'command'));
+        const both = await engine.layout(buildStateGraph(elementOf(m, 'S.A')!, m, 'both'));
+        const command = await engine.layout(buildStateGraph(elementOf(m, 'S.A')!, m, 'command'));
         expect(Object.keys(both.edgeLayout).sort()).toEqual(both.edges.map((e) => e.id).sort());
         expect(Object.keys(both.edgeLayout).filter((id) => id.endsWith('Open->S.A#Open'))).toEqual([]);
         const id = 'S.A:hold|S.A#Held->S.A#Open';

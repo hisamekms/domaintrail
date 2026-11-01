@@ -39,7 +39,7 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `domain` (the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources: the models and the rules, on what the syntax parses), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, parsing and the diagnostics of the syntax and the links, the AST index, labels, the sites, the AST → model mappings, the printer of `dt fmt`) |
+| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `model/` (`.dt`: what it publishes — the Typed Model, the diff, the dependency types, its rule IDs) and the TypeScript generated from it, committed in `src/generated` (imported by `domain` with `import type` only; see [Bootstrap](#bootstrap)); `domain` (the helpers over the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources: the models and the rules, on what the syntax parses), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, parsing and the diagnostics of the syntax and the links, the AST index, labels, the sites, the AST → model mappings, the printer of `dt fmt`) |
 | `contexts/storming` | `@domaintrail/storming`, the Event Storming DSL `.dtes` (ADR 0024), upstream Modeling: `domain` (the IR, the validator, the link to the Typed Model, the semantic graph and timeline occurrences, its rule IDs, `isStormingFile`), `application` (its analysis against the Typed Model), `infrastructure/syntax` (its own grammar and Langium project, the parser into the IR, the printer) |
 | `contexts/collaboration` | `@domaintrail/collaboration`, collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r contexts/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports — the model validator among them —, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, identity) |
 | `capabilities/analysis` | `@domaintrail/analysis`, the project analysis behind `dt check` (ADR 0027's capability `analysis`): `application` (Modeling's and Storming's analyses and the generation's checks combined into one `Analysis`), `core` (the config's `sources` section) |
@@ -122,6 +122,25 @@ bun run test:it        # the integration tests: test/
   relative links of the README, CONTRIBUTING and Getting started resolve (`test/guide.test.ts`, `test/docs.test.ts`).
   `docs/guide.md` is printed by `dt guide`, so a heading there needs a `<!-- topic: … -->` line above it.
 - **The tree-sitter grammar**: parses with the committed wasm (`test/tree-sitter.test.ts`; see below).
+
+## Bootstrap
+
+Modeling describes what it publishes in its own `.dt` (`contexts/modeling/model`), and the tool is built on the
+TypeScript generated from it, committed in `contexts/modeling/src/generated` (as Collaboration's in
+`contexts/collaboration/src/generated`). Modeling imports the generated code with `import type` only (the architecture
+test's rule `generated`), so the tool runs from the committed output even when the generator is broken.
+`test/modeling-contracts.test.ts` and `test/collaboration-contracts.test.ts` fail when the model does not check clean,
+is not formatted, or generating it again differs from the committed files.
+
+- **Changing Modeling's model:** edit `contexts/modeling/model/*.dt`, run `bun run dt -r contexts/modeling fmt` and
+  `bun run dt -r contexts/modeling generate ts`, then `bun run typecheck` and fix what uses the changed types. A change of
+  the Typed Model's shape changes the Live View payload (a T0 baseline): make it in one commit with every consumer and
+  the updated snapshots (`bun test -u` on those tests), and say why in the commit message.
+- **Changing the generator:** regenerate both packages (`bun run dt -r contexts/modeling generate ts` and
+  `bun run dt -r contexts/collaboration generate ts`) and commit the generated files with the change.
+- **A broken generator** (its output does not type-check, or the tool no longer runs): `git restore
+  contexts/modeling/src/generated contexts/collaboration/src/generated` to get the committed output back, fix the
+  generator with it in place, then regenerate both packages.
 
 ## The tree-sitter grammar
 

@@ -1,283 +1,154 @@
 /**
- * Typed Model: a resolved, serializable view of the domain model.
- * It is the input of the TypeScript generator and of the Graph IR, and is sent to the Live View.
+ * Typed Model: a resolved, serializable view of the domain model. It is the input of the TypeScript generator and of
+ * the Graph IR, and is sent to the Live View. Its types are described in `model/*.dt` and generated into
+ * `src/generated` (imported as types only, so that the tool runs from the committed output); the helpers over them are
+ * written here.
  */
-import type { Location } from '@domaintrail/kernel';
+import type * as M from '../generated/Modeling.js';
 
-export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
+export type {
+    BinaryOp,
+    Cardinality,
+    CommandModel,
+    ContextModel,
+    ContextName,
+    Described,
+    DomainModel,
+    ElementId,
+    ElementKind,
+    ElementModel,
+    EmitModel,
+    EnumValueModel,
+    ExprModel,
+    FieldKind,
+    FieldModel,
+    InvariantModel,
+    LabelSource,
+    Location,
+    OutcomePatternModel,
+    PolicyModel,
+    PrimitiveName,
+    QualifiedName,
+    Quantifier,
+    RequirementModel,
+    StateModel,
+    TermModel,
+    TransitionModel,
+    TypeExpr,
+    VariantModel,
+    VerifiedFor,
+    VerifiedModel,
+} from '../generated/Modeling.js';
 
-export type ElementKind =
-    | 'id'
-    | 'primitive'
-    | 'verified'
-    | 'enum'
-    | 'valueObject'
-    | 'union'
-    | 'entity'
-    | 'aggregate'
-    | 'event'
-    | 'error'
-    | 'fieldSet'
-    | 'policy';
+type ElementModel = M.ElementModel;
+type FieldModel = M.FieldModel;
 
-export type TypeExpr =
-    | { kind: 'primitive'; name: PrimitiveName }
-    /** `ref` is the qualified name of the target; `target` is undefined when the reference is unresolved. */
-    | { kind: 'ref'; ref: string; text: string; target?: ElementKind };
+/** The element of a kind (`ElementOf<'aggregate'>`). */
+export type ElementOf<K extends M.ElementKind> = Extract<ElementModel, { readonly kind: K }>;
+export type AggregateModel = ElementOf<'aggregate'>;
+export type UnionModel = ElementOf<'union'>;
+export type EnumModel = ElementOf<'enum'>;
+export type PolicyElement = ElementOf<'policy'>;
+/** The elements that hold fields: value objects, entities, aggregates, events, errors and field sets. */
+export type FieldsElement = Extract<ElementModel, { readonly fields: readonly FieldModel[] }>;
 
-export type Cardinality = 'one' | 'optional' | 'many' | 'nonEmpty';
-
-export interface FieldModel {
-    name: string;
-    kind: 'field' | 'owns' | 'references' | 'param';
-    type: TypeExpr;
-    cardinality: Cardinality;
-    /** Multiplicity as written in the DSL (`?`, `[0..*]`, ...), empty when omitted. */
-    multiplicity: string;
-    /** Qualified name of the referenced aggregate (`references` only). */
-    target?: string;
-    /** Japanese (display) name and where it came from. */
-    label?: string;
-    labelSource?: 'inline' | 'term' | 'type';
-    /** Description from `///` comments (own, or of the term). */
-    doc?: string;
-    /** Qualified name of the field set the field comes from (`with`); absent for the element's own fields. */
-    fieldSet?: string;
+/** The elements of a model by stable ID (an element's ID is its qualified name), built once per model. */
+const indexes = new WeakMap<M.DomainModel, ReadonlyMap<string, ElementModel>>();
+function index(model: M.DomainModel): ReadonlyMap<string, ElementModel> {
+    let byId = indexes.get(model);
+    if (!byId) {
+        byId = new Map(model.elements.map((e) => [e.id, e]));
+        indexes.set(model, byId);
+    }
+    return byId;
 }
 
-/** Display name and description shared by declarations. */
-export interface Described {
-    label?: string;
-    doc?: string;
-}
+/** The element with a stable ID or qualified name (`Sales.Order`), if the model has one. */
+export const elementOf = (model: M.DomainModel, idOrName: string): ElementModel | undefined => index(model).get(idOrName);
 
-export interface InvariantModel extends Described {
-    name: string;
-    /** The expression as written; absent for an invariant declared without one (not expressed in the DSL). */
-    source?: string;
-    /** The expression as a tree, for generated checks; absent with `source`. */
-    expr?: ExprModel;
-}
+/** Whether the model has an element with this stable ID or qualified name. */
+export const hasElement = (model: M.DomainModel, idOrName: string): boolean => index(model).has(idOrName);
 
-/**
- * An invariant or requirement expression as a tree (syntax only: names are resolved by whoever reads it, in the scope
- * of the invariant or requirement). Numbers keep their sign; `pattern` is the regular expression exactly as written.
- */
-export type ExprModel =
-    | { k: 'bool'; value: boolean }
-    | { k: 'int'; value: number }
-    | { k: 'decimal'; value: string }
-    | { k: 'string'; value: string }
-    | { k: 'name'; name: string }
-    | { k: 'member'; receiver: ExprModel; member: string }
-    | { k: 'not'; operand: ExprModel }
-    | { k: 'binary'; op: 'implies' | 'or' | 'and' | '==' | '!=' | '<' | '<=' | '>' | '>='; left: ExprModel; right: ExprModel }
-    | { k: 'range'; operand: ExprModel; lower: ExprModel; upper: ExprModel }
-    | { k: 'count'; collection: ExprModel }
-    | { k: 'exists'; operand: ExprModel }
-    | { k: 'length'; operand: ExprModel }
-    | { k: 'matches'; operand: ExprModel; pattern: string }
-    | { k: 'unique'; collection: ExprModel; param?: string; keys: ExprModel[] }
-    | { k: 'contains'; collection: ExprModel; element: ExprModel }
-    | { k: 'quantifier'; quantifier: 'all' | 'any'; collection: ExprModel; param: string; body: ExprModel };
+/** The context of that name, if the model has it. */
+export const contextOf = (model: M.DomainModel, name: string): M.ContextModel | undefined => model.contexts.find((c) => c.name === name);
 
-export interface StateModel extends Described {
-    id: string;
-    name: string;
-    fields: FieldModel[];
-    invariants: InvariantModel[];
-    location: Location;
-}
+/** The names of the contexts, in declaration order. */
+export const contextNames = (model: M.DomainModel): M.ContextName[] => model.contexts.map((c) => c.name);
 
-/** A variant of a union: its name is the discriminator value. */
-export interface VariantModel extends Described {
-    name: string;
-    fields: FieldModel[];
-    invariants: InvariantModel[];
-}
+/** Shared contexts (shared kernel), whose elements are usable by name from every context. */
+export const sharedContexts = (model: M.DomainModel): M.ContextName[] => model.contexts.filter((c) => c.shared).map((c) => c.name);
 
-/** `requires name "label" { expr } else Error`: the command is accepted only if the requirement holds. */
-export interface RequirementModel extends Described {
-    name: string;
-    /** The expression as written; absent for a requirement declared without one (not expressed in the DSL). */
-    source?: string;
-    /** The expression as a tree, for generated checks; absent with `source`. */
-    expr?: ExprModel;
-    /** Qualified name of the error returned when the requirement does not hold. */
-    error: string;
-}
+export const elementsIn = (model: M.DomainModel, ctx: string): ElementModel[] => model.elements.filter((e) => e.context === ctx);
 
-/** `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory. */
-export interface TransitionModel {
-    from: string[];
-    to: string[];
-}
+/** The fields an element holds (its own and those of its field sets; an aggregate's common fields); none for the rest. */
+export const fieldsOf = (el: ElementModel): readonly FieldModel[] => ('fields' in el ? el.fields : []);
 
-/** `when A | B -> C`: the outcomes an `emits` entry applies to. An empty side matches any state (a factory has no source). */
-export interface OutcomePatternModel {
-    from: string[];
-    to: string[];
-}
+/** The invariants of an element (an aggregate's common ones); none for the kinds without invariants. */
+export const invariantsOf = (el: ElementModel): readonly M.InvariantModel[] => ('invariants' in el ? el.invariants : []);
 
-/**
- * An entry of `emits`: the command emits `event` as often as its multiplicity says (once without one), for the
- * outcomes that match `when` (every outcome without it). On failure it emits nothing.
- */
-export interface EmitModel {
-    /** Qualified event name. */
-    event: string;
-    cardinality: Cardinality;
-    /** Multiplicity as written in the DSL (`?`, `[1..*]`, ...), empty when omitted. */
-    multiplicity: string;
-    /** How many times the event is emitted, at least and at most (`undefined`: no upper bound). */
-    lower: number;
-    upper?: number;
-    when?: OutcomePatternModel;
-}
+/** The field sets an element names with `with` (qualified names). */
+export const fieldSetsOf = (el: ElementModel): readonly M.QualifiedName[] => ('fieldSets' in el ? el.fieldSets : []);
 
-export interface CommandModel extends Described {
-    id: string;
-    name: string;
-    factory: boolean;
-    params: FieldModel[];
-    /** State transitions; a factory has one without source states, an aggregate without states none. */
-    transitions: TransitionModel[];
-    /** Preconditions over the parameters and the aggregate's current data (`requires`). */
-    requires: RequirementModel[];
-    /**
-     * `changes`: the fields the command may change, as written — common fields, and state-specific fields it would
-     * otherwise carry over. Empty: it changes no common field (a factory sets every field).
-     */
-    changes: string[];
-    /** The events emitted on success, per entry of `emits`. */
-    emits: EmitModel[];
-    /**
-     * Qualified error names: those listed in `errors`, then those named by `else` of the requirements, each once.
-     * Together they make the command's error union.
-     */
-    errors: string[];
-    location: Location;
-}
+/** The states of an aggregate; none for the other kinds. */
+export const statesOf = (el: ElementModel): readonly M.StateModel[] => (el.kind === 'aggregate' ? el.states : []);
 
-/**
- * `policy Name when Event -> Aggregate.command`: when the event happens, the command is eventually run, by whatever
- * mechanism (the same use case, an event bus, a batch). The aggregate belongs to the policy's context.
- */
-export interface PolicyModel {
-    /** Qualified event name (as written when unresolved). */
-    event: string;
-    /** Qualified name of the target aggregate (as written when unresolved). */
-    aggregate: string;
-    /** Name of the target command in the aggregate. */
-    command: string;
-}
+/** The commands of an aggregate; none for the other kinds. */
+export const commandsOf = (el: ElementModel): readonly M.CommandModel[] => (el.kind === 'aggregate' ? el.commands : []);
 
-export interface ElementModel extends Described {
-    id: string;
-    context: string;
-    name: string;
-    kind: ElementKind;
-    location: Location;
-    /** Base primitive of an ID or domain primitive. */
-    base?: PrimitiveName;
-    /** Verified types only (ADR 0023). */
-    verified?: VerifiedModel;
-    /** Values of an enum. */
-    values?: string[];
-    /** Japanese names of enum values, by value. */
-    valueLabels?: Record<string, string>;
-    fields: FieldModel[];
-    invariants: InvariantModel[];
-    /** Unions only: the discriminator property, the enum it is bound to (qualified name), and the variants. */
-    discriminator?: string;
-    tagType?: string;
-    variants?: VariantModel[];
-    /**
-     * Aggregates, entities, value objects and events: the field sets named with `with` (qualified names). Their fields come first in
-     * `fields`, marked with `fieldSet`.
-     */
-    fieldSets?: string[];
-    /** Events only: true when the event is declared `persistent` (its contract is to be persisted). */
-    persistent?: boolean;
-    /** Aggregates only. */
-    states?: StateModel[];
-    commands?: CommandModel[];
-    /** Policies only: the event it reacts to and the command it runs. */
-    policy?: PolicyModel;
-}
+/** The variants of a union; none for the other kinds. */
+export const variantsOf = (el: ElementModel): readonly M.VariantModel[] => (el.kind === 'union' ? el.variants : []);
 
-/**
- * `verified X of T for C? errors E`: evidence that a check outside the aggregate was made — a value of `of` that only
- * its factory makes, from the value and the context of `for`, failing with one of `errors`.
- */
-export interface VerifiedModel {
-    of: TypeExpr;
-    /** The context the check needs, and whether it may be absent (`for C?`). */
-    for?: { type: TypeExpr; optional: boolean };
-    /** Qualified names of the errors of the factory. */
-    errors: string[];
-}
-
-export interface TermModel {
-    name: string;
-    label: string;
-    doc?: string;
-}
-
-export interface DomainModel {
-    contexts: string[];
-    /** Japanese names of contexts. */
-    contextLabels: Record<string, string>;
-    /** Descriptions of contexts (`///` comments). */
-    contextDocs: Record<string, string>;
-    /** Shared contexts (shared kernel), whose elements are usable by name from every context. */
-    sharedContexts: string[];
-    /** Glossary of field / parameter names per context. */
-    terms: Record<string, TermModel[]>;
-    /** Keyed by stable ID, in declaration order. */
-    elements: Record<string, ElementModel>;
-}
-
-export const elementsIn = (model: DomainModel, ctx: string): ElementModel[] => Object.values(model.elements).filter((e) => e.context === ctx);
-
-export const elementList = (model: DomainModel): ElementModel[] => Object.values(model.elements);
+/** The values of an enum; none for the other kinds. */
+export const valuesOf = (el: ElementModel): readonly M.EnumValueModel[] => (el.kind === 'enum' ? el.values : []);
 
 /** The policies of the model, in declaration order. */
-export const policyList = (model: DomainModel): (ElementModel & { policy: PolicyModel })[] =>
-    elementList(model).filter((e): e is ElementModel & { policy: PolicyModel } => e.kind === 'policy' && !!e.policy);
+export const policyList = (model: M.DomainModel): PolicyElement[] => model.elements.filter((e): e is PolicyElement => e.kind === 'policy');
 
 /** The policies that run command `command` of aggregate `aggregate` (qualified). */
-export const policiesRunning = (model: DomainModel, aggregate: string, command: string): ElementModel[] =>
+export const policiesRunning = (model: M.DomainModel, aggregate: string, command: string): PolicyElement[] =>
     policyList(model).filter((p) => p.policy.aggregate === aggregate && p.policy.command === command);
 
 /** The policies that react to event `event` (qualified). */
-export const policiesReactingTo = (model: DomainModel, event: string): ElementModel[] => policyList(model).filter((p) => p.policy.event === event);
+export const policiesReactingTo = (model: M.DomainModel, event: string): PolicyElement[] => policyList(model).filter((p) => p.policy.event === event);
 
 /** The element's own fields, without those it takes from field sets. */
-export const ownFields = (el: ElementModel): FieldModel[] => el.fields.filter((f) => !f.fieldSet);
+export const ownFields = (el: ElementModel): FieldModel[] => fieldsOf(el).filter((f) => !f.fieldSet);
 
 /** Fields of an element, including state-specific fields of aggregates and the fields of every union variant. */
 export const allFieldsOf = (el: ElementModel): FieldModel[] => [
-    ...el.fields,
-    ...(el.states ?? []).flatMap((s) => s.fields),
-    ...(el.variants ?? []).flatMap((v) => v.fields),
+    ...fieldsOf(el),
+    ...statesOf(el).flatMap((s) => s.fields),
+    ...variantsOf(el).flatMap((v) => v.fields),
 ];
 
+/** How a binary operator is written in the DSL. */
+export const BINARY_OP_TEXT: Readonly<Record<M.BinaryOp, string>> = {
+    implies: 'implies',
+    or: 'or',
+    and: 'and',
+    eq: '==',
+    ne: '!=',
+    lt: '<',
+    le: '<=',
+    gt: '>',
+    ge: '>=',
+};
+
 /** `when` of an `emits` entry as written, e.g. `Confirmed ->` (empty without one). */
-export const outcomePatternText = (w: OutcomePatternModel | undefined): string =>
+export const outcomePatternText = (w: M.OutcomePatternModel | undefined): string =>
     w ? [w.from.join(' | '), '->', w.to.join(' | ')].filter(Boolean).join(' ') : '';
 
 /** The multiplicity and `when` written after the event of an `emits` entry, e.g. `[1..*] when -> Draft`. */
-export const emitSuffix = (e: EmitModel): string => `${e.multiplicity}${e.when ? ` when ${outcomePatternText(e.when)}` : ''}`.trim();
+export const emitSuffix = (e: M.EmitModel): string => `${e.multiplicity}${e.when ? ` when ${outcomePatternText(e.when)}` : ''}`.trim();
 
 /** The events a command may emit (qualified names, each once, in the order of `emits`). */
-export const emittedEvents = (c: CommandModel): string[] => [...new Set(c.emits.map((e) => e.event))];
+export const emittedEvents = (c: M.CommandModel): M.QualifiedName[] => [...new Set(c.emits.map((e) => e.event))];
 
 /**
  * Whether an `emits` entry applies to the outcome of a command that starts in `from` (`undefined` for a factory or an
  * aggregate without states) and ends in `to`.
  */
-export const emitApplies = (e: { when?: OutcomePatternModel }, from: string | undefined, to: string | undefined): boolean =>
+export const emitApplies = (e: { readonly when?: M.OutcomePatternModel }, from: string | undefined, to: string | undefined): boolean =>
     !e.when ||
     ((e.when.from.length === 0 || (from !== undefined && e.when.from.includes(from))) &&
         (e.when.to.length === 0 || (to !== undefined && e.when.to.includes(to))));
@@ -299,12 +170,12 @@ export const sameFieldType = (a: FieldModel, b: FieldModel): boolean =>
  *   - `dropped`: the source's own fields that are not carried over.
  */
 export function outcomeFields(
-    agg: ElementModel,
-    c: CommandModel,
+    agg: AggregateModel,
+    c: M.CommandModel,
     from: string | undefined,
     to: string | undefined,
 ): { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } {
-    const own = (state: string | undefined): FieldModel[] => agg.states?.find((s) => s.name === state)?.fields ?? [];
+    const own = (state: string | undefined): readonly FieldModel[] => agg.states.find((s) => s.name === state)?.fields ?? [];
     const target = own(to);
     if (c.factory) return { set: [...agg.fields, ...target], carried: [], dropped: [] };
     const source = own(from);

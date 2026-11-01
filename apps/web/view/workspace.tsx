@@ -6,6 +6,7 @@ import type { StormingView, ViewPayload } from '@domaintrail/visualization/proto
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
 import { ContextList } from '../context-picker';
 import { useT } from '../i18n';
+import { contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
 import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
@@ -157,7 +158,7 @@ export function ViewWorkspace(props: {
                                 <FilterSection title={t.filters.contexts}>
                                     <ContextList
                                         contexts={focusContexts}
-                                        labels={model?.contextLabels ?? {}}
+                                        labels={model ? contextLabels(model) : {}}
                                         selected={checked}
                                         hidden={hidden}
                                         mode={mode}

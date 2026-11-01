@@ -1,7 +1,8 @@
 import * as posix from 'node:path/posix';
 import * as testingSource from './testing/_testing.js' with { type: 'text' };
-import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel } from '@domaintrail/modeling';
-import { elementList, elementsIn } from '@domaintrail/modeling';
+import type { AggregateModel, CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PolicyElement } from '@domaintrail/modeling';
+import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, fieldsOf, invariantsOf, statesOf, variantsOf } from '@domaintrail/modeling';
+import type { DomainPrimitive } from './checks.js';
 import {
     aggregateInvariants,
     checkName,
@@ -66,8 +67,8 @@ export function register(suite: Suite): void {
 
 /** The types whose arbitraries an element's arbitrary is made of (qualified names): those of its fields, its base. */
 function arbitraryParts(el: ElementModel): string[] {
-    const fields = [...el.fields, ...(el.states ?? []).flatMap((s) => s.fields), ...(el.variants ?? []).flatMap((v) => v.fields)];
-    const types = [...fields.map((f) => f.type), ...(el.verified ? [el.verified.of] : [])];
+    const fields = [...fieldsOf(el), ...statesOf(el).flatMap((s) => s.fields), ...variantsOf(el).flatMap((v) => v.fields)];
+    const types = [...fields.map((f) => f.type), ...(el.kind === 'verified' ? [el.verified.of] : [])];
     return types.flatMap((t) => (t.kind === 'ref' ? [t.ref] : []));
 }
 
@@ -77,7 +78,7 @@ function arbitraryParts(el: ElementModel): string[] {
  * would need one of theirs (qualified names, in declaration order).
  */
 export function untestedTypes(model: DomainModel): { recursive: string[]; types: string[] } {
-    const parts = new Map(elementList(model).map((e) => [e.id, arbitraryParts(e)]));
+    const parts = new Map<string, string[]>(model.elements.map((e) => [e.id, arbitraryParts(e)]));
     const reaches = (from: string, to: string): boolean => {
         const seen = new Set<string>();
         const stack = [...(parts.get(from) ?? [])];
@@ -101,15 +102,15 @@ export function untestedTypes(model: DomainModel): { recursive: string[]; types:
  */
 function untestedCases(model: DomainModel, untested: ReadonlySet<string>, policies: Readonly<Record<string, PolicyMode>>): string[] {
     const out: string[] = [];
-    for (const el of elementList(model)) {
-        for (const c of el.commands ?? []) if (!testable(el, c, untested)) out.push(`${el.id}.${c.name}`);
-        if (el.policy && policies[el.context] === 'required' && untested.has(el.policy.event)) out.push(`policy ${el.id}`);
+    for (const el of model.elements) {
+        if (el.kind === 'aggregate') for (const c of el.commands) if (!testable(el, c, untested)) out.push(`${el.id}.${c.name}`);
+        if (el.kind === 'policy' && policies[el.context] === 'required' && untested.has(el.policy.event)) out.push(`policy ${el.id}`);
     }
     return out;
 }
 
 /** Whether a command's case can be generated: its aggregate and parameters have arbitraries. */
-const testable = (agg: ElementModel, c: CommandModel, untested: ReadonlySet<string>): boolean =>
+const testable = (agg: AggregateModel, c: CommandModel, untested: ReadonlySet<string>): boolean =>
     !untested.has(agg.id) && c.params.every((p) => p.type.kind !== 'ref' || !untested.has(p.type.ref));
 
 /**
@@ -138,7 +139,7 @@ export function generateTests(model: DomainModel, header: string, opts: TestsOpt
     const dir = opts.dir;
     const files: File[] = [{ path: posix.join(dir, '_testing.ts'), content: `${header}\n${TESTING}` }];
     const untested = new Set(untestedTypes(model).types);
-    for (const ctx of model.contexts) {
+    for (const ctx of contextNames(model)) {
         files.push({
             path: posix.join(dir, `${ctx}.ts`),
             content: new TestsEmitter(model, ctx, header, (c) => moduleOf(dir, c), opts.policies?.[ctx] === 'required', untested).emit(),
@@ -149,7 +150,7 @@ export function generateTests(model: DomainModel, header: string, opts: TestsOpt
         header,
         `export * from './_testing.js';`,
         ...(opts.runner ? [`export { register } from './_register.js';`] : []),
-        ...model.contexts.map((c) => `export * as ${c} from './${c}.js';`),
+        ...contextNames(model).map((c) => `export * as ${c} from './${c}.js';`),
         '',
     ];
     files.push({ path: posix.join(dir, 'index.ts'), content: index.join('\n') });
@@ -157,7 +158,7 @@ export function generateTests(model: DomainModel, header: string, opts: TestsOpt
 }
 
 /** Bounds read from the invariants of a domain primitive (`value in 1..999`, `length(value) <= 8`, `matches`). */
-export function hintsOf(invs: InvariantModel[]): Record<string, number | string> {
+export function hintsOf(invs: readonly InvariantModel[]): Record<string, number | string> {
     const h: Record<string, number | string> = {};
     const num = (e: ExprModel): number | undefined => (e.k === 'int' ? e.value : e.k === 'decimal' ? Number(e.value) : undefined);
     const isValue = (e: ExprModel): boolean => e.k === 'name' && e.name === 'value';
@@ -197,15 +198,16 @@ export function hintsOf(invs: InvariantModel[]): Record<string, number | string>
             const s = isValue(e.operand) ? 'value' : 'length';
             bound(s, '>=', num(e.lower));
             bound(s, '<=', num(e.upper));
-        } else if (e.k === 'binary' && e.op in flip) {
+        } else if (e.k === 'binary' && BINARY_OP_TEXT[e.op] in flip) {
+            const text = BINARY_OP_TEXT[e.op];
             for (const [x, y, op] of [
-                [e.left, e.right, e.op],
-                [e.right, e.left, flip[e.op]],
+                [e.left, e.right, text],
+                [e.right, e.left, flip[text]],
             ] as const) {
                 if (isValue(x)) bound('value', op, num(y));
                 else if (isLength(x)) bound('length', op, num(y));
             }
-        } else if (e.k === 'binary' && e.op === '==') {
+        } else if (e.k === 'binary' && e.op === 'eq') {
             if (isLength(e.left)) bound('length', '==', num(e.right));
         } else if (e.k === 'matches' && isValue(e.operand) && !('pattern' in h)) {
             h.pattern = e.pattern;
@@ -281,7 +283,7 @@ class TestsEmitter {
         return `testing.many(${b}, ${lower}${upper !== undefined ? `, ${upper}` : ''})`;
     }
 
-    private record(head: string[], fields: FieldModel[]): string {
+    private record(head: string[], fields: readonly FieldModel[]): string {
         const props = [...head, ...fields.map((f) => `${f.name}: ${this.fieldArb(f, false)}`)];
         const optional = fields.some((f) => f.cardinality === 'optional');
         const required = [...head.map((h) => h.slice(0, h.indexOf(':'))), ...fields.filter((f) => f.cardinality !== 'optional').map((f) => f.name)];
@@ -289,11 +291,11 @@ class TestsEmitter {
     }
 
     /** `(v) => <check>(v).length === 0`, with the declared checks of the options (others assumed to hold). */
-    private holds(typeName: string, checkOwner: string, invs: InvariantModel[]): string {
+    private holds(typeName: string, checkOwner: string, invs: readonly InvariantModel[]): string {
         return `(v) => ${this.violated(typeName, checkOwner, invs)}(v).length === 0`;
     }
 
-    private violated(typeName: string, checkOwner: string, invs: InvariantModel[]): string {
+    private violated(typeName: string, checkOwner: string, invs: readonly InvariantModel[]): string {
         if (!hasDeclared(invs)) return `${this.ctx}.${checkName(typeName)}`;
         const names = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
         return `${this.ctx}.${checkWithName(typeName)}(testing.declared<${this.ctx}.${declaredChecksName(checkOwner)}>([${names.join(', ')}], declared.${checkOwner}))`;
@@ -315,13 +317,13 @@ class TestsEmitter {
             switch (el.kind) {
                 case 'id':
                 case 'primitive': {
-                    const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base ?? 'String'}', ${literal(hintsOf(el.invariants))})), seed)`;
+                    const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base}', ${literal(hintsOf(el.invariants))})), seed)`;
                     add(el.name, valid(el.name, raw, el.invariants.length ? this.holds(el.name, el.name, el.invariants) : undefined));
                     break;
                 }
                 case 'verified': {
                     // the check is the factory's, outside the contract tests: any value of the base passed it
-                    const base = this.baseArb({ name: el.name, kind: 'param', type: el.verified!.of, cardinality: 'one', multiplicity: '' });
+                    const base = this.baseArb({ name: el.name, kind: 'param', type: el.verified.of, cardinality: 'one', multiplicity: '' });
                     add(el.name, `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${base})`);
                     break;
                 }
@@ -334,7 +336,7 @@ class TestsEmitter {
                 case 'enum':
                     add(
                         el.name,
-                        `given.${el.name} ?? ${el.values?.length ? `fc.constantFrom<${this.type(el.name)}>(${el.values.map((v) => `'${v}'`).join(', ')})` : `fc.constant(undefined as never)`}`,
+                        `given.${el.name} ?? ${el.values.length ? `fc.constantFrom<${this.type(el.name)}>(${el.values.map((v) => `'${v.name}'`).join(', ')})` : `fc.constant(undefined as never)`}`,
                     );
                     break;
                 case 'valueObject':
@@ -344,15 +346,15 @@ class TestsEmitter {
                     break;
                 }
                 case 'union': {
-                    const tag = el.discriminator ?? 'kind';
-                    const variants = (el.variants ?? []).map((v) => this.record([`${tag}: fc.constant('${v.name}' as const)`], v.fields));
+                    const tag = el.discriminator;
+                    const variants = el.variants.map((v) => this.record([`${tag}: fc.constant('${v.name}' as const)`], v.fields));
                     const raw = variants.length ? `testing.cast<${this.type(el.name)}>(fc.oneof(${variants.join(', ')}))` : 'fc.constant(undefined as never)';
                     const invs = unionInvariants(el);
                     add(el.name, valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined));
                     break;
                 }
                 case 'aggregate': {
-                    const states = el.states ?? [];
+                    const states = el.states;
                     const invs = aggregateInvariants(el);
                     const examples = (key: string): string => `options.examples?.${el.name}?.${key}`;
                     if (!states.length) {
@@ -391,10 +393,11 @@ class TestsEmitter {
                     : el.kind === 'union'
                       ? unionInvariants(el)
                       : ['id', 'primitive', 'valueObject', 'entity'].includes(el.kind)
-                        ? el.invariants
+                        ? invariantsOf(el)
                         : [];
             if (hasDeclared(invs)) out.push(`readonly ${el.name}?: Partial<${this.ctx}.${declaredChecksName(el.name)}>;`);
-            for (const c of el.commands ?? []) {
+            if (el.kind !== 'aggregate') continue;
+            for (const c of el.commands) {
                 const t = commandTypeName(el, c);
                 if (hasDeclared(c.requires)) out.push(`readonly ${t}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
             }
@@ -417,7 +420,7 @@ class TestsEmitter {
         return out;
     }
 
-    private primitiveCase(p: ElementModel): string {
+    private primitiveCase(p: DomainPrimitive): string {
         const declared = p.invariants.filter((i) => !i.expr).map((i) => `'${i.name}'`);
         const check = !p.invariants.length
             ? '() => () => []'
@@ -427,7 +430,7 @@ class TestsEmitter {
         return [
             `...(impl.make.${p.name} ? testing.primitiveCases({`,
             `    type: '${this.ctx}.${p.name}',`,
-            `    base: '${p.base ?? 'String'}',`,
+            `    base: '${p.base}',`,
             `    hints: ${literal(hintsOf(p.invariants))},`,
             `    invariants: [${p.invariants.map((i) => `'${i.name}'`).join(', ')}],`,
             `    declared: [${declared.join(', ')}],`,
@@ -438,8 +441,8 @@ class TestsEmitter {
         ].join('\n');
     }
 
-    private commandCase(agg: ElementModel, c: CommandModel): string {
-        const states = agg.states ?? [];
+    private commandCase(agg: AggregateModel, c: CommandModel): string {
+        const states = agg.states;
         const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
         const subject = c.factory ? [] : [states.length ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})` : `a.${agg.name}`];
         const input = `fc.tuple(${[...subject, ...c.params.map((p) => this.fieldArb(p, true))].join(', ')})`;
@@ -490,16 +493,16 @@ class TestsEmitter {
      */
     private validOf(f: FieldModel, outer: ReadonlySet<string> = new Set()): string {
         if (f.type.kind === 'primitive') return `(v) => testing.isBase(v, '${f.type.name}')`;
-        const el = this.model.elements[f.type.ref];
+        const el = elementOf(this.model, f.type.ref);
         if (!el) return '() => true';
         const ctx = el.context;
-        const invs = el.kind === 'union' ? unionInvariants(el) : el.kind === 'aggregate' ? [] : el.invariants;
+        const invs = el.kind === 'union' ? unionInvariants(el) : el.kind === 'aggregate' ? [] : invariantsOf(el);
         const inner = new Set([...outer, el.id]);
         const shape =
             el.kind === 'enum'
-                ? `[${(el.values ?? []).map((v) => `'${v}'`).join(', ')}].includes(v as string)`
+                ? `[${el.values.map((v) => `'${v.name}'`).join(', ')}].includes(v as string)`
                 : el.kind === 'id' || el.kind === 'primitive'
-                  ? `testing.isBase(v, '${el.base ?? 'String'}')`
+                  ? `testing.isBase(v, '${el.base}')`
                   : (el.kind === 'valueObject' || el.kind === 'entity') && !outer.has(el.id)
                     ? `testing.validFields(v, [${el.fields.map((g) => this.inputField(g, inner)).join(', ')}])`
                     : 'testing.isObject(v)';
@@ -520,12 +523,13 @@ class TestsEmitter {
     }
 
     /** The case of a required policy: every event resolves to an input that the command accepts. */
-    private policyCase(p: ElementModel): string {
-        const { event, aggregate, command } = p.policy!;
-        const agg = this.model.elements[aggregate];
-        const c = agg?.commands?.find((x) => x.name === command);
+    private policyCase(p: PolicyElement): string {
+        const { event, aggregate, command } = p.policy;
+        const target = elementOf(this.model, aggregate);
+        const agg = target?.kind === 'aggregate' ? target : undefined;
+        const c = agg?.commands.find((x) => x.name === command);
         const id = agg?.fields.find((f) => f.name === 'id');
-        const fields = [...(c && !c.factory && id ? [{ ...id, name: aggregateParamName(agg!) }] : []), ...(c?.params ?? [])];
+        const fields = [...(agg && c && !c.factory && id ? [{ ...id, name: aggregateParamName(agg) }] : []), ...(c?.params ?? [])];
         const simple = (q: string): string => (q.startsWith(`${this.ctx}.`) ? q.slice(this.ctx.length + 1) : q);
         return [
             `...testing.policyCases({`,
@@ -542,11 +546,11 @@ class TestsEmitter {
         const ctx = this.ctx;
         const { members, defs } = this.arbitraries();
         const primitives = this.els.filter((e) => e.kind === 'id' || e.kind === 'primitive');
-        const aggregates = this.els.filter((e) => e.kind === 'aggregate' && e.commands?.length);
-        const cases = (agg: ElementModel): CommandModel[] => (agg.commands ?? []).filter((c) => testable(agg, c, this.untested));
+        const aggregates = this.els.filter((e): e is AggregateModel => e.kind === 'aggregate' && e.commands.length > 0);
+        const cases = (agg: AggregateModel): CommandModel[] => agg.commands.filter((c) => testable(agg, c, this.untested));
         const tested = aggregates.filter((agg) => cases(agg).length);
-        const policies = this.policiesRequired ? this.els.filter((e) => e.kind === 'policy') : [];
-        const policyCases = policies.filter((p) => !this.untested.has(p.policy!.event));
+        const policies = this.policiesRequired ? this.els.filter((e): e is PolicyElement => e.kind === 'policy') : [];
+        const policyCases = policies.filter((p) => !this.untested.has(p.policy.event));
         const indent = (text: string, pad: string): string =>
             text
                 .split('\n')
@@ -564,7 +568,7 @@ class TestsEmitter {
             ),
             ...(policyCases.length ? [`testing.suite('policies', [\n${policyCases.map((p) => indent(this.policyCase(p), '    ')).join('\n')}\n]),`] : []),
         ];
-        const all = this.model.contexts;
+        const all = contextNames(this.model);
         const defsText = defs.join('\n');
         const groupsText = groups.join('\n');
         // the helpers a function body uses (for `noUnusedLocals`)

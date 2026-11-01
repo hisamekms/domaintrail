@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, checkSales, codes, only } from '../../test-helpers.js';
+import { check, checkSales, codes, only, element } from '../../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   id UserId: UUID
@@ -41,18 +41,18 @@ describe('unions', () => {
     test('a valid union model checks clean and lands in the Typed Model', async () => {
         const a = await check({ 'sales.dt': SALES });
         expect(a.diagnostics).toEqual([]);
-        const actor = a.model!.elements['Sales.Actor'];
+        const actor = element(a.model, 'Sales.Actor');
         expect(actor).toMatchObject({ kind: 'union', discriminator: 'kind', label: '行為者', doc: '実際の行為者。' });
         expect(actor.variants!.map((v) => [v.name, v.label, v.fields.map((f) => f.name)])).toEqual([
             ['INTERNAL_USER', '社内', ['userId']],
             ['EXTERNAL_PARTY', '社外', ['name', 'partnerId']],
         ]);
-        const details = a.model!.elements['Sales.Details'];
+        const details = element(a.model, 'Sales.Details');
         expect(details).toMatchObject({ discriminator: 'type', tagType: 'Sales.Process' });
         // a variant without a label takes the label of its enum value
         expect(details.variants!.map((v) => v.label)).toEqual(['配達', '印刷']);
-        expect(a.model!.elements['Sales.Coverage'].variants![0].invariants.map((i) => i.name)).toEqual(['notBlank']);
-        expect(a.model!.elements['Sales.Spec'].fields.find((f) => f.name === 'details')!.type).toMatchObject({ target: 'union' });
+        expect(element(a.model, 'Sales.Coverage').variants![0].invariants.map((i) => i.name)).toEqual(['notBlank']);
+        expect(element(a.model, 'Sales.Spec').fields.find((f) => f.name === 'details')!.type).toMatchObject({ target: 'union' });
     });
 
     test('M015 a union bound to an enum has exactly its values as variants', async () => {
@@ -130,7 +130,7 @@ describe('unions', () => {
             'sales.dt': 'context Sales { id AId: UUID aggregate A { id: AId coverage: Coverage } }',
         });
         expect(a.diagnostics).toEqual([]);
-        expect(a.model!.elements['Sales.A'].fields[1].type).toMatchObject({ ref: 'Common.Coverage', target: 'union' });
+        expect(element(a.model, 'Sales.A').fields[1].type).toMatchObject({ ref: 'Common.Coverage', target: 'union' });
     });
 
     test('a doc comment above a variant does not leak into fields on the same line', async () => {
@@ -139,7 +139,7 @@ describe('unions', () => {
     /// 説明
     A { x: Int }
   }`);
-        const v = a.model!.elements['Sales.U'].variants![0];
+        const v = element(a.model, 'Sales.U').variants![0];
         expect(v.doc).toBe('説明');
         expect(v.fields[0].doc).toBeUndefined();
     });

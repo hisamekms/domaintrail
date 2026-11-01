@@ -1,4 +1,4 @@
-import { contextDependencies, type DomainModel, type ElementKind, elementList, groupByContext, supportingContexts } from '@domaintrail/modeling';
+import { contextDependencies, type DomainModel, type ElementKind, elementsIn, groupByContext, supportingContexts } from '@domaintrail/modeling';
 import { named, sized } from './build.js';
 import { maxUnits, perLang, sameText, type Graph, type GraphEdge, type GraphLine, type GraphNode, type Texts } from './ir.js';
 
@@ -44,20 +44,19 @@ export function dependencyCounts(ids: number, types: number, events = 0): Texts 
  * contexts and contexts that only declare IDs are left out, since nearly everything depends on them.
  */
 export function buildContextMapGraph(model: DomainModel, opts: { all?: boolean } = {}): Graph {
-    const hidden = opts.all ? new Set<string>() : supportingContexts(model);
-    const shownContexts = model.contexts.filter((c) => !hidden.has(c));
-    const nodes: GraphNode[] = shownContexts.map((ctx) => {
-        const els = elementList(model).filter((e) => e.context === ctx);
+    const hidden: ReadonlySet<string> = opts.all ? new Set<string>() : supportingContexts(model);
+    const shownContexts = model.contexts.filter((c) => !hidden.has(c.name));
+    const nodes: GraphNode[] = shownContexts.map(({ name: ctx, label: ctxLabel, shared }) => {
+        const els = elementsIn(model, ctx);
         const lines: GraphLine[] = COUNTED.flatMap(({ kind, ja, en }) => {
             const n = els.filter((e) => e.kind === kind).length;
             return n ? [{ key: perLang({ ja, en }), value: sameText(String(n)) }] : [];
         });
-        const shared = model.sharedContexts.includes(ctx);
         const idOnly = !shared && els.length > 0 && els.every((e) => e.kind === 'id');
         const node = sized({
             id: contextNodeId(ctx),
             kind: 'boundedContext',
-            label: named(ctx, model.contextLabels[ctx]),
+            label: named(ctx, ctxLabel),
             stereotype: perLang(
                 shared
                     ? { ja: '«共有カーネル»', en: '«shared kernel»' }

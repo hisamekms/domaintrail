@@ -252,6 +252,12 @@ const RULES: Record<Rule, RuleText> = {
         fix: () =>
             'read the model as written or the typed model (`domain/`), which `infrastructure/syntax/` builds from the AST and which keep the source locations; or move what needs Langium or the AST into `infrastructure/syntax/` and call it from `application/`',
     },
+    generated: {
+        section: 'Modeling',
+        statement:
+            "a package's generated code (`generated`, from its own `.dt`) imports only its own files, and the rest of the package imports only its types (`import type`), so that the tool runs from the committed output even when the generator is broken.",
+        fix: () => 'import the generated types with `import type`, and write what needs a value (a constructor, a check) by hand next to them',
+    },
     kernel: {
         section: 'Layout',
         statement: `the kernel (shared/kernel) is kept small: it imports only its own files and ${PURE_BUILTINS.join(', ')}, no Langium and no other module.`,
@@ -516,6 +522,21 @@ describe('layers', () => {
                 )
                 .map(({ name, imp }) => ({ module: name, key: local(name, imp.file), where: [imp.file] })),
         );
+    });
+
+    test('generated code imports only its own files, and the rest of its package only its types (generated)', () => {
+        const owners = NAMES.filter((name) => MAP[name].generated);
+        expect(owners.length).toBeGreaterThan(0);
+        const violations = all
+            .filter(({ name }) => owners.includes(name))
+            .flatMap(({ name, imp }) => {
+                const dir = `${MAP[name].sources}/${MAP[name].generated}/`;
+                const reached = imp.resolved?.startsWith(dir) ?? false;
+                const inside = imp.file.startsWith(dir);
+                return (inside ? !reached : reached && !imp.typeOnly) ? [atFile(name, imp)] : [];
+            });
+        expect(all.some(({ name, imp }) => owners.includes(name) && imp.resolved?.startsWith(`${MAP[name].sources}/${MAP[name].generated}/`))).toBe(true);
+        expectNoProblems('generated', violations);
     });
 
     test('the kernel imports only its own files and the pure builtins: no Langium, no other module (kernel)', () => {

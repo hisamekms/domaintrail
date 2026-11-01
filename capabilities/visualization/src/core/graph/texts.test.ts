@@ -1,6 +1,7 @@
 // The texts of the graphs in every language and display mode (the Live View's own words among them).
 import { describe, expect, test } from 'bun:test';
 import { analyze } from '@domaintrail/analysis';
+import { elementOf } from '@domaintrail/modeling';
 import { buildStateGraph, buildStructureGraph } from './build.js';
 import { buildContextMapGraph } from './context-map.js';
 import { anyLang, perLang, type Graph } from './ir.js';
@@ -79,7 +80,7 @@ describe('labels in views', () => {
         expect(order.lines.find((l) => l.key.en.name === 'note')!.value).toEqual(anyLang({ name: 'String?', label: '文字列?', both: 'String?' }));
         expect(structure.nodes.find((n) => n.id === 'Sales')!.label.ja.label).toBe('販売');
 
-        const states = buildStateGraph(m.elements['Sales.Order'], m);
+        const states = buildStateGraph(elementOf(m, 'Sales.Order')!, m);
         expect(states.edges[0].label).toEqual(anyLang({ name: 'confirm(at)', label: '確定する', both: '確定する confirm(at)' }));
         expect(states.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.lines.at(-1)).toEqual({
             key: anyLang({ name: '✓ hasNote', label: '✓ 備考あり', both: '✓ 備考あり (hasNote)' }),
@@ -109,16 +110,14 @@ describe('labels in views', () => {
 describe('i18n of the diagrams', () => {
     test('Japanese diagrams leave no English words untranslated', async () => {
         const model = (await analyze(await exampleSources())).model!;
-        const contexts = model.contexts.filter((c) => !model.sharedContexts.includes(c));
+        const contexts = model.contexts.filter((c) => !c.shared).map((c) => c.name);
         const graphs: Graph[] = [
             buildContextMapGraph(model, { all: true }),
             buildStructureGraph(model),
             buildStructureGraph(model, { level: 'aggregates' }),
             // stubs of the other contexts
             ...contexts.flatMap((c) => [buildStructureGraph(model, { focus: [c] }), buildStructureGraph(model, { focus: [c], level: 'aggregates' })]),
-            ...Object.values(model.elements)
-                .filter((e) => e.kind === 'aggregate')
-                .map((agg) => buildStateGraph(agg, model)),
+            ...model.elements.filter((e) => e.kind === 'aggregate').map((agg) => buildStateGraph(agg, model)),
         ];
         // the Live View's own words in diagrams: the captions, and the counts on the context map
         const words = graphs.flatMap((g) =>

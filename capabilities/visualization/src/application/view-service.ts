@@ -1,4 +1,4 @@
-import { diffModels, type DomainModel, EMPTY_DIFF, fingerprints, type ModelDiff, supportingContexts } from '@domaintrail/modeling';
+import { contextNames, diffModels, type DomainModel, elementOf, EMPTY_DIFF, fingerprints, type ModelDiff, supportingContexts } from '@domaintrail/modeling';
 import { type Storming, type StormingAnalysis, stormingTimelines } from '@domaintrail/storming';
 import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../core/storming/ir.js';
@@ -19,7 +19,7 @@ const FOCUS_LAYOUT_CACHE = 20;
 export function focusableContexts(model: DomainModel): string[] {
     const supporting = supportingContexts(model);
     const drawn = new Set(['aggregate', 'entity', 'valueObject', 'union']);
-    return model.contexts.filter((c) => !supporting.has(c) && Object.values(model.elements).some((e) => e.context === c && drawn.has(e.kind)));
+    return contextNames(model).filter((c) => !supporting.has(c) && model.elements.some((e) => e.context === c && drawn.has(e.kind)));
 }
 
 const pickBaseView = ({ model, structure, overview, aggregates, contextMap, contextMapAll, states }: ViewPayload): BaseView => ({
@@ -145,7 +145,7 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
         layoutGraph: (g: Graph) => Promise<LaidOutGraph>,
     ): Promise<ViewPayload['states']> => {
         const states: ViewPayload['states'] = {};
-        for (const el of Object.values(model.elements)) {
+        for (const el of model.elements) {
             if (el.kind !== 'aggregate') continue;
             const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
             for (const l of TRANSITION_LABELS) byLabels[l] = await layoutGraph(markLineChanges(buildStateGraph(el, model, l), base(el.id, l)));
@@ -406,7 +406,10 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
         const contextMapAll = await layoutCurrent(buildContextMapGraph(model, { all: true }));
         const overview = await layoutCurrent(buildStructureGraph(model, { level: 'overview' }));
         const aggregates = await layoutCurrent(buildStructureGraph(model, { level: 'aggregates' }));
-        const baseAggregate = (id: string) => (baseModel?.elements[id]?.kind === 'aggregate' ? baseModel.elements[id] : undefined);
+        const baseAggregate = (id: string) => {
+            const el = baseModel && elementOf(baseModel, id);
+            return el?.kind === 'aggregate' ? el : undefined;
+        };
         const states = await stateGraphs(
             model,
             (id, l) => {

@@ -64,7 +64,7 @@ import {
     type WorkspaceEdit,
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
-import { ast, commandsOf, docComment, DomainGeneratedModule, DomainModule, elementIdOf, formatDomain, LabelResolver, ModelIndex } from '@domaintrail/modeling';
+import { ast, docComment, DomainGeneratedModule, DomainModule, elementIdOf, formatDomain, LabelResolver, ModelIndex } from '@domaintrail/modeling';
 import { docComment as stormingDocComment, EventStormingGeneratedModule, EventStormingModule, formatStorming, stormingAst } from '@domaintrail/storming';
 import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { type Diagnostic } from '@domaintrail/kernel';
@@ -614,7 +614,7 @@ class StormingDefinitionProvider extends DefaultDefinitionProvider {
         if (segment === 0) target = index.fragments.find((c) => c.name === ctx);
         else {
             const el = index.lookup(`${ctx}.${element}`);
-            target = segment === 1 ? el : el && ast.isAggregate(el) ? commandsOf(el).find((c) => c.name === command) : undefined;
+            target = segment === 1 ? el : el && ast.isAggregate(el) ? el.members.filter(ast.isCommand).find((c) => c.name === command) : undefined;
         }
         const targetName = target?.$cstNode && GrammarUtils.findNodeForProperty(target.$cstNode, 'name');
         const targetDocument = target && AstUtils.getDocument(target);

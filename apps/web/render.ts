@@ -69,8 +69,11 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
     const structure = graph.id.startsWith('structure');
     const scale = graph.textScale ?? 1;
     const severity = diagnosticsByElement(opts.diagnostics, structure);
-    const change = (elementId: string): ChangeMark =>
-        opts.diff.added.includes(elementId) ? 'added' : opts.diff.changed.includes(elementId) ? 'changed' : 'none';
+    // the diff lists stable IDs; the graph's nodes carry them as plain strings
+    const added: readonly string[] = opts.diff.added;
+    const changed: readonly string[] = opts.diff.changed;
+    const removed: readonly string[] = opts.diff.removed;
+    const change = (elementId: string): ChangeMark => (added.includes(elementId) ? 'added' : changed.includes(elementId) ? 'changed' : 'none');
 
     const groups: TLShapePartial[] = [];
     const nodes: TLShapePartial[] = [];
@@ -102,7 +105,7 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
         const present = new Set(graph.nodes.map((n) => n.elementId));
         for (const n of opts.previous.nodes) {
             const l = opts.previous.nodeLayout[n.id];
-            if (!l || GROUP_KINDS.has(n.kind) || present.has(n.elementId) || !opts.diff.removed.includes(n.elementId)) continue;
+            if (!l || GROUP_KINDS.has(n.kind) || present.has(n.elementId) || !removed.includes(n.elementId)) continue;
             ghosts.push({
                 id: ghostShapeId(n.id),
                 type: 'domain-node',

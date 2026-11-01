@@ -19,12 +19,12 @@ const readme = await readFile(path.join(ROOT, 'README.md'), 'utf8');
 const blocks = (lang: string, markdown = guide): string[] => [...markdown.matchAll(new RegExp('^```' + lang + '\\n([\\s\\S]*?)^```', 'gm'))].map((m) => m[1]);
 
 /** The `dt` blocks as files of one workspace, named by their first line (`// sales/order.dt`). */
-/** Every rule ID, as its owners declare them: Modeling's (`ModelingRuleId`) and Storming's (`StormingRuleId`), joined. */
+/** Every rule ID, as its owners declare them: Modeling's (`ModelingRuleId`, generated from its `.dt`) and Storming's (`StormingRuleId`), joined. */
 async function ruleIds(): Promise<string> {
     const union = async (file: string[], name: string): Promise<string> =>
         new RegExp(`export type ${name} =([^;]*);`).exec(await readFile(path.join(ROOT, ...file), 'utf8'))![1];
     return [
-        await union(['contexts', 'modeling', 'src', 'domain', 'rule-ids.ts'], 'ModelingRuleId'),
+        await union(['contexts', 'modeling', 'src', 'generated', 'Modeling.ts'], 'ModelingRuleId'),
         await union(['contexts', 'storming', 'src', 'domain', 'rule-ids.ts'], 'StormingRuleId'),
     ].join('');
 }

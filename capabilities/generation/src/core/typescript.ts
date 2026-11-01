@@ -1,20 +1,24 @@
 import * as posix from 'node:path/posix';
 import type {
+    AggregateModel,
     CommandModel,
     Described,
     DomainModel,
-    EmitModel,
     ElementModel,
+    ElementOf,
+    EmitModel,
     FieldModel,
     InvariantModel,
     OutcomePatternModel,
+    PolicyElement,
     PrimitiveName,
     RequirementModel,
     TypeExpr,
+    UnionModel,
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
-import { elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
-import { CheckWriter } from './checks.js';
+import { contextNames, elementOf, elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
+import { CheckWriter, type DomainPrimitive } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
 import {
     AGGREGATE_TYPE,
@@ -220,8 +224,8 @@ export function generateTypeScript(
 ): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     const files: GeneratedFile[] = [];
-    for (const dir of new Set(model.contexts.map(dirOf))) {
-        const contexts = model.contexts.filter((c) => dirOf(c) === dir);
+    for (const dir of new Set(contextNames(model).map(dirOf))) {
+        const contexts = contextNames(model).filter((c) => dirOf(c) === dir);
         files.push({ path: posix.join(dir, '_runtime.ts'), content: RUNTIME });
         for (const ctx of contexts) {
             files.push({
@@ -263,7 +267,7 @@ const describedLines = (d: Described): string[] => [d.label, d.doc].filter((x): 
 const PERSISTENT_LINE = '@persistent Persisted: storing this event is part of its contract.';
 
 /** JSDoc lines of invariants; one declared without an expression says so. */
-const invariantLines = (invs: InvariantModel[]): string[] =>
+const invariantLines = (invs: readonly InvariantModel[]): string[] =>
     invs.map((i) => `@invariant ${i.name}${i.label ? ` (${i.label})` : ''}: ${i.source ?? 'not expressed in the DSL'}`);
 
 /**
@@ -273,10 +277,10 @@ const invariantLines = (invs: InvariantModel[]): string[] =>
 const seeLine = (loc: Location): string => `@see ${loc.file.replace(/\\/g, '/')}:${loc.line}`;
 
 /** JSDoc lines of a command's requirements; one declared without an expression says so. */
-const requirementLines = (reqs: RequirementModel[], error: (qname: string) => string): string[] =>
+const requirementLines = (reqs: readonly RequirementModel[], error: (qname: string) => string): string[] =>
     reqs.map((r) => `@requires ${r.name}${r.label ? ` (${r.label})` : ''} else ${error(r.error)}: ${r.source ?? 'not expressed in the DSL'}`);
 
-const unique = (names: string[]): string[] => [...new Set(names)];
+const unique = (names: readonly string[]): string[] => [...new Set(names)];
 
 /** An outcome of a command: the key of its success value (the target state), its first property and the events. */
 interface Outcome {
@@ -298,7 +302,7 @@ function times(e: EmitModel): { words: string; unchecked: boolean } {
 }
 
 /** `A`, `A or B`, `A, B or C`. */
-const or = (names: string[]): string => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`);
+const or = (names: readonly string[]): string => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`);
 
 /** When an `emits` entry applies, in words. */
 function condition(w: OutcomePatternModel | undefined): string {
@@ -361,16 +365,15 @@ class ContextEmitter {
                     break;
                 case 'enum':
                     this.jsdoc([...describedLines(el), seeLine(el.location)]);
-                    if (!el.values?.length) {
+                    if (!el.values.length) {
                         this.line(`export type ${el.name} = never;`);
-                    } else if (el.valueLabels) {
+                    } else if (el.values.some((v) => v.label)) {
                         this.line(`export type ${el.name} =`);
                         el.values.forEach((v, i) => {
-                            const label = el.valueLabels?.[v];
-                            this.line(`    | '${v}'${i === el.values!.length - 1 ? ';' : ''}${label ? ` // ${oneLine(label)}` : ''}`);
+                            this.line(`    | '${v.name}'${i === el.values.length - 1 ? ';' : ''}${v.label ? ` // ${oneLine(v.label)}` : ''}`);
                         });
                     } else {
-                        this.line(`export type ${el.name} = ${el.values.map((v) => `'${v}'`).join(' | ')};`);
+                        this.line(`export type ${el.name} = ${el.values.map((v) => `'${v.name}'`).join(' | ')};`);
                     }
                     break;
                 case 'valueObject':
@@ -386,12 +389,12 @@ class ContextEmitter {
                     break;
                 case 'union':
                     this.union(el);
-                    if (el.variants?.length) this.push(this.checks.equality(el));
+                    if (el.variants.length) this.push(this.checks.equality(el));
                     this.push(this.checks.union(el));
                     break;
                 case 'event':
                 case 'error':
-                    this.jsdoc([...describedLines(el), ...(el.persistent ? [PERSISTENT_LINE] : []), seeLine(el.location)]);
+                    this.jsdoc([...describedLines(el), ...(el.kind === 'event' && el.persistent ? [PERSISTENT_LINE] : []), seeLine(el.location)]);
                     this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.name}';`], ownFields(el));
                     break;
                 case 'aggregate':
@@ -448,11 +451,11 @@ class ContextEmitter {
      * A policy: the type of its handler, from the event to what the application needs to run the command (`…Input`,
      * written before the first policy that runs the command). The rule is "eventually": nothing here says how.
      */
-    private policy(p: ElementModel): void {
-        const { event, aggregate, command } = p.policy!;
-        const agg = this.model.elements[aggregate];
-        const c = agg?.commands?.find((x) => x.name === command);
-        if (!agg || !c) return; // the model has no errors when generated
+    private policy(p: PolicyElement): void {
+        const { event, aggregate, command } = p.policy;
+        const agg = elementOf(this.model, aggregate);
+        const c = agg?.kind === 'aggregate' ? agg.commands.find((x) => x.name === command) : undefined;
+        if (agg?.kind !== 'aggregate' || !c) return; // the model has no errors when generated
         const input = inputTypeName(agg, c);
         if (!this.inputs.has(input)) {
             this.inputs.add(input);
@@ -473,7 +476,7 @@ class ContextEmitter {
     }
 
     /** What the application needs to run a command: its arguments by name, after the aggregate's ID unless a factory. */
-    private input(agg: ElementModel, c: CommandModel): void {
+    private input(agg: AggregateModel, c: CommandModel): void {
         const id = agg.fields.find((f) => f.name === 'id');
         const self = !c.factory && id ? [`/** The ${agg.name} to run the command on. */`, `readonly ${aggregateParamName(agg)}: ${this.fieldType(id)};`] : [];
         this.jsdoc([
@@ -506,16 +509,16 @@ class ContextEmitter {
     }
 
     /** The field sets an element extends, as written from this context. */
-    private fieldSets(el: ElementModel): string[] {
-        return (el.fieldSets ?? []).map((f) => this.ref(f));
+    private fieldSets(el: Extract<ElementModel, { readonly fieldSets: unknown }>): string[] {
+        return el.fieldSets.map((f) => this.ref(f));
     }
 
     /**
      * Domain primitive (or ID): a branded type, the error for invalid values, and the constructor contract.
      * The constructor is implemented by hand; invariants are documented, not checked at run time.
      */
-    private primitive(p: ElementModel): void {
-        const base = PRIMITIVES[p.base ?? 'String'];
+    private primitive(p: DomainPrimitive): void {
+        const base = PRIMITIVES[p.base];
         const summary = p.kind === 'id' && !p.label ? [`Identifier of ${p.name}.`] : [];
         const make = `make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}`;
         const noCast = `Make it with \`${make}\`; never \`as ${p.name}\` (see dt guide lint).`;
@@ -549,8 +552,8 @@ class ContextEmitter {
      * asserted) is one, a value of the base is not, and the verifications of a chain combine; and the factory contract,
      * async since the check reads the world outside the aggregate.
      */
-    private verified(v: ElementModel): void {
-        const { of, for: context, errors } = v.verified!;
+    private verified(v: ElementOf<'verified'>): void {
+        const { of, for: context, errors } = v.verified;
         const base = this.typeExpr(of);
         const contextType = context && this.typeExpr(context.type);
         this.jsdoc([
@@ -572,10 +575,10 @@ class ContextEmitter {
     }
 
     /** A union: one type alias over object types tagged with the discriminator. */
-    private union(u: ElementModel): void {
-        const tag = u.discriminator ?? 'kind';
+    private union(u: UnionModel): void {
+        const tag = u.discriminator;
         this.jsdoc([...describedLines(u), seeLine(u.location)]);
-        const variants = u.variants ?? [];
+        const variants = u.variants;
         if (variants.length === 0) {
             this.line(`export type ${u.name} = never;`);
             return;
@@ -597,8 +600,8 @@ class ContextEmitter {
         });
     }
 
-    private aggregate(agg: ElementModel): void {
-        const states = agg.states ?? [];
+    private aggregate(agg: AggregateModel): void {
+        const states = agg.states;
         if (states.length === 0) {
             this.jsdoc([...describedLines(agg), ...invariantLines(agg.invariants), seeLine(agg.location)]);
             this.iface(agg.name, this.fieldSets(agg), [], ownFields(agg));
@@ -622,7 +625,7 @@ class ContextEmitter {
         this.shape(agg);
         this.push(this.checks.aggregate(agg));
 
-        const commands = agg.commands ?? [];
+        const commands = agg.commands;
         for (const c of commands) {
             this.out.push('');
             this.command(agg, c);
@@ -651,9 +654,9 @@ class ContextEmitter {
     }
 
     /** The fields of an aggregate as data for `decide` (`OrderShape`): the common fields, and each state's own fields. */
-    private shape(agg: ElementModel): void {
-        const states = agg.states ?? [];
-        const list = (fields: FieldModel[]): string => `[${fields.map((f) => `'${f.name}'`).join(', ')}]`;
+    private shape(agg: AggregateModel): void {
+        const states = agg.states;
+        const list = (fields: readonly FieldModel[]): string => `[${fields.map((f) => `'${f.name}'`).join(', ')}]`;
         this.jsdoc([
             `The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`,
             seeLine(agg.location),
@@ -668,9 +671,9 @@ class ContextEmitter {
         this.line('};');
     }
 
-    private command(agg: ElementModel, c: CommandModel): void {
-        const stateful = (agg.states ?? []).length > 0;
-        const stateUnion = (names: string[]): string =>
+    private command(agg: AggregateModel, c: CommandModel): void {
+        const stateful = agg.states.length > 0;
+        const stateUnion = (names: readonly string[]): string =>
             stateful
                 ? unique(names)
                       .map((n) => stateTypeName(agg, n))
@@ -687,7 +690,7 @@ class ContextEmitter {
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
         // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name; the
         // contract holds the aggregate, the decision what to `set`
-        const outcomes = (from: string | undefined, targets: string[], decision: boolean): Outcome[] =>
+        const outcomes = (from: string | undefined, targets: readonly string[], decision: boolean): Outcome[] =>
             (stateful ? unique(targets) : [undefined]).map((to) => ({
                 key: to ?? agg.name,
                 first: decision ? `set: ${this.setType(outcomeFields(agg, c, from, to).set)}` : `aggregate: ${to ? stateTypeName(agg, to) : agg.name}`,
@@ -761,8 +764,8 @@ class ContextEmitter {
     }
 
     /** The generated check of a command's requirements, with the parameters of its contract. */
-    private requiresCheck(agg: ElementModel, c: CommandModel): string[] {
-        const states = agg.states ?? [];
+    private requiresCheck(agg: AggregateModel, c: CommandModel): string[] {
+        const states = agg.states;
         const sources = unique(c.transitions.flatMap((t) => t.from));
         const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
@@ -771,14 +774,14 @@ class ContextEmitter {
     }
 
     /** The entries of `emits` for a source state, with `when` reduced to what still selects among its targets. */
-    private emitsFrom(c: CommandModel, from: string, targets: string[]): { e: EmitModel; when?: OutcomePatternModel }[] {
+    private emitsFrom(c: CommandModel, from: string, targets: readonly string[]): { e: EmitModel; when?: OutcomePatternModel }[] {
         return c.emits
             .filter((e) => targets.some((to) => emitApplies(e, from, to)))
             .map((e) => ({ e, when: e.when?.to.length && !targets.every((to) => e.when!.to.includes(to)) ? { from: [], to: e.when.to } : undefined }));
     }
 
     /** What the decision gives for an outcome, and what `decide` carries over and drops, in words. */
-    private outcomeLine(agg: ElementModel, c: CommandModel, from: string | undefined, to: string | undefined): string {
+    private outcomeLine(agg: AggregateModel, c: CommandModel, from: string | undefined, to: string | undefined): string {
         const head = c.factory ? `new -> ${to ?? agg.name}` : to ? `${from} -> ${to}` : agg.name;
         if (c.factory) return `${head} — set: every field`;
         const { set, carried, dropped } = outcomeFields(agg, c, from, to);
@@ -857,7 +860,7 @@ class ContextEmitter {
         });
     }
 
-    private iface(name: string, bases: string[], extra: string[], fields: FieldModel[]): void {
+    private iface(name: string, bases: readonly string[], extra: readonly string[], fields: readonly FieldModel[]): void {
         const lines = [...extra, ...fields.flatMap((f) => this.property(f))];
         const ext = bases.length ? ` extends ${bases.join(', ')}` : '';
         if (lines.length === 0) {

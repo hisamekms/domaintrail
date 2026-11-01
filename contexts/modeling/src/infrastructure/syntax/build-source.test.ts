@@ -93,6 +93,9 @@ const nodesOf = (a: DomainAnalysis): AstNode[] => a.documents.flatMap((d) => [..
 const fileOf = (a: DomainAnalysis, node: AstNode): string => a.resolveFile(AstUtils.getDocument(node).uri.toString());
 
 /** What the Typed Model writes for an expression: the tree without its sites. */
+/** The operators as written, as the Typed Model names them. */
+const OPS = { implies: 'implies', or: 'or', and: 'and', '==': 'eq', '!=': 'ne', '<': 'lt', '<=': 'le', '>': 'gt', '>=': 'ge' } as const;
+
 function toExprModel(e: Expr): ExprModel {
     switch (e.k) {
         case 'bool':
@@ -109,7 +112,7 @@ function toExprModel(e: Expr): ExprModel {
         case 'not':
             return { k: 'not', operand: toExprModel(e.operand) };
         case 'binary':
-            return { k: 'binary', op: e.op, left: toExprModel(e.left), right: toExprModel(e.right) };
+            return { k: 'binary', op: OPS[e.op], left: toExprModel(e.left), right: toExprModel(e.right) };
         case 'range':
             return { k: 'range', operand: toExprModel(e.operand), lower: toExprModel(e.lower), upper: toExprModel(e.upper) };
         case 'count':
@@ -186,9 +189,9 @@ describe('the model as written', () => {
                       ].filter((e): e is Expr => !!e)
                     : [],
             );
-            const typed = Object.values(a.model!.elements).flatMap((el) =>
+            const typed = a.model!.elements.flatMap((el) =>
                 el.kind === 'aggregate'
-                    ? [...el.invariants, ...el.states!.flatMap((s) => s.invariants), ...el.commands!.flatMap((c) => c.requires)].flatMap((x) =>
+                    ? [...el.invariants, ...el.states.flatMap((s) => s.invariants), ...el.commands.flatMap((c) => c.requires)].flatMap((x) =>
                           x.expr ? [x.expr] : [],
                       )
                     : [],
@@ -288,7 +291,7 @@ describe('the fixture as written', () => {
         expect(e.op).toBe('implies');
         expect(toExprModel(e.right)).toEqual({
             k: 'not',
-            operand: { k: 'binary', op: '==', left: { k: 'name', name: 'note' }, right: { k: 'string', value: 'x' } },
+            operand: { k: 'binary', op: 'eq', left: { k: 'name', name: 'note' }, right: { k: 'string', value: 'x' } },
         });
         const finish = commandsOf(order).find((c) => c.name === 'finish')!;
         expect(finish.requirements.map((r) => [r.name, r.label, r.expr?.k, r.error.text])).toEqual([

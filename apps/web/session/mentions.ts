@@ -9,6 +9,7 @@
 // it mentions (`people`, sent as `mentions`): picking one after `@` adds them, deleting their mentions removes them.
 // The body stays plain text: the stream reads the tokens back with `parseBody` (`domain/body.ts`) and renders them as
 // text and links, never as HTML.
+import { commandsOf, contextOf, statesOf } from '@domaintrail/modeling';
 import { declarations, firstDeclarations } from '@domaintrail/storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, plainBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
@@ -256,12 +257,12 @@ export function mentionCandidates(
         });
     };
     if (model) {
-        const contextName = (c: string): string => nameIn(mode, c, model.contextLabels[c]);
-        for (const el of Object.values(model.elements)) {
+        const contextName = (c: string): string => nameIn(mode, c, contextOf(model, c)?.label);
+        for (const el of model.elements) {
             add(el.id, 'dt', el.kind, contextName(el.context), el.name, el.label);
-            for (const s of el.states ?? [])
+            for (const s of statesOf(el))
                 add(s.id, 'dt', 'state', contextName(el.context), `${el.name}.${s.name}`, s.label && `${el.label ?? el.name}.${s.label}`);
-            for (const c of el.commands ?? [])
+            for (const c of commandsOf(el))
                 add(c.id, 'dt', 'command', contextName(el.context), `${el.name}.${c.name}`, c.label && `${el.label ?? el.name}.${c.label}`);
         }
     }

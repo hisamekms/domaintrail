@@ -1,6 +1,6 @@
 import { ChevronRight, Microscope, Telescope, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { type DomainModel } from '@domaintrail/modeling';
+import { commandsOf, elementOf, type DomainModel } from '@domaintrail/modeling';
 import {
     type AnyDeclaration,
     buildSemanticGraph,
@@ -85,8 +85,11 @@ export const stormingSelectionName = (id: string): string => id.slice(id.lastInd
 function dtTarget(model: DomainModel | null, kind: string, path: string): string | undefined {
     if (!model) return undefined;
     const segments = path.split('.');
-    if (kind === 'command' && segments.length === 3) return model.elements[`${segments[0]}.${segments[1]}`]?.commands?.find((c) => c.name === segments[2])?.id;
-    const el = segments.length === 2 ? model.elements[path] : undefined;
+    if (kind === 'command' && segments.length === 3) {
+        const agg = elementOf(model, `${segments[0]}.${segments[1]}`);
+        return agg && commandsOf(agg).find((c) => c.name === segments[2])?.id;
+    }
+    const el = segments.length === 2 ? elementOf(model, path) : undefined;
     return el?.kind === kind ? el.id : undefined;
 }
 

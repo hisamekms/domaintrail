@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type InvariantModel } from '@domaintrail/modeling';
+import { elementOf, type ElementModel, type InvariantModel } from '@domaintrail/modeling';
 import { analyze } from '@domaintrail/analysis';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -19,8 +19,8 @@ describe('catalog', () => {
         const sections = catalogSections(model);
         expect(sections.map((s) => s.key)).toEqual(['aggregates', 'entities', 'values', 'primitives', 'fieldSets', 'events', 'errors', 'policies']);
         const ids = sections.flatMap((s) => s.groups.flatMap((g) => g.items.map((e) => e.id)));
-        expect(ids.sort()).toEqual(Object.keys(model.elements).sort());
-        expect(Object.values(model.elements).every((e) => inCatalog(e.kind))).toBe(true);
+        expect(ids.sort()).toEqual(model.elements.map((e) => e.id).sort());
+        expect(model.elements.every((e) => inCatalog(e.kind))).toBe(true);
         for (const s of sections) expect(s.count).toBe(s.groups.reduce((n, g) => n + g.items.length, 0));
     });
 
@@ -68,7 +68,7 @@ describe('catalog', () => {
             const sections = filterCatalog(catalogSections(model), { ...none, query: 'order' });
             const ids = shown(sections);
             expect(ids.length).toBeGreaterThan(0);
-            expect(ids.every((id) => matchesQuery(model.elements[id], 'order'))).toBe(true);
+            expect(ids.every((id) => matchesQuery(elementOf(model, id)!, 'order'))).toBe(true);
             for (const s of sections) {
                 expect(s.count).toBe(catalogSections(model).find((x) => x.key === s.key)!.count);
                 expect(s.shown).toBe(s.groups.reduce((n, g) => n + g.items.length, 0));
@@ -81,11 +81,11 @@ describe('catalog', () => {
             const byKind = filterCatalog(catalogSections(model), { ...none, sections: ['events', 'errors'] });
             expect(byKind.filter((s) => s.shown > 0).map((s) => s.key)).toEqual(['events', 'errors']);
             const byContext = filterCatalog(catalogSections(model), { ...none, contexts: ['Common'] });
-            expect(shown(byContext).every((id) => model.elements[id].context === 'Common')).toBe(true);
+            expect(shown(byContext).every((id) => elementOf(model, id)!.context === 'Common')).toBe(true);
             expect(shown(byContext).length).toBeGreaterThan(0);
             expect(shown(filterCatalog(catalogSections(model), { ...none, contexts: [] }))).toEqual([]);
             const combined = filterCatalog(catalogSections(model), { query: 'order', sections: ['events'], contexts: ['Sales'] });
-            expect(shown(combined).every((id) => model.elements[id].kind === 'event' && model.elements[id].context === 'Sales')).toBe(true);
+            expect(shown(combined).every((id) => elementOf(model, id)!.kind === 'event' && elementOf(model, id)!.context === 'Sales')).toBe(true);
             expect(shown(filterCatalog(catalogSections(model), { ...none, query: 'no-such-element' }))).toEqual([]);
         });
     });
@@ -97,7 +97,7 @@ describe('catalog', () => {
 
         test('puts the badges first, then the label over the name', async () => {
             const model = await shopModel();
-            const event = Object.values(model.elements).find((e) => e.kind === 'event' && e.label && !e.persistent)!;
+            const event = model.elements.find((e) => e.kind === 'event' && e.label && !e.persistent)!;
             const html = head(event);
             expect(lines(html)).toEqual(['card-tags', 'card-name', 'card-subname']);
             expect(html).toContain(`title="${event.label}">${event.label}</span>`);
@@ -108,8 +108,8 @@ describe('catalog', () => {
 
         test('shows the name alone when there is no label, and the persistence badge only on events', async () => {
             const model = await shopModel();
-            const order = Object.values(model.elements).find((e) => e.kind === 'aggregate')!;
-            const el = { ...order, id: 'Sales.Audit', name: 'Audit', kind: 'fieldSet' as const, label: undefined };
+            const order = model.elements.find((e) => e.kind === 'aggregate')!;
+            const el = { ...order, id: 'Sales.Audit', name: 'Audit', kind: 'fieldSet' as const, label: undefined } as unknown as ElementModel;
             const html = head(el);
             expect(lines(html)).toEqual(['card-tags', 'card-name']);
             expect(html).toContain(`>${el.name}</span>`);

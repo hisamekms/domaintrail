@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, codes, only } from '../../test-helpers.js';
+import { check, codes, only, element, plain } from '../../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   terms {
@@ -30,10 +30,10 @@ const SALES = `context Sales "販売" {
 describe('label resolution', () => {
     test('declarations take inline labels; descriptions come from /// comments', async () => {
         const m = (await check({ 'a.dt': SALES })).model!;
-        expect(m.contextLabels).toEqual({ Sales: '販売' });
-        expect(m.elements['Sales.Order']).toMatchObject({ label: '注文', doc: '顧客からの購入依頼。\n確定後は変更できない。' });
-        expect(m.elements['Sales.Reason'].valueLabels).toEqual({ Requested: '顧客都合' });
-        const order = m.elements['Sales.Order'];
+        expect(plain(m.contexts.map((c) => [c.name, c.label]))).toEqual([['Sales', '販売']]);
+        expect(element(m, 'Sales.Order')).toMatchObject({ label: '注文', doc: '顧客からの購入依頼。\n確定後は変更できない。' });
+        expect(element(m, 'Sales.Reason').values).toEqual([{ name: 'Requested', label: '顧客都合' }, { name: 'Other' }]);
+        const order = element(m, 'Sales.Order');
         expect(order.states?.map((s) => s.label)).toEqual(['下書き', '確定済み']);
         expect(order.states?.[1].invariants[0]).toMatchObject({ name: 'hasNote', label: '備考あり' });
         expect(order.commands?.[0]).toMatchObject({ label: '確定する' });
@@ -41,14 +41,14 @@ describe('label resolution', () => {
 
     test('fields: inline label, then term, then the type (or the referenced aggregate)', async () => {
         const m = (await check({ 'a.dt': SALES })).model!;
-        const order = m.elements['Sales.Order'];
+        const order = element(m, 'Sales.Order');
         const field = (name: string) => [...order.fields, ...order.states!.flatMap((s) => s.fields)].find((f) => f.name === name);
         expect(field('note')).toMatchObject({ label: '注文メモ', labelSource: 'inline' });
         expect(field('confirmedAt')).toMatchObject({ label: '確定日時', labelSource: 'term', doc: '顧客が注文を確定した日時。' });
         expect(field('id')).toMatchObject({ label: '注文ID', labelSource: 'type' });
         expect(field('customer')).toMatchObject({ label: '顧客', labelSource: 'type' });
         expect(order.commands?.[0].params[0]).toMatchObject({ label: '確定する日時', labelSource: 'inline' });
-        expect(m.terms.Sales).toEqual([
+        expect(m.contexts.find((c) => c.name === 'Sales')?.terms).toEqual([
             { name: 'confirmedAt', label: '確定日時', doc: '顧客が注文を確定した日時。' },
             { name: 'note', label: '備考' },
         ]);
@@ -61,7 +61,7 @@ describe('label resolution', () => {
                 'a.dt': 'context S { id AId: UUID aggregate A { id: AId command go(at: Timestamp) } }',
             })
         ).model!;
-        expect(m.elements['S.A'].commands?.[0].params[0].label).toBe('日時');
+        expect(element(m, 'S.A').commands?.[0].params[0].label).toBe('日時');
     });
 });
 

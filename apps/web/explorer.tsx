@@ -1,6 +1,6 @@
 import { ChevronRight, Database, Diff, Folder, FolderOpen, PanelLeftClose, Search, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { DomainModel, ElementModel, ModelDiff } from '@domaintrail/modeling';
+import { commandsOf, contextOf, elementOf, statesOf, type DomainModel, type ElementModel, type ModelDiff } from '@domaintrail/modeling';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DisplayMode } from '@domaintrail/visualization';
 import { buildFileTree, filesIn, type FileTreeNode } from './file-tree';
@@ -82,7 +82,7 @@ export function Explorer(props: ExplorerProps) {
     // a file is changed when an item declared in it was added or changed
     const changedFiles = new Set<string>();
     for (const id of [...props.diff.added, ...props.diff.changed]) {
-        const file = model?.elements[ownerElement(id)]?.location.file;
+        const file = model && elementOf(model, ownerElement(id))?.location.file;
         if (file) changedFiles.add(file);
     }
     const fileCounts = (files: string[]) => {
@@ -221,9 +221,10 @@ export function Explorer(props: ExplorerProps) {
     );
 
     function contextNode(model: DomainModel, ctx: string) {
-        const label = model.contextLabels[ctx];
+        const context = contextOf(model, ctx);
+        const label = context?.label;
         const ctxText = textHit(ctx, label);
-        const els = Object.values(model.elements).filter((e) => e.context === ctx);
+        const els = model.elements.filter((e) => e.context === ctx);
         const groups = KIND_ORDER.map((kind) => ({
             kind,
             nodes: els
@@ -236,7 +237,7 @@ export function Explorer(props: ExplorerProps) {
         if (!groups.length && !ctxHit) return null;
         if (ctxHit) modelHits++;
 
-        const shared = model.sharedContexts.includes(ctx);
+        const shared = !!context?.shared;
         const open = isOpen(`ctx:${ctx}`, true);
         return (
             <div key={ctx}>
@@ -272,13 +273,13 @@ export function Explorer(props: ExplorerProps) {
     function elementNode(el: ElementModel, ctxText: boolean) {
         const elText = ctxText || textHit(el.name, el.label);
         const childShown = (c: { id: string; name: string; label?: string }) => (elText || textHit(c.name, c.label)) && flagsHit(marks.get(c.id));
-        const states = (el.states ?? []).filter(childShown);
-        const commands = (el.commands ?? []).filter(childShown);
+        const states = statesOf(el).filter(childShown);
+        const commands = commandsOf(el).filter(childShown);
         const elHit = elText && flagsHit(marks.get(el.id));
         if (!states.length && !commands.length && !elHit) return null;
         modelHits += states.length + commands.length + (elHit ? 1 : 0);
 
-        const hasChildren = !!(el.states?.length || el.commands?.length);
+        const hasChildren = !!(statesOf(el).length || commandsOf(el).length);
         const key = `agg:${el.id}`;
         const open = isOpen(key, false);
         return (visible: boolean) => (
@@ -288,7 +289,7 @@ export function Explorer(props: ExplorerProps) {
                     nameIn(props.mode, el.name, el.label),
                     { depth: 2, visible, ...(hasChildren && { open, onToggle: () => toggle(key, false) }) },
                     el.kind,
-                    el.persistent && (
+                    el.kind === 'event' && el.persistent && (
                         <span className="tree-persistent" title={t.persistentHint}>
                             <Database size={11} />
                         </span>

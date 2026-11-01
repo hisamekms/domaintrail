@@ -1,12 +1,15 @@
+import type { AggregateDependency } from '../generated/Modeling.js';
 import { representative } from './dependencies.js';
-import { allFieldsOf, elementList, type DomainModel, type ElementModel } from './model.js';
+import { allFieldsOf, type DomainModel, type ElementId, type ElementModel } from './model.js';
+
+export type { AggregateDependency } from '../generated/Modeling.js';
 
 /** Value types and entities: what a field can hold inside an aggregate. */
 const HELD_KINDS = new Set<ElementModel['kind']>(['entity', 'valueObject', 'union']);
 
 /** Aggregates that (transitively) hold each entity / value object. */
-export function owningAggregates(elements: readonly ElementModel[], byId: Map<string, ElementModel>): Map<string, Set<string>> {
-    const owners = new Map<string, Set<string>>();
+export function owningAggregates(elements: readonly ElementModel[], byId: ReadonlyMap<string, ElementModel>): Map<ElementId, Set<ElementId>> {
+    const owners = new Map<ElementId, Set<ElementId>>();
     for (const agg of elements.filter((e) => e.kind === 'aggregate')) {
         const stack: ElementModel[] = [agg];
         const seen = new Set<string>();
@@ -18,7 +21,7 @@ export function owningAggregates(elements: readonly ElementModel[], byId: Map<st
                 if (f.kind === 'references' || f.type.kind !== 'ref') continue;
                 const t = byId.get(f.type.ref);
                 if (!t || !HELD_KINDS.has(t.kind)) continue;
-                const set = owners.get(t.id) ?? new Set<string>();
+                const set = owners.get(t.id) ?? new Set<ElementId>();
                 set.add(agg.id);
                 owners.set(t.id, set);
                 stack.push(t);
@@ -29,19 +32,10 @@ export function owningAggregates(elements: readonly ElementModel[], byId: Map<st
 }
 
 /** The aggregate of `ctx` that alone holds an element (of `owners`, from `owningAggregates`), if there is one. */
-export function soleOwner(owners: Set<string> | undefined, ctx: string): string | undefined {
+export function soleOwner(owners: ReadonlySet<ElementId> | undefined, ctx: string): ElementId | undefined {
     if (!owners || owners.size !== 1) return undefined;
     const [owner] = owners;
     return owner.startsWith(`${ctx}.`) ? owner : undefined;
-}
-
-/** A dependency of one aggregate on another, with the paths of the fields it goes through (`items.product`). */
-export interface AggregateDependency {
-    source: string;
-    target: string;
-    /** Holds a type of the other aggregate, not only its ID. */
-    type: boolean;
-    paths: string[];
 }
 
 /**
@@ -50,15 +44,15 @@ export interface AggregateDependency {
  * declaration order.
  */
 export function aggregateDependencies(model: DomainModel): AggregateDependency[] {
-    const elements = elementList(model);
-    const byId = new Map(elements.map((e) => [e.id, e]));
+    const elements = model.elements;
+    const byId = new Map<string, ElementModel>(elements.map((e) => [e.id, e]));
     const owners = owningAggregates(elements, byId);
     /** The aggregate that stands for an element: itself, or the aggregate that owns an entity. */
-    const aggregateOf = (el: ElementModel | undefined): string | undefined =>
+    const aggregateOf = (el: ElementModel | undefined): ElementId | undefined =>
         el?.kind === 'aggregate' ? el.id : el?.kind === 'entity' ? soleOwner(owners.get(el.id), el.context) : undefined;
-    const out = new Map<string, AggregateDependency>();
+    const out = new Map<string, { source: ElementId; target: ElementId; type: boolean; paths: string[] }>();
     for (const agg of elements.filter((e) => e.kind === 'aggregate')) {
-        const add = (target: string | undefined, type: boolean, path: string): void => {
+        const add = (target: ElementId | undefined, type: boolean, path: string): void => {
             if (!target || target === agg.id) return;
             const key = `${agg.id}=>${target}`;
             const dep = out.get(key) ?? { source: agg.id, target, type: false, paths: [] };

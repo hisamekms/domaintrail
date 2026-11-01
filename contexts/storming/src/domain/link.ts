@@ -10,7 +10,7 @@
 import type { Diagnostic } from '@domaintrail/kernel';
 import { didYouMean, type Candidate } from '@domaintrail/kernel';
 import { commandId } from '@domaintrail/modeling';
-import { elementList, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '@domaintrail/modeling';
+import { commandsOf, elementOf, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '@domaintrail/modeling';
 import { esDiagnostic, esElementId, REF_KINDS, type Clause, type NodeElement, type Storming } from './ir.js';
 
 export type DtRefKind = 'event' | 'aggregate' | 'command';
@@ -31,9 +31,9 @@ const article = (kind: string): string => `${/^[aeiou]/.test(kind) ? 'an' : 'a'}
 
 /** The qualified paths a `ref` of `kind` may name: `Ctx.Name`, or `Ctx.Aggregate.command`. */
 function refPaths(kind: DtRefKind, model: DomainModel): string[] {
-    const elements = elementList(model);
+    const elements = model.elements;
     if (kind !== 'command') return elements.filter((e) => e.kind === kind).map((e) => e.id);
-    return elements.flatMap((e) => (e.kind === 'aggregate' ? (e.commands ?? []).map((c) => `${e.id}.${c.name}`) : []));
+    return elements.flatMap((e) => (e.kind === 'aggregate' ? e.commands.map((c) => `${e.id}.${c.name}`) : []));
 }
 
 /**
@@ -57,7 +57,7 @@ export function resolveDtRef(kind: DtRefKind, path: string, model: DomainModel):
         };
     }
     const elementPath = kind === 'command' ? segments.slice(0, 2).join('.') : path;
-    const element: ElementModel | undefined = model.elements[elementPath];
+    const element: ElementModel | undefined = elementOf(model, elementPath);
     if (!element) {
         const hint = suggestPath(path, paths);
         return { ok: false, code: 'S010', message: `The ${kind} ref '${path}' names nothing in the .dt model.`, ...(hint ? { hint } : {}) };
@@ -75,9 +75,9 @@ export function resolveDtRef(kind: DtRefKind, path: string, model: DomainModel):
         };
     }
     const name = segments[2];
-    const command: CommandModel | undefined = element.commands?.find((c) => c.name === name);
+    const command: CommandModel | undefined = element.commands.find((c) => c.name === name);
     if (command) return { ok: true, id: commandId(element.id, command.name) };
-    const commands = (element.commands ?? []).map((c) => ({ name: `${element.id}.${c.name}`, key: c.name }));
+    const commands = element.commands.map((c) => ({ name: `${element.id}.${c.name}`, key: c.name }));
     const hint = didYouMean(name, commands) ?? (commands.length ? `use a command of '${element.id}': ${commands.map((c) => c.name).join(', ')}` : undefined);
     return { ok: false, code: 'S011', message: `The aggregate '${elementPath}' has no command '${name}'.`, ...(hint ? { hint } : {}) };
 }
@@ -156,9 +156,11 @@ export function linkStormings(stormings: readonly Storming[], model: DomainModel
             }
 
             // S013: an emitted event whose `ref` the exhaustive `emits` of the `.dt` command does not list (ADR 0018).
-            const command = model.elements[aggregateId]?.commands?.find((c) => c.name === commandName);
+            const aggregate = elementOf(model, aggregateId);
+            const command = aggregate && commandsOf(aggregate).find((c) => c.name === commandName);
             if (!command) continue;
-            const emitted = new Set(emittedEvents(command));
+            // the qualified names of the events, compared with the resolved IDs (the same text)
+            const emitted = new Set<string>(emittedEvents(command));
             for (const emits of relations(el, 'emits')) {
                 const event = byId.get(emits.target);
                 const dtEvent = event?.kind === 'event' ? resolved.get(event.id) : undefined;

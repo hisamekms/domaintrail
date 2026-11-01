@@ -1,6 +1,7 @@
 // The project analysis: the .dt and .dtes sources of a workspace analyzed together, the .dtes against the .dt model
 // (through the CLI: test/dtes-cli.test.ts), and the generation's checks.
 import { describe, expect, test } from 'bun:test';
+import { hasElement } from '@domaintrail/modeling';
 import { analyze } from './analyze.js';
 import { check, exampleSources, only } from '../test-helpers.js';
 
@@ -94,7 +95,7 @@ describe('analyze with .dtes sources', () => {
         const broken = await check({ 'domain.dt': DT, 'flow.dtes': 'storming Delivery {\n  event\n' });
         expect(broken.diagnostics.map(where)).toEqual(['flow.dtes:2 SYNTAX']);
         expect(broken.syntaxOk).toBe(true);
-        expect(broken.model?.elements['Delivery.Shipment']).toBeDefined();
+        expect(broken.model && hasElement(broken.model, 'Delivery.Shipment')).toBe(true);
         expect(broken.stormings).toMatchObject({ syntaxOk: false, stormings: [] });
         expect(broken.ok).toBe(false);
 

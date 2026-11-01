@@ -1,6 +1,6 @@
 import { Check, Copy } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { DomainModel } from '@domaintrail/modeling';
+import { commandsOf, statesOf, type DomainModel } from '@domaintrail/modeling';
 import type { Diagnostic, Location } from '@domaintrail/kernel';
 import { highlight, type Token } from './highlight';
 import { useT } from './i18n';
@@ -20,10 +20,10 @@ export interface SourceRange extends Location {
 export function declarationRanges(model: DomainModel | null): SourceRange[] {
     if (!model) return [];
     const out: SourceRange[] = [];
-    for (const el of Object.values(model.elements)) {
+    for (const el of model.elements) {
         out.push({ id: el.id, ...el.location });
-        for (const s of el.states ?? []) out.push({ id: s.id, ...s.location });
-        for (const c of el.commands ?? []) out.push({ id: c.id, ...c.location });
+        for (const s of statesOf(el)) out.push({ id: s.id, ...s.location });
+        for (const c of commandsOf(el)) out.push({ id: c.id, ...c.location });
     }
     return out;
 }

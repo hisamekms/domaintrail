@@ -1,4 +1,16 @@
-import type { CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PrimitiveName } from '@domaintrail/modeling';
+import type {
+    AggregateModel,
+    CommandModel,
+    DomainModel,
+    ElementOf,
+    EnumModel,
+    ExprModel,
+    FieldModel,
+    InvariantModel,
+    PrimitiveName,
+    UnionModel,
+} from '@domaintrail/modeling';
+import { BINARY_OP_TEXT, contextNames, elementOf, sharedContexts } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import { invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
@@ -9,19 +21,24 @@ import { invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
  * without an expression becomes a slot (`…DeclaredChecks`) that the user's code fills in.
  */
 
+/** An ID or a domain primitive. */
+export type DomainPrimitive = ElementOf<'id' | 'primitive'>;
+/** A value object or an entity: a type with fields. */
+export type Struct = ElementOf<'valueObject' | 'entity'>;
+
 /** The type of a value in an expression, resolved against the Typed Model. */
 export type Ty =
     | { k: 'prim'; name: PrimitiveName; literal?: boolean }
     /** An ID or domain primitive. */
-    | { k: 'dp'; el: ElementModel }
+    | { k: 'dp'; el: DomainPrimitive }
     /** An enum value, or the discriminator of a union (both are strings). */
     | { k: 'enum' }
-    | { k: 'struct'; el: ElementModel }
-    | { k: 'union'; el: ElementModel }
+    | { k: 'struct'; el: Struct }
+    | { k: 'union'; el: UnionModel }
     | { k: 'list'; elem: Ty }
     | { k: 'opt'; inner: Ty }
-    | { k: 'enumType'; el: ElementModel }
-    | { k: 'unionType'; el: ElementModel }
+    | { k: 'enumType'; el: EnumModel }
+    | { k: 'unionType'; el: UnionModel }
     | { k: 'ctx'; name: string };
 
 /** What the code of a context module provides to the checks it emits. */
@@ -64,13 +81,13 @@ export const requiresWithName = (commandType: string): string => `check${command
 export const declaredRequiresName = (commandType: string): string => `${commandType}DeclaredRequires`;
 
 /** Whether an element's or state's invariants include one without an expression (a slot). */
-export const hasDeclared = (invs: { expr?: ExprModel }[]): boolean => invs.some((i) => !i.expr);
+export const hasDeclared = (invs: readonly { readonly expr?: ExprModel }[]): boolean => invs.some((i) => !i.expr);
 
 /** Every invariant of an aggregate: its own, then those of each state (names are unique across them, M002). */
-export const aggregateInvariants = (agg: ElementModel): InvariantModel[] => [...agg.invariants, ...(agg.states ?? []).flatMap((s) => s.invariants)];
+export const aggregateInvariants = (agg: AggregateModel): InvariantModel[] => [...agg.invariants, ...agg.states.flatMap((s) => s.invariants)];
 
 /** Every invariant of a union: those of each variant. */
-export const unionInvariants = (u: ElementModel): InvariantModel[] => (u.variants ?? []).flatMap((v) => v.invariants);
+export const unionInvariants = (u: UnionModel): InvariantModel[] => u.variants.flatMap((v) => v.invariants);
 
 export function fieldTy(model: DomainModel, f: FieldModel): Ty {
     const base = baseTy(model, f);
@@ -86,7 +103,7 @@ export function fieldTy(model: DomainModel, f: FieldModel): Ty {
 
 function baseTy(model: DomainModel, f: FieldModel): Ty {
     if (f.type.kind === 'primitive') return { k: 'prim', name: f.type.name };
-    const el = model.elements[f.type.ref];
+    const el = elementOf(model, f.type.ref);
     switch (el?.kind) {
         case 'id':
         case 'primitive':
@@ -99,7 +116,7 @@ function baseTy(model: DomainModel, f: FieldModel): Ty {
         case 'union':
             return { k: 'union', el };
         case 'verified':
-            return baseTy(model, { ...f, type: el.verified!.of }); // a verified value is a value of its base
+            return baseTy(model, { ...f, type: el.verified.of }); // a verified value is a value of its base
         default:
             throw new Error(`no value type for field '${f.name}'`);
     }
@@ -108,7 +125,7 @@ function baseTy(model: DomainModel, f: FieldModel): Ty {
 /** The base primitive of a scalar type, if it is one. */
 function primOf(t: Ty): PrimitiveName | undefined {
     if (t.k === 'prim') return t.name;
-    if (t.k === 'dp') return t.el.base ?? 'String';
+    if (t.k === 'dp') return t.el.base;
     return undefined;
 }
 
@@ -231,12 +248,15 @@ export class ExprCompiler {
                         return wrapped(`${l.js} || ${r.js}`);
                     case 'implies':
                         return wrapped(`${negate(l)} || ${r.js}`);
-                    case '==':
+                    case 'eq':
                         return wrapped(this.equal(strip(l.ty), l.js, r.js, strip(r.ty)));
-                    case '!=':
+                    case 'ne':
                         return bool(`!(${this.equal(strip(l.ty), l.js, r.js, strip(r.ty))})`);
-                    default:
-                        return wrapped(`${scalar(l)} ${e.op} ${scalar(r)}`);
+                    case 'lt':
+                    case 'le':
+                    case 'gt':
+                    case 'ge':
+                        return wrapped(`${scalar(l)} ${BINARY_OP_TEXT[e.op]} ${scalar(r)}`);
                 }
             }
         }
@@ -246,10 +266,10 @@ export class ExprCompiler {
         const bound = scope.get(name);
         if (bound) return bound;
         const { model, ctx } = this.env;
-        const visible = [ctx, ...model.sharedContexts].map((c) => model.elements[`${c}.${name}`]).find((el) => el?.kind === 'enum' || el?.kind === 'union');
+        const visible = [ctx, ...sharedContexts(model)].map((c) => elementOf(model, `${c}.${name}`)).find((el) => el?.kind === 'enum' || el?.kind === 'union');
         if (visible?.kind === 'enum') return { js: '', ty: { k: 'enumType', el: visible } };
         if (visible?.kind === 'union') return { js: '', ty: { k: 'unionType', el: visible } };
-        if (model.contexts.includes(name)) return { js: '', ty: { k: 'ctx', name } };
+        if (contextNames(model).some((c) => c === name)) return { js: '', ty: { k: 'ctx', name } };
         throw new Error(`cannot resolve '${name}'`);
     }
 
@@ -258,8 +278,10 @@ export class ExprCompiler {
         const t = strip(r.ty); // an optional receiver is guarded by exists(...) (M009)
         switch (t.k) {
             case 'ctx': {
-                const el = this.env.model.elements[`${t.name}.${m}`];
-                return { js: '', ty: el.kind === 'enum' ? { k: 'enumType', el } : { k: 'unionType', el } };
+                const el = elementOf(this.env.model, `${t.name}.${m}`);
+                if (el?.kind === 'enum') return { js: '', ty: { k: 'enumType', el } };
+                if (el?.kind === 'union') return { js: '', ty: { k: 'unionType', el } };
+                throw new Error(`no enum or union '${t.name}.${m}'`);
             }
             case 'enumType':
             case 'unionType':
@@ -284,7 +306,7 @@ function regex(pattern: string): string {
 }
 
 /** A scope with the fields of an element, read from `subject`. */
-export function fieldScope(model: DomainModel, subject: string, fields: FieldModel[]): Scope {
+export function fieldScope(model: DomainModel, subject: string, fields: readonly FieldModel[]): Scope {
     return new Map(fields.map((f) => [f.name, { js: `${subject}.${f.name}`, ty: fieldTy(model, f) }]));
 }
 
@@ -319,13 +341,13 @@ export function collect(items: CheckItem[], indent: string): string[] {
 }
 
 /** Compiles the expressed invariants among `invs` in `scope`; declared ones call their slot with `args`. */
-export function items(compiler: ExprCompiler, invs: InvariantModel[], scope: Scope, args: string, guard?: string): CheckItem[] {
+export function items(compiler: ExprCompiler, invs: readonly InvariantModel[], scope: Scope, args: string, guard?: string): CheckItem[] {
     return invs.map((i) => ({ name: i.name, ...(i.expr ? { violated: negate(compiler.compile(i.expr, scope)) } : { args }), ...(guard && { guard }) }));
 }
 
 /** The requirement scope of a command: the aggregate's fields it sees (from `subject`) and its parameters. */
-export function requirementScope(model: DomainModel, agg: ElementModel, c: CommandModel, subject: string): Scope {
-    const states = agg.states ?? [];
+export function requirementScope(model: DomainModel, agg: AggregateModel, c: CommandModel, subject: string): Scope {
+    const states = agg.states;
     const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
     const first = states.find((s) => s.name === sources[0]);
     const fields = c.factory ? [] : [...agg.fields, ...(first?.fields ?? [])];
@@ -395,8 +417,8 @@ export class CheckWriter {
     }
 
     /** A domain primitive (or ID): its check and its generated constructor `make<Name>`. */
-    primitive(p: ElementModel): string[] {
-        const base = BASE[p.base ?? 'String'];
+    primitive(p: DomainPrimitive): string[] {
+        const base = BASE[p.base];
         const type = p.name;
         if (p.invariants.length === 0) {
             return [
@@ -404,7 +426,7 @@ export class CheckWriter {
                 `export const ${makeName(p)}: ${makeTypeName(p)} = (value) => value as ${type};`,
             ];
         }
-        const scope: Scope = new Map([['value', { js: 'value', ty: { k: 'prim', name: p.base ?? 'String' } }]]);
+        const scope: Scope = new Map([['value', { js: 'value', ty: { k: 'prim', name: p.base } }]]);
         const declared = hasDeclared(p.invariants);
         const result = `${invalidTypeName(p)}['invariant']`;
         const out: string[] = [];
@@ -460,7 +482,7 @@ export class CheckWriter {
     }
 
     /** The equality of a value object (all fields), an entity (`id`) or a union (discriminator and fields). */
-    equality(el: ElementModel): string[] {
+    equality(el: Struct | UnionModel): string[] {
         const type = el.name;
         const c = this.compiler;
         let doc: string;
@@ -474,10 +496,10 @@ export class CheckWriter {
             const parts = el.fields.map((f) => c.equal(fieldTy(this.env.model, f), `a.${f.name}`, `b.${f.name}`));
             body = [`return ${parts.length ? parts.join(' && ') : 'true'};`];
         } else {
-            const tag = el.discriminator ?? 'kind';
+            const tag = el.discriminator;
             doc = `Whether two ${type} values are equal: by \`${tag}\` and the fields of the variant (ADR 0016).`;
             body = [`if (a.${tag} !== b.${tag}) return false;`];
-            for (const v of el.variants ?? []) {
+            for (const v of el.variants) {
                 if (!v.fields.length) continue;
                 const narrowed = `Extract<${type}, { readonly ${tag}: '${v.name}' }>`;
                 const parts = v.fields.map((f) => c.equal(fieldTy(this.env.model, f), `a.${f.name}`, `y.${f.name}`));
@@ -501,7 +523,7 @@ export class CheckWriter {
     }
 
     /** The check of a value object or entity. */
-    struct(el: ElementModel): string[] {
+    struct(el: Struct): string[] {
         if (!el.invariants.length) return [];
         const subject = subjectName(el.name);
         const scope = fieldScope(this.env.model, subject, el.fields);
@@ -527,15 +549,15 @@ export class CheckWriter {
     }
 
     /** The check of a union: the invariants of the variant a value is in. */
-    union(u: ElementModel): string[] {
+    union(u: UnionModel): string[] {
         const all = unionInvariants(u);
         if (!all.length) return [];
-        const tag = u.discriminator ?? 'kind';
+        const tag = u.discriminator;
         const subject = subjectName(u.name);
         const declared = hasDeclared(all);
         const body: CheckItem[] = [];
         const slots: { name: string; args: string }[] = [];
-        for (const v of u.variants ?? []) {
+        for (const v of u.variants) {
             const guard = `${subject}.${tag} === '${v.name}'`;
             body.push(...items(this.compiler, v.invariants, fieldScope(this.env.model, subject, v.fields), subject, guard));
             for (const i of v.invariants.filter((x) => !x.expr))
@@ -556,11 +578,11 @@ export class CheckWriter {
     }
 
     /** The checks of an aggregate: per state (the aggregate's invariants and the state's), and for any state. */
-    aggregate(agg: ElementModel): string[] {
+    aggregate(agg: AggregateModel): string[] {
         const all = aggregateInvariants(agg);
         if (!all.length) return [];
         const subject = subjectName(agg.name);
-        const states = agg.states ?? [];
+        const states = agg.states;
         const declared = hasDeclared(all);
         const model = this.env.model;
         const slotArgs = (stateType: string) => `${subject}: ${stateType}`;
@@ -622,7 +644,7 @@ export class CheckWriter {
      * The requirements of a command: the first that does not hold, in declaration order (ADR 0020, D2), or `undefined`.
      * `subject` is the aggregate parameter (absent for a factory), `ps` the command's parameters as in its contract.
      */
-    requires(agg: ElementModel, c: CommandModel, typeName: string, subject: Param | undefined, ps: Param[]): string[] {
+    requires(agg: AggregateModel, c: CommandModel, typeName: string, subject: Param | undefined, ps: Param[]): string[] {
         if (!c.requires.length) return [];
         const scope = requirementScope(this.env.model, agg, c, subject?.name ?? '');
         const args = [...(subject ? [subject] : []), ...ps];

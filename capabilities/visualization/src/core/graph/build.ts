@@ -1,18 +1,23 @@
 import {
     aggregateDependencies,
     type CommandModel,
+    commandsOf,
     contextDependencies,
     type DomainModel,
-    elementList,
+    elementOf,
     type ElementModel,
     emitApplies,
     type FieldModel,
+    fieldsOf,
     owningAggregates,
     representative,
+    sharedContexts,
     soleOwner,
+    statesOf,
     supportingContexts,
     type TypeExpr,
     type VariantModel,
+    variantsOf,
 } from '@domaintrail/modeling';
 import {
     CHAR_WIDTH,
@@ -97,12 +102,13 @@ export function named(name: string, label: string | undefined, both = (l: string
     return anyLang({ name: name + suffix, label: (label ?? name) + suffix, both: (label ? both(label, name) : name) + suffix });
 }
 
-const lookupLabel = (model: DomainModel, qname: string): string | undefined => model.elements[qname]?.label;
+const lookupLabel = (model: DomainModel, qname: string): string | undefined => elementOf(model, qname)?.label;
 
 /** A field row in every display mode: key `◆ 明細` / `◆ items`, value `注文明細[0..*]` / `OrderItem[0..*]`. */
 export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent = ''): GraphLine {
     const marker = indent + (f.kind === 'owns' ? '◆ ' : f.kind === 'references' ? '→ ' : '');
-    const byName = typeText(f.type, ctx, model.sharedContexts);
+    const shared = sharedContexts(model);
+    const byName = typeText(f.type, ctx, shared);
     const byLabel = f.type.kind === 'ref' ? (lookupLabel(model, f.type.ref) ?? byName) : PRIMITIVE_LABELS[f.type.name];
     return {
         key: anyLang({
@@ -112,7 +118,7 @@ export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent
         }),
         value: anyLang({ name: byName + f.multiplicity, label: byLabel + f.multiplicity, both: byName + f.multiplicity }),
         ...(f.fieldSet && {
-            origin: named(typeText({ kind: 'ref', ref: f.fieldSet, text: '' }, ctx, model.sharedContexts), lookupLabel(model, f.fieldSet), (l) => l),
+            origin: named(typeText({ kind: 'ref', ref: f.fieldSet, text: '' }, ctx, shared), lookupLabel(model, f.fieldSet), (l) => l),
         }),
     };
 }
@@ -183,10 +189,10 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
     if (level === 'aggregates') return buildAggregatesGraph(model, opts);
     const overview = level === 'overview';
     const scale = overview ? OVERVIEW_TEXT_SCALE : 1;
-    const elements = elementList(model);
+    const elements = model.elements;
     const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
     const shown = elements.filter((e) => STRUCTURE_KINDS.has(e.kind) && (!focus || focus.has(e.context)));
-    const byId = new Map(elements.map((e) => [e.id, e]));
+    const byId = new Map<string, ElementModel>(elements.map((e) => [e.id, e]));
     const owners = owningAggregates(shown, byId);
     const hidden = (opts.hidden ?? []).filter((c) => !focus?.has(c));
     const stubs = focus ? focusStubs(model, focus, new Set(shown.map((e) => e.id)), new Set(hidden)) : undefined;
@@ -194,10 +200,9 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
     const nodes: GraphNode[] = [];
     const edges: GraphEdge[] = [];
     const usedContexts = new Set([...shown, ...(stubs?.elements ?? [])].map((e) => e.context));
-    for (const ctx of model.contexts) {
+    for (const { name: ctx, label: ctxLabel, shared } of model.contexts) {
         if (!usedContexts.has(ctx)) continue;
-        const shared = model.sharedContexts.includes(ctx);
-        const base = named(ctx, model.contextLabels[ctx]);
+        const base = named(ctx, ctxLabel);
         const label = shared ? mapTexts(base, (s, lang) => `${s} · ${WORDS[lang].shared}`) : base;
         nodes.push({ id: ctx, kind: shared ? 'sharedContext' : 'context', label, lines: [], elementId: ctx, width: 0, height: 0 });
     }
@@ -216,15 +221,15 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
             });
         }
         const owner = el.kind === 'aggregate' ? el.id : soleOwner(owners.get(el.id), el.context);
-        const lines = overview ? [] : el.fields.map((f) => fieldLine(f, el.context, model));
+        const lines = overview ? [] : fieldsOf(el).map((f) => fieldLine(f, el.context, model));
         if (!overview && el.kind === 'union') {
             // One row per variant (the discriminator value), followed by its fields.
-            for (const v of el.variants ?? []) {
+            for (const v of el.variants) {
                 lines.push({ key: named(`${el.discriminator}: ${v.name}`, v.label && `${v.label}`, (l, n) => `${l} (${n})`) });
                 lines.push(...v.fields.map((f) => fieldLine(f, el.context, model, VARIANT_INDENT)));
             }
         }
-        if (!overview && el.kind === 'aggregate' && el.states?.length) {
+        if (!overview && el.kind === 'aggregate' && el.states.length) {
             const byName = el.states.map((s) => s.name).join(' | ');
             const byLabel = el.states.map((s) => s.label ?? s.name).join(' | ');
             lines.push({ key: perLang({ ja: WORDS.ja.state, en: WORDS.en.state }), value: anyLang({ name: byName, label: byLabel, both: byName }) });
@@ -246,8 +251,8 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
         );
 
         const fields: [FieldModel, VariantModel | undefined][] = [
-            ...[...el.fields, ...(el.states ?? []).flatMap((s) => s.fields)].map((f): [FieldModel, undefined] => [f, undefined]),
-            ...(el.variants ?? []).flatMap((v) => v.fields.map((f): [FieldModel, VariantModel] => [f, v])),
+            ...[...fieldsOf(el), ...statesOf(el).flatMap((s) => s.fields)].map((f): [FieldModel, undefined] => [f, undefined]),
+            ...variantsOf(el).flatMap((v) => v.fields.map((f): [FieldModel, VariantModel] => [f, v])),
         ];
         const seen = new Set<string>();
         for (const [f, variant] of fields) {
@@ -299,8 +304,9 @@ function buildAggregatesGraph(model: DomainModel, opts: StructureOptions): Graph
     const scale = OVERVIEW_TEXT_SCALE;
     const focus = opts.focus?.length ? new Set(opts.focus) : undefined;
     const hidden = (opts.hidden ?? []).filter((c) => !focus?.has(c));
-    const left = new Set(focus ? [...supportingContexts(model), ...hidden] : model.sharedContexts);
-    const aggregates = elementList(model).filter((e) => e.kind === 'aggregate' && !left.has(e.context));
+    const shared = sharedContexts(model);
+    const left = new Set<string>(focus ? [...supportingContexts(model), ...hidden] : shared);
+    const aggregates = model.elements.filter((e) => e.kind === 'aggregate' && !left.has(e.context));
     const drawable = new Set(aggregates.map((e) => e.id));
     const shown = aggregates.filter((e) => !focus || focus.has(e.context));
     const shownIds = new Set(shown.map((e) => e.id));
@@ -311,15 +317,15 @@ function buildAggregatesGraph(model: DomainModel, opts: StructureOptions): Graph
     const stubContexts = new Set(stubs.map((e) => e.context));
 
     const nodes: GraphNode[] = [];
-    for (const ctx of model.contexts) {
-        if (left.has(ctx) || model.sharedContexts.includes(ctx) || (focus && !focus.has(ctx) && !stubContexts.has(ctx))) continue;
+    for (const { name: ctx, label: ctxLabel, doc: ctxDoc } of model.contexts) {
+        if (left.has(ctx) || shared.includes(ctx) || (focus && !focus.has(ctx) && !stubContexts.has(ctx))) continue;
         nodes.push(
             sizedGroup(
                 {
                     id: ctx,
                     kind: 'context',
-                    label: named(ctx, model.contextLabels[ctx]),
-                    lines: docLines(model.contextDocs[ctx], CONTEXT_DOC_WIDTH),
+                    label: named(ctx, ctxLabel),
+                    lines: docLines(ctxDoc, CONTEXT_DOC_WIDTH),
                     elementId: ctx,
                 },
                 scale,
@@ -428,7 +434,7 @@ function focusStubs(
     const pairs = new Map<string, { source: string; target: string; type: boolean; paths: string[] }>();
     for (const d of contextDependencies(model)) {
         if ((!focus.has(d.from) && !focus.has(d.to)) || hidden.has(d.from) || hidden.has(d.to)) continue;
-        const source = model.elements[d.source];
+        const source = elementOf(model, d.source);
         const target = representative(model, d.target);
         if (!source || !target || source.kind === 'event' || source.kind === 'error' || source.kind === 'policy') continue;
         for (const el of [source, target]) if (!shownIds.has(el.id)) stubs.set(el.id, el);
@@ -479,8 +485,8 @@ function fieldEdge(el: ElementModel, f: FieldModel, byId: Map<string, ElementMod
 export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: TransitionLabels = 'both'): Graph {
     const nodes: Omit<GraphNode, 'width' | 'height'>[] = [];
     const edges: GraphEdge[] = [];
-    const states = agg.states ?? [];
-    const commands = agg.commands ?? [];
+    const states = statesOf(agg);
+    const commands = commandsOf(agg);
     const stateful = states.length > 0;
 
     if (stateful) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { contextDependencies } from '@domaintrail/modeling';
+import { commandsOf, contextDependencies, elementOf } from '@domaintrail/modeling';
 import { OutcomeCard } from './behavior';
 import { MESSAGES } from './i18n';
 import { catalogSections, fieldSetUsers, namer } from './model-utils';
@@ -52,11 +52,11 @@ const FILES = {
 describe('field sets: Live View', () => {
     test("an event card's payload marks the fields of field sets", async () => {
         const model = (await check(FILES)).model!;
-        const order = model.elements['Sales.Order'];
+        const order = elementOf(model, 'Sales.Order')!;
         const html = renderToStaticMarkup(
             <OutcomeCard
                 id="Sales.OrderPlaced"
-                commands={order.commands!.slice(0, 1)}
+                commands={commandsOf(order).slice(0, 1)}
                 model={model}
                 names={namer('label', model)}
                 tx={MESSAGES.ja}
@@ -69,7 +69,7 @@ describe('field sets: Live View', () => {
     test('a field set is used by its elements and counts its field types once', async () => {
         const a = await check(FILES);
         const model = a.model!;
-        expect(fieldSetUsers(model, 'Common.Tenanted').map((e) => e.id)).toEqual(['Sales.Order', 'Sales.OrderItem', 'Sales.OrderPlaced']);
+        expect(fieldSetUsers(model, 'Common.Tenanted').map((e): string => e.id)).toEqual(['Sales.Order', 'Sales.OrderItem', 'Sales.OrderPlaced']);
         expect(usagesOf(model, 'Common.TenantId').map((u) => u.key)).toEqual(['Common.Tenanted.tenant']);
         expect(usagesOf(model, 'Sales.StaffId').map((u) => u.key)).toEqual(['Sales.Performed.performedBy']);
         const deps = contextDependencies(model).filter((d) => d.path === 'with');

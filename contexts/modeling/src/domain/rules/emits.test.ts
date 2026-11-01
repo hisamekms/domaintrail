@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, checkSales, codes, only } from '../../test-helpers.js';
+import { check, checkSales, codes, only, element } from '../../test-helpers.js';
 
 const WORK = `context Tasks {
   id WorkId: UUID
@@ -49,7 +49,7 @@ describe('emits in the DSL', () => {
     test('entries take a multiplicity and `when`; the Typed Model holds them', async () => {
         const a = await check({ 'tasks.dt': WORK });
         expect(a.diagnostics).toEqual([]);
-        const cmd = (name: string) => a.model!.elements['Tasks.Work'].commands!.find((c) => c.name === name)!;
+        const cmd = (name: string) => element(a.model, 'Tasks.Work').commands!.find((c) => c.name === name)!;
         expect(cmd('progress').emits).toEqual([
             { event: 'Tasks.StepRecorded', cardinality: 'one', multiplicity: '', lower: 1, upper: 1 },
             { event: 'Tasks.WorkCompleted', cardinality: 'one', multiplicity: '', lower: 1, upper: 1, when: { from: [], to: ['Completed'] } },
@@ -74,7 +74,7 @@ describe('emits in the DSL', () => {
     command move(when: Timestamp) Draft -> Done emits Moved when Draft -> Done
   }`);
         expect(a.diagnostics).toEqual([]);
-        expect(a.model!.elements['Sales.Order'].fields.map((f) => f.name)).toContain('when');
+        expect(element(a.model, 'Sales.Order').fields.map((f) => f.name)).toContain('when');
     });
 
     test('M006: the states of `when` are sources / targets of the command, and it matches an outcome', async () => {

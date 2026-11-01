@@ -1,6 +1,17 @@
 import { Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { DomainModel, ElementModel, FieldModel, InvariantModel, ModelDiff } from '@domaintrail/modeling';
+import {
+    contextOf,
+    fieldsOf,
+    invariantsOf,
+    nameOfId,
+    sharedContexts,
+    type DomainModel,
+    type ElementModel,
+    type FieldModel,
+    type InvariantModel,
+    type ModelDiff,
+} from '@domaintrail/modeling';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DisplayMode } from '@domaintrail/visualization';
 import { useT, type Messages } from './i18n';
@@ -10,6 +21,7 @@ import {
     CATALOG_SECTIONS,
     catalogSections,
     commandsWithOutcome,
+    contextLabels,
     fieldSetUsers,
     filterCatalog,
     isCatalogFiltered,
@@ -85,7 +97,7 @@ export function CatalogFilters(props: { model: DomainModel; mode: DisplayMode; f
             <FilterSection title={t.filters.contexts}>
                 <ContextList
                     contexts={contextList}
-                    labels={model.contextLabels}
+                    labels={contextLabels(model)}
                     selected={filter.contexts ?? contextList}
                     mode={props.mode}
                     onChange={(cs) => onChange({ ...filter, contexts: cs.length === contextList.length ? null : cs })}
@@ -131,7 +143,7 @@ export function Catalog(props: CatalogProps & { filter: CatalogFilter }) {
     const all = catalogSections(model);
     const sections = filterCatalog(all, filter).filter((s) => !filtering || s.shown > 0);
     const names = namer(props.mode, model);
-    const shared = new Set(model.sharedContexts);
+    const shared = new Set<string>(sharedContexts(model));
     const severity = new Map<string, 'error' | 'warning'>();
     for (const d of props.diagnostics) {
         if (!d.elementId) continue;
@@ -186,7 +198,7 @@ function Section(
             {section.groups.map(({ context, items }) => (
                 <section key={context} className={`catalog-context${props.shared.has(context) ? ' catalog-shared' : ''}`}>
                     <h2>
-                        {names.of({ name: context, label: model.contextLabels[context] })}
+                        {names.of({ name: context, label: contextOf(model, context)?.label })}
                         {props.shared.has(context) && <span className="shared-badge">{t.sharedCatalog}</span>}
                     </h2>
                     <div className="cards">
@@ -266,19 +278,19 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
         case 'enum':
             return (
                 <>
-                    {el.base && <div className="card-base">{names.primitive(el.base)}</div>}
-                    {el.values && (
+                    {'base' in el && <div className="card-base">{names.primitive(el.base)}</div>}
+                    {el.kind === 'enum' && (
                         <div className="chips">
                             {el.values.map((v) => (
-                                <code key={v}>{names.of({ name: v, label: el.valueLabels?.[v] })}</code>
+                                <code key={v.name}>{names.of(v)}</code>
                             ))}
                         </div>
                     )}
-                    <Invariants invariants={el.invariants} names={names} />
+                    <Invariants invariants={invariantsOf(el)} names={names} />
                 </>
             );
         case 'verified': {
-            const v = el.verified!;
+            const v = el.verified;
             return (
                 <>
                     <div className="card-base">
@@ -304,29 +316,29 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
             return (
                 <>
                     {el.discriminator && <div className="card-base">{el.discriminator}</div>}
-                    <Fields fields={el.fields} ctx={el.context} names={names} />
+                    <Fields fields={fieldsOf(el)} ctx={el.context} names={names} />
                     <div className="chips">
-                        {(el.variants ?? []).map((v) => (
+                        {el.variants.map((v) => (
                             <code key={v.name}>{names.of(v)}</code>
                         ))}
                     </div>
-                    <Invariants invariants={el.invariants} names={names} />
+                    <Invariants invariants={invariantsOf(el)} names={names} />
                 </>
             );
         case 'aggregate':
             return (
                 <>
                     <Fields fields={el.fields} ctx={el.context} names={names} />
-                    {(el.states?.length ?? 0) > 0 && (
+                    {el.states.length > 0 && (
                         <div className="chips">
-                            {el.states!.map((s) => (
+                            {el.states.map((s) => (
                                 <code key={s.id}>{names.of(s)}</code>
                             ))}
                         </div>
                     )}
-                    {(el.commands?.length ?? 0) > 0 && (
+                    {el.commands.length > 0 && (
                         <ul className="card-commands">
-                            {el.commands!.map((c) => (
+                            {el.commands.map((c) => (
                                 <li key={c.id}>
                                     {names.of(c)}
                                     <span className="muted">{names.transition(el, c)}</span>
@@ -345,11 +357,11 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
                 <ul className="card-fields">
                     <li>
                         <span>when</span>
-                        <code>{el.policy ? names.id(el.policy.event) : ''}</code>
+                        <code>{names.id(el.policy.event)}</code>
                     </li>
                     <li>
                         <span>→</span>
-                        <code>{target ? `${names.of(target.agg)}.${names.of(target.command)}` : `${el.policy?.aggregate}.${el.policy?.command}`}</code>
+                        <code>{target ? `${names.of(target.agg)}.${names.of(target.command)}` : `${el.policy.aggregate}.${el.policy.command}`}</code>
                     </li>
                 </ul>
             );
@@ -365,7 +377,7 @@ function CardBody({ el, model, names }: { el: ElementModel; model: DomainModel; 
             return (
                 <>
                     <Fields fields={el.fields} ctx={el.context} names={names} />
-                    <Invariants invariants={el.invariants} names={names} />
+                    <Invariants invariants={invariantsOf(el)} names={names} />
                 </>
             );
     }
@@ -378,9 +390,7 @@ function CardUses({ el, model, names, shared }: { el: ElementModel; model: Domai
     if (el.kind === 'event' || el.kind === 'error') {
         const commands = commandsWithOutcome(model, el.id).map(({ agg, command }) => `${names.of(agg)}.${names.of(command)}`);
         // an error may also be returned by the factory of a verified type
-        const factories = Object.values(model.elements)
-            .filter((v) => v.verified?.errors.includes(el.id))
-            .map((v) => names.of(v));
+        const factories = model.elements.filter((v) => v.kind === 'verified' && v.verified.errors.includes(nameOfId(el.id))).map((v) => names.of(v));
         const reactions = el.kind === 'event' ? policiesReactingTo(model, el.id) : [];
         const from =
             commands.length || factories.length ? `← ${[...commands, ...factories].join(', ')}` : el.kind === 'event' ? t.raisedByNone : t.returnedByNone;
@@ -406,12 +416,12 @@ function CardUses({ el, model, names, shared }: { el: ElementModel; model: Domai
     return (
         <>
             {t.usedIn(uses.length)}
-            {shared && usedIn.length > 0 && <> · {usedIn.map((c) => names.of({ name: c, label: model.contextLabels[c] })).join(', ')}</>}
+            {shared && usedIn.length > 0 && <> · {usedIn.map((c) => names.of({ name: c, label: contextOf(model, c)?.label })).join(', ')}</>}
         </>
     );
 }
 
-function Fields({ fields, ctx, names }: { fields: FieldModel[]; ctx: string; names: Namer }) {
+function Fields({ fields, ctx, names }: { fields: readonly FieldModel[]; ctx: string; names: Namer }) {
     if (!fields.length) return null;
     return (
         <ul className="card-fields">
@@ -430,7 +440,7 @@ function Fields({ fields, ctx, names }: { fields: FieldModel[]; ctx: string; nam
     );
 }
 
-export function Invariants({ invariants, names }: { invariants: InvariantModel[]; names: Namer }) {
+export function Invariants({ invariants, names }: { invariants: readonly InvariantModel[]; names: Namer }) {
     const t = useT();
     if (!invariants.length) return null;
     return (

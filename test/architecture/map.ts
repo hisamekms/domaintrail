@@ -74,7 +74,12 @@ export type Rule =
      * an import of Langium by a file of a module that is not an app outside its `infrastructure/syntax/`, or of a
      * context's `infrastructure/syntax/` by a file under `domain/` or `core/` — the file, `<file under the sources>`
      */
-    | 'syntax';
+    | 'syntax'
+    /**
+     * an import by a package's generated code (`generated`) of anything but its own files, or an import of it by the
+     * rest of the package that is not type-only — `<file under the sources>: <specifier>`
+     */
+    | 'generated';
 
 export interface Module {
     kind: Kind;
@@ -93,6 +98,13 @@ export interface Module {
      * capabilities; a context importing it violates `public-surface`, keyed by the module it reaches.
      */
     published?: readonly string[];
+    /**
+     * The directory of its sources that `dt generate ts` writes from its own `.dt` (committed; ADR 0027, Modeling is
+     * described in its own `.dt`). Its domain may import it; it imports only its own files, and the rest of the package
+     * imports its types only (`import type`), so that the tool runs from the committed output even when the generator
+     * is broken.
+     */
+    generated?: string;
     /** The violations it still has, by rule; the comment of each group names the task that removes it. */
     exceptions?: Partial<Record<Rule, readonly string[]>>;
 }
@@ -108,6 +120,8 @@ export const MAP: Record<string, Module> = {
         upstream: ['kernel'],
         // the typed model with its dependencies and diff, the stable IDs, Modeling's rule IDs
         published: ['domain/model', 'domain/dependencies', 'domain/usages', 'domain/ids', 'domain/aggregates', 'domain/diff', 'domain/rule-ids'],
+        // the types of what it publishes, generated from contexts/modeling/model (T11)
+        generated: 'generated',
     },
     storming: {
         kind: 'context',

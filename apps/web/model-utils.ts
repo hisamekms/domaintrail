@@ -1,5 +1,20 @@
 import { type DisplayMode, PRIMITIVE_LABELS, typeText } from '@domaintrail/visualization';
-import type { CommandModel, DomainModel, ElementKind, ElementModel, StateModel, TypeExpr } from '@domaintrail/modeling';
+import {
+    commandsOf,
+    contextNames,
+    contextOf,
+    elementOf,
+    sharedContexts,
+    statesOf,
+    type AggregateModel,
+    type CommandModel,
+    type DomainModel,
+    type ElementKind,
+    type ElementModel,
+    type PolicyElement,
+    type StateModel,
+    type TypeExpr,
+} from '@domaintrail/modeling';
 import { ownerElement } from './render';
 
 export type Select = (id: string) => void;
@@ -37,21 +52,20 @@ export type Resolved =
 
 /** Resolves a context, element, state (`Agg#State`) or command (`Agg:cmd`) ID. */
 export function resolve(model: DomainModel, id: string): Resolved | undefined {
-    if (model.contexts.includes(id)) {
-        return { kind: 'context', name: id, label: model.contextLabels[id], shared: model.sharedContexts.includes(id) };
-    }
-    const el = model.elements[id];
+    const ctx = contextOf(model, id);
+    if (ctx) return { kind: 'context', name: id, label: ctx.label, shared: ctx.shared };
+    const el = elementOf(model, id);
     if (el) return { kind: 'element', el };
-    const agg = model.elements[ownerElement(id)];
-    const state = agg?.states?.find((s) => s.id === id);
+    const agg = elementOf(model, ownerElement(id));
+    const state = agg && statesOf(agg).find((s) => s.id === id);
     if (agg && state) return { kind: 'state', agg, state };
-    const command = agg?.commands?.find((c) => c.id === id);
+    const command = agg && commandsOf(agg).find((c) => c.id === id);
     if (agg && command) return { kind: 'command', agg, command };
     return undefined;
 }
 
 export function transitionText(agg: ElementModel, c: CommandModel): string {
-    if (!agg.states?.length) return c.factory ? 'new' : '';
+    if (!statesOf(agg).length) return c.factory ? 'new' : '';
     return c.transitions.map((t) => `${c.factory ? 'new' : t.from.join(' | ')} → ${t.to.join(' | ')}`).join('; ');
 }
 
@@ -96,7 +110,7 @@ export function catalogSections(model: DomainModel): CatalogSection[] {
         const groups = contexts
             .map((context) => ({
                 context,
-                items: Object.values(model.elements)
+                items: model.elements
                     .filter((e) => e.context === context && kinds.includes(e.kind))
                     .sort((a, b) => kinds.indexOf(a.kind) - kinds.indexOf(b.kind) || a.name.localeCompare(b.name)),
             }))
@@ -140,16 +154,21 @@ export function filterCatalog(sections: CatalogSection[], filter: CatalogFilter)
 export { commandsWithOutcome, fieldSetUsers, policiesReactingTo, policiesRunning } from '@domaintrail/modeling';
 
 /** The command a policy runs (`Agg:command`), with its aggregate, when both resolve. */
-export function policyTarget(model: DomainModel, p: ElementModel): { agg: ElementModel; command: CommandModel } | undefined {
-    const agg = p.policy && model.elements[p.policy.aggregate];
-    const command = agg?.commands?.find((c) => c.name === p.policy!.command);
+export function policyTarget(model: DomainModel, p: PolicyElement): { agg: AggregateModel; command: CommandModel } | undefined {
+    const el = elementOf(model, p.policy.aggregate);
+    const agg = el?.kind === 'aggregate' ? el : undefined;
+    const command = agg?.commands.find((c) => c.name === p.policy.command);
     return agg && command ? { agg, command } : undefined;
 }
 
+/** The labels of the contexts that have one, by name. */
+export const contextLabels = (model: DomainModel): Record<string, string> =>
+    Object.fromEntries(model.contexts.flatMap((c) => (c.label === undefined ? [] : [[c.name, c.label]])));
+
 /** Contexts with shared ones first. */
 export function orderedContexts(model: DomainModel): string[] {
-    const shared = new Set(model.sharedContexts);
-    return [...model.contexts].sort((a, b) => Number(shared.has(b)) - Number(shared.has(a)) || a.localeCompare(b));
+    const shared = new Set<string>(sharedContexts(model));
+    return contextNames(model).sort((a, b) => Number(shared.has(b)) - Number(shared.has(a)) || a.localeCompare(b));
 }
 
 /** Display names for the current mode, used throughout the inspector and lists. */
@@ -176,7 +195,7 @@ export interface Namer {
 export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
     const of = (x: { name: string; label?: string }) => nameIn(mode, x.name, x.label);
     const state = (agg: ElementModel, name: string) => {
-        const s = agg.states?.find((x) => x.name === name);
+        const s = statesOf(agg).find((x) => x.name === name);
         return s ? of(s) : name;
     };
     return {
@@ -184,19 +203,19 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         of,
         field: of,
         type(t, ctx) {
-            const byName = typeText(t, ctx, model?.sharedContexts ?? []);
+            const byName = typeText(t, ctx, model ? sharedContexts(model) : []);
             if (mode !== 'label') return byName;
-            return t.kind === 'primitive' ? PRIMITIVE_LABELS[t.name] : (model?.elements[t.ref]?.label ?? byName);
+            return t.kind === 'primitive' ? PRIMITIVE_LABELS[t.name] : ((model && elementOf(model, t.ref)?.label) ?? byName);
         },
         primitive: (name) => (mode === 'label' ? (PRIMITIVE_LABELS[name] ?? name) : name),
         state,
         transition(agg, c) {
-            if (!agg.states?.length) return c.factory ? 'new' : '';
-            const states = (names: string[]) => names.map((n) => state(agg, n)).join(' | ');
+            if (!statesOf(agg).length) return c.factory ? 'new' : '';
+            const states = (names: readonly string[]) => names.map((n) => state(agg, n)).join(' | ');
             return c.transitions.map((t) => `${c.factory ? 'new' : states(t.from)} → ${states(t.to)}`).join('; ');
         },
         short(id) {
-            const el = model?.elements[id];
+            const el = model && elementOf(model, id);
             if (!el) return shortName(id);
             return mode === 'both' ? (el.label ?? el.name) : of(el);
         },

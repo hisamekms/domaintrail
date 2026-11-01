@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { DomainModel, ModelDiff } from '@domaintrail/modeling';
+import { commandsOf, elementOf, type DomainModel, type ModelDiff } from '@domaintrail/modeling';
 import { menuPlacement } from './baseline-picker';
 import { CommandCard } from './behavior';
 import { MESSAGES } from './i18n';
@@ -118,9 +118,9 @@ describe('rows compared with the baseline', () => {
     test('a command card marks only its changed parts', async () => {
         const after = await model(AFTER);
         const before = await model(BEFORE);
-        const agg = after.elements['A.Order'];
-        const c = agg.commands!.find((x) => x.name === 'close')!;
-        const was = before.elements['A.Order'].commands!.find((x) => x.name === 'close')!;
+        const agg = elementOf(after, 'A.Order')!;
+        const c = commandsOf(agg).find((x) => x.name === 'close')!;
+        const was = commandsOf(elementOf(before, 'A.Order')!).find((x) => x.name === 'close')!;
         const html = renderToStaticMarkup(
             <CommandCard
                 agg={agg}

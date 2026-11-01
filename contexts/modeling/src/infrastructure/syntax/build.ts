@@ -59,27 +59,30 @@ import {
     type ModelIndex,
     type WithFieldSets,
 } from './model-index.js';
-import type { Location } from '@domaintrail/kernel';
-import { commandId, elementId, stateId } from '../../domain/ids.js';
+import { commandId, contextName, elementId, qualifiedName, stateId } from '../../domain/ids.js';
 import type {
+    BinaryOp,
     CommandModel,
+    ContextModel,
+    ElementId,
     Described,
-    ExprModel,
     DomainModel,
     ElementKind,
     ElementModel,
+    ExprModel,
     FieldModel,
     InvariantModel,
+    Location,
+    QualifiedName,
     RequirementModel,
     StateModel,
-    TermModel,
     TypeExpr,
     VariantModel,
 } from '../../domain/model.js';
 
 /** Builds the Typed Model. Tolerates unresolved references so that the view can render models with semantic errors. */
 export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel {
-    const elements: Record<string, ElementModel> = {};
+    const elements = new Map<string, ElementModel>();
     const labels = new LabelResolver(index);
     const field = (f: FieldLike | Parameter): FieldModel => fieldModel(f, labels);
     const loc = (node: AstNode): Location => ({
@@ -89,89 +92,101 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
     });
 
     /** Fields taken from the element's field sets, marked with the field set they come from. */
-    const included = (el: WithFieldSets): FieldModel[] =>
-        includedFields(el).map(({ field: f, fieldSet }) => ({ ...field(f), fieldSet: elementId(fieldSet.$container.name, fieldSet.name) }));
-    const withFieldSets = (el: WithFieldSets): Partial<ElementModel> => {
-        const sets = fieldSetsOf(el);
-        return sets.length && !isFieldSet(el) ? { fieldSets: sets.map((s) => elementId(s.$container.name, s.name)) } : {};
-    };
+    const included = (el: WithFieldSets): FieldModel[] => includedFields(el).map(({ field: f, fieldSet }) => ({ ...field(f), fieldSet: qname(fieldSet) }));
+    const fieldSets = (el: WithFieldSets): QualifiedName[] => fieldSetsOf(el).map(qname);
 
     for (const el of index.elements) {
         const id = elementId(el.$container.name, el.name);
-        if (elements[id]) continue; // duplicate, reported by M002
-        const base: ElementModel = {
-            id,
-            context: el.$container.name,
-            name: el.name,
-            kind: kindOf(el),
-            location: loc(el),
-            ...described(el),
-            fields: [],
-            invariants: [],
-        };
-        if (isIdType(el) || isPrimitiveDecl(el)) {
-            base.base = el.base;
-            base.invariants = primitiveInvariants(el).map((i) => ({
-                name: i.name,
-                ...optional('source', i.expr && sourceText(i.expr)),
-                ...(i.expr && { expr: exprModel(i.expr) }),
-                ...optional('label', i.label),
-                ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
-            }));
-        } else if (isVerifiedDecl(el)) {
-            base.verified = {
-                of: typeExpr(el.base),
-                ...(el.context && { for: { type: typeExpr(el.context), optional: el.contextOptional } }),
-                errors: [...new Set(el.errors.map((r) => (r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText)))],
-            };
-        } else if (isEnumDecl(el)) {
-            base.values = el.values.map((v) => v.name);
-            const valueLabels = Object.fromEntries(el.values.filter((v) => v.label).map((v) => [v.name, v.label!]));
-            if (Object.keys(valueLabels).length) base.valueLabels = valueLabels;
-        } else if (isUnionDecl(el)) {
-            base.discriminator = discriminatorOf(el);
-            const bound = el.tagType?.ref;
-            if (bound) base.tagType = elementId(bound.$container.name, bound.name);
-            base.variants = el.variants.map((v): VariantModel => {
-                // A variant without a label uses the label of the enum value it stands for.
-                const label = v.label ?? bound?.values.find((x) => x.name === v.name)?.label;
-                return {
-                    name: v.name,
-                    ...optional('label', label),
-                    ...optional('doc', docComment(v)),
-                    fields: fieldsOf(v.members).map(field),
-                    invariants: invariantsOf(v.members).map(invariant),
+        if (elements.has(id)) continue; // duplicate, reported by M002
+        const head = { id, context: contextName(el.$container.name), name: el.name };
+        const common = { location: loc(el), ...described(el) };
+        elements.set(id, element(el));
+
+        function element(el: ContextElement): ElementModel {
+            if (isIdType(el) || isPrimitiveDecl(el)) {
+                const invariants = primitiveInvariants(el).map((i): InvariantModel => ({
+                    name: i.name,
+                    ...optional('source', i.expr && sourceText(i.expr)),
+                    ...(i.expr && { expr: exprModel(i.expr) }),
+                    ...optional('label', i.label),
+                    ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
+                }));
+                return { ...head, kind: isIdType(el) ? 'id' : 'primitive', ...common, base: el.base, invariants };
+            }
+            if (isVerifiedDecl(el)) {
+                const verified = {
+                    of: typeExpr(el.base),
+                    ...(el.context && { for: { type: typeExpr(el.context), optional: el.contextOptional } }),
+                    errors: [...new Set(el.errors.map(refName))],
                 };
-            });
-        } else if (isAggregate(el)) {
-            Object.assign(base, withFieldSets(el));
-            base.fields = [...included(el), ...commonFields(el).map(field)];
-            base.invariants = invariantsOf(el.members).map(invariant);
-            base.states = statesOf(el).map((s) => state(id, s, loc, field));
-            base.commands = commandsOf(el).map((c) => command(id, c, loc, field));
-        } else if (isPolicy(el)) {
-            const qname = (r: { ref?: ContextElement; $refText: string }): string => (r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText);
-            base.policy = { event: qname(el.event), aggregate: qname(el.aggregate), command: el.command.$refText };
-        } else {
-            Object.assign(base, withFieldSets(el));
-            if (isEventDecl(el) && el.persistent) base.persistent = true;
-            base.fields = [...included(el), ...fieldsOf(el.members).map(field)];
-            base.invariants = invariantsOf(el.members).map(invariant);
+                return { ...head, kind: 'verified', ...common, verified };
+            }
+            if (isEnumDecl(el)) return { ...head, kind: 'enum', ...common, values: el.values.map((v) => ({ name: v.name, ...optional('label', v.label) })) };
+            if (isUnionDecl(el)) {
+                const bound = el.tagType?.ref;
+                const variants = el.variants.map((v): VariantModel => {
+                    // A variant without a label uses the label of the enum value it stands for.
+                    const label = v.label ?? bound?.values.find((x) => x.name === v.name)?.label;
+                    return {
+                        name: v.name,
+                        ...optional('label', label),
+                        ...optional('doc', docComment(v)),
+                        fields: fieldsOf(v.members).map(field),
+                        invariants: invariantsOf(v.members).map(invariant),
+                    };
+                });
+                return {
+                    ...head,
+                    kind: 'union',
+                    ...common,
+                    discriminator: discriminatorOf(el),
+                    ...(bound && { tagType: qname(bound) }),
+                    variants,
+                };
+            }
+            if (isAggregate(el)) {
+                return {
+                    ...head,
+                    kind: 'aggregate',
+                    ...common,
+                    fieldSets: fieldSets(el),
+                    fields: [...included(el), ...commonFields(el).map(field)],
+                    invariants: invariantsOf(el.members).map(invariant),
+                    states: statesOf(el).map((s) => state(id, s, loc, field)),
+                    commands: commandsOf(el).map((c) => command(id, c, loc, field)),
+                };
+            }
+            if (isPolicy(el)) {
+                return {
+                    ...head,
+                    kind: 'policy',
+                    ...common,
+                    policy: { event: refName(el.event), aggregate: refName(el.aggregate), command: el.command.$refText },
+                };
+            }
+            if (isFieldSet(el)) return { ...head, kind: 'fieldSet', ...common, fields: fieldsOf(el.members).map(field) };
+            const fields = [...included(el), ...fieldsOf(el.members).map(field)];
+            if (isEventDecl(el)) return { ...head, kind: 'event', ...common, fieldSets: fieldSets(el), fields, persistent: el.persistent };
+            if (isErrorDecl(el)) return { ...head, kind: 'error', ...common, fieldSets: fieldSets(el), fields };
+            const invariants = invariantsOf(el.members).map(invariant);
+            return { ...head, kind: isEntity(el) ? 'entity' : 'valueObject', ...common, fieldSets: fieldSets(el), fields, invariants };
         }
-        elements[id] = base;
     }
-    const contextLabels: Record<string, string> = {};
-    const contextDocs: Record<string, string> = {};
-    const terms: Record<string, TermModel[]> = {};
-    for (const ctx of index.contextNames) {
-        const label = labels.contextLabel(ctx);
-        if (label) contextLabels[ctx] = label;
-        const doc = labels.contextDoc(ctx);
-        if (doc) contextDocs[ctx] = doc;
-        terms[ctx] = [...labels.termsOf(ctx).values()].map((t) => ({ name: t.name, label: t.label, ...optional('doc', docComment(t)) }));
-    }
-    return { contexts: index.contextNames, contextLabels, contextDocs, sharedContexts: index.sharedContexts, terms, elements };
+    const contexts = index.contextNames.map((ctx): ContextModel => ({
+        name: contextName(ctx),
+        ...optional('label', labels.contextLabel(ctx)),
+        ...optional('doc', labels.contextDoc(ctx)),
+        shared: index.sharedContexts.includes(ctx),
+        terms: [...labels.termsOf(ctx).values()].map((t) => ({ name: t.name, label: t.label, ...optional('doc', docComment(t)) })),
+    }));
+    return { contexts, elements: [...elements.values()] };
 }
+
+/** The qualified name of a declaration of a context. */
+const qname = (decl: { name: string; $container: { name: string } }): QualifiedName => qualifiedName(`${decl.$container.name}.${decl.name}`);
+
+/** A reference by qualified name: the target's, or as written when it does not resolve. */
+const refName = (r: { ref?: ContextElement; $refText: string }): QualifiedName => (r.ref ? qname(r.ref) : qualifiedName(r.$refText));
 
 /** Label and `///` description of a declaration, omitting absent values. */
 function described(node: AstNode & { label?: string }): Described {
@@ -202,8 +217,8 @@ function typeExpr(ref: TypeRef | undefined): TypeExpr {
     if (ref?.primitive) return { kind: 'primitive', name: ref.primitive };
     const target = ref?.decl?.ref;
     const text = ref?.decl?.$refText ?? '';
-    if (!target) return { kind: 'ref', ref: text, text };
-    return { kind: 'ref', ref: elementId(target.$container.name, target.name), text, target: kindOf(target) };
+    if (!target) return { kind: 'ref', ref: qualifiedName(text), text };
+    return { kind: 'ref', ref: qname(target), text, target: kindOf(target) };
 }
 
 /** How many times a multiplicity allows: once without one, `?` at most once. */
@@ -214,40 +229,48 @@ function bounds(m: Multiplicity | undefined): { lower: number; upper?: number } 
 }
 
 function fieldModel(f: FieldLike | Parameter, labels: LabelResolver): FieldModel {
-    const out: FieldModel = {
+    const t = isReferenceField(f) ? f.target : undefined;
+    const target = t?.ref ? qname(t.ref) : t?.$refText !== undefined ? qualifiedName(t.$refText) : undefined;
+    const label = labels.fieldLabel(f);
+    const doc = labels.fieldDoc(f);
+    return {
         name: f.name,
         kind: f.$type === 'Parameter' ? 'param' : isOwnsField(f) ? 'owns' : isReferenceField(f) ? 'references' : 'field',
         type: typeExpr(f.type),
         cardinality: cardinality(f.multiplicity),
         multiplicity: multiplicityText(f.multiplicity),
+        ...(target !== undefined && { target }),
+        ...(label && { label: label.label, labelSource: label.source }),
+        ...(doc && { doc }),
     };
-    if (isReferenceField(f)) {
-        const t = f.target?.ref;
-        out.target = t ? elementId(t.$container.name, t.name) : f.target?.$refText;
-    }
-    const label = labels.fieldLabel(f);
-    if (label) {
-        out.label = label.label;
-        out.labelSource = label.source;
-    }
-    const doc = labels.fieldDoc(f);
-    if (doc) out.doc = doc;
-    return out;
 }
 
 function invariant(inv: Invariant): InvariantModel {
     return { name: inv.name, ...optional('source', inv.expr && sourceText(inv.expr)), ...(inv.expr && { expr: exprModel(inv.expr) }), ...described(inv) };
 }
 
-function requirement(r: Requirement, qname: (r: { ref?: ContextElement; $refText: string }) => string): RequirementModel {
+function requirement(r: Requirement): RequirementModel {
     return {
         name: r.name,
         ...optional('source', r.expr && sourceText(r.expr)),
         ...(r.expr && { expr: exprModel(r.expr) }),
-        error: qname(r.error),
+        error: refName(r.error),
         ...described(r),
     };
 }
+
+/** The operators as the grammar writes them, as the model names them. */
+const BINARY_OPS: Readonly<Record<string, BinaryOp>> = {
+    implies: 'implies',
+    or: 'or',
+    and: 'and',
+    '==': 'eq',
+    '!=': 'ne',
+    '<': 'lt',
+    '<=': 'le',
+    '>': 'gt',
+    '>=': 'ge',
+};
 
 /** The tree of an expression (syntax only; the model has no errors when it is read for generated checks). */
 function exprModel(e: Expression): ExprModel {
@@ -258,7 +281,7 @@ function exprModel(e: Expression): ExprModel {
     if (isNameRef(e)) return { k: 'name', name: e.name };
     if (isMemberAccess(e)) return { k: 'member', receiver: exprModel(e.receiver), member: e.member };
     if (isNotExpr(e)) return { k: 'not', operand: exprModel(e.operand) };
-    if (isBinaryExpr(e)) return { k: 'binary', op: e.op, left: exprModel(e.left), right: exprModel(e.right) };
+    if (isBinaryExpr(e)) return { k: 'binary', op: BINARY_OPS[e.op], left: exprModel(e.left), right: exprModel(e.right) };
     if (isRangeExpr(e)) return { k: 'range', operand: exprModel(e.operand), lower: exprModel(e.lower), upper: exprModel(e.upper) };
     if (isCountExpr(e)) return { k: 'count', collection: exprModel(e.collection) };
     if (isExistsExpr(e)) return { k: 'exists', operand: exprModel(e.operand) };
@@ -273,7 +296,7 @@ function exprModel(e: Expression): ExprModel {
 
 const sourceText = (e: AstNode | undefined): string => (e ? expressionText(e) : '');
 
-function state(aggId: string, s: State, loc: (n: AstNode) => Location, field: (f: FieldLike) => FieldModel): StateModel {
+function state(aggId: ElementId, s: State, loc: (n: AstNode) => Location, field: (f: FieldLike) => FieldModel): StateModel {
     return {
         id: stateId(aggId, s.name),
         name: s.name,
@@ -284,8 +307,7 @@ function state(aggId: string, s: State, loc: (n: AstNode) => Location, field: (f
     };
 }
 
-function command(aggId: string, c: Command, loc: (n: AstNode) => Location, field: (f: Parameter) => FieldModel): CommandModel {
-    const qname = (r: { ref?: ContextElement; $refText: string }): string => (r.ref ? elementId(r.ref.$container.name, r.ref.name) : r.$refText);
+function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, field: (f: Parameter) => FieldModel): CommandModel {
     return {
         id: commandId(aggId, c.name),
         name: c.name,
@@ -293,16 +315,16 @@ function command(aggId: string, c: Command, loc: (n: AstNode) => Location, field
         factory: c.factory,
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
-        requires: c.requirements.map((r) => requirement(r, qname)),
+        requires: c.requirements.map(requirement),
         changes: [...c.changes],
         emits: c.emits.map((e) => ({
-            event: qname(e.event),
+            event: refName(e.event),
             cardinality: cardinality(e.multiplicity),
             multiplicity: multiplicityText(e.multiplicity),
             ...bounds(e.multiplicity),
             ...(e.when && { when: { from: e.when.from.map((r) => r.$refText), to: e.when.to.map((r) => r.$refText) } }),
         })),
-        errors: [...new Set([...c.errors, ...c.requirements.map((r) => r.error)].map(qname))],
+        errors: [...new Set([...c.errors, ...c.requirements.map((r) => r.error)].map(refName))],
         location: loc(c),
     };
 }

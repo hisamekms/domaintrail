@@ -7,13 +7,22 @@
 // at all is marked with the task that moves it.
 
 // ---- published language: the typed model ----------------------------------------------------------------------
+// (its types are described in model/*.dt and generated into src/generated; the helpers are written in domain/)
 export {
     allFieldsOf,
-    elementList,
+    BINARY_OP_TEXT,
+    commandsOf,
+    contextNames,
+    contextOf,
+    elementOf,
     elementsIn,
     emitApplies,
     emitSuffix,
     emittedEvents,
+    fieldSetsOf,
+    fieldsOf,
+    hasElement,
+    invariantsOf,
     outcomeFields,
     outcomePatternText,
     ownFields,
@@ -21,25 +30,46 @@ export {
     policiesRunning,
     policyList,
     sameFieldType,
+    sharedContexts,
+    statesOf,
+    valuesOf,
+    variantsOf,
+    type AggregateModel,
+    type BinaryOp,
     type Cardinality,
     type CommandModel,
+    type ContextModel,
+    type ContextName,
     type Described,
     type DomainModel,
+    type ElementId,
     type ElementKind,
     type ElementModel,
+    type ElementOf,
     type EmitModel,
+    type EnumModel,
+    type EnumValueModel,
     type ExprModel,
+    type FieldKind,
     type FieldModel,
+    type FieldsElement,
     type InvariantModel,
+    type LabelSource,
+    type Location,
     type OutcomePatternModel,
+    type PolicyElement,
     type PolicyModel,
     type PrimitiveName,
+    type QualifiedName,
+    type Quantifier,
     type RequirementModel,
     type StateModel,
     type TermModel,
     type TransitionModel,
     type TypeExpr,
+    type UnionModel,
     type VariantModel,
+    type VerifiedFor,
     type VerifiedModel,
 } from './domain/model.js';
 export {
@@ -52,15 +82,15 @@ export {
     type DependencyKind,
 } from './domain/dependencies.js';
 export { commandsWithOutcome, fieldSetUsers, fieldUseText, fieldUses, identityOf, type FieldUse, type Named } from './domain/usages.js';
-export { commandId } from './domain/ids.js';
+export { commandId, contextName, elementId, idOfName, nameOfId, qualifiedName, stateId } from './domain/ids.js';
 export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './domain/aggregates.js';
 export { diffModels, EMPTY_DIFF, fingerprints, isEmptyDiff, type ModelDiff } from './domain/diff.js';
 export type { ModelingRuleId } from './domain/rule-ids.js';
 
 // ---- the model as written, for the rules: what `DomainAnalysis.sourceModel` holds ------------------------------
 // (not published language: Modeling's rules and the generator's name check read it and report through `RuleSink`;
-// its lookups and member helpers are the namespace `written` (`written.commandsOf`), apart from the syntax's
-// `commandsOf` below, which the language server reads)
+// its lookups and member helpers are the namespace `written` (`written.commandsOf`), apart from the Typed Model's
+// helpers of the same names above)
 export type {
     AggregateDecl,
     AggregateMember,
@@ -116,5 +146,5 @@ export * as ast from './infrastructure/syntax/generated/ast.js';
 export { DomainGeneratedModule, DomainGeneratedSharedModule } from './infrastructure/syntax/generated/module.js';
 export { DomainModule } from './infrastructure/syntax/domain-module.js';
 export { docComment, LabelResolver } from './infrastructure/syntax/labels.js';
-export { commandsOf, ModelIndex } from './infrastructure/syntax/model-index.js';
+export { ModelIndex } from './infrastructure/syntax/model-index.js';
 export { elementIdOf } from './infrastructure/syntax/element-id.js';

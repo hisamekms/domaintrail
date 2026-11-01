@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { contextDependencies, groupByContext, supportingContexts } from './dependencies.js';
 import type { DomainModel } from './model.js';
-import { check } from '../test-helpers.js';
+import { check, plain } from '../test-helpers.js';
 
 const FILES = {
     'common.dt': 'shared context Common { primitive Quantity: Int { value >= 0 } }',
@@ -53,7 +53,7 @@ describe('context dependencies', () => {
 
     test('grouped by pair of contexts, with counts', async () => {
         const groups = groupByContext(contextDependencies(await model())).map((g) => [g.from, g.to, g.ids, g.types]);
-        expect(groups).toEqual([
+        expect(plain(groups)).toEqual([
             ['Sales', 'Common', 0, 1],
             ['Sales', 'Identity', 2, 0],
             ['Billing', 'Sales', 2, 2],
@@ -61,6 +61,6 @@ describe('context dependencies', () => {
     });
 
     test('shared contexts and contexts with only IDs are supporting contexts', async () => {
-        expect([...supportingContexts(await model())].sort()).toEqual(['Common', 'Identity']);
+        expect(plain([...supportingContexts(await model())]).sort()).toEqual(['Common', 'Identity']);
     });
 });

@@ -1,7 +1,7 @@
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { formatDomain } from '@domaintrail/modeling';
+import { contextNames, formatDomain } from '@domaintrail/modeling';
 import { formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
@@ -183,7 +183,7 @@ Examples:
                 fail('Generation skipped because the model has errors.', 1);
                 return;
             }
-            checkTsContexts(cfg, a.model.contexts);
+            checkTsContexts(cfg, contextNames(a.model));
             const defaultOut = path.resolve(cfg.root, opts.out ?? cfg.tsOut);
             const outOf = (ctx: string): string => (ctx in cfg.tsContexts ? path.resolve(cfg.root, cfg.tsContexts[ctx]) : defaultOut);
             // contract tests (ADR 0020) only when configured; by default in `tests` below the output directory
@@ -196,11 +196,11 @@ Examples:
                     return;
                 }
             }
-            const dirs = Object.fromEntries(a.model.contexts.map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
+            const dirs = Object.fromEntries(contextNames(a.model).map((c) => [c, toPosix(path.relative(cfg.root, outOf(c)))]));
             const tests = testsOut
                 ? { dir: toPosix(path.relative(cfg.root, testsOut)), ...(cfg.tsTests?.runner && { runner: cfg.tsTests.runner }) }
                 : undefined;
-            const policies = policyModes(cfg, a.model.contexts);
+            const policies = policyModes(cfg, contextNames(a.model));
             if (tests) for (const w of testsWarnings(a.model, policies)) io.err(`Warning: ${w}`);
             const files = generateTypeScript(a.model, dirs, tests, policies).map((f) => ({
                 ...f,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { checkSales, codes, only } from '../../test-helpers.js';
+import { checkSales, codes, only, element } from '../../test-helpers.js';
 
 const DECLS = `
   id OrderId: UUID
@@ -33,17 +33,17 @@ describe('domain primitive declarations', () => {
         const a = await withOrder('');
         expect(codes(a)).toEqual([]);
         const m = a.model!;
-        expect(m.elements['Sales.Quantity']).toMatchObject({
+        expect(element(m, 'Sales.Quantity')).toMatchObject({
             kind: 'primitive',
             base: 'Int',
             label: '数量',
             invariants: [{ name: 'valid', source: 'value > 0' }],
         });
-        expect(m.elements['Sales.Email'].invariants.map((i) => [i.name, i.label])).toEqual([
+        expect(element(m, 'Sales.Email').invariants.map((i) => [i.name, i.label])).toEqual([
             ['format', '形式'],
             ['maxLength', undefined],
         ]);
-        expect(m.elements['Sales.InvoiceNo']).toMatchObject({ kind: 'id', invariants: [{ source: 'matches(value, "^INV-\\d{8}$")' }] });
+        expect(element(m, 'Sales.InvoiceNo')).toMatchObject({ kind: 'id', invariants: [{ source: 'matches(value, "^INV-\\d{8}$")' }] });
     });
 
     test('invariants see only `value`, typed as the base primitive', async () => {
@@ -114,6 +114,6 @@ describe('domain primitives in other invariants', () => {
 
     test('field labels fall back to the primitive label', async () => {
         const m = (await withOrder('')).model!;
-        expect(m.elements['Sales.Order'].fields.find((f) => f.name === 'quantity')).toMatchObject({ label: '数量', labelSource: 'type' });
+        expect(element(m, 'Sales.Order').fields.find((f) => f.name === 'quantity')).toMatchObject({ label: '数量', labelSource: 'type' });
     });
 });

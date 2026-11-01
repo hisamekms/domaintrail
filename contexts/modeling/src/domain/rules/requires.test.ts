@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, checkSales, codes, only } from '../../test-helpers.js';
+import { check, checkSales, codes, only, element } from '../../test-helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
 const review = (commands: string, extra = '') =>
@@ -39,7 +39,7 @@ describe('requires', () => {
       requires noOpenBlocker "未解決の阻害がない" else Blocked
       errors Conflict`);
         expect(a.diagnostics).toEqual([]);
-        const accept = a.model!.elements['Review.Review'].commands![0];
+        const accept = element(a.model, 'Review.Review').commands![0];
         expect(accept.requires).toEqual([
             {
                 name: 'authorizedApprover',
@@ -66,7 +66,7 @@ describe('requires', () => {
       requires c { reviewer != person } else NotApprover
       errors Blocked, Conflict`);
         expect(a.diagnostics).toEqual([]);
-        expect(a.model!.elements['Review.Review'].commands![0].errors).toEqual(['Review.Blocked', 'Review.Conflict', 'Review.NotApprover']);
+        expect(element(a.model, 'Review.Review').commands![0].errors).toEqual(['Review.Blocked', 'Review.Conflict', 'Review.NotApprover']);
     });
 
     test('requires and else still name fields and parameters', async () => {
@@ -80,7 +80,7 @@ describe('requires', () => {
   }
   error Rejected`);
         expect(codes(a).filter((c) => c !== 'M011')).toEqual([]); // `else` is reserved in TypeScript only
-        expect(a.model!.elements['Sales.Order'].fields.map((f) => f.name)).toEqual(['id', 'requires']);
+        expect(element(a.model, 'Sales.Order').fields.map((f) => f.name)).toEqual(['id', 'requires']);
     });
 
     test('M007 the error of else must exist', async () => {

@@ -1,13 +1,17 @@
 import {
     allFieldsOf,
     type CommandModel,
+    commandsOf,
     type DomainModel,
+    elementOf,
     type ElementModel,
     emitSuffix,
     emittedEvents,
     type FieldModel,
+    fieldsOf,
     policiesReactingTo,
     policiesRunning,
+    statesOf,
 } from '@domaintrail/modeling';
 import type { Messages } from './i18n';
 import type { Namer, Select } from './model-utils';
@@ -64,7 +68,19 @@ function KindLink({ kind, id, x, names, onSelect }: { kind: string; id: string; 
  * Parameters or payload in two columns: the name (ラベル 名前 in 両方) and the type. With `base` (the baseline's
  * fields), added, changed and removed fields are marked, and a changed type shows the old one struck through.
  */
-function FieldGrid({ fields, base, ctx, names, onSelect }: { fields: FieldModel[]; base?: FieldModel[]; ctx: string; names: Namer; onSelect: Select }) {
+function FieldGrid({
+    fields,
+    base,
+    ctx,
+    names,
+    onSelect,
+}: {
+    fields: readonly FieldModel[];
+    base?: readonly FieldModel[];
+    ctx: string;
+    names: Namer;
+    onSelect: Select;
+}) {
     return (
         <div className="bcard-fields">
             {diffRows(fields, base, (f) => f.name).map(({ item: f, change, before }) => (
@@ -104,9 +120,9 @@ export function OldType({ before, f, ctx, names }: { before: FieldModel; f: Fiel
  * label, and the name on hover.
  */
 function Transition({ agg, c, base, names, onSelect }: { agg: ElementModel; c: CommandModel; base?: CommandModel; names: Namer; onSelect: Select }) {
-    const chips = (states: string[]) =>
+    const chips = (states: readonly string[]) =>
         states.map((name) => {
-            const s = agg.states?.find((x) => x.name === name);
+            const s = statesOf(agg).find((x) => x.name === name);
             const both = names.mode === 'both' && !!s?.label;
             return (
                 <a key={name} className="state-chip" title={both ? name : undefined} onClick={() => onSelect(s?.id ?? agg.id)}>
@@ -163,9 +179,9 @@ export function Requirements({
                             else
                         </span>
                         <KindLink
-                            kind={model.elements[r.error]?.kind ?? 'error'}
+                            kind={elementOf(model, r.error)?.kind ?? 'error'}
                             id={r.error}
-                            x={model.elements[r.error] ?? { name: r.error }}
+                            x={elementOf(model, r.error) ?? { name: r.error }}
                             names={names}
                             onSelect={onSelect}
                         />
@@ -237,11 +253,11 @@ export function PolicyReaction({
     onSelect: Select;
     input?: boolean;
 }) {
-    if (!p.policy) return null;
+    if (p.kind !== 'policy') return null;
     const { event, aggregate, command } = p.policy;
-    const agg = model.elements[aggregate];
-    const c = agg?.commands?.find((x) => x.name === command);
-    const id = agg?.fields.find((f) => f.name === 'id');
+    const agg = elementOf(model, aggregate);
+    const c = agg && commandsOf(agg).find((x) => x.name === command);
+    const id = agg && fieldsOf(agg).find((f) => f.name === 'id');
     const fields = c
         ? [...(!c.factory && id ? [{ ...id, name: agg!.name.charAt(0).toLowerCase() + agg!.name.slice(1), label: agg!.label }] : []), ...c.params]
         : [];
@@ -249,7 +265,7 @@ export function PolicyReaction({
         <div className="bcard-reaction">
             <div className="bcard-outcome">
                 <span className="bcard-caption">{tx.whenEvent}</span>
-                <KindLink kind="event" id={event} x={model.elements[event] ?? { name: event }} names={names} onSelect={onSelect} />
+                <KindLink kind="event" id={event} x={elementOf(model, event) ?? { name: event }} names={names} onSelect={onSelect} />
             </div>
             <div className="bcard-outcome">
                 <span className="bcard-caption">{tx.runsCommand}</span>
@@ -303,7 +319,7 @@ export function CommandCard({
     onSelect: Select;
     base?: CardBase<CommandModel>;
 }) {
-    const outcome = (id: string) => model.elements[id] ?? base?.model.elements[id] ?? { name: id };
+    const outcome = (id: string) => elementOf(model, id) ?? (base && elementOf(base.model, id)) ?? { name: id };
     // the parts of a removed or added card are not marked one by one
     const was = base?.change === 'changed' || !base?.change ? base?.item : undefined;
     const has = (part: keyof CommandModel) => {
@@ -318,7 +334,7 @@ export function CommandCard({
                 {c.factory && <span className="factory-badge">{tx.factory}</span>}
                 {base?.change && <span className={`change change-${base.change}`}>{tx[base.change]}</span>}
             </div>
-            {(agg.states?.length ?? 0) > 0 && <Transition agg={agg} c={c} base={was} names={names} onSelect={onSelect} />}
+            {statesOf(agg).length > 0 && <Transition agg={agg} c={c} base={was} names={names} onSelect={onSelect} />}
             {has('params') && (
                 <div className="bcard-part">
                     <div className="bcard-caption">{tx.params}</div>
@@ -347,7 +363,7 @@ export function CommandCard({
                             {diffRows(c.emits, was?.emits, (e) => e.event).map(({ item: e, change }, i) => (
                                 <span key={i} className={rowClass(change, 'bcard-emit')}>
                                     <KindLink
-                                        kind={model.elements[e.event]?.kind ?? 'event'}
+                                        kind={elementOf(model, e.event)?.kind ?? 'event'}
                                         id={e.event}
                                         x={outcome(e.event)}
                                         names={names}
@@ -365,7 +381,7 @@ export function CommandCard({
                             </span>
                             {diffRows(c.errors, was?.errors, (e) => e).map(({ item: e, change }) => (
                                 <span key={e} className={rowClass(change)}>
-                                    <KindLink kind={model.elements[e]?.kind ?? 'error'} id={e} x={outcome(e)} names={names} onSelect={onSelect} />
+                                    <KindLink kind={elementOf(model, e)?.kind ?? 'error'} id={e} x={outcome(e)} names={names} onSelect={onSelect} />
                                 </span>
                             ))}
                         </span>
@@ -402,7 +418,7 @@ export function OutcomeCard({
     /** The baseline: the card is marked by `change`, and the payload against the baseline's event or error. */
     base?: CardBase<ElementModel>;
 }) {
-    const el = model.elements[id] ?? base?.item;
+    const el = elementOf(model, id) ?? base?.item;
     const kind = el?.kind ?? 'error';
     const was = base?.change === 'changed' || !base?.change ? base?.item : undefined;
     return (
@@ -420,10 +436,10 @@ export function OutcomeCard({
                 ))}
             </div>
             {kind === 'event' && <PolicyLinks caption={tx.reactedToBy} policies={policiesReactingTo(model, id)} names={names} onSelect={onSelect} />}
-            {el && el.fields.length > 0 && (
+            {el && fieldsOf(el).length > 0 && (
                 <div className="bcard-part">
                     <div className="bcard-caption">{tx.payload}</div>
-                    <FieldGrid fields={el.fields} base={was?.fields} ctx={el.context} names={names} onSelect={onSelect} />
+                    <FieldGrid fields={fieldsOf(el)} base={was && fieldsOf(was)} ctx={el.context} names={names} onSelect={onSelect} />
                 </div>
             )}
         </div>
@@ -431,7 +447,7 @@ export function OutcomeCard({
 }
 
 /** The events (`emits`) or errors (`errors`) of the aggregate's commands, with the commands of each. */
-export function outcomesOf(commands: CommandModel[], kind: 'emits' | 'errors'): Map<string, CommandModel[]> {
+export function outcomesOf(commands: readonly CommandModel[], kind: 'emits' | 'errors'): Map<string, CommandModel[]> {
     const out = new Map<string, CommandModel[]>();
     for (const c of commands) {
         for (const e of kind === 'emits' ? emittedEvents(c) : c.errors) out.set(e, [...(out.get(e) ?? []), c]);

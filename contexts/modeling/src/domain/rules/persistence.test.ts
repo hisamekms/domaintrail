@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { checkSales, codes } from '../../test-helpers.js';
+import { checkSales, codes, element, type AnyElement } from '../../test-helpers.js';
 
 const SALES = `
   id OrderId: UUID
@@ -14,11 +14,11 @@ describe('persistent events', () => {
     test('events are persisted only when declared persistent', async () => {
         const a = await checkSales(SALES);
         expect(codes(a)).toEqual([]);
-        const els = a.model!.elements;
-        expect(els['Sales.OrderPlaced'].persistent).toBe(true);
-        expect(els['Sales.OrderConfirmed'].persistent).toBe(true);
-        expect(els['Sales.OrderViewed'].persistent).toBeUndefined();
+        const els = (id: string): AnyElement => element(a.model, id);
+        expect(els('Sales.OrderPlaced').persistent).toBe(true);
+        expect(els('Sales.OrderConfirmed').persistent).toBe(true);
+        expect(els('Sales.OrderViewed').persistent).toBe(false);
         // `persistent` stays usable as a field name.
-        expect(els['Sales.Flags'].fields.map((f) => f.name)).toEqual(['persistent']);
+        expect(els('Sales.Flags').fields.map((f) => f.name)).toEqual(['persistent']);
     });
 });

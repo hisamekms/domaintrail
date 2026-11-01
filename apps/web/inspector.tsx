@@ -2,16 +2,23 @@ import { PanelBottomClose, PanelRightClose, Undo2 } from 'lucide-react';
 import { createContext, useContext, type ReactNode } from 'react';
 import {
     type CommandModel,
+    commandsOf,
     contextDependencies,
     type ContextDependency,
     type DomainModel,
+    elementOf,
     type ElementModel,
+    type ElementOf,
     emitSuffix,
     emittedEvents,
     type FieldModel,
+    fieldsOf,
     groupByContext,
+    invariantsOf,
     type InvariantModel,
     type ModelDiff,
+    nameOfId,
+    statesOf,
     supportingContexts,
     type TypeExpr,
 } from '@domaintrail/modeling';
@@ -296,8 +303,8 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
         const { agg, state } = r;
         const was = base?.r?.kind === 'state' ? base.r : undefined;
         if (tab === 'behavior') {
-            const into = (a: ElementModel, name: string) => (a.commands ?? []).filter((c) => c.transitions.some((t) => t.to.includes(name)));
-            const outOf = (a: ElementModel, name: string) => (a.commands ?? []).filter((c) => c.transitions.some((t) => t.from.includes(name)));
+            const into = (a: ElementModel, name: string) => commandsOf(a).filter((c) => c.transitions.some((t) => t.to.includes(name)));
+            const outOf = (a: ElementModel, name: string) => commandsOf(a).filter((c) => c.transitions.some((t) => t.from.includes(name)));
             return (
                 <>
                     <CommandList
@@ -397,15 +404,18 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
 
     const el = r.el;
     const was = base?.r?.kind === 'element' ? base.r.el : undefined;
+    // a baseline of another kind has no variants or states to compare with
+    const wasVariants = was?.kind === 'union' ? was.variants : undefined;
+    const wasStates = was?.kind === 'aggregate' ? was.states : undefined;
     if (tab === 'behavior') {
         return (
             <>
                 <CommandList
-                    title={tx.counted(tx.commands, el.commands?.length ?? 0)}
+                    title={tx.counted(tx.commands, commandsOf(el).length)}
                     agg={el}
                     model={model}
-                    commands={el.commands ?? []}
-                    base={was && (was.commands ?? [])}
+                    commands={commandsOf(el)}
+                    base={was && commandsOf(was)}
                     onSelect={onSelect}
                 />
                 <AggregateOutcomes agg={el} was={was} model={model} kind="errors" onSelect={onSelect} />
@@ -426,24 +436,31 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
     // structure
     return (
         <>
-            {el.base && (
+            {'base' in el && (
                 <p>
                     {el.kind === 'id' ? tx.identifier : tx.kinds.primitive}
                     {tx.separator}
-                    {tx.baseType}: {was?.base && was.base !== el.base && <del className="was">{names.primitive(was.base)}</del>}
+                    {tx.baseType}: {was && 'base' in was && was.base !== el.base && <del className="was">{names.primitive(was.base)}</del>}
                     <code>{names.primitive(el.base)}</code>
                 </p>
             )}
-            {el.verified && <VerifiedBody el={el} onSelect={onSelect} />}
-            {el.values && (
+            {el.kind === 'verified' && <VerifiedBody el={el} onSelect={onSelect} />}
+            {el.kind === 'enum' && (
                 <Section title={tx.values}>
                     <div className="chips">
-                        {diffRows(el.values, was?.values, (v) => v).map(({ item: v, change }) => (
-                            <code key={v} className={rowClass(change)}>
-                                {names.mode === 'both' ? v : names.of({ name: v, label: el.valueLabels?.[v] })}
-                                {names.mode === 'both' && el.valueLabels?.[v] && <span className="muted"> {el.valueLabels[v]}</span>}
-                            </code>
-                        ))}
+                        {diffRows(
+                            el.values.map((v) => v.name),
+                            was?.kind === 'enum' ? was.values.map((v) => v.name) : undefined,
+                            (v) => v,
+                        ).map(({ item: v, change }) => {
+                            const label = el.values.find((x) => x.name === v)?.label;
+                            return (
+                                <code key={v} className={rowClass(change)}>
+                                    {names.mode === 'both' ? v : names.of({ name: v, label })}
+                                    {names.mode === 'both' && label && <span className="muted"> {label}</span>}
+                                </code>
+                            );
+                        })}
                     </div>
                 </Section>
             )}
@@ -458,9 +475,9 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                             </>
                         )}
                     </p>
-                    {diffRows(el.variants ?? [], was?.variants, (v) => v.name).map(({ item: v, change }) => {
+                    {diffRows(el.variants, wasVariants, (v) => v.name).map(({ item: v, change }) => {
                         // the rows of an added or removed variant are not marked one by one
-                        const old = change === 'changed' || !change ? was?.variants?.find((x) => x.name === v.name) : undefined;
+                        const old = change === 'changed' || !change ? wasVariants?.find((x) => x.name === v.name) : undefined;
                         return (
                             <div key={v.name} title={v.doc} className={rowClass(change)}>
                                 <Fields
@@ -479,9 +496,9 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             )}
             {el.kind !== 'id' && el.kind !== 'primitive' && el.kind !== 'verified' && el.kind !== 'enum' && el.kind !== 'union' && (
                 <Fields
-                    title={el.states?.length ? tx.commonFields : el.kind === 'event' || el.kind === 'error' ? tx.payload : tx.fields}
-                    fields={el.fields}
-                    base={was?.fields}
+                    title={statesOf(el).length ? tx.commonFields : el.kind === 'event' || el.kind === 'error' ? tx.payload : tx.fields}
+                    fields={fieldsOf(el)}
+                    base={was && fieldsOf(was)}
                     ctx={el.context}
                     onSelect={onSelect}
                     empty={tx.noFields}
@@ -490,15 +507,15 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
             {(el.kind === 'aggregate' || el.kind === 'entity' || el.kind === 'valueObject') && (
                 <Invariants
                     items={el.invariants}
-                    base={was?.invariants}
-                    title={el.states?.length ? tx.allStateInvariants : tx.invariants}
+                    base={was && invariantsOf(was)}
+                    title={statesOf(el).length ? tx.allStateInvariants : tx.invariants}
                     labelOnly={el.kind === 'aggregate'}
                 />
             )}
-            {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} base={was?.invariants} title={tx.valueInvariants} />}
-            {((el.states?.length ?? 0) > 0 || (was?.states?.length ?? 0) > 0) && (
-                <Section title={tx.counted(tx.states, el.states?.length ?? 0)}>
-                    {diffRows(el.states ?? [], was?.states, (s) => s.name).map(({ item: s, change }) => (
+            {(el.kind === 'id' || el.kind === 'primitive') && <Invariants items={el.invariants} base={was && invariantsOf(was)} title={tx.valueInvariants} />}
+            {(statesOf(el).length > 0 || (wasStates?.length ?? 0) > 0) && (
+                <Section title={tx.counted(tx.states, statesOf(el).length)}>
+                    {diffRows(statesOf(el), wasStates, (s) => s.name).map(({ item: s, change }) => (
                         <div key={s.id} className={rowClass(change, 'sub')}>
                             <a onClick={() => onSelect(s.id)}>{names.of(s)}</a>
                             {s.fields.length > 0 && <span className="muted small"> {s.fields.map((f) => names.field(f)).join(', ')}</span>}
@@ -511,10 +528,10 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
 }
 
 /** What a verified type verifies, the context its check needs and the errors of its factory. */
-function VerifiedBody({ el, onSelect }: { el: ElementModel; onSelect: Select }) {
+function VerifiedBody({ el, onSelect }: { el: ElementOf<'verified'>; onSelect: Select }) {
     const names = useNames();
     const tx = useT();
-    const v = el.verified!;
+    const v = el.verified;
     const type = (t: TypeExpr) => (t.kind === 'ref' ? <a onClick={() => onSelect(t.ref)}>{names.id(t.ref)}</a> : <code>{names.primitive(t.name)}</code>);
     return (
         <>
@@ -585,14 +602,15 @@ function ContextBody({ model, ctx, onSelect, onFocus }: { model: DomainModel; ct
     const names = useNames();
     const tx = useT();
     const base = useBase();
-    const els = Object.values(model.elements).filter((e) => e.context === ctx);
+    const els = model.elements.filter((e) => e.context === ctx);
     // the context's elements in the baseline, when it was there
-    const baseEls = base?.r ? Object.values(base.model.elements).filter((e) => e.context === ctx) : undefined;
-    const terms = model.terms[ctx] ?? [];
+    const baseEls = base?.r ? base.model.elements.filter((e) => e.context === ctx) : undefined;
+    const terms = model.contexts.find((c) => c.name === ctx)?.terms ?? [];
+    const supporting: ReadonlySet<string> = supportingContexts(model);
     const groups = groupByContext(contextDependencies(model));
     return (
         <>
-            {!supportingContexts(model).has(ctx) && (
+            {!supporting.has(ctx) && (
                 <p>
                     <button onClick={() => onFocus(ctx)}>{tx.focusContext}</button>
                 </p>
@@ -641,17 +659,21 @@ function References({ model, el, onSelect }: { model: DomainModel; el: ElementMo
     const names = useNames();
     const tx = useT();
     const typeUses = usagesOf(model, el.id, names.of);
-    const idType = el.fields.find((f) => f.name === 'id' && f.type.kind === 'ref')?.type;
+    const idType = fieldsOf(el).find((f) => f.name === 'id' && f.type.kind === 'ref')?.type;
     const idUses = el.kind === 'aggregate' && idType?.kind === 'ref' ? usagesOf(model, idType.ref, names.of).filter((u) => u.target !== el.id) : [];
-    const commands = Object.values(model.elements).flatMap((a) =>
-        (a.commands ?? []).filter((c) => emittedEvents(c).includes(el.id) || c.errors.includes(el.id)).map((c) => ({ agg: a, c })),
+    // events, errors and the types a verified type names are referred to by qualified name: the element's ID as one
+    const qname = nameOfId(el.id);
+    const commands = model.elements.flatMap((a) =>
+        commandsOf(a)
+            .filter((c) => emittedEvents(c).includes(qname) || c.errors.includes(qname))
+            .map((c) => ({ agg: a, c })),
     );
     const users = el.kind === 'fieldSet' ? fieldSetUsers(model, el.id) : [];
-    const verifiedTypes = Object.values(model.elements).filter((v) => v.verified);
-    const isRef = (t: TypeExpr | undefined) => t?.kind === 'ref' && t.ref === el.id;
-    const factories = verifiedTypes.filter((v) => v.verified!.errors.includes(el.id));
-    const verifiedAs = verifiedTypes.filter((v) => isRef(v.verified!.of));
-    const contextOf = verifiedTypes.filter((v) => isRef(v.verified!.for?.type));
+    const verifiedTypes = model.elements.filter((v): v is ElementOf<'verified'> => v.kind === 'verified');
+    const isRef = (t: TypeExpr | undefined) => t?.kind === 'ref' && t.ref === qname;
+    const factories = verifiedTypes.filter((v) => v.verified.errors.includes(qname));
+    const verifiedAs = verifiedTypes.filter((v) => isRef(v.verified.of));
+    const contextOf = verifiedTypes.filter((v) => isRef(v.verified.for?.type));
     const verifiedLists: [string, ElementModel[]][] = [
         [tx.returnedByVerified, factories],
         [tx.verifiedAs, verifiedAs],
@@ -727,7 +749,7 @@ function PolicyList({ title, policies, base, onSelect }: { title: string; polici
             {diffRows(policies, base, (p) => p.id).map(({ item: p, change }) => (
                 <div key={p.id} className={rowClass(change, 'sub')}>
                     <a onClick={() => onSelect(p.id)}>{names.of(p)}</a>
-                    {p.policy && (
+                    {p.kind === 'policy' && (
                         <span className="muted small mono">
                             {' '}
                             when {names.id(p.policy.event)} → {names.id(`${p.policy.aggregate}:${p.policy.command}`)}
@@ -751,8 +773,8 @@ function CommandList({
     title: string;
     agg: ElementModel;
     model: DomainModel;
-    commands: CommandModel[];
-    base?: CommandModel[];
+    commands: readonly CommandModel[];
+    base?: readonly CommandModel[];
     onSelect: Select;
 }) {
     const names = useNames();
@@ -780,17 +802,19 @@ function CommandList({
 
 /** `orderId: OrderId, …` (or `注文ID: 注文ID, …`) */
 const payloadText = (names: Namer, ev: ElementModel): string =>
-    ev.fields.map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`).join(', ');
+    fieldsOf(ev)
+        .map((f) => `${names.field(f)}: ${names.type(f.type, ev.context)}${f.multiplicity}`)
+        .join(', ');
 
 /** An event or error of a command; `suffix` is an event's multiplicity and `when` as written (`[1..*] when -> Draft`). */
 function OutcomeRow({ model, id, suffix, change, onSelect }: { model: DomainModel; id: string; suffix?: string; change?: RowChange; onSelect: Select }) {
     const names = useNames();
-    const ev = model.elements[id];
+    const ev = elementOf(model, id);
     return (
         <div className={rowClass(change, 'event-row')}>
             <a onClick={() => onSelect(id)}>{names.id(id)}</a>
             {suffix && <code className="emit-when"> {suffix}</code>}
-            {ev && ev.fields.length > 0 && <div className="muted small mono">{payloadText(names, ev)}</div>}
+            {ev && fieldsOf(ev).length > 0 && <div className="muted small mono">{payloadText(names, ev)}</div>}
         </div>
     );
 }
@@ -813,8 +837,8 @@ function AggregateOutcomes({
     const names = useNames();
     const tx = useT();
     const baseline = useBase();
-    const outcomes = outcomesOf(agg.commands ?? [], kind);
-    const before = was && outcomesOf(was.commands ?? [], kind);
+    const outcomes = outcomesOf(commandsOf(agg), kind);
+    const before = was && outcomesOf(commandsOf(was), kind);
     const rows = diffRows([...outcomes.keys()], before && [...before.keys()], (id) => id);
     // the errors are a part of the behaviour tab, but the events have a tab of their own, which says so when there are none
     if (rows.length === 0 && kind === 'errors') return null;
@@ -830,7 +854,7 @@ function AggregateOutcomes({
                     names={names}
                     tx={tx}
                     onSelect={onSelect}
-                    base={before && baseline ? { model: baseline.model, item: baseline.model.elements[id], change } : undefined}
+                    base={before && baseline ? { model: baseline.model, item: elementOf(baseline.model, id), change } : undefined}
                 />
             ))}
         </Section>
@@ -872,9 +896,9 @@ function Fields({
     empty,
 }: {
     title: string;
-    fields: FieldModel[];
+    fields: readonly FieldModel[];
     /** The baseline's fields: added, changed and removed ones are marked, a changed type shows the old one struck through. */
-    base?: FieldModel[];
+    base?: readonly FieldModel[];
     ctx: string;
     onSelect: Select;
     empty?: string;
@@ -956,9 +980,9 @@ export function Invariants({
     title,
     labelOnly,
 }: {
-    items: InvariantModel[];
+    items: readonly InvariantModel[];
     /** The baseline's invariants: added, changed and removed ones are marked, a changed expression shows the old one struck through. */
-    base?: InvariantModel[];
+    base?: readonly InvariantModel[];
     title: string;
     labelOnly?: boolean;
 }) {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { formatDomain } from '../../infrastructure/syntax/format.js';
 import { contextDependencies, groupByContext } from '../dependencies.js';
-import { check } from '../../test-helpers.js';
+import { check, plain } from '../../test-helpers.js';
 
 const SALES = `context Sales {
   id OrderId: UUID
@@ -107,11 +107,11 @@ describe('policy declarations', () => {
 
     test('the context map counts a policy as an event dependency of the reacting context', async () => {
         const deps = contextDependencies((await model()).model!);
-        expect(deps.filter((d) => d.kind === 'event')).toEqual([
+        expect(plain(deps.filter((d) => d.kind === 'event'))).toEqual([
             { from: 'Billing', to: 'Sales', kind: 'event', source: 'Billing.BillConfirmedOrder', path: 'when OrderConfirmed', target: 'Sales.OrderConfirmed' },
             { from: 'Billing', to: 'Sales', kind: 'event', source: 'Billing.SendConfirmed', path: 'when OrderConfirmed', target: 'Sales.OrderConfirmed' },
         ]);
-        expect(groupByContext(deps).map((g) => [g.from, g.to, g.ids, g.types, g.events])).toEqual([['Billing', 'Sales', 2, 0, 2]]);
+        expect(plain(groupByContext(deps).map((g) => [g.from, g.to, g.ids, g.types, g.events]))).toEqual([['Billing', 'Sales', 2, 0, 2]]);
     });
 
     test('dt fmt keeps a policy on one line when it fits, else puts `when` on the next', () => {

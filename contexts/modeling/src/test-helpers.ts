@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
 import { hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
+import type { DomainModel, ElementModel } from './domain/model.js';
 
 export const EXAMPLES = path.join(import.meta.dir, '..', '..', '..', 'examples', 'shop');
 
@@ -39,4 +40,21 @@ export async function exampleSources(): Promise<SourceFile[]> {
     };
     await walk(EXAMPLES);
     return Promise.all(found.sort().map(async (p) => ({ path: p, text: await readFile(path.join(EXAMPLES, p), 'utf8') })));
+}
+
+type Keys<U> = U extends unknown ? keyof U : never;
+type Part<U, K extends PropertyKey> = U extends { readonly [P in K]?: infer V } ? V : never;
+/** A value of the Typed Model with its names and IDs as plain strings, to compare with literals. */
+export type Plain<T> = T extends string ? string : T extends readonly (infer E)[] ? Plain<E>[] : T extends object ? { [K in keyof T]: Plain<T[K]> } : T;
+/** A value of the Typed Model, typed with plain strings for its names and IDs. */
+export const plain = <T>(value: T): Plain<T> => value as Plain<T>;
+
+/** An element of any kind, with every part any kind has (absent at run time where its kind has none): for assertions. */
+export type AnyElement = Plain<{ readonly [K in Keys<ElementModel>]: Part<ElementModel, K> }>;
+
+/** The element of a model by stable ID, read as `AnyElement` (it must exist). */
+export function element(model: DomainModel | undefined, id: string): AnyElement {
+    const el = model?.elements.find((e) => e.id === id);
+    if (!el) throw new Error(`no element ${id}`);
+    return el as unknown as AnyElement;
 }

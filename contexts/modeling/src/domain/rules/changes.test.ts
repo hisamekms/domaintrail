@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, only } from '../../test-helpers.js';
+import { check, only, element } from '../../test-helpers.js';
 
 /**
  * Work moves Draft -> Review -> Done -> Archived. `draftNo` is in Draft and Review (carried over between them),
@@ -54,12 +54,12 @@ describe('changes in the DSL', () => {
     test('lists the fields a command may change, after requires and before emits; the Typed Model holds them', async () => {
         const a = await work(COMMANDS);
         expect(a.diagnostics).toEqual([]);
-        const cmd = (name: string) => a.model!.elements['Tasks.Work'].commands!.find((c) => c.name === name)!;
+        const cmd = (name: string) => element(a.model, 'Tasks.Work').commands!.find((c) => c.name === name)!;
         expect(cmd('rename').changes).toEqual(['title', 'updatedAt']);
         expect(cmd('rename').emits.map((e) => e.event)).toEqual(['Tasks.Renamed']);
         expect(cmd('renumber').changes).toEqual(['draftNo']);
         expect(cmd('submit').changes).toEqual([]);
-        expect(a.model!.elements['Tasks.Tag'].commands![1].changes).toEqual(['color']);
+        expect(element(a.model, 'Tasks.Tag').commands![1].changes).toEqual(['color']);
     });
 
     test('after emits it is a syntax error', async () => {
@@ -79,8 +79,8 @@ describe('changes in the DSL', () => {
 }`,
         });
         expect(a.diagnostics).toEqual([]);
-        expect(a.model!.elements['Sales.Order'].fields.map((f) => f.name)).toEqual(['id', 'changes']);
-        expect(a.model!.elements['Sales.Order'].commands![0].changes).toEqual(['changes']);
+        expect(element(a.model, 'Sales.Order').fields.map((f) => f.name)).toEqual(['id', 'changes']);
+        expect(element(a.model, 'Sales.Order').commands![0].changes).toEqual(['changes']);
     });
 
     test('M021: a field the command can change; not on a factory, not the identity', async () => {

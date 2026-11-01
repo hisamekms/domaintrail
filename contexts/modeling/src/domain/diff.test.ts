@@ -1,7 +1,7 @@
 // The model diff: what counts as an addition, a change and a removal of an element, a state or a command.
 import { describe, expect, test } from 'bun:test';
 import { diffModels } from './diff.js';
-import { check } from '../test-helpers.js';
+import { check, plain } from '../test-helpers.js';
 
 describe('diff', () => {
     test('identifies added, changed and removed elements, states and commands', async () => {
@@ -9,9 +9,9 @@ describe('diff', () => {
         const after = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A { id: AId note: String? state X state Z command go() X -> Z } value W }' }))
             .model!;
         const d = diffModels(before, after);
-        expect(d.added.sort()).toEqual(['S.A#Z', 'S.W']);
-        expect(d.changed.sort()).toEqual(['S.A', 'S.A:go']);
-        expect(d.removed.sort()).toEqual(['S.A#Y', 'S.V']);
+        expect(plain(d.added).sort()).toEqual(['S.A#Z', 'S.W']);
+        expect(plain(d.changed).sort()).toEqual(['S.A', 'S.A:go']);
+        expect(plain(d.removed).sort()).toEqual(['S.A#Y', 'S.V']);
     });
 
     test('moving declarations between lines or files is not a change', async () => {
@@ -84,7 +84,7 @@ describe('requires in the Live View', () => {
     test('a change to a requirement changes its command (and its aggregate)', async () => {
         const before = await review('command accept() Reviewing -> Accepted requires x { blockers == 0 } else Blocked');
         const after = await review('command accept() Reviewing -> Accepted requires x { blockers < 1 } else Blocked');
-        expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Review.Review', 'Review.Review:accept'], removed: [] });
+        expect(plain(diffModels(before.model, after.model!))).toEqual({ added: [], changed: ['Review.Review', 'Review.Review:accept'], removed: [] });
     });
 });
 
@@ -92,6 +92,6 @@ describe('changes in the DSL', () => {
     test('a change to it changes its command (and its aggregate)', async () => {
         const before = await work('command x() Draft -> Draft changes title');
         const after = await work('command x() Draft -> Draft changes title, note');
-        expect(diffModels(before.model, after.model!)).toEqual({ added: [], changed: ['Tasks.Work', 'Tasks.Work:x'], removed: [] });
+        expect(plain(diffModels(before.model, after.model!))).toEqual({ added: [], changed: ['Tasks.Work', 'Tasks.Work:x'], removed: [] });
     });
 });

@@ -54,10 +54,10 @@ export const shapeName = (agg: Named): string => `${agg.name}Shape`;
  * the targets differ by transition (`A -> A, B -> B`), or the events do (`emits X when A ->`). State names only, as in
  * the Typed Model.
  */
-export function outputsVary(factory: boolean, transitions: OutcomePatternModel[], emits: { when?: OutcomePatternModel }[]): boolean {
+export function outputsVary(factory: boolean, transitions: readonly OutcomePatternModel[], emits: readonly { readonly when?: OutcomePatternModel }[]): boolean {
     if (factory) return false;
     // per source state: each target with the entries of `emits` that apply to it
-    const output = (from: string, to: string[]): string =>
+    const output = (from: string, to: readonly string[]): string =>
         [...new Set(to)]
             .sort()
             .map((t) => `${t}:${emits.flatMap((e, i) => (emitApplies(e, from, t) ? [i] : [])).join(',')}`)

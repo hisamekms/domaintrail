@@ -1,7 +1,7 @@
 // Whether the target of a request still resolves in a model (ADR 0026, ModelTarget): a target is never re-bound, so a
 // path that no longer matches is shown as stale. Render node IDs are never involved: `.dt` elements are looked up by
 // model ID, storming elements by storming and local ID, occurrences by timeline, event and step path.
-import { type DomainModel } from '@domaintrail/modeling';
+import { commandsOf, type DomainModel, elementOf, hasElement, statesOf } from '@domaintrail/modeling';
 import { declarations, type Storming } from '@domaintrail/storming';
 import type { Collaboration } from '../generated/index.js';
 
@@ -35,11 +35,17 @@ export function decodeOccurrencePath(text: string): number[] | undefined {
 
 /** Whether a `.dt` model ID names something: an element, a state (`Sales.Order#Shipped`) or a command (`Sales.Order:confirm`). */
 function modelIdResolves(model: DomainModel, id: string): boolean {
-    if (model.elements[id]) return true;
+    if (hasElement(model, id)) return true;
     const state = id.lastIndexOf('#');
-    if (state > 0) return model.elements[id.slice(0, state)]?.states?.some((s) => s.name === id.slice(state + 1)) ?? false;
+    if (state > 0) {
+        const el = elementOf(model, id.slice(0, state));
+        return el ? statesOf(el).some((s) => s.name === id.slice(state + 1)) : false;
+    }
     const command = id.lastIndexOf(':');
-    if (command > 0) return model.elements[id.slice(0, command)]?.commands?.some((c) => c.name === id.slice(command + 1)) ?? false;
+    if (command > 0) {
+        const el = elementOf(model, id.slice(0, command));
+        return el ? commandsOf(el).some((c) => c.name === id.slice(command + 1)) : false;
+    }
     return false;
 }
 

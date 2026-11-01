@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { checkSales, codes, only } from '../../test-helpers.js';
+import { checkSales, codes, only, element } from '../../test-helpers.js';
 
 const model = (aggregateInvariants: string, confirmedInvariants = '', extra = '') =>
     checkSales(`
@@ -187,7 +187,7 @@ describe('invariants without an expression', () => {
             'invariant both "確定時に通知済み" { total > 0 }',
         );
         expect(a.diagnostics).toEqual([]);
-        const order = a.model!.elements['Sales.Order'];
+        const order = element(a.model, 'Sales.Order');
         expect(order.invariants).toEqual([
             { name: 'labelled', label: '明細の在庫が引当済み' },
             { name: 'described', doc: 'The lines were checked against stock.' },
@@ -197,7 +197,7 @@ describe('invariants without an expression', () => {
                 name: 'both',
                 label: '確定時に通知済み',
                 source: 'total > 0',
-                expr: { k: 'binary', op: '>', left: { k: 'name', name: 'total' }, right: { k: 'int', value: 0 } },
+                expr: { k: 'binary', op: 'gt', left: { k: 'name', name: 'total' }, right: { k: 'int', value: 0 } },
             },
         ]);
     });
@@ -218,7 +218,7 @@ describe('invariants without an expression', () => {
     invariant bare
   }`);
         expect(codes(a)).toEqual(['M018']);
-        expect(a.model!.elements['Sales.Code'].invariants.map((i) => [i.name, i.source])).toEqual([
+        expect(element(a.model, 'Sales.Code').invariants.map((i) => [i.name, i.source])).toEqual([
             ['format', 'matches(value, "^[A-Z]+$")'],
             ['registered', undefined],
             ['bare', undefined],

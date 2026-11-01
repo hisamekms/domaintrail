@@ -1,15 +1,16 @@
-import { emittedEvents, ownFields, type CommandModel, type DomainModel, type ElementModel, type FieldModel } from './model.js';
+import { commandsOf, emittedEvents, fieldSetsOf, fieldsOf, ownFields, statesOf, variantsOf } from './model.js';
+import type { AggregateModel, CommandModel, ContextName, DomainModel, ElementModel, FieldModel, QualifiedName } from './model.js';
 
 /** Something with a name and a Japanese name: an element, state, variant, command or field. */
-export type Named = { name: string; label?: string };
+export type Named = { readonly name: string; readonly label?: string };
 
 /** A field or parameter typed with an element. */
 export interface FieldUse {
     key: string;
-    /** Element, state or command that holds the field. */
+    /** Element, state or command that holds the field (its stable ID). */
     target: string;
     /** Context in which the type is used. */
-    context: string;
+    context: ContextName;
     field: FieldModel;
     /** Where the field is: the element, then the state, variant or command (a command's field is a parameter). */
     path: Named[];
@@ -21,13 +22,13 @@ export interface FieldUse {
  */
 export function fieldUses(model: DomainModel, id: string): FieldUse[] {
     const uses: FieldUse[] = [];
-    const typed = (f: FieldModel) => f.type.kind === 'ref' && f.type.ref === id;
-    for (const el of Object.values(model.elements)) {
-        const use = (key: string, target: string, field: FieldModel, path: Named[]) => uses.push({ key, target, context: el.context, field, path });
+    const typed = (f: FieldModel): boolean => f.type.kind === 'ref' && f.type.ref === id;
+    for (const el of model.elements) {
+        const use = (key: string, target: string, field: FieldModel, path: Named[]): number => uses.push({ key, target, context: el.context, field, path });
         for (const f of ownFields(el).filter(typed)) use(`${el.id}.${f.name}`, el.id, f, [el]);
-        for (const s of el.states ?? []) for (const f of s.fields.filter(typed)) use(`${s.id}.${f.name}`, s.id, f, [el, s]);
-        for (const v of el.variants ?? []) for (const f of v.fields.filter(typed)) use(`${el.id}.${v.name}.${f.name}`, el.id, f, [el, v]);
-        for (const c of el.commands ?? []) for (const p of c.params.filter(typed)) use(`${c.id}.${p.name}`, c.id, p, [el, c]);
+        for (const s of statesOf(el)) for (const f of s.fields.filter(typed)) use(`${s.id}.${f.name}`, s.id, f, [el, s]);
+        for (const v of variantsOf(el)) for (const f of v.fields.filter(typed)) use(`${el.id}.${v.name}.${f.name}`, el.id, f, [el, v]);
+        for (const c of commandsOf(el)) for (const p of c.params.filter(typed)) use(`${c.id}.${p.name}`, c.id, p, [el, c]);
     }
     return uses;
 }
@@ -39,17 +40,19 @@ export function fieldUseText(u: FieldUse, name: (x: Named) => string): string {
 }
 
 /** Commands that emit the event or return the error `id`. */
-export function commandsWithOutcome(model: DomainModel, id: string): { agg: ElementModel; command: CommandModel }[] {
-    return Object.values(model.elements).flatMap((agg) =>
-        (agg.commands ?? []).filter((c) => emittedEvents(c).includes(id) || c.errors.includes(id)).map((command) => ({ agg, command })),
+export function commandsWithOutcome(model: DomainModel, id: string): { agg: AggregateModel; command: CommandModel }[] {
+    return model.elements.flatMap((agg) =>
+        agg.kind === 'aggregate'
+            ? agg.commands.filter((c) => emittedEvents(c).some((e) => e === id) || c.errors.some((e) => e === id)).map((command) => ({ agg, command }))
+            : [],
     );
 }
 
 /** Elements that take on the fields of a field set (`with`). */
-export const fieldSetUsers = (model: DomainModel, id: string): ElementModel[] => Object.values(model.elements).filter((e) => e.fieldSets?.includes(id));
+export const fieldSetUsers = (model: DomainModel, id: string): ElementModel[] => model.elements.filter((e) => fieldSetsOf(e).some((f) => f === id));
 
 /** The ID type of an aggregate or entity (the type of its `id` field), if it has one. */
-export function identityOf(el: ElementModel): string | undefined {
-    const id = el.fields.find((f) => f.name === 'id');
+export function identityOf(el: ElementModel): QualifiedName | undefined {
+    const id = fieldsOf(el).find((f) => f.name === 'id');
     return id?.type.kind === 'ref' ? id.type.ref : undefined;
 }

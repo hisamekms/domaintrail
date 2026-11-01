@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { EventMessage, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
-import { type DomainModel } from '@domaintrail/modeling';
+import { commandsOf, statesOf, type DomainModel } from '@domaintrail/modeling';
 import { analyze } from '@domaintrail/analysis';
 import type { LaidOutGraph, ViewOptions } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
@@ -84,7 +84,7 @@ describe('ViewLocation', () => {
 
 describe('targets from the selection', () => {
     const ctx = { model, stormings: stormingViews, sources };
-    const aggregate = Object.values(model.elements).find((e) => e.kind === 'aggregate' && e.states?.length && e.commands?.length)!;
+    const aggregate = model.elements.find((e) => e.kind === 'aggregate' && statesOf(e).length && commandsOf(e).length)!;
 
     test('a .dt element, state or command by its model ID, with its label and source range', () => {
         const t = targetOfSelection({ ...ctx, selected: aggregate.id })!;
@@ -97,16 +97,16 @@ describe('targets from the selection', () => {
             endLine: aggregate.location.endLine,
         });
         expect(t.range!.endColumn).toBeGreaterThan(0);
-        const state = aggregate.states![0];
+        const state = statesOf(aggregate)[0];
         expect(targetOfSelection({ ...ctx, selected: state.id })?.target).toEqual({ kind: 'DtElement', element: state.id });
-        const command = aggregate.commands![0];
+        const command = commandsOf(aggregate)[0];
         expect(targetOfSelection({ ...ctx, selected: command.id })?.target).toEqual({ kind: 'DtElement', element: command.id });
     });
 
     test('nothing for no selection, a file, a context, a storming itself or an unknown element', () => {
         expect(targetOfSelection({ ...ctx, selected: undefined })).toBeUndefined();
         expect(targetOfSelection({ ...ctx, selected: `file:${aggregate.location.file}` })).toBeUndefined();
-        expect(targetOfSelection({ ...ctx, selected: model.contexts[0] })).toBeUndefined();
+        expect(targetOfSelection({ ...ctx, selected: model.contexts[0].name })).toBeUndefined();
         expect(targetOfSelection({ ...ctx, selected: `es/${storming.id}` })).toBeUndefined();
         expect(targetOfSelection({ ...ctx, selected: `es/${storming.id}/Nope` })).toBeUndefined();
         expect(targetOfSelection({ ...ctx, selected: 'Nope.Nope' })).toBeUndefined();

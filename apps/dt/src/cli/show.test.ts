@@ -1,5 +1,6 @@
 // dt show's text and JSON (over real files and the CLI: test/show.test.ts).
 import { describe, expect, test } from 'bun:test';
+import { type AggregateModel, elementOf } from '@domaintrail/modeling';
 import { lookup, showJson, showText } from './show.js';
 import { check } from '../test-helpers.js';
 
@@ -47,7 +48,7 @@ describe('policy declarations', () => {
 
     test('dt show: a policy, the command it runs and the event it reacts to', async () => {
         const m = (await model()).model!;
-        const el = (id: string) => ({ kind: 'element' as const, el: m.elements[id] });
+        const el = (id: string) => ({ kind: 'element' as const, el: elementOf(m, id)! });
         expect(showText(m, el('Billing.BillConfirmedOrder'))).toEqual([
             '/// 確定した注文は請求する。',
             'policy Billing.BillConfirmedOrder "請求する" when Sales.OrderConfirmed -> Invoice.issue  // billing.dt:16',
@@ -58,12 +59,12 @@ describe('policy declarations', () => {
         expect(showText(m, el('Billing.SendConfirmed'))[3]).toBe(
             '  input { invoice: InvoiceId, sentAt: Timestamp, lines: Amount[1..3] }  // what the application needs to run it, eventually (any mechanism)',
         );
-        const invoice = m.elements['Billing.Invoice'];
-        expect(showText(m, { kind: 'command', agg: invoice, command: invoice.commands![0] })[1]).toBe(
+        const invoice = elementOf(m, 'Billing.Invoice') as AggregateModel;
+        expect(showText(m, { kind: 'command', agg: invoice, command: invoice.commands[0] })[1]).toBe(
             '  // triggered by policy BillConfirmedOrder "請求する" when Sales.OrderConfirmed',
         );
         expect(showText(m, el('Sales.OrderConfirmed'))).toContain('  reacted to by (policy): Billing.BillConfirmedOrder, Billing.SendConfirmed');
-        const json = showJson(m, { kind: 'command', agg: invoice, command: invoice.commands![1] }) as { command: { triggeredBy: string[] } };
+        const json = showJson(m, { kind: 'command', agg: invoice, command: invoice.commands[1] }) as { command: { triggeredBy: string[] } };
         expect(json.command.triggeredBy).toEqual(['Billing.SendConfirmed']);
     });
 });

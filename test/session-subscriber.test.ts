@@ -38,6 +38,7 @@ import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
 import { sourceSelection } from '@domaintrail/analysis';
+import { hasElement } from '@domaintrail/modeling';
 
 const ROOT = path.join(import.meta.dir, '..');
 const FAKE = path.join(import.meta.dir, 'fixtures', 'agent', 'fake-claude.mjs');
@@ -399,7 +400,7 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             expect([done.state, done.state === 'Completed' && done.changed]).toEqual(['Completed', true]);
             const updated = await waitFor('the Domain view', () => {
                 const latest = view.latest();
-                return latest?.model?.elements['Sales.OrderArchived'] ? latest : undefined;
+                return latest?.model && hasElement(latest.model, 'Sales.OrderArchived') ? latest : undefined;
             });
             expect(updated.status).toBe('ok');
             expect(await readFile(path.join(ctx.root, 'sales', 'order.dt'), 'utf8')).toContain('  event OrderArchived "注文保管" {\n    orderId: OrderId\n  }');

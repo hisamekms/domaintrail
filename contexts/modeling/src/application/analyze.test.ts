@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { analyzeDomain } from './analyze.js';
-import { check, checkSales, codes, exampleSources, only } from '../test-helpers.js';
+import { check, checkSales, codes, exampleSources, only, element, type AnyElement } from '../test-helpers.js';
 
 const ORDER = `
   id OrderId: UUID
@@ -21,7 +21,7 @@ describe('examples', () => {
         expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
         expect(a.diagnostics).toEqual([]);
         expect(a.syntaxOk).toBe(true);
-        expect(a.model?.elements['Sales.Order']).toBeDefined();
+        expect(a.model?.elements.some((e) => e.id === 'Sales.Order')).toBe(true);
         const clash = await analyzeDomain([{ path: 'sales.dt', text: `context Sales {\n${ORDER} value FinishOrder\n}\n` }]);
         expect(clash.diagnostics.filter((d) => d.code === 'M011')).toEqual([]);
     });
@@ -121,12 +121,12 @@ describe('keywords as names', () => {
 }`,
         });
         expect(a.diagnostics).toEqual([]);
-        const els = a.model!.elements;
-        expect(els['A.Op'].values).toEqual(['implies', 'or', 'and', 'not', 'in', 'true', 'false', 'String', 'state']);
-        expect(els['A.TypeExpr'].variants?.map((v) => v.name)).toEqual(['primitive', 'not']);
-        expect(els['A.V'].fields.map((f) => f.name)).toEqual(['context', 'event', 'errors', 'op']);
-        expect(els['A.G'].commands?.map((c) => `${c.name}(${c.params.map((p) => p.name).join(', ')})`)).toEqual(['command(id, state, error)', 'emits(errors)']);
-        expect(els['A.G'].states?.map((s) => s.name)).toEqual(['S']);
+        const el = (id: string): AnyElement => element(a.model, id);
+        expect(el('A.Op').values.map((v) => v.name)).toEqual(['implies', 'or', 'and', 'not', 'in', 'true', 'false', 'String', 'state']);
+        expect(el('A.TypeExpr').variants.map((v) => v.name)).toEqual(['primitive', 'not']);
+        expect(el('A.V').fields.map((f) => f.name)).toEqual(['context', 'event', 'errors', 'op']);
+        expect(el('A.G').commands.map((c) => `${c.name}(${c.params.map((p) => p.name).join(', ')})`)).toEqual(['command(id, state, error)', 'emits(errors)']);
+        expect(el('A.G').states.map((s) => s.name)).toEqual(['S']);
     });
 });
 
@@ -243,7 +243,7 @@ describe('commands (M006, M007)', () => {
     note: String?
   }`);
         expect(a.diagnostics).toEqual([]);
-        const work = a.model!.elements['Sales.Work'];
+        const work = element(a.model, 'Sales.Work');
         expect(Object.fromEntries(work.commands!.map((c) => [c.name, c.transitions]))).toEqual({
             open: [{ from: [], to: ['Draft'] }],
             change: [

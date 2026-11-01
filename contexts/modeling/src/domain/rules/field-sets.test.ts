@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, checkSales, codes, only } from '../../test-helpers.js';
+import { check, checkSales, codes, only, element, type AnyElement } from '../../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {
@@ -47,23 +47,23 @@ describe('field sets', () => {
     test('a valid model checks clean; elements get the fields of their field sets first', async () => {
         const a = await check(FILES);
         expect(a.diagnostics).toEqual([]);
-        const els = a.model!.elements;
-        expect(els['Common.Tenanted'].kind).toBe('fieldSet');
-        expect(els['Common.Tenanted'].fields.map((f) => [f.name, f.label])).toEqual([['tenant', 'テナント']]);
-        expect(els['Sales.Order'].fieldSets).toEqual(['Common.Tenanted']);
-        expect(els['Sales.Order'].fields.map((f) => [f.name, f.fieldSet])).toEqual([
+        const els = (id: string): AnyElement => element(a.model, id);
+        expect(els('Common.Tenanted').kind).toBe('fieldSet');
+        expect(els('Common.Tenanted').fields.map((f) => [f.name, f.label])).toEqual([['tenant', 'テナント']]);
+        expect(els('Sales.Order').fieldSets).toEqual(['Common.Tenanted']);
+        expect(els('Sales.Order').fields.map((f) => [f.name, f.fieldSet])).toEqual([
             ['tenant', 'Common.Tenanted'],
             ['id', undefined],
             ['items', undefined],
         ]);
-        expect(els['Sales.OrderPlaced'].fields.map((f) => f.name)).toEqual(['tenant', 'performedBy', 'orderId']);
-        expect(els['Sales.OrderConfirmed'].fieldSets).toBeUndefined();
+        expect(els('Sales.OrderPlaced').fields.map((f) => f.name)).toEqual(['tenant', 'performedBy', 'orderId']);
+        expect(els('Sales.OrderConfirmed').fieldSets).toEqual([]);
     });
 
     test('`fields` and `with` stay usable as field names', async () => {
         const a = await checkSales('value V { fields: String with: Int }');
         expect(a.diagnostics).toEqual([]);
-        expect(a.model!.elements['Sales.V'].fields.map((f) => f.name)).toEqual(['fields', 'with']);
+        expect(element(a.model, 'Sales.V').fields.map((f) => f.name)).toEqual(['fields', 'with']);
     });
 
     test('M016: with only on aggregates, entities, value objects and events', async () => {
@@ -87,7 +87,7 @@ describe('field sets', () => {
   }
   value Twice with Described { label: String }`);
         expect(only(a, 'M016').map((d) => d.message)).toEqual(["Field 'label' of 'Twice' is already taken from field set 'Described'."]);
-        const v = a.model!.elements['Sales.State'];
+        const v = element(a.model, 'Sales.State');
         expect(v.fieldSets).toEqual(['Sales.Described']);
         expect(v.fields.map((f) => `${f.name}${f.fieldSet ? ` (${f.fieldSet})` : ''}`)).toEqual(['label (Sales.Described)', 'doc (Sales.Described)', 'name']);
         expect(a.diagnostics.filter((d) => d.code !== 'M016')).toEqual([]);

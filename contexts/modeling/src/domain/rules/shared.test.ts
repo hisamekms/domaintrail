@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, codes, only } from '../../test-helpers.js';
+import { check, codes, only, element, plain } from '../../test-helpers.js';
 
 const COMMON = `shared context Common "共通" {
   terms { currency: "通貨" }
@@ -25,15 +25,15 @@ describe('shared contexts', () => {
         });
         expect(a.diagnostics).toEqual([]);
         const m = a.model!;
-        expect(m.sharedContexts).toEqual(['Common']);
-        expect(m.elements['Sales.Customer'].fields.map((f) => f.type)).toMatchObject([
+        expect(plain(m.contexts.filter((c) => c.shared).map((c) => c.name))).toEqual(['Common']);
+        expect(element(m, 'Sales.Customer').fields.map((f) => f.type)).toMatchObject([
             { ref: 'Sales.CustomerId' },
             { ref: 'Common.Email', target: 'primitive' },
             { ref: 'Common.Money', target: 'valueObject' },
             { ref: 'Common.Currency', target: 'enum' },
         ]);
         // terms of shared contexts apply when the context itself has none
-        expect(m.elements['Common.Money'].fields[1].label).toBe('通貨');
+        expect(element(m, 'Common.Money').fields[1].label).toBe('通貨');
     });
 
     test('the context own elements win over shared ones, with a warning', async () => {
@@ -41,7 +41,7 @@ describe('shared contexts', () => {
             'common.dt': COMMON,
             'sales.dt': 'context Sales { primitive Email: String id XId: UUID aggregate X { id: XId e: Email } }',
         });
-        expect(a.model!.elements['Sales.X'].fields[1].type).toMatchObject({ ref: 'Sales.Email' });
+        expect(element(a.model, 'Sales.X').fields[1].type).toMatchObject({ ref: 'Sales.Email' });
         expect(only(a, 'M014').map((d) => [d.severity, d.message])).toEqual([
             ['warning', "'Sales.Email' hides 'Common.Email' of a shared context inside 'Sales'."],
         ]);

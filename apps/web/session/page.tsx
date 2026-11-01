@@ -5,10 +5,12 @@ import { createShapeId, useValue } from 'tldraw';
 import { firstDeclarations } from '@domaintrail/storming';
 import { type DisplayMode, LEVEL_KINDS } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import { contextNames } from '@domaintrail/modeling';
 import type { Panes } from '../app/panes';
 import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
+import { contextLabels } from '../model-utils';
 import { stormingGraph, type StormingChoice } from '../storming';
 import { shapeElementId } from '../render';
 import { highlightElement } from '../view/canvas';
@@ -226,8 +228,8 @@ export function useSessionPage(input: {
     const viewScope = useMemo(
         (): ViewScope => ({
             mode: input.mode,
-            contexts: model?.contexts ?? [],
-            contextLabels: model?.contextLabels ?? {},
+            contexts: model ? contextNames(model) : [],
+            contextLabels: model ? contextLabels(model) : {},
             stormings,
         }),
         [input.mode, model, stormings],
