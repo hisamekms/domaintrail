@@ -622,37 +622,44 @@ export const AgentRunShape: Shape = {
 export type AgentRunDeclaredChecks = { readonly serial: (agentRun: AgentRun) => boolean };
 
 /**
- * The invariants of AgentRun in state Queued (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see model/agent-run.dt:142
+ */
+export function checkAgentRunCommonWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly 'serial'[] {
+    return (agentRun) => {
+        const violated: 'serial'[] = [];
+        if (!checks.serial(agentRun)) violated.push('serial');
+        return violated;
+    };
+}
+
+/**
+ * The invariants of AgentRun in state Queued (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:152
  */
 export function checkQueuedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: QueuedAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
-        const violated: 'serial'[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
-        return violated;
+        return checkAgentRunCommonWith(checks)(agentRun);
     };
 }
 
 /**
- * The invariants of AgentRun in state Running (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun in state Running (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:153
  */
 export function checkRunningAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RunningAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
-        const violated: 'serial'[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
-        return violated;
+        return checkAgentRunCommonWith(checks)(agentRun);
     };
 }
 
 /**
- * The invariants of AgentRun in state Completed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun in state Completed (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:157
  */
 export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: CompletedAgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput')[] {
     return (agentRun) => {
-        const violated: ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput')[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
+        const violated: ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
         if (!(((((agentRun.report.exitCode === 0) && (agentRun.report.formatted === true)) && (agentRun.report.checked === true)) && (agentRun.report.newDtErrors === 0)) && (agentRun.report.unparsedDtes === 0))) violated.push('succeeded');
         if (!((!(agentRun.changed === true) || !(agentRun.resultRevision === agentRun.baseRevision)) && (!(agentRun.changed === false) || (agentRun.resultRevision === agentRun.baseRevision)))) violated.push('unchangedKeepsBase');
         if (agentRun.reply !== undefined && !(agentRun.reply.questions.length === 0)) violated.push('completedAsksNothing');
@@ -662,13 +669,12 @@ export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (age
 }
 
 /**
- * The invariants of AgentRun in state NeedsClarification (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun in state NeedsClarification (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:182
  */
 export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: NeedsClarificationAgentRun) => readonly ('serial' | 'clarificationAsks' | 'clarificationReplyAboutInput')[] {
     return (agentRun) => {
-        const violated: ('serial' | 'clarificationAsks' | 'clarificationReplyAboutInput')[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
+        const violated: ('serial' | 'clarificationAsks' | 'clarificationReplyAboutInput')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
         if (agentRun.reply !== undefined && !(agentRun.reply.questions.length >= 1)) violated.push('clarificationAsks');
         if (agentRun.reply !== undefined && !((agentRun.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && agentRun.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && agentRun.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) violated.push('clarificationReplyAboutInput');
         return violated;
@@ -676,13 +682,12 @@ export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChec
 }
 
 /**
- * The invariants of AgentRun in state Declined (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun in state Declined (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:197
  */
 export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: DeclinedAgentRun) => readonly ('serial' | 'declinedAsksNothing' | 'declinedReplyAboutInput')[] {
     return (agentRun) => {
-        const violated: ('serial' | 'declinedAsksNothing' | 'declinedReplyAboutInput')[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
+        const violated: ('serial' | 'declinedAsksNothing' | 'declinedReplyAboutInput')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
         if (!(agentRun.reply.questions.length === 0)) violated.push('declinedAsksNothing');
         if (!((agentRun.reply.requests.every((r) => agentRun.input.requests.some((i) => i.request === r.request)) && agentRun.reply.questions.every((q) => q.requests.every((x) => agentRun.input.requests.some((i) => i.request === x)))) && agentRun.reply.assumptions.every((a) => a.requests.every((x) => agentRun.input.requests.some((i) => i.request === x))))) violated.push('declinedReplyAboutInput');
         return violated;
@@ -690,27 +695,24 @@ export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agen
 }
 
 /**
- * The invariants of AgentRun in state Failed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun in state Failed (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:209
  */
 export function checkFailedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: FailedAgentRun) => readonly ('serial' | 'ruleNotMetReported')[] {
     return (agentRun) => {
-        const violated: ('serial' | 'ruleNotMetReported')[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
+        const violated: ('serial' | 'ruleNotMetReported')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
         if (agentRun.reason === 'RuleNotMet' && !((agentRun.report !== undefined) && !(((((agentRun.report.exitCode === 0) && (agentRun.report.formatted === true)) && (agentRun.report.checked === true)) && (agentRun.report.newDtErrors === 0)) && (agentRun.report.unparsedDtes === 0)))) violated.push('ruleNotMetReported');
         return violated;
     };
 }
 
 /**
- * The invariants of AgentRun in state Cancelled (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of AgentRun in state Cancelled (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/agent-run.dt:221
  */
 export function checkCancelledAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: CancelledAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
-        const violated: 'serial'[] = [];
-        if (!checks.serial(agentRun)) violated.push('serial');
-        return violated;
+        return checkAgentRunCommonWith(checks)(agentRun);
     };
 }
 
@@ -1894,23 +1896,29 @@ export const MarkShape: Shape = {
 };
 
 /**
- * The invariants of Mark in state Placed (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/mark.dt:66
+ * The invariants of Mark (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see model/mark.dt:53
  */
-export function checkPlacedMark(mark: PlacedMark): readonly 'fitsTarget'[] {
+export function checkMarkCommon(mark: MarkCommon): readonly 'fitsTarget'[] {
     const violated: 'fitsTarget'[] = [];
     if (!((!(mark.sign.kind === 'Vote') || ((mark.target.kind === 'QuestionOption') || (mark.target.kind === 'AssumptionChoice'))) && (!(mark.sign.kind === 'Reaction') || ((mark.target.kind === 'Message') || (mark.target.kind === 'Turn'))))) violated.push('fitsTarget');
     return violated;
 }
 
 /**
- * The invariants of Mark in state Removed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of Mark in state Placed (the aggregate's, by `checkMarkCommon`, and the state's) that an aggregate violates, in declaration order.
+ * @see model/mark.dt:66
+ */
+export function checkPlacedMark(mark: PlacedMark): readonly 'fitsTarget'[] {
+    return checkMarkCommon(mark);
+}
+
+/**
+ * The invariants of Mark in state Removed (the aggregate's, by `checkMarkCommon`, and the state's) that an aggregate violates, in declaration order.
  * @see model/mark.dt:67
  */
 export function checkRemovedMark(mark: RemovedMark): readonly 'fitsTarget'[] {
-    const violated: 'fitsTarget'[] = [];
-    if (!((!(mark.sign.kind === 'Vote') || ((mark.target.kind === 'QuestionOption') || (mark.target.kind === 'AssumptionChoice'))) && (!(mark.sign.kind === 'Reaction') || ((mark.target.kind === 'Message') || (mark.target.kind === 'Turn'))))) violated.push('fitsTarget');
-    return violated;
+    return checkMarkCommon(mark);
 }
 
 /**
@@ -2263,10 +2271,10 @@ export const RequestShape: Shape = {
 };
 
 /**
- * The invariants of Request in state Sent (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/request.dt:39
+ * The invariants of Request (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see model/request.dt:18
  */
-export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
+export function checkRequestCommon(request: RequestCommon): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
     const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] = [];
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
@@ -2277,17 +2285,19 @@ export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyT
 }
 
 /**
- * The invariants of Request in state Dismissed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of Request in state Sent (the aggregate's, by `checkRequestCommon`, and the state's) that an aggregate violates, in declaration order.
+ * @see model/request.dt:39
+ */
+export function checkSentRequest(request: SentRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
+    return checkRequestCommon(request);
+}
+
+/**
+ * The invariants of Request in state Dismissed (the aggregate's, by `checkRequestCommon`, and the state's) that an aggregate violates, in declaration order.
  * @see model/request.dt:42
  */
 export function checkDismissedRequest(request: DismissedRequest): readonly ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] {
-    const violated: ('atMostTwentyTargets' | 'distinctTargets' | 'atMostTwentyMentions' | 'distinctMentions' | 'noWorkspaceTarget')[] = [];
-    if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
-    if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
-    if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
-    if (!(distinct(request.mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) violated.push('distinctMentions');
-    if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
-    return violated;
+    return checkRequestCommon(request);
 }
 
 /**
@@ -2372,7 +2382,7 @@ export function checkSendRequestRequires(_id: RequestId, _session: ActiveSession
     if (!(distinct(targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
     if (!(targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
     if (!(mentions.length <= 20)) return 'atMostTwentyMentions';
-    if (!(distinct(mentions, ($24: ParticipantId, $25: ParticipantId) => $24 === $25))) return 'distinctMentions';
+    if (!(distinct(mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) return 'distinctMentions';
     return undefined;
 }
 
@@ -2798,10 +2808,10 @@ export const RevisionShape: Shape = {
 export type RevisionDeclaredChecks = { readonly hashOfFiles: (revision: Revision) => boolean };
 
 /**
- * The invariants of Revision in state Recorded (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/revision.dt:68
+ * The invariants of Revision (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see model/revision.dt:55
  */
-export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revision: RecordedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
+export function checkRevisionCommonWith(checks: RevisionDeclaredChecks): (revision: Revision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
         const violated: ('distinctPaths' | 'hashOfFiles')[] = [];
         if (!(distinct(revision.files, (f, f2) => f.path === f2.path))) violated.push('distinctPaths');
@@ -2811,15 +2821,22 @@ export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revi
 }
 
 /**
- * The invariants of Revision in state Confirmed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of Revision in state Recorded (the aggregate's, by `checkRevisionCommonWith`, and the state's) that an aggregate violates, in declaration order.
+ * @see model/revision.dt:68
+ */
+export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revision: RecordedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
+    return (revision) => {
+        return checkRevisionCommonWith(checks)(revision);
+    };
+}
+
+/**
+ * The invariants of Revision in state Confirmed (the aggregate's, by `checkRevisionCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see model/revision.dt:69
  */
 export function checkConfirmedRevisionWith(checks: RevisionDeclaredChecks): (revision: ConfirmedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
-        const violated: ('distinctPaths' | 'hashOfFiles')[] = [];
-        if (!(distinct(revision.files, (f, f2) => f.path === f2.path))) violated.push('distinctPaths');
-        if (!checks.hashOfFiles(revision)) violated.push('hashOfFiles');
-        return violated;
+        return checkRevisionCommonWith(checks)(revision);
     };
 }
 
@@ -3373,10 +3390,10 @@ export const SessionShape: Shape = {
 };
 
 /**
- * The invariants of Session in state Open (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see model/session.dt:32
+ * The invariants of Session (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see model/session.dt:18
  */
-export function checkOpenSession(session: OpenSession): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
+export function checkSessionCommon(session: SessionCommon): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
     const violated: ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] = [];
     if (!(distinct(session.participants, equalParticipant))) violated.push('distinctParticipants');
     if (!(session.participants.some((p) => (p.id === session.facilitator) && (p.role === 'Facilitator')))) violated.push('facilitatorListed');
@@ -3385,15 +3402,19 @@ export function checkOpenSession(session: OpenSession): readonly ('distinctParti
 }
 
 /**
- * The invariants of Session in state Closed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of Session in state Open (the aggregate's, by `checkSessionCommon`, and the state's) that an aggregate violates, in declaration order.
+ * @see model/session.dt:32
+ */
+export function checkOpenSession(session: OpenSession): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
+    return checkSessionCommon(session);
+}
+
+/**
+ * The invariants of Session in state Closed (the aggregate's, by `checkSessionCommon`, and the state's) that an aggregate violates, in declaration order.
  * @see model/session.dt:33
  */
 export function checkClosedSession(session: ClosedSession): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
-    const violated: ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] = [];
-    if (!(distinct(session.participants, equalParticipant))) violated.push('distinctParticipants');
-    if (!(session.participants.some((p) => (p.id === session.facilitator) && (p.role === 'Facilitator')))) violated.push('facilitatorListed');
-    if (!(session.participants.every((p) => !(p.role === 'Facilitator') || (p.id === session.facilitator)))) violated.push('soleFacilitator');
-    return violated;
+    return checkSessionCommon(session);
 }
 
 /**
@@ -4005,7 +4026,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($26: string, $27: string) => $26 === $27);
+        return sameOptional(a.scope, y.scope, ($24: string, $25: string) => $24 === $25);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -4081,7 +4102,7 @@ export interface TargetSnapshot {
  * @see model/target.dt:56
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($28: string, $29: string) => $28 === $29) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($26: string, $27: string) => $26 === $27) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**

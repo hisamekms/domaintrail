@@ -161,6 +161,8 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         out.push({ name: shapeName(el), origin: `the shape of '${el.name}'`, at });
         if (states.length > 0) {
             out.push({ name: commonTypeName(el), origin: `common fields of '${el.name}'`, at });
+            const commonDeclared = written.invariantsOf(el.members).some((i) => !i.expr);
+            out.push({ name: `check${commonTypeName(el)}${commonDeclared ? 'With' : ''}`, origin: `the check of the invariants of '${el.name}'`, at });
             for (const s of states) {
                 out.push({ name: stateTypeName(el, s), origin: `state '${el.name}.${s.name}'`, at: s.nameAt });
             }

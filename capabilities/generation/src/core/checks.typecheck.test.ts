@@ -99,6 +99,20 @@ context Sales {
       changes lines
     command cancel(reason: Reason) Draft -> Cancelled
   }
+  id TicketId: UUID
+  aggregate Ticket {
+    id: TicketId
+    title: String
+    invariant titled "件名がある"
+    state Open
+    state Closed { invariant short { length(title) <= 80 } }
+  }
+  id MemoId: UUID
+  aggregate Memo {
+    id: MemoId
+    state Open
+    state Done
+  }
   error Duplicate
   error Unknown
   error TooLarge

@@ -88,6 +88,20 @@ context Sales {
       changes lines
     command cancel(reason: Reason) Draft -> Cancelled
   }
+  id TicketId: UUID
+  aggregate Ticket {
+    id: TicketId
+    title: String
+    invariant titled "件名がある"
+    state Open
+    state Closed { invariant short { length(title) <= 80 } }
+  }
+  id MemoId: UUID
+  aggregate Memo {
+    id: MemoId
+    state Open
+    state Done
+  }
   error Duplicate
   error Unknown
   error TooLarge
@@ -185,6 +199,22 @@ describe('generated checks', () => {
         expect(Sales.checkOrderWith(checks)(cancelled)).toEqual(['otherNeedsNote']);
         expect(Sales.checkOrderWith({ audited: () => false })({ ...cancelled, note: 'n' })).toEqual(['audited']);
         expect(Sales.checkOrderWith(checks)({ ...cancelled, reason: 'Requested' })).toEqual([]);
+    });
+
+    test("check<Aggregate>Common: the aggregate's invariants once, which the check of each state reports first", () => {
+        const order = { id: 'o', lines: [line('1', 'ABC-0001'), line('1', 'ABC-0001')], prices: [] };
+        expect(Sales.checkOrderCommon(order)).toEqual(['distinctSkus', 'distinctLines']);
+        expect(Sales.checkOrderCommon({ ...order, lines: [] })).toEqual([]);
+        const cancelled = { ...order, state: 'Cancelled', reason: 'Other' };
+        expect(Sales.checkCancelledOrderWith({ audited: () => false })(cancelled)).toEqual(['distinctSkus', 'distinctLines', 'otherNeedsNote', 'audited']);
+        // A slot of the aggregate's own: the common check takes it (and the aggregate, the slot's argument)
+        const ticket = { state: 'Closed', id: 't', title: 'x'.repeat(81) };
+        expect(Sales.checkTicketCommonWith({ titled: () => false })(ticket)).toEqual(['titled']);
+        expect(Sales.checkClosedTicketWith({ titled: () => false })(ticket)).toEqual(['titled', 'short']);
+        expect(Sales.checkOpenTicketWith({ titled: () => true })({ ...ticket, state: 'Open' })).toEqual([]);
+        // An aggregate with states and no invariants still has its common check, which reports none
+        expect(Sales.checkMemoCommon({ id: 'm' })).toEqual([]);
+        expect(Sales.checkMemo).toBeUndefined();
     });
 
     test('requirements: the first that does not hold in declaration order, a slot for the one without expression', () => {

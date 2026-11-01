@@ -13,7 +13,7 @@ import type {
 import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, sharedContexts } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
-import { RUNTIME_NAMES, TS_RESERVED, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
+import { RUNTIME_NAMES, TS_RESERVED, commonTypeName, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
@@ -446,13 +446,28 @@ export class CheckWriter {
 
     /**
      * A check function: `check<T>(subject)` returning the violated invariants, or with declared invariants
-     * `check<T>With(checks)` returning that function. `body` collects into `violated` (or returns the result itself).
+     * `check<T>With(checks)` returning that function. `body` collects into `violated` (or returns the result itself),
+     * which starts with the elements of `init` (an expression of an array) when given; an empty body returns none.
      */
-    private checkFunction(doc: string[], loc: Location, typeName: string, subject: Param, result: string, declared: string | false, body: string[]): string[] {
-        const text = body.join('\n');
+    private checkFunction(
+        doc: string[],
+        loc: Location,
+        typeName: string,
+        subject: Param,
+        result: string,
+        declared: string | false,
+        body: string[],
+        init?: string,
+    ): string[] {
+        const text = [init ?? '', ...body].join('\n');
         const head = this.env.jsdoc(doc, loc);
         const collects = text.includes('violated.push');
-        const inner = collects ? [`const violated: ${list(result)}[] = [];`, ...body, 'return violated;'] : body;
+        const start = init ? `[...${init}]` : '[]';
+        const inner = collects
+            ? [`const violated: ${list(result)}[] = ${start};`, ...body, 'return violated;']
+            : body.length
+              ? body
+              : [`return ${init ?? '[]'};`];
         if (!declared) {
             return [
                 ...head,
@@ -646,10 +661,13 @@ export class CheckWriter {
         ];
     }
 
-    /** The checks of an aggregate: per state (the aggregate's invariants and the state's), and for any state. */
+    /**
+     * The checks of an aggregate. With states: of the common part (the aggregate's invariants, also without any), per
+     * state (the common part's and the state's) and for any state.
+     */
     aggregate(agg: AggregateModel): string[] {
         const all = aggregateInvariants(agg);
-        if (!all.length) return [];
+        if (!all.length && !agg.states.length) return [];
         const subject = subjectName(agg.name);
         const states = agg.states;
         const declared = hasDeclared(all);
@@ -677,18 +695,38 @@ export class CheckWriter {
             );
             return out;
         }
+        // The slot of an aggregate's invariant declared without an expression takes the aggregate, so then does its check.
+        const common = commonTypeName(agg);
+        const commonDeclared = hasDeclared(agg.invariants);
+        out.push(
+            ...this.checkFunction(
+                [`The invariants of ${agg.name} (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.`],
+                agg.location,
+                common,
+                { name: subject, type: commonDeclared ? agg.name : common },
+                namesType(agg.invariants.map((i) => i.name)),
+                commonDeclared && agg.name,
+                collect(items(this.compiler, agg.invariants, fieldScope(model, subject, agg.fields), subject), ''),
+            ),
+        );
+        if (!all.length) return out;
+        out.push('');
+        const commonCall = commonDeclared ? `${checkWithName(common)}(checks)(${subject})` : `${checkName(common)}(${subject})`;
         for (const s of states) {
             const type = stateTypeName(agg, s);
             const scope = fieldScope(model, subject, [...agg.fields, ...s.fields]);
             out.push(
                 ...this.checkFunction(
-                    [`The invariants of ${agg.name} in state ${s.name} (the aggregate's and the state's) that an aggregate violates, in declaration order.`],
+                    [
+                        `The invariants of ${agg.name} in state ${s.name} (the aggregate's, by \`${commonDeclared ? checkWithName(common) : checkName(common)}\`, and the state's) that an aggregate violates, in declaration order.`,
+                    ],
                     s.location,
                     type,
                     { name: subject, type },
                     namesType([...agg.invariants, ...s.invariants].map((i) => i.name)),
                     declared && agg.name,
-                    collect(items(this.compiler, [...agg.invariants, ...s.invariants], scope, subject), ''),
+                    collect(items(this.compiler, s.invariants, scope, subject), ''),
+                    commonCall,
                 ),
                 '',
             );

@@ -120,6 +120,14 @@ export const InvoiceShape: Shape = {
 };
 
 /**
+ * The invariants of Invoice (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see billing/invoice.dt:4
+ */
+export function checkInvoiceCommon(_invoice: InvoiceCommon): readonly never[] {
+    return [];
+}
+
+/**
  * Invoice.issue (new -> Open) — factory
  * 請求書を発行する
  * @param id 請求書ID
@@ -782,10 +790,10 @@ export const OrderShape: Shape = {
 };
 
 /**
- * The invariants of Order in state Draft (the aggregate's and the state's) that an aggregate violates, in declaration order.
- * @see sales/order.dt:30
+ * The invariants of Order (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see sales/order.dt:13
  */
-export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] {
+export function checkOrderCommon(order: OrderCommon): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] {
     const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] = [];
     if (!(order.items.every((item) => item.quantity > 0))) violated.push('quantitiesPositive');
     if (!(distinct(order.items, (item, item2) => item.sku === item2.sku))) violated.push('distinctSkus');
@@ -794,27 +802,29 @@ export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositiv
 }
 
 /**
- * The invariants of Order in state Confirmed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of Order in state Draft (the aggregate's, by \`checkOrderCommon\`, and the state's) that an aggregate violates, in declaration order.
+ * @see sales/order.dt:30
+ */
+export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] {
+    return checkOrderCommon(order);
+}
+
+/**
+ * The invariants of Order in state Confirmed (the aggregate's, by \`checkOrderCommon\`, and the state's) that an aggregate violates, in declaration order.
  * @see sales/order.dt:32
  */
 export function checkConfirmedOrder(order: ConfirmedOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] {
-    const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] = [];
-    if (!(order.items.every((item) => item.quantity > 0))) violated.push('quantitiesPositive');
-    if (!(distinct(order.items, (item, item2) => item.sku === item2.sku))) violated.push('distinctSkus');
-    if (!(order.items.every((a) => order.items.every((b) => a.unitPrice.currency === b.unitPrice.currency)))) violated.push('singleCurrency');
+    const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] = [...checkOrderCommon(order)];
     if (!(order.items.length > 0)) violated.push('hasItems');
     return violated;
 }
 
 /**
- * The invariants of Order in state Cancelled (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * The invariants of Order in state Cancelled (the aggregate's, by \`checkOrderCommon\`, and the state's) that an aggregate violates, in declaration order.
  * @see sales/order.dt:37
  */
 export function checkCancelledOrder(order: CancelledOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] {
-    const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] = [];
-    if (!(order.items.every((item) => item.quantity > 0))) violated.push('quantitiesPositive');
-    if (!(distinct(order.items, (item, item2) => item.sku === item2.sku))) violated.push('distinctSkus');
-    if (!(order.items.every((a) => order.items.every((b) => a.unitPrice.currency === b.unitPrice.currency)))) violated.push('singleCurrency');
+    const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] = [...checkOrderCommon(order)];
     if (order.reason === 'Other' && !(order.note !== undefined)) violated.push('otherNeedsNote');
     return violated;
 }
