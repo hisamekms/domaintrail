@@ -3,6 +3,7 @@
 // named participants signed in with their own cookies (one of them made the facilitator with the start's link), the
 // seed's agent (the real subscriber with a scripted runner), and the scenarios played through the session API as pages
 // play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over.
+import { plainBody } from '@domaintrail/collaboration/domain/body';
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
 import type { DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
@@ -42,7 +43,12 @@ export interface Ctx {
     /** An event's occurrence in a timeline (the step path: `0`, `2.1`) as a target. */
     occurrence(storming: string, timeline: string, eventName: string, step: string, label: string): TargetSpec;
     /** `who` sends a message; `reads`: what the mock classifier answers for it (default: guessed from its words). */
-    say(who: Person, body: string, options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson }): Promise<RequestJson>;
+    /** `mentions`: the people `@name[pN]` in the body names, in order (the N-th from 1). */
+    say(
+        who: Person,
+        body: string,
+        options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson; mentions?: readonly Person[] },
+    ): Promise<RequestJson>;
     /** The facilitator applies messages as one run that the agent plays as `step`; resolves once the run ended. */
     apply(requests: readonly RequestJson[], step: Step, options?: { note?: string }): Promise<RunJson>;
     /** The facilitator answers a run's questions: its requests queued again with the answer, played as `step`. */
@@ -185,7 +191,7 @@ export async function seed(options: SeedOptions): Promise<Seeded> {
         agent = undefined;
 
         if (options.leaveQueued) {
-            const left = await ctx.say('sato', '最後にもう一件: @返品が依頼された[1] に返品の受付期限（注文から30日）を入れてください', {
+            const left = await ctx.say('sato', '最後にもう一件: #返品が依頼された[1] に返品の受付期限（注文から30日）を入れてください', {
                 targets: [ctx.es('Returns', 'ReturnRequested', '返品が依頼された')],
                 reads: 'request',
             });
@@ -277,11 +283,19 @@ function makeCtx(deps: {
             label,
         }),
         async say(who, body, options = {}) {
-            if (options.reads) deps.classifier?.expect(body, options.reads);
+            const mentions = (options.mentions ?? []).map((p) => people[p].me.participant.id);
+            // the classifier is asked the body with its mentions as names
+            if (options.reads)
+                deps.classifier?.expect(plainBody(body, { targets: options.targets?.length ?? 0, people: mentions.length }, true), options.reads);
             const revision = await latestRevision();
             const targets = (options.targets ?? []).map((t) => ({ target: t.target, sourceRevision: revision, label: t.label }));
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the JSON of a target snapshot (the server checks it)
-            return api.send(people[who], { targets, body, ...(options.replyTo && { replyTo: options.replyTo.id }) } as Parameters<SessionClient['send']>[1]);
+            return api.send(people[who], {
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the JSON of a target snapshot (the server checks it)
+                targets: targets as Parameters<SessionClient['send']>[1]['targets'],
+                body,
+                ...(options.replyTo && { replyTo: options.replyTo.id }),
+                ...(mentions.length > 0 && { mentions }),
+            });
         },
         apply: (requests, step, options = {}) => queue({ requests: requests.map((r) => r.id), ...(options.note && { note: options.note }) }, step),
         answer: (run, answer, step) => queue({ requests: run.input.requests.map((r) => r.request), answerTo: run.id, answer }, step),

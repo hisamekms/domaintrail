@@ -10,40 +10,43 @@ export type ScenarioName = (typeof SCENARIO_NAMES)[number];
 
 /** A text longer than the stream shows at once (clamped, with "more"). */
 const LONG_MESSAGE = [
-    '@請求書[1] まわりで、経理チームから聞いた要望をまとめます。長くなりますがすみません。',
+    '#請求書[1] まわりで、経理チームから聞いた要望をまとめます。長くなりますがすみません。',
     '',
     '1. 請求書は注文が確定したときに発行されるが、確定から発行までの間に注文が取り消されることがある。そのときは発行しないでほしい。',
     '2. 支払いは基本的にカードだが、法人のお客さまは銀行振込が多い。振込の場合、入金の確認に2〜3営業日かかるので、その間は「入金確認中」のような状態が欲しい。',
-    '3. @支払済み[2] になったあとで返品があった場合、返金は請求書ではなく返品の側で扱う、という理解で合っているか確認したい。',
-    '4. @支払う[3] のときに入金額が請求金額と違うケース（振込手数料を差し引かれる等）がたまにある。今は手作業で調整している。',
+    '3. #支払済み[2] になったあとで返品があった場合、返金は請求書ではなく返品の側で扱う、という理解で合っているか確認したい。',
+    '4. #支払う[3] のときに入金額が請求金額と違うケース（振込手数料を差し引かれる等）がたまにある。今は手作業で調整している。',
     '5. 月末締めでまとめて請求したいお客さまもいる（いわゆる合算請求）。これは今回の範囲外でもよいが、将来の拡張として頭に入れておきたい。',
     '',
-    'どれも急ぎではありませんが、1と2は次のリリースまでに入れたいとのことでした。優先度の相談は ooyama_F さんにお願いします。',
+    'どれも急ぎではありませんが、1と2は次のリリースまでに入れたいとのことでした。優先度の相談は @ooyama_F[p1] さんにお願いします。',
 ].join('\n');
 
 const chat = async (s: Ctx): Promise<void> => {
     await s.say('sato', 'おはようございます。今日は注文と返品まわりを詰めましょう 🙌', { reads: 'chat' });
     // the same person twice in a row: the second message continues the first
     await s.say('sato', 'まずは注文の状態遷移から見ていきたいです', { reads: 'chat' });
-    const shipped = await s.say('suzuki', '@注文[1] に「出荷済み」の状態を足してください。確定のあと倉庫から出荷するまでを追いたいです。', {
+    // people mentioned: `@name[pN]` is the N-th of `mentions`; the one mentioned sees the message marked, and `@` on the launcher
+    await s.say('tanaka', '@鈴木[p1] さん @高橋[p2] さん、返品の流れはあとで一緒に見ませんか', { mentions: ['suzuki', 'takahashi'], reads: 'chat' });
+    const shipped = await s.say('suzuki', '#注文[1] に「出荷済み」の状態を足してください。確定のあと倉庫から出荷するまでを追いたいです。', {
         targets: [s.dt('Sales.Order', '注文')],
         reads: 'request',
     });
-    await s.say('tanaka', '@返品が依頼された[1] の前に、顧客が返品理由を選ぶ操作が要りそうです。@受け付けた返品[2] の流れで見ると分かりやすいです', {
+    await s.say('tanaka', '#返品が依頼された[1] の前に、顧客が返品理由を選ぶ操作が要りそうです。#受け付けた返品[2] の流れで見ると分かりやすいです', {
         targets: [s.es('Returns', 'ReturnRequested', '返品が依頼された'), s.occurrence('Returns', 'Accepted', 'ReturnRequested', '0', '受け付けた返品')],
         reads: 'unsure',
     });
     await s.say('takahashi', LONG_MESSAGE, {
         targets: [s.dt('Billing.Invoice', '請求書'), s.dt('Billing.Invoice#Paid', '支払済み'), s.dt('Billing.Invoice:pay', '支払う')],
+        mentions: ['facilitator'],
         reads: 'request',
     });
     // the facilitator's own messages: 「あなた」 for whoever holds the facilitator's role
-    await s.say('facilitator', 'ありがとうございます。@注文[1] の件から反映していきます', { targets: [s.dt('Sales.Order', '注文')], reads: 'chat' });
+    await s.say('facilitator', 'ありがとうございます。#注文[1] の件から反映していきます', { targets: [s.dt('Sales.Order', '注文')], reads: 'chat' });
     await s.say('facilitator', '残りは順番に見ていきます。ちなみに請求書の再発行ってモデルにありましたっけ？', { reads: 'unsure' });
     // targets that the run below renames and removes: they read as stale afterwards
     const renamed = await s.say(
         'suzuki',
-        '@備考変更[1] はほかのイベントと揃えて OrderNoteChanged にしてください。@RefundAndOrder[2] は Sales の返金依頼と同じものと決まったので消してください',
+        '#備考変更[1] はほかのイベントと揃えて OrderNoteChanged にしてください。#RefundAndOrder[2] は Sales の返金依頼と同じものと決まったので消してください',
         { targets: [s.dt('Sales.NoteChanged', '備考変更'), s.es('Returns', 'RefundAndOrder', 'RefundAndOrder')], reads: 'request' },
     );
     await s.apply([shipped], {
@@ -70,12 +73,19 @@ const chat = async (s: Ctx): Promise<void> => {
             requests: [{ request: 1, status: 'done' }],
         },
     });
+    // a body as written before `#` named elements: `@name[n]` still reads as target n
     await s.say('sato', 'ありがとうございます！@出荷済み[1] が見えるようになりました', { targets: [s.dt('Sales.Order#Shipped', '出荷済み')], reads: 'chat' });
+    // an element and people in one message
+    await s.say('suzuki', '#出荷済み[1] のあとの返品は @田中[p1] さんの担当ですね。@ooyama_F[p2] さん、次はそこを見ましょう', {
+        targets: [s.dt('Sales.Order#Shipped', '出荷済み')],
+        mentions: ['tanaka', 'facilitator'],
+        reads: 'chat',
+    });
 };
 
 const runs = async (s: Ctx): Promise<void> => {
     // completed with changes, then applied again with a note: one card, two runs
-    const failed = await s.say('sato', '@請求書[1] に、決済サービスで支払いに失敗したときのイベントを追加してください', {
+    const failed = await s.say('sato', '#請求書[1] に、決済サービスで支払いに失敗したときのイベントを追加してください', {
         targets: [s.dt('Billing.Invoice', '請求書')],
         reads: 'request',
     });
@@ -113,7 +123,7 @@ const runs = async (s: Ctx): Promise<void> => {
     );
 
     // completed without changes
-    const confirm = await s.say('suzuki', '@注文を確定する[1] に「明細が1件以上」の条件が入っているか確認してください', {
+    const confirm = await s.say('suzuki', '#注文を確定する[1] に「明細が1件以上」の条件が入っているか確認してください', {
         targets: [s.dt('Sales.Order:confirm', '注文を確定する')],
         reads: 'request',
     });
@@ -129,14 +139,14 @@ const runs = async (s: Ctx): Promise<void> => {
     // failed: the agent exits non-zero (with its report), and an agent that cannot run at all
     const rebuild = await s.say('tanaka', '返品のストーミングを、受付・検品・返金の3つのタイムラインに作り直してください', { reads: 'request' });
     await s.apply([rebuild], { kind: 'exit', exitCode: 1 });
-    const recommend = await s.say('takahashi', '@顧客[1] の購買履歴から、おすすめ商品を出す仕組みもモデルにしてください', {
+    const recommend = await s.say('takahashi', '#顧客[1] の購買履歴から、おすすめ商品を出す仕組みもモデルにしてください', {
         targets: [s.dt('Sales.Customer', '顧客')],
         reads: 'request',
     });
     await s.apply([recommend], { kind: 'crash' });
 
     // declined, with the agent's reason
-    const erase = await s.say('sato', '@顧客[1] の個人情報を、本人確認なしで一括削除できるコマンドを足してください', {
+    const erase = await s.say('sato', '#顧客[1] の個人情報を、本人確認なしで一括削除できるコマンドを足してください', {
         targets: [s.dt('Sales.Customer', '顧客')],
         reads: 'request',
     });
@@ -191,7 +201,7 @@ const runs = async (s: Ctx): Promise<void> => {
 
 const questions = async (s: Ctx): Promise<void> => {
     // a single-choice question, votes open
-    const due = await s.say('suzuki', '@請求書[1] に支払期限を持たせたいです', { targets: [s.dt('Billing.Invoice', '請求書')], reads: 'request' });
+    const due = await s.say('suzuki', '#請求書[1] に支払期限を持たせたいです', { targets: [s.dt('Billing.Invoice', '請求書')], reads: 'request' });
     const dueRun = await s.apply([due], {
         kind: 'reply',
         reply: {
@@ -248,7 +258,7 @@ const questions = async (s: Ctx): Promise<void> => {
     await s.voteOption('takahashi', methodsRun, 'methods', 'konbini');
 
     // two questions, one answered in words only
-    const returned = await s.say('takahashi', '@返金した[1] とき、元の請求書をどう扱うかもモデルに入れてください', {
+    const returned = await s.say('takahashi', '#返金した[1] とき、元の請求書をどう扱うかもモデルに入れてください', {
         targets: [s.es('Returns', 'RefundPaid', '返金した')],
         reads: 'request',
     });
@@ -277,7 +287,7 @@ const questions = async (s: Ctx): Promise<void> => {
     await s.voteOption('suzuki', returnedRun, 'credit', 'cancel');
 
     // answered: an option chosen, and その他 in the facilitator's own words; the answer's run completes the card
-    const pay = await s.say('sato', '@支払う[1] とき、入金額が請求金額と違う場合も扱いたいです', {
+    const pay = await s.say('sato', '#支払う[1] とき、入金額が請求金額と違う場合も扱いたいです', {
         targets: [s.dt('Billing.Invoice:pay', '支払う')],
         reads: 'request',
     });
@@ -353,7 +363,7 @@ const questions = async (s: Ctx): Promise<void> => {
     );
 
     // taken over: the same message queued again with a note, not an answer; its votes stay as they were
-    const defect = await s.say('suzuki', '@商品を検品した[1] で不良が見つかったときの流れも足してください', {
+    const defect = await s.say('suzuki', '#商品を検品した[1] で不良が見つかったときの流れも足してください', {
         targets: [s.es('Returns', 'ItemInspected', '商品を検品した')],
         reads: 'request',
     });
@@ -398,7 +408,7 @@ const questions = async (s: Ctx): Promise<void> => {
 
 const assumptions = async (s: Ctx): Promise<void> => {
     // assumptions with alternatives, votes open (for an alternative, and for keeping it)
-    const cancel = await s.say('tanaka', '@注文を取り消す[1] とき、請求書も取り消されるようにしてください', {
+    const cancel = await s.say('tanaka', '#注文を取り消す[1] とき、請求書も取り消されるようにしてください', {
         targets: [s.dt('Sales.Order:cancel', '注文を取り消す')],
         reads: 'request',
     });
@@ -447,7 +457,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
     await s.voteAssumption('sato', cancelRun, 1);
 
     // an alternative picked: the run that redoes it continues the card (→ #n)
-    const amount = await s.say('suzuki', '@請求書を発行する[1] とき、請求金額を注文の合計から計算するようにしてください', {
+    const amount = await s.say('suzuki', '#請求書を発行する[1] とき、請求金額を注文の合計から計算するようにしてください', {
         targets: [s.dt('Billing.Invoice:issue', '請求書を発行する')],
         reads: 'request',
     });
@@ -491,7 +501,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
     });
 
     // the assumption left as it was: the message applied again with a note of the facilitator's own
-    const address = await s.say('takahashi', '@顧客[1] ごとに請求先の住所を持たせてください', { targets: [s.dt('Sales.Customer', '顧客')], reads: 'request' });
+    const address = await s.say('takahashi', '#顧客[1] ごとに請求先の住所を持たせてください', { targets: [s.dt('Sales.Customer', '顧客')], reads: 'request' });
     const addressRun = await s.apply([address], {
         kind: 'reply',
         edit: (root) =>
@@ -532,7 +542,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
 };
 
 const replies = async (s: Ctx): Promise<void> => {
-    const reissue = await s.say('sato', '@請求書[1] の再発行を扱えるようにしてください', { targets: [s.dt('Billing.Invoice', '請求書')], reads: 'request' });
+    const reissue = await s.say('sato', '#請求書[1] の再発行を扱えるようにしてください', { targets: [s.dt('Billing.Invoice', '請求書')], reads: 'request' });
     const event = (fields: readonly string[], reasons: boolean): string =>
         [
             'context Billing {',
@@ -571,11 +581,11 @@ const replies = async (s: Ctx): Promise<void> => {
 
 const reactions = async (s: Ctx): Promise<void> => {
     const wrap = await s.say('sato', '今日の議論はいったんここまでにしましょうか', { reads: 'chat' });
-    const diagram = await s.say('suzuki', '@請求書[1] の状態遷移、図で見るとすっきりしてますね', {
+    const diagram = await s.say('suzuki', '#請求書[1] の状態遷移、図で見るとすっきりしてますね', {
         targets: [s.dt('Billing.Invoice', '請求書')],
         reads: 'chat',
     });
-    const receipt = await s.say('tanaka', '@支払完了[1] のあとに領収書を発行するイベントも欲しいです', {
+    const receipt = await s.say('tanaka', '#支払完了[1] のあとに領収書を発行するイベントも欲しいです', {
         targets: [s.dt('Billing.InvoicePaid', '支払完了')],
         reads: 'request',
     });
