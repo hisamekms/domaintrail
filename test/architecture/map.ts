@@ -162,8 +162,8 @@ export const MAP: Record<string, Module> = {
     },
     visualization: {
         kind: 'capability',
-        dir: 'packages/visualization',
-        sources: 'packages/visualization/src',
+        dir: 'capabilities/visualization',
+        sources: 'capabilities/visualization/src',
         upstream: ['modeling'],
     },
     agent: {

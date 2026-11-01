@@ -15,7 +15,7 @@ import {
     type NodeLayout,
     type Point,
     type Texts,
-} from '../domain/graph/ir.js';
+} from '../core/graph/ir.js';
 import type { LayoutEngine, LayoutOptions } from '../application/layout-engine.js';
 
 const ROOT = '__root__';

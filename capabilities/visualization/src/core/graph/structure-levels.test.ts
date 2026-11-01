@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { buildStructureGraph, wrapText } from './build.js';
-import { ElkLayoutEngine } from '../../infrastructure/elk.js';
+import { ElkLayoutEngine } from '../../adapters/elk.js';
 import type { DomainModel } from '@domaintrail/modeling';
 import { check } from '../../test-helpers.js';
 

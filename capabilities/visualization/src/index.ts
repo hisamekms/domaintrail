@@ -23,13 +23,13 @@ export {
     type StructureLevel,
     type Texts,
     type TransitionLabels,
-} from './domain/graph/ir.js';
-export { PRIMITIVE_LABELS, typeText } from './domain/graph/build.js';
-export { dependencyCounts } from './domain/graph/context-map.js';
+} from './core/graph/ir.js';
+export { PRIMITIVE_LABELS, typeText } from './core/graph/build.js';
+export { dependencyCounts } from './core/graph/context-map.js';
 
 // ---- core: the storming views ----------------------------------------------------------------------------------
-export { LEVEL_KINDS, VIEW_LEVELS, type RenderGraph, type ViewLevel, type ViewOptions } from './domain/storming/ir.js';
-export { stormingViewKey } from './domain/storming/graph.js';
+export { LEVEL_KINDS, VIEW_LEVELS, type RenderGraph, type ViewLevel, type ViewOptions } from './core/storming/ir.js';
+export { stormingViewKey } from './core/storming/graph.js';
 
 // ---- application: the view service and its ports ---------------------------------------------------------------
 export { createViewService, type ViewService, type ViewServiceDeps } from './application/view-service.js';
@@ -44,7 +44,7 @@ export {
 } from './application/ports.js';
 export { type LayoutEngine, type LayoutOptions } from './application/layout-engine.js';
 
-// ---- adapters, for the app that wires them (infrastructure/: adapters/ after T8) --------------------------------
-export { ElkLayoutEngine } from './infrastructure/elk.js';
-export { createFileLayoutStore } from './infrastructure/file-layout-store.js';
-export { createGitRevisions } from './infrastructure/git.js';
+// ---- adapters, for the app that wires them ---------------------------------------------------------------------
+export { ElkLayoutEngine } from './adapters/elk.js';
+export { createFileLayoutStore } from './adapters/file-layout-store.js';
+export { createGitRevisions } from './adapters/git.js';

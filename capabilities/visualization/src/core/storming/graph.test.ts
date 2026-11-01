@@ -6,7 +6,7 @@ import type { ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
 import { renderToGraph, stormingGraphId, stormingViewKey } from './graph.js';
 import type { LaidOutGraph, NodeLayout } from '../graph/ir.js';
-import { ElkLayoutEngine } from '../../infrastructure/elk.js';
+import { ElkLayoutEngine } from '../../adapters/elk.js';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 

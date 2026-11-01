@@ -1,6 +1,6 @@
 import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { LaidOutGraph } from '../domain/graph/ir.js';
+import type { LaidOutGraph } from '../core/graph/ir.js';
 import type { LayoutCache, LayoutStore } from '../application/ports.js';
 
 export const LAYOUT_FILE = path.join('.domaintrail', 'layout.json');

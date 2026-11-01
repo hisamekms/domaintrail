@@ -11,21 +11,13 @@ import {
     stormingTimelines,
     supportingContexts,
 } from '@domaintrail/modeling';
-import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../domain/storming/ir.js';
-import { matchRenderNodes, projectView } from '../domain/storming/render.js';
-import { renderToGraph, stormingViewKey } from '../domain/storming/graph.js';
-import { buildStateGraph, buildStructureGraph } from '../domain/graph/build.js';
-import { buildContextMapGraph } from '../domain/graph/context-map.js';
-import { markLineChanges } from '../domain/graph/line-changes.js';
-import {
-    TRANSITION_LABELS,
-    graphSignature,
-    type Graph,
-    type LaidOutGraph,
-    type Point,
-    type StructureLevel,
-    type TransitionLabels,
-} from '../domain/graph/ir.js';
+import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../core/storming/ir.js';
+import { matchRenderNodes, projectView } from '../core/storming/render.js';
+import { renderToGraph, stormingViewKey } from '../core/storming/graph.js';
+import { buildStateGraph, buildStructureGraph } from '../core/graph/build.js';
+import { buildContextMapGraph } from '../core/graph/context-map.js';
+import { markLineChanges } from '../core/graph/line-changes.js';
+import { TRANSITION_LABELS, graphSignature, type Graph, type LaidOutGraph, type Point, type StructureLevel, type TransitionLabels } from '../core/graph/ir.js';
 import type { LayoutEngine, LayoutOptions } from './layout-engine.js';
 import type { GitCommit, GitRevisions, LayoutCache, LayoutStore, WorkspaceReader } from './ports.js';
 import type { BaseView, Baseline, BaselineSpec, StormingView, ViewPayload } from '../protocol.js';

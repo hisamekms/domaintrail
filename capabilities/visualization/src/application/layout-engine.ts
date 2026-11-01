@@ -1,4 +1,4 @@
-import type { Graph, LaidOutGraph, Point } from '../domain/graph/ir.js';
+import type { Graph, LaidOutGraph, Point } from '../core/graph/ir.js';
 
 export interface LayoutOptions {
     /**
