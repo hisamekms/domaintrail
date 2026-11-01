@@ -1,0 +1,13 @@
+context Billing {
+  id InvoiceId: UUID
+
+  entity Line { amount: Int }
+
+  value class { amount: Int }
+
+  aggregate Invoice {
+    id: InvoiceId
+    order: Sales.OrderId
+    command issue()
+  }
+}

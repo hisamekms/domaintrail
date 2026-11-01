@@ -1,0 +1,22 @@
+{
+  "name": "@domaintrail/web",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@domaintrail/collaboration": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
+    "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
+    "@domaintrail/visualization": "workspace:*",
+    "lucide-react": "1.62.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "tldraw": "5.5.2"
+  },
+  "devDependencies": {
+    "@domaintrail/analysis": "workspace:*",
+    "@tldraw/tlschema": "5.5.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}

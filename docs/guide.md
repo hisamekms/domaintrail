@@ -300,6 +300,12 @@ context Sales {
   states, commands have no transitions. A command that keeps the state writes it out: `Draft -> Draft`.
 - `value`, `state`, `event` and `error` bodies are optional (`state Draft`, `error EmptyOrder`).
 - Other contexts' elements are referenced with qualified names: `Sales.OrderId`, `-> Sales.Order`.
+- Keywords as names: a field, parameter, term, command, discriminator or lambda parameter may be named with a
+  declaration keyword (`event: EventName`, `state: Status`, `errors: Reason[0..*]`, `command emits(…)`): a name is
+  followed by `:` (or `(` for a command), a declaration by its name. The words of expressions (`not`, `in`, `and`,
+  `or`, `implies`, `true`, `false`) and the primitive types are not field names. Enum values and union variants may be
+  any word, those included (`enum Op { and or not }`, written `Op.and` in an expression). Elements and contexts are
+  named with identifiers only.
 - Comments: `// …` and `/* … */`; `///` is a description (see [Names](#names-labels-and-descriptions)).
 
 <!-- topic: primitives -->
@@ -365,6 +371,11 @@ context Sales {
   Variants hold value fields and invariants (seeing their own fields); entities and aggregates are not allowed.
 - In invariants, `payer.kind` compares with `Payer.COMPANY` (or the bound enum's values); variant fields are not
   accessible from outside the union.
+- Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
+  passes through an optional field (`?`), a list that may be empty (`[0..*]`), or a union with a variant out of it
+  (`union Expr { lit { value: Int } not { operand: Expr } }`). Otherwise, and for any cycle through an entity or an
+  aggregate, it is M012. The generated types, equality and checks handle nesting; the contract tests generate no
+  values of recursive types yet (see [Generated tests](#generated-tests)).
 
 <!-- topic: shared -->
 ### Shared contexts
@@ -391,8 +402,8 @@ shared context Common "共通" { // shared kernel: usable by simple name from ev
 <!-- topic: field-sets -->
 ### Field sets
 
-Fields that several aggregates, entities or events have for the same domain reason are written once as a field set
-and taken on with `with`.
+Fields that several aggregates, entities, value objects or events have for the same domain reason are written once as
+a field set and taken on with `with`.
 
 ```dt
 // common/tenancy.dt
@@ -442,7 +453,7 @@ context Expenses "経費" {
 
 - `fields Name "label" { ... }` holds plain fields, written like any other field (type, multiplicity, label, `///`).
   No `owns`, `references`, invariants, `with` or `id` inside (M016).
-- `with A, B` after the name and label of an `aggregate`, `entity` or `event` (only those, M016). A field set is
+- `with A, B` after the name and label of an `aggregate`, `entity`, `value` or `event` (only those, M016). A field set is
   referenced like a type: by name in its own context and from shared contexts, as `Context.Name` otherwise.
 - The fields come first, in the order of `with`, and then count as the element's own: invariants see them, and an
   aggregate's states share them. A name may come from one place only, the element or one of its field sets (M016).
@@ -1593,6 +1604,11 @@ Options, all optional:
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
 
+**Recursive value types** have no generated arbitrary yet: `dt generate ts` warns, and the contract tests leave out
+the arbitraries of those types and of the types holding them, and the cases that need one (a command with such a
+parameter or of an aggregate holding one, a required policy reacting to such an event). Test those commands in your
+own tests.
+
 **Outside the generated tests** is what happens around the commands, which your own tests cover (as
 `examples/shop/src/app.test.ts` does): the factories of verified types (`MakeAvailableEmail`, with your repositories and
 services), the constraints without an expression where you pass no check, and the application — loading, saving,
@@ -2104,11 +2120,11 @@ storming](#diagnostics-of-a-storming).
 | M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `count(…)` / `length(…)` |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
-| M012 | the ownership graph has no cycles |
+| M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
 | M013 | aggregates and entities have an `id` field of their own ID type |
 | M014 | shared contexts: only value types, no dependency on other contexts, consistent `shared`, unambiguous names (shadowing is a warning) |
 | M015 | unions: at least one variant, variants match the bound enum exactly, no variant field named like the discriminator |
-| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities and events, each field name from one place |
+| M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities, value objects and events, each field name from one place |
 | M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |

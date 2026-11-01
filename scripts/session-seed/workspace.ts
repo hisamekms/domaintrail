@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { access, chmod, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { readServerAddress } from '@domaintrail/collaboration/infrastructure/session-files';
+import { readServerAddress } from '@domaintrail/collaboration';
 
 /** The file a seed leaves in the directories it makes: only those are wiped by `--reset`. */
 export const SEED_MARKER = '.dt-session-seed';

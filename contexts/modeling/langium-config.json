@@ -1,0 +1,11 @@
+{
+  "projectName": "Domain",
+  "languages": [
+    {
+      "id": "domain",
+      "grammar": "src/infrastructure/syntax/domain.langium",
+      "fileExtensions": [".dt"]
+    }
+  ],
+  "out": "src/infrastructure/syntax/generated"
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@domaintrail/modeling",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@domaintrail/kernel": "workspace:*",
+    "langium": "4.4.0"
+  }
+}

@@ -2,11 +2,9 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { parseJsonc } from '@domaintrail/modeling/core/config';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { formatDomain } from '@domaintrail/modeling/format/format';
+import { cliDeps, runCli } from '@domaintrail/dt';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -93,7 +91,8 @@ describe('getting started', () => {
         test(`${file}: its JSONC blocks are valid`, () => {
             const blocks = blocksOf(page, 'jsonc');
             expect(blocks.length).toBeGreaterThan(0);
-            for (const block of blocks) expect(parseJsonc(block)).toBeInstanceOf(Object);
+            // the config and tsconfig.json alike: JSONC as Bun reads it
+            for (const block of blocks) expect(Bun.JSONC.parse(block)).toBeInstanceOf(Object);
         });
     }
 

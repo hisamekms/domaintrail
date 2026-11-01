@@ -7,10 +7,8 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps, startViewServer, type ViewServer, runCli } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
 import { tempCopyOfExamples } from './helpers.js';
 
 let dir: string;

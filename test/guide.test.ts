@@ -2,15 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { parseGuide } from '@domaintrail/presentation/cli/guide';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { DEFAULT_AGENT_TOOLS, parseJsonc, resolveConfig } from '@domaintrail/modeling/core/config';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
+import { generateTypeScript } from '@domaintrail/generation';
+import { analyze, sourceSelection } from '@domaintrail/analysis';
+import { resolveConfig } from '@domaintrail/dt';
+import { loadWorkspace } from '@domaintrail/workspace';
 import { EXAMPLES, check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -21,6 +19,16 @@ const readme = await readFile(path.join(ROOT, 'README.md'), 'utf8');
 const blocks = (lang: string, markdown = guide): string[] => [...markdown.matchAll(new RegExp('^```' + lang + '\\n([\\s\\S]*?)^```', 'gm'))].map((m) => m[1]);
 
 /** The `dt` blocks as files of one workspace, named by their first line (`// sales/order.dt`). */
+/** Every rule ID, as its owners declare them: Modeling's (`ModelingRuleId`, generated from its `.dt`) and Storming's (`StormingRuleId`), joined. */
+async function ruleIds(): Promise<string> {
+    const union = async (file: string[], name: string): Promise<string> =>
+        new RegExp(`export type ${name} =([^;]*);`).exec(await readFile(path.join(ROOT, ...file), 'utf8'))![1];
+    return [
+        await union(['contexts', 'modeling', 'src', 'generated', 'Modeling.ts'], 'ModelingRuleId'),
+        await union(['contexts', 'storming', 'src', 'domain', 'rule-ids.ts'], 'StormingRuleId'),
+    ].join('');
+}
+
 function workspace(): Record<string, string> {
     const files: Record<string, string> = {};
     for (const block of blocks('dt')) {
@@ -31,81 +39,6 @@ function workspace(): Record<string, string> {
     }
     return files;
 }
-
-/** Runs `dt guide …` and returns the exit code with what it printed. */
-async function runGuide(...args: string[]): Promise<{ code: number; out: string; err: string }> {
-    const out: string[] = [];
-    const err: string[] = [];
-    const code = await runCli(['guide', ...args], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
-    return { code, out: out.join('\n'), err: err.join('\n') };
-}
-
-describe('dt guide topics', () => {
-    const parsed = parseGuide(guide);
-
-    test('--all prints docs/guide.md', async () => {
-        expect(await runGuide('--all')).toEqual({ code: 0, out: guide.trimEnd(), err: '' });
-    });
-
-    test('every ## and ### heading has a topic, and every topic a unique name and a non-empty section', async () => {
-        const headings = guide.replace(/^```[\s\S]*?^```/gm, '').match(/^#{2,3} .+$/gm)!;
-        expect(parsed.topics.map((t) => `${'#'.repeat(t.level)} ${t.title}`)).toEqual(headings);
-        expect(new Set(parsed.topics.map((t) => t.name)).size).toBe(parsed.topics.length);
-        for (const t of parsed.topics) {
-            const r = await runGuide(t.name);
-            expect(r.code).toBe(0);
-            expect(r.out).toBe(t.text);
-            expect(r.out.startsWith(`${'#'.repeat(t.level)} ${t.title}\n\n`)).toBe(true);
-            expect(r.out.split('\n').length).toBeGreaterThan(2);
-            expect(r.out).not.toContain('<!-- topic:');
-        }
-    });
-
-    test('a ## topic includes its ### topics, a ### topic only itself', async () => {
-        const dsl = (await runGuide('dsl')).out;
-        expect(dsl).toContain('### Command requirements');
-        expect(dsl).not.toContain('## Generated TypeScript');
-        const requires = (await runGuide('requires')).out;
-        expect(requires).not.toContain('### Command changes');
-    });
-
-    test('without a topic, prints the intro, the quick reference and the list of topics, about one screen', async () => {
-        const r = await runGuide();
-        expect(r.code).toBe(0);
-        expect(r.out.startsWith(parsed.intro)).toBe(true);
-        expect(r.out).toContain(parsed.topics.find((t) => t.name === 'quick')!.text);
-        for (const t of parsed.topics) expect(r.out).toMatch(new RegExp(`^ +${t.name} +`, 'm'));
-        expect(r.out.split('\n').length).toBeLessThanOrEqual(160);
-    });
-
-    test('the quick reference example is a file that checks without any diagnostic and is formatted', async () => {
-        const quick = parsed.topics.find((t) => t.name === 'quick')!.text;
-        const [example] = blocks('dt', quick);
-        expect(example).toContain('aggregate');
-        const a = await check({ 'library/loan.dt': example });
-        expect(a.diagnostics).toEqual([]);
-        expect(formatDomain(example)).toBe(example);
-    });
-
-    test('an unknown topic is an error with a suggestion and the topics', async () => {
-        const r = await runGuide('requries');
-        expect(r.code).toBe(1);
-        expect(r.out).toBe('');
-        expect(r.err).toContain("did you mean 'requires'?");
-        expect(r.err).toContain('workflow, layout, dsl');
-        expect((await runGuide('requires', '--all')).code).toBe(1);
-    });
-
-    test('a rule code prints its row of the rules table and the topics that explain it', async () => {
-        const r = await runGuide('m010');
-        expect(r.code).toBe(0);
-        expect(r.out).toContain('| M010 | state-specific fields');
-        expect(r.out).toContain('`dt guide requires`');
-        const m022 = await runGuide('M022');
-        expect(m022.out).toContain('| M022 | (warning) a field of an event or error');
-        expect(m022.out).toContain('Explained in: `dt guide requires`, `dt guide events`, `dt guide verified`.');
-    });
-});
 
 describe('dt guide', () => {
     test('its DSL examples are one workspace that checks without any diagnostic', async () => {
@@ -121,7 +54,7 @@ describe('dt guide', () => {
     });
 
     test('its DSL examples use every keyword of the grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dt')
             .join('\n')
@@ -145,7 +78,7 @@ describe('dt guide', () => {
     });
 
     test('its storming examples use every keyword of the .dtes grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'storming', 'storming.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'contexts', 'storming', 'src', 'infrastructure', 'syntax', 'storming.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dtes')
             .filter((b) => /^\/\/ \S+\.dtes\n/.test(b))
@@ -155,9 +88,7 @@ describe('dt guide', () => {
     });
 
     test('each S rule has an example storming that reports it and nothing else against the workspace, formatted', async () => {
-        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
-        const union = /export type RuleId =([^;]*);/.exec(source)![1];
-        const rules = [...union.matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
+        const rules = [...(await ruleIds()).matchAll(/'(S\d{3})'/g)].map((m) => m[1]);
         const examples = blocks('dtes').flatMap((b) => {
             const code = /^\/\/ (S\d{3})\n/.exec(b)?.[1];
             return code ? [[code, b] as const] : [];
@@ -171,9 +102,7 @@ describe('dt guide', () => {
     });
 
     test('its rules table lists every diagnostic code', async () => {
-        const source = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'core', 'diagnostics.ts'), 'utf8');
-        const union = /export type RuleId =([^;]*);/.exec(source)![1];
-        const codes = [...union.matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]);
+        const codes = [...new Set([...(await ruleIds()).matchAll(/'([A-Z0-9]+)'/g)].map((m) => m[1]))];
         expect(codes.length).toBeGreaterThan(10);
         for (const code of codes) expect(guide).toContain(`| ${code} |`);
     });
@@ -187,7 +116,7 @@ describe('dt guide', () => {
         expect(files.map(([n]) => n)).toEqual(expect.arrayContaining(['src/stored.ts', 'src/meta-by-event.ts']));
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-guide-'));
         try {
-            const a = await analyze(await loadWorkspace(EXAMPLES));
+            const a = await analyze(await loadWorkspace(EXAMPLES, sourceSelection()));
             await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
             for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
             await mkdir(path.join(dir, 'src'));
@@ -214,7 +143,7 @@ describe('dt guide', () => {
 
     test('its config example is valid JSONC', () => {
         const config = blocks('jsonc').find((b) => b.includes('"sources"')) ?? '';
-        expect(parseJsonc(config)).toMatchObject({ sources: expect.any(Array) });
+        expect(resolveConfig(config, path.join(ROOT, 'domaintrail.jsonc'))).toMatchObject({ sources: expect.any(Array) });
     });
 
     test('its session config example is a valid config, with the defaults it says', () => {

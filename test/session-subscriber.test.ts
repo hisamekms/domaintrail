@@ -10,21 +10,35 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startSubscriber as startApplicationSubscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
-import type { AgentApi, StreamItem, WorkspaceFiles } from '@domaintrail/agent/application/ports';
-import { createClaudeCodeRunner } from '@domaintrail/agent/infrastructure/claude-code';
-import { createDtTools } from '@domaintrail/agent/infrastructure/dt-tools';
-import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
-import { systemClock } from '@domaintrail/agent/infrastructure/system';
-import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
+import {
+    type AgentApi,
+    createClaudeCodeRunner,
+    createDtTools,
+    createHttpAgentApi,
+    scanWorkspace,
+    startSubscriber as startApplicationSubscriber,
+    type StreamItem,
+    type SubscriberEnd,
+    systemClock,
+    type WorkspaceFiles,
+} from '@domaintrail/agent';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
-import { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from '@domaintrail/composition/subscriber';
-import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
-import { SessionError } from '@domaintrail/presentation/cli/ports';
+import {
+    readCredential,
+    type RunningSubscriber,
+    type SessionServer,
+    startSessionServer,
+    startSubscriber,
+    type SubscriberOptions,
+    SessionError,
+} from '@domaintrail/dt';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import type { ResolvedSessionConfig } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
+import { findDomainFiles } from '@domaintrail/workspace';
 import { tempCopyOfExamples } from './helpers';
+import { sourceSelection } from '@domaintrail/analysis';
+import { hasElement } from '@domaintrail/modeling';
 
 const ROOT = path.join(import.meta.dir, '..');
 const FAKE = path.join(import.meta.dir, 'fixtures', 'agent', 'fake-claude.mjs');
@@ -209,7 +223,7 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined> | T 
     }
 }
 
-/** The composition's subscriber on the context's workspace, with the fake agent following `plan`. */
+/** The app's subscriber (`startSubscriber`) on the context's workspace, with the fake agent following `plan`. */
 async function subscribe(ctx: Context, planFile: string, extra: Partial<SubscriberOptions> = {}): Promise<{ subscriber: RunningSubscriber; log: string[] }> {
     const log: string[] = [];
     const subscriber = await startSubscriber({
@@ -386,7 +400,7 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             expect([done.state, done.state === 'Completed' && done.changed]).toEqual(['Completed', true]);
             const updated = await waitFor('the Domain view', () => {
                 const latest = view.latest();
-                return latest?.model?.elements['Sales.OrderArchived'] ? latest : undefined;
+                return latest?.model && hasElement(latest.model, 'Sales.OrderArchived') ? latest : undefined;
             });
             expect(updated.status).toBe('ok');
             expect(await readFile(path.join(ctx.root, 'sales', 'order.dt'), 'utf8')).toContain('  event OrderArchived "注文保管" {\n    orderId: OrderId\n  }');
@@ -686,7 +700,10 @@ describe('the stream and the completions', () => {
                 api: wrap(real),
                 runner: await createClaudeCodeRunner({ root: ctx.root, command: { command: process.execPath, args: [FAKE, planFile] } }),
                 tools: createDtTools({ dt: DT, root: ctx.root, log: (l) => log.push(l) }),
-                workspace: wrapWorkspace({ scan: () => scanWorkspace(ctx.root), sources: async () => new Set(await findDomainFiles(ctx.root)) }),
+                workspace: wrapWorkspace({
+                    scan: () => scanWorkspace(ctx.root),
+                    sources: async () => new Set(await findDomainFiles(ctx.root, sourceSelection())),
+                }),
                 clock: systemClock,
                 owner: 'test@host',
                 nonce: () => 'n'.repeat(32),

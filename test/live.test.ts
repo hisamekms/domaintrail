@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
+import { startViewServer, type ViewServer } from '@domaintrail/dt';
+import { elementOf } from '@domaintrail/modeling';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { tempCopyOfExamples } from './helpers.js';
+import { sourceSelection } from '@domaintrail/analysis';
 
 let dir: string;
 let server: ViewServer;
@@ -66,7 +68,7 @@ describe('Live View', () => {
             'states:Sales.Order',
         ]);
         expect(state.sources.map((x) => x.path)).toEqual(state.files);
-        const order = state.model!.elements['Sales.Order'].location;
+        const order = elementOf(state.model!, 'Sales.Order')!.location;
         const lines = state.sources.find((x) => x.path === order.file)!.text.split('\n');
         expect(lines[order.line - 1]).toContain('aggregate Order');
         expect(lines[order.endLine - 1].trim()).toBe('}');
@@ -116,10 +118,10 @@ describe('Live View', () => {
                 .replace('    state Draft "下書き"\n', '    state Draft "下書き"\n    state Shipped { trackingNo: String }\n')
                 .replace('  error EmptyOrder "明細なし"', '  error EmptyOrder "明細なし"\n  error NotShippable'),
         );
-        const p = await nextUpdate((u) => u.diff.added.includes('Sales.Order#Shipped'));
+        const p = await nextUpdate((u) => u.diff.added.map(String).includes('Sales.Order#Shipped'));
         expect(p.status).toBe('ok');
-        expect(p.diff.added.sort()).toEqual(['Sales.NotShippable', 'Sales.Order#Shipped']);
-        expect(p.diff.changed).toEqual(['Sales.Order']);
+        expect(p.diff.added.map(String).sort()).toEqual(['Sales.NotShippable', 'Sales.Order#Shipped']);
+        expect(p.diff.changed.map(String)).toEqual(['Sales.Order']);
         expect(p.states['Sales.Order'].both.nodes.map((n) => n.id)).toContain('Sales.Order#Shipped');
     });
 
@@ -159,14 +161,14 @@ describe('Live View', () => {
         await writeFile(order(), src.replace('Draft -> Confirmed\n', 'Draft -> Archived\n'));
         const p = await nextUpdate((u) => u.status === 'invalid');
         expect(p.diagnostics.find((d) => d.code === 'M006')?.elementId).toBe('Sales.Order:confirm');
-        expect(p.diff.changed).toContain('Sales.Order:confirm');
+        expect(p.diff.changed.map(String)).toContain('Sales.Order:confirm');
         await writeFile(order(), src);
         await nextUpdate((u) => u.status === 'ok');
     });
 
     test('removed elements are reported, and deleting a file updates the view', async () => {
         await rm(path.join(dir, 'extra.dt'));
-        const p = await nextUpdate((u) => u.diff.removed.includes('Shipping.Address'));
+        const p = await nextUpdate((u) => u.diff.removed.map(String).includes('Shipping.Address'));
         expect(p.files).not.toContain('extra.dt');
         expect(p.structure?.nodes.map((n) => n.id)).not.toContain('Shipping.Address');
     });
@@ -193,11 +195,11 @@ describe('layout persistence', () => {
     test('never writes through a symlinked layout directory or file', async () => {
         const { mkdtemp, symlink, writeFile: write, readFile: read, mkdir: mk, readlink, rm: remove } = await import('node:fs/promises');
         const { tmpdir } = await import('node:os');
-        const { createViewService } = await import('@domaintrail/visualization/application/view-service');
-        const { createFileLayoutStore } = await import('@domaintrail/visualization/infrastructure/file-layout-store');
-        const { createGitRevisions } = await import('@domaintrail/visualization/infrastructure/git');
-        const { createWorkspaceReader } = await import('@domaintrail/workspace/infrastructure/files');
-        const { ElkLayoutEngine } = await import('@domaintrail/visualization/infrastructure/elk');
+        const { createViewService } = await import('@domaintrail/visualization');
+        const { createFileLayoutStore } = await import('@domaintrail/visualization');
+        const { createGitRevisions } = await import('@domaintrail/visualization');
+        const { createWorkspaceReader } = await import('@domaintrail/workspace');
+        const { ElkLayoutEngine } = await import('@domaintrail/visualization');
         const base = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
         const outside = path.join(base, 'outside');
         await mk(outside);
@@ -212,7 +214,7 @@ describe('layout persistence', () => {
             await createViewService({
                 root: a,
                 engine,
-                workspace: createWorkspaceReader(a),
+                workspace: createWorkspaceReader(a, sourceSelection()),
                 layoutStore: createFileLayoutStore(a),
                 git: createGitRevisions(a),
             }).refresh();
@@ -226,7 +228,7 @@ describe('layout persistence', () => {
             await createViewService({
                 root: b,
                 engine,
-                workspace: createWorkspaceReader(b),
+                workspace: createWorkspaceReader(b, sourceSelection()),
                 layoutStore: createFileLayoutStore(b),
                 git: createGitRevisions(b),
             }).refresh();

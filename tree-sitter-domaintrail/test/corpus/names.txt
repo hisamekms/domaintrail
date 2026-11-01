@@ -145,3 +145,234 @@ context A {
         (field
           (identifier)
           (primitive_type))))))
+
+================================================================================
+Declaration keywords as field, parameter and command names
+================================================================================
+
+context A {
+  value V {
+    context: String
+    event: String
+    error: String
+    errors: String[0..*]
+    emits: String[0..*]
+    aggregate: String
+    command: String
+    state: String
+    owns: String
+    references: String
+    enum: String
+    union: String
+    entity: String
+    primitive: String
+    create: Bool
+    shared: Bool
+    terms: Int
+    invariant: Int
+    invariant k { exists(event) implies count(errors) > 0 }
+  }
+  aggregate G {
+    state: Int
+    state S
+    command command(event: String, error: String) S -> S
+    create: Bool
+    create command start(state: Int) -> S
+    owns: Int
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (value_declaration
+      (identifier)
+      (member_block
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type)
+          (multiplicity
+            (integer)))
+        (field
+          (identifier)
+          (primitive_type)
+          (multiplicity
+            (integer)))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (field
+          (identifier)
+          (primitive_type))
+        (invariant
+          (identifier)
+          (binary_expression
+            (call_expression
+              (function_name)
+              (identifier))
+            (binary_expression
+              (call_expression
+                (function_name)
+                (identifier))
+              (number
+                (integer)))))))
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (field
+          (identifier)
+          (primitive_type))
+        (state
+          (identifier))
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (primitive_type))
+            (parameter
+              (identifier)
+              (primitive_type)))
+          (transition
+            (identifier)
+            (identifier)))
+        (field
+          (identifier)
+          (primitive_type))
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (primitive_type)))
+          (transition
+            (identifier)))
+        (field
+          (identifier)
+          (primitive_type))))))
+
+================================================================================
+Keywords as enum values, variant names and members
+================================================================================
+
+context A {
+  enum Op { implies or and eq not in true false String UUID state command }
+  union U {
+    primitive { name: String }
+    not { operand: Int }
+  }
+  value V {
+    op: Op
+    invariant k { op == Op.and or op != Op.String }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (enum_declaration
+      (identifier)
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier))
+      (enum_value
+        (identifier)))
+    (union_declaration
+      (identifier)
+      (variant
+        (identifier)
+        (member_block
+          (field
+            (identifier)
+            (primitive_type))))
+      (variant
+        (identifier)
+        (member_block
+          (field
+            (identifier)
+            (primitive_type)))))
+    (value_declaration
+      (identifier)
+      (member_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (identifier)
+              (member_expression
+                (identifier)
+                (identifier)))
+            (binary_expression
+              (identifier)
+              (member_expression
+                (identifier)
+                (identifier)))))))))

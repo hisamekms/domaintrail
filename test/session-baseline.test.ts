@@ -7,13 +7,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
-import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
-import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import { startViewServer, type ViewServer } from '@domaintrail/dt';
+import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
+import { createWorkspaceReader } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/analysis';
+import { elementOf } from '@domaintrail/modeling';
 
 const DT = `context Shop {
   id OrderId: UUID
@@ -69,7 +68,13 @@ async function workspace(files: Record<string, string>): Promise<string> {
 
 /** The view service of the workspace at `dir`, with the real adapters. */
 const viewService = (dir: string): ViewService =>
-    createViewService({ root: dir, engine, workspace: createWorkspaceReader(dir), layoutStore: createFileLayoutStore(dir), git: createGitRevisions(dir) });
+    createViewService({
+        root: dir,
+        engine,
+        workspace: createWorkspaceReader(dir, sourceSelection()),
+        layoutStore: createFileLayoutStore(dir),
+        git: createGitRevisions(dir),
+    });
 
 const errors = (p: ViewPayload): string[] => p.diagnostics.filter((d) => d.severity === 'error').map((d) => `${d.file} ${d.code}`);
 
@@ -78,7 +83,7 @@ describe('the Live View payload by the kinds of sources', () => {
         const p = await viewService(await workspace({ 'shop.dt': DT })).refresh();
         expect(p).toMatchObject({ type: 'update', status: 'ok', stale: false, files: ['shop.dt'], stormings: [] });
         expect(p.sources).toEqual([{ path: 'shop.dt', text: DT }]);
-        expect(Object.keys(p.model!.elements)).toEqual(expect.arrayContaining(['Shop.Order', 'Shop.OrderPlaced']));
+        expect(p.model!.elements.map((e) => e.id)).toEqual(expect.arrayContaining(['Shop.Order', 'Shop.OrderPlaced']));
         expect(p.structure?.nodes.map((n) => n.id)).toContain('Shop.Order');
         expect(p.diagnostics).toEqual([]);
     });
@@ -89,7 +94,7 @@ describe('the Live View payload by the kinds of sources', () => {
         expect(p).toMatchObject({ status: 'ok', stale: false, files: ['ordering.dtes'] });
         expect(p.sources).toEqual([{ path: 'ordering.dtes', text: dtes }]);
         expect(p.model).not.toBeNull();
-        expect(p.model!.elements).toEqual({});
+        expect(p.model!.elements).toEqual([]);
         expect(p.structure?.nodes).toEqual([]);
         expect(p.stormings.map((s) => [s.id, s.file, s.stale])).toEqual([['Ordering', 'ordering.dtes', false]]);
         expect(p.diagnostics).toEqual([]);
@@ -102,7 +107,7 @@ describe('the Live View payload by the kinds of sources', () => {
         const p = await viewService(await workspace({ 'shop.dt': DT, 'ordering.dtes': DTES })).refresh();
         expect(p).toMatchObject({ status: 'ok', stale: false, files: ['ordering.dtes', 'shop.dt'] });
         expect(p.sources.map((s) => s.path)).toEqual(p.files);
-        expect(p.model!.elements['Shop.OrderPlaced']).toBeDefined();
+        expect(elementOf(p.model!, 'Shop.OrderPlaced')).toBeDefined();
         expect(p.stormings.map((s) => s.id)).toEqual(['Ordering']);
         expect(p.diagnostics).toEqual([]);
     });
@@ -120,7 +125,7 @@ describe('a .dtes ref that stops resolving after a .dt edit', () => {
         expect(p.stale).toBe(false);
         expect(errors(p)).toEqual(['ordering.dtes S010']);
         expect(p.diagnostics[0].message).toContain('Shop.OrderPlaced');
-        expect(p.model!.elements['Shop.OrderSubmitted']).toBeDefined();
+        expect(elementOf(p.model!, 'Shop.OrderSubmitted')).toBeDefined();
         expect(p.sources).toEqual([
             { path: 'ordering.dtes', text: DTES },
             { path: 'shop.dt', text: renamed },

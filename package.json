@@ -35,17 +35,22 @@
     "node": ">=22.13.0"
   },
   "workspaces": [
-    "packages/*",
-    "web"
+    "contexts/*",
+    "capabilities/*",
+    "platform/*",
+    "shared/*",
+    "apps/*"
   ],
   "scripts": {
-    "langium:generate": "langium generate --file packages/modeling/langium-config.json",
+    "langium:generate": "langium generate --file contexts/modeling/langium-config.json && langium generate --file contexts/storming/langium-config.json",
     "build": "bun run langium:generate && bun ./scripts/build.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --type-aware --deny-warnings",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "bun test",
+    "test:unit": "bun test ./contexts ./capabilities ./platform ./shared ./apps",
+    "test:it": "bun test ./test",
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
     "session:seed": "bun ./scripts/session-seed.ts",
@@ -63,10 +68,13 @@
   },
   "devDependencies": {
     "@domaintrail/agent": "workspace:*",
+    "@domaintrail/analysis": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
-    "@domaintrail/composition": "workspace:*",
+    "@domaintrail/dt": "workspace:*",
+    "@domaintrail/generation": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
-    "@domaintrail/presentation": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/web": "workspace:*",
     "@domaintrail/workspace": "workspace:*",

@@ -1,0 +1,323 @@
+context Modeling {
+  /// A model: its bounded contexts and their elements, in declaration order.
+  value DomainModel {
+    contexts: ContextModel[0..*]
+    /// Each element once (by stable ID), in declaration order.
+    elements: ElementModel[0..*]
+  }
+
+  /// A bounded context, with its Japanese name and description (`context Sales "販売"`, `///`).
+  value ContextModel with Described {
+    name: ContextName
+    /// A shared context (shared kernel), whose elements are usable by name from every context.
+    shared: Bool
+    /// Glossary of field and parameter names.
+    terms: TermModel[0..*]
+  }
+
+  /// An entry of `terms`: the Japanese name of a field or parameter name in its context.
+  value TermModel {
+    name: String
+    label: String
+    doc: String?
+  }
+
+  /// The kind of an element.
+  enum ElementKind { id primitive verified enum valueObject union entity aggregate event error fieldSet policy }
+
+  /// The primitive types of the language.
+  enum PrimitiveName { String Int Decimal Bool Timestamp UUID }
+
+  /// An element of a context: each kind has exactly its own parts.
+  union ElementModel by kind: ElementKind {
+    /// `id X: T { … }`: a domain primitive that identifies an aggregate or entity.
+    id {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      base: PrimitiveName
+      invariants: InvariantModel[0..*]
+    }
+    /// `primitive X: T { … }`: a single value wrapping a primitive type, with invariants on `value`.
+    primitive {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      base: PrimitiveName
+      invariants: InvariantModel[0..*]
+    }
+    /// `verified X of T for C? errors E` (ADR 0023).
+    verified {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      verified: VerifiedModel
+    }
+    enum {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      values: EnumValueModel[0..*]
+    }
+    valueObject {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      /// The field sets named with `with` (qualified names). Their fields come first in `fields`, marked with `fieldSet`.
+      fieldSets: QualifiedName[0..*]
+      fields: FieldModel[0..*]
+      invariants: InvariantModel[0..*]
+    }
+    /// A tagged union: the discriminator property, the enum it is bound to (qualified name), and the variants.
+    union {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      discriminator: String
+      tagType: QualifiedName?
+      variants: VariantModel[0..*]
+    }
+    entity {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      fieldSets: QualifiedName[0..*]
+      fields: FieldModel[0..*]
+      invariants: InvariantModel[0..*]
+    }
+    /// An aggregate: its common fields and invariants, its states and its commands.
+    aggregate {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      fieldSets: QualifiedName[0..*]
+      fields: FieldModel[0..*]
+      invariants: InvariantModel[0..*]
+      states: StateModel[0..*]
+      commands: CommandModel[0..*]
+    }
+    event {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      fieldSets: QualifiedName[0..*]
+      fields: FieldModel[0..*]
+      /// Declared `persistent`: its contract is to be persisted.
+      persistent: Bool
+    }
+    error {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      fieldSets: QualifiedName[0..*]
+      fields: FieldModel[0..*]
+    }
+    /// `fields Name { … }`: fields that several elements take on with `with`.
+    fieldSet {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      fields: FieldModel[0..*]
+    }
+    /// `policy Name when Event -> Aggregate.command`: the event it reacts to and the command it runs.
+    policy {
+      id: ElementId
+      context: ContextName
+      name: String
+      label: String?
+      doc: String?
+      location: Location
+      policy: PolicyModel
+    }
+  }
+
+  /// A value of an enum, with its Japanese name.
+  value EnumValueModel {
+    name: String
+    label: String?
+  }
+
+  /// The type of a field, a parameter or a verified type.
+  union TypeExpr {
+    primitive {
+      name: PrimitiveName
+    }
+    /// `ref` is the qualified name of the target (as written when it does not resolve); `target` its kind, absent when
+    /// the reference does not resolve.
+    ref {
+      ref: QualifiedName
+      text: String
+      target: ElementKind?
+    }
+  }
+
+  /// How many values a field holds: exactly one, at most one (`?`), any number (`[0..*]`, `[0..n]`), at least one.
+  enum Cardinality { one optional many nonEmpty }
+
+  /// What a field is: a plain field, `owns`, `references`, or a command's parameter.
+  enum FieldKind { field owns references param }
+
+  /// Where the Japanese name of a field comes from: written on it, its term, its type.
+  enum LabelSource { inline term type }
+
+  /// A field of an element, state or variant, or a parameter of a command.
+  value FieldModel with Described {
+    name: String
+    kind: FieldKind
+    type: TypeExpr
+    cardinality: Cardinality
+    /// Multiplicity as written in the DSL (`?`, `[0..*]`, ...), empty when omitted.
+    multiplicity: String
+    /// Qualified name of the referenced aggregate (`references` only).
+    target: QualifiedName?
+    labelSource: LabelSource?
+    /// Qualified name of the field set the field comes from (`with`); absent for the element's own fields.
+    fieldSet: QualifiedName?
+  }
+
+  /// `invariant name "label" { expr }`.
+  value InvariantModel with Described {
+    name: String
+    /// The expression as written; absent for an invariant declared without one (not expressed in the DSL).
+    source: String?
+    /// The expression as a tree, for generated checks; absent with `source`.
+    expr: ExprModel?
+  }
+
+  /// A state of an aggregate, with its own fields and invariants.
+  value StateModel with Described {
+    id: ElementId
+    name: String
+    fields: FieldModel[0..*]
+    invariants: InvariantModel[0..*]
+    location: Location
+  }
+
+  /// A variant of a union: its name is the discriminator value.
+  value VariantModel with Described {
+    name: String
+    fields: FieldModel[0..*]
+    invariants: InvariantModel[0..*]
+  }
+
+  /// `requires name "label" { expr } else Error`: the command is accepted only if the requirement holds.
+  value RequirementModel with Described {
+    name: String
+    /// The expression as written; absent for a requirement declared without one (not expressed in the DSL).
+    source: String?
+    /// The expression as a tree, for generated checks; absent with `source`.
+    expr: ExprModel?
+    /// Qualified name of the error returned when the requirement does not hold.
+    error: QualifiedName
+  }
+
+  /// `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory.
+  value TransitionModel {
+    from: String[0..*]
+    to: String[0..*]
+  }
+
+  /// `when A | B -> C`: the outcomes an `emits` entry applies to. An empty side matches any state (a factory has no
+  /// source).
+  value OutcomePatternModel {
+    from: String[0..*]
+    to: String[0..*]
+  }
+
+  /// An entry of `emits`: the command emits `event` as often as its multiplicity says (once without one), for the
+  /// outcomes that match `when` (every outcome without it). On failure it emits nothing.
+  value EmitModel {
+    /// Qualified event name.
+    event: QualifiedName
+    cardinality: Cardinality
+    /// Multiplicity as written in the DSL (`?`, `[1..*]`, ...), empty when omitted.
+    multiplicity: String
+    /// How many times the event is emitted, at least.
+    lower: Int
+    /// How many times the event is emitted, at most (absent: no upper bound).
+    upper: Int?
+    when: OutcomePatternModel?
+  }
+
+  /// A command of an aggregate.
+  value CommandModel with Described {
+    id: ElementId
+    name: String
+    /// `create command`: it makes a new aggregate.
+    factory: Bool
+    params: FieldModel[0..*]
+    /// State transitions; a factory has one without source states, an aggregate without states none.
+    transitions: TransitionModel[0..*]
+    /// Preconditions over the parameters and the aggregate's current data (`requires`).
+    requires: RequirementModel[0..*]
+    /// `changes`: the fields the command may change, as written — common fields, and state-specific fields it would
+    /// otherwise carry over. Empty: it changes no common field (a factory sets every field).
+    changes: String[0..*]
+    /// The events emitted on success, per entry of `emits`.
+    emits: EmitModel[0..*]
+    /// Qualified error names: those listed in `errors`, then those named by `else` of the requirements, each once.
+    /// Together they make the command's error union.
+    errors: QualifiedName[0..*]
+    location: Location
+  }
+
+  /// `policy Name when Event -> Aggregate.command`: when the event happens, the command is eventually run, by whatever
+  /// mechanism (the same use case, an event bus, a batch). The aggregate belongs to the policy's context.
+  value PolicyModel {
+    /// Qualified event name (as written when unresolved).
+    event: QualifiedName
+    /// Qualified name of the target aggregate (as written when unresolved).
+    aggregate: QualifiedName
+    /// Name of the target command in the aggregate.
+    command: String
+  }
+
+  /// `verified X of T for C? errors E`: evidence that a check outside the aggregate was made — a value of `of` that
+  /// only its factory makes, from the value and the context of `for`, failing with one of `errors`.
+  value VerifiedModel {
+    of: TypeExpr
+    /// The context the check needs, and whether it may be absent (`for C?`).
+    for: VerifiedFor?
+    /// Qualified names of the errors of the factory.
+    errors: QualifiedName[0..*]
+  }
+
+  /// `for C?` of a verified type.
+  value VerifiedFor {
+    type: TypeExpr
+    optional: Bool
+  }
+}

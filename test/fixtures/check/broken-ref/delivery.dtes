@@ -1,0 +1,16 @@
+storming Delivery "配送" {
+  event ShipmentCancelled "配送キャンセル" { ref Delivery.ShipmentCancelled }
+  event ShipmentDelivered { ref Delivery.ShipmentDelivered }
+  event Lost { ref Delivery.Shipment }
+  event Gone { ref ShipmentGone }
+  aggregate Shipment { ref Delivery.Shipment }
+  command Cancel {
+    ref Delivery.Courier.assign
+    target Shipment
+  }
+  command Deliver {
+    ref Delivery.Shipment.deliver
+    target Shipment
+    emits ShipmentCancelled
+  }
+}

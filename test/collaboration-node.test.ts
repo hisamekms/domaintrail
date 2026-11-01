@@ -10,7 +10,6 @@ import { Glob } from 'bun';
 import pkg from '../package.json' with { type: 'json' };
 
 const ROOT = path.join(import.meta.dir, '..');
-const SRC = path.join(ROOT, 'packages');
 const EXTERNAL = Object.keys(pkg.dependencies).flatMap((name) => [name, `${name}/*`]);
 
 const dirs: string[] = [];
@@ -21,13 +20,10 @@ afterAll(async () => {
 const ENTRY = `
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import { Collaboration as C } from '${SRC}/collaboration/src/generated/index.ts';
-import { createCollaboration } from '${SRC}/collaboration/src/application/use-cases.ts';
-import { openSessionBlobs } from '${SRC}/collaboration/src/infrastructure/blobs.ts';
-import { createUnitOfWork, openSessionDatabase } from '${SRC}/collaboration/src/infrastructure/sqlite.ts';
-import { randomIds, systemClock } from '${SRC}/collaboration/src/infrastructure/system.ts';
-import { createModelValidator } from '${SRC}/collaboration/src/infrastructure/validator.ts';
-import { createWorkspaceSnapshot } from '${SRC}/workspace/src/infrastructure/snapshot.ts';
+import { Collaboration as C, createCollaboration, createUnitOfWork, openSessionBlobs, openSessionDatabase, randomIds, systemClock } from '@domaintrail/collaboration';
+import { createModelValidator } from '@domaintrail/dt';
+import { createWorkspaceSnapshot } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/analysis';
 
 const [root, step] = process.argv.slice(2);
 const must = (r) => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value; };
@@ -35,7 +31,7 @@ const open = async () => {
     const db = await openSessionDatabase(root);
     return { db, use: createCollaboration({
         uow: createUnitOfWork(db),
-        workspace: createWorkspaceSnapshot(root),
+        workspace: createWorkspaceSnapshot(root, sourceSelection()),
         blobs: await openSessionBlobs(root),
         validator: createModelValidator(),
         clock: systemClock,
@@ -46,20 +42,21 @@ const open = async () => {
 if (step === 'run') {
     const { db, use } = await open();
     const facilitator = must(C.makeParticipantId('facilitator'));
+    const actor = { kind: 'participant', participant: facilitator, role: 'Facilitator' };
     const { session, revision } = must(await use.startSession({ facilitator, name: must(C.makeDisplayName('Ada')) }));
     const request = must(await use.sendRequest({
         session: session.id,
-        author: facilitator,
+        actor,
         targets: [{ target: { kind: 'DtElement', element: must(C.makeElementName('Sales.Order')) }, sourceRevision: revision.id }],
         body: must(C.makeText('Add a note.')),
     }));
-    const run = must(await use.queueRun({ session: session.id, requests: [request.id], queuedBy: facilitator }));
+    const run = must(await use.queueRun({ session: session.id, requests: [request.id], actor }));
     const { lease } = must(await use.claimNextRun({ session: session.id, owner: 'node', leaseMs: 60000 }));
     must(await use.startRun({ run: run.id, token: lease.token }));
     const file = path.join(root, 'sales.dt');
     writeFileSync(file, readFileSync(file, 'utf8').replace('id: OrderId', 'id: OrderId\\n    note: String?'));
     const finished = must(await use.finishRun({ run: run.id, token: lease.token, facts: { exitCode: 0, formatted: true, checked: true } }));
-    const restored = must(await use.restoreRevision({ session: session.id, revision: revision.id, by: facilitator }));
+    const restored = must(await use.restoreRevision({ session: session.id, revision: revision.id, actor }));
     db.close();
     console.log(JSON.stringify({ session: session.id, run: finished.run.state, changed: finished.run.changed, restored: restored.restored.contentHash === revision.contentHash }));
 } else {
@@ -87,10 +84,11 @@ function node(args: string[]): { code: number; out: string } {
 describe('collaboration on Node', () => {
     test('the sources the CLI bundles use no Bun API', async () => {
         const offending: string[] = [];
-        for (const dir of ['collaboration/src', 'workspace/src']) {
-            for await (const rel of new Glob('**/*.ts').scan({ cwd: path.join(SRC, dir) })) {
-                if (rel.startsWith('generated/tests/')) continue; // the generated contract tests register with bun:test
-                const source = await readFile(path.join(SRC, dir, rel), 'utf8');
+        for (const dir of ['contexts/collaboration/src', 'platform/workspace/src']) {
+            for await (const rel of new Glob('**/*.ts').scan({ cwd: path.join(ROOT, dir) })) {
+                // the generated contract tests register with bun:test; the unit tests run on Bun and are not bundled
+                if (rel.startsWith('generated/tests/') || rel.endsWith('.test.ts') || rel === 'test-helpers.ts') continue;
+                const source = await readFile(path.join(ROOT, dir, rel), 'utf8');
                 if (/\bBun\.|from ['"]bun(:[\w-]+)?['"]/.test(source)) offending.push(`${dir}/${rel}`);
             }
         }

@@ -1,0 +1,449 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`dt check dt only: text 1`] = `
+{
+  "code": 1,
+  "lines": [
+    "out: billing/invoice.dt:4:10 - warning M003: Entity 'Line' is not owned by any aggregate.",
+    "out:   hint: add 'owns line: Line' to the aggregate it belongs to, or make it a value object or an aggregate",
+    "err: billing/invoice.dt:4:10 - error M013: Entity 'Line' must declare an identity field 'id' with an ID type.",
+    "err:   hint: declare 'id LineId: UUID' in the context and add the field 'id: LineId'",
+    "err: billing/invoice.dt:6:9 - error M011: Generated TypeScript name 'class' (value object 'class') is a reserved word.",
+    "err: sales/order.dt:3:6 - error M002: 'Sales.OrderId' is already declared in context 'Sales'.",
+    "err: sales/order.dt:10:15 - error M001: Cannot resolve type 'CustomerRef' in this context (use Context.Name for other contexts).",
+    "err: sales/order.dt:12:26 - error M009: Operator '>' cannot be applied to 'Quantity' and 'String'.",
+    "err: sales/order.dt:19:32 - error M006: Cannot resolve state 'Shipped' in this aggregate.",
+    "err:   hint: use a state of 'Order': Draft, Confirmed",
+    "err: sales/order.dt:19:46 - error M007: Cannot resolve event 'OrderConfirmd' in this context (use Context.Name for other contexts).",
+    "err:   hint: did you mean 'OrderConfirmed'?",
+    "err: 2 file(s) checked: 7 error(s), 1 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check dt only: json 1`] = `
+{
+  "code": 1,
+  "lines": [
+    
+"out: {
+  "diagnostics": [
+    {
+      "file": "billing/invoice.dt",
+      "line": 4,
+      "column": 10,
+      "endLine": 4,
+      "endColumn": 14,
+      "severity": "warning",
+      "code": "M003",
+      "message": "Entity 'Line' is not owned by any aggregate.",
+      "hint": "add 'owns line: Line' to the aggregate it belongs to, or make it a value object or an aggregate"
+    },
+    {
+      "file": "billing/invoice.dt",
+      "line": 4,
+      "column": 10,
+      "endLine": 4,
+      "endColumn": 14,
+      "severity": "error",
+      "code": "M013",
+      "message": "Entity 'Line' must declare an identity field 'id' with an ID type.",
+      "hint": "declare 'id LineId: UUID' in the context and add the field 'id: LineId'"
+    },
+    {
+      "file": "billing/invoice.dt",
+      "line": 6,
+      "column": 9,
+      "endLine": 6,
+      "endColumn": 14,
+      "severity": "error",
+      "code": "M011",
+      "message": "Generated TypeScript name 'class' (value object 'class') is a reserved word."
+    },
+    {
+      "file": "sales/order.dt",
+      "line": 3,
+      "column": 6,
+      "endLine": 3,
+      "endColumn": 13,
+      "severity": "error",
+      "code": "M002",
+      "message": "'Sales.OrderId' is already declared in context 'Sales'."
+    },
+    {
+      "file": "sales/order.dt",
+      "line": 10,
+      "column": 15,
+      "endLine": 10,
+      "endColumn": 26,
+      "severity": "error",
+      "code": "M001",
+      "message": "Cannot resolve type 'CustomerRef' in this context (use Context.Name for other contexts)."
+    },
+    {
+      "file": "sales/order.dt",
+      "line": 12,
+      "column": 26,
+      "endLine": 12,
+      "endColumn": 43,
+      "severity": "error",
+      "code": "M009",
+      "message": "Operator '>' cannot be applied to 'Quantity' and 'String'."
+    },
+    {
+      "file": "sales/order.dt",
+      "line": 19,
+      "column": 32,
+      "endLine": 19,
+      "endColumn": 39,
+      "severity": "error",
+      "code": "M006",
+      "message": "Cannot resolve state 'Shipped' in this aggregate.",
+      "hint": "use a state of 'Order': Draft, Confirmed"
+    },
+    {
+      "file": "sales/order.dt",
+      "line": 19,
+      "column": 46,
+      "endLine": 19,
+      "endColumn": 59,
+      "severity": "error",
+      "code": "M007",
+      "message": "Cannot resolve event 'OrderConfirmd' in this context (use Context.Name for other contexts).",
+      "hint": "did you mean 'OrderConfirmed'?"
+    }
+  ],
+  "summary": {
+    "files": 2,
+    "errors": 7,
+    "warnings": 1
+  }
+}"
+,
+  ],
+}
+`;
+
+exports[`dt check dtes only: text 1`] = `
+{
+  "code": 1,
+  "lines": [
+    "err: delivery-cancellation.dtes:3:5 - error S010: The event ref 'Delivery.ShipmentCancelled' names nothing in the .dt model.",
+    "err: delivery-cancellation.dtes:6:5 - error S010: The event ref 'Fleet.BikeReleased' names nothing in the .dt model.",
+    "err: delivery-cancellation.dtes:16:5 - error S010: The aggregate ref 'Delivery.Shipment' names nothing in the .dt model.",
+    "err: delivery-cancellation.dtes:19:5 - error S010: The aggregate ref 'Fleet.BikeAssignment' names nothing in the .dt model.",
+    "err: delivery-cancellation.dtes:24:5 - error S010: The command ref 'Delivery.Shipment.cancel' names nothing in the .dt model.",
+    "err: delivery-cancellation.dtes:31:5 - error S010: The command ref 'Fleet.BikeAssignment.release' names nothing in the .dt model.",
+    "err: 1 file(s) checked: 6 error(s), 0 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check dtes only: json 1`] = `
+{
+  "code": 1,
+  "lines": [
+    
+"out: {
+  "diagnostics": [
+    {
+      "file": "delivery-cancellation.dtes",
+      "line": 3,
+      "column": 5,
+      "endLine": 3,
+      "endColumn": 35,
+      "severity": "error",
+      "code": "S010",
+      "message": "The event ref 'Delivery.ShipmentCancelled' names nothing in the .dt model."
+    },
+    {
+      "file": "delivery-cancellation.dtes",
+      "line": 6,
+      "column": 5,
+      "endLine": 6,
+      "endColumn": 27,
+      "severity": "error",
+      "code": "S010",
+      "message": "The event ref 'Fleet.BikeReleased' names nothing in the .dt model."
+    },
+    {
+      "file": "delivery-cancellation.dtes",
+      "line": 16,
+      "column": 5,
+      "endLine": 16,
+      "endColumn": 26,
+      "severity": "error",
+      "code": "S010",
+      "message": "The aggregate ref 'Delivery.Shipment' names nothing in the .dt model."
+    },
+    {
+      "file": "delivery-cancellation.dtes",
+      "line": 19,
+      "column": 5,
+      "endLine": 19,
+      "endColumn": 29,
+      "severity": "error",
+      "code": "S010",
+      "message": "The aggregate ref 'Fleet.BikeAssignment' names nothing in the .dt model."
+    },
+    {
+      "file": "delivery-cancellation.dtes",
+      "line": 24,
+      "column": 5,
+      "endLine": 24,
+      "endColumn": 33,
+      "severity": "error",
+      "code": "S010",
+      "message": "The command ref 'Delivery.Shipment.cancel' names nothing in the .dt model."
+    },
+    {
+      "file": "delivery-cancellation.dtes",
+      "line": 31,
+      "column": 5,
+      "endLine": 31,
+      "endColumn": 37,
+      "severity": "error",
+      "code": "S010",
+      "message": "The command ref 'Fleet.BikeAssignment.release' names nothing in the .dt model."
+    }
+  ],
+  "summary": {
+    "files": 1,
+    "errors": 6,
+    "warnings": 0
+  }
+}"
+,
+  ],
+}
+`;
+
+exports[`dt check dt and dtes: text 1`] = `
+{
+  "code": 0,
+  "lines": [
+    "out: 2 file(s) checked: 0 error(s), 0 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check dt and dtes: json 1`] = `
+{
+  "code": 0,
+  "lines": [
+    
+"out: {
+  "diagnostics": [],
+  "summary": {
+    "files": 2,
+    "errors": 0,
+    "warnings": 0
+  }
+}"
+,
+  ],
+}
+`;
+
+exports[`dt check broken refs: text 1`] = `
+{
+  "code": 1,
+  "lines": [
+    "err: delivery.dtes:4:16 - error S011: The event ref 'Delivery.Shipment' names an aggregate, not an event.",
+    "err: delivery.dtes:5:16 - error S010: The event ref 'ShipmentGone' is not fully qualified: write 'Context.Event'.",
+    "out: delivery.dtes:8:5 - warning S012: The command ref 'Delivery.Courier.assign' is a command of 'Delivery.Courier', but its target 'Shipment' refers to 'Delivery.Shipment'.",
+    "out:   hint: correct the ref of 'Cancel' or of 'Shipment', or the target",
+    "out: delivery.dtes:14:5 - warning S013: 'Deliver' emits 'ShipmentCancelled', which refers to 'Delivery.ShipmentCancelled', but the .dt command 'Delivery.Shipment.deliver' never emits it: a .dt command emits only the events of its emits.",
+    "out:   hint: add 'Delivery.ShipmentCancelled' to the emits of 'Delivery.Shipment.deliver' (or, for a failure, an error of it), or correct the ref of 'Deliver' or 'ShipmentCancelled'",
+    "err: 2 file(s) checked: 2 error(s), 2 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check broken refs: json 1`] = `
+{
+  "code": 1,
+  "lines": [
+    
+"out: {
+  "diagnostics": [
+    {
+      "file": "delivery.dtes",
+      "line": 4,
+      "column": 16,
+      "endLine": 4,
+      "endColumn": 37,
+      "severity": "error",
+      "code": "S011",
+      "message": "The event ref 'Delivery.Shipment' names an aggregate, not an event."
+    },
+    {
+      "file": "delivery.dtes",
+      "line": 5,
+      "column": 16,
+      "endLine": 5,
+      "endColumn": 32,
+      "severity": "error",
+      "code": "S010",
+      "message": "The event ref 'ShipmentGone' is not fully qualified: write 'Context.Event'."
+    },
+    {
+      "file": "delivery.dtes",
+      "line": 8,
+      "column": 5,
+      "endLine": 8,
+      "endColumn": 32,
+      "severity": "warning",
+      "code": "S012",
+      "message": "The command ref 'Delivery.Courier.assign' is a command of 'Delivery.Courier', but its target 'Shipment' refers to 'Delivery.Shipment'.",
+      "hint": "correct the ref of 'Cancel' or of 'Shipment', or the target"
+    },
+    {
+      "file": "delivery.dtes",
+      "line": 14,
+      "column": 5,
+      "endLine": 14,
+      "endColumn": 28,
+      "severity": "warning",
+      "code": "S013",
+      "message": "'Deliver' emits 'ShipmentCancelled', which refers to 'Delivery.ShipmentCancelled', but the .dt command 'Delivery.Shipment.deliver' never emits it: a .dt command emits only the events of its emits.",
+      "hint": "add 'Delivery.ShipmentCancelled' to the emits of 'Delivery.Shipment.deliver' (or, for a failure, an error of it), or correct the ref of 'Deliver' or 'ShipmentCancelled'"
+    }
+  ],
+  "summary": {
+    "files": 2,
+    "errors": 2,
+    "warnings": 2
+  }
+}"
+,
+  ],
+}
+`;
+
+exports[`dt check dt syntax error: text 1`] = `
+{
+  "code": 1,
+  "lines": [
+    "err: broken.dt:3:13 - error SYNTAX: Expecting token of type ':' but found \`{\`. \`aggregate\` is read here as the name of a field: a '}' may be missing before it.",
+    "err: broken.dt:4:2 - error SYNTAX: Expecting token of type '}' but found end of file.",
+    "err: 1 file(s) checked: 2 error(s), 0 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check dt syntax error: json 1`] = `
+{
+  "code": 1,
+  "lines": [
+    
+"out: {
+  "diagnostics": [
+    {
+      "file": "broken.dt",
+      "line": 3,
+      "column": 13,
+      "endLine": 3,
+      "endColumn": 14,
+      "severity": "error",
+      "code": "SYNTAX",
+      "message": "Expecting token of type ':' but found \`{\`. \`aggregate\` is read here as the name of a field: a '}' may be missing before it."
+    },
+    {
+      "file": "broken.dt",
+      "line": 4,
+      "column": 2,
+      "endLine": 4,
+      "endColumn": 2,
+      "severity": "error",
+      "code": "SYNTAX",
+      "message": "Expecting token of type '}' but found end of file."
+    }
+  ],
+  "summary": {
+    "files": 1,
+    "errors": 2,
+    "warnings": 0
+  }
+}"
+,
+  ],
+}
+`;
+
+exports[`dt check dtes syntax error: text 1`] = `
+{
+  "code": 1,
+  "lines": [
+    "err: delivery.dtes:3:3 - error SYNTAX: Expecting token of type '}' but found \`command\`.",
+    "err: delivery.dtes:5:3 - error SYNTAX: Expecting token of type 'ID' but found \`}\`.",
+    "err: 2 file(s) checked: 2 error(s), 0 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check dtes syntax error: json 1`] = `
+{
+  "code": 1,
+  "lines": [
+    
+"out: {
+  "diagnostics": [
+    {
+      "file": "delivery.dtes",
+      "line": 3,
+      "column": 3,
+      "endLine": 3,
+      "endColumn": 10,
+      "severity": "error",
+      "code": "SYNTAX",
+      "message": "Expecting token of type '}' but found \`command\`."
+    },
+    {
+      "file": "delivery.dtes",
+      "line": 5,
+      "column": 3,
+      "endLine": 5,
+      "endColumn": 4,
+      "severity": "error",
+      "code": "SYNTAX",
+      "message": "Expecting token of type 'ID' but found \`}\`."
+    }
+  ],
+  "summary": {
+    "files": 2,
+    "errors": 2,
+    "warnings": 0
+  }
+}"
+,
+  ],
+}
+`;
+
+exports[`dt check examples/shop: text 1`] = `
+{
+  "code": 0,
+  "lines": [
+    "out: 8 file(s) checked: 0 error(s), 0 warning(s).",
+  ],
+}
+`;
+
+exports[`dt check examples/shop: json 1`] = `
+{
+  "code": 0,
+  "lines": [
+    
+"out: {
+  "diagnostics": [],
+  "summary": {
+    "files": 8,
+    "errors": 0,
+    "warnings": 0
+  }
+}"
+,
+  ],
+}
+`;

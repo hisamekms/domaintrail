@@ -1,0 +1,340 @@
+import { describe, expect, test } from 'bun:test';
+import { analyzeDomain } from './analyze.js';
+import { check, checkSales, codes, exampleSources, only, element, type AnyElement } from '../test-helpers.js';
+
+const ORDER = `
+  id OrderId: UUID
+  id LineId: UUID
+  aggregate Order {
+    id: OrderId
+    owns lines: Line[0..*]
+    state Draft
+    state Done { doneAt: Timestamp }
+    command finish(at: Timestamp) Draft -> Done
+  }
+  entity Line { id: LineId  quantity: Int }
+`;
+
+describe('examples', () => {
+    test("Modeling's analysis takes the .dt sources alone, and leaves the generation's checks to the project analysis", async () => {
+        const a = await analyzeDomain((await exampleSources()).filter((s) => s.path.endsWith('.dt')));
+        expect(a.files).toEqual(['billing/context.dt', 'billing/invoice.dt', 'common/context.dt', 'sales/context.dt', 'sales/customer.dt', 'sales/order.dt']);
+        expect(a.diagnostics).toEqual([]);
+        expect(a.syntaxOk).toBe(true);
+        expect(a.model?.elements.some((e) => e.id === 'Sales.Order')).toBe(true);
+        const clash = await analyzeDomain([{ path: 'sales.dt', text: `context Sales {\n${ORDER} value FinishOrder\n}\n` }]);
+        expect(clash.diagnostics.filter((d) => d.code === 'M011')).toEqual([]);
+    });
+
+    test('a context can be split across files; other contexts need qualified names', async () => {
+        const a = await check({
+            'a.dt': 'context Sales { id CustomerId: UUID }',
+            'b.dt': `context Sales { aggregate Customer { id: CustomerId } }
+                         context Billing { id InvoiceId: UUID aggregate Invoice { id: InvoiceId references c: CustomerId -> Customer } }`,
+        });
+        expect(only(a, 'M001').map((d) => d.message)).toEqual([
+            "Cannot resolve type 'CustomerId' in this context (use Context.Name for other contexts).",
+            "Cannot resolve aggregate 'Customer' in this context (use Context.Name for other contexts).",
+        ]);
+    });
+});
+
+describe('diagnostics carry file position and rule ID', () => {
+    test('syntax errors', async () => {
+        const a = await checkSales('aggregate Order { id: }');
+        expect(a.syntaxOk).toBe(false);
+        expect(a.diagnostics[0]).toMatchObject({ file: 'sales.dt', code: 'SYNTAX', severity: 'error', start: { line: 2 } });
+    });
+
+    test('an unexpected end of file is named as such, not as an empty token', async () => {
+        const unclosed = await analyzeDomain([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {' }]);
+        expect(unclosed.diagnostics.map((d) => d.message)).toEqual(["Expecting token of type '}' but found end of file."]);
+        const noAlternative = await analyzeDomain([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {\n    command' }]);
+        expect(noAlternative.diagnostics.map((d) => d.message)).toEqual([
+            "Expecting a name after `command` (or ':' for a field named `command`) but found end of file.",
+        ]);
+    });
+
+    test('a keyword that may be a name and is neither: one error, at the keyword, naming what may follow', async () => {
+        const messages = async (members: string): Promise<string[]> =>
+            (
+                await analyzeDomain([{ path: 'a.dt', text: `context A {\n  id GId: UUID\n  aggregate G {\n    id: GId\n    state S\n${members}\n  }\n}\n` }])
+            ).diagnostics.map((d) => `${d.start.line}:${d.start.column} ${d.message}`);
+        expect(await messages('    command')).toEqual(["6:5 Expecting a name after `command` (or ':' for a field named `command`) but found `}`."]);
+        expect(await messages('    state')).toEqual(["6:5 Expecting a name after `state` (or ':' for a field named `state`) but found `}`."]);
+        expect(await messages('    create go(id: GId) -> S')).toEqual([
+            "6:5 Expecting 'command' after `create` (or ':' for a field named `create`) but found `go`.",
+        ]);
+        expect(await messages('    invariant { id == id }')).toEqual([
+            "6:5 Expecting a name after `invariant` (or ':' for a field named `invariant`) but found `{`.",
+        ]);
+        expect(await messages('    create command go(id: GId) -> S emits')).toEqual([
+            "7:3 Expecting token of type ':' but found `}`. `emits` is read here as the name of a field; as a keyword it is followed by a name.",
+        ]);
+    });
+
+    test('a declaration keyword read as a field name in an unclosed block says that a } may be missing', async () => {
+        const a = await analyzeDomain([{ path: 'a.dt', text: 'context A {\n  value Money { amount: Int\n  aggregate {\n}\n' }]);
+        expect(a.diagnostics.map((d) => `${d.start.line}:${d.start.column} ${d.message}`)).toEqual([
+            "3:13 Expecting token of type ':' but found `{`. `aggregate` is read here as the name of a field: a '}' may be missing before it.",
+            "4:2 Expecting token of type '}' but found end of file.",
+        ]);
+    });
+
+    test('a missing name or type is "a name" or "a type", not the identifier and every keyword that may be one', async () => {
+        const type = await checkSales('value V {\n x:\n }');
+        expect(type.diagnostics.map((d) => d.message)).toEqual(['Expecting a type but found `}`.']);
+    });
+
+    test('M001 unresolved type reference', async () => {
+        const a = await checkSales(`${ORDER} value V { x: Nope }`);
+        const [d] = only(a, 'M001');
+        expect(d).toMatchObject({ file: 'sales.dt', start: { line: 13 }, elementId: 'Sales.V' });
+        expect(d.message).toContain("'Nope'");
+    });
+});
+
+describe('keywords as names', () => {
+    test('declaration keywords name fields, parameters and commands; any word an enum value or a variant', async () => {
+        const a = await check({
+            'a.dt': `context A {
+  enum Op { implies or and not in true false String state }
+  union TypeExpr {
+    primitive { name: String }
+    not { operand: Int }
+  }
+  value V {
+    context: String
+    event: String?
+    errors: String[0..*]
+    op: Op
+    invariant k { op == Op.and implies exists(event) }
+  }
+  id GId: UUID
+  aggregate G {
+    id: GId
+    state: Int
+    state S
+    create command command(id: GId, state: Int, error: String) -> S
+    command emits(errors: Int) S -> S
+  }
+}`,
+        });
+        expect(a.diagnostics).toEqual([]);
+        const el = (id: string): AnyElement => element(a.model, id);
+        expect(el('A.Op').values.map((v) => v.name)).toEqual(['implies', 'or', 'and', 'not', 'in', 'true', 'false', 'String', 'state']);
+        expect(el('A.TypeExpr').variants.map((v) => v.name)).toEqual(['primitive', 'not']);
+        expect(el('A.V').fields.map((f) => f.name)).toEqual(['context', 'event', 'errors', 'op']);
+        expect(el('A.G').commands.map((c) => `${c.name}(${c.params.map((p) => p.name).join(', ')})`)).toEqual(['command(id, state, error)', 'emits(errors)']);
+        expect(el('A.G').states.map((s) => s.name)).toEqual(['S']);
+    });
+});
+
+describe('naming (M002)', () => {
+    test('duplicate declarations across files of the same context', async () => {
+        const a = await check({ 'a.dt': 'context S { id X: UUID }', 'b.dt': 'context S { id X: Int }' });
+        expect(codes(a)).toEqual(['M002']);
+    });
+
+    test('duplicate fields, states and state fields shadowing common fields', async () => {
+        const a = await checkSales(`
+  id OrderId: UUID
+  aggregate Order {
+    id: OrderId
+    note: String
+    note: String
+    state A { note: String }
+    state A
+  }`);
+        expect(codes(a).sort()).toEqual(['M002', 'M002', 'M002']);
+    });
+});
+
+describe('ownership (M003, M004, M012)', () => {
+    test('M003 an entity owned by two aggregates', async () => {
+        const a = await checkSales(`${ORDER}
+  id OtherId: UUID
+  aggregate Other { id: OtherId owns lines: Line[0..*] }`);
+        expect(codes(a)).toEqual(['M003']);
+    });
+
+    test('M003 warning for an entity owned by no aggregate', async () => {
+        const a = await checkSales(`${ORDER} id OrphanId: UUID entity Orphan { id: OrphanId }`);
+        expect(a.ok).toBe(true);
+        expect(only(a, 'M003')[0]).toMatchObject({ severity: 'warning' });
+    });
+
+    test('M004 entity embedded as a plain field / aggregate owned by another aggregate', async () => {
+        const a = await checkSales(`${ORDER}
+  id OtherId: UUID
+  aggregate Other { id: OtherId line: Line owns order: Order }`);
+        expect(codes(a)).toEqual(['M004', 'M004']);
+        expect(a.diagnostics.map((d) => d.message).join('\n')).toContain("declare it with 'owns'");
+    });
+
+    test('M004 entity of another context cannot be owned', async () => {
+        const a = await check({
+            'a.dt': `context Sales { ${ORDER} }`,
+            'b.dt': 'context Billing { id BId: UUID aggregate B { id: BId owns lines: Sales.Line[0..*] } }',
+        });
+        expect(codes(a)).toContain('M004');
+    });
+
+    test('M012 ownership cycle through an entity', async () => {
+        const a = await checkSales(`${ORDER} id EId: UUID entity E { id: EId owns v: V? } value V { owns e: E }`);
+        expect(only(a, 'M012').map((d) => d.message)).toEqual(['Ownership cycle: E -> V -> E.']);
+    });
+
+    test('M012 a recursive value type is allowed when each value on the cycle has a finite value', async () => {
+        const through = async (body: string): Promise<string[]> => only(await checkSales(`${ORDER} ${body}`), 'M012').map((d) => d.message);
+        expect(await through('value A { owns b: B } value B { c: C } value C { owns a: A? }')).toEqual([]);
+        expect(await through('value Tree { children: Tree[0..*] }')).toEqual([]);
+        expect(await through('union Expr { lit { value: Int } not { operand: Expr } and { left: Expr  right: Expr } }')).toEqual([]);
+        expect(await through('value Rule { expr: Expr } union Expr { lit { value: Int } rule { rule: Rule } }')).toEqual([]);
+        expect(await through('value A { b: B } value B { a: A[1..*] }')).toEqual(['Recursive value without a finite value: A -> B -> A.']);
+        expect(await through('union Expr { not { operand: Expr } }')).toEqual(['Recursive value without a finite value: Expr -> Expr.']);
+        expect(await through('fields Up { parent: Node? } value Node with Up { name: String }')).toEqual([]);
+        expect(await through('fields Up { parent: Node } value Node with Up { name: String }')).toEqual([
+            'Recursive value without a finite value: Node -> Node.',
+        ]);
+        expect(await through('value Tree { children: Tree[0..*] } value Pair { left: Pair  tree: Tree }')).toEqual([
+            'Recursive value without a finite value: Pair -> Pair.',
+        ]);
+    });
+});
+
+describe('references (M005)', () => {
+    test('reference type must match the identity of the target aggregate', async () => {
+        const a = await checkSales(`${ORDER}
+  id CustomerId: UUID
+  aggregate Customer { id: CustomerId }
+  aggregate Invoice { id: InvoiceId references order: CustomerId -> Order references c: String -> Customer }
+  id InvoiceId: UUID`);
+        expect(codes(a)).toEqual(['M005', 'M005']);
+        expect(only(a, 'M005')[0].message).toContain("'Order' is identified by 'OrderId'");
+    });
+});
+
+describe('commands (M006, M007)', () => {
+    test('transitions are separated by line breaks or commas; sources and targets take several states', async () => {
+        const a = await checkSales(`
+  id WorkId: UUID
+  event WorkChanged { workId: WorkId }
+  error NotReady
+  aggregate Work {
+    id: WorkId
+    state Draft
+    state InProgress
+    state Completed
+    state Cancelled
+
+    create command open(id: WorkId) -> Draft
+
+    command change()
+      Draft -> Draft
+      InProgress -> InProgress
+      emits WorkChanged
+
+    command start() Draft -> InProgress
+    command finish() InProgress -> Completed errors NotReady
+    command cancel() Draft | InProgress -> Cancelled
+    command review() InProgress -> InProgress | Completed
+    command edit() Draft -> Draft, InProgress -> InProgress
+    note: String?
+  }`);
+        expect(a.diagnostics).toEqual([]);
+        const work = element(a.model, 'Sales.Work');
+        expect(Object.fromEntries(work.commands!.map((c) => [c.name, c.transitions]))).toEqual({
+            open: [{ from: [], to: ['Draft'] }],
+            change: [
+                { from: ['Draft'], to: ['Draft'] },
+                { from: ['InProgress'], to: ['InProgress'] },
+            ],
+            start: [{ from: ['Draft'], to: ['InProgress'] }],
+            finish: [{ from: ['InProgress'], to: ['Completed'] }],
+            cancel: [{ from: ['Draft', 'InProgress'], to: ['Cancelled'] }],
+            review: [{ from: ['InProgress'], to: ['InProgress', 'Completed'] }],
+            edit: [
+                { from: ['Draft'], to: ['Draft'] },
+                { from: ['InProgress'], to: ['InProgress'] },
+            ],
+        });
+        expect(work.commands!.find((c) => c.name === 'change')!.emits).toEqual([
+            { event: 'Sales.WorkChanged', cardinality: 'one', multiplicity: '', lower: 1, upper: 1 },
+        ]);
+        expect(work.fields.map((f) => f.name)).toContain('note');
+    });
+
+    test('the old from/to syntax is a syntax error', async () => {
+        const a = await checkSales(ORDER.replace('Draft -> Done', 'from Draft to Done'));
+        expect(codes(a)).toContain('SYNTAX');
+    });
+
+    test('M006 non-existent state', async () => {
+        const a = await checkSales(ORDER.replace('-> Done', '-> Shipped'));
+        const [d] = only(a, 'M006');
+        expect(d.message).toBe("Cannot resolve state 'Shipped' in this aggregate.");
+        expect(d.elementId).toBe('Sales.Order:finish');
+    });
+
+    test('M006 command shape rules', async () => {
+        const a = await checkSales(
+            `${ORDER}
+  id CId: UUID
+  aggregate C {
+    id: CId
+    command a() X -> X
+  }`.replace(
+                'command finish(at: Timestamp) Draft -> Done',
+                `command finish(at: Timestamp) Draft -> Done
+    command none()
+    command noSource() -> Done
+    command mixed() Draft -> Done, -> Draft
+    create command make() Draft -> Draft
+    create command make2()
+    create command make3() -> Draft, -> Done`,
+            ),
+        );
+        expect(only(a, 'M006').map((d) => d.message)).toEqual([
+            "Command 'none' must declare its state transitions, e.g. 'Draft -> Submitted' (or be declared with 'create command').",
+            "Command 'noSource' has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').",
+            "Command 'mixed' has a transition without source states; write 'State -> ...' (only a 'create command' starts with '->').",
+            "Factory command 'make' creates a new 'Order' and cannot have source states; write '-> Draft'.",
+            "Factory command 'make2' must declare exactly one transition to its initial state(s), e.g. '-> Draft'.",
+            "Factory command 'make3' must declare exactly one transition to its initial state(s), e.g. '-> Draft'.",
+            "Cannot resolve state 'X' in this aggregate.",
+            "Command 'a' declares state transitions, but aggregate 'C' has no states.",
+            "Cannot resolve state 'X' in this aggregate.",
+        ]);
+    });
+
+    test('M006 a state is the source of one transition only; a target listed twice is a warning', async () => {
+        const a = await checkSales(ORDER.replace('Draft -> Done', 'Draft -> Draft\n    Done | Draft -> Done | Done'));
+        expect(only(a, 'M006').map((d) => [d.severity, d.message, d.start.line])).toEqual([
+            [
+                'error',
+                "State 'Draft' is the source of more than one transition of command 'finish'; its outcome must be decided by one transition (use 'A -> B | C').",
+                11,
+            ],
+            ['warning', "State 'Done' is listed more than once.", 11],
+        ]);
+    });
+
+    test('M007 events and errors must exist and be of the right kind', async () => {
+        const a = await checkSales(`${ORDER.replace('-> Done', '-> Done emits Ghost, Oops errors Done2')} error Oops`);
+        expect(only(a, 'M007').map((d) => d.message)).toEqual([
+            "Cannot resolve event 'Ghost' in this context (use Context.Name for other contexts).",
+            "Cannot resolve event 'Oops' in this context (use Context.Name for other contexts).",
+            "Cannot resolve error 'Done2' in this context (use Context.Name for other contexts).",
+        ]);
+    });
+});
+
+describe('identity (M013)', () => {
+    test('aggregates and entities need their own ID type', async () => {
+        const a = await checkSales(`${ORDER} entity Other { id: LineId } value V { id: String }`);
+        expect(only(a, 'M013').map((d) => d.message)).toEqual(["ID type 'LineId' already identifies 'Line'; each Aggregate/Entity needs its own ID type."]);
+        const b = await checkSales('aggregate NoId { name: String }');
+        expect(codes(b)).toEqual(['M013']);
+    });
+});

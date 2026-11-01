@@ -613,7 +613,8 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   call — what a later solo chat under `dt view` will use to apply the facilitator's messages at once.
 - **Dismiss is dropped from the product.** Messages are talk, not a queue to clear: the page has no 見送る and the
   `POST /api/session/requests/:id/dismiss` route is gone. The model keeps the `Dismissed` state, its event and the use
-  case so that older sessions load and replay; such requests show as messages.
+  case so that older sessions load and replay; such requests show as messages. (ADR 0027, T12: the `dismiss` command
+  and the `dismissRequest` use case are removed; the state and the event stay, for the older sessions.)
 - **The facilitator works in the chat.** The right-side `SessionPanel` (and the inspector menu's switch to it) is gone.
   ⤓ applies one message at once (runs stay serial: it waits as 実行待ち); ▾ adds a note first or enters selection; Shift/⌘
   chooses several, and まとめてアプライ queues them as one run; 取り消す (a few seconds) cancels the run while it is still

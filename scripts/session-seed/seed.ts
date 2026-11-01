@@ -3,10 +3,10 @@
 // named participants signed in with their own cookies (one of them made the facilitator with the start's link), the
 // seed's agent (the real subscriber with a scripted runner), and the scenarios played through the session API as pages
 // play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over.
-import { plainBody } from '@domaintrail/collaboration/domain/body';
+import { plainBody } from '@domaintrail/collaboration';
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
-import type { DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
+import type { DtCommand } from '@domaintrail/agent';
 import type { AnswerBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { startMockClassifier, type MockClassifier, type ReadsAs } from './classifier.js';
 import { sessionClient, type Participant, type SessionClient } from './client.js';
@@ -22,7 +22,7 @@ type Target = NonNullable<Parameters<SessionClient['send']>[1]['targets']>[numbe
 export const PEOPLE = { facilitator: 'ooyama_F', sato: '佐藤', suzuki: '鈴木', tanaka: '田中', takahashi: '高橋' } as const;
 export type Person = keyof typeof PEOPLE;
 
-/** The note a page writes when the facilitator picks another alternative of an assumption (`alternativeNote` of web/i18n.tsx, ja). */
+/** The note a page writes when the facilitator picks another alternative of an assumption (`alternativeNote` of apps/web/i18n.tsx, ja). */
 export const alternativeNote = (assumption: string, alternative: string): string =>
     `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`;
 

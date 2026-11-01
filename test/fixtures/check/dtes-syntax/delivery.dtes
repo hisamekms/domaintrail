@@ -1,0 +1,6 @@
+storming Delivery {
+  event ShipmentCancelled { ref Delivery.ShipmentCancelled
+  command Cancel {
+    target
+  }
+}

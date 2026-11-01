@@ -1,0 +1,19 @@
+{
+  "name": "@domaintrail/analysis",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@domaintrail/generation": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
+    "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
+    "picomatch": "4.0.7"
+  },
+  "devDependencies": {
+    "@types/picomatch": "4.0.3"
+  }
+}

@@ -13,13 +13,14 @@
   "overrides": [
     {
       // tests cast partial fixtures and the JSON of the servers they test; their assertions check the values
-      "files": ["test/**"],
+      // (the integration tests in test/, the unit tests and their helpers next to the code)
+      "files": ["test/**", "**/*.test.ts", "**/*.test.tsx", "**/test-helpers.ts"],
       "rules": { "typescript/no-unsafe-type-assertion": "off" }
     }
   ],
   "ignorePatterns": [
     "dist/**",
-    "packages/modeling/src/language/generated/**",
+    "contexts/modeling/src/infrastructure/syntax/generated/**",
     "**/generated/**",
     "tree-sitter-domaintrail/src/**",
     "tree-sitter-domaintrail/bindings/**",

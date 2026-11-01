@@ -1,0 +1,14 @@
+{
+  "name": "@domaintrail/storming",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@domaintrail/kernel": "workspace:*",
+    "@domaintrail/modeling": "workspace:*",
+    "langium": "4.4.0"
+  }
+}

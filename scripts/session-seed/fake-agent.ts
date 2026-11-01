@@ -3,16 +3,23 @@
 // scripted runner in place of Claude Code. Each step a scenario expects is queued before its run, and the runs are
 // taken in queue order, one at a time: the next invocation plays the next step. A step edits the workspace for real
 // and returns the structured reply the scenario wrote, validated as a real reply is.
-import type { AgentInvocation, AgentOutcome, AgentRunner } from '@domaintrail/agent/application/ports';
-import { startSubscriber, type Subscriber } from '@domaintrail/agent/application/subscriber';
-import { createDtTools, type DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
-import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
-import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/system';
-import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
-import { readCredential } from '@domaintrail/composition/subscriber';
-import { plainQuestion, readReply, requestNumber, type ReplyData } from '@domaintrail/collaboration/domain/reply';
-import { DEFAULT_SOURCES } from '@domaintrail/modeling/core/config';
-import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
+import {
+    type AgentInvocation,
+    type AgentOutcome,
+    type AgentRunner,
+    createDtTools,
+    createHttpAgentApi,
+    type DtCommand,
+    randomNonce,
+    scanWorkspace,
+    startSubscriber,
+    type Subscriber,
+    systemClock,
+} from '@domaintrail/agent';
+import { readCredential } from '@domaintrail/dt';
+import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
+import { sourceSelection } from '@domaintrail/analysis';
+import { findDomainFiles } from '@domaintrail/workspace';
 
 /** A reply as a scenario writes it: requests by their number in the run (from 1); `questions` and `assumptions` optional. */
 export type ScriptedReply = Omit<ReplyData<number>, 'questions' | 'assumptions'> & Partial<Pick<ReplyData<number>, 'questions' | 'assumptions'>>;
@@ -92,7 +99,7 @@ export async function startFakeAgent(options: FakeAgentOptions): Promise<FakeAge
             tools: createDtTools({ dt: options.dt, root: options.root, log: options.log }),
             workspace: {
                 scan: () => scanWorkspace(options.root),
-                sources: async () => new Set(await findDomainFiles(options.root, DEFAULT_SOURCES, true)),
+                sources: async () => new Set(await findDomainFiles(options.root, sourceSelection())),
             },
             clock: systemClock,
             owner: 'seed-fake-agent',

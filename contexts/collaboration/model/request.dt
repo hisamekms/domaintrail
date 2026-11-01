@@ -1,0 +1,126 @@
+context Collaboration {
+  /// 依頼の識別子。
+  id RequestId "依頼ID": UUID
+
+  /// まだ見送られていない、そのセッションの依頼だと、エージェント実行に束ねるときに確かめたもの。
+  verified PendingRequest "未処理の依頼" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestAlreadyDismissed
+
+  /// 返信できると、依頼を送るときに確かめた実行。そのセッションの、終わった実行（完了・失敗・辞退・取消）。
+  /// 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
+  verified ReplyableRun "返信できる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable
+
+  /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
+  verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
+
+  /// 参加者がモデルの要素について送る依頼。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の要素の言及（`#注文[1]`、以前の `@注文[1]`）は
+  /// 対象の番号で、人の言及（`@佐藤[p1]`）は言及した人の番号で指す。
+  aggregate Request "依頼" {
+    id: RequestId
+    references session: SessionId -> Session
+    author: ParticipantId "依頼者"
+    owns targets: TargetSnapshot[0..20] "対象"
+    body: Text "本文"
+    sentAt: Timestamp "送信日時"
+    /// AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。
+    references replyTo: AgentRunId? -> AgentRun "返信先"
+    /// 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。
+    mentions: ParticipantId[0..20] "言及した人"
+
+    invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
+    invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
+    invariant atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 }
+    invariant distinctMentions "同じ人の言及は1回" { unique(mentions) }
+    /// ワークスペース全体は、対象を挙げないことで表す。
+    invariant noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
+      all(targets, t => t.target.kind != ModelTarget.Workspace)
+    }
+
+    state Sent "送信済み"
+    /// 見送りは印で、依頼そのものは残る。見送る操作はもうない（#23 で画面と経路から外し、ADR 0027 の T12 でコマンドも
+    /// 外した）。以前のセッションに残る見送り済みの依頼を読み、実行に束ねないために、状態は残す。
+    state Dismissed "見送り" {
+      dismissedBy: ParticipantId "見送った人"
+      dismissedAt: Timestamp "見送り日時"
+    }
+
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableRun?, mentions: MentionableParticipant[0..20]) "依頼を送る"
+      -> Sent
+      requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
+      requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
+      requires noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
+        all(targets, t => t.target.kind != ModelTarget.Workspace)
+      } else WorkspaceTarget
+      requires atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 } else TooManyMentions
+      requires distinctMentions "同じ人の言及は1回" { unique(mentions) } else DuplicateMention
+      emits RequestSent
+  }
+
+  persistent event RequestSent "依頼送信" {
+    requestId: RequestId
+    session: SessionId
+    author: ParticipantId
+    targets: TargetSnapshot[0..20]
+    body: Text
+    sentAt: Timestamp
+    replyTo: AgentRunId?
+    mentions: ParticipantId[0..20] "言及した人"
+  }
+
+  /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
+  persistent event RequestDismissed "依頼見送り" {
+    requestId: RequestId
+    dismissedBy: ParticipantId
+    dismissedAt: Timestamp
+  }
+
+  /// 指定した依頼がない。
+  error RequestNotFound "依頼なし" {
+    request: RequestId
+  }
+
+  /// 依頼は別のセッションのもの。
+  error RequestOfAnotherSession "別のセッションの依頼" {
+    request: RequestId
+  }
+
+  /// 依頼はすでに見送られている。
+  error RequestAlreadyDismissed "見送り済みの依頼" {
+    request: RequestId
+  }
+
+  /// 言及した人は、そのセッションの参加者ではない。
+  error MentionedNotAParticipant "参加者でない人の言及" {
+    participant: ParticipantId
+  }
+
+  /// 返信先の実行がない。
+  error RunNotFound "実行なし" {
+    run: AgentRunId
+  }
+
+  /// 返信先の実行は別のセッションのもの。
+  error RunOfAnotherSession "別のセッションの実行" {
+    run: AgentRunId
+  }
+
+  /// 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・取消の実行）。
+  error RunNotReplyable "返信できない実行" {
+    run: AgentRunId
+  }
+
+  /// 本文で言及する人が20人を超える。
+  error TooManyMentions "言及する人が多すぎる"
+
+  /// 本文で同じ人を2回言及している。
+  error DuplicateMention "言及する人の重複"
+
+  /// 依頼の対象が20件を超える。
+  error TooManyTargets "対象が多すぎる"
+
+  /// 依頼の対象に同じものが2回ある。
+  error DuplicateTarget "対象の重複"
+
+  /// 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
+  error WorkspaceTarget "対象にワークスペース全体"
+}

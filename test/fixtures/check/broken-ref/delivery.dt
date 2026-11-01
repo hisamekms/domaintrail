@@ -1,0 +1,18 @@
+context Delivery {
+  id ShipmentId: UUID
+  id CourierId: UUID
+  event ShipmentCancelled { shipmentId: ShipmentId }
+  event ShipmentDelivered { shipmentId: ShipmentId }
+  aggregate Shipment {
+    id: ShipmentId
+    state Pending
+    state Delivered
+    state Cancelled
+    command cancel() Pending -> Cancelled emits ShipmentCancelled
+    command deliver() Pending -> Delivered emits ShipmentDelivered
+  }
+  aggregate Courier {
+    id: CourierId
+    command assign()
+  }
+}
