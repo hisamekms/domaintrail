@@ -1,12 +1,12 @@
-// The generated checks, type-checked strictly by tsc (a child process).
+// The generated checks, type-checked strictly by tsc.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/modeling';
-import { check } from '../helpers.js';
+import { generateTypeScript } from './typescript.js';
+import { check } from '../test-helpers.js';
 
-const ROOT = path.join(import.meta.dir, '..', '..');
+const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
 const dirs: string[] = [];
 afterAll(async () => {
     for (const d of dirs) await rm(d, { recursive: true, force: true });

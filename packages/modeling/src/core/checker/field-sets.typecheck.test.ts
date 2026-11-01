@@ -1,10 +1,10 @@
-// The generated TypeScript of field sets, type-checked by tsc (a child process).
+// The generated TypeScript of field sets, type-checked by tsc.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/modeling';
-import { check } from '../helpers.js';
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check } from '../../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {
@@ -73,7 +73,7 @@ export const all: readonly Sales.DomainEvent[] = [placed];
 export const missing: Sales.OrderPlaced = { type: 'OrderPlaced', performedBy: staff, orderId: order };
 `,
         );
-        const tsc = path.join(import.meta.dir, '..', '..', 'node_modules', '.bin', 'tsc');
+        const tsc = path.join(import.meta.dir, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
         const r = Bun.spawnSync(
             [process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'use.ts'],
             { cwd: dir },

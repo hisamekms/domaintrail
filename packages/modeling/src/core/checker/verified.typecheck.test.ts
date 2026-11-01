@@ -1,10 +1,10 @@
-// The generated TypeScript of verified types, type-checked by tsc (a child process).
+// The generated TypeScript of verified types, type-checked by tsc.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/modeling';
-import { check } from '../helpers.js';
+import { generateTypeScript } from '../../generator/typescript.js';
+import { check } from '../../test-helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {
@@ -52,7 +52,7 @@ const run = (extra?: string, members?: string) => check({ 'sales.dt': sales(extr
 
 describe('verified types: generated TypeScript', () => {
     let dir: string;
-    const TSC = path.join(import.meta.dir, '..', '..', 'node_modules', '.bin', 'tsc');
+    const TSC = path.join(import.meta.dir, '..', '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
     const tsc = (file: string, text: string) => {
         const src = path.join(dir, 'src', file);
         return writeFile(src, text).then(() => {
