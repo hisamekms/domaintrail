@@ -86,7 +86,9 @@ const packageName = (specifier: string): string =>
         .slice(0, specifier.startsWith('@') ? 2 : 1)
         .join('/');
 const isBuiltin = (specifier: string): boolean => specifier.startsWith('node:') || specifier === 'bun' || specifier.startsWith('bun:');
-const isIO = (specifier: string): boolean => isBuiltin(specifier) || IO_PACKAGES.includes(packageName(specifier));
+/** Builtins that do no I/O: paths and URLs are computed, not read. */
+const PURE_BUILTINS = ['node:path', 'node:url'];
+const isIO = (specifier: string): boolean => (isBuiltin(specifier) && !PURE_BUILTINS.includes(specifier)) || IO_PACKAGES.includes(packageName(specifier));
 /** The directory segments of a path (without the file name). */
 const segments = (file: string): string[] => file.split('/').slice(0, -1);
 /** Whether an import reaches one of the directories (`application`, `infrastructure`, ...) by its path. */
@@ -135,7 +137,7 @@ const RULES: Record<Rule, RuleText> = {
     kinds: {
         section: 'Dependency rules',
         statement:
-            'a context depends only on its declared upstream contexts; a capability on contexts, the platform and declared capabilities; the platform only on the platform; an app on anything; nothing on an app.',
+            'a context depends only on its declared upstream contexts; a capability on contexts, the platform and declared capabilities; the platform only on the platform; an app on contexts, capabilities and the platform; nothing on an app.',
         fix: (v) => kindFix(MAP[v.module].kind, MAP[v.key]?.kind),
     },
     exports: {
@@ -158,7 +160,7 @@ const RULES: Record<Rule, RuleText> = {
     },
     'pure-core-io': {
         section: 'Layout, Enforcement',
-        statement: `\`domain/\` and \`core/\` import no I/O (node:*, bun, ${IO_PACKAGES.join(', ')}).`,
+        statement: `\`domain/\` and \`core/\` import no I/O (node:* but ${PURE_BUILTINS.join(', ')}, bun, ${IO_PACKAGES.join(', ')}).`,
         fix: () =>
             "put the I/O behind a port of the package's application, implemented in `infrastructure/` (a capability's `adapters/`), or pass the values in",
     },
@@ -169,7 +171,7 @@ const RULES: Record<Rule, RuleText> = {
     },
     'application-io': {
         section: 'Layout, Enforcement',
-        statement: `\`application/\` imports no I/O (node:*, bun, ${IO_PACKAGES.join(', ')}): it reaches technology through ports.`,
+        statement: `\`application/\` imports no I/O (node:* but ${PURE_BUILTINS.join(', ')}, bun, ${IO_PACKAGES.join(', ')}): it reaches technology through ports.`,
         fix: () => "define a port in `application/` and implement it in `infrastructure/` (a capability's `adapters/`), wired by an app",
     },
 };

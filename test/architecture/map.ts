@@ -20,7 +20,8 @@ export const MAY_DEPEND_ON: Record<Kind, readonly Kind[]> = {
     // contexts; other capabilities only when declared (`analysis → generation`); the platform
     capability: ['context', 'capability', 'platform'],
     platform: ['platform'],
-    app: ['context', 'capability', 'platform', 'app'],
+    // contexts, capabilities, the platform; not another app
+    app: ['context', 'capability', 'platform'],
 };
 
 /**
@@ -83,12 +84,9 @@ export const MAP: Record<string, Module> = {
         exceptions: {
             exports: ['./*'],
             'pure-core-io': [
-                // the project analysis reads paths: it leaves `core/` as the capability `analysis` (T4)
-                'core/analyze.ts: node:path',
                 // the configuration: split by owner, and the `realpathSync` check of `session.agent.dt` out of the pure
                 // validation (T6)
                 'core/config.ts: node:fs',
-                'core/config.ts: node:path',
             ],
         },
     },
@@ -224,6 +222,8 @@ export const MAP: Record<string, Module> = {
         // the wiring; presentation and composition merge into one app, apps/dt (T8)
         upstream: ['agent', 'collaboration', 'modeling', 'presentation', 'visualization', 'workspace'],
         exceptions: {
+            // an app depends on no other app: presentation and composition merge into apps/dt (T8)
+            kinds: ['presentation'],
             exports: ['./*'],
             'public-surface': [
                 // the agent's core and adapters it wires (T2)
