@@ -1,0 +1,49 @@
+# Plan: changes to the generated TypeScript
+
+A review of what `dt generate ts` writes for `examples/shop` found seven points; the maintainer chose a solution for
+each. This plan records the choices and splits them into tasks. The decisions that change earlier ADRs (0001, 0020,
+0023) are written down in a new ADR first (G0).
+
+## Landing
+
+- Starts after ADR 0027 (domain and application boundaries) is merged into `main`: the generator lives in
+  `capabilities/generation` there, and these tasks work on that layout.
+- As for ADR 0027: one integration branch from `main`, one worktree and branch per task, each done by a worker and
+  merged into the integration branch after review, one pull request to `main`, squash merged.
+- G1, G5 and G6 break the code users write against the generated code; they ship in one release, with the breaking
+  changes in the changelog.
+- Every task leaves typecheck, lint, fmt, tests and build passing, and regenerates `examples/shop`, which stays
+  consistent with the generated code (its own tests pass).
+
+## Decisions
+
+| # | Point | Decision |
+|---|---|---|
+| 1 | `UUID` is mapped to `string` and never checked: `makeCustomerId = (value) => value as CustomerId` accepts any string, though the model says `UUID` | An ID or primitive on `UUID` checks the form. `make<Name>` returns `Result<Name, Invalid<Name>>`, the violated invariant being `'uuid'`; the contract tests' arbitraries draw UUIDs |
+| 2 | The check of each state repeats the aggregate's invariants (`checkDraftOrder`, `checkConfirmedOrder`, `checkCancelledOrder` each test the same three expressions) | A public `check<Aggregate>Common` checks the aggregate's invariants; the check of each state calls it and adds the state's. Return types and order are unchanged |
+| 3 | Translated expressions are hard to read: `implies` as a double negation (`!(!(a) \|\| b)`), lambda variables as `$item`/`$item$`, string literals in `"…"` among `'…'` | All three: a violated `A implies B` is emitted as `A && !B`; lambda variables keep the names written in `.dt` (the second of a pair gets a suffix such as `item2`; a suffix is added only on a clash); string literals use `'…'` throughout |
+| 4 | The target of `references` is only a trailing comment (`// -> Sales.Customer`) | The field's doc comment links it: `@see {@link Customer}` (`{@link Billing.Invoice}` across contexts). Types are unchanged |
+| 5 | `_runtime.ts` (137 lines) and `tests/_testing.ts` (581 lines) are copied into every project | The runtime stays copied (production code does not depend on domaintrail). The testing support becomes a package, `@domaintrail/testing`, a dev dependency; generated tests import it, and the generated code states the version it needs. It is released with domaintrail, same version |
+| 6 | The context of a verified type's factory with `for X?` is `context: X \| undefined`, so a call passes `undefined` explicitly | Kept. ADR 0023 and the factory's doc comment say why: an omitted context would compile, and the check would then not leave out the one it should (e.g. a customer's own address reported as taken) |
+| 7 | Command parameters are positional (`place(id, customer)`, `cancel(order, reason)`); TypeScript has no named arguments, so parameters of one type can be swapped silently and reordering breaks callers | A command takes its parameters as one object, after the aggregate: `place({ id, customer })`, `cancel(order, { reason })`, and in a decision `Draft: (order, { reason }) => …`. A command without parameters takes none (`archive(order)`). Contract test inputs and examples become objects. The runtime cost (one small object per call) is negligible next to what a command allocates and the I/O around it |
+
+## Tasks
+
+| Task | What | Compatibility | After |
+|---|---|---|---|
+| G0 | ADR 0028: decisions 1–7, amending ADR 0001 (type mapping of `UUID`), 0020 (contract test inputs, the testing package) and 0023 (the context parameter) | — | — |
+| G1 | Decision 1: the `UUID` check in `make<Name>` for IDs and primitives, the invariant name, the arbitraries, `examples/shop` and the guide | breaking | G0 |
+| G2 | Decision 2: `check<Aggregate>Common` | additive | G0 |
+| G3 | Decision 3: the expression translation (implies, lambda names, quotes) | same behaviour | G0 |
+| G4 | Decisions 4 and 6: `{@link}` for references; the context parameter's doc comment | same behaviour | G0 |
+| G5 | Decision 5: `@domaintrail/testing` (package, publishing, version check), generated tests importing it | breaking | G0 |
+| G6 | Decision 7: command parameters as one object, in commands, decisions, contract tests and examples | breaking | G5 (both change the contract tests' support) |
+
+G1, G2, G3 and G4 can run in parallel; G2 and G3 both touch the checks' generation (`checks.ts`), so whichever lands
+second rebases.
+
+## Open
+
+- How users are meant to handle infrastructure failures in the factories of verified types (and policy handlers): the
+  discussion leaned towards "a rejected promise means the check could not be made; `errors` are the domain's", stated in
+  ADR 0023 and the doc comment, but it is not decided. Decide before G0 if it is to be part of ADR 0028.
