@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { buildStructureGraph, focusGraphId } from '@domaintrail/visualization/domain/graph/build';
-import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from '@domaintrail/visualization/domain/graph/context-map';
-import { contextDependencies, groupByContext, supportingContexts } from '@domaintrail/modeling/model/dependencies';
-import { perLang } from '@domaintrail/visualization/domain/graph/ir';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import { check } from './helpers.js';
+import { buildStructureGraph, focusGraphId } from './build.js';
+import { CONTEXT_MAP_ALL_GRAPH_ID, buildContextMapGraph, contextNodeId } from './context-map.js';
+import { perLang } from './ir.js';
+import type { DomainModel } from '@domaintrail/modeling';
+import { check } from '../../test-helpers.js';
 
 const FILES = {
     'common.dt': 'shared context Common { primitive Quantity: Int { value >= 0 } }',
@@ -39,34 +38,6 @@ async function model(): Promise<DomainModel> {
     expect(a.diagnostics).toEqual([]);
     return a.model!;
 }
-
-describe('context dependencies', () => {
-    test('every use of another context, with its kind and where it is', async () => {
-        const deps = contextDependencies(await model()).map((d) => `${d.source} ${d.path} -> ${d.target} (${d.kind})`);
-        expect(deps).toEqual([
-            'Sales.Order quantity -> Common.Quantity (type)',
-            'Sales.Order createdBy -> Identity.UserId (id)',
-            'Sales.Order place(by) -> Identity.UserId (id)',
-            'Billing.Origin ORDER.orderId -> Sales.OrderId (id)',
-            'Billing.Origin MANUAL.channel -> Sales.Channel (type)',
-            'Billing.Invoice orderId -> Sales.Order (id)',
-            'Billing.Invoice shipTo -> Sales.Address (type)',
-        ]);
-    });
-
-    test('grouped by pair of contexts, with counts', async () => {
-        const groups = groupByContext(contextDependencies(await model())).map((g) => [g.from, g.to, g.ids, g.types]);
-        expect(groups).toEqual([
-            ['Sales', 'Common', 0, 1],
-            ['Sales', 'Identity', 2, 0],
-            ['Billing', 'Sales', 2, 2],
-        ]);
-    });
-
-    test('shared contexts and contexts with only IDs are supporting contexts', async () => {
-        expect([...supportingContexts(await model())].sort()).toEqual(['Common', 'Identity']);
-    });
-});
 
 describe('Context Map', () => {
     test('one node per domain context and one edge per dependency, supporting contexts left out', async () => {

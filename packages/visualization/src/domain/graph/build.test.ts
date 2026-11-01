@@ -1,24 +1,15 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from '@domaintrail/visualization/domain/graph/build';
-import { diffModels } from '@domaintrail/visualization/domain/graph/diff';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import {
-    INTERNAL_PADDING,
-    LINE_HEIGHT,
-    TRANSITION_SUB_LINE_HEIGHT,
-    anyLang,
-    sameText,
-    transitionText,
-    type TransitionLabels,
-} from '@domaintrail/visualization/domain/graph/ir';
-import { EXAMPLES, check } from './helpers.js';
+import { analyze } from '@domaintrail/modeling';
+import { boundaryId, buildStateGraph, buildStructureGraph, initialNodeId } from './build.js';
+import { diffModels } from './diff.js';
+import { ElkLayoutEngine } from '../../infrastructure/elk.js';
+import { INTERNAL_PADDING, LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, anyLang, sameText, transitionText, type TransitionLabels } from './ir.js';
+import { check, exampleSources } from '../../test-helpers.js';
 
 const engine = new ElkLayoutEngine();
 afterAll(() => engine.dispose());
 
-const exampleModel = async () => (await analyze(await loadWorkspace(EXAMPLES))).model!;
+const exampleModel = async () => (await analyze(await exampleSources())).model!;
 
 describe('Structure View graph', () => {
     test('contexts contain aggregate boundaries which contain exclusively owned elements', async () => {

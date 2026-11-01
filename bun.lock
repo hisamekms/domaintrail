@@ -96,6 +96,9 @@
         "@domaintrail/modeling": "workspace:*",
         "elkjs": "0.12.0",
       },
+      "devDependencies": {
+        "fast-check": "4.10.2",
+      },
     },
     "packages/workspace": {
       "name": "@domaintrail/workspace",

@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { analyze } from '@domaintrail/modeling/core/analyze';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { buildStateGraph, buildStructureGraph } from '@domaintrail/visualization/domain/graph/build';
-import { anyLang, perLang } from '@domaintrail/visualization/domain/graph/ir';
-import { EXAMPLES, check, codes, only } from './helpers.js';
+import { analyze } from './analyze.js';
+import { generateTypeScript } from '../generator/typescript.js';
+import { check, codes, exampleSources, only } from '../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   terms {
@@ -115,48 +112,9 @@ describe('label diagnostics', () => {
     });
 });
 
-describe('labels in views and generated code', () => {
-    test('graph texts exist for every language and display mode', async () => {
-        const m = (await check({ 'a.dt': SALES })).model!;
-        const structure = buildStructureGraph(m);
-        const order = structure.nodes.find((n) => n.id === 'Sales.Order')!;
-        // names and labels are the same in every language
-        expect(order.label).toEqual(anyLang({ name: 'Order', label: '注文', both: '注文 (Order)' }));
-        expect(order.lines.find((l) => l.key.en.name.startsWith('→'))).toEqual({
-            key: anyLang({ name: '→ customer', label: '→ 顧客', both: '→ 顧客 customer' }),
-            value: anyLang({ name: 'CustomerId', label: '顧客ID', both: 'CustomerId' }),
-        });
-        expect(order.lines.find((l) => l.key.en.name === 'note')!.value).toEqual(anyLang({ name: 'String?', label: '文字列?', both: 'String?' }));
-        expect(structure.nodes.find((n) => n.id === 'Sales')!.label.ja.label).toBe('販売');
-
-        const states = buildStateGraph(m.elements['Sales.Order'], m);
-        expect(states.edges[0].label).toEqual(anyLang({ name: 'confirm(at)', label: '確定する', both: '確定する confirm(at)' }));
-        expect(states.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.lines.at(-1)).toEqual({
-            key: anyLang({ name: '✓ hasNote', label: '✓ 備考あり', both: '✓ 備考あり (hasNote)' }),
-        });
-    });
-
-    test("the Live View's own words follow the language, whatever the display mode", async () => {
-        const m = (await check({ 'a.dt': SALES })).model!;
-        const boundary = buildStructureGraph(m).nodes.find((n) => n.id === 'Sales.Order@boundary')!;
-        expect(boundary.label).toEqual({
-            ja: { name: 'Order 集約', label: '注文 集約', both: '注文 (Order) 集約' },
-            en: { name: 'Order aggregate', label: '注文 aggregate', both: '注文 (Order) aggregate' },
-        });
-        const state = buildStructureGraph(m)
-            .nodes.find((n) => n.id === 'Sales.Order')!
-            .lines.find((l) => l.key.en.name === 'state');
-        expect(state?.key).toEqual(perLang({ ja: '状態', en: 'state' }));
-    });
-
-    test('wide characters reserve more width than ASCII', async () => {
-        const m = (await check({ 'a.dt': 'context S { id AId: UUID aggregate A "とても長い日本語の集約名称" { id: AId } }' })).model!;
-        const node = buildStructureGraph(m).nodes.find((n) => n.id === 'S.A')!;
-        expect(node.width).toBeGreaterThan('とても長い日本語の集約名称 (A)'.length * 8.6 + 28);
-    });
-
+describe('labels in generated code', () => {
     test('generated TypeScript carries labels and descriptions as JSDoc', async () => {
-        const a = await analyze(await loadWorkspace(EXAMPLES));
+        const a = await analyze(await exampleSources());
         expect(a.diagnostics).toEqual([]);
         const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
         expect(sales).toContain('/**\n * 注文\n * 顧客からの購入依頼。確定後は明細を変更できない。\n * @see sales/order.dt:13\n */\nexport type Order =');

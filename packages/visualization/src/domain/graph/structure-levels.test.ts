@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { aggregateDependencies, buildStructureGraph, wrapText } from '@domaintrail/visualization/domain/graph/build';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import type { DomainModel } from '@domaintrail/modeling/model/model';
-import { check } from './helpers.js';
+import { aggregateDependencies, buildStructureGraph, wrapText } from './build.js';
+import { ElkLayoutEngine } from '../../infrastructure/elk.js';
+import type { DomainModel } from '@domaintrail/modeling';
+import { check } from '../../test-helpers.js';
 
 const engine = new ElkLayoutEngine();
 afterAll(() => engine.dispose());
