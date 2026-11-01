@@ -1,5 +1,5 @@
-// The stable ID (`domain/ids.ts`) of the model element an AST node lies in: diagnostics and the language server report
-// on AST nodes until the checkers run on the typed model (T10).
+// The stable ID (`domain/ids.ts`) of the model element an AST node lies in: for the sites of the model as written, the
+// diagnostics of the links, and the language server.
 import type { AstNode } from 'langium';
 import {
     isCommand,

@@ -445,6 +445,40 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
 - **T10 — checkers onto the typed model (P4).** One task per checker (13), any order; each removes its exceptions from
   the map. Diagnostics (rule, message, range, order) stay the same. Done when Langium is imported only under
   `infrastructure/syntax` and the exception list has no syntax entries.
+  **T10 (done).** Four groups in parallel, each moving its checkers in its own commits and changing only its own
+  lines of `analyzeDomain` (a checker takes `SourceModel` and a `RuleSink` sharing the analysis's list, at its place in
+  the order): *a* `names` (M002), `shared` (M014), `structure` (M003–M005, M012, M013), `unions` (M015); *b*
+  `field-sets` (M016), `verified` (M024), `commands` (M006, M020, M021), `events` (M017); *c* `payloads` (M022),
+  `policies` (M023), `expressions` (M001, M008–M010, M018, M019), with `regexSource` (it reads the CST) moved to
+  `infrastructure/syntax/regex-source.ts`, where both builders put the regular expression as written on their model;
+  *d* `labels` (M002 for terms, L001–L003), `LabelResolver`'s `termFor` and `fieldLabel` ported to `domain/labels.ts`
+  (a field takes the context it is declared in; one from a field set, that of the field set), and generation's M011:
+  the name check and the generated names read the model as written and report through a `RuleSink`,
+  `GeneratedName.at` is a `Site` instead of an AST node, Modeling's `.` exports the model's lookups and member helpers
+  as the namespace `written` (`written.commandsOf`; flat names would clash with the syntax's `commandsOf` that the
+  language server reads), and `DiagnosticSink`, `FileResolver` and the AST index's helpers only generation used left
+  `.` (`ast`, `ModelIndex`, `commandsOf`, `LabelResolver`, `docComment`, `elementIdOf` stay for the language server).
+  The groups were merged one after the other; each worker compared the diagnostics of its rules side by side, on the AST
+  and on the model as written: 0 differences. Every `syntax` exception and
+  generation's `foreign-infrastructure` ones are gone: the map has no exceptions left.
+  *The cleanup:* parsing, the diagnostics of the syntax and of the links (their hints, M023) and the AST index moved
+  from `application/analyze.ts` to `infrastructure/syntax/parse.ts` (`parseDomain`); the analysis imports no Langium
+  (`DomainAnalysis.documents` is typed by the syntax's `DomainDocument`) and runs the rules with one `RuleSink` over its
+  own list, after the syntax's and the links' diagnostics. The rule `syntax` now also rejects Langium in a non-app
+  module outside `infrastructure/syntax/` (an app's language server may use it). Removed, with no users left (grep and
+  the typecheck): `DiagnosticSink` (`diagnostic-sink.ts` became `site.ts`: `siteOf` and `FileResolver`, which the
+  builders and the parser take; build.ts's copy of `FileResolver` went), `infrastructure/syntax/types.ts` (the Typed
+  Model's builder takes `cardinality` and `multiplicityText` from `domain/types.ts`), the AST index's `lookupVisible`,
+  `elementsOf`, `duplicates`, getters by kind but `aggregates`, `variantFields` and `identityField` (the helpers it
+  uses itself are no longer exported), and the test helpers' site check (`sitesOf`, `ruleDiagnostics`,
+  `unsitedDiagnostics`: a rule can only report at a site of the model now). The diagnostics of every analysis the
+  tests run (316 distinct, 174 with diagnostics) are the same before and after the cleanup. *Tests:* the labels' port
+  added three (`domain/labels.test.ts`); the cleanup removed the site test of `build-source.test.ts`, the two of
+  `RuleSink` against `DiagnosticSink` and the comparison of both static types (the test of the static types alone moved
+  to `domain/types.test.ts`). 1354 → 1357 → 1353 passing (7 todo; unit 1001 → 1004 → 1000, integration 353); T0
+  baselines byte-identical. *Left:* `DomainAnalysis` still carries `documents`, `index` and `resolveFile` (the
+  analysis's `Analysis` passes the first two on; `dt generate` reads `documents.length`, the syntax's tests the rest);
+  whether the Typed Model is built from the model as written is T11's question.
 - **T11 — Modeling in its own `.dt`.** `contexts/modeling/model/*.dt` for the typed model (not the AST and its
   mapping), generated code committed in `src/generated`, the domain built on it, a test that fails when generating
   again differs (as `test/collaboration-contracts.test.ts`), and the bootstrap steps.

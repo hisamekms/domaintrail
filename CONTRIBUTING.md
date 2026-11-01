@@ -39,7 +39,7 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `domain` (the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, the AST index, labels, the diagnostic sink, the AST → model mappings, the printer of `dt fmt`) |
+| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `domain` (the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources: the models and the rules, on what the syntax parses), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, parsing and the diagnostics of the syntax and the links, the AST index, labels, the sites, the AST → model mappings, the printer of `dt fmt`) |
 | `contexts/storming` | `@domaintrail/storming`, the Event Storming DSL `.dtes` (ADR 0024), upstream Modeling: `domain` (the IR, the validator, the link to the Typed Model, the semantic graph and timeline occurrences, its rule IDs, `isStormingFile`), `application` (its analysis against the Typed Model), `infrastructure/syntax` (its own grammar and Langium project, the parser into the IR, the printer) |
 | `contexts/collaboration` | `@domaintrail/collaboration`, collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r contexts/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports — the model validator among them —, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, identity) |
 | `capabilities/analysis` | `@domaintrail/analysis`, the project analysis behind `dt check` (ADR 0027's capability `analysis`): `application` (Modeling's and Storming's analyses and the generation's checks combined into one `Analysis`), `core` (the config's `sources` section) |
@@ -70,8 +70,9 @@ the platform, the shared kernel, or an app. Its rules:
   upstream of each package, the declared dependencies, the entries (a context takes only the published language of its
   upstream contexts), the versions, the layers (`domain/` and `core/` import no I/O, no `application/` and no
   technology; only an app imports another package's `infrastructure/` or `adapters/`), the kernel (it imports nothing)
-  and the syntax (Langium and `infrastructure/syntax/` stay out of `domain/` and `core/`; the checkers that still read
-  the AST are its exceptions until T10 of `docs/plans/0027-boundaries.md`). A new package gets an entry in the map.
+  and the syntax (Langium is imported only under a context's `infrastructure/syntax/`, and by an app's language
+  server; `domain/` and `core/` import neither Langium nor `infrastructure/syntax/`: the checkers read the model as
+  written). A new package gets an entry in the map.
 - `domaintrail.jsonc` is split by owner (ADR 0027, Project analysis and configuration): each section's type, defaults
   and validation live with the package that uses it, as `validate…(section, fail)` and `resolve…(section)` and its
   keys; `apps/dt/src/config` composes them (the checks in a fixed order, the first error wins) and the
