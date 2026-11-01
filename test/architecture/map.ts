@@ -71,8 +71,8 @@ export type Rule =
      */
     | 'kernel'
     /**
-     * an import of Langium or of a context's `infrastructure/syntax/` by a file under `domain/` or `core/` — the file,
-     * `<file under the sources>` (one entry per checker that still reads the AST, until T10)
+     * an import of Langium by a file of a module that is not an app outside its `infrastructure/syntax/`, or of a
+     * context's `infrastructure/syntax/` by a file under `domain/` or `core/` — the file, `<file under the sources>`
      */
     | 'syntax';
 

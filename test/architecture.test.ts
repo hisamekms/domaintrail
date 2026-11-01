@@ -248,9 +248,9 @@ const RULES: Record<Rule, RuleText> = {
     syntax: {
         section: 'Modeling',
         statement:
-            "`domain/` and `core/` read no syntax: they import neither Langium nor a context's `infrastructure/syntax/` (the grammar, the AST, its index); the checkers run on the typed model. Until T10 moves every checker onto it, those that still read the AST are listed as exceptions, one per file.",
+            "Langium is imported only under a context's `infrastructure/syntax/` (the grammar, the parser, the AST and its mappings; an app's language server may use it too), and `domain/` and `core/` read no syntax: they import neither Langium nor `infrastructure/syntax/`; the checkers run on the model as written.",
         fix: () =>
-            'read the typed model (`domain/`), which `infrastructure/syntax/` builds from the AST and which keeps the source locations; or move what needs the AST into `infrastructure/syntax/`',
+            'read the model as written or the typed model (`domain/`), which `infrastructure/syntax/` builds from the AST and which keep the source locations; or move what needs Langium or the AST into `infrastructure/syntax/` and call it from `application/`',
     },
     kernel: {
         section: 'Layout',
@@ -503,11 +503,17 @@ describe('layers', () => {
         );
     });
 
-    test('domain/ and core/ import neither Langium nor infrastructure/syntax/ (syntax)', () => {
+    test('Langium only under infrastructure/syntax/, and domain/ and core/ import neither Langium nor infrastructure/syntax/ (syntax)', () => {
+        const langium = (imp: Import): boolean => packageName(imp.specifier) === 'langium';
+        const inSyntax = (name: string, imp: Import): boolean => local(name, imp.file).startsWith(SYNTAX);
         expectNoProblems(
             'syntax',
-            pure
-                .filter(({ imp }) => packageName(imp.specifier) === 'langium' || imp.resolved?.includes(`/${SYNTAX}`))
+            all
+                .filter(
+                    ({ name, imp, dirs }) =>
+                        (MAP[name].kind !== 'app' && langium(imp) && !inSyntax(name, imp)) ||
+                        (dirs.some((d) => PURE.includes(d)) && imp.resolved?.includes(`/${SYNTAX}`)),
+                )
                 .map(({ name, imp }) => ({ module: name, key: local(name, imp.file), where: [imp.file] })),
         );
     });
