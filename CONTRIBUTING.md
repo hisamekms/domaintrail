@@ -55,29 +55,72 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 | `tree-sitter-domaintrail` | the tree-sitter grammar |
 | `editors/zed` | the Zed extension |
 
-Each package is `@domaintrail/<name>`, of a kind of [ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)
-(Layout): a context (`domain/`, `application/`, `infrastructure/`), a capability (`core/`, `application/`, `adapters/`),
-the platform, the shared kernel, or an app. Its rules:
+## Boundaries
 
-- A package declares in its `package.json` every package it imports, `@domaintrail/*` and third-party alike. A
-  third-party dependency the CLI needs at run time is also in the root's `dependencies` (the bundle keeps those
-  external), at the same version: a dependency declared in several manifests must have the same version everywhere.
-- Across packages, import only a package's entries: `@domaintrail/<area>` (its `src/index.ts`: published language,
-  use cases, the adapters an app wires) and, where a package has wire types, `@domaintrail/<area>/protocol` (its
-  `src/protocol.ts`). `exports` lists nothing else ([ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)).
-  Inside a package, import relatively with `.js`.
-- `test/architecture.test.ts` enforces the boundary map of ADR 0027 (`test/architecture/map.ts`): the kind and the
-  upstream of each package, the declared dependencies, the entries (a context takes only the published language of its
-  upstream contexts), the versions, the layers (`domain/` and `core/` import no I/O, no `application/` and no
-  technology; only an app imports another package's `infrastructure/` or `adapters/`), the kernel (it imports nothing)
-  and the syntax (Langium is imported only under a context's `infrastructure/syntax/`, and by an app's language
-  server; `domain/` and `core/` import neither Langium nor `infrastructure/syntax/`: the checkers read the model as
-  written). A new package gets an entry in the map.
-- `domaintrail.jsonc` is split by owner (ADR 0027, Project analysis and configuration): each section's type, defaults
-  and validation live with the package that uses it, as `validate…(section, fail)` and `resolve…(section)` and its
-  keys; `apps/dt/src/config` composes them (the checks in a fixed order, the first error wins) and the
-  workspace reads the file. A new setting goes to its owner and into `schema/domaintrail.schema.json`, which a test
-  compares with the composed keys.
+Each package is `@domaintrail/<name>`, of a kind of [ADR 0027](docs/adr/0027-domain-and-application-boundaries.md)
+(Three kinds of module, Layout). The boundary map, `test/architecture/map.ts`, gives each package its kind and the
+packages it depends on, and `test/architecture.test.ts` derives every check below from it (it also checks that this
+table matches the map):
+
+| Package | Path | Kind | Depends on |
+|---|---|---|---|
+| `modeling` | `contexts/modeling` | context | kernel |
+| `storming` | `contexts/storming` | context | kernel, modeling |
+| `collaboration` | `contexts/collaboration` | context | kernel, modeling, storming |
+| `analysis` | `capabilities/analysis` | capability | generation, kernel, modeling, storming |
+| `generation` | `capabilities/generation` | capability | kernel, modeling |
+| `visualization` | `capabilities/visualization` | capability | analysis, kernel, modeling, storming |
+| `agent` | `capabilities/agent` | capability | collaboration |
+| `workspace` | `platform/workspace` | platform | kernel |
+| `kernel` | `shared/kernel` | kernel | — |
+| `dt` | `apps/dt` | app | agent, analysis, collaboration, generation, kernel, modeling, storming, visualization, workspace |
+| `web` | `apps/web` | app | analysis (its unit tests only, a devDependency), collaboration, kernel, modeling, storming, visualization |
+
+| Kind | Inside `src/` | May depend on | Takes from another package |
+|---|---|---|---|
+| context | `domain/` (pure), `application/` (use cases, ports), `infrastructure/` (technology; `infrastructure/syntax/` the grammar, the parser, the AST and its mappings) | its declared upstream contexts, the kernel | `.`, and of an upstream context only its published language |
+| capability | `core/` (pure), `application/`, `adapters/` (technology) | contexts, the capabilities it declares (`analysis → generation`), the platform, the kernel | `.`, `./protocol` |
+| platform | | the platform, the kernel | `.` |
+| kernel | | nothing | |
+| app | its entry points and wiring | contexts, capabilities, the platform, the kernel; never another app | `.`, `./protocol` |
+
+The rules, with the name a failure gives (a failure also names the section of ADR 0027 and the usual fix):
+
+- **Declared dependencies.** A package's `package.json` declares exactly the `@domaintrail/*` packages the map lists,
+  and every third-party package it imports. A third-party dependency the CLI needs at run time is also in the root's
+  `dependencies` (the bundle keeps those external), at the same version: a dependency declared in several manifests has
+  the same version everywhere. Between kinds, only what the table above allows (`kinds`).
+- **Public surface.** `exports` lists only `.` (`src/index.ts`: published language, use cases, the adapters an app
+  wires) and, where a package has wire types, `./protocol` (`src/protocol.ts`; collaboration and visualization)
+  (`exports`). Across packages, import only those entries (`public-surface`); inside a package, import relatively with
+  `.js`, never out of the package. An index.ts names what it exports, module by module (no `export *`). A context's
+  **published language** is the modules the map lists in `published` — Modeling's Typed Model, dependencies, usages,
+  stable IDs, aggregates' dependencies, diff and rule IDs; Storming's IR, semantic graph, rule IDs and files — and a
+  context takes nothing else from an upstream's `.`, keyed by the module the name comes from.
+- **Layers.** `domain/` and `core/` import no I/O (`pure-core-io`: no `node:*` but `node:path`, `node:path/posix` and
+  `node:url`, no `bun`, `chokidar`, `ws` or `elkjs`) and neither `application/` nor `infrastructure/` / `adapters/`
+  (`pure-core-layers`). `application/` imports no I/O either (`application-io`): it reaches technology through ports.
+  Only an app imports another package's `infrastructure/` or `adapters/`, even through `.` (`foreign-infrastructure`).
+- **Syntax** (`syntax`). Langium is imported only under a context's `infrastructure/syntax/`, and by an app (the
+  language server); `domain/` and `core/` import neither Langium nor `infrastructure/syntax/`. The checkers read the
+  model as written (`contexts/modeling/src/domain/source-model.ts`), which the syntax builds from the AST with a site
+  for every part they report on.
+- **Generated code** (`generated`). A package's code generated from its own `.dt` (the map's `generated`: Modeling's
+  `src/generated`) imports only its own files, and the rest of the package imports only its types (`import type`). See
+  [Bootstrap](#bootstrap).
+- **The kernel** (`kernel`). `shared/kernel` imports only its own files and the pure builtins, and its index.ts exports
+  every module. Keep it small: what needs Langium or the model stays in the module that uses it.
+- **Runtimes.** Collaboration and the agent run on Node (`node:*` only in their `infrastructure/` / `adapters/`, no
+  `bun`); the page imports no `infrastructure/`.
+- **Exceptions.** The map can list a rule's known violations per package (`exceptions`); it lists none. A listed
+  violation that no longer occurs fails the test, so the list only shrinks: new code adds none.
+
+A new package gets an entry in the map and a row in the table above.
+
+`domaintrail.jsonc` is split by owner (ADR 0027, Project analysis and configuration): each section's type, defaults and
+validation live with the package that uses it, as `validate…(section, fail)` and `resolve…(section)` and its keys;
+`apps/dt/src/config` composes them (the checks in a fixed order, the first error wins) and the workspace reads the file.
+A new setting goes to its owner and into `schema/domaintrail.schema.json`, which a test compares with the composed keys.
 
 ## Tests
 
@@ -156,20 +199,26 @@ It regenerates the parser, runs the corpus tests and builds `tree-sitter-domaint
 parser and the wasm. Commit all of them: the tests parse with the committed wasm and fail when the stamp is stale, so
 CI needs neither the tree-sitter CLI nor the wasi-sdk.
 
-When adding a keyword to the DSL, decide whether it may also be a name: a field, parameter or command name
-(`FeatureName` in the Langium grammar, `FEATURE_KEYWORDS` in `grammar.js`) — the declaration keywords are — and an enum
-value or variant name (`ValueName`, `VALUE_KEYWORDS`: every keyword); `test/tree-sitter.test.ts` checks that both
-grammars agree. The words of expressions are not field names. A new declaration should start with its keyword followed
-by a name, never like `name :`, which is how a field starts: the parser tells a keyword used as a name from the keyword
-by the token after it. Compare the syntax errors of common mistakes (a keyword with its name missing, a block left
-open) before and after; `parser-messages.ts` rewrites those that read worse.
+## Adding a keyword
+
+A keyword lives in the Langium grammar of its language (`contexts/<context>/src/infrastructure/syntax/*.langium`), in
+the tree-sitter grammar and its highlight query (`tree-sitter-domaintrail/queries/highlights.scm`, copied to
+`editors/zed/languages/domaintrail/highlights.scm`, which a test compares), and in the Live View's highlighter
+(`apps/web/highlight.ts`). Decide whether it may also be a name: a field, parameter or command name (`FeatureName` in the
+Langium grammar, `FEATURE_KEYWORDS` in `grammar.js`) — the declaration keywords are — and an enum value or variant name
+(`ValueName`, `VALUE_KEYWORDS`: every keyword); `test/tree-sitter.test.ts` checks that both grammars agree. The words of
+expressions are not field names. A new declaration should start with its keyword followed by a name, never like
+`name :`, which is how a field starts: the parser tells a keyword used as a name from the keyword by the token after it.
+Compare the syntax errors of common mistakes (a keyword with its name missing, a block left open) before and after;
+`parser-messages.ts` rewrites those that read worse.
 
 ## The Zed extension
 
 `editors/zed` is a Rust extension (built by Zed, which needs Rust installed with rustup). Install it locally with *zed:
 install dev extension* and that directory. `extension.toml` pins the grammar to a commit of this repository
-(`[grammars.domaintrail] rev`): after changing the grammar and committing, point `rev` at that commit. Its version
-follows the package's.
+(`[grammars.domaintrail] rev`), which Zed fetches from GitHub: after a change of the grammar reaches `main`, point
+`rev` at that commit of `main` in a follow-up pull request (a branch's commits are gone once it is squash merged). Its
+version follows the package's.
 
 ## Commits
 

@@ -333,6 +333,24 @@ describe('the boundary map', () => {
             }
         }
     });
+
+    test("CONTRIBUTING.md's package table gives each package's path, kind and upstream as the map does", async () => {
+        const contributing = await readFile(path.join(ROOT, 'CONTRIBUTING.md'), 'utf8');
+        const rows = [...contributing.matchAll(/^\| `([a-z]+)` \| `([^`]+)` \| ([a-z]+) \| ([^|]+) \|$/gm)].map(([, name, dir, kind, upstream]) => ({
+            name,
+            dir,
+            kind,
+            // `analysis (its unit tests only, a devDependency)`: the remark aside
+            upstream:
+                upstream.trim() === '—'
+                    ? []
+                    : upstream
+                          .replace(/\s*\([^)]*\)/g, '')
+                          .split(',')
+                          .map((u) => u.trim()),
+        }));
+        expect(rows).toEqual(Object.entries(MAP).map(([name, m]) => ({ name, dir: m.dir, kind: m.kind, upstream: [...m.upstream] })));
+    });
 });
 
 // ---- dependencies ----------------------------------------------------------------------------------------------
