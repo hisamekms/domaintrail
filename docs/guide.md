@@ -378,8 +378,8 @@ context Sales {
 - Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
   passes through an optional field (`?`), a list that may be empty (`[0..*]`), or a union with a variant out of it
   (`union Expr { lit { value: Int } not { operand: Expr } }`). Otherwise, and for any cycle through an entity or an
-  aggregate, it is M012. The generated types, equality and checks handle nesting; the contract tests generate no
-  values of recursive types yet (see [Generated tests](#generated-tests)).
+  aggregate, it is M012. The generated types, equality and checks handle nesting, and the contract tests draw nested
+  values up to a maximum depth (see [Generated tests](#generated-tests)).
 
 <!-- topic: shared -->
 ### Shared contexts
@@ -1675,10 +1675,31 @@ Options, all optional:
 A failing case says what was expected, e.g. `Order.cancel(…) made an aggregate that violates 'otherNeedsNote'`. Change
 the implementation — or, if the implementation is right, the DSL (here a missing `requires` on `cancel`).
 
-**Recursive value types** have no generated arbitrary yet: `dt generate ts` warns, and the contract tests leave out
-the arbitraries of those types and of the types holding them, and the cases that need one (a command with such a
-parameter or of an aggregate holding one, a required policy reacting to such an event). Test those commands in your
-own tests.
+**Recursive value types** (a tree, an expression) are drawn like the others, built with `fc.letrec`: the types on one
+cycle (`Expr` and `Call`, each holding the other, even in different contexts) are defined together. Values are biased
+towards shallow ones, which keeps runs fast and counterexamples small, and go at most `maxRecursionDepth` deep: how
+many times a value nests through its cycle, counted where the cycle could end — a union's variant (a variant out of the
+cycle, such as `lit`, is the only one drawn once the depth is reached), an optional field (then absent), a list that may
+be empty (then empty). A value of depth 1 holds no other; a binary tree of depth 4 has at most 15 nodes. The depth is
+set in the config, overall and per type by qualified name; the types of one cycle use the greatest depth among them:
+
+```jsonc
+"tests": {
+  "maxRecursionDepth": 4, // the default
+  "types": { "Modeling.Expr": { "maxRecursionDepth": 3 } }
+}
+```
+
+Raise the depth when the rules only show in deeper values; lower it when runs are slow. A recursive type whose
+invariants reject most drawn values (a tree that must be balanced, an expression that must type-check) stops with the
+message naming the type, as any other: pass its arbitrary in `arbitraries`. Inside a cycle, the arbitrary passed is used
+for the nested values too, so it may build its values itself, with `fc.letrec` or from smaller valid ones:
+
+```ts
+// balanced trees: built by height, so every value holds the invariant
+const tree = fc.letrec<{ t: Tree }>((tie) => ({ t: fc.oneof({ depthSize: 'small', maxDepth: 3 }, fc.constant({ children: [] }), tie('t').map((c) => ({ children: [c, c] }))) })).t;
+register(M.contract(impl, { arbitraries: { M: { Tree: tree } } }));
+```
 
 **Outside the generated tests** is what happens around the commands, which your own tests cover (as
 `examples/shop/src/app.test.ts` does): the factories of verified types (`MakeAvailableEmail`, with your repositories and
@@ -2373,7 +2394,7 @@ generation refused) is an `error` message in the document, e.g. `{ "error": "Roo
 |---|---|
 | 0 | success (`check`: no errors; warnings are allowed) |
 | 1 | the model or a storming has errors, no `.dt` or `.dtes` file was found, generation was refused, `show` did not find the name (or it is ambiguous), `guide` got an unknown topic, or the root / a file could not be read |
-| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` that the model does not have) or an unknown `generate` target |
+| 2 | invalid configuration (`domaintrail.jsonc` / `--config`, including a context name in `generate.ts.contexts` or a type in `generate.ts.tests.types` that the model does not have) or an unknown `generate` target |
 
 <!-- topic: config -->
 ## Configuration
@@ -2401,7 +2422,13 @@ relative to the config file, and its directory becomes the root. Without a confi
       // and/or its own "policies" (all optional; see dt guide output-dirs)
       "contexts": { "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } },
       // contract tests, written only with this key (optional); they import domaintrail/testing and need fast-check
-      "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
+      "tests": {
+        "out": "src/domain/generated/tests", // default: <out>/tests
+        "runner": "vitest",                 // bun, vitest, jest, node
+        // how deep drawn values of recursive types go, overall and per type (a cycle uses its greatest)
+        "maxRecursionDepth": 4,             // default: 4
+        "types": { "Sales.Category": { "maxRecursionDepth": 3 } }
+      }
     }
   },
   "view": { "port": 4321, "host": "127.0.0.1" }             // defaults shown
@@ -2413,8 +2440,9 @@ only; contexts listed in `generate.ts.contexts` keep their own directories. Sour
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in
 `generate.ts.contexts` that is not a context of the model is a config error, reported by `generate ts` once the model
-has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`); the tests of a context with a
-`module` go into `<its out>/tests`. The policies of a context
+has been checked; so is a name in `generate.ts.tests.types` that is not a type of the model, and one that is not a
+recursive type is warned about. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`); the tests of
+a context with a `module` go into `<its out>/tests`. The policies of a context
 are `generate.ts.contexts.<Context>.policies` if given, else `generate.ts.policies`, else `optional` (see
 [Reactions to events](#reactions-to-events-policies)).
 
