@@ -57,6 +57,7 @@ const chat = async (s: Ctx): Promise<void> => {
         },
         reply: {
             outcome: 'done',
+            title: '注文の出荷',
             summary: '@{Sales.Order} に @{Sales.Order#Shipped} と、確定済みから出荷済みにする @{Sales.Order:ship} を足しました。',
             requests: [{ request: 1, status: 'done' }],
         },
@@ -69,6 +70,7 @@ const chat = async (s: Ctx): Promise<void> => {
         },
         reply: {
             outcome: 'done',
+            title: 'イベント名の統一',
             summary: '@{Sales.NoteChanged} を @{Sales.OrderNoteChanged} に改名し、返品のストーミングからホットスポット RefundAndOrder を消しました。',
             requests: [{ request: 1, status: 'done' }],
         },
@@ -84,7 +86,8 @@ const chat = async (s: Ctx): Promise<void> => {
 };
 
 const runs = async (s: Ctx): Promise<void> => {
-    // completed with changes, then applied again with a note: one card, two runs
+    // completed with changes, then applied again with a note: one card, two runs. Their replies have no title, as
+    // replies from before titles: the card is named by its first message instead
     const failed = await s.say('sato', '#請求書[1] に、決済サービスで支払いに失敗したときのイベントを追加してください', {
         targets: [s.dt('Billing.Invoice', '請求書')],
         reads: 'request',
@@ -131,6 +134,7 @@ const runs = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'done',
+            title: '注文確定の条件の確認',
             summary: 'すでに @{Sales.Order:confirm} に requires hasItems（明細が1件以上）があります。変更はしていません。',
             requests: [{ request: 1, status: 'done', note: '確認のみ' }],
         },
@@ -154,6 +158,7 @@ const runs = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'declined',
+            title: '顧客データの一括削除',
             summary:
                 '本人確認なしの一括削除は、誤操作や成りすましで顧客データを失うおそれがあるため行いません。削除の手順と確認の方法を決めてから依頼してください。',
             requests: [{ request: 1, status: 'skipped', note: '本人確認の方法が決まっていないため' }],
@@ -189,6 +194,7 @@ const runs = async (s: Ctx): Promise<void> => {
             ),
         reply: {
             outcome: 'done',
+            title: '出荷イベントと配送方法',
             summary: '@{Sales.OrderShipped} と @{Sales.ShippingMethod} を追加しました。',
             requests: [
                 { request: 1, status: 'done' },
@@ -206,6 +212,7 @@ const questions = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'clarification',
+            title: '請求書の支払期限',
             summary: '支払期限の決め方を確認させてください。',
             requests: [{ request: 1, status: 'question' }],
             questions: [
@@ -233,6 +240,7 @@ const questions = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'clarification',
+            title: '扱う支払方法',
             summary: 'どの支払方法を扱うか教えてください。',
             requests: [{ request: 1, status: 'question' }],
             questions: [
@@ -266,6 +274,7 @@ const questions = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'clarification',
+            title: '返品と請求書の関係',
             summary: '返品と請求書の関係について2点確認させてください。',
             requests: [{ request: 1, status: 'question' }],
             questions: [
@@ -295,6 +304,7 @@ const questions = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'clarification',
+            title: '入金額の差の扱い',
             summary: '入金額が違うときの扱いを確認させてください。',
             requests: [{ request: 1, status: 'question' }],
             questions: [
@@ -356,6 +366,7 @@ const questions = async (s: Ctx): Promise<void> => {
                 ),
             reply: {
                 outcome: 'done',
+                title: '一部入金と許容差額',
                 summary: '@{Billing.PartiallyPaid} と、許容差額 @{Billing.PaymentTolerance}（0〜880円）を追加しました。',
                 requests: [{ request: 1, status: 'done' }],
             },
@@ -371,6 +382,7 @@ const questions = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'clarification',
+            title: '検品で不良が見つかったとき',
             summary: '不良が見つかったあとの対応を確認させてください。',
             requests: [{ request: 1, status: 'question' }],
             questions: [
@@ -398,6 +410,7 @@ const questions = async (s: Ctx): Promise<void> => {
             edit: (root) => editFile(root, 'stormings/returns.dtes', /^( {2}event ItemDisposed .*\n)/m, '$1  event DefectFound "不良が見つかった"\n'),
             reply: {
                 outcome: 'done',
+                title: '不良の発見',
                 summary: '@{es:Returns/DefectFound} を追加しました。その後の対応はまだ入れていません。',
                 requests: [{ request: 1, status: 'done' }],
             },
@@ -431,6 +444,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
             ),
         reply: {
             outcome: 'done',
+            title: '注文取消と請求書の取消',
             summary: '@{Billing.InvoiceCancelled} を追加しました。',
             requests: [{ request: 1, status: 'done' }],
             assumptions: [
@@ -456,7 +470,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
     await s.voteAssumption('tanaka', cancelRun, 1, 'own');
     await s.voteAssumption('sato', cancelRun, 1);
 
-    // an alternative picked: the run that redoes it continues the card (→ #n)
+    // an alternative picked: the run that redoes it continues the card (the pick's time links to it)
     const amount = await s.say('suzuki', '#請求書を発行する[1] とき、請求金額を注文の合計から計算するようにしてください', {
         targets: [s.dt('Billing.Invoice:issue', '請求書を発行する')],
         reads: 'request',
@@ -477,6 +491,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
         edit: (root) => writeSource(root, 'billing/amount.dt', rounding('切り捨て')),
         reply: {
             outcome: 'done',
+            title: '請求金額の端数処理',
             summary: '@{Billing.Rounding} と @{Billing.TaxIncludedAmount} を追加しました。',
             requests: [{ request: 1, status: 'done' }],
             assumptions: [
@@ -497,7 +512,12 @@ const assumptions = async (s: Ctx): Promise<void> => {
     await s.pickAlternative(amountRun, 0, 'halfUp', {
         kind: 'reply',
         edit: (root) => writeSource(root, 'billing/amount.dt', rounding('四捨五入')),
-        reply: { outcome: 'done', summary: '端数を四捨五入（@{Billing.Rounding}）に変えました。', requests: [{ request: 1, status: 'done' }] },
+        reply: {
+            outcome: 'done',
+            title: '四捨五入への変更',
+            summary: '端数を四捨五入（@{Billing.Rounding}）に変えました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
     });
 
     // the assumption left as it was: the message applied again with a note of the facilitator's own
@@ -512,6 +532,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
             ),
         reply: {
             outcome: 'done',
+            title: '請求先の郵便番号',
             summary: '請求先の住所のために @{Sales.PostalCode} を追加しました。',
             requests: [{ request: 1, status: 'done' }],
             assumptions: [{ text: '請求先は顧客につき1つと考えました。', requests: [1], alternatives: [{ id: 'many', label: '複数の請求先から選ぶ' }] }],
@@ -535,7 +556,12 @@ const assumptions = async (s: Ctx): Promise<void> => {
                         '',
                     ].join('\n'),
                 ),
-            reply: { outcome: 'done', summary: '@{Sales.PostalCode} をハイフンなしの7桁にしました。', requests: [{ request: 1, status: 'done' }] },
+            reply: {
+                outcome: 'done',
+                title: '郵便番号の形式',
+                summary: '@{Sales.PostalCode} をハイフンなしの7桁にしました。',
+                requests: [{ request: 1, status: 'done' }],
+            },
         },
         { note: '前提はこのままで、郵便番号はハイフンなしの7桁にしてください' },
     );
@@ -558,7 +584,7 @@ const replies = async (s: Ctx): Promise<void> => {
     const first = await s.apply([reissue], {
         kind: 'reply',
         edit: (root) => writeSource(root, 'billing/reissue.dt', event([], false)),
-        reply: { outcome: 'done', summary: '@{Billing.InvoiceReissued} を追加しました。', requests: [{ request: 1, status: 'done' }] },
+        reply: { outcome: 'done', title: '請求書の再発行', summary: '@{Billing.InvoiceReissued} を追加しました。', requests: [{ request: 1, status: 'done' }] },
     });
     // two replies to the completed run, applied together: their run continues the card
     const count = await s.say('suzuki', 'イベント名は「請求書再発行」で分かりやすいです。再発行の回数も持たせたいです', { replyTo: first, reads: 'request' });
@@ -568,6 +594,7 @@ const replies = async (s: Ctx): Promise<void> => {
         edit: (root) => writeSource(root, 'billing/reissue.dt', event(['reason: ReissueReason', 'count: Int "再発行の回数"'], true)),
         reply: {
             outcome: 'done',
+            title: '再発行の回数と理由',
             summary: '@{Billing.InvoiceReissued} に回数と理由（@{Billing.ReissueReason}）を足しました。',
             requests: [
                 { request: 1, status: 'done' },
@@ -605,7 +632,7 @@ const reactions = async (s: Ctx): Promise<void> => {
                     '',
                 ].join('\n'),
             ),
-        reply: { outcome: 'done', summary: '@{Billing.ReceiptIssued} を追加しました。', requests: [{ request: 1, status: 'done' }] },
+        reply: { outcome: 'done', title: '領収書の発行', summary: '@{Billing.ReceiptIssued} を追加しました。', requests: [{ request: 1, status: 'done' }] },
     });
     // one emoji by many, mine (the facilitator's) among them
     for (const who of ['sato', 'suzuki', 'tanaka', 'facilitator'] as const) await s.react(who, wrap, '👍');
@@ -634,6 +661,7 @@ const references = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'done',
+            title: '注文から入金までの流れ',
             summary:
                 '@{Sales.Order} が @{Sales.Order#Confirmed} になると @{Billing.Invoice} が発行され（@{es:OrderToCash/InvoiceIssued}）、@{Billing.Invoice:pay} で @{Billing.InvoicePaid} になります。',
             requests: [
@@ -653,6 +681,7 @@ const references = async (s: Ctx): Promise<void> => {
         kind: 'reply',
         reply: {
             outcome: 'clarification',
+            title: '支払期限の持たせ先',
             summary: '持たせる先を選んでください。',
             requests: [{ request: 1, status: 'question' }],
             questions: [
