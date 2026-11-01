@@ -36,3 +36,29 @@ describe('verified types: the checker', () => {
         ).toEqual(['verified', 'of', 'for']);
     });
 });
+
+describe('keywords as names', () => {
+    test('a keyword or a primitive type after `.` is a name', () => {
+        const kinds = (src: string) =>
+            highlight(src)[0]
+                .filter((t) => t.kind !== 'plain')
+                .map((t) => [t.text, t.kind]);
+        expect(kinds('op == Op.and and kind != Kind.String')).toEqual([
+            ['op', 'name'],
+            ['Op', 'type'],
+            ['and', 'name'],
+            ['and', 'keyword'],
+            ['kind', 'name'],
+            ['Kind', 'type'],
+            ['String', 'name'],
+        ]);
+        expect(kinds('policy P when Paid -> Order.create')).toEqual([
+            ['policy', 'keyword'],
+            ['P', 'type'],
+            ['when', 'keyword'],
+            ['Paid', 'type'],
+            ['Order', 'type'],
+            ['create', 'name'],
+        ]);
+    });
+});

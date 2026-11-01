@@ -78,7 +78,10 @@ export function highlight(source: string): Token[][] {
             // `id: OrderId` / `value: Int` are field names, not keywords
             const end = m.index + text.length;
             const isFieldName = /^\s*:/.test(source.slice(end, end + 16));
-            push(KEYWORDS.has(word) && !isFieldName ? 'keyword' : PRIMITIVES.has(word) ? 'primitive' : /^[A-Z]/.test(word) ? 'type' : 'name', text);
+            // after `.` any word is a value or member name (`Op.and`, `Kind.String`, `-> Order.create`)
+            const isMember = /\.\s*$/.test(source.slice(Math.max(0, m.index - 16), m.index));
+            if (isMember && (KEYWORDS.has(word) || PRIMITIVES.has(word))) push('name', text);
+            else push(KEYWORDS.has(word) && !isFieldName ? 'keyword' : PRIMITIVES.has(word) ? 'primitive' : /^[A-Z]/.test(word) ? 'type' : 'name', text);
         } else push('plain', text);
     }
     return lines;
