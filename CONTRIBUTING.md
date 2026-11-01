@@ -39,15 +39,15 @@ CI (`.github/workflows/ci.yml`) runs the build, the type check, the lint, the fo
 
 | Path | Contents |
 |---|---|
-| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `model/` (`.dt`: what it publishes — the Typed Model, the diff, the dependency types, its rule IDs) and the TypeScript generated from it, committed in `src/generated` (imported by `domain` with `import type` only; see [Bootstrap](#bootstrap)); `domain` (the helpers over the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources: the models and the rules, on what the syntax parses), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, parsing and the diagnostics of the syntax and the links, the AST index, labels, the sites, the AST → model mappings, the printer of `dt fmt`) |
+| `contexts/modeling` | `@domaintrail/modeling`, the `.dt` language (a context of ADR 0027): `model/` (`.dt`: what it publishes — the Typed Model, the diff, the dependency types, its rule IDs; its locations are the kernel's `Location`) and the TypeScript generated from it, committed in `src/generated` (imported by `domain` with `import type` only; see [Bootstrap](#bootstrap)); `domain` (the helpers over the Typed Model, its dependencies between contexts and between aggregates, the diff of two models, the stable IDs, Modeling's rule IDs; the model as written that the checkers read — sites, expression trees, resolved references — with its static types and the rule sink; the checkers in `rules/`), `application` (Modeling's analysis of the `.dt` sources: the models and the rules, on what the syntax parses), `infrastructure/syntax` (the grammar and its Langium project, `langium-config.json`; the generated parser and AST, scoping, parsing and the diagnostics of the syntax and the links, the AST index, labels, the sites, the AST → model mappings, the printer of `dt fmt`) |
 | `contexts/storming` | `@domaintrail/storming`, the Event Storming DSL `.dtes` (ADR 0024), upstream Modeling: `domain` (the IR, the validator, the link to the Typed Model, the semantic graph and timeline occurrences, its rule IDs, `isStormingFile`), `application` (its analysis against the Typed Model), `infrastructure/syntax` (its own grammar and Langium project, the parser into the IR, the printer) |
-| `contexts/collaboration` | `@domaintrail/collaboration`, collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (after changing the model, `bun run dt -r contexts/collaboration generate ts`; `test/collaboration-contracts.test.ts` fails when generating again differs, `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports — the model validator among them —, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, identity) |
+| `contexts/collaboration` | `@domaintrail/collaboration`, collaboration sessions (ADR 0026): `model/` (`.dt`) and the TypeScript generated from it, committed in `src/generated` (see [Bootstrap](#bootstrap); `src/contracts.test.ts` runs its contract tests); `domain` (the commands and pure decisions, the emoji of a reaction), `application` (use cases, ports — the model validator among them —, its settings in the config's `session` section), `infrastructure` (`node:sqlite` store, blobs, identity) |
 | `capabilities/analysis` | `@domaintrail/analysis`, the project analysis behind `dt check` (ADR 0027's capability `analysis`): `application` (Modeling's and Storming's analyses and the generation's checks combined into one `Analysis`), `core` (the config's `sources` section) |
 | `capabilities/generation` | `@domaintrail/generation`: `core` (the TypeScript generator, generated checks and contract tests, naming, its name check M011 run by the project analysis; the config's `generate` and `lintHint` sections) |
 | `capabilities/visualization` | `@domaintrail/visualization`, the Live View's model: `core` (graph IR and the rows marked against the baseline, the storming views: the prefix trie, the render graph), `application` (the view service and its ports), `adapters` (the ELK layout, the layout file, git), `protocol.ts` |
 | `capabilities/agent` | `@domaintrail/agent`, `dt session subscribe` (ADR 0026): `core` (the subscriber and the run pipeline over its ports, the prompt), `adapters` (the agent API client and its SSE parser, the Claude Code adapter, `dt fmt`/`dt check`, the workspace scan; their settings `session.agent.allowedTools` and `session.agent.dt`) |
 | `platform/workspace` | `@domaintrail/workspace`, the workspace on disk: sources and `.gitignore` (which files are sources is given by the app), finding and reading the config file (its format given by the app), the output of `dt generate ts`, the file and git ref watchers |
-| `shared/kernel` | `@domaintrail/kernel`, ADR 0027's shared kernel: `Diagnostic` (its code a plain string; each context owns its rule IDs), the suggestions, `SourceFile`, `Location`, `camel`; it imports nothing |
+| `shared/kernel` | `@domaintrail/kernel`, ADR 0027's shared kernel: `Diagnostic` (its code a plain string; each context owns its rule IDs), the suggestions, `SourceFile`, `Location`, `camel`; it imports nothing. Its types are the shared context Kernel in `model/` (`.dt`), generated into `src/generated` (committed) and exported whole by its index.ts, through which the generated code of other packages imports the context (`@domaintrail/kernel`; see [Bootstrap](#bootstrap)) |
 | `apps/dt` | `@domaintrail/dt`, the one binary: `main.ts` (`runDt`, called by `bin/dt.ts`, and `cliDeps`), `wiring` (the Live View server, the session server, the subscriber, the model validator, with every adapter wired), `cli` (the commands, `dt guide`, `dt show`), `lsp` (`dt lsp`), `server` (`http` and `websocket`: the Live View server and its access check; `session`: the session's routes, identities, presence, the agent API), `config` (`domaintrail.jsonc` composed from its sections' owners; the ports, hosts and allowed hosts and origins are the app's own) |
 | `apps/web` | `@domaintrail/web`, the Live View page (React + tldraw): `app` (shell, top bar, socket), `view` (the view's hooks and workspace), `session`, `shared` |
 | `testing` | `domaintrail/testing`, the support of the generated contract tests (ADR 0028, decision 5): a subpath of the published package, built into `dist/testing.js` (see [The testing support](#the-testing-support)) |
@@ -110,8 +110,9 @@ The rules, with the name a failure gives (a failure also names the section of AD
   `dependencies` (the bundle keeps those external), at the same version: a dependency declared in several manifests has
   the same version everywhere. Between kinds, only what the table above allows (`kinds`).
 - **Public surface.** `exports` lists only `.` (`src/index.ts`: published language, use cases, the adapters an app
-  wires) and, where a package has wire types, `./protocol` (`src/protocol.ts`; collaboration and visualization)
-  (`exports`). Across packages, import only those entries (`public-surface`); inside a package, import relatively with
+  wires), where a package has wire types, `./protocol` (`src/protocol.ts`; collaboration and visualization), and, where
+  the tests of other packages draw values of its context, `./tests` (its generated `src/generated/tests/<Context>.ts`;
+  the kernel), which only tests import (`exports`). Across packages, import only those entries (`public-surface`); inside a package, import relatively with
   `.js`, never out of the package. An index.ts names what it exports, module by module (no `export *`). A context's
   **published language** is the modules the map lists in `published` — Modeling's Typed Model, dependencies, usages,
   stable IDs, aggregates' dependencies, diff and rule IDs; Storming's IR, semantic graph, rule IDs and files — and a
@@ -124,9 +125,12 @@ The rules, with the name a failure gives (a failure also names the section of AD
   language server); `domain/` and `core/` import neither Langium nor `infrastructure/syntax/`. The checkers read the
   model as written (`contexts/modeling/src/domain/source-model.ts`), which the syntax builds from the AST with a site
   for every part they report on.
-- **Generated code** (`generated`). A package's code generated from its own `.dt` (the map's `generated`: Modeling's
-  `src/generated`) imports only its own files, and the rest of the package imports only its types (`import type`). See
-  [Bootstrap](#bootstrap).
+- **Generated code** (`generated`). A package's code generated from the model (the map's `generated`: Modeling's and
+  the kernel's `src/generated`) imports only its own files and the modules of the contexts that the root
+  `domaintrail.jsonc` writes into other packages (`generate.ts.contexts.<Ctx>.module`: Modeling's imports
+  `@domaintrail/kernel`), and the rest of the package imports only its types (`import type`), but for the index.ts of a
+  package whose generated code other packages import (the map's `publishesGenerated`: the kernel's), which exports it
+  whole. The generated contract tests (`src/generated/tests`) count as tests. See [Bootstrap](#bootstrap).
 - **The kernel** (`kernel`). `shared/kernel` imports only its own files and the pure builtins, and its index.ts exports
   every module. Keep it small: what needs Langium or the model stays in the module that uses it.
 - **Runtimes.** Collaboration and the agent run on Node (`node:*` only in their `infrastructure/` / `adapters/`, no
@@ -187,22 +191,26 @@ bun run test:it        # the integration tests: test/
 
 ## Bootstrap
 
-Modeling describes what it publishes in its own `.dt` (`contexts/modeling/model`), and the tool is built on the
-TypeScript generated from it, committed in `contexts/modeling/src/generated` (as Collaboration's in
-`contexts/collaboration/src/generated`). Modeling imports the generated code with `import type` only (the architecture
-test's rule `generated`), so the tool runs from the committed output even when the generator is broken.
-`test/modeling-contracts.test.ts` and `test/collaboration-contracts.test.ts` fail when the model does not check clean,
-is not formatted, or generating it again differs from the committed files.
+DomainTrail describes itself in `.dt`, with one configuration at the root (`domaintrail.jsonc`, ADR 0028): the kernel
+(`shared/kernel/model`, a shared context), Modeling (`contexts/modeling/model`: what it publishes) and Collaboration
+(`contexts/collaboration/model`). Each is generated into its package's `src/generated` (committed, with its contract
+tests in `src/generated/tests`), and imported from the other packages by the package's module (`generate.ts.contexts.
+<Ctx>.module`): Modeling's Typed Model takes the kernel's `Location` from `@domaintrail/kernel`. `bun run dt check` and
+`bun run dt view` at the root show all three. The tool is built on the generated code: Modeling imports it with `import
+type` only (the architecture test's rule `generated`), so the tool runs from the committed output even when the
+generator is broken. `test/self-contracts.test.ts` fails when the model does not check clean, is not formatted, or
+generating it again differs from the committed files.
 
-- **Changing Modeling's model:** edit `contexts/modeling/model/*.dt`, run `bun run dt -r contexts/modeling fmt` and
-  `bun run dt -r contexts/modeling generate ts`, then `bun run typecheck` and fix what uses the changed types. A change of
-  the Typed Model's shape changes the Live View payload (a T0 baseline): make it in one commit with every consumer and
-  the updated snapshots (`bun test -u` on those tests), and say why in the commit message.
-- **Changing the generator:** regenerate both packages (`bun run dt -r contexts/modeling generate ts` and
-  `bun run dt -r contexts/collaboration generate ts`) and commit the generated files with the change.
+- **Changing the model** (any of the three): edit the `.dt`, run `bun run dt fmt` and `bun run dt generate ts` at the
+  root, then `bun run typecheck` and fix what uses the changed types (a type the kernel's generated code adds is also
+  exported from `shared/kernel/src/index.ts`). A change of the Typed Model's shape changes the Live View payload (a T0
+  baseline): make it in one commit with every consumer and the updated snapshots (`bun test -u` on those tests), and
+  say why in the commit message.
+- **Changing the generator:** regenerate (`bun run dt generate ts` at the root) and commit the generated files with
+  the change.
 - **A broken generator** (its output does not type-check, or the tool no longer runs): `git restore
-  contexts/modeling/src/generated contexts/collaboration/src/generated` to get the committed output back, fix the
-  generator with it in place, then regenerate both packages.
+  shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated` to get the committed
+  output back, fix the generator with it in place, then regenerate.
 
 ## The tree-sitter grammar
 

@@ -1738,6 +1738,32 @@ its own `_runtime.ts` and an `index.ts` re-exporting only the contexts in it; a 
 relative path (`import type * as Common from '../../packages/shared/src/generated/Common.js'`). The runtimes are
 identical, so values typed with one are accepted where the other is expected.
 
+When those directories are packages of a monorepo, a relative path crosses from one package into another. Give the
+context the module through which its package exports its generated code, next to its `out`:
+
+```jsonc
+{
+  "generate": {
+    "ts": {
+      "contexts": { "Common": { "out": "packages/shared/src/generated", "module": "@acme/shared" } },
+      "tests": {},
+    },
+  },
+}
+```
+
+- Generated code in another output directory imports the context from the module (`import type * as Common from
+  '@acme/shared'`; a value import when a generated check calls one of its functions); code in the same directory keeps
+  the relative path. The package exports the context's generated module under that name (an entry pointing at
+  `Common.ts`, or an index that exports all of it).
+- With contract tests, the context's tests are written into its package, `<out>/tests` (with their own `index.ts`,
+  and `_register.ts` with a runner; the package needs domaintrail and fast-check as dev dependencies), and the tests of other directories take its arbitraries from `<module>/tests`: the
+  package exports its `tests/Common.ts` under that name. The options of a context's tests name the contexts whose tests
+  are next to them and those of other packages they draw values from, so a package's tests import only the packages
+  it depends on.
+- `module` needs `out`. Keep one configuration for the whole repository: every context is still read, checked and
+  generated together, and the Live View shows them all.
+
 Each run replaces the files generated before (recognized by their header). The files written are recorded in
 `.domaintrail/generated.json` under the root, and generated files of earlier runs that are no longer written (an output
 directory moved, a context removed) are deleted, along with a directory left empty. Only recorded paths inside the root
@@ -2354,7 +2380,8 @@ relative to the config file, and its directory becomes the root. Without a confi
       "out": "src/domain/generated",                        // default: "generated/domain"
       // policies: "optional" (a handler type each) or "required" (also <Context>PolicyHandlers, which the contract tests take)
       "policies": "optional",                               // default: "optional"
-      // per context: a directory of its own instead of "out", and/or its own "policies" (both optional)
+      // per context: a directory of its own instead of "out" (with "module": the name its package exports it by),
+      // and/or its own "policies" (all optional; see dt guide output-dirs)
       "contexts": { "Common": { "out": "packages/shared/src/generated" }, "Billing": { "policies": "required" } },
       // contract tests, written only with this key (optional); they import domaintrail/testing and need fast-check
       "tests": { "out": "src/domain/generated/tests", "runner": "vitest" } // default out: <out>/tests; runner: bun, vitest, jest, node
@@ -2369,7 +2396,8 @@ only; contexts listed in `generate.ts.contexts` keep their own directories. Sour
 included, must stay inside the config file's directory (the root without a config file): an absolute path or one with
 `..` is a config error, and an output directory reached through a symlink stops generation. A name in
 `generate.ts.contexts` that is not a context of the model is a config error, reported by `generate ts` once the model
-has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`). The policies of a context
+has been checked. Without `generate.ts.tests.out`, the tests follow `--out` (`<out>/tests`); the tests of a context with a
+`module` go into `<its out>/tests`. The policies of a context
 are `generate.ts.contexts.<Context>.policies` if given, else `generate.ts.policies`, else `optional` (see
 [Reactions to events](#reactions-to-events-policies)).
 
