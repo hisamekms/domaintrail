@@ -50,7 +50,7 @@ if (step === 'run') {
     const request = must(await use.sendRequest({
         session: session.id,
         author: facilitator,
-        target: { target: { kind: 'DtElement', element: must(C.makeElementName('Sales.Order')) }, sourceRevision: revision.id },
+        targets: [{ target: { kind: 'DtElement', element: must(C.makeElementName('Sales.Order')) }, sourceRevision: revision.id }],
         body: must(C.makeText('Add a note.')),
     }));
     const run = must(await use.queueRun({ session: session.id, requests: [request.id], queuedBy: facilitator }));

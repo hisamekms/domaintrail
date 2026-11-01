@@ -160,10 +160,57 @@
               "type": "array",
               "items": { "type": "string", "minLength": 1 },
               "default": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+            },
+            "dt": {
+              "description": "The command the agent's dt runs (and the dt fmt / dt check after it), as an argument array, e.g. [\"node\", \"../clone/dist/dt.js\"]. An element with a path separator that is not absolute is relative to this file. Default: the running dt itself.",
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "maxPreviousRunDiff": {
+              "description": "The most characters of unified diff the agent is given of the runs a run continues (the runs its messages reply to, the run it answers), all together; past it, only the files each changed.",
+              "type": "integer",
+              "minimum": 0,
+              "default": 20480
             }
           }
         },
-        "maxParticipants": { "description": "Most participants a session admits.", "type": "integer", "minimum": 1, "default": 50 }
+        "maxParticipants": { "description": "Most participants a session admits.", "type": "integer", "minimum": 1, "default": 50 },
+        "quickReactions": {
+          "description": "The emoji the add-reaction popover of the chat offers first, in order: each exactly one emoji (one grapheme; ZWJ sequences, skin tones, flags and keycaps count as one), distinct. Any other emoji can still be typed there.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "default": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"]
+        },
+        "classifier": {
+          "description": "Telling the chat's requests from its talk (opt-in). When enabled, the text of each chat message is sent to Cloudflare Workers AI.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "description": "Classify the chat's messages; otherwise every message can be applied.", "type": "boolean", "default": false },
+            "provider": { "description": "The classifier.", "enum": ["cloudflare-clef"], "default": "cloudflare-clef" },
+            "model": { "description": "The Clef model of Workers AI.", "enum": ["clef-flash", "clef"], "default": "clef-flash" },
+            "accountId": { "description": "The Cloudflare account of Workers AI (required when enabled).", "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },
+            "apiTokenEnv": {
+              "description": "The name of the environment variable holding the Workers AI API token (never the token itself).",
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "default": "CLOUDFLARE_API_TOKEN"
+            },
+            "threshold": {
+              "description": "The probability from which a message is a request.",
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "exclusiveMaximum": 1,
+              "default": 0.5
+            }
+          },
+          "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+          "then": { "required": ["accountId"] }
+        }
       },
       "if": { "properties": { "identity": { "const": "access" } }, "required": ["identity"] },
       "then": { "required": ["access"] }

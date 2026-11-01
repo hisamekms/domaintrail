@@ -78,6 +78,8 @@ export interface SubscribeOptions {
     /** The config file given with `-c` (for `dt fmt` and `dt check` after the agent). */
     configPath?: string;
     agent: 'claude';
+    /** `session.agent.dt`: the command `dt` runs for the agent and after it; absent, the running CLI itself. */
+    dt?: readonly string[];
     /** Handle one run (waiting for one if none is queued), then end. */
     once: boolean;
     log: (line: string) => void;

@@ -6,10 +6,13 @@
 // is decided by the caller (S4); the use cases take the participant as a fact.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
+import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
+import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
+import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
-import { diagnosticsDiff, runReport, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
+import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { IdentityKey } from './identity.js';
 import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
@@ -52,6 +55,19 @@ export interface NoRequests {
 
 export interface NothingQueued {
     readonly type: 'NothingQueued';
+}
+
+/** The facilitator's answer does not fit the questions of the run it answers (`field`: where in the answer). */
+export interface InvalidAnswer {
+    readonly type: 'InvalidAnswer';
+    readonly field: string;
+    readonly message: string;
+}
+
+/** The run answered is not one that waits for an answer to structured questions (not NeedsClarification, or its reply asked none). */
+export interface NothingToAnswer {
+    readonly type: 'NothingToAnswer';
+    readonly run: AgentRunId;
 }
 
 /** Another run of the session is running or claimed: runs are serial. */
@@ -127,19 +143,34 @@ export const MAX_COMPARISON_DIFF = 512 * 1024;
 /** The least budget a file's diff is started with: below it, the rest of the comparison's diffs are omitted. */
 const MIN_DIFF_ROOM = 2 * 1024;
 
+/** A run that a run continues (its messages reply to it, its answer answers it, or it picked one of its alternatives), with what it changed. */
+export interface PreviousRun {
+    readonly run: Collaboration.AgentRun;
+    readonly changes: PreviousRunChanges;
+}
+
 /** Everything a session holds, for a page that shows it. */
 export interface SessionState {
     readonly session: Collaboration.Session;
     readonly requests: readonly Collaboration.Request[];
     readonly runs: readonly Collaboration.AgentRun[];
     readonly revisions: readonly Collaboration.Revision[];
+    /** The marks still placed (votes and reactions), in the order they were placed. */
+    readonly marks: readonly Collaboration.PlacedMark[];
 }
 
-/** Whether each request's target still resolves in the workspace as it is now. */
+/** What setting a mark changed: the mark placed (none when it was there already or taken off) and the marks removed. */
+export interface MarkSet {
+    readonly placed: Collaboration.PlacedMark | undefined;
+    /** The mark taken off, or the votes of its exclusive group that it moved from. */
+    readonly removed: readonly Collaboration.RemovedMark[];
+}
+
+/** Whether each target of each request still resolves in the workspace as it is now (in the request's order of targets). */
 export interface TargetStatuses {
     /** The content hash of the workspace the targets were resolved in. */
     readonly contentHash: Collaboration.ContentHash;
-    readonly statuses: ReadonlyMap<Collaboration.RequestId, TargetStatus>;
+    readonly statuses: ReadonlyMap<Collaboration.RequestId, readonly TargetStatus[]>;
 }
 
 export type RestoreError =
@@ -171,18 +202,73 @@ export interface CollaborationUseCases {
     sendRequest(input: {
         readonly session: SessionId;
         readonly author: ParticipantId;
-        readonly target: Collaboration.TargetSnapshot;
+        /** What the request is about: none for the whole workspace. */
+        readonly targets: readonly Collaboration.TargetSnapshot[];
         readonly body: Collaboration.Text;
-    }): Promise<Result<Collaboration.SentRequest, Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed | NotAParticipant | InvalidTarget>>;
+        /** The run of the session it replies to: ended (completed, failed, declined or cancelled), not waiting for an answer. */
+        readonly replyTo?: AgentRunId;
+        /** The participants of the session the body mentions (`@name[pN]` names the N-th), each once, at most 20. */
+        readonly mentions?: readonly ParticipantId[];
+    }): Promise<
+        Result<
+            Collaboration.SentRequest,
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | NotAParticipant
+            | Collaboration.RunNotFound
+            | Collaboration.RunOfAnotherSession
+            | Collaboration.RunNotReplyable
+            | Collaboration.MentionedNotAParticipant
+            | Collaboration.TooManyMentions
+            | Collaboration.DuplicateMention
+            | InvalidTarget
+            | Collaboration.TooManyTargets
+            | Collaboration.DuplicateTarget
+            | Collaboration.WorkspaceTarget
+        >
+    >;
     dismissRequest(input: {
         readonly request: Collaboration.RequestId;
         readonly by: ParticipantId;
     }): Promise<Result<Collaboration.DismissedRequest, NotFound | NotAllowed>>;
+    /**
+     * Places or takes off a participant's mark (a vote or a reaction; `placed`: whether it should be there). Placing
+     * a vote moves the participant's vote of the same exclusive group; setting a mark to what it is changes nothing.
+     * Refused when the target is not the session's, or is a vote that closed (`domain/marks.ts`), when the sign does
+     * not fit the target, for a vote of the facilitator, and for an emoji new to a target that has
+     * `MAX_REACTION_EMOJI` different emoji already.
+     */
+    setMark(input: {
+        readonly session: SessionId;
+        readonly participant: ParticipantId;
+        readonly target: Collaboration.MarkTarget;
+        readonly sign: Collaboration.MarkSign;
+        readonly placed: boolean;
+    }): Promise<
+        Result<
+            MarkSet,
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | NotAParticipant
+            | Collaboration.MarkTargetNotFound
+            | Collaboration.MarkTargetClosed
+            | Collaboration.MarkNotForTarget
+            | Collaboration.FacilitatorDoesNotVote
+            | Collaboration.ReactionLimitReached
+        >
+    >;
     /** Bundles sent requests of the session into a queued run, freezing their content as its input. */
     queueRun(input: {
         readonly session: SessionId;
         readonly requests: readonly Collaboration.RequestId[];
         readonly note?: Collaboration.Text;
+        /** The answer to the questions of a run of the session that needs clarification, frozen into the input. */
+        readonly answer?: { readonly answerTo: AgentRunId; readonly answer: AnswerData };
+        /**
+         * The alternative picked of an assumption of a completed run of the session, frozen into the input: the requests
+         * are that run's requests, queued again (`domain/reply.ts` `resolvePick`).
+         */
+        readonly pick?: PickData;
         readonly queuedBy: ParticipantId;
     }): Promise<
         Result<
@@ -195,6 +281,14 @@ export interface CollaborationUseCases {
             | Collaboration.DuplicateRequest
             | Collaboration.InputMismatch
             | NoRequests
+            | NotFound
+            | NothingToAnswer
+            | InvalidAnswer
+            | Collaboration.RunNotFound
+            | Collaboration.RunOfAnotherSession
+            | Collaboration.RunNotPickable
+            | Collaboration.AlternativeNotFound
+            | Collaboration.PickMismatch
         >
     >;
     /** Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. */
@@ -220,18 +314,30 @@ export interface CollaborationUseCases {
     /**
      * Ends a running run with the agent's facts: the workspace now is its result revision (the base itself when
      * nothing changed), the diagnostics are compared with the base's, and the run success rule decides Completed or
-     * Failed. Calling it again with the same lease returns the same run.
+     * Failed. The agent's reply is kept with a completed run, never used to decide. Calling it again with the same lease
+     * returns the same run.
      */
     finishRun(input: {
         readonly run: AgentRunId;
         readonly token: string;
         readonly facts: RunFacts;
-    }): Promise<Result<Finished, NotFound | LeaseLost | NotAllowed | BlobMissing | Collaboration.PathOutsideRoot>>;
+        readonly reply?: Collaboration.AgentReply;
+    }): Promise<Result<Finished, NotFound | LeaseLost | NotAllowed | BlobMissing | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>>;
+    /** Ends a running run with the agent's question (plain text, and its structured reply when there is one). */
     askClarification(input: {
         readonly run: AgentRunId;
         readonly token: string;
         readonly question: Collaboration.Text;
-    }): Promise<Result<Ended<Collaboration.NeedsClarificationAgentRun>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot>>;
+        readonly reply?: Collaboration.AgentReply;
+    }): Promise<
+        Result<Ended<Collaboration.NeedsClarificationAgentRun>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>
+    >;
+    /** Ends a running run that the agent declined (its reply says why); the workspace now is its result revision. */
+    declineRun(input: {
+        readonly run: AgentRunId;
+        readonly token: string;
+        readonly reply: Collaboration.AgentReply;
+    }): Promise<Result<Ended<Collaboration.DeclinedAgentRun>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>>;
     /** Ends a running run without a report (the agent's abnormal end). */
     failRun(input: {
         readonly run: AgentRunId;
@@ -273,6 +379,12 @@ export interface CollaborationUseCases {
         readonly before: RevisionId;
         readonly after: RevisionId;
     }): Promise<Result<Comparison, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
+    /**
+     * The runs a run continues — those its messages reply to, then the one its answer answers, then the one it picked an
+     * alternative of, as its frozen input names them — each with what it changed from its base to its result revision:
+     * a unified diff while the diffs of all of them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
+     */
+    previousRuns(input: { readonly run: AgentRunId; readonly maxDiff: number }): Promise<Result<readonly PreviousRun[], NotFound>>;
     /** The restores attempted in the session, in order. */
     restoreOperations(input: { readonly session: SessionId }): Promise<readonly RestoreOperation[]>;
     sessionState(input: { readonly session: SessionId }): Promise<Result<SessionState, NotFound>>;
@@ -324,7 +436,7 @@ const notFound = (aggregate: NotFound['aggregate'], id: string): NotFound => ({ 
 const notAllowed = (command: string, state: string): NotAllowed => ({ type: 'NotAllowed', command, state });
 
 /** The ended states of a run under its lease. */
-type EndedRun = Collaboration.CompletedAgentRun | Collaboration.FailedAgentRun | Collaboration.NeedsClarificationAgentRun;
+type EndedRun = Collaboration.CompletedAgentRun | Collaboration.FailedAgentRun | Collaboration.NeedsClarificationAgentRun | Collaboration.DeclinedAgentRun;
 
 export function createCollaboration(deps: CollaborationDeps): CollaborationUseCases {
     const { uow, clock, ids } = deps;
@@ -367,7 +479,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         const stored = stores.runs.load(run);
         if (stored?.completedWith !== token) return undefined;
         const r = stored.run;
-        return r.state === 'Completed' || r.state === 'Failed' || r.state === 'NeedsClarification' ? r : undefined;
+        return r.state === 'Completed' || r.state === 'Failed' || r.state === 'NeedsClarification' || r.state === 'Declined' ? r : undefined;
     };
 
     /** The running run held with `token` (before or after a snapshot taken between transactions). */
@@ -388,6 +500,52 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         const base = stores.revisions.load(run.baseRevision);
         if (base && base.contentHash === captured.contentHash) return { revision: base, changed: false };
         return { revision: record(stores, run.session, { kind: 'RunResult', run: run.id }, captured, at), changed: true };
+    };
+
+    /**
+     * Ends a running run without `dt fmt`/`dt check` (a question, a decline): the workspace now is its result revision
+     * (the base itself when nothing changed). The same call again with the same lease returns the same run.
+     */
+    const endWithoutChecks = async <S extends 'NeedsClarification' | 'Declined', R extends Extract<EndedRun, { state: S }>>(
+        run: AgentRunId,
+        token: string,
+        state: S,
+        decide: (
+            r: Collaboration.RunningAgentRun,
+            resultRevision: RevisionId,
+            at: Date,
+        ) => Result<{ readonly aggregate: R; readonly events: object }, Collaboration.InvalidReply>,
+    ): Promise<Result<Ended<R>, NotFound | LeaseLost | NotAllowed | Collaboration.PathOutsideRoot | Collaboration.InvalidReply>> => {
+        const before = await uow.transaction((stores): Result<EndedRun | undefined, NotFound | LeaseLost | NotAllowed> => {
+            const replay = replayOf(stores, run, token);
+            if (replay) return ok(replay);
+            const r = running(stores, run, token, clock.now());
+            return r.ok ? ok(undefined) : r;
+        });
+        if (!before.ok) return before;
+        if (before.value) {
+            const replay = before.value;
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the replayed run is in the state this call ends runs in
+            if (replay.state === state) return ok({ run: replay as R, replayed: true });
+            return err(notAllowed(state === 'Declined' ? 'decline' : 'askClarification', replay.state));
+        }
+        const captured = await capture(deps);
+        if (!captured.ok) return captured;
+        return uow.transaction((stores) => {
+            const r = running(stores, run, token, clock.now());
+            if (!r.ok) return r;
+            const at = clock.now();
+            // decided before the result is recorded: a refused reply records nothing
+            const check = decide(r.value, r.value.baseRevision, at);
+            if (!check.ok) return check;
+            const result = resultOf(stores, r.value, captured.value, at);
+            const decided = decide(r.value, result.revision.id, at);
+            if (!decided.ok) return decided;
+            stores.runs.save(decided.value.aggregate);
+            stores.runs.endLease(run, token);
+            publish(stores, r.value.session, decided.value.events, at);
+            return ok({ run: decided.value.aggregate, replayed: false });
+        });
     };
 
     const useCases: CollaborationUseCases = {
@@ -433,15 +591,32 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async sendRequest({ session, author, target, body }) {
-            const violated = [...Collaboration.checkTargetSnapshot(target), ...(target.range ? Collaboration.checkSourceRange(target.range) : [])];
+        async sendRequest({ session, author, targets, body, replyTo, mentions = [] }) {
+            const violated = targets.flatMap((target) => [
+                ...Collaboration.checkTargetSnapshot(target),
+                ...(target.range ? Collaboration.checkSourceRange(target.range) : []),
+            ]);
             if (violated.length) return err({ type: 'InvalidTarget', violated });
             return uow.transaction(async (stores) => {
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === author)) return err({ type: 'NotAParticipant', participant: author });
+                let replyable: Collaboration.ReplyableRun | undefined;
+                if (replyTo !== undefined) {
+                    const r = await storeVerifications(stores).makeReplyableRun(replyTo, session);
+                    if (!r.ok) return r;
+                    replyable = r.value;
+                }
+                const mentioned: Collaboration.MentionableParticipant[] = [];
+                for (const m of mentions) {
+                    const p = await storeVerifications(stores).makeMentionableParticipant(m, session);
+                    if (!p.ok) return p;
+                    mentioned.push(p.value);
+                }
                 const at = clock.now();
-                const { Sent } = decided(requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, target, body, at));
+                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at, replyable, mentioned);
+                if (!sent.ok) return sent;
+                const { Sent } = sent.value;
                 stores.requests.save(Sent.aggregate);
                 publish(stores, session, Sent.events, at);
                 return ok(Sent.aggregate);
@@ -461,11 +636,75 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async queueRun({ session, requests, note, queuedBy }) {
+        async setMark({ session, participant, target, sign, placed }) {
             return uow.transaction(async (stores) => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
                 if (!active.ok) return active;
+                // the role is the session's, never the caller's word
+                const who = stores.sessions.load(session)?.participants.find((p) => p.id === participant);
+                if (!who) return err({ type: 'NotAParticipant', participant });
+                const open = await verify.makeOpenMarkTarget(target, session);
+                if (!open.ok) return open;
+                const runs = stores.runs.listBySession(session);
+                const change = markChange(stores.marks.placedBy(session, participant), target, sign, placed, (t) => exclusiveGroup(t, runs));
+                const at = clock.now();
+                let made: Collaboration.PlacedMark | undefined;
+                const events: Collaboration.PersistentEvent[] = [];
+                if (change.place) {
+                    const key = markKey(target);
+                    if (
+                        !reactionRoom(
+                            stores.marks.placedBySession(session).filter((m) => markKey(m.target) === key),
+                            sign,
+                        )
+                    )
+                        return err({ type: 'ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
+                    // decided before anything is removed: a refused mark changes nothing
+                    const decided = markCommands.place(Collaboration.makeMarkId(ids.newId()), active.value, participant, who.role, open.value, sign, at);
+                    if (!decided.ok) return decided;
+                    made = decided.value.Placed.aggregate;
+                    events.push(decided.value.Placed.events.MarkPlaced);
+                }
+                const removed: Collaboration.RemovedMark[] = [];
+                for (const mark of change.remove) {
+                    // the votes moved from are in the same run's question or assumption: open as the target is
+                    const off = await verify.makeOpenMarkTarget(mark.target, session);
+                    if (!off.ok) return off;
+                    const { Removed } = decided(markCommands.remove(mark, off.value, at));
+                    stores.marks.save(Removed.aggregate);
+                    removed.push(Removed.aggregate);
+                    events.unshift(Removed.events.MarkRemoved);
+                }
+                if (made) stores.marks.save(made);
+                stores.outbox.append(session, events, at);
+                return ok({ placed: made, removed });
+            });
+        },
+
+        async queueRun({ session, requests, note, answer, pick, queuedBy }) {
+            return uow.transaction(async (stores) => {
+                const verify = storeVerifications(stores);
+                const active = await verify.makeActiveSession(session);
+                if (!active.ok) return active;
+                let answered: Collaboration.Answer | undefined;
+                if (answer) {
+                    const to = stores.runs.load(answer.answerTo)?.run;
+                    if (!to || to.session !== session) return err(notFound('AgentRun', answer.answerTo));
+                    if (to.state !== 'NeedsClarification' || !to.reply) return err({ type: 'NothingToAnswer', run: to.id });
+                    const resolved = resolveAnswer(answer.answer, to.id, to.reply);
+                    if (!resolved.ok) return err({ type: 'InvalidAnswer', field: resolved.error.path, message: resolved.error.message });
+                    answered = resolved.value;
+                }
+                let picked: Collaboration.AlternativePick | undefined;
+                if (pick) {
+                    const of = stores.runs.load(pick.pickOf)?.run;
+                    if (!of) return err({ type: 'RunNotFound', run: pick.pickOf });
+                    if (of.session !== session) return err({ type: 'RunOfAnotherSession', run: pick.pickOf });
+                    const resolved = resolvePick(pick, of, requests);
+                    if (!resolved.ok) return resolved;
+                    picked = resolved.value;
+                }
                 const pending: Collaboration.PendingRequest[] = [];
                 const frozen: Collaboration.FrozenRequest[] = [];
                 for (const id of requests) {
@@ -474,7 +713,8 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     pending.push(p.value);
                     const r = stores.requests.load(id);
                     // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
-                    if (r && !frozen.some((f) => f.request === id)) frozen.push({ request: id, author: r.author, target: r.target, body: r.body });
+                    if (r && !frozen.some((f) => f.request === id))
+                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(r.replyTo && { replyTo: r.replyTo }) });
                 }
                 const bundled = nonEmpty(pending);
                 const input = nonEmpty(frozen);
@@ -484,7 +724,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     Collaboration.makeAgentRunId(ids.newId()),
                     active.value,
                     bundled,
-                    note === undefined ? { requests: input } : { requests: input, note },
+                    { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }), ...(picked && { pick: picked }) },
                     queuedBy,
                     at,
                 );
@@ -554,7 +794,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async finishRun({ run, token, facts }) {
+        async finishRun({ run, token, facts, reply }) {
             const before = await uow.transaction(
                 (stores): Result<{ replay: EndedRun | undefined; base: Collaboration.Revision | undefined }, NotFound | LeaseLost | NotAllowed> => {
                     const replay = replayOf(stores, run, token);
@@ -567,7 +807,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             if (!before.ok) return before;
             const { replay, base } = before.value;
             if (replay) {
-                if (replay.state === 'NeedsClarification') return err(notAllowed('finish', replay.state));
+                if (replay.state === 'NeedsClarification' || replay.state === 'Declined') return err(notAllowed('finish', replay.state));
                 return ok({ run: replay, replayed: true, diff: undefined });
             }
             if (!base) throw new Error(`The base revision of run ${run} is missing`);
@@ -580,9 +820,13 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const r = running(stores, run, token, clock.now());
                 if (!r.ok) return r;
                 const at = clock.now();
+                const report = runReport(facts, diff);
+                // the reply is checked before the result is recorded: a refused reply records nothing
+                const check = agentRunCommands.finish(r.value, report, r.value.baseRevision, false, reply, at);
+                if (!check.ok && check.error.type === 'InvalidReply') return err(check.error);
                 const result = resultOf(stores, r.value, captured.value, at);
-                const finished = agentRunCommands.finish(r.value, runReport(facts, diff), result.revision.id, result.changed, at);
-                // `changed` is decided from the revisions above
+                const finished = agentRunCommands.finish(r.value, report, result.revision.id, result.changed, reply, at);
+                // `changed` is decided from the revisions above, and the reply was checked
                 if (!finished.ok) throw new Error(`Finishing run ${run} failed: ${finished.error.type}`);
                 const outcome = finished.value.Completed ?? finished.value.Failed;
                 stores.runs.save(outcome.aggregate);
@@ -592,30 +836,17 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async askClarification({ run, token, question }) {
-            const before = await uow.transaction((stores): Result<EndedRun | undefined, NotFound | LeaseLost | NotAllowed> => {
-                const replay = replayOf(stores, run, token);
-                if (replay) return ok(replay);
-                const r = running(stores, run, token, clock.now());
-                return r.ok ? ok(undefined) : r;
+        async askClarification({ run, token, question, reply }) {
+            return endWithoutChecks(run, token, 'NeedsClarification', (r, revision, at) => {
+                const asked = agentRunCommands.askClarification(r, question, reply, revision, at);
+                return asked.ok ? ok(asked.value.NeedsClarification) : asked;
             });
-            if (!before.ok) return before;
-            if (before.value) {
-                if (before.value.state !== 'NeedsClarification') return err(notAllowed('askClarification', before.value.state));
-                return ok({ run: before.value, replayed: true });
-            }
-            const captured = await capture(deps);
-            if (!captured.ok) return captured;
-            return uow.transaction((stores) => {
-                const r = running(stores, run, token, clock.now());
-                if (!r.ok) return r;
-                const at = clock.now();
-                const result = resultOf(stores, r.value, captured.value, at);
-                const { NeedsClarification } = decided(agentRunCommands.askClarification(r.value, question, result.revision.id, at));
-                stores.runs.save(NeedsClarification.aggregate);
-                stores.runs.endLease(run, token);
-                publish(stores, r.value.session, NeedsClarification.events, at);
-                return ok({ run: NeedsClarification.aggregate, replayed: false });
+        },
+
+        async declineRun({ run, token, reply }) {
+            return endWithoutChecks(run, token, 'Declined', (r, revision, at) => {
+                const declined = agentRunCommands.decline(r, reply, revision, at);
+                return declined.ok ? ok(declined.value.Declined) : declined;
             });
         },
 
@@ -846,6 +1077,46 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             return ok({ before: a, after: b, files, counts: statusCounts(files), diffsOmitted });
         },
 
+        async previousRuns({ run, maxDiff }) {
+            const found = await uow.transaction((stores) => {
+                const r = stores.runs.load(run)?.run;
+                if (!r) return undefined;
+                // the runs named by the frozen input, of the run's session only (checked when the reply was sent)
+                return previousRunIds(r.input).flatMap((id) => {
+                    const p = stores.runs.load(id)?.run;
+                    return p && p.session === r.session ? [p] : [];
+                });
+            });
+            if (!found) return err(notFound('AgentRun', run));
+            const compared: (ComparedChange[] | undefined)[] = [];
+            for (const p of found) {
+                const base = 'baseRevision' in p ? p.baseRevision : undefined;
+                const result = 'resultRevision' in p ? p.resultRevision : undefined;
+                if (!base || !result) {
+                    compared.push(undefined);
+                    continue;
+                }
+                const c = await useCases.compareRevisions({ session: p.session, before: base, after: result });
+                if (c.ok) {
+                    compared.push(
+                        c.value.files.flatMap((f) => (f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status, ...(f.diff && { diff: f.diff }) }])),
+                    );
+                    continue;
+                }
+                // the bytes are gone (or the revisions): the files by hash, without their diff
+                const revisions = await uow.transaction((stores) => ({ a: stores.revisions.load(base), b: stores.revisions.load(result) }));
+                compared.push(
+                    revisions.a && revisions.b
+                        ? compareFiles(revisions.a.files, revisions.b.files).flatMap((f) =>
+                              f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status }],
+                          )
+                        : undefined,
+                );
+            }
+            const changes = boundChanges(compared, maxDiff);
+            return ok(found.map((p, i) => ({ run: p, changes: changes[i] })));
+        },
+
         async restoreOperations({ session }) {
             return uow.transaction((stores) => stores.operations.restores(session));
         },
@@ -859,6 +1130,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     requests: stores.requests.listBySession(session),
                     runs: stores.runs.listBySession(session),
                     revisions: stores.revisions.listBySession(session),
+                    marks: stores.marks.placedBySession(session),
                 });
             });
         },
@@ -871,7 +1143,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             const scope = captured.value.analysis;
             return ok({
                 contentHash: captured.value.contentHash,
-                statuses: new Map(requests.map((r) => [r.id, targetStatus(r.target.target, scope)])),
+                statuses: new Map(requests.map((r) => [r.id, r.targets.map((t) => targetStatus(t.target, scope))])),
             });
         },
 

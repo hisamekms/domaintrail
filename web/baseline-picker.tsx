@@ -114,7 +114,12 @@ export function BaselineMenu({ baseline, anchor, onClose }: { baseline: Baseline
     const { below, style } = menuPlacement(anchor.getBoundingClientRect(), { width: window.innerWidth, height: window.innerHeight });
 
     return (
-        <div className={`baseline-menu ${below ? 'baseline-menu-below' : 'baseline-menu-above'}`} role="listbox" ref={root} style={style}>
+        <div
+            className={`baseline-menu motion-pop ${below ? 'baseline-menu-below' : 'baseline-menu-above motion-pop-up'}`}
+            role="listbox"
+            ref={root}
+            style={style}
+        >
             <button role="option" aria-selected={baseline.kind === 'previous'} className="baseline-option" onClick={() => choose({ kind: 'previous' })}>
                 <strong>{t.baselinePrevious}</strong>
                 <span className="muted small">{t.baselinePreviousHint}</span>

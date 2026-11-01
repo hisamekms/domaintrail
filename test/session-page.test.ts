@@ -243,12 +243,12 @@ describe('the session state from the socket', () => {
         seq: 3,
     } as unknown as SessionStateBody;
     const me = { session: 's1', participant: { id: 'dev:a', name: 'A', role: 'participant' } } as unknown as Parameters<typeof adopt>[2];
-    const target = { target: { kind: 'Workspace' }, sourceRevision: 'r1' };
+    const targets: unknown[] = [];
     const sent = (seq: number, id: string): EventMessage =>
         ({
             type: 'request.sent',
             seq,
-            event: { type: 'RequestSent', requestId: id, session: 's1', author: 'dev:a', target, body: 'b', sentAt: at },
+            event: { type: 'RequestSent', requestId: id, session: 's1', author: 'dev:a', targets, body: 'b', sentAt: at, mentions: [] },
         }) as EventMessage;
     const message = (seq: number, event: object): EventMessage => ({ type: 'x', seq, event }) as unknown as EventMessage;
 

@@ -1,6 +1,8 @@
+import { realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import picomatch from 'picomatch';
 import { RUNNERS, type Runner } from '../generator/tests.js';
+import { DEFAULT_QUICK_REACTIONS, readEmoji } from './emoji.js';
 import { POLICY_MODES, type PolicyMode } from '../generator/typescript.js';
 
 /** Config file names, in order of preference within one directory. */
@@ -21,6 +23,17 @@ export type SessionIdentity = (typeof SESSION_IDENTITIES)[number];
  */
 export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'];
 export const DEFAULT_MAX_PARTICIPANTS = 50;
+/** The most characters of unified diff the agent is given of the runs a run continues (replies, answers), together. */
+export const DEFAULT_MAX_PREVIOUS_RUN_DIFF = 20 * 1024;
+/** The classifiers of a session's chat messages (request or chat), and the models of Cloudflare's Clef. */
+export const CLASSIFIER_PROVIDERS = ['cloudflare-clef'] as const;
+export const CLEF_MODELS = ['clef-flash', 'clef'] as const;
+export type ClefModel = (typeof CLEF_MODELS)[number];
+export const DEFAULT_CLASSIFIER_TOKEN_ENV = 'CLOUDFLARE_API_TOKEN';
+export const DEFAULT_CLASSIFIER_THRESHOLD = 0.5;
+export { DEFAULT_QUICK_REACTIONS };
+/** Most emoji in `session.quickReactions`. */
+export const MAX_QUICK_REACTIONS = 8;
 
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile {
@@ -76,9 +89,49 @@ export interface SessionConfigFile {
         port?: number;
         /** The tools the agent may use, as Claude Code permission rules. Default: `DEFAULT_AGENT_TOOLS`. */
         allowedTools?: string[];
+        /**
+         * The `dt` the agent and the pipeline run: `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`,
+         * paths relative to the config file, outside the workspace. Default: the running `dt` itself.
+         */
+        dt?: string[];
+        /**
+         * The most characters of unified diff the agent is given of the runs a run continues (the runs its messages reply
+         * to, the run it answers), all of them together; past it, a run's changed files only. Default: 20480.
+         */
+        maxPreviousRunDiff?: number;
     };
     /** Most participants a session admits. Default: 50. */
     maxParticipants?: number;
+    /**
+     * The emoji the add-reaction popover of the chat offers first, in order: each exactly one emoji, distinct, at most
+     * `MAX_QUICK_REACTIONS`. Any other emoji can still be typed there. Default: 👍 👀 🤔 🎉 ❤️ 🙏.
+     */
+    quickReactions?: string[];
+    /** Telling the chat's requests from its talk (opt-in; the message text goes to the provider). */
+    classifier?: {
+        /** Default: false (every message can be applied). */
+        enabled?: boolean;
+        /** Default: `cloudflare-clef` (Workers AI). */
+        provider?: (typeof CLASSIFIER_PROVIDERS)[number];
+        /** Default: `clef-flash`. */
+        model?: ClefModel;
+        /** The Cloudflare account of Workers AI; required when enabled. */
+        accountId?: string;
+        /** The name of the environment variable holding the API token (never the token). Default: `CLOUDFLARE_API_TOKEN`. */
+        apiTokenEnv?: string;
+        /** The probability from which a message is a request. Default: 0.5. */
+        threshold?: number;
+    };
+}
+
+/** The `session.classifier` section resolved. */
+export interface ResolvedClassifierConfig {
+    enabled: boolean;
+    provider: (typeof CLASSIFIER_PROVIDERS)[number];
+    model: ClefModel;
+    accountId?: string;
+    apiTokenEnv: string;
+    threshold: number;
 }
 
 /** The `session` section resolved: every default applied. */
@@ -95,8 +148,12 @@ export interface ResolvedSessionConfig {
         acceptCookie: boolean;
         avatarHosts: string[];
     };
-    agent: { port: number; allowedTools: string[] };
+    /** `dt`: the command (absolute paths) the agent's `dt` runs, when configured. */
+    agent: { port: number; allowedTools: string[]; dt?: string[]; maxPreviousRunDiff: number };
     maxParticipants: number;
+    /** In the form reactions are kept (`normalizeEmoji`). */
+    quickReactions: string[];
+    classifier: ResolvedClassifierConfig;
 }
 
 export interface ResolvedConfig {
@@ -139,6 +196,7 @@ export function defaultConfig(root: string): ResolvedConfig {
 export function resolveConfig(text: string, file: string): ResolvedConfig {
     const raw = parseJsonc(text, file);
     const config = validate(raw, file);
+    checkAgentDt(config, file);
     return {
         root: path.dirname(file),
         file,
@@ -153,11 +211,75 @@ export function resolveConfig(text: string, file: string): ResolvedConfig {
         },
         ...(config.generate?.ts?.tests && { tsTests: config.generate.ts.tests }),
         view: { port: config.view?.port ?? DEFAULT_PORT, host: config.view?.host ?? DEFAULT_HOST },
-        session: resolveSession(config.session),
+        session: resolveSession(config.session, path.dirname(file)),
     };
 }
 
-function resolveSession(session: SessionConfigFile | undefined): ResolvedSessionConfig {
+/**
+ * Refuses an agent's `dt` that runs a file of the workspace (the config file's directory), symbolic links followed and
+ * compared by path segments: the agent writes there during a run. (The subscriber checks again when it starts, with
+ * the runtime found on the PATH.)
+ */
+function checkAgentDt(config: DomainTrailConfigFile, file: string): void {
+    const dt = config.session?.agent?.dt;
+    if (!dt) return;
+    const dir = path.dirname(file);
+    const root = realPath(dir);
+    const within = (p: string): boolean => {
+        const rel = path.relative(root, realPath(p));
+        return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+    };
+    const inside = resolveCommand(dt, dir).filter((p) => path.isAbsolute(p) && within(p));
+    if (inside.length)
+        throw new ConfigError(
+            `${file}: 'session.agent.dt' may not run anything inside the workspace (${inside.join(', ')}): the agent can write there during a run. Use a dt outside the workspace (e.g. a clone next to it).`,
+        );
+}
+
+/** The runtimes the agent's `dt` may be started with, as `[<runtime>, <script>]`. */
+export const DT_RUNTIMES = ['node', 'bun', 'deno'] as const;
+
+const isRuntime = (word: string): boolean =>
+    (DT_RUNTIMES as readonly string[]).includes(
+        path
+            .basename(word)
+            .toLowerCase()
+            .replace(/\.exe$/, ''),
+    );
+const hasSeparator = (word: string): boolean => /[\\/]/.test(word);
+
+/**
+ * The agent's `dt` as it runs: `[<runtime>, <script>]` (a runtime named bare stays for the PATH) or `[<dt
+ * executable>]`, every path resolved against the config file's directory.
+ */
+export function resolveCommand(command: readonly string[], dir: string): string[] {
+    return command.map((part, i) => (i === 0 && command.length === 2 && !hasSeparator(part) ? part : path.resolve(dir, part)));
+}
+
+/** Why the agent's `dt` has not one of its two shapes, if it has not. */
+function dtShapeError(dt: readonly string[]): string | undefined {
+    const shape = 'must be ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], with no other word';
+    if (dt.length === 2) {
+        if (!isRuntime(dt[0])) return `${shape}: ${dt[0]} is not one of the runtimes`;
+        if (dt[1].startsWith('-')) return `${shape}: ${dt[1]} is an option`;
+        return undefined;
+    }
+    if (dt.length === 1) return hasSeparator(dt[0]) && !dt[0].startsWith('-') ? undefined : `${shape}: a dt executable is given by its path`;
+    return shape;
+}
+
+/** A path as it really is: symbolic links followed up to its deepest existing directory, the rest as written. */
+function realPath(p: string): string {
+    const abs = path.resolve(p);
+    try {
+        return realpathSync(abs);
+    } catch {
+        const parent = path.dirname(abs);
+        return parent === abs ? abs : path.join(realPath(parent), path.basename(abs));
+    }
+}
+
+function resolveSession(session: SessionConfigFile | undefined, dir?: string): ResolvedSessionConfig {
     const access = session?.access;
     return {
         port: session?.port ?? DEFAULT_PORT,
@@ -174,8 +296,23 @@ function resolveSession(session: SessionConfigFile | undefined): ResolvedSession
                 avatarHosts: access.avatarHosts ?? [],
             },
         }),
-        agent: { port: session?.agent?.port ?? 0, allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS] },
+        agent: {
+            port: session?.agent?.port ?? 0,
+            allowedTools: session?.agent?.allowedTools ?? [...DEFAULT_AGENT_TOOLS],
+            ...(session?.agent?.dt && { dt: dir === undefined ? [...session.agent.dt] : resolveCommand(session.agent.dt, dir) }),
+            maxPreviousRunDiff: session?.agent?.maxPreviousRunDiff ?? DEFAULT_MAX_PREVIOUS_RUN_DIFF,
+        },
         maxParticipants: session?.maxParticipants ?? DEFAULT_MAX_PARTICIPANTS,
+        // validated: each reads as one emoji
+        quickReactions: (session?.quickReactions ?? DEFAULT_QUICK_REACTIONS).map((e) => readEmoji(e) ?? e),
+        classifier: {
+            enabled: session?.classifier?.enabled ?? false,
+            provider: session?.classifier?.provider ?? 'cloudflare-clef',
+            model: session?.classifier?.model ?? 'clef-flash',
+            ...(session?.classifier?.accountId !== undefined && { accountId: session.classifier.accountId }),
+            apiTokenEnv: session?.classifier?.apiTokenEnv ?? DEFAULT_CLASSIFIER_TOKEN_ENV,
+            threshold: session?.classifier?.threshold ?? DEFAULT_CLASSIFIER_THRESHOLD,
+        },
     };
 }
 
@@ -299,7 +436,8 @@ const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every(
 function validateSession(session: unknown, fail: (msg: string) => never): void {
     if (!isObject(session)) return fail("'session' must be an object");
     for (const key of Object.keys(session)) {
-        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants'].includes(key)) fail(`unknown key 'session.${key}'`);
+        if (!['port', 'host', 'identity', 'access', 'agent', 'maxParticipants', 'quickReactions', 'classifier'].includes(key))
+            fail(`unknown key 'session.${key}'`);
     }
     if (session.port !== undefined && !isPort(session.port)) fail("'session.port' must be a port number");
     if (session.host !== undefined && (typeof session.host !== 'string' || !session.host)) fail("'session.host' must be a string");
@@ -340,15 +478,55 @@ function validateSession(session: unknown, fail: (msg: string) => never): void {
     const agent = session.agent;
     if (agent !== undefined) {
         if (!isObject(agent)) return fail("'session.agent' must be an object");
-        for (const key of Object.keys(agent)) if (!['port', 'allowedTools'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
+        for (const key of Object.keys(agent))
+            if (!['port', 'allowedTools', 'dt', 'maxPreviousRunDiff'].includes(key)) fail(`unknown key 'session.agent.${key}'`);
         if (agent.port !== undefined && !isPort(agent.port)) fail("'session.agent.port' must be a port number");
         if (agent.allowedTools !== undefined && !isStringList(agent.allowedTools)) fail("'session.agent.allowedTools' must be an array of tool rules");
+        if (agent.dt !== undefined) {
+            if (!(isStringList(agent.dt) && agent.dt.length > 0 && agent.dt.every((a) => !/[\0\r\n]/.test(a))))
+                fail('\'session.agent.dt\' must be a command as a non-empty array of non-empty strings (e.g. ["node", "../clone/dist/dt.js"])');
+            const wrong = dtShapeError(agent.dt);
+            if (wrong) fail(`'session.agent.dt' ${wrong}`);
+        }
+        const max = agent.maxPreviousRunDiff;
+        if (max !== undefined && !(typeof max === 'number' && Number.isInteger(max) && max >= 0))
+            fail("'session.agent.maxPreviousRunDiff' must be a non-negative integer (characters of diff)");
+    }
+    const classifier = session.classifier;
+    if (classifier !== undefined) {
+        if (!isObject(classifier)) return fail("'session.classifier' must be an object");
+        for (const key of Object.keys(classifier))
+            if (!['enabled', 'provider', 'model', 'accountId', 'apiTokenEnv', 'threshold'].includes(key)) fail(`unknown key 'session.classifier.${key}'`);
+        if (classifier.enabled !== undefined && typeof classifier.enabled !== 'boolean') fail("'session.classifier.enabled' must be a boolean");
+        if (classifier.provider !== undefined && !(CLASSIFIER_PROVIDERS as readonly unknown[]).includes(classifier.provider))
+            fail(`'session.classifier.provider' must be one of ${CLASSIFIER_PROVIDERS.map((p) => `'${p}'`).join(', ')}`);
+        if (classifier.model !== undefined && !(CLEF_MODELS as readonly unknown[]).includes(classifier.model))
+            fail(`'session.classifier.model' must be one of ${CLEF_MODELS.map((m) => `'${m}'`).join(', ')}`);
+        if (classifier.accountId !== undefined && (typeof classifier.accountId !== 'string' || !/^[0-9a-f]{32}$/i.test(classifier.accountId)))
+            fail("'session.classifier.accountId' must be a Cloudflare account ID (32 hexadecimal digits)");
+        if (classifier.apiTokenEnv !== undefined && (typeof classifier.apiTokenEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(classifier.apiTokenEnv)))
+            fail("'session.classifier.apiTokenEnv' must be the name of an environment variable (the token itself never goes in the file)");
+        if (classifier.threshold !== undefined && !(typeof classifier.threshold === 'number' && classifier.threshold > 0 && classifier.threshold < 1))
+            fail("'session.classifier.threshold' must be a number between 0 and 1");
+        if (classifier.enabled === true && classifier.accountId === undefined) fail("'session.classifier' enabled needs 'accountId'");
     }
     if (
         session.maxParticipants !== undefined &&
         !(typeof session.maxParticipants === 'number' && Number.isInteger(session.maxParticipants) && session.maxParticipants >= 1)
     )
         fail("'session.maxParticipants' must be a positive integer");
+    const quick = session.quickReactions;
+    if (quick !== undefined) {
+        if (!isStringList(quick) || quick.length === 0 || quick.length > MAX_QUICK_REACTIONS)
+            return fail(`'session.quickReactions' must be an array of 1 to ${MAX_QUICK_REACTIONS} emoji`);
+        const seen = new Set<string>();
+        for (const e of quick) {
+            const emoji = readEmoji(e);
+            if (emoji === undefined) fail(`'session.quickReactions' must hold one emoji per entry: '${e}'`);
+            if (seen.has(emoji)) fail(`'session.quickReactions' must not repeat an emoji: '${e}'`);
+            seen.add(emoji);
+        }
+    }
 }
 
 /** An output directory: a string inside the directory of the config file. */

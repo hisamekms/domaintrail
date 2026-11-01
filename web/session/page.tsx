@@ -1,37 +1,45 @@
 // The session's part of the page (ADR 0026): computed on every page, shown only in a session. Under `dt view` no
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
-import { useCallback, useEffect, useMemo, type ReactNode } from 'react';
-import { Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createShapeId, useValue } from 'tldraw';
 import { LEVEL_KINDS } from '@domaintrail/visualization/domain/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
+import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { Panes } from '../app/panes';
+import type { Conversation } from '../app/shell';
 import type { ViewSocket } from '../app/useViewSocket';
 import { useT } from '../i18n';
-import { Resizer, usePersistentState } from '../shared/layout';
 import { stormingGraph, type StormingChoice } from '../storming';
+import { shapeElementId } from '../render';
 import { highlightElement } from '../view/canvas';
 import type { Workspace } from '../view/workspace';
+import { ChatLauncher, SessionChat } from './chat';
 import { PeerCursors } from './cursors';
+import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
-import { SessionPanel } from './panel';
+import { SelectionAction } from './selection-action';
+import { confirmSelection, isConfirmKey, isTyping } from './suggestions';
+import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
-import { occurrenceNode, targetOfSelection, type ModelTarget } from './targets';
-import { defaultDraftStorage, useDrafts, usePresence, useSession } from './useSession';
+import { mentionCandidates } from './mentions';
+import type { ViewScope, ViewTarget } from './views';
+import { occurrenceNode, targetKey, targetOfSelection, type ModelTarget, type NamingContext, type TargetDraft } from './targets';
+import { agentStatus, latestAt, streamItems, unreadCount, unreadMentions } from './stream';
+import { defaultDraftStorage, useComposerDraft, usePresence, useSession } from './useSession';
 
-/** Width of a closed side pane's rail (RAIL_WIDTH of app/shell.tsx). */
-const RAIL_WIDTH = 28;
 /** The graph node of a shape on the canvas (`render.ts`: `n:<graph node ID>`). */
 const NODE_SHAPE = 'shape:n:';
 
 export interface SessionPage {
-    /** The session pane for `AppShell`'s `sidePanel`; undefined outside a session. */
-    readonly sidePanel: ReactNode;
+    /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
+    readonly conversation: Conversation | undefined;
     /** The others' cursors over the canvas; undefined outside a session. */
     readonly canvasOverlay: ReactNode;
     /** In a session only the facilitator changes the shared baseline (the server answers others 403). */
     readonly baselineLocked: boolean;
+    /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
+    readonly ended: boolean;
 }
 
 export function useSessionPage(input: {
@@ -39,6 +47,8 @@ export function useSessionPage(input: {
     current: ViewPayload | null;
     workspace: Workspace;
     panes: Panes;
+    /** The name display setting (ラベル / 名前 / 両方): targets are named in it. */
+    mode: DisplayMode;
     /** Shows a `.dt` item in the view that suits it best (the explorer's double-click). */
     openBest: (id: string) => void;
 }): SessionPage {
@@ -46,6 +56,8 @@ export function useSessionPage(input: {
     const { editor, stormings, nav, settings, viewGraph } = workspace;
     const { view } = nav;
     const session = useSession(socket, current);
+    const model = current?.model ?? null;
+    const naming = useMemo((): NamingContext => ({ mode: input.mode, model, stormings }), [input.mode, model, stormings]);
     const t = useT();
 
     const location = viewLocation({
@@ -71,31 +83,98 @@ export function useSessionPage(input: {
     });
     usePresence(socket, session, editor, location, selectionTarget?.target);
 
-    const storage = useMemo(defaultDraftStorage, []);
-    const drafts = useDrafts(storage, session && { session: session.me.session, participant: session.me.participant.id });
-
-    // the session pane and the inspector take turns on the right
-    const [open, setOpen] = usePersistentState('domaintrail.layout.session', true);
-    const [width, setWidth] = usePersistentState('domaintrail.layout.sessionWidth', 380);
-    const { inspectorOpen, setInspectorOpen } = panes;
-    const shown = session !== undefined && open;
-    useEffect(() => {
-        if (inspectorOpen && shown) setOpen(false);
-        // only the inspector opening closes the session pane
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inspectorOpen]);
-    useEffect(() => {
-        if (shown && inspectorOpen) setInspectorOpen(false);
-        // only the session pane opening (or the session starting with it open) closes the inspector
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [shown]);
-    const openPane = useCallback(
-        (o: boolean) => {
-            setOpen(o);
-            if (o) setInspectorOpen(false);
+    // a selection of several shapes on the canvas: each targetable element once (the composer's `+` adds them all)
+    const selectedKey = useValue(
+        'selected shapes',
+        () => {
+            if (!editor) return '';
+            const shapes = editor.getSelectedShapeIds();
+            if (shapes.length < 2) return '';
+            return JSON.stringify(
+                shapes.flatMap((id) => {
+                    const element = shapeElementId(editor, id);
+                    return element ? [[element, id.startsWith(NODE_SHAPE) ? id.slice(NODE_SHAPE.length) : '']] : [];
+                }),
+            );
         },
-        [setOpen, setInspectorOpen],
+        [editor],
     );
+    const sources = current?.sources;
+    const selectionTargets = useMemo((): TargetDraft[] => {
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- written just above from [element, node] pairs
+        const picked = selectedKey ? (JSON.parse(selectedKey) as [string, string][]) : [];
+        if (picked.length === 0) return selectionTarget ? [selectionTarget] : [];
+        const out: TargetDraft[] = [];
+        for (const [selected, node] of picked) {
+            const target = targetOfSelection({
+                selected,
+                model,
+                stormings,
+                sources: sources ?? [],
+                ...(timelineView && { timelineView }),
+                ...(node && { selectedNode: node }),
+            });
+            if (target && !out.some((o) => targetKey(o.target) === targetKey(target.target))) out.push(target);
+        }
+        return out;
+        // the selection target and the timeline view are covered by their keys
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedKey, model, stormings, sources, selectionTarget && targetKey(selectionTarget.target), timelineView?.timelineId, timelineView?.render]);
+    const candidates = useMemo(
+        () => (session ? mentionCandidates({ mode: input.mode, model, stormings, sources: sources ?? [] }) : []),
+        [session !== undefined, input.mode, model, stormings, sources],
+    );
+
+    const storage = useMemo(defaultDraftStorage, []);
+    const scope = session && { session: session.me.session, participant: session.me.participant.id };
+    const composer = useComposerDraft(storage, scope);
+
+    // the selection confirmed as the request's targets (💬 on the canvas, or `C`): the chat shown, the caret in its text
+    const [focusPending, setFocusPending] = useState(false);
+    const onFocused = useCallback(() => setFocusPending(false), []);
+    const composerValue = composer.value;
+    const setComposerValue = useCallback((v: ComposerValue) => composer.setValue(v), [composer]);
+    const { conversationOpen, setConversationOpen } = panes;
+    const confirm = useCallback(() => {
+        if (selectionTargets.length === 0) return;
+        setComposerValue(confirmSelection(composerValue, selectionTargets).value);
+        setConversationOpen(true);
+        setFocusPending(true);
+    }, [selectionTargets, composerValue, setComposerValue, setConversationOpen]);
+    const live = session?.status === 'live' && session.state.session.state === 'Open';
+    useEffect(() => {
+        if (!live) return;
+        const onKey = (e: KeyboardEvent): void => {
+            if (selectionTargets.length === 0 || !isConfirmKey(e, isTyping(document.activeElement))) return;
+            e.preventDefault();
+            e.stopPropagation();
+            confirm();
+        };
+        // before tldraw's own shortcuts (it binds no plain `c`, but the key is ours here)
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+    }, [live, selectionTargets.length, confirm]);
+
+    // the chat is the session's first place: the conversation opens when the page joins a session
+    const inSession = session !== undefined;
+    useEffect(() => {
+        if (inSession) setConversationOpen(true);
+        // only joining opens it; closing it afterwards is the reader's choice
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inSession]);
+    // the collab ended: the chat opens, with its summary
+    const ended = session !== undefined && (session.status === 'closed' || session.state.session.state === 'Closed');
+    useEffect(() => {
+        if (ended) setConversationOpen(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ended]);
+    // what came since the chat was last shown: the floating button counts it
+    const items = useMemo(() => (session ? streamItems(session.state) : []), [session?.state]);
+    const latest = latestAt(items);
+    const [seen, setSeen] = useState<string | undefined>();
+    useEffect(() => {
+        if (conversationOpen) setSeen(latest);
+    }, [conversationOpen, latest]);
 
     const { select, setView } = nav;
     const { stormingChoice, setStormingChoice } = settings;
@@ -144,44 +223,81 @@ export function useSessionPage(input: {
         [editor, stormings, stormingChoice, setStormingChoice, select, setView, openBest],
     );
 
-    if (!session) return { sidePanel: undefined, canvasOverlay: undefined, baselineLocked: false };
-    const online = new Set([...session.peers.values()].map((p) => p.participant.id)).size + 1;
+    // another participant's view, opened here as it is (the view, not their camera)
+    const viewScope = useMemo(
+        (): ViewScope => ({
+            mode: input.mode,
+            contexts: model?.contexts ?? [],
+            contextLabels: model?.contextLabels ?? {},
+            stormings,
+        }),
+        [input.mode, model, stormings],
+    );
+    const { setStructureLevel, setStructureContexts, setHiddenContexts, setMapAll } = settings;
+    const openView = useCallback(
+        (target: ViewTarget) => {
+            switch (target.kind) {
+                case 'catalog':
+                    return setView({ kind: 'catalog' });
+                case 'contextMap':
+                    setMapAll(target.all);
+                    return setView({ kind: 'contextMap' });
+                case 'structure':
+                    setStructureLevel(target.level);
+                    setStructureContexts(target.focus ? [...target.focus.contexts] : null);
+                    if (target.focus) setHiddenContexts([...target.focus.hidden]);
+                    return setView({ kind: 'structure' });
+                case 'storming': {
+                    const { [target.stormingId]: _, ...others } = stormingChoice.timelines;
+                    setStormingChoice({
+                        stormingId: target.stormingId,
+                        level: target.level,
+                        timelines: target.timelineId === undefined ? others : { ...others, [target.stormingId]: target.timelineId },
+                    });
+                    return setView({ kind: 'storming' });
+                }
+            }
+        },
+        [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
+    );
+
+    if (!session) return { conversation: undefined, canvasOverlay: undefined, baselineLocked: false, ended: false };
+    const facilitator = session.me.participant.role === 'facilitator';
     return {
-        baselineLocked: session.me.participant.role !== 'facilitator',
-        canvasOverlay: <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />,
-        sidePanel: (
+        baselineLocked: !facilitator,
+        ended,
+        canvasOverlay: (
             <>
-                <Resizer
-                    direction="x"
-                    size={width}
-                    min={300}
-                    max={() => window.innerWidth - 400}
-                    invert
-                    open={shown}
-                    collapsed={RAIL_WIDTH}
-                    onResize={setWidth}
-                    onOpenChange={openPane}
-                />
-                <div className={`side side-right side-session${shown ? ' open' : ''}`} style={{ width: shown ? width : RAIL_WIDTH }}>
-                    <div className="rail" inert={shown}>
-                        <button className="icon-button" onClick={() => openPane(true)} data-tooltip={t.session.open} aria-label={t.session.open}>
-                            <Users size={16} aria-hidden />
-                        </button>
-                        <span className="count">{online}</span>
-                    </div>
-                    <aside className="pane" style={{ width }} inert={!shown}>
-                        <SessionPanel
-                            session={session}
-                            drafts={drafts}
-                            location={location}
-                            selectionTarget={selectionTarget}
-                            onNavigate={navigate}
-                            onShowInspector={() => setInspectorOpen(true)}
-                            onClose={() => setOpen(false)}
-                        />
-                    </aside>
-                </div>
+                <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />
+                <SelectionAction editor={editor} enabled={live && selectionTargets.length > 0} label={t.session.chat.addToRequest('C')} onConfirm={confirm} />
             </>
         ),
+        conversation: {
+            content: (
+                <TargetNamingProvider value={naming}>
+                    <SessionChat
+                        session={session}
+                        composer={composer}
+                        selectionTargets={selectionTargets}
+                        candidates={candidates}
+                        focusPending={focusPending}
+                        onFocused={onFocused}
+                        location={location}
+                        viewScope={viewScope}
+                        onOpenView={openView}
+                        onNavigate={navigate}
+                        onClose={() => setConversationOpen(false)}
+                    />
+                </TargetNamingProvider>
+            ),
+            launcher: (
+                <ChatLauncher
+                    status={agentStatus(session.state.runs)}
+                    unread={conversationOpen ? 0 : unreadCount(items, seen)}
+                    mentions={conversationOpen ? 0 : unreadMentions(items, seen, session.state, session.me.participant.id)}
+                    onOpen={() => setConversationOpen(true)}
+                />
+            ),
+        },
     };
 }

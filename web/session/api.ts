@@ -1,6 +1,16 @@
 // The session's REST API as the page calls it (`/api/session/*`, ADR 0026). Called only once the page knows it is in
 // a session (the socket sent `session.state`): under `dt view` none of these requests is made.
-import type { ComparisonBody, ErrorBody, Me, QueueRunBody, RestoredBody, SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type {
+    ComparisonBody,
+    ErrorBody,
+    MarkSetBody,
+    Me,
+    QueueRunBody,
+    RestoredBody,
+    SendRequestBody,
+    SessionStateBody,
+    SetMarkBody,
+} from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration/domain/targets';
 
 /**
@@ -54,8 +64,8 @@ async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): 
 
 export interface TargetStatuses {
     readonly contentHash: string;
-    /** By request ID. */
-    readonly statuses: Readonly<Record<string, TargetStatus>>;
+    /** By request ID: one per target, in the request's order. */
+    readonly statuses: Readonly<Record<string, readonly TargetStatus[]>>;
 }
 
 export const sessionApi = {
@@ -63,10 +73,14 @@ export const sessionApi = {
     state: (): Promise<SessionStateBody> => call('state'),
     targets: (): Promise<TargetStatuses> => call('targets'),
     sendRequest: (body: SendRequestBody): Promise<unknown> => call('requests', { method: 'POST', body }),
-    dismissRequest: (id: string): Promise<unknown> => call(`requests/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: {} }),
-    queueRun: (body: QueueRunBody): Promise<unknown> => call('runs', { method: 'POST', body }),
+    /** Another one-time facilitator link, to hand the role over. */
+    facilitatorLink: (): Promise<{ link: string; expiresAt: string }> => call('facilitator/link', { method: 'POST', body: {} }),
+    close: (): Promise<unknown> => call('close', { method: 'POST', body: {} }),
+    queueRun: (body: QueueRunBody): Promise<{ run: { id: string } }> => call('runs', { method: 'POST', body }),
     /** Signs out (`dev`), or leaves an `access` session: `logout` is where the page goes then (Access's logout). */
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),
+    /** Places or takes off one of my marks (a vote or a reaction). */
+    setMark: (body: SetMarkBody): Promise<MarkSetBody> => call('marks', { method: 'POST', body }),
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
     /** Records the workspace as it is now (the facilitator). */
     takeRevision: (): Promise<unknown> => call('revisions', { method: 'POST', body: {} }),

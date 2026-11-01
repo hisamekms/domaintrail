@@ -68,7 +68,7 @@ function queued(id: number, session: C.SessionId = sessionId): C.QueuedAgentRun 
         id: C.makeAgentRunId(`00000000-0000-4000-8000-0000000001${String(id).padStart(2, '0')}`),
         session,
         input: {
-            requests: [{ request, author: facilitator, target: { target: { kind: 'Workspace' }, sourceRevision: revision }, body: value(C.makeText('x')) }],
+            requests: [{ request, author: facilitator, targets: [], body: value(C.makeText('x')) }],
         },
         queuedBy: facilitator,
         queuedAt: at,
@@ -81,9 +81,10 @@ function sendRequest(stores: Stores, session: C.SessionId = sessionId): void {
         id: request,
         session,
         author: facilitator,
-        target: { target: { kind: 'Workspace' }, sourceRevision: revision },
+        targets: [],
         body: value(C.makeText('x')),
         sentAt: at,
+        mentions: [],
     });
 }
 
@@ -103,6 +104,7 @@ describe('schema and transactions', () => {
             'agent_runs',
             'facilitator_links',
             'facilitators',
+            'marks',
             'outbox',
             'requests',
             'restore_operations',
@@ -285,5 +287,107 @@ describe('the session directory and blobs', () => {
         expect(await thrown(blobs.get('../x'))).toMatchObject(errorLike('Not a SHA-256'));
         await writeFile(path.join(dir, hash.slice(0, 2), hash), 'tampered');
         expect(await blobs.get(hash)).toBeUndefined();
+    });
+});
+
+describe('rows written before requests had several targets', () => {
+    // a request, a run's frozen request and the RequestSent event held one `target` (0.6.0): read as a list, nothing rewritten
+    test('are read as a list of targets: none for the whole workspace, else that one', async () => {
+        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, 'fixtures', 'session', 'legacy-rows.json'), 'utf8')) as {
+            session: { id: string; state: string; data: unknown };
+            requests: { id: string; state: string; data: unknown }[];
+            runs: { id: string; state: string; data: unknown }[];
+            outbox: { type: string; payload: unknown }[];
+        };
+        const db = openDatabase(':memory:');
+        const raw = (o: unknown): string => JSON.stringify(o);
+        db.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(fixture.session.id, fixture.session.state, raw(fixture.session.data));
+        fixture.requests.forEach((r, i) =>
+            db
+                .prepare('INSERT INTO requests (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)')
+                .run(r.id, fixture.session.id, i + 1, r.state, raw(r.data)),
+        );
+        for (const r of fixture.runs)
+            db.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, 1, ?, ?)').run(r.id, fixture.session.id, r.state, raw(r.data));
+        for (const e of fixture.outbox)
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+                fixture.session.id,
+                e.type,
+                raw(e.payload),
+                at.toISOString(),
+            );
+        const stored = JSON.stringify(db.prepare('SELECT data FROM requests').all());
+        const uow = createUnitOfWork(db);
+        const session = C.makeSessionId(fixture.session.id);
+        const element: unknown = {
+            target: { kind: 'DtElement', element: 'Billing.Invoice' },
+            sourceRevision: revision,
+            label: '請求書 (Billing.Invoice)',
+            range: { path: 'billing/invoice.dt', startLine: 6, startColumn: 1, endLine: 25, endColumn: 3 },
+        };
+        const { requests, runs, events } = await uow.transaction((st) => ({
+            requests: st.requests.listBySession(session),
+            runs: st.runs.listBySession(session),
+            events: st.outbox.readAfter(0, 10, session),
+        }));
+        // compared as plain data: the fixture's JSON
+        const plain = (v: unknown): unknown => v;
+        expect(plain(requests.map((r) => [r.state, r.targets]))).toEqual([
+            ['Sent', []],
+            ['Dismissed', [element]],
+        ]);
+        expect(requests.every((r) => !('target' in r) && C.checkRequest(r).length === 0)).toBe(true);
+        expect(requests[1].sentAt).toEqual(new Date('2026-10-31T11:48:36.979Z'));
+        expect(plain(runs[0].input.requests.map((r) => r.targets))).toEqual([[], [element]]);
+        expect(plain(runs[0].input.note)).toBe('税込で固定');
+        expect(plain(events.map((e) => (e.event.type === 'RequestSent' ? e.event.targets : undefined)))).toEqual([[], [element]]);
+        // reading changes nothing in the database; a request saved again is written in the new shape
+        expect(JSON.stringify(db.prepare('SELECT data FROM requests').all())).toBe(stored);
+        await uow.transaction((st) => st.requests.save(requests[0]));
+        expect(JSON.parse((db.prepare('SELECT data FROM requests WHERE id = ?').get(requests[0].id) as { data: string }).data)).toMatchObject({ targets: [] });
+        expect(Object.keys(requests[1])).toEqual(['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'dismissedBy', 'dismissedAt', 'mentions']);
+        // written before people could be mentioned: they mention no one, the event too
+        expect(requests.map((r) => r.mentions)).toEqual([[], []]);
+        expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.mentions : undefined))).toEqual([[], []]);
+    });
+});
+
+describe("rows written before the agent's reply was structured", () => {
+    // a run that needs clarification had a plain question, a completed run no reply, an input no answer: read as they are
+    test('load as runs without a reply, and still hold the invariants of their state', async () => {
+        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, 'fixtures', 'session', 'legacy-run-replies.json'), 'utf8')) as {
+            session: { id: string; state: string; data: unknown };
+            runs: { id: string; state: string; data: unknown }[];
+            outbox: { type: string; payload: unknown }[];
+        };
+        const db = openDatabase(':memory:');
+        const raw = (o: unknown): string => JSON.stringify(o);
+        db.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(fixture.session.id, fixture.session.state, raw(fixture.session.data));
+        fixture.runs.forEach((r, i) =>
+            db
+                .prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)')
+                .run(r.id, fixture.session.id, i + 1, r.state, raw(r.data)),
+        );
+        for (const e of fixture.outbox)
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+                fixture.session.id,
+                e.type,
+                raw(e.payload),
+                at.toISOString(),
+            );
+        const uow = createUnitOfWork(db);
+        const session = C.makeSessionId(fixture.session.id);
+        const { runs, events } = await uow.transaction((st) => ({ runs: st.runs.listBySession(session), events: st.outbox.readAfter(0, 10, session) }));
+        expect(runs.map((r) => r.state)).toEqual(['NeedsClarification', 'Completed']);
+        const [asked, done] = runs;
+        expect(asked?.state === 'NeedsClarification' && asked.question).toContain('税区分は');
+        for (const r of runs) {
+            expect('reply' in r).toBe(false);
+            expect(r.input.answer).toBeUndefined();
+            expect(C.checkRunInput(r.input)).toEqual([]);
+            expect(C.checkAgentRunWith({ serial: () => true })(r)).toEqual([]);
+        }
+        expect(done?.state === 'Completed' && done.changed).toBe(true);
+        expect(events.map((e) => e.event.type)).toEqual(['RunNeedsClarification', 'RunCompleted']);
     });
 });

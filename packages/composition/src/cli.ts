@@ -37,8 +37,10 @@ export function cliDeps(): CliDeps {
         },
         issueFacilitatorLink: async (root) => (await import('./session.js')).issueFacilitatorLink(root),
         startSubscriber: async (options) => {
-            // `dt fmt` and `dt check` after the agent: this very CLI, with the runtime and the entry running it now
-            const dt = { command: process.execPath, args: process.argv[1] ? [process.argv[1]] : [] };
+            // the agent's `dt` and `dt fmt` / `dt check` after it: `session.agent.dt`, else this very CLI, with the runtime
+            // and the entry running it now
+            const [command, ...args] = options.dt ?? [];
+            const dt = command ? { command, args } : { command: process.execPath, args: process.argv[1] ? [process.argv[1]] : [] };
             const subscriber = await (await import('./subscriber.js')).startSubscriber({ ...options, dt });
             // Ctrl+C: the run in hand is released or failed as interrupted, and its agent stopped, before exiting
             const interrupted = (): void => {

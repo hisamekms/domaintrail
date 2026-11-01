@@ -3,14 +3,17 @@
 // adapters are in `../infrastructure`, wired by composition (`startSubscriber`).
 import type {
     AgentClaimed,
+    AgentReplyBody,
     AgentFinishBody,
     AgentLease,
+    AgentPreviousRun,
     AgentParticipantsBody,
     AgentSessionBody,
     EventMessage,
     Json,
 } from '@domaintrail/collaboration/protocol';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import type { ReplyData, ReplyOutcome } from '@domaintrail/collaboration/domain/reply';
 
 /** An answer of the agent API other than 2xx: its HTTP status and the error's `type` (`LeaseLost`, `NothingQueued`, …). */
 export interface ApiFailure {
@@ -37,10 +40,11 @@ export type StreamItem =
     /** The stream is open (first, and again after each reconnection): queued runs may have been missed meanwhile. */
     { readonly kind: 'open' } | { readonly kind: 'event'; readonly id: string; readonly type: string; readonly message: EventMessage };
 
-/** `POST /agent/runs/:id/start` → 200. */
+/** `POST /agent/runs/:id/start` → 200 (`AgentStartedBody`): `previousRuns` may be absent from an older server. */
 export interface Started {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
+    readonly previousRuns?: readonly AgentPreviousRun[];
 }
 
 /** The agent API of the session server (loopback, bearer token). */
@@ -57,7 +61,8 @@ export interface AgentApi {
     start(run: string, token: string): Promise<ApiResult<Started>>;
     heartbeat(run: string, token: string): Promise<ApiResult<{ readonly lease: AgentLease }>>;
     finish(run: string, token: string, facts: Omit<AgentFinishBody, 'token'>): Promise<ApiResult<unknown>>;
-    clarification(run: string, token: string, question: string): Promise<ApiResult<unknown>>;
+    clarification(run: string, token: string, question: string, reply?: AgentReplyBody): Promise<ApiResult<unknown>>;
+    decline(run: string, token: string, reply: AgentReplyBody): Promise<ApiResult<unknown>>;
     fail(run: string, token: string, reason: 'AgentError' | 'Interrupted'): Promise<ApiResult<unknown>>;
     release(run: string, token: string): Promise<ApiResult<unknown>>;
 }
@@ -68,6 +73,8 @@ export interface AgentInvocation {
     readonly prompt: string;
     /** The tools the facilitator allows (`GET /agent/session`). */
     readonly allowedTools: readonly string[];
+    /** How many requests the prompt numbers (the reply names them by number, 1 to this). */
+    readonly requests: number;
     /** Aborted to stop the agent (a cancel, a lost lease, Ctrl+C): the agent and every process it started are killed. */
     readonly signal: AbortSignal;
 }
@@ -76,10 +83,14 @@ export interface AgentInvocation {
 export interface AgentOutcome {
     /** The agent process's exit code (-1 when it was killed by a signal). */
     readonly exitCode: number;
-    /** What the agent said it did (from its final outcome line); not logged, it may echo the requests. */
+    /** How the agent says the run ended (`done` when its reply could not be read). Never logged, like all of the reply. */
+    readonly outcome: ReplyOutcome;
+    /** What the agent said it did, or why it declined ('' when its reply had none). */
     readonly summary: string;
-    /** The agent asks the facilitator this instead of guessing (its final outcome line). */
+    /** A clarification: the agent asks the facilitator this instead of guessing, as plain text. */
     readonly question?: string;
+    /** The reply, validated against its shape and limits (requests by their number in the prompt); absent when it was not valid. */
+    readonly reply?: ReplyData<number>;
 }
 
 /** Runs the agent (Claude Code) in the workspace root, one invocation at a time. */

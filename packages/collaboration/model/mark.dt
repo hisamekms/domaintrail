@@ -1,0 +1,122 @@
+context Collaboration {
+  /// 印の識別子。
+  id MarkId "印ID": UUID
+
+  /// 反応に使う絵文字1つ（書記素1つ）。ZWJ でつないだ組・肌の色・国旗・キーキャップも1つと数える。アプリは絵文字に意味を
+  /// 与えない。正規化した形で持つ: NFC で、テキスト表示が既定の絵文字には VS16（U+FE0F）を付けた完全修飾の形（❤ と ❤️ は
+  /// 同じ反応）。
+  primitive Emoji "絵文字": String {
+    invariant bounded "長すぎない" { length(value) >= 1 and length(value) <= 64 }
+    /// 書記素1つの絵文字で、正規化した形（`@domaintrail/modeling/core/emoji`）。
+    invariant singleEmoji "正規化した絵文字1つ"
+  }
+
+  /// 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応（絵文字）はメッセージと AI のターンに誰でも付ける。
+  union MarkSign "印の種類" {
+    Vote "票" {}
+    /// 利用者が選んだ絵文字。どの絵文字にもアプリは意味を与えない。
+    Reaction "反応" {
+      emoji: Emoji
+    }
+  }
+
+  /// 印を付けるもの。
+  union MarkTarget "印の対象" {
+    /// 人のメッセージ（依頼）。
+    Message "メッセージ" {
+      request: RequestId
+    }
+    /// AI のターン（エージェント実行）。
+    Turn "AI のターン" {
+      run: AgentRunId
+    }
+    /// 確認待ちの実行の、問いの選択肢。
+    QuestionOption "問いの選択肢" {
+      run: AgentRunId
+      question: ReplyKey "問い"
+      option: ReplyKey "選択肢"
+    }
+    /// 返答の前提（0 始まりの番号）について、そのままにする（別案なし）か、別案のどれか。
+    AssumptionChoice "前提の選び方" {
+      run: AgentRunId
+      assumption: Tally "前提の番号"
+      alternative: ReplyKey? "別案（なければ前提のまま）"
+    }
+  }
+
+  /// いま印を付け外しできると、付け外しのときに確かめた対象: セッションにあり、票なら締め切られていない。
+  verified OpenMarkTarget "付け外しできる対象" of MarkTarget for SessionId errors MarkTargetNotFound, MarkTargetClosed
+
+  /// 参加者が対象に付ける印。票と反応は同じ仕組み（だれが・なにに・どの印を）で、対象の種類ごとの規則（同じ組で1つだけ、
+  /// 締め切り、だれが付けられるか、1つの対象に付く絵文字の種類の上限）はコード（`domain/marks.ts`）が決める。外した印は残し、
+  /// 付け直しは新しい印になる。
+  aggregate Mark "印" {
+    id: MarkId
+    references session: SessionId -> Session
+    participant: ParticipantId
+    target: MarkTarget
+    sign: MarkSign
+    placedAt: Timestamp "付けた日時"
+
+    /// 票は問いの選択肢と前提の選び方に、反応はメッセージと AI のターンに付ける。
+    invariant fitsTarget "印の種類が対象に合う" {
+      (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+    }
+
+    state Placed "付いている"
+    state Removed "外した" {
+      removedAt: Timestamp "外した日時"
+    }
+
+    create command place(id: MarkId, session: ActiveSession, participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, placedAt: Timestamp) "印を付ける"
+      -> Placed
+      requires fitsTarget "印の種類が対象に合う" {
+        (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+      } else MarkNotForTarget
+      /// ファシリテーターは票を入れない（回答が決定になる）。
+      requires participantsVote "票は参加者だけ" {
+        sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
+      } else FacilitatorDoesNotVote
+      emits MarkPlaced
+
+    /// 締め切られた票は外せない（対象を付け外しできると確かめてから外す）。
+    command remove(open: OpenMarkTarget, removedAt: Timestamp) "印を外す"
+      Placed -> Removed
+      emits MarkRemoved
+  }
+
+  persistent event MarkPlaced "印を付けた" {
+    markId: MarkId
+    session: SessionId
+    participant: ParticipantId
+    target: MarkTarget
+    sign: MarkSign
+    placedAt: Timestamp
+  }
+
+  persistent event MarkRemoved "印を外した" {
+    markId: MarkId
+    participant: ParticipantId
+    target: MarkTarget
+    sign: MarkSign
+    removedAt: Timestamp
+  }
+
+  /// 印の対象がセッションにない（メッセージ・実行・問い・選択肢・前提・別案のどれか）。
+  error MarkTargetNotFound "印の対象なし"
+
+  /// 票が締め切られている（回答した・別案を選んだ・あとの実行が同じ依頼を扱った・実行が確認待ちでない）。
+  error MarkTargetClosed "締め切られた票"
+
+  /// 印の種類が対象に合わない（票は選択肢と前提に、反応はメッセージとターンに）。
+  error MarkNotForTarget "対象に合わない印"
+
+  /// ファシリテーターは票を入れない。
+  error FacilitatorDoesNotVote "ファシリテーターの票"
+
+  /// 1つの対象（メッセージ・AI のターン）に付く絵文字の種類は上限まで（`domain/marks.ts` の `MAX_REACTION_EMOJI`）。
+  /// 付いている絵文字を付けるのは上限に関わらずできる。
+  error ReactionLimitReached "反応の種類の上限" {
+    limit: Tally "上限"
+  }
+}

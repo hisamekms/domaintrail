@@ -10,6 +10,8 @@ import { Collaboration as Contract, register } from '@domaintrail/collaboration/
 import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
 import { hashBytes, snapshotFile, snapshotHash } from '@domaintrail/collaboration/domain/snapshot';
 import { tally } from '@domaintrail/collaboration/domain/validation';
+import { makeEmoji, markCommands } from '@domaintrail/collaboration/domain/marks';
+import { isNormalEmoji } from '@domaintrail/modeling/core/emoji';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`invalid example: ${JSON.stringify(r.error)}`);
@@ -69,7 +71,7 @@ const validation: C.ValidationSummary = { dtErrors: tally(0), dtesErrors: tally(
 const frozen: C.FrozenRequest = {
     request,
     author: facilitator,
-    target: { target: { kind: 'Workspace' }, sourceRevision: revision },
+    targets: [],
     body: value(C.makeText('Add a cancel command to the order.')),
 };
 const running: C.RunningAgentRun = {
@@ -81,6 +83,26 @@ const running: C.RunningAgentRun = {
     queuedAt: at,
     baseRevision: revision,
     startedAt: at,
+};
+/** A reply about the run's request: done, and the same asking a question (a clarification's). */
+const reply: C.AgentReply = {
+    summary: value(C.makeText('Added cancel.')),
+    requests: [{ request, status: 'Done' }],
+    questions: [],
+    assumptions: [{ text: value(C.makeText('Only an open order can be cancelled.')), requests: [request], alternatives: [] }],
+};
+const asking: C.AgentReply = {
+    ...reply,
+    requests: [{ request, status: 'Question' }],
+    questions: [
+        {
+            id: value(C.makeReplyKey('q1')),
+            text: value(C.makeText('Which orders can be cancelled?')),
+            requests: [request],
+            options: [{ id: value(C.makeReplyKey('open')), label: value(C.makeText('Open ones')) }],
+            multiple: false,
+        },
+    ],
 };
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the examples stand in for what the verified types' factories check
 const pending = request as C.PendingRequest;
@@ -111,16 +133,21 @@ register(
                 TimelineName: C.makeTimelineName,
                 StormingEventName: C.makeStormingEventName,
                 OccurrencePath: C.makeOccurrencePath,
+                ReplyKey: C.makeReplyKey,
+                MarkId: C.makeMarkId,
+                Emoji: makeEmoji,
             },
             Session: sessionCommands,
             Request: requestCommands,
             AgentRun: agentRunCommands,
             Revision: revisionCommands,
+            Mark: markCommands,
         },
         {
             // `serial` is the run queue's (one running run per session, a unique index of the store): not a property of one run
             declared: {
                 Collaboration: {
+                    Emoji: { singleEmoji: isNormalEmoji },
                     Revision: declaredChecks.Revision,
                     TakeRevision: { hashMatchesFiles: (_id, _session, _origin, contentHash, fs) => snapshotHash(fs) === contentHash },
                     RestoreRevision: { hashMatchesFiles: (_id, _session, _from, _pre, contentHash, fs) => snapshotHash(fs) === contentHash },
@@ -128,6 +155,8 @@ register(
             },
             arbitraries: {
                 Collaboration: {
+                    // random strings are rarely one emoji: a few of every shape (text presentation, ZWJ, skin tone, flag, keycap)
+                    Emoji: fc.constantFrom(...['👍', '❤️', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣', '🏳️‍🌈'].map((e) => value(makeEmoji(e)))),
                     CompletedAgentRun,
                     OpenSession,
                     RecordedRevision: hashed(base.RecordedRevision),
@@ -139,10 +168,12 @@ register(
                     commands: {
                         queue: [[running.id, active, [pending], { requests: [frozen] }, facilitator, at]],
                         finish: [
-                            [running, success, revision, false, at],
-                            [running, success, C.makeRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'), true, at],
-                            [running, { ...success, newDtErrors: tally(1) }, revision, false, at],
+                            [running, success, revision, false, undefined, at],
+                            [running, success, C.makeRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'), true, reply, at],
+                            [running, { ...success, newDtErrors: tally(1) }, revision, false, reply, at],
                         ],
+                        askClarification: [[running, value(C.makeText('Which orders?')), asking, revision, at]],
+                        decline: [[running, reply, revision, at]],
                     },
                 },
                 Revision: {

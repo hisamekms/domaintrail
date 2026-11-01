@@ -1,12 +1,14 @@
 // `dt session subscribe --agent claude` (ADR 0026, S6): the subscriber of the session server running on the
-// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code, this CLI's `dt fmt`/`dt check`
-// and the workspace's files.
+// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code, `dt fmt`/`dt check` (this CLI,
+// or `session.agent.dt`, for the agent too) and the workspace's files.
 import { lstat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { startSubscriber as subscribe, type Subscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
 import { createClaudeCodeRunner, type AgentCommand } from '@domaintrail/agent/infrastructure/claude-code';
+import { dtCommandOf, pinDt, type PinnedDt } from '@domaintrail/agent/infrastructure/dt-shim';
 import { createDtTools, type DtCommand } from '@domaintrail/agent/infrastructure/dt-tools';
+import type { AgentRunner } from '@domaintrail/agent/application/ports';
 import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
 import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
 import { randomNonce, systemClock } from '@domaintrail/agent/infrastructure/system';
@@ -32,7 +34,10 @@ export interface SubscriberOptions {
     agent: AgentName;
     /** Handle one run, then end. */
     once?: boolean;
-    /** How `dt` is started for `dt fmt` and `dt check` (the CLI passes its own runtime and entry). */
+    /**
+     * How `dt` is started for `dt fmt` and `dt check` after the agent, and by the agent itself (its `dt`): the CLI passes
+     * `session.agent.dt` when configured, else its own runtime and entry.
+     */
     dt: DtCommand;
     log?: (line: string) => void;
     /** The agent's program instead of `claude` on the PATH: for the tests only, not a CLI option. */
@@ -83,13 +88,22 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.session !== credential.session) throw new SessionError('The agent credential is not for the session the server runs.');
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
 
+    // the agent's dt, taken once now (never read again from the config file, which is in the workspace)
+    let dt: PinnedDt;
+    let runner: AgentRunner;
+    try {
+        dt = pinDt(options.dt, root);
+        runner = await createClaudeCodeRunner({ root, command: options.agentCommand, dt });
+    } catch (e) {
+        throw new SessionError(e instanceof Error ? e.message : String(e));
+    }
     const sources = options.sources ?? DEFAULT_SOURCES;
     const respectGitignore = options.respectGitignore ?? true;
     const subscriber: Subscriber = subscribe(
         {
             api,
-            runner: createClaudeCodeRunner({ root, command: options.agentCommand }),
-            tools: createDtTools({ dt: options.dt, root, configPath: options.configPath, log }),
+            runner,
+            tools: createDtTools({ dt: dtCommandOf(dt), root, configPath: options.configPath, log }),
             workspace: {
                 scan: () => scanWorkspace(root),
                 sources: async () => new Set(await findDomainFiles(root, sources, respectGitignore)),

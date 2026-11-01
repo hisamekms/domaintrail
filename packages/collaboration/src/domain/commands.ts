@@ -1,6 +1,6 @@
 // The commands of the collaboration aggregates, checked against the generated contracts (ADR 0026). Each is a pure
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
-// PendingRequest, RestorableRevision) are parameters that the application makes. The requirements are checked with the
+// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
 // what each outcome sets.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
@@ -37,14 +37,27 @@ export const sessionCommands: Collaboration.SessionCommands = {
 };
 
 export const requestCommands: Collaboration.RequestCommands = {
-    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, target, body, sentAt) =>
-        ok({
+    send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (id, session, author, targets, body, sentAt, replyTo, mentions) => {
+        switch (Collaboration.checkSendRequestRequires(id, session, author, targets, body, sentAt, replyTo, mentions)) {
+            case 'atMostTwentyTargets':
+                return err({ type: 'TooManyTargets' });
+            case 'distinctTargets':
+                return err({ type: 'DuplicateTarget' });
+            case 'noWorkspaceTarget':
+                return err({ type: 'WorkspaceTarget' });
+            case 'atMostTwentyMentions':
+                return err({ type: 'TooManyMentions' });
+            case 'distinctMentions':
+                return err({ type: 'DuplicateMention' });
+        }
+        return ok({
             Sent: {
-                set: { id, session, author, target, body, sentAt },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, target, body, sentAt } },
+                // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
             },
-        }),
-    ),
+        });
+    }),
 
     dismiss: decide<Collaboration.DismissRequestDecision>(Collaboration.RequestShape, {
         Sent: (request, dismissedBy, dismissedAt) =>
@@ -80,13 +93,19 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
 
     // Completed when the report meets the run success rule, Failed (RuleNotMet) with the report otherwise
     finish: decide<Collaboration.FinishAgentRunDecision>(Collaboration.AgentRunShape, {
-        Running: (run, report, resultRevision, changed, finishedAt) => {
-            if (Collaboration.checkFinishAgentRunRequires(run, report, resultRevision, changed, finishedAt) === 'changedMatchesResult')
-                return err({ type: 'ChangedMismatch' });
+        Running: (run, report, resultRevision, changed, reply, finishedAt) => {
+            switch (Collaboration.checkFinishAgentRunRequires(run, report, resultRevision, changed, reply, finishedAt)) {
+                case 'changedMatchesResult':
+                    return err({ type: 'ChangedMismatch' });
+                case 'replyAsksNothing':
+                case 'replyAboutInput':
+                    return err({ type: 'InvalidReply' });
+            }
             if (succeeded(report)) {
                 return ok({
                     Completed: {
-                        set: { report, resultRevision, changed, finishedAt },
+                        // the reply is kept with a completed run only: a failure is the facts'
+                        set: { report, resultRevision, changed, reply, finishedAt },
                         events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
                     },
                 });
@@ -101,13 +120,28 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     }),
 
     askClarification: decide<Collaboration.AskClarificationAgentRunDecision>(Collaboration.AgentRunShape, {
-        Running: (run, question, resultRevision, finishedAt) =>
-            ok({
+        Running: (run, question, reply, resultRevision, finishedAt) => {
+            if (Collaboration.checkAskClarificationAgentRunRequires(run, question, reply, resultRevision, finishedAt) !== undefined)
+                return err({ type: 'InvalidReply' });
+            return ok({
                 NeedsClarification: {
-                    set: { question, resultRevision, finishedAt },
+                    set: { question, reply, resultRevision, finishedAt },
                     events: { RunNeedsClarification: { type: 'RunNeedsClarification', runId: run.id, question, resultRevision, finishedAt } },
                 },
-            }),
+            });
+        },
+    }),
+
+    decline: decide<Collaboration.DeclineAgentRunDecision>(Collaboration.AgentRunShape, {
+        Running: (run, reply, resultRevision, finishedAt) => {
+            if (Collaboration.checkDeclineAgentRunRequires(run, reply, resultRevision, finishedAt) !== undefined) return err({ type: 'InvalidReply' });
+            return ok({
+                Declined: {
+                    set: { reply, resultRevision, finishedAt },
+                    events: { RunDeclined: { type: 'RunDeclined', runId: run.id, resultRevision, finishedAt } },
+                },
+            });
+        },
     }),
 
     // a failure without a report: the run success rule is finish's

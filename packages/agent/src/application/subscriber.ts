@@ -1,14 +1,16 @@
 // The subscriber of a session (`dt session subscribe`, ADR 0026, S6): follows the agent API's SSE stream, claims the
 // next queued run, and runs it through the pipeline, one run at a time:
 //
-//   claim → start (the server takes the base revision) → prompt → the agent, with heartbeats → the changed files are
-//   only DSL sources? → `dt fmt`, `dt check` → finish {exitCode, formatted, checked} (the server decides the rest)
+//   claim → start (the server takes the base revision, and gives the runs it continues) → prompt → the agent, with heartbeats → the changed files are
+//   only DSL sources? → `dt fmt`, `dt check` → finish {exitCode, formatted, checked, reply} (the server decides the rest)
 //
-// or, instead of finish, a clarification (the agent asked a question) or a failure (`AgentError`: the agent could not
+// or, instead of finish, a clarification (the agent asked questions), a decline (the agent will not do the requests,
+// and says why) or a failure (`AgentError`: the agent could not
 // run or changed other files; `Interrupted`: the subscriber was stopped). A cancel of the run (`run.cancel_requested`)
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
 // queued one is claimed without waiting for anyone. Functions over the ports only: no I/O of its own.
-import type { AgentClaimed } from '@domaintrail/collaboration/protocol';
+import { mapRequests } from '@domaintrail/collaboration/domain/reply';
+import type { AgentClaimed, AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
 import { buildPrompt } from './prompt.js';
 
@@ -187,7 +189,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 );
             });
             try {
-                await runPipeline(id, token, run.input, cancel.signal);
+                await runPipeline(id, token, run.input, started.value.previousRuns ?? [], cancel.signal);
             } catch (e) {
                 // the workspace could not be scanned, the participants not read…: the run fails, the next one is taken
                 log(`run ${id}: ${message(e)}`);
@@ -200,7 +202,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         }
     };
 
-    const runPipeline = async (id: string, token: string, input: AgentClaimed['run']['input'], cancelled: AbortSignal): Promise<void> => {
+    const runPipeline = async (
+        id: string,
+        token: string,
+        input: AgentClaimed['run']['input'],
+        previousRuns: readonly AgentPreviousRun[],
+        cancelled: AbortSignal,
+    ): Promise<void> => {
         const names = await api.participants().then(
             (r) => new Map(r.ok ? r.value.participants.map((p) => [p.id, p.name]) : []),
             (e: unknown) => {
@@ -242,7 +250,12 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             const signal = AbortSignal.any([cancelled, stopping.signal]);
             let outcome: AgentOutcome;
             try {
-                outcome = await deps.runner.run({ prompt: buildPrompt(input, names, deps.nonce()), allowedTools: options.allowedTools, signal });
+                outcome = await deps.runner.run({
+                    prompt: buildPrompt(input, names, deps.nonce(), previousRuns),
+                    allowedTools: options.allowedTools,
+                    requests: input.requests.length,
+                    signal,
+                });
             } catch (e) {
                 await inspect();
                 if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
@@ -255,8 +268,14 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
             log(`run ${id}: the agent exited with ${outcome.exitCode}`);
             if (outside) return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
-            if (outcome.question !== undefined && outcome.exitCode === 0) {
-                return complete(`asks for clarification (${changed} file(s) changed)`, id, () => api.clarification(id, token, outcome.question ?? ''));
+            // the reply names requests by their number in the prompt: back to the frozen input's IDs
+            const reply = outcome.reply && mapRequests(outcome.reply, (n) => input.requests[n - 1]?.request ?? '');
+            if (outcome.exitCode === 0 && outcome.outcome === 'clarification' && outcome.question !== undefined) {
+                const question = outcome.question;
+                return complete(`asks for clarification (${changed} file(s) changed)`, id, () => api.clarification(id, token, question, reply));
+            }
+            if (outcome.exitCode === 0 && outcome.outcome === 'declined' && reply) {
+                return complete(`declined (${changed} file(s) changed)`, id, () => api.decline(id, token, reply));
             }
             const formatted = await deps.tools.format();
             const checked = await deps.tools.check();
@@ -264,7 +283,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             await complete(
                 `finished (${changed} file(s) changed; dt fmt ${formatted ? 'ran' : 'did not run'}, dt check ${checked ? 'ran' : 'did not run'})`,
                 id,
-                () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked }),
+                // the reply of a done run only: a question or a decline that did not end the run is dropped
+                () => api.finish(id, token, { exitCode: outcome.exitCode, formatted, checked, ...(outcome.outcome === 'done' && reply && { reply }) }),
             );
         } finally {
             // any other way out (an exception) still looks at what the agent left

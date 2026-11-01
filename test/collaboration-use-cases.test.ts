@@ -8,6 +8,7 @@ import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
 import type { CollaborationDeps } from '@domaintrail/collaboration/application/ports';
 import { createCollaboration, MAX_COMPARISON_DIFF, type CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
 import { MAX_DIFF_BYTES } from '@domaintrail/collaboration/domain/compare';
+import { toAgentReply, type ReplyData } from '@domaintrail/collaboration/domain/reply';
 import { encodeOccurrencePath } from '@domaintrail/collaboration/domain/targets';
 import { summarize } from '@domaintrail/collaboration/domain/validation';
 import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
@@ -110,7 +111,7 @@ async function started(s: Session): Promise<{ id: C.SessionId; start: C.Recorded
 
 async function queuedRun(s: Session, id: C.SessionId, start: C.RecordedRevision): Promise<C.QueuedAgentRun> {
     const target: C.TargetSnapshot = { target: { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }, sourceRevision: start.id };
-    const request = value(await s.use.sendRequest({ session: id, author: guest, target, body: text('Add a cancel command.') }));
+    const request = value(await s.use.sendRequest({ session: id, author: guest, targets: [target], body: text('Add a cancel command.') }));
     return value(await s.use.queueRun({ session: id, requests: [request.id], queuedBy: facilitator }));
 }
 
@@ -132,27 +133,49 @@ describe('sessions and requests', () => {
     test('requests need an open session and a participant; a dismissed request cannot be bundled', async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const target: C.TargetSnapshot = { target: { kind: 'Workspace' }, sourceRevision: start.id };
+        const element = (name: string): C.TargetSnapshot => ({
+            target: { kind: 'DtElement', element: value(C.makeElementName(name)) },
+            sourceRevision: start.id,
+        });
         const stranger = value(C.makeParticipantId('stranger'));
-        expect(error(await s.use.sendRequest({ session: id, author: stranger, target, body: text('x') }))).toEqual({
+        expect(error(await s.use.sendRequest({ session: id, author: stranger, targets: [], body: text('x') }))).toEqual({
             type: 'NotAParticipant',
             participant: stranger,
         });
-        const ranged: C.TargetSnapshot = {
-            ...target,
+        const backwards: C.TargetSnapshot = {
+            ...element('Sales.Order'),
             range: {
                 path: value(C.makeWorkspacePath('sales/sales.dt')),
-                startLine: value(C.makeLineNumber(1)),
+                startLine: value(C.makeLineNumber(2)),
                 startColumn: value(C.makeColumnNumber(1)),
                 endLine: value(C.makeLineNumber(1)),
                 endColumn: value(C.makeColumnNumber(2)),
             },
         };
-        expect(error(await s.use.sendRequest({ session: id, author: guest, target: ranged, body: text('x') }))).toEqual({
+        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: [element('Sales.Customer'), backwards], body: text('x') }))).toEqual({
             type: 'InvalidTarget',
-            violated: ['workspaceHasNoRange'],
+            violated: ['ordered'],
         });
-        const sent = value(await s.use.sendRequest({ session: id, author: guest, target, body: text('x') }));
+        // several targets: at most 20, each once, and never the whole workspace (which is no target at all)
+        const many = Array.from({ length: 21 }, (_, i) => element(`Sales.E${i}`));
+        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: many, body: text('x') }))).toEqual({ type: 'TooManyTargets' });
+        expect(
+            error(await s.use.sendRequest({ session: id, author: guest, targets: [element('Sales.Order'), element('Sales.Order')], body: text('x') })),
+        ).toEqual({ type: 'DuplicateTarget' });
+        expect(
+            error(
+                await s.use.sendRequest({
+                    session: id,
+                    author: guest,
+                    targets: [{ target: { kind: 'Workspace' }, sourceRevision: start.id }],
+                    body: text('x'),
+                }),
+            ),
+        ).toEqual({ type: 'WorkspaceTarget' });
+        const two = value(await s.use.sendRequest({ session: id, author: guest, targets: many.slice(0, 20), body: text('x') }));
+        expect(two.targets).toHaveLength(20);
+        const target: readonly C.TargetSnapshot[] = [];
+        const sent = value(await s.use.sendRequest({ session: id, author: guest, targets: target, body: text('x') }));
         value(await s.use.dismissRequest({ request: sent.id, by: facilitator }));
         expect(error(await s.use.dismissRequest({ request: sent.id, by: facilitator }))).toEqual({
             type: 'NotAllowed',
@@ -165,7 +188,7 @@ describe('sessions and requests', () => {
         });
         expect(error(await s.use.queueRun({ session: id, requests: [], queuedBy: facilitator }))).toEqual({ type: 'NoRequests' });
         value(await s.use.closeSession({ session: id }));
-        expect(error(await s.use.sendRequest({ session: id, author: guest, target, body: text('x') }))).toEqual({ type: 'SessionAlreadyClosed' });
+        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: target, body: text('x') }))).toEqual({ type: 'SessionAlreadyClosed' });
     });
 
     test('a run freezes its requests at queueing, and a request bundled twice is refused', async () => {
@@ -179,7 +202,7 @@ describe('sessions and requests', () => {
         const state = value(await s.use.sessionState({ session: id }));
         expect(state.runs[0]).toEqual(run);
         expect(error(await s.use.queueRun({ session: id, requests: [request], queuedBy: facilitator }))).toMatchObject({ type: 'RequestAlreadyDismissed' });
-        const again = value(await s.use.sendRequest({ session: id, author: guest, target: run.input.requests[0].target, body: text('y') }));
+        const again = value(await s.use.sendRequest({ session: id, author: guest, targets: run.input.requests[0].targets, body: text('y') }));
         expect(error(await s.use.queueRun({ session: id, requests: [again.id, again.id], queuedBy: facilitator }))).toEqual({ type: 'DuplicateRequest' });
     });
 });
@@ -296,6 +319,219 @@ describe('agent runs', () => {
         clock.t += 2_000;
         expect(await after.use.expireLeases()).toEqual({ failed: [], released: [claimed.id] });
         expect(value(await after.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 1_000 })).run.id).toBe(claimed.id);
+    });
+});
+
+describe('agent replies', () => {
+    /** A reply about the run's requests, as the agent API takes it. */
+    const reply = (over: Partial<ReplyData<C.RequestId>> & Pick<ReplyData<C.RequestId>, 'requests'>): C.AgentReply =>
+        toAgentReply({ outcome: 'done', summary: 'Added cancel.', questions: [], assumptions: [], ...over });
+
+    /** A started run of a fresh session. */
+    async function runningRun(): Promise<{ s: Session; id: C.SessionId; run: C.QueuedAgentRun; token: string; request: C.RequestId }> {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+        value(await s.use.startRun({ run: run.id, token: lease.token }));
+        return { s, id, run, token: lease.token, request: run.input.requests[0].request };
+    }
+
+    test('a completed run keeps the reply; a reply about another request is refused before anything is recorded', async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const stranger = C.makeRequestId('00000000-0000-4000-8000-0000000000ff');
+        const before = value(await s.use.sessionState({ session: id })).revisions.length;
+        await s.write('sales/sales.dt', SALES.replace('    command confirm()', '    command cancel()\n      Draft -> Draft\n\n    command confirm()'));
+        expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request: stranger, status: 'done' }] }) }))).toEqual({
+            type: 'InvalidReply',
+        });
+        expect(value(await s.use.sessionState({ session: id })).revisions).toHaveLength(before);
+        const kept = reply({
+            requests: [{ request, status: 'partial', note: 'Only the command.' }],
+            assumptions: [{ text: 'Only drafts.', requests: [request], alternatives: [{ id: 'all', label: 'Any state' }] }],
+        });
+        const finished = value(await s.use.finishRun({ run: run.id, token, facts, reply: kept }));
+        expect(finished.run).toMatchObject({ state: 'Completed', changed: true, reply: kept });
+        expect(value(await s.use.sessionState({ session: id })).runs[0]).toMatchObject({ reply: kept });
+    });
+
+    test('a failed run keeps no reply: the facts decide', async () => {
+        const { s, run, token, request } = await runningRun();
+        const failed = value(
+            await s.use.finishRun({ run: run.id, token, facts: { ...facts, exitCode: 1 }, reply: reply({ requests: [{ request, status: 'done' }] }) }),
+        );
+        expect(failed.run.state).toBe('Failed');
+        expect('reply' in failed.run).toBe(false);
+    });
+
+    test('a clarification keeps its structured questions; a done reply with questions is refused', async () => {
+        const { s, run, token, request } = await runningRun();
+        const asking = reply({
+            outcome: 'clarification',
+            requests: [{ request, status: 'question' }],
+            questions: [{ id: 'q1', text: 'Which state?', requests: [request], options: [{ id: 'draft', label: 'Draft' }], multiple: false }],
+        });
+        expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: asking }))).toEqual({ type: 'InvalidReply' });
+        expect(error(await s.use.askClarification({ run: run.id, token, question: text('Which?'), reply: reply({ requests: [] }) }))).toEqual({
+            type: 'InvalidReply',
+        });
+        const asked = value(await s.use.askClarification({ run: run.id, token, question: text('Which state?'), reply: asking }));
+        expect(asked.run).toMatchObject({ state: 'NeedsClarification', question: 'Which state?', reply: asking });
+    });
+
+    test('a declined run ends without checks, keeps the reason, and is replayed like the other endings', async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const declined = reply({
+            outcome: 'declined',
+            summary: 'This is not about the model.',
+            requests: [{ request, status: 'skipped', note: 'Out of scope.' }],
+        });
+        const ended = value(await s.use.declineRun({ run: run.id, token, reply: declined }));
+        expect(ended.run).toMatchObject({ state: 'Declined', reply: declined, resultRevision: ended.run.baseRevision });
+        expect(value(await s.use.declineRun({ run: run.id, token, reply: declined })).replayed).toBe(true);
+        expect(error(await s.use.finishRun({ run: run.id, token, facts }))).toEqual({ type: 'NotAllowed', command: 'finish', state: 'Declined' });
+        expect(error(await s.use.askClarification({ run: run.id, token, question: text('x') }))).toEqual({
+            type: 'NotAllowed',
+            command: 'askClarification',
+            state: 'Declined',
+        });
+        const types = (await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id))).map((e) => e.event.type);
+        expect(types.at(-1)).toBe('RunDeclined');
+    });
+
+    test("the facilitator's answer is checked against the questions and frozen into the next run's input", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const asking = reply({
+            outcome: 'clarification',
+            requests: [{ request, status: 'question' }],
+            questions: [
+                {
+                    id: 'q1',
+                    text: 'Which state?',
+                    requests: [request],
+                    options: [
+                        { id: 'draft', label: 'Draft', detail: 'before confirm' },
+                        { id: 'open', label: 'Open' },
+                    ],
+                    multiple: false,
+                },
+                {
+                    id: 'q2',
+                    text: 'Which events?',
+                    requests: [],
+                    options: [
+                        { id: 'a', label: 'A' },
+                        { id: 'b', label: 'B' },
+                    ],
+                    multiple: true,
+                },
+            ],
+        });
+        value(await s.use.askClarification({ run: run.id, token, question: text('Which state?'), reply: asking }));
+        const queue = (answers: { question: string; options: string[]; text?: string }[], answerTo = run.id) =>
+            s.use.queueRun({ session: id, requests: [request], queuedBy: facilitator, answer: { answerTo, answer: { answers } } });
+
+        expect(error(await queue([{ question: 'q9', options: ['draft'] }]))).toMatchObject({ type: 'InvalidAnswer', field: 'answer.answers[0].question' });
+        expect(error(await queue([{ question: 'q1', options: ['draft', 'open'] }]))).toMatchObject({
+            type: 'InvalidAnswer',
+            field: 'answer.answers[0].options',
+        });
+        expect(error(await queue([{ question: 'q1', options: ['closed'] }]))).toMatchObject({ type: 'InvalidAnswer', field: 'answer.answers[0].options[0]' });
+        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        expect(error(await queue([{ question: 'q1', options: ['draft'] }], unknown))).toEqual({ type: 'NotFound', aggregate: 'AgentRun', id: unknown });
+
+        const next = value(
+            await queue([
+                { question: 'q1', options: ['draft'] },
+                { question: 'q2', options: ['a', 'b'], text: 'and C' },
+            ]),
+        );
+        expect(next.input.answer as unknown).toEqual({
+            answerTo: run.id,
+            answers: [
+                { question: 'q1', text: 'Which state?', chosen: [{ id: 'draft', label: 'Draft', detail: 'before confirm' }] },
+                {
+                    question: 'q2',
+                    text: 'Which events?',
+                    chosen: [
+                        { id: 'a', label: 'A' },
+                        { id: 'b', label: 'B' },
+                    ],
+                    freeText: 'and C',
+                },
+            ],
+        });
+        // a run that is not waiting for an answer has nothing to answer
+        expect(error(await queue([{ question: 'q1', options: ['draft'] }], next.id))).toEqual({ type: 'NothingToAnswer', run: next.id });
+    });
+
+    test("the facilitator's pick of an alternative is checked against the completed run and frozen into the next run's input", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const tally = (n: number): C.Tally => value(C.makeTally(n));
+        const key = (k: string): C.ReplyKey => value(C.makeReplyKey(k));
+        const pickOf = (of: C.AgentRunId, assumption = 1, alternative = 'any', requests: C.RequestId[] = [request]) =>
+            s.use.queueRun({
+                session: id,
+                requests,
+                queuedBy: facilitator,
+                note: text('redo it'),
+                pick: { pickOf: of, assumption: tally(assumption), alternative: key(alternative) },
+            });
+        // not completed yet: nothing to pick
+        expect(error(await pickOf(run.id))).toEqual({ type: 'RunNotPickable', run: run.id });
+        const assumptions = [
+            { text: 'Only drafts.', requests: [request], alternatives: [] },
+            {
+                text: 'Cancel keeps the order.',
+                requests: [request],
+                alternatives: [
+                    { id: 'delete', label: 'Delete it' },
+                    { id: 'any', label: 'Any state' },
+                ],
+            },
+        ];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+
+        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        expect(error(await pickOf(unknown))).toEqual({ type: 'RunNotFound', run: unknown });
+        // an assumption or an alternative the reply does not have
+        expect(error(await pickOf(run.id, 2))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 0, 'any'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'other'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        // the requests queued again are the run's, no fewer and no more
+        const other = value(await s.use.sendRequest({ session: id, author: guest, targets: [], body: text('Also rename it.') }));
+        expect(error(await pickOf(run.id, 1, 'any', [request, other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'any', [other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
+        expect(value(await s.use.sessionState({ session: id })).runs).toHaveLength(1);
+
+        const next = value(await pickOf(run.id));
+        expect(next.input.pick as unknown).toEqual({
+            pickOf: run.id,
+            assumption: 1,
+            text: 'Cancel keeps the order.',
+            alternative: { id: 'any', label: 'Any state' },
+        });
+        expect(next.input.note as unknown).toBe('redo it');
+        // the agent is given the run it picked from, with what it changed
+        const previous = value(await s.use.previousRuns({ run: next.id, maxDiff: 100_000 }));
+        expect(previous.map((p) => p.run.id)).toEqual([run.id]);
+        expect(previous[0].changes.kind).toBe('diff');
+        // a run that did not complete (queued) cannot be picked from
+        expect(error(await pickOf(next.id))).toEqual({ type: 'RunNotPickable', run: next.id });
+    });
+
+    test("a pick of another session's run is refused", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const assumptions = [{ text: 'Only drafts.', requests: [request], alternatives: [{ id: 'all', label: 'Any state' }] }];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+        value(await s.use.closeSession({ session: id }));
+        const { id: second } = await started(s);
+        const mine = value(await s.use.sendRequest({ session: second, author: guest, targets: [], body: text('Again.') }));
+        const pick = { pickOf: run.id, assumption: value(C.makeTally(0)), alternative: value(C.makeReplyKey('all')) };
+        expect(error(await s.use.queueRun({ session: second, requests: [mine.id], queuedBy: facilitator, pick }))).toEqual({
+            type: 'RunOfAnotherSession',
+            run: run.id,
+        });
     });
 });
 
@@ -633,20 +869,37 @@ describe('revisions', () => {
     test("targets of requests are current, stale or unknown in the workspace now; they're never re-bound", async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const send = async (target: C.ModelTarget): Promise<C.RequestId> =>
-            value(await s.use.sendRequest({ session: id, author: guest, target: { target, sourceRevision: start.id }, body: text('x') })).id;
-        const order = await send({ kind: 'DtElement', element: value(C.makeElementName('Sales.Order#Confirmed')) });
-        const received = await send({
+        const send = async (...targets: C.ModelTarget[]): Promise<C.RequestId> =>
+            value(
+                await s.use.sendRequest({
+                    session: id,
+                    author: guest,
+                    targets: targets.map((target) => ({ target, sourceRevision: start.id })),
+                    body: text('x'),
+                }),
+            ).id;
+        const confirmed: C.ModelTarget = { kind: 'DtElement', element: value(C.makeElementName('Sales.Order#Confirmed')) };
+        const order = await send(confirmed);
+        const received: C.ModelTarget = {
             kind: 'DtesOccurrence',
             storming: value(C.makeStormingName('Returns')),
             timeline: value(C.makeTimelineName('Normal')),
             eventName: value(C.makeStormingEventName('Received')),
             occurrence: value(C.makeOccurrencePath(encodeOccurrencePath([1]))),
-        });
-        expect([...value(await s.use.targetStatuses({ session: id })).statuses.values()]).toEqual(['current', 'current']);
+        };
+        const occurrence = await send(received);
+        // one status per target, in the request's order; none for the whole workspace
+        const both = await send({ kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }, confirmed);
+        const workspace = await send();
+        expect([...value(await s.use.targetStatuses({ session: id })).statuses.values()]).toEqual([['current'], ['current'], ['current', 'current'], []]);
         await s.write('sales/sales.dt', SALES.replace('    state Confirmed\n', '').replace('Draft -> Confirmed', 'Draft -> Draft'));
         await s.write('stormings/returns.dtes', RETURNS.replace('    Requested\n', '    Requested\n    Requested\n'));
         const statuses = value(await s.use.targetStatuses({ session: id })).statuses;
-        expect([statuses.get(order), statuses.get(received)]).toEqual(['stale', 'stale']);
+        expect([statuses.get(order), statuses.get(occurrence), statuses.get(both), statuses.get(workspace)]).toEqual([
+            ['stale'],
+            ['stale'],
+            ['current', 'stale'],
+            [],
+        ]);
     });
 });

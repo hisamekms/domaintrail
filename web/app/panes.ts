@@ -1,23 +1,45 @@
-import type { BottomTab } from '../bottom';
+import { useEffect, useState } from 'react';
 import type { InspectorTab } from '../inspector';
 import { usePersistentState } from '../shared/layout';
+import { useSwap } from '../shared/motion';
+import { autoInspectorWidth, effectiveLayout, keptOverrides, NO_OVERRIDES, type Dock, type Overrides } from './responsive';
+import { scaledSize } from './text-size';
 
-/** Which panes are open, their sizes and tabs, and whether the legend is open (remembered per browser). */
+/** The lists of the left pane, chosen in its activity bar. */
+export type LeftView = 'tree' | 'problems' | 'changes';
+
+/**
+ * Which panes are open, their sizes and contents, and whether the legend is open (remembered per browser). The left
+ * pane and the dock are as shown: on a narrow window with the conversation open the page may override the reader's
+ * saved choices (`responsive.ts`); setting them then changes what is shown only, not what is saved.
+ */
 export interface Panes {
+    /** The left pane shows its list (else its activity bar only). */
     explorerOpen: boolean;
     setExplorerOpen: (open: boolean) => void;
-    inspectorOpen: boolean;
-    setInspectorOpen: (open: boolean) => void;
-    bottomOpen: boolean;
-    setBottomOpen: (open: boolean) => void;
     explorerWidth: number;
     setExplorerWidth: (width: number) => void;
+    leftView: LeftView;
+    /** Opens the left pane on `view`. */
+    showLeft: (view: LeftView) => void;
+    /** The inspector (the dock) is open. */
+    inspectorOpen: boolean;
+    setInspectorOpen: (open: boolean) => void;
+    /** Where the inspector is shown: a move lags `--motion-swap` behind, while `inspectorMoving` fades it out. */
+    inspectorDock: Dock;
+    setInspectorDock: (dock: Dock) => void;
+    /** The inspector is fading out before it moves to the other side (`inspectorDock` is still the old one). */
+    inspectorMoving: boolean;
+    /** The inspector's width on the right: the reader's (once dragged), else one that leaves the canvas its share. */
     inspectorWidth: number;
     setInspectorWidth: (width: number) => void;
-    bottomHeight: number;
-    setBottomHeight: (height: number) => void;
-    bottomTab: BottomTab;
-    setBottomTab: (tab: BottomTab) => void;
+    inspectorHeight: number;
+    setInspectorHeight: (height: number) => void;
+    /** The conversation pillar at the right end (a session's chat); never open without one. */
+    conversationOpen: boolean;
+    setConversationOpen: (open: boolean) => void;
+    conversationWidth: number;
+    setConversationWidth: (width: number) => void;
     legendOpen: boolean;
     setLegendOpen: (open: boolean) => void;
     inspectorTab: InspectorTab;
@@ -26,35 +48,98 @@ export interface Panes {
     openInspector: (tab: InspectorTab) => void;
 }
 
-export function usePanes(): Panes {
-    const [explorerOpen, setExplorerOpen] = usePersistentState('domaintrail.layout.explorer', true);
-    const [inspectorOpen, setInspectorOpen] = usePersistentState('domaintrail.layout.inspector', true);
-    const [bottomOpen, setBottomOpen] = usePersistentState('domaintrail.layout.bottom', false);
-    const [explorerWidth, setExplorerWidth] = usePersistentState('domaintrail.layout.explorerWidth', 260);
-    const [inspectorWidth, setInspectorWidth] = usePersistentState('domaintrail.layout.inspectorWidth', 420);
-    const [bottomHeight, setBottomHeight] = usePersistentState('domaintrail.layout.bottomHeight', 220);
-    const [bottomTab, setBottomTab] = usePersistentState<BottomTab>('domaintrail.layout.bottomTab', 'problems');
+/** The window's inner width, followed as it is resized. */
+export function useWindowWidth(): number {
+    const [width, setWidth] = useState(() => (typeof window === 'undefined' ? Infinity : window.innerWidth));
+    useEffect(() => {
+        const onResize = (): void => setWidth(window.innerWidth);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+    return width;
+}
+
+/** The width of the left pane's activity bar (BAR_WIDTH in shell.tsx). */
+const LEFT_BAR = 44;
+
+/** The panes' default sizes at a 16px root; until the reader drags a pane, its size is this times the UI scale. */
+export const DEFAULT_PANE_SIZES = { explorerWidth: 260, inspectorHeight: 320, conversationWidth: 380 } as const;
+
+/** A pane's size: the reader's (once dragged), else its default at the UI scale. */
+export function paneSize(saved: number | null, base: number, scale: number): number {
+    return saved ?? scaledSize(base, scale);
+}
+
+/** `uiScale`: how much larger the UI is than at a 16px root (the text size), which the default sizes follow. */
+export function usePanes(uiScale = 1): Panes {
+    const [leftSaved, setLeftSaved] = usePersistentState('domaintrail.layout.explorer', true);
+    const [dockOpen, setDockOpen] = usePersistentState('domaintrail.layout.inspector', true);
+    // the sizes are null until the reader drags the pane: then they follow the text size
+    const [explorerWidthSaved, setExplorerWidth] = usePersistentState<number | null>('domaintrail.layout.explorerWidth', null);
+    const [leftView, setLeftView] = usePersistentState<LeftView>('domaintrail.layout.leftView', 'tree');
+    const [dockSaved, setDockSaved] = usePersistentState<Dock>('domaintrail.layout.inspectorDock', 'right');
+    // null until the reader drags it: then the width follows the room the other panes leave
+    const [inspectorWidthSaved, setInspectorWidth] = usePersistentState<number | null>('domaintrail.layout.inspectorWidth', null);
+    const [inspectorHeightSaved, setInspectorHeight] = usePersistentState<number | null>('domaintrail.layout.inspectorHeight', null);
+    const [conversationOpen, setConversationOpen] = useState(false);
+    const [conversationWidthSaved, setConversationWidth] = usePersistentState<number | null>('domaintrail.layout.conversationWidth', null);
     const [legendOpen, setLegendOpen] = usePersistentState('domaintrail.layout.legend', true);
     const [inspectorTab, setInspectorTab] = usePersistentState<InspectorTab>('domaintrail.inspector.tab', 'structure');
+
+    const explorerWidth = paneSize(explorerWidthSaved, DEFAULT_PANE_SIZES.explorerWidth, uiScale);
+    const inspectorHeight = paneSize(inspectorHeightSaved, DEFAULT_PANE_SIZES.inspectorHeight, uiScale);
+    const conversationWidth = paneSize(conversationWidthSaved, DEFAULT_PANE_SIZES.conversationWidth, uiScale);
+
+    const width = useWindowWidth();
+    const [overrides, setOverrides] = useState<Overrides>(NO_OVERRIDES);
+    const layout = effectiveLayout({ width, conversationOpen, left: leftSaved, dock: dockSaved, overrides, scale: uiScale });
+    const { forced } = layout;
+    const dockShown = useSwap(layout.dock);
+    // an override ends with the narrow window (or with the conversation closed): the saved choices are shown again
+    useEffect(() => {
+        setOverrides((o) => keptOverrides(o, { left: forced.left, dock: forced.dock }));
+    }, [forced.left, forced.dock]);
+
+    const leftWidth = LEFT_BAR + (layout.left ? explorerWidth : 0);
+    const inspectorWidth = inspectorWidthSaved ?? autoInspectorWidth(width - leftWidth - (conversationOpen ? conversationWidth : 0), uiScale);
+
+    const setExplorerOpen = (open: boolean): void => {
+        if (forced.left) setOverrides((o) => ({ ...o, left: open }));
+        else setLeftSaved(open);
+    };
+    const setInspectorDock = (dock: Dock): void => {
+        if (forced.dock) setOverrides((o) => ({ ...o, dock }));
+        else setDockSaved(dock);
+    };
+    const setInspectorOpen = setDockOpen;
     const openInspector = (tab: InspectorTab): void => {
         setInspectorTab(tab);
         setInspectorOpen(true);
     };
+    const showLeft = (view: LeftView): void => {
+        setLeftView(view);
+        setExplorerOpen(true);
+    };
     return {
-        explorerOpen,
+        explorerOpen: layout.left,
         setExplorerOpen,
-        inspectorOpen,
-        setInspectorOpen,
-        bottomOpen,
-        setBottomOpen,
         explorerWidth,
         setExplorerWidth,
+        leftView,
+        showLeft,
+        inspectorOpen: dockOpen,
+        setInspectorOpen,
+        inspectorDock: dockShown.shown,
+        setInspectorDock,
+        inspectorMoving: dockShown.swapping,
         inspectorWidth,
         setInspectorWidth,
-        bottomHeight,
-        setBottomHeight,
-        bottomTab,
-        setBottomTab,
+        inspectorHeight,
+        setInspectorHeight,
+        conversationOpen,
+        setConversationOpen,
+        conversationWidth,
+        setConversationWidth,
         legendOpen,
         setLegendOpen,
         inspectorTab,

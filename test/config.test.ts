@@ -426,8 +426,10 @@ describe('session section (ADR 0026)', () => {
             port: 4321,
             host: '127.0.0.1',
             identity: 'dev',
-            agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'] },
+            agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'], maxPreviousRunDiff: 20480 },
             maxParticipants: 50,
+            quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
+            classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
         });
     });
 
@@ -442,7 +444,7 @@ describe('session section (ADR 0026)', () => {
                     allowedHosts: ['s.example.com'],
                     allowedOrigins: ['https://s.example.com'],
                 },
-                agent: { port: 9000, allowedTools: ['Read'] },
+                agent: { port: 9000, allowedTools: ['Read'], maxPreviousRunDiff: 4096 },
                 maxParticipants: 5,
             },
         });
@@ -460,8 +462,38 @@ describe('session section (ADR 0026)', () => {
                 acceptCookie: false,
                 avatarHosts: [],
             },
-            agent: { port: 9000, allowedTools: ['Read'] },
+            agent: { port: 9000, allowedTools: ['Read'], maxPreviousRunDiff: 4096 },
             maxParticipants: 5,
+            quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
+            classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
+        });
+    });
+
+    test("the agent's dt: a runtime and a script relative to the config file, or one executable", async () => {
+        const dir = await project({ 'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['bun', '../clone/bin/dt.ts'] } } }) });
+        expect((await loadConfig({ start: dir })).session.agent.dt).toEqual(['bun', path.resolve(dir, '../clone/bin/dt.ts')]);
+        const exe = await project({ 'domaintrail.json': JSON.stringify({ session: { agent: { dt: ['../bin/dt'] } } }) });
+        expect((await loadConfig({ start: exe })).session.agent.dt).toEqual([path.resolve(exe, '../bin/dt')]);
+    });
+
+    test('the quick reactions: one emoji each, kept in the form reactions are (❤ as ❤️)', async () => {
+        const text = JSON.stringify({ session: { quickReactions: ['❤', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1⃣'] } });
+        const c = await loadConfig({ start: await project({ 'domaintrail.json': text }) });
+        expect(c.session.quickReactions).toEqual(['❤️', '👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣']);
+    });
+
+    test('the classifier: opt-in, Clef Flash, the token by the name of its variable', async () => {
+        const text = JSON.stringify({
+            session: { classifier: { enabled: true, accountId: '0123456789abcdef0123456789abcdef', model: 'clef', threshold: 0.7 } },
+        });
+        const c = await loadConfig({ start: await project({ 'domaintrail.json': text }) });
+        expect(c.session.classifier).toEqual({
+            enabled: true,
+            provider: 'cloudflare-clef',
+            model: 'clef',
+            accountId: '0123456789abcdef0123456789abcdef',
+            apiTokenEnv: 'CLOUDFLARE_API_TOKEN',
+            threshold: 0.7,
         });
     });
 
@@ -476,8 +508,26 @@ describe('session section (ADR 0026)', () => {
         [{ access: { teamDomain: 't', audience: 'a', avatarHosts: ['https://x.example'] } }, "'session.access.avatarHosts'"],
         [{ agent: { allowedTools: [''] } }, "'session.agent.allowedTools'"],
         [{ agent: { port: 70000 } }, "'session.agent.port'"],
+        [{ agent: { maxPreviousRunDiff: -1 } }, "'session.agent.maxPreviousRunDiff'"],
+        [{ agent: { maxPreviousRunDiff: 1.5 } }, "'session.agent.maxPreviousRunDiff'"],
         [{ maxParticipants: 0 }, "'session.maxParticipants'"],
+        [{ quickReactions: [] }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: '👍' }, "'session.quickReactions' must be an array"],
+        [{ quickReactions: ['👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍', '👍'] }, "'session.quickReactions' must be an array of 1 to 8 emoji"],
+        [{ quickReactions: ['ok'] }, "'session.quickReactions' must hold one emoji per entry: 'ok'"],
+        [{ quickReactions: ['👍👍'] }, "'session.quickReactions' must hold one emoji per entry"],
+        [{ quickReactions: ['❤', '❤️'] }, "'session.quickReactions' must not repeat an emoji"],
         [{ token: 'x' }, "unknown key 'session.token'"],
+        [{ agent: { dt: [] } }, "'session.agent.dt' must be a command"],
+        [{ agent: { dt: ['node', ''] } }, "'session.agent.dt' must be a command"],
+        [{ agent: { dt: 'node dist/dt.js' } }, "'session.agent.dt' must be a command"],
+        [{ classifier: { enabled: true } }, "needs 'accountId'"],
+        [{ classifier: { provider: 'openai' } }, "'session.classifier.provider'"],
+        [{ classifier: { model: 'jev' } }, "'session.classifier.model'"],
+        [{ classifier: { accountId: 'acct' } }, "'session.classifier.accountId'"],
+        [{ classifier: { apiTokenEnv: 'cf-token value' } }, "'session.classifier.apiTokenEnv'"],
+        [{ classifier: { threshold: 1 } }, "'session.classifier.threshold'"],
+        [{ classifier: { token: 'x' } }, "unknown key 'session.classifier.token'"],
     ])('%j is refused', async (session, message) => {
         const dir = await project({ 'domaintrail.json': JSON.stringify({ session }) });
         const e = await loadConfig({ start: dir }).then(

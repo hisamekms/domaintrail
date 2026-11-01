@@ -15,6 +15,9 @@ export interface TargetScope {
     readonly stormingsComplete: boolean;
 }
 
+/** Most targets one request has (the `atMostTwentyTargets` invariant of Request). */
+export const MAX_REQUEST_TARGETS = 20;
+
 /** `current`: it resolves; `stale`: it no longer does; `unknown`: the sources it would be in do not parse. */
 export type TargetStatus = 'current' | 'stale' | 'unknown';
 

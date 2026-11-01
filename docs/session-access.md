@@ -76,10 +76,10 @@ Tick each line; for a failure, record what is listed under [When something fails
 
 - [ ] Participant A opens `https://session.example.com/`, signs in through Access and sees the Live View.
 - [ ] Participant B does the same with another identity.
-- [ ] Each sees the other in the session panel with their **name** (the Identity API's `name`; if that API was not
+- [ ] Each sees the other in the chat's participants with their **name** (the Identity API's `name`; if that API was not
       reachable, the part of the e-mail before `@`) and an **avatar** when `avatarHosts` allows the picture's host,
       else **initials**.
-- [ ] No page shows anyone's e-mail address (look at the panel, and in the browser's developer tools at
+- [ ] No page shows anyone's e-mail address (look at the chat, and in the browser's developer tools at
       `/api/session/me`, `/api/session/state` and the WebSocket messages: no `@`).
 - [ ] A and B are participants; only the facilitator's browser shows the facilitator's actions. A participant who
       calls a facilitator action (e.g. `POST /api/session/runs` from the developer tools' console) gets 403
@@ -110,8 +110,8 @@ Tick each line; for a failure, record what is listed under [When something fails
       configured one. When a participant's token expires, their page's WebSocket closes (close code 4002, "token
       expired", visible in the developer tools' Network tab); the page reconnects once Access gives it a fresh token,
       or Access asks them to sign in again.
-- [ ] A participant who leaves the session (`POST /api/session/leave`, from the page's control when it has one, else
-      from the developer tools' console) has their pages closed (code 4001); the answer names `/cdn-cgi/access/logout`,
+- [ ] A participant who leaves the session (`POST /api/session/leave`, from the collab menu's 退出, else from the developer
+      tools' console) has their pages closed (code 4001); the answer names `/cdn-cgi/access/logout`,
       where the page sends them to end the Access session.
 
 **A run across the tunnel**

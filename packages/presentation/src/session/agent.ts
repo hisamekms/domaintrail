@@ -2,8 +2,8 @@
 // public listener, and requiring the bearer token of `.domaintrail/session/agent.json` on every request. Browsers are
 // refused (any `Origin`). The subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed
 // with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
-// starts it, heartbeats, and ends it (finish with its facts only, ask for clarification, fail) or releases it. The
-// server computes the rest (S3's use cases).
+// starts it (and gets the runs it continues, with what they changed), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
+// fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import type { OutboxEntry } from '@domaintrail/collaboration/application/ports';
@@ -12,12 +12,12 @@ import { Collaboration } from '@domaintrail/collaboration/generated/index';
 import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
-import { body, text, uuid, MAX_NOTE } from './input.js';
+import { agentReply, body, text, uuid, MAX_NOTE } from './input.js';
 import { eventMessage } from './relay.js';
 import { statusOf } from './routes.js';
 
-/** Largest body of an agent request. */
-const MAX_AGENT_BODY = 16 * 1024;
+/** Largest body of an agent request (a reply at its limits, in any script, fits). */
+const MAX_AGENT_BODY = 256 * 1024;
 /** How many events a stream reads from the outbox at a time (it waits for the socket to drain before the next). */
 const STREAM_PAGE = 100;
 /** A comment on every stream this often, so that proxies and the subscriber see it is alive. */
@@ -31,6 +31,8 @@ export interface AgentApiDeps {
     readonly allowedTools: readonly string[];
     /** How long a claim or a heartbeat holds the lease. */
     readonly leaseMs: number;
+    /** The most characters of diff a started run is given of the runs it continues, together (`session.agent.maxPreviousRunDiff`). */
+    readonly maxPreviousRunDiff: number;
     /** Most SSE streams open at once. */
     readonly maxStreams: number;
     /** Sends what the outbox got to the pages (and wakes the streams); called after every change. */
@@ -184,7 +186,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'start': {
                 const b = await input(req, res, ['token']);
                 if (!b) return;
-                return answer(res, await use.startRun({ run, token: String(b.token) }), (v) => ({ run: v.run, baseRevision: v.base }));
+                const started = await use.startRun({ run, token: String(b.token) });
+                if (!started.ok) return answer(res, started, (v) => v);
+                // the runs it continues (replies, an answer) and what they changed, measured now (ADR 0026, "replies to runs")
+                const previous = await use.previousRuns({ run, maxDiff: deps.maxPreviousRunDiff });
+                const previousRuns = previous.ok ? previous.value : [];
+                return answer(res, started, (v) => ({ run: v.run, baseRevision: v.base, previousRuns }));
             }
             case 'heartbeat': {
                 const b = await input(req, res, ['token']);
@@ -194,21 +201,40 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 return sendJson(res, 200, { lease: { token: r.value.token, expiresAt: r.value.expiresAt.toISOString() } });
             }
             case 'finish': {
-                const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked']);
+                const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply']);
                 if (!b) return;
                 const { exitCode, formatted, checked } = b;
                 if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < -1024 || exitCode > 1024)
                     return sendError(res, 400, 'InvalidInput', 'Expected the exit code.', { field: 'exitCode' });
                 if (typeof formatted !== 'boolean') return sendError(res, 400, 'InvalidInput', 'Expected true or false.', { field: 'formatted' });
                 if (typeof checked !== 'boolean') return sendError(res, 400, 'InvalidInput', 'Expected true or false.', { field: 'checked' });
-                return answer(res, await use.finishRun({ run, token: String(b.token), facts: { exitCode, formatted, checked } }), (v) => v);
+                const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'done');
+                if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
+                return answer(
+                    res,
+                    await use.finishRun({ run, token: String(b.token), facts: { exitCode, formatted, checked }, ...(reply && { reply: reply.value }) }),
+                    (v) => v,
+                );
             }
             case 'clarification': {
-                const b = await input(req, res, ['token', 'question']);
+                const b = await input(req, res, ['token', 'question', 'reply']);
                 if (!b) return;
                 const question = text(b.question, 'question', MAX_NOTE);
                 if (!question.ok) return sendError(res, 400, 'InvalidInput', question.error.message, { field: 'question' });
-                return answer(res, await use.askClarification({ run, token: String(b.token), question: question.value }), (v) => v);
+                const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'clarification');
+                if (reply && !reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
+                return answer(
+                    res,
+                    await use.askClarification({ run, token: String(b.token), question: question.value, ...(reply && { reply: reply.value }) }),
+                    (v) => v,
+                );
+            }
+            case 'decline': {
+                const b = await input(req, res, ['token', 'reply']);
+                if (!b) return;
+                const reply = agentReply(b.reply, 'declined');
+                if (!reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
+                return answer(res, await use.declineRun({ run, token: String(b.token), reply: reply.value }), (v) => v);
             }
             case 'fail': {
                 const b = await input(req, res, ['token', 'reason']);

@@ -2,13 +2,14 @@
 // (`session.state`, with the outbox position `seq` it includes) and the events after it. Events that arrive before a
 // state are kept until it comes; an event is applied only when its `seq` is past the state's, and applying one twice
 // changes nothing. An event that does not carry everything the state holds (a queued run's input, a finished run's
-// report, a revision's files) asks for the state to be fetched again.
+// report or the agent's reply, a revision's files) asks for the state to be fetched again.
 import type { EventMessage, Me, SessionServerMessage, SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 type SessionJson = SessionStateBody['session'];
+type MarkJson = SessionStateBody['marks'][number];
 
 export interface SessionModel {
     readonly state: SessionStateBody | undefined;
@@ -86,9 +87,11 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 id: e.requestId,
                 session: e.session,
                 author: e.author,
-                target: e.target,
+                targets: e.targets,
                 body: e.body,
                 sentAt: e.sentAt,
+                ...(e.replyTo !== undefined && { replyTo: e.replyTo }),
+                mentions: e.mentions,
                 state: 'Sent',
             };
             return { state: { ...at, requests: [...state.requests, request] }, refetch: false };
@@ -114,7 +117,8 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'RunCompleted':
             // the report is not in the event
             return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Completed' };
-        case 'RunNeedsClarification':
+        case 'RunNeedsClarification': {
+            const run = state.runs.find((r) => r.id === e.runId);
             return {
                 state: runs(
                     (r) =>
@@ -123,8 +127,13 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                             : r,
                     e.runId,
                 ),
-                refetch: false,
+                // the agent's structured reply is not in the event
+                refetch: run?.state === 'Running' || run === undefined,
             };
+        }
+        case 'RunDeclined':
+            // the agent's reply (its reason) is not in the event
+            return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Declined' };
         case 'RunFailed': {
             const run = state.runs.find((r) => r.id === e.runId);
             if (run?.state !== 'Running') return { state: at, refetch: run === undefined };
@@ -156,6 +165,23 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'RevisionRestored':
             // the revision's files are not in the event
             return { state: at, refetch: !state.revisions.some((r) => r.id === e.revisionId) };
+        case 'MarkPlaced': {
+            // a state from before marks were sent has none
+            const marks = state.marks ?? [];
+            if (marks.some((m) => m.id === e.markId)) return { state: at, refetch: false };
+            const mark: MarkJson = {
+                id: e.markId,
+                session: e.session,
+                participant: e.participant,
+                target: e.target,
+                sign: e.sign,
+                placedAt: e.placedAt,
+                state: 'Placed',
+            };
+            return { state: { ...at, marks: [...marks, mark] }, refetch: false };
+        }
+        case 'MarkRemoved':
+            return { state: { ...at, marks: (state.marks ?? []).filter((m) => m.id !== e.markId) }, refetch: false };
         case 'RevisionConfirmed':
             return {
                 state: {

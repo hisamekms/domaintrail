@@ -38,7 +38,7 @@ restored. `.dt` and `.dtes` are first-class from the start. `dt view` stays as i
 | `packages/agent` | `dt session subscribe`: `application/` (the subscriber loop and the run pipeline over the ports `AgentApi`, `AgentRunner`, `DslTools`, `WorkspaceFiles`, `Clock`; the prompt), `infrastructure/` (the SSE client, the Claude Code adapter (child process, no shell interpolation), `dt fmt`/`dt check`, the workspace scan) — in place since S6 | collaboration (protocol and types only) |
 | presentation | session HTTP routes (`/api/session/*`), the agent API on its own loopback listener, the WS message union | + collaboration (application, protocol, generated types) — in place since S4 |
 | composition | `startSessionServer` (view + session in one HTTP process), `startSubscriber`, CLI wiring | + collaboration (infrastructure; since S4), agent (since S6) |
-| web | the session panel in `AppShell`'s `sidePanel`, drafts in IndexedDB, presence overlay | + collaboration (protocol, types) — in place since S4 (`useViewSocket`) |
+| web | the chat in `AppShell`'s `conversation`, the session panel in its `dockAlternative`, drafts in IndexedDB, presence overlay | + collaboration (protocol, types) — in place since S4 (`useViewSocket`) |
 
 The architecture test gets both packages, the graph above and the layer rules (`domain` pure, `application` without
 I/O; only composition imports infrastructure).
@@ -396,7 +396,8 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
 - **Clarification signal.** The agent ends its reply with one line `DT-OUTCOME: {"outcome":"done","summary":"…"}` or
   `DT-OUTCOME: {"outcome":"clarification","question":"…"}`; the adapter takes the last such line of the JSON result's
   `result`. A missing or invalid line is a plain `done` (the facts decide); a question is trimmed and cut to 4,000
-  characters. `--json-schema` was not used: its output field could not be checked without a real run.
+  characters. `--json-schema` was not used: its output field could not be checked without a real run. *Superseded by
+  the appendix "Structured replies": the reply is now Claude Code's structured output; this line is still read.*
 - **dt fmt / dt check** run with this CLI itself: `process.execPath` and `process.argv[1]` (e.g. `node dist/dt.js`),
   `-r <root>` and the `-c` the subscriber was given, never a `dt` on the PATH; output discarded, 5 minutes each.
 - **Tests** use a fake agent (`test/fixtures/agent/fake-claude.mjs`, a plan per invocation) through composition's
@@ -468,3 +469,424 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   a paragraph in `docs/live-view.md`, and `docs/session-first-run.md` for a first run with the real Claude Code. The
   guide's list of topics grows by four lines, so its test allows `dt guide` 160 lines instead of 150. The changelogs
   record released versions only, so they are left for the release.
+
+## Appendix: requests with several targets (amendment)
+
+A request was about one target (the whole workspace, a `.dt` element, a `.dtes` element or an occurrence). People in
+a meeting talk about several things at once ("give 注文 the 顧客's address"), so a request now has **0 to 20 targets**.
+
+- **Model** (`model/request.dt`, `agent-run.dt`). `Request.targets: TargetSnapshot[0..20]`; the frozen copy in a run's
+  input (`FrozenRequest.targets`) and `RequestSent.targets` carry the list too. **No target means the whole
+  workspace**: the `Workspace` kind of `ModelTarget` is no longer used in a request's list (`noWorkspaceTarget`), so
+  "the workspace" has one spelling and a list never mixes it with elements. `Workspace` stays in the union, for the
+  presence's selected target and for rows written before. Invariants of Request: `atMostTwentyTargets`
+  (`count(targets) <= 20`; the multiplicity's bounds are JSDoc only), `distinctTargets` (`unique(targets, t =>
+  t.target)`, by union value), `noWorkspaceTarget`; `send` requires the same, else `TooManyTargets`,
+  `DuplicateTarget`, `WorkspaceTarget`. `TargetSnapshot`'s `workspaceHasNoRange` is kept (it still holds for every
+  snapshot) though a request's snapshots are never the workspace's now.
+- **Persistence.** No migration: rows are stored whole as JSON, and a row written before (a request, a run's frozen
+  request, a `RequestSent` in the outbox with one `target`) is read as the list it stands for — none when the target
+  was the whole workspace, else that one target (`infrastructure/legacy.ts`). Nothing is rewritten; a row saved again is
+  written with `targets`. A running session's database keeps working after the upgrade (tested on a fixture of former
+  rows, and by hand on a copy of a live session).
+- **API.** `POST /api/session/requests` takes `{ targets, body }`: 0–20 targets, each a target snapshot as before, each
+  once (`targets[i].target`), none the whole workspace (`targets[i].target.kind`), every `sourceRevision` a revision of
+  the session (`UnknownRevision` names `targets[i].sourceRevision`). The former `{ target, body }` is still taken as a
+  list of one, or none for the workspace's target; both at once is refused. `GET /api/session/targets` answers a status
+  per target, in the request's order: `statuses: { [request]: TargetStatus[] }` (empty for the whole workspace).
+- **Mentions.** (Amended: elements are now written `#name[n]`, and `@` mentions people — see "mentions of people"
+  below.) The body stays plain text. A mention is `@name[n]`: `n` is the number of one of *that request's*
+  targets, from 1; the name has no spaces, brackets or `@` and is only what the writer saw (the target's label or
+  name). A mention of a number the request does not have is text. The page renders mentions as links to their target
+  (named in the current display setting), never as markup; the agent's prompt lists each request's targets numbered
+  from 1 (`targets: [{ number, kind, … }]`, or `"the whole workspace"`) and its rules say that `@name[n]` means target
+  n of the same request, whatever the name says.
+- **The composer** (`web/session/mentions.ts`): the chips under the text are the targets (none: the whole workspace).
+  Typing `@` (or the IME's `＠`) offers every element, state and command of the model and every note of the stormings
+  (not timelines or groups; occurrences only through the selection), matched loosely on the label, the name and the
+  qualified name, shown with their kind and context or storming; ↑↓, Enter/Tab, Esc; while an IME composes
+  (`isComposing` or key code 229) no key picks or sends. Picking writes `@name[n] ` and adds chip n (or reuses it);
+  deleting every mention of a chip that came from a mention removes it (a chip added otherwise stays); removing a chip
+  turns its mentions into plain text; numbers follow the chips. The selection (canvas or explorer) is suggested as
+  dashed chips after the confirmed ones (sent as targets unless dismissed with ×, until the selection changes; never
+  stored in the draft; confirmed + suggested within the 20); the canvas's 💬 next to the selection, or `C` outside
+  text inputs (no tldraw or app binding of a plain `c`), confirms them and focuses the composer. The app has no
+  context menus (tldraw's UI is hidden), so none was added. Formerly `選択中: … [+]`. A selection
+  of several shapes adds each targetable element, and an occurrence is added from a timeline's view. The unsent text
+  and chips stay in the browser (the composer's draft, IndexedDB).
+
+## Appendix: structured replies (amendment)
+
+The agent's reply was one `DT-OUTCOME:` line, and the session kept only a clarification's question as text (the
+summary of a done run was dropped). People in a meeting want to see, per request, what the AI says it did, what it
+assumed, and to answer its questions by choosing. The reply is now structured data; the facts stay measured.
+
+- **Principles.** Facts are never the AI's: success or failure, the files changed, `dt fmt`/`dt check` and the
+  diagnostics are measured by the pipeline and the server as before. The reply is untrusted input: validated against
+  its shape and limits on the subscriber and again on the server, stored only when valid, and shown as plain text (no
+  HTML, no markdown). A reply that is missing or invalid never fails a run: what can be read is kept (the outcome, a
+  summary within the limit, a clarification's question text), else nothing.
+- **Shape** (what the AI returns): `{ outcome: done | clarification | declined, summary, requests: [{ request,
+  status: done | partial | skipped | question, note? }], questions?: [{ id, text, requests?, options: [{ id, label,
+  detail? }], multiple }], assumptions?: [{ text, requests?, alternatives?: [{ id, label }] }] }`. `request` is the
+  request's number in the prompt (the prompt now numbers requests from 1, `number`, instead of showing their IDs); the
+  subscriber maps the numbers back to the frozen input's request IDs. A note is required for partial and skipped; a
+  clarification asks 1–3 questions, the other outcomes none; the AI never offers "other" (the page always adds it).
+  Unknown fields are refused. Keys (`id`) are letters, digits, `_` and `-`.
+- **Limits in one module**: `packages/collaboration/src/domain/reply.ts` (`REPLY_LIMITS`: summary 300, request note
+  200, questions 3, question 500, options 5, label 80, detail 300, assumptions 5, assumption 300 (not given by the brief;
+  chosen here), alternatives 3, alternative label 80, key 40, the facilitator's own words in an answer 500). The JSON
+  schema given to the agent (`replyJsonSchema(requests)`), the prompt's description of the reply, the validation of
+  both sides (`readReply`, `readAnswer`), and the page all take them from it; the model holds what is not a number
+  (`noteExplains`, the questions of each ending, keys unique, the requests named are the run's). The module is pure (it
+  imports only the generated model), so `@domaintrail/agent` may import it as values — the one exception to "only types
+  from collaboration", allowed by name in the architecture test.
+- **Claude Code** 2.1.316, checked with real calls (a tiny schema, `--tools ''` and `--tools Read,Glob` with
+  `--permission-mode dontAsk`): `claude --print --output-format json --json-schema '<schema>'` answers
+  `{"type":"result", "result":"<the object as JSON>", "structured_output":{…}, …}` (the structured output is a tool of
+  Claude Code's own: `stop_reason` is `tool_use`, one turn more, no permission prompt or denial under `dontAsk`). The
+  adapter passes `--json-schema` (the schema is ours, no person's text) and reads `structured_output`, else `result` as
+  JSON, else the last `DT-OUTCOME:` line of `result` (the former protocol, still read; the fake agent of the tests uses
+  both). The prompt describes the reply in a few lines (limits interpolated) to keep the Q&A loop fast.
+- **Declined is a state of its own**, `Declined "辞退"` (`baseRevision`, `startedAt`, `reply`, `resultRevision`,
+  `finishedAt`), reached by `decline(reply, resultRevision, finishedAt)` from `Running`, emitting `RunDeclined`
+  (`run.declined` for pages and the agent stream). Not `Completed`: completing runs `dt fmt`/`dt check` and the success
+  rule, and `dt fmt` alone may change files, while a declined run, like a clarification, ends with the files as the
+  agent left them; and it is not waiting for an answer, so it is not `NeedsClarification`. Its reason is the reply's
+  summary. If the agent changed files anyway, the result revision records it and the page shows the measured count. A
+  decline without a readable reason is read as `done` (the facts decide).
+- **Model** (`model/agent-run.dt`, generated code regenerated). Values `AgentReply` (`summary`, `requests:
+  RequestReply[]`, `questions: ReplyQuestion[]`, `assumptions: ReplyAssumption[]`), `RequestReply` (`request:
+  RequestId`, `status: RequestProgress`, `note?`), `ReplyQuestion`, `ReplyOption`, `ReplyAssumption`,
+  `ReplyAlternative`, the primitive `ReplyKey`. `Completed.reply?` (no questions), `NeedsClarification.reply?` (at least
+  one question; `question: Text` stays, the plain text: the questions one per line, or the former question),
+  `Declined.reply`; each holds that the requests its reply names are the run's. `finish` and `askClarification` take an
+  optional reply and refuse one that breaks those (`InvalidReply`, checked before a result revision is recorded); a
+  failed run keeps no reply (the facts decide). `RunInput.answer?: Answer` — the facilitator's answer, frozen.
+- **The answer** (API, model and prompt now; the panel's controls later). `POST /api/session/runs` takes `answerTo` (a
+  run of the session) and `answer: { answers: [{ question, options, text? }] }` together. The use case checks the
+  answered run is `NeedsClarification` with a structured reply (else `NothingToAnswer`, 409), every question and
+  option ID is its (single choice: at most one option), each question once, an option or own words for each
+  (`InvalidAnswer` with the field, 400), and freezes `Answer { answerTo, answers: [AnsweredQuestion { question, text,
+  chosen: ReplyOption[], freeText? }] }` into the new run's input, so the prompt is still built from the frozen input
+  only: the block gains `answersToYourQuestions: [{ question, chosen: ["label (detail)"], inTheirOwnWords }]`, and rule
+  6 says to follow it.
+- **Agent API.** `finish` takes `reply?` (outcome `done`), `clarification` `question` and `reply?` (outcome
+  `clarification`), and the new `POST /agent/runs/:id/decline` takes `reply` (outcome `declined`); each validates with
+  `readReply` (requests by UUID, the outcome matching the route; `InvalidInput` with the field) and the model checks the
+  requests are the run's (`InvalidReply`, 400). The agent API's body limit grows from 16 KiB to 256 KiB (a reply at its
+  limits in Japanese). The subscriber sends a clarification or a decline only when the agent exited 0, otherwise runs
+  the checks and finishes, dropping a reply that is not `done`.
+- **Persistence.** No migration: a run is stored whole as JSON and the new fields are optional, so rows written before
+  (a clarification with only its question, a completed run with no reply, an input with no answer) load as they are and
+  keep their invariants (tested on a fixture copied in shape from a real database, and by starting this build on a copy
+  of a live session's directory). `Declined` is a new value of the `state` column, which has no constraint.
+- **Pages.** `RunNeedsClarification` and `RunDeclined` do not carry the reply: a page fetches the state again. The chat
+  (`web/session/reply.tsx`, shared with the panel): a completed run shows `反映しました (n ファイル)` small (n counted
+  from the base and result revisions' files), the summary, a line per request (✓ ◐ – ? with the author, the head of its
+  body and the note) and the assumptions with their alternatives as read-only chips; a clarification shows the summary
+  and each question with the requests it is about and its options as disabled radio buttons or checkboxes, plus
+  "その他…"; a declined run a neutral bubble with its reason. A run without a structured reply is shown as before.
+- **Element references in the reply.** In any text of the reply (summary, request notes, questions, option labels and
+  details, assumptions, alternative labels) the agent names an element by its identifier, never its label, as a token:
+  `@{<model ID>}` for a `.dt` element, state or command (`@{Sales.Order}`, `@{Sales.Order#Draft}`,
+  `@{Sales.Order:confirm}`: the `element` of a `DtElement` target) and `@{es:<storming>/<local>}` for a `.dtes`
+  element (`@{es:Returns/ReturnRequested}`: the `storming` and `local` of a `DtesElement` target, the identifiers of
+  the `.dtes` source). The identifier has no whitespace, braces or `@` (at most 200 characters); `\@{` is a literal
+  `@{`. A request body's mention is `@name[n]`, without braces, so neither reads as the other; reply text is never
+  parsed for mentions. Tokens count as written toward the limits (unchanged). The prompt gives the format in one rule
+  with one example each. The page (`web/session/references.ts`, pure, unit-tested) resolves a token against the model
+  and stormings now and shows it as `targetName` does in the name display setting, as a link that navigates like a
+  target chip; one that does not resolve shows its identifier (without braces or `es:`) as plain text. Replies without
+  tokens are unchanged.
+
+
+## Appendix: messages, apply, classification and the agent's dt (amendment)
+
+- **Data model: a message is a `Request`.** Option (a) of the two weighed: everything posted in the chat — the
+  facilitator's own posts too — is a `Request` as before (author, 0–20 targets, body; it never changes), shown as a chat
+  message. *Applied* is not a state of its own: a message is applied when a run's frozen input holds it, so nothing is
+  migrated and every existing row (including those with the old `Dismissed` state) loads unchanged; the run input, the
+  prompt and the numbering of requests in it (`@name[n]`) are untouched. A new `Message` entity was rejected: it would
+  have duplicated `Request`'s targets, invariants and events for no state the model needs. `POST /api/session/requests`
+  takes `apply` (`true` or `{ note }`, the facilitator's only): the message is queued as a run of its own in the same
+  call — what a later solo chat under `dt view` will use to apply the facilitator's messages at once.
+- **Dismiss is dropped from the product.** Messages are talk, not a queue to clear: the page has no 見送る and the
+  `POST /api/session/requests/:id/dismiss` route is gone. The model keeps the `Dismissed` state, its event and the use
+  case so that older sessions load and replay; such requests show as messages.
+- **The facilitator works in the chat.** The right-side `SessionPanel` (and the inspector menu's switch to it) is gone.
+  ⤓ applies one message at once (runs stay serial: it waits as 実行待ち); ▾ adds a note first or enters selection; Shift/⌘
+  chooses several, and まとめてアプライ queues them as one run; 取り消す (a few seconds) cancels the run while it is still
+  queued. A clarification card offers the reply's options (radio or checkbox, plus その他 in own words) and 答えて再実行
+  queues the same requests with `answerTo` + `answer` at once. **An assumption's alternative** is asked for in the
+  run's **note** (`前提「…」は採らず、「…」としてやり直してください。`): `answer` is reserved for a run that asked
+  (`NothingToAnswer` otherwise), and a note needs no change to the model (*amended*: the pick is now recorded as
+  `input.pick` too — see "Picks are recorded" below). Cancel is ✕ on the status (head) and on queued
+  or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯; recording, a new
+  facilitator link (`POST /api/session/facilitator/link`, what `dt session link` does) and closing the session in the
+  head's ⋯.
+- **Cards.** One card per change unit, updated in place (`web/session/history.ts`, `cards.ts`, pure and unit-tested). A
+  run joins the unit of the run its `answer.answerTo` names, else the latest unit whose latest run asked or completed
+  with exactly the same requests (an alternative picked, the same messages applied again); after a cancel, a failure or
+  a decline it starts a card of its own. Each run of a card quotes the messages it applied with the reply's status for
+  each (✓ ◐ – ?) and note — the reply's per-request lines, no longer repeated below — and an applied message shows its
+  latest run's mark and number (`✓ #3`) to everyone. 履歴 shows the same cards, compact.
+- **Classification (opt-in).** `session.classifier` (`enabled` false by default, `provider` `cloudflare-clef`, `model`
+  `clef-flash` | `clef`, `accountId`, `apiTokenEnv` — the *name* of the variable holding the token —, `threshold` 0.5).
+  A `MessageClassifier` port in the collaboration application (`application/classifier.ts`), the Clef adapter in its
+  infrastructure (`infrastructure/clef.ts`, plain `fetch`), a fake in the tests. Verified against Cloudflare's Workers
+  AI docs for `@cf/cloudflare/clef-flash` (developers.cloudflare.com/workers-ai/models/clef-flash/, its
+  `schema-input.json` and `schema-output.json`): `POST https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/@cf/cloudflare/{model}`
+  with `{ model, state, questions: { <id>: { type: "noul", instructions, criteria: { true, false } } } }`, answered
+  `{ answers: { <id>: { type: "noul", noul: <probability of yes> } }, usage }` inside Cloudflare's `{ result, success }`.
+  Each message is asked once, in the background after it is sent (8 s timeout); a failure, a timeout or a probability
+  within 0.1 of the threshold leaves it applicable (the decision falls back to the human), and a message read as talk
+  can still be applied from ▾. Results are kept in memory and sent to the facilitator's pages only
+  (`session.classifications` on connect, `session.classification` as they come); participants never see them. Neither
+  the message nor the token is logged. Message text goes to Cloudflare only when enabled; Workers AI's data usage page
+  states that customer content is not used to train models. `DOMAINTRAIL_CLASSIFIER_URL` points the adapter at a local
+  mock (tests, demos).
+- **The agent's `dt`.** A real run's reply said `dt` was not on the agent's `PATH`. The subscriber now puts a `dt` shim
+  first on the agent's `PATH` for each run, so the prompt and `allowedTools` stay `dt fmt` / `dt check`. What it runs is
+  `session.agent.dt` or, unset, the running `dt` itself; the same command runs `dt fmt` / `dt check` after the agent.
+  Since the agent can write in the workspace during a run (and the check for non-DSL changes only runs after it), the
+  rules are positive and few, after three rounds of security review: (1) only `["node" | "bun" | "deno", "<script>"]` or
+  `["<dt executable>"]`, paths relative to the config file, refused at config load when inside the workspace (symbolic
+  links followed, compared by path segments: `<root>/..evil` is inside); (2) pinned once when the subscriber starts —
+  never re-read from the config file, which is in the workspace — to absolute real paths (the runtime found on the
+  `PATH`), refused inside the workspace, fingerprinted (SHA-256 of the runtime and the script) and checked before each
+  run; (3) the shim never parses words with a shell: `dt` / `dt.cmd` only starts the runtime on a launcher that holds
+  the command as JSON and spawns it with `shell: false`; (4) the agent's `dt` takes `fmt` or `check` and then `.dt` /
+  `.dtes` files of the workspace only — any option (`--prefix`, `-r`, `--config`, …) or other argument is refused with a
+  message to the agent — and the launcher always adds `-r <workspace>` itself; (5) the shim lives in a private (0700)
+  temporary directory outside the workspace, and `dt` (the agent's and the pipeline's) runs with a private working
+  directory, never the workspace, so no runtime picks up a config of it.
+- **Inspector width.** Until the reader drags it, the inspector on the right takes about a third of the room beside
+  the left pane and the chat (300–420 px), so that the canvas keeps its share when the chat is open.
+
+## Appendix: votes and reactions (amendment)
+
+*Decided by the maintainer*: participants signal a preference on a question's options and an assumption's choices
+(votes, ♡), anyone reacts to a message or an AI turn with an emoji (see "Reactions are emoji" below: at first four
+named reactions); the facilitator decides. Both are **one mechanism**: a mark is who (a participant) marked what (a target) with which sign.
+
+- **Model** (`model/mark.dt`, generated code regenerated). Aggregate `Mark` (`participant`, `target: MarkTarget`, `sign:
+  MarkSign`, `placedAt`; `Placed` → `Removed { removedAt }`), the union `MarkTarget` — `Message { request }`, `Turn
+  { run }`, `QuestionOption { run, question, option }` (the reply's keys), `AssumptionChoice { run, assumption,
+  alternative? }` (the assumption's index in the reply, which has no key; no alternative = keep it as it is) —, the
+  union `MarkSign` (`Vote`, `Reaction { emoji }`; at first an enum of `Vote` and four named reactions), events `MarkPlaced` / `MarkRemoved`. The invariant `fitsTarget`
+  (the vote on options and assumptions, the reactions on messages and turns) and the requirement `participantsVote`
+  (`FacilitatorDoesNotVote`; the role is the session's, never the caller's word) are the DSL's; `place` and `remove` take
+  the verified `OpenMarkTarget` (`MarkTargetNotFound`, `MarkTargetClosed`), made in `application/verifications.ts`. A
+  removed mark is kept; placing it again is a new mark. Not a field on `Request`/`AgentRun`: those never change once
+  sent or ended, and a mark is many people's.
+- **Rules per kind of target** (`domain/marks.ts`, pure, over plain shapes so that the page decides the same way):
+  exclusive groups — one vote per participant in a single-choice question and in an assumption group (the assumption
+  and its alternatives), moved by voting another; any number in a multiple-choice question; each emoji on its own.
+  **Closing is derived, never stored**: a reaction never closes. A vote is open while its run is the latest run to have
+  handled its requests — no later run (in queue order) answers it (`input.answer.answerTo`) or bundles any of its
+  requests, a run cancelled before it started (no base revision) not counting — and the run is `NeedsClarification` (a
+  question's option) or `Completed` (an assumption's choices). So the facilitator's answer, an alternative picked (a
+  run of the same requests with a note), the same messages applied again, or a re-run of an overlapping set all close
+  it; cancelling that run before it started (the undo after applying) opens it again. "Overlapping" rather than "the
+  same set": a later run that took over any of the requests has the newer say on them. Closed votes are frozen.
+- **Use case** `setMark { session, participant, target, sign, placed }`: setting a mark to what it is changes nothing
+  (idempotent, so a page sends the state it wants, not a toggle); placing a vote removes the participant's vote of the
+  same group in the same transaction (both events, the removal first). Refused while the session is not open, for a
+  stranger, a missing or closed target, a sign that does not fit, a vote of the facilitator.
+- **Persistence.** Migration 4 adds `marks` (`target_key` = `markKey(target)`, `sign`, `state`, JSON `data`) with a
+  unique partial index: one placed mark per session, participant, target and sign. Nothing else changes, so a session
+  database of the version before is upgraded in place (tested on a database built with the former migrations, and by
+  starting this build on a copy of a live session's directory).
+- **Transport.** `POST /api/session/marks { target, sign, placed }` (any participant; 64 KiB body as the other routes;
+  each field checked at the boundary: `target.*`, `sign`, `placed`) → `{ placed?, removed }`; errors 400
+  `MarkNotForTarget`, 403 `FacilitatorDoesNotVote` (also refused before the use case), 404 `MarkTargetNotFound`, 409
+  `MarkTargetClosed`. The outbox events reach the pages as `mark.placed` / `mark.removed`; the agent's SSE stream does
+  not carry them (not in `AGENT_EVENT_TYPES`), and the agent API is unchanged. `session.state` and `GET
+  /api/session/state` carry `marks` (the placed ones), so a late joiner or a reload sees them.
+- **Page** (`web/session/marks.ts`, pure and tested; `mark-controls.tsx`). Within the chat's decoration budget: counts
+  small and muted, no pills; my own vote in the clickable violet (a filled ♥), never red; reactions as below. Who
+  marked is never always shown: the count's tooltip names them, and a click on a vote's count opens a small list (for
+  touch). A reaction's click toggles mine, so its names are in its tooltip and, for touch, in the ☺+ popover, which
+  lists who placed each reaction under the choices. Participants see a clarification's questions as rows
+  with ♡ (no "other": they write in the chat); the facilitator's answer form shows the counts and never preselects.
+  After closing, the answer line's tooltip (and the note line of an alternative picked) keeps the counts and names.
+  No optimistic change: the server broadcasts the change before it answers; a mark being set is not clickable again
+  until then. Votes and reactions are not unread items and notify no one.
+
+### Reactions are emoji (amendment)
+
+*Decided by the maintainer*: the four named reactions (賛成, 疑問, いいね, 了解) gave the app a vocabulary people did not
+choose. A reaction is now **any one emoji the participant picks; the app assigns none a meaning** and shows no names.
+
+- **Model.** `MarkSign` is the union `Vote | Reaction { emoji: Emoji }`. The primitive `Emoji` is bounded in the DSL
+  (1 to 64 UTF-16 units) and has the declared check `singleEmoji`, implemented by `@domaintrail/modeling/core/emoji`
+  (shared by the config, the server and the page): exactly one grapheme (`Intl.Segmenter`), made only of
+  `\p{Emoji}` / `\p{Emoji_Component}` characters, with a pictograph (`\p{Extended_Pictographic}`, so ZWJ sequences,
+  skin tones and tag sequences), a flag (two regional indicators) or a keycap; at most 64 UTF-8 bytes. Text, a lone
+  component, a digit and two emoji are refused at the boundary (400 `sign.emoji`).
+- **Normalization.** An emoji is kept NFC and **fully qualified**: every VS16 (U+FE0F) is dropped, then added back after
+  each emoji character whose default presentation is text (`\p{Emoji}` without `\p{Emoji_Presentation}`) unless a
+  skin tone follows. So ❤ and ❤️ (and 1⃣ / 1️⃣, 🏳‍🌈 / 🏳️‍🌈) are the same reaction, kept in the form the emoji pickers
+  insert and every platform draws as an emoji. The route normalizes what it is sent; `Emoji` accepts only the kept
+  form, so two forms never reach the store.
+- **Limit.** At most `MAX_REACTION_EMOJI` (20) different emoji on one message or turn: a new 21st is refused by
+  `setMark` with `ReactionLimitReached { limit }` (409); joining an emoji already there always works, and taking the
+  last of one off makes room. The page disables the choices that would not fit.
+- **Wire.** `sign` is `{ "kind": "Vote" }` or `{ "kind": "Reaction", "emoji": "👍" }` — the generated union as JSON,
+  like `target` — in `POST /api/session/marks` and in `mark.placed` / `mark.removed`. `session.state` also carries
+  `quickReactions`.
+- **Persistence.** The `sign` column holds `signKey(sign)`: `Vote` or the emoji, so the unique partial index is one
+  placed mark per participant, target and emoji. Migration 6 (after the replies' 5) rewrites a database's marks and
+  its outbox's `MarkPlaced` / `MarkRemoved`: Agree → 👍, Doubt → 🤔, Like → ❤️, Seen → 👀, a vote's `"Vote"` → `{ "kind":
+  "Vote" }`; the mapping is one to one, so the index holds (tested on a database built with migrations 1 to 4).
+- **Config.** `session.quickReactions`: the emoji ☺+ offers first, 1 to 8, each one emoji, distinct after
+  normalization; default 👍 👀 🤔 🎉 ❤️ 🙏. Any other emoji can be typed or pasted in ☺+'s ＋ field (no emoji-picker
+  library: the OS picker works in the field); Enter adds it, Escape closes the field.
+- **Page.** Reactions are drawn as colored emoji — an exception to the decoration budget, since the emoji is the
+  content — each with a small muted count and no pill, in the order each first appeared. Mine, which colour can no
+  longer say, has its count in violet and a faint violet outline and background. The tooltip is the emoji and the
+  names.
+
+## Appendix: replies to runs (amendment)
+
+*Decided by the maintainer*: people answer what the AI did by replying to its turn, and the agent sees what it is
+answered about. Until now a run's input held only the request texts, the facilitator's note and an answer's question
+and choices — never the previous run's reply or changes, even when answering.
+
+- **A reply is a message.** `Request.replyTo?: AgentRunId` (`references … -> AgentRun`), copied into the frozen input
+  (`FrozenRequest.replyTo?`) and `RequestSent.replyTo?`. `send` takes the verified `ReplyableRun` (made in
+  `application/verifications.ts`: `RunNotFound`, `RunOfAnotherSession`, `RunNotReplyable`): a run of the same session
+  that ended — `Completed`, `Failed`, `Declined`, `Cancelled` (`REPLYABLE_STATES`). Not `Queued` or `Running` (nothing
+  to reply to yet) and not `NeedsClarification`, which has its answer form and votes. Anyone may reply; whether a reply
+  runs is decided as for any message: classified (a thank-you reads as talk), applied by the facilitator (one at once,
+  several as one run; the facilitator's own reply like the participants' in collab mode). No new state or entity.
+- **API.** `POST /api/session/requests` takes `replyTo` (a UUID, `InvalidInput` with the field; 404 `RunNotFound` /
+  `RunOfAnotherSession`, 409 `RunNotReplyable`), with `apply` too.
+- **Persistence.** Migration 5 adds `requests.reply_to` (a foreign key to `agent_runs`, indexed when set): the database
+  refuses a reply to a run it does not hold. Rows written before have `NULL` and load unchanged (the JSON field is
+  optional); tested on a database built with the first four migrations.
+- **Previous runs** (`domain/previous-runs.ts`, pure). The runs a run continues are those its requests reply to, then
+  the run its answer answers (`previousRunIds`, each once, in the input's order): the input names them only, frozen at
+  queueing. What they changed is measured when the run starts: the use case `previousRuns({ run, maxDiff })` compares
+  each one's base and result revisions with `compareRevisions` (its bounds apply) and `boundChanges` gives, in order, a
+  run whose whole unified diff (`--- a/…`/`+++ b/…` per file) fits what is left of the budget its diff, any other its
+  changed files with the lines added and removed (`diffOmitted`); a run without a result revision (cancelled, failed
+  before its end) is `unrecorded`; missing blobs give the files without diff. The budget is
+  `session.agent.maxPreviousRunDiff` (default 20480 characters, all previous runs of one run together), next to the
+  agent's other settings.
+- **Agent API.** `POST /agent/runs/:id/start` answers `previousRuns: [{ run, changes }]` (`AgentStartedBody`) with the
+  running run and its base revision: the subscriber needs no blob or revision access, and the API stays on its loopback
+  listener with its credential.
+- **Prompt.** The block gains `previousRuns` — each `{ number, requests (numbered, as its prompt numbered them),
+  facilitatorNote?, outcome, failure?, yourReply? { summary, requests: [{ request, status, note? }], questions?,
+  assumptions? }, yourQuestion?, changes }` with `changes` the `{ files, diff }`, `{ files, linesAdded, linesRemoved,
+  diffOmitted }`, `"no file changed"` or `"not recorded …"` — and a request that replies gets `inReplyToPreviousRun: n`,
+  an answer `questionsAskedInPreviousRun: n`. Rule 9 says they are context, that the current files are the truth and
+  other runs may have happened since, and never to re-apply an old diff. Everything stays in the delimited JSON block as
+  data (`<` and `>` escaped).
+- **Cards.** A run joins the unit of the run its answer answers, else of a run its requests reply to (the latest such
+  unit when they reply to several), else as before (`history.ts`); the unit keeps its place and its "updated" pill. The
+  votes of a run close when a later run bundles a reply to it (`laterRunOf`), consistent with the card it continues.
+- **Page** (`web/session/replies.ts`, pure and tested). ↩ at the far right of an AI turn (after ☺+), on hover or focus,
+  faint on touch, for the turn's latest run when it is replyable; a click puts `↩ AI #3 への返信 ✕` above the composer
+  (✕, or Esc on an empty text, cancels) and adds the run's requests' targets to the composer's chips. The posted reply
+  shows `↩ AI #3: <head of the summary>` on one muted line at its top (plain text, cut to the room), a click jumping to
+  the card and flashing it. The continuation quotes the replies like other applied messages.
+
+### Picks are recorded (amendment)
+
+*Decided by the maintainer*: the card showed a picked alternative (✓, `選択 name · time → #n`) by matching the later
+run's note against the page's note template in each language — a guess that breaks when the template changes or the
+note is written by hand. The pick is now part of the frozen input.
+
+- **Model.** `RunInput.pick?: AlternativePick { pickOf: AgentRunId, assumption: Tally, text, alternative:
+  ReplyAlternative }`: the assumption by its index in the reply (a reply is immutable once stored; assumptions have no
+  key) and the alternative by its key, as `MarkTarget.AssumptionChoice` names them; its text and the alternative are
+  copied at queueing, as an answer copies its questions. New errors `RunNotPickable` (the run is not `Completed`, or
+  its reply has no assumptions), `AlternativeNotFound` and `PickMismatch` (the requests are not exactly the run's).
+- **Use case.** `queueRun` takes `pick { pickOf, assumption, alternative }`: the run must be the session's
+  (`RunNotFound`, `RunOfAnotherSession`), and `resolvePick` (`domain/reply.ts`, pure) checks the rest and freezes it.
+  The note stays: the agent and the people read it as before.
+- **API.** `POST /api/session/runs` takes `pick` (the facilitator only, as any queueing; each field checked:
+  `pick.pickOf`, `pick.assumption`, `pick.alternative`); 404 `RunNotFound` / `RunOfAnotherSession`, 409
+  `RunNotPickable`, 400 `AlternativeNotFound` / `PickMismatch`.
+- **Previous runs and prompt.** `previousRunIds` adds `pick.pickOf` after the runs replied to and the run answered
+  (each once), so the agent gets the run it assumed in with its reply and changes; the block gains `pickedAlternative {
+  insteadOfYourAssumption, alternative, assumedInPreviousRun? }` and rule 6 says to redo the requests with it.
+- **Cards and votes.** `pickedAlternative` (`web/session/decisions.ts`) reads `input.pick` of the run that took over;
+  a note is never read as a pick. A pick run joins the unit of `pick.pickOf` (`history.ts`) and closes its votes
+  (`laterRunOf`; it bundles the same requests, so this changes nothing but says it).
+- **No migration, no fallback.** Run inputs are stored as JSON, so the optional field needs no schema change; a run
+  stored before loads unchanged (tested, and on a copy of a live session's database). Runs picked through the note
+  only (between the messages appendix and this one, never released) show no ✓: their note line still says what was
+  asked.
+
+## Appendix: mentions of people (amendment)
+
+*Decided by the maintainer*: in the composer `#` names elements (what `@` did) and `@` names people, so that a
+participant can call someone's attention to a message. Run references by `#3` were considered and dropped.
+
+- **Tokens** (`domain/body.ts`, pure, read the same way by the page, the prompt and the classifier). `#name[n]` is
+  target n of the request; `@name[n]`, as bodies were written before, still reads as target n — nothing stored is
+  rewritten, and a legacy body renders as the new one does. `@name[pN]` is the N-th person of the request's `mentions`.
+  The full-width `＃` and `＠` count; a name has no spaces, brackets, `#` or `@`; a token whose number the request does
+  not have is text. A person written with `#` is not a token.
+- **Model.** `Request.mentions: ParticipantId[0..20]` and `RequestSent.mentions`, invariants `atMostTwentyMentions`
+  and `distinctMentions`. `send` takes the verified `MentionableParticipant` (`MentionedNotAParticipant`): anyone who
+  joined the session, online or not, the facilitator too. Not frozen into the run's input: the agent only reads the
+  name. **No migration**: requests are stored as JSON; a request and its `RequestSent` written before read as
+  `mentions: []` (`infrastructure/legacy.ts`, tested on the fixture of former rows).
+- **API.** `POST /api/session/requests` takes `mentions` (participant IDs): 400 with the field when it is not a list
+  of at most 20 distinct IDs, 400 `MentionedNotAParticipant` (also `TooManyMentions`, `DuplicateMention` from the
+  command).
+- **Prompt and classifier.** Rule 1 says `#name[n]` (`@name[n]` in older requests) means target n and that a plain
+  `@name` is a person; the request's body is given with each person as `@name` (`peopleAsNames`), inside the JSON block
+  as before. The classifier is given the body with its mentions as names (`plainBody(…, true)`: `#注文[1]` → `注文`).
+- **Composer** (`web/session/mentions.ts`). `#` offers the elements as `@` did and writes `#name[n] `. `@` offers the
+  others in the session (`mentionablePeople`: online first, then away, by name; the facilitator included; never me,
+  nor the facilitator's row while I hold the role), with avatar and name; with no one else (or no session) it opens
+  nothing. Picking writes `@name[pN] ` and adds the person to the composer's `people` (kept in the draft); deleting
+  every mention of a person forgets them and renumbers the rest, as chips do. The list is capped to the room above the
+  text, so it never covers the chat's header however tall the composer is.
+- **Stream.** An element reads `#注文` (a link, as before); a person `@佐藤` by their name now, a violet link (it does
+  something: it opens the participants at their row, the offline part opened when they are away, the row flashed),
+  kept on one line. A message that mentions me (`mentionsMe`: it names me, or the facilitator while I hold the role;
+  never my own) has a faint `--blue-wash` background with a thin `--blue-tint` edge in my stream only — not violet,
+  which is what can be clicked, nor amber, which is a question waiting for an answer. While the chat is closed, its
+  launcher shows `@ n` (`unreadMentions`: messages since the chat was last shown that mention me) in place of the count
+  of new items, and its label says so. Nothing else notifies.
+- **Solo.** Without a session there is no chat; in a session alone, `@` offers no one.
+
+## Appendix: cards named, not numbered (amendment)
+
+*Decided by the maintainer*: participants read a card — a run and the runs that continue it (answers, picks, replies,
+the same messages applied again) — as one chunk of change. Run numbers meant nothing to them (`#1–2` in 履歴,
+`AI #1–2 · 19:21 · name`, `✓ #2`, `↩ AI #3: …`, `→ #5`).
+
+- **The AI names its runs.** `AgentReply.title?: Text` (`model/agent-run.dt`, generated code regenerated): a short
+  title of what the requests are about. `REPLY_LIMITS.title` (30 characters) bounds it, `REPLY_LIMITS.titleAim` (20) is
+  what the prompt asks for ("about 20 characters, in the requests' language"); `readReply` takes it optional, trimmed,
+  on one line (no line breaks, no control characters); `replyJsonSchema` requires it of the agent; what is kept of an
+  invalid done or declined reply includes the title, whitespace folded to one line and cut to the limit. Replies stored
+  before have none: no migration (replies are JSON in the run).
+- **A card's name** (`unitName`, `web/session/history.ts`): the title of the card's first run that has one — runs that
+  continue it never rename it — else the head of the first message its first run applied, on one line, mentions as the
+  names they were written with. The stream's AI turn shows `AI · <title> · 19:21` (only a real title: the quotes under
+  it already show the message), who queued it in the time's tooltip; continuation runs show their time alone, the
+  number in its tooltip.
+- **履歴's heading**: the outcome icon, the name and the time span (first run queued → latest change); then, muted, whose
+  messages the first run applied (up to two names, else 「佐藤 ほか 2 人の依頼」), how many runs and how many files;
+  then the files the card changed (the first three by name and 「ほか n」), a violet link that opens the comparison of the
+  revisions before its first run and after its last. The page knows each revision's files and hashes, not its elements,
+  so the changes are listed by file; listing the changed elements would need the server to analyse both revisions (a
+  follow-up). The comparison's dialog moved out of the チャット tab so that 履歴 opens it too.
+- **Elsewhere**: an applied message's mark is the glyph alone (`✓`), the card's name and the state in its tooltip — a
+  name on every applied message would crowd the side column and repeat the card's name for each of its messages; the
+  reply chip and reference line name the card (`↩ 「請求書の税区分」への返信`, `↩ 請求書の税区分: …`); the "updated"
+  pill names the card; a pick's `選択 name · time` links its time to the run it queued (same card), with no number; the
+  undo bar says 「実行に入れました」. Revision numbers stay where precision is the point (the card's ⋯, the comparison,
+  the restore box).
+- **The collab's end summary** titles each change with the same name (`unitTitle` of `web/session/collab.ts` takes
+  `unitName`, cut at 60 characters).
+

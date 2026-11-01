@@ -1,0 +1,180 @@
+{
+  "_comment": "Rows as the session database held them before requests had several targets (schema user_version 3, DomainTrail 0.6.0): a request, a run's frozen request and the RequestSent event had one `target`. Copied in shape from a real session.db; the content is made up.",
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "state": "Open",
+    "data": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "facilitator": "local:facilitator",
+      "participants": [
+        {
+          "id": "local:facilitator",
+          "name": "Facilitator",
+          "role": "Facilitator",
+          "joinedAt": {
+            "$date": "2026-10-31T10:00:00.000Z"
+          }
+        }
+      ],
+      "startedAt": {
+        "$date": "2026-10-31T10:00:00.000Z"
+      },
+      "state": "Open"
+    }
+  },
+  "requests": [
+    {
+      "id": "00000000-0000-4000-8000-000000000010",
+      "state": "Sent",
+      "data": {
+        "state": "Sent",
+        "id": "00000000-0000-4000-8000-000000000010",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "author": "local:facilitator",
+        "target": {
+          "target": {
+            "kind": "Workspace"
+          },
+          "sourceRevision": "00000000-0000-4000-8000-000000000020"
+        },
+        "body": "請求書に税区分を入れたい",
+        "sentAt": {
+          "$date": "2026-10-31T10:19:59.859Z"
+        }
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "state": "Dismissed",
+      "data": {
+        "state": "Dismissed",
+        "id": "00000000-0000-4000-8000-000000000011",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "author": "dev:bob",
+        "target": {
+          "target": {
+            "kind": "DtElement",
+            "element": "Billing.Invoice"
+          },
+          "sourceRevision": "00000000-0000-4000-8000-000000000020",
+          "label": "請求書 (Billing.Invoice)",
+          "range": {
+            "path": "billing/invoice.dt",
+            "startLine": 6,
+            "startColumn": 1,
+            "endLine": 25,
+            "endColumn": 3
+          }
+        },
+        "body": "TEST",
+        "sentAt": {
+          "$date": "2026-10-31T11:48:36.979Z"
+        },
+        "dismissedBy": "dev:bob",
+        "dismissedAt": {
+          "$date": "2026-10-31T11:48:48.499Z"
+        }
+      }
+    }
+  ],
+  "runs": [
+    {
+      "id": "00000000-0000-4000-8000-000000000030",
+      "state": "Queued",
+      "data": {
+        "state": "Queued",
+        "id": "00000000-0000-4000-8000-000000000030",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "input": {
+          "requests": [
+            {
+              "request": "00000000-0000-4000-8000-000000000010",
+              "author": "local:facilitator",
+              "target": {
+                "target": {
+                  "kind": "Workspace"
+                },
+                "sourceRevision": "00000000-0000-4000-8000-000000000020"
+              },
+              "body": "請求書に税区分を入れたい"
+            },
+            {
+              "request": "00000000-0000-4000-8000-000000000011",
+              "author": "dev:bob",
+              "target": {
+                "target": {
+                  "kind": "DtElement",
+                  "element": "Billing.Invoice"
+                },
+                "sourceRevision": "00000000-0000-4000-8000-000000000020",
+                "label": "請求書 (Billing.Invoice)",
+                "range": {
+                  "path": "billing/invoice.dt",
+                  "startLine": 6,
+                  "startColumn": 1,
+                  "endLine": 25,
+                  "endColumn": 3
+                }
+              },
+              "body": "TEST"
+            }
+          ],
+          "note": "税込で固定"
+        },
+        "queuedBy": "local:facilitator",
+        "queuedAt": {
+          "$date": "2026-10-31T10:21:39.488Z"
+        }
+      }
+    }
+  ],
+  "outbox": [
+    {
+      "type": "RequestSent",
+      "payload": {
+        "type": "RequestSent",
+        "requestId": "00000000-0000-4000-8000-000000000010",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "author": "local:facilitator",
+        "target": {
+          "target": {
+            "kind": "Workspace"
+          },
+          "sourceRevision": "00000000-0000-4000-8000-000000000020"
+        },
+        "body": "請求書に税区分を入れたい",
+        "sentAt": {
+          "$date": "2026-10-31T10:19:59.859Z"
+        }
+      }
+    },
+    {
+      "type": "RequestSent",
+      "payload": {
+        "type": "RequestSent",
+        "requestId": "00000000-0000-4000-8000-000000000011",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "author": "dev:bob",
+        "target": {
+          "target": {
+            "kind": "DtElement",
+            "element": "Billing.Invoice"
+          },
+          "sourceRevision": "00000000-0000-4000-8000-000000000020",
+          "label": "請求書 (Billing.Invoice)",
+          "range": {
+            "path": "billing/invoice.dt",
+            "startLine": 6,
+            "startColumn": 1,
+            "endLine": 25,
+            "endColumn": 3
+          }
+        },
+        "body": "TEST",
+        "sentAt": {
+          "$date": "2026-10-31T11:48:36.979Z"
+        }
+      }
+    }
+  ]
+}

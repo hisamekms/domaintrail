@@ -3,18 +3,22 @@ import { Box, LayoutGrid, LayoutList, type LucideIcon } from 'lucide-react';
 import { Tldraw, type Editor } from 'tldraw';
 import { STRUCTURE_LEVELS, type DisplayMode, type Lang, type StructureLevel } from '@domaintrail/visualization/domain/graph/ir';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
-import { Catalog } from '../catalog';
-import { ContextPicker } from '../context-picker';
+import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
+import { ContextList } from '../context-picker';
 import { useT } from '../i18n';
-import { Legend } from '../legend';
+import type { LegendView } from '../legend';
 import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
+import { useCenterOnResize } from './center';
+import { CanvasControls, EdgeHint } from './canvas-controls';
 import { fitAll, usePointerCursor } from './canvas';
+import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
+import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
 
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
 
@@ -48,6 +52,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
 
     useSelectOnCanvas(editor, nav.select);
     usePointerCursor(editor);
+    useCenterOnResize(editor);
 
     const onMount = useCallback((e: Editor) => {
         e.updateInstanceState({ isReadonly: true });
@@ -74,8 +79,24 @@ export function ViewWorkspace(props: {
     const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
     const { checked, hidden, focusKey, noneChecked, graph } = viewGraph;
     const model = current?.model ?? null;
+    const focusContexts = current?.focusContexts ?? [];
+    const { filter: catalogFilter, setFilter: setCatalogFilter } = useCatalogFilter();
     const t = useT();
     const empty = { added: [], changed: [], removed: [] };
+    const legendView: LegendView | null =
+        !graph || !isCanvas(view)
+            ? null
+            : view.kind === 'contextMap'
+              ? 'contextMap'
+              : view.kind === 'storming'
+                ? 'storming'
+                : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`;
+    /** Fits the whole view: a storming view like when it is shown (its graph, never zoomed in past normal size). */
+    const fitView = (): void => {
+        if (!editor) return;
+        if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
+        else editor.zoomToFit({ animation: { duration: 200 } });
+    };
 
     return (
         <section className="center">
@@ -96,73 +117,79 @@ export function ViewWorkspace(props: {
                         ))}
                 </div>
                 <div className="view-toolbar">
-                    {view.kind === 'contextMap' && (
-                        <label className="check small">
-                            <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
-                            {t.showAllContexts}
-                        </label>
-                    )}
                     {view.kind === 'structure' && (
-                        <ContextPicker
-                            contexts={current?.focusContexts ?? []}
-                            labels={model?.contextLabels ?? {}}
-                            selected={checked}
-                            hidden={hidden}
-                            mode={mode}
-                            onChange={(cs) => setStructureContexts(cs.length === (current?.focusContexts ?? []).length ? null : cs)}
-                            onHiddenChange={setHiddenContexts}
-                        />
+                        <ToolbarSubject>
+                            <LevelSwitch
+                                label={t.structureMode}
+                                levels={STRUCTURE_LEVELS}
+                                value={structureLevel}
+                                icons={LEVEL_ICONS}
+                                names={(l) => ({ label: t.structureLevels[l], tooltip: t.structureLevels[l] })}
+                                onChange={setStructureLevel}
+                            />
+                        </ToolbarSubject>
                     )}
-                    {view.kind === 'structure' && (
-                        <div className="segmented small icons" role="group" aria-label={t.structureMode}>
-                            {STRUCTURE_LEVELS.map((l) => {
-                                const Icon = LEVEL_ICONS[l];
-                                return (
-                                    <button
-                                        key={l}
-                                        className={structureLevel === l ? 'active' : ''}
-                                        aria-pressed={structureLevel === l}
-                                        onClick={() => setStructureLevel(l)}
-                                        data-tooltip={t.structureLevels[l]}
-                                        aria-label={t.structureLevels[l]}
-                                    >
-                                        <Icon size={15} aria-hidden />
-                                    </button>
-                                );
-                            })}
-                        </div>
+                    {view.kind === 'catalog' && (
+                        <ToolbarSubject>
+                            <CatalogSearch filter={catalogFilter} onChange={setCatalogFilter} />
+                        </ToolbarSubject>
                     )}
                     {view.kind === 'storming' && <StormingToolbar stormings={stormings} choice={stormingChoice} mode={mode} onChange={setStormingChoice} />}
-                    {isCanvas(view) && (
-                        <button
-                            onClick={() => {
-                                // a storming view is fitted like when it is shown: its graph, never zoomed in past normal size
-                                if (!editor) return;
-                                if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
-                                else editor.zoomToFit({ animation: { duration: 200 } });
-                            }}
-                        >
-                            {t.zoomToFit}
-                        </button>
-                    )}
+                    <ToolbarEnd>
+                        {view.kind === 'contextMap' && (
+                            <FilterPopover count={activeFilterCount({ view: 'contextMap', mapAll })} onClear={() => setMapAll(false)}>
+                                <FilterSection title={t.filters.contexts}>
+                                    <label className="check">
+                                        <input type="checkbox" checked={mapAll} onChange={(e) => setMapAll(e.target.checked)} />
+                                        {t.showAllContexts}
+                                    </label>
+                                </FilterSection>
+                            </FilterPopover>
+                        )}
+                        {view.kind === 'structure' && (
+                            <FilterPopover
+                                count={activeFilterCount({ view: 'structure', contexts: focusContexts.length, checked: checked.length, hidden: hidden.length })}
+                                onClear={() => {
+                                    setStructureContexts(null);
+                                    setHiddenContexts([]);
+                                }}
+                            >
+                                <FilterSection title={t.filters.contexts}>
+                                    <ContextList
+                                        contexts={focusContexts}
+                                        labels={model?.contextLabels ?? {}}
+                                        selected={checked}
+                                        hidden={hidden}
+                                        mode={mode}
+                                        onChange={(cs) => setStructureContexts(cs.length === focusContexts.length ? null : cs)}
+                                        onHiddenChange={setHiddenContexts}
+                                    />
+                                </FilterSection>
+                            </FilterPopover>
+                        )}
+                        {view.kind === 'catalog' && model && (
+                            <FilterPopover
+                                count={activeFilterCount({ view: 'catalog', contexts: catalogFilter.contexts, kinds: catalogFilter.sections })}
+                                onClear={() => setCatalogFilter({ ...catalogFilter, contexts: null, sections: [] })}
+                            >
+                                <CatalogFilters model={model} mode={mode} filter={catalogFilter} onChange={setCatalogFilter} />
+                            </FilterPopover>
+                        )}
+                    </ToolbarEnd>
                 </div>
             </div>
             <div className="view-area">
                 <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
                 {isCanvas(view) && props.overlay}
-                {graph && isCanvas(view) && (
-                    <Legend
-                        view={
-                            view.kind === 'contextMap'
-                                ? 'contextMap'
-                                : view.kind === 'storming'
-                                  ? 'storming'
-                                  : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`
-                        }
-                        open={legendOpen}
-                        onToggle={onLegendToggle}
+                {isCanvas(view) && (
+                    <CanvasControls
+                        editor={editor}
+                        fitAll={fitView}
+                        legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
+                        keys
                     />
                 )}
+                <EdgeHint editor={editor} view={legendView} />
                 {current && !graph && isCanvas(view) && (
                     <div className="empty">
                         {current.status === 'empty'
@@ -184,6 +211,7 @@ export function ViewWorkspace(props: {
                         diagnostics={current?.diagnostics ?? []}
                         selected={selected}
                         onSelect={(id) => select(id)}
+                        filter={catalogFilter}
                     />
                 )}
             </div>

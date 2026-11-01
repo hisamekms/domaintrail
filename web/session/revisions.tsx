@@ -1,14 +1,13 @@
-// The revision timeline of the session panel (ADR 0026, S7): every revision with its origin, time, validation per DSL
-// and confirmed mark; two chosen revisions compared in a dialog (each file's status and line diff, `.dt` and `.dtes`
-// together); and, for the facilitator, confirming (a mark, never a gate), recording the current state and restoring,
-// with the two-step for external changes and the way through a run in progress. Participants see it all read-only;
-// the server checks the role anyway.
+// The revisions as the chat's menus reach them (ADR 0026, S7 and the amendment "messages and apply"): two revisions
+// compared in a dialog (each file's status and line diff, `.dt` and `.dtes` together); and, for the facilitator,
+// confirming (a mark, never a gate), recording the current state and restoring, with the two-step for external changes
+// and the way through a run in progress.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import type { ComparedFileBody, ComparisonBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
-import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timeline, type OriginDetail, type TimelineEntry } from './timeline';
+import { diffLines, restoreProblem, timeline, type TimelineEntry } from './timeline';
 
 type Tx = Messages['session'];
 type RevisionJson = SessionStateBody['revisions'][number];
@@ -29,21 +28,38 @@ type RestoreFlow =
     | { readonly step: 'done'; readonly revision: string; readonly restored: string }
     | { readonly step: 'failed'; readonly revision: string; readonly message: string };
 
-export function Revisions(props: { state: SessionStateBody; facilitator: boolean; live: boolean; nameOf: (id: string) => string; tx: Tx }) {
-    const { state, facilitator, live, nameOf, tx } = props;
+/** What the chat's menus do with revisions: compare two, confirm one, restore one (asked first), record the workspace. */
+export interface RevisionTools {
+    /** The restore's box, while one is under way: placed in the chat. */
+    readonly node: ReactNode;
+    /** The comparison's dialog, while one is open: placed outside the tabs, so that 履歴 opens it too. */
+    readonly dialog: ReactNode;
+    compare(before: string, after: string): void;
+    confirm(revision: string): void;
+    restore(revision: string): void;
+    take(): void;
+    /** A revision's number in the session (`#3`). */
+    number(id: string): string;
+}
+
+/**
+ * The facilitator's revision actions in the chat (ADR 0026, amendment): confirming (a mark, never a gate), recording
+ * the current state and restoring, with the two-step for external changes and the way through a run in progress, and
+ * the comparison of two revisions in a dialog (each file's status and line diff, `.dt` and `.dtes` together). The
+ * server checks the role anyway.
+ */
+export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools {
     const entries = timeline(state);
     const numberOf = new Map(entries.map((e) => [e.revision.id, e.number]));
     const runNumber = (id: string): number | undefined => {
         const i = [...state.runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt)).findIndex((r) => r.id === id);
         return i < 0 ? undefined : i + 1;
     };
-    const [chosen, setChosen] = useState<readonly string[]>([]);
     const [comparing, setComparing] = useState<readonly [string, string] | undefined>();
     const [flow, setFlow] = useState<RestoreFlow | undefined>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
-    const pair = comparisonPair(chosen, state.revisions);
-    const control = facilitator && live;
+    const n = (id: string): string => String(numberOf.get(id) ?? '?');
 
     const act = async (f: () => Promise<unknown>): Promise<boolean> => {
         setBusy(true);
@@ -58,7 +74,6 @@ export function Revisions(props: { state: SessionStateBody; facilitator: boolean
             setBusy(false);
         }
     };
-
     const restore = async (revision: string, recordExternalChanges: boolean): Promise<void> => {
         setBusy(true);
         try {
@@ -74,26 +89,12 @@ export function Revisions(props: { state: SessionStateBody; facilitator: boolean
             setBusy(false);
         }
     };
-
     const cancelRun = async (revision: string, run: string): Promise<void> => {
         if (await act(() => sessionApi.cancelRun(run))) setFlow({ step: 'run', revision, run, cancelled: true });
     };
 
-    const n = (id: string): string => String(numberOf.get(id) ?? '?');
-
-    return (
-        <section className="session-section session-revisions-section">
-            <h3>{tx.revisions(state.revisions.length)}</h3>
-            <div className="session-buttons">
-                <button className="session-compare" disabled={!pair} onClick={() => pair && setComparing(pair)}>
-                    {pair ? tx.compare(n(pair[0]), n(pair[1])) : tx.chooseTwo}
-                </button>
-                {control && (
-                    <button className="session-take" disabled={busy} onClick={() => void act(() => sessionApi.takeRevision())}>
-                        {tx.takeRevision}
-                    </button>
-                )}
-            </div>
+    const node = (
+        <>
             {flow && (
                 <RestoreBox
                     flow={flow}
@@ -107,101 +108,22 @@ export function Revisions(props: { state: SessionStateBody; facilitator: boolean
                     tx={tx}
                 />
             )}
-            {error && <p className="session-note session-error">{tx.error(error)}</p>}
-            <ol className="session-list session-revisions">
-                {entries.map((e) => (
-                    <RevisionItem
-                        key={e.revision.id}
-                        entry={e}
-                        chosen={chosen.includes(e.revision.id)}
-                        onChoose={(on) => setChosen((c) => chooseForComparison(c, e.revision.id, on))}
-                        control={control}
-                        busy={busy}
-                        onConfirm={() => void act(() => sessionApi.confirmRevision(e.revision.id))}
-                        onRestore={() => setFlow({ step: 'confirm', revision: e.revision.id })}
-                        nameOf={nameOf}
-                        tx={tx}
-                    />
-                ))}
-            </ol>
-            {comparing && <ComparisonDialog pair={comparing} n={n} entries={entries} onClose={() => setComparing(undefined)} />}
-        </section>
-    );
-}
-
-function originText(o: OriginDetail, nameOf: (id: string) => string, tx: Tx): string {
-    const d = tx.originDetails;
-    switch (o.kind) {
-        case 'SessionStart':
-            return tx.origins.SessionStart;
-        case 'RunBase':
-        case 'RunResult':
-            return `${tx.origins[o.kind]} · ${d.run(o.run)}`;
-        case 'Manual':
-            return `${tx.origins.Manual} · ${d.by(nameOf(o.by))}`;
-        case 'PreRestore':
-            return `${tx.origins.PreRestore} · ${d.restoring(o.restoring)}`;
-        case 'Restored':
-            return `${tx.origins.Restored} · ${d.restoredFrom(o.from, o.preRestore)}`;
-    }
-}
-
-function RevisionItem(props: {
-    entry: TimelineEntry;
-    chosen: boolean;
-    onChoose: (on: boolean) => void;
-    control: boolean;
-    busy: boolean;
-    onConfirm: () => void;
-    onRestore: () => void;
-    nameOf: (id: string) => string;
-    tx: Tx;
-}) {
-    const { entry, tx } = props;
-    const r = entry.revision;
-    return (
-        <li className={`session-revision state-${r.state}${entry.latest ? ' latest' : ''}`} data-revision={r.id} data-number={entry.number}>
-            <div className="session-row">
-                <input
-                    type="checkbox"
-                    aria-label={tx.chooseForComparison(entry.number)}
-                    checked={props.chosen}
-                    onChange={(e) => props.onChoose(e.target.checked)}
-                />
-                <span className="session-revision-number">#{entry.number}</span>
-                <span className="session-revision-origin">{originText(entry.origin, props.nameOf, tx)}</span>
-                <span className="muted small">{time(r.takenAt)}</span>
-                {entry.latest && <span className="session-status">{tx.latest}</span>}
-                {r.state === 'Confirmed' && (
-                    <span className="session-status status-current session-confirmed" data-tooltip={time(r.confirmedAt)}>
-                        ✓ {tx.confirmed} · {props.nameOf(r.confirmedBy)}
-                    </span>
-                )}
-            </div>
-            <div className="muted small session-validation">
-                {[
-                    tx.validationCounts.dt(r.validation.dtErrors),
-                    tx.validationCounts.dtes(r.validation.dtesErrors, r.validation.dtesWarnings),
-                    tx.validationCounts.links(r.validation.linkWarnings),
-                ].join(' · ')}
-                {r.validation.stale && ` · ${tx.staleValidation}`}
-            </div>
-            {props.control && (r.state === 'Recorded' || !entry.sameAsLatest) && (
-                <div className="session-row session-revision-actions">
-                    {r.state === 'Recorded' && (
-                        <button className="small session-confirm" disabled={props.busy} onClick={props.onConfirm} data-tooltip={tx.confirmHint}>
-                            {tx.confirm}
-                        </button>
-                    )}
-                    {!entry.sameAsLatest && (
-                        <button className="small session-restore-button" disabled={props.busy} onClick={props.onRestore}>
-                            {tx.restore}
-                        </button>
-                    )}
-                </div>
+            {error && (
+                <p className="session-note session-error" role="status">
+                    {tx.error(error)}
+                </p>
             )}
-        </li>
+        </>
     );
+    return {
+        node,
+        dialog: comparing && <ComparisonDialog pair={comparing} n={n} entries={entries} onClose={() => setComparing(undefined)} />,
+        compare: (before, after) => setComparing([before, after]),
+        confirm: (revision) => void act(() => sessionApi.confirmRevision(revision)),
+        restore: (revision) => setFlow({ step: 'confirm', revision }),
+        take: () => void act(() => sessionApi.takeRevision()),
+        number: n,
+    };
 }
 
 function RestoreBox(props: {

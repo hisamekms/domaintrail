@@ -1,3 +1,4 @@
+import { ChevronRight, Microscope, Telescope, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import { declarations, type AnyDeclaration, type NodeElement, type Storming } from '@domaintrail/modeling/storming/ir';
@@ -11,6 +12,7 @@ import type { StormingView } from '@domaintrail/visualization/protocol';
 import { useT } from './i18n';
 import { fileSelection, nameIn, type Select } from './model-utils';
 import type { SourceFocus } from './source';
+import { LevelSwitch, SubjectPicker, ToolbarSubject } from './view/toolbar';
 
 /** What the Event Storming view shows: a storming, a level and a timeline filter, all of them the page's state only. */
 export interface StormingChoice {
@@ -74,7 +76,13 @@ function dtTarget(model: DomainModel | null, kind: string, path: string): string
     return el?.kind === kind ? el.id : undefined;
 }
 
-/** The storming picker, the level toggle and the timeline filter of the Event Storming view. */
+const LEVEL_ICONS: Record<ViewLevel, LucideIcon> = { 'big-picture': Telescope, 'design-level': Microscope };
+
+/**
+ * The Event Storming view's toolbar: its subject, the storming then the timeline (すべて（統合） or one timeline) as a
+ * breadcrumb of pickers, and its level. The timeline is what is looked at, not a filter: the integrated canvas and a
+ * timeline draw different things.
+ */
 export function StormingToolbar({
     stormings,
     choice,
@@ -91,54 +99,41 @@ export function StormingToolbar({
     if (!shown) return null;
     const { storming, options } = shown;
     return (
-        <>
-            {stormings.length > 1 && (
-                <select
-                    className="view-select"
-                    aria-label={t.stormingPicker}
+        <ToolbarSubject>
+            <nav className="subject-crumbs" aria-label={t.views.storming}>
+                <SubjectPicker
+                    label={t.stormingPicker}
                     value={storming.id}
-                    onChange={(e) => onChange({ ...choice, stormingId: e.target.value })}
-                >
-                    {stormings.map((s) => (
-                        <option key={s.id} value={s.id}>
-                            {nameIn(mode, s.id, s.label)}
-                        </option>
-                    ))}
-                </select>
-            )}
-            {storming.timelines.length > 0 && (
-                <select
-                    className="view-select"
-                    aria-label={t.timelineFilter}
-                    data-tooltip={t.timelineFilter}
-                    value={options.timelineId ?? ''}
-                    onChange={(e) => {
-                        const { [storming.id]: _, ...others } = choice.timelines;
-                        onChange({ ...choice, timelines: e.target.value ? { ...others, [storming.id]: e.target.value } : others });
-                    }}
-                >
-                    <option value="">{t.allTimelines}</option>
-                    {storming.timelines.map((tl) => (
-                        <option key={tl.id} value={tl.id}>
-                            {nameIn(mode, tl.id, tl.label)}
-                        </option>
-                    ))}
-                </select>
-            )}
-            <div className="segmented small" role="group" aria-label={t.stormingLevel}>
-                {VIEW_LEVELS.map((l) => (
-                    <button
-                        key={l}
-                        className={options.level === l ? 'active' : ''}
-                        aria-pressed={options.level === l}
-                        onClick={() => onChange({ ...choice, level: l })}
-                        data-tooltip={t.stormingLevels[l].hint}
-                    >
-                        {t.stormingLevels[l].label}
-                    </button>
-                ))}
-            </div>
-        </>
+                    options={stormings.map((s) => ({ value: s.id, label: nameIn(mode, s.id, s.label) }))}
+                    onChange={(id) => onChange({ ...choice, stormingId: id })}
+                />
+                {storming.timelines.length > 0 && (
+                    <>
+                        <ChevronRight className="subject-sep" size={14} aria-hidden />
+                        <SubjectPicker
+                            label={t.timelineFilter}
+                            value={options.timelineId ?? ''}
+                            options={[
+                                { value: '', label: t.allTimelines },
+                                ...storming.timelines.map((tl) => ({ value: tl.id, label: nameIn(mode, tl.id, tl.label) })),
+                            ]}
+                            onChange={(id) => {
+                                const { [storming.id]: _, ...others } = choice.timelines;
+                                onChange({ ...choice, timelines: id ? { ...others, [storming.id]: id } : others });
+                            }}
+                        />
+                    </>
+                )}
+            </nav>
+            <LevelSwitch
+                label={t.stormingLevel}
+                levels={VIEW_LEVELS}
+                value={options.level}
+                icons={LEVEL_ICONS}
+                names={(l) => ({ label: t.stormingLevels[l].label, tooltip: `${t.stormingLevels[l].label} — ${t.stormingLevels[l].hint}` })}
+                onChange={(level) => onChange({ ...choice, level })}
+            />
+        </ToolbarSubject>
     );
 }
 

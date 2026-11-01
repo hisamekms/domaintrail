@@ -3,11 +3,23 @@
 // does, so nothing here calls the session API or sends anything there.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from 'tldraw';
-import type { Cursor, Me, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import type { Classification, Cursor, Me, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import type { ViewSocket } from '../app/useViewSocket';
 import { SessionApiError, sessionApi, type TargetStatuses } from './api';
-import { createIndexedDbDrafts, createMemoryDrafts, editDraft, newDraft, type Draft, type DraftScope, type DraftStorage } from './drafts';
+import {
+    COMPOSER_DRAFT,
+    composerScope,
+    createIndexedDbDrafts,
+    createMemoryDrafts,
+    editDraft,
+    newDraft,
+    type Draft,
+    type DraftScope,
+    type DraftStorage,
+} from './drafts';
+import { EMPTY_COMPOSER, type ComposerValue } from './mentions';
+import { WORKSPACE_TARGET } from './targets';
 import { hasCanvas } from './location';
 import { NO_PEERS, receivePresence, throttle, type Peers } from './presence';
 import { adopt, disconnected, INITIAL_SESSION, receive, refetched, type SessionModel } from './state';
@@ -34,6 +46,8 @@ export interface SessionData {
     readonly epoch: number;
     /** The last failure of a call the page made by itself (state, targets, me). */
     readonly error: string | undefined;
+    /** The facilitator's: how each message reads, when the session classifies them (else undefined: all applicable). */
+    readonly classifications: Readonly<Record<string, Classification>> | undefined;
 }
 
 const message = (e: unknown): string => (e instanceof SessionApiError ? `${e.type} (${e.status})` : e instanceof Error ? e.message : String(e));
@@ -47,10 +61,13 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     const [epoch, setEpoch] = useState(0);
     const [targets, setTargets] = useState<TargetStatuses | undefined>();
     const [error, setError] = useState<string | undefined>();
+    const [classifications, setClassifications] = useState<Readonly<Record<string, Classification>> | undefined>();
 
     useEffect(
         () =>
             subscribe((m) => {
+                if (m.type === 'session.classifications') return setClassifications(m.classifications);
+                if (m.type === 'session.classification') return setClassifications((c) => ({ ...c, [m.request]: m.classification }));
                 if (m.type === 'session.state') {
                     setEpoch((e) => e + 1);
                     setStatus('live');
@@ -113,8 +130,8 @@ export function useSession(socket: ViewSocket, current: ViewPayload | null): Ses
     }, [inSession, requestCount, current]);
 
     return useMemo(
-        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error } : undefined),
-        [model.state, model.me, peers, status, targets, epoch, error],
+        () => (model.state && model.me ? { me: model.me, state: model.state, peers, status, targets, epoch, error, classifications } : undefined),
+        [model.state, model.me, peers, status, targets, epoch, error, classifications],
     );
 }
 
@@ -282,4 +299,71 @@ export function useDrafts(storage: DraftStorage, scope: DraftScope | undefined):
     );
 
     return { drafts, error, add, edit, remove };
+}
+
+export interface ComposerDraft {
+    /** The unsent request: its text and targets (empty while there is none, and until it is loaded). */
+    readonly value: ComposerValue;
+    readonly error: string | undefined;
+    /** Changes it; it is saved shortly after typing stops. */
+    setValue(value: ComposerValue): void;
+    /** Forgets it (once it was sent). */
+    clear(): Promise<void>;
+}
+
+const isEmpty = (v: ComposerValue): boolean => v.text === '' && v.chips.length === 0;
+
+/** The chat composer's one unsent request of a participant in a session, kept in the drafts' storage until it is sent. */
+export function useComposerDraft(storage: DraftStorage, scope: DraftScope | undefined): ComposerDraft {
+    const [value, setValueState] = useState<ComposerValue>(EMPTY_COMPOSER);
+    const [error, setError] = useState<string | undefined>();
+    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const session = scope?.session;
+    const participant = scope?.participant;
+    const key = useMemo(() => (session && participant ? composerScope({ session, participant }) : undefined), [session, participant]);
+
+    useEffect(() => {
+        setValueState(EMPTY_COMPOSER);
+        if (!key) return;
+        let cancelled = false;
+        storage.load(key).then(
+            (loaded) => {
+                const draft = loaded.find((d) => d.id === COMPOSER_DRAFT);
+                // typing before the load finished wins; a draft saved before there were chips (or people) has none
+                if (!cancelled && draft) setValueState((v) => (isEmpty(v) ? { text: draft.body, chips: draft.chips ?? [], people: draft.people ?? [] } : v));
+            },
+            (e: unknown) => setError(message(e)),
+        );
+        return () => {
+            cancelled = true;
+            clearTimeout(timer.current);
+        };
+    }, [storage, key]);
+
+    const setValue = useCallback(
+        (next: ComposerValue) => {
+            setValueState(next);
+            clearTimeout(timer.current);
+            if (!key) return;
+            timer.current = setTimeout(() => {
+                const now = Date.now();
+                const write = isEmpty(next)
+                    ? storage.remove(key, COMPOSER_DRAFT)
+                    : storage.save(key, { ...newDraft(COMPOSER_DRAFT, WORKSPACE_TARGET, now), body: next.text, chips: next.chips, people: next.people });
+                write.then(
+                    () => setError(undefined),
+                    (e: unknown) => setError(message(e)),
+                );
+            }, AUTOSAVE_MS);
+        },
+        [storage, key],
+    );
+
+    const clear = useCallback(async () => {
+        clearTimeout(timer.current);
+        setValueState(EMPTY_COMPOSER);
+        if (key) await storage.remove(key, COMPOSER_DRAFT);
+    }, [storage, key]);
+
+    return { value, error, setValue, clear };
 }

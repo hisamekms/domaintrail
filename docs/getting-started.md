@@ -89,7 +89,7 @@ Select the element you want to talk about — in the explorer on the left or in 
 inspector on the right: its fields and invariants (構造), the states and transitions of its aggregate (状態遷移), what a
 command requires, changes and emits (振る舞い), who uses it (参照) and its source (ソース). In the ソース tab, the copy
 button on the highlighted declaration copies its code. Paste it into the conversation with what should change, or name
-the element (`Reservation.confirm`; the 名前 / 両方 switch in the header shows the names next to the labels):
+the element (`Reservation.confirm`; the 名前 / 両方 setting (the gear at the foot of the left pane) shows the names next to the labels):
 
 > `command confirm(capacity: Headcount, at: Timestamp) "確定する"` — a reservation should also record who confirmed
 > it.

@@ -16,6 +16,17 @@ import {
     MAX_LINE_CHARS,
     MAX_OUTPUT_LINES,
 } from '@domaintrail/collaboration/domain/compare';
+import {
+    checkAgentReplyDeep,
+    readAnswer,
+    readReply,
+    REPLY_LIMITS,
+    requestNumber,
+    resolveAnswer,
+    resolvePick,
+    toAgentReply,
+    type PickData,
+} from '@domaintrail/collaboration/domain/reply';
 import { sha256Hex } from '@domaintrail/collaboration/domain/sha256';
 import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from '@domaintrail/collaboration/domain/snapshot';
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from '@domaintrail/collaboration/domain/targets';
@@ -255,9 +266,13 @@ describe('transitions', () => {
     test('a request is dismissed as a mark: it keeps its content', () => {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for MakeActiveSession's check
         const active = sessionId as C.ActiveSession;
-        const target: C.TargetSnapshot = { target: { kind: 'Workspace', scope: 'Dtes' }, sourceRevision: base };
+        const target: C.TargetSnapshot = {
+            target: { kind: 'DtesElement', storming: value(C.makeStormingName('S')), local: value(C.makeStormingLocalName('E')) },
+            sourceRevision: base,
+        };
         const body = value(C.makeText('Split the timeline.'));
-        const sent = value(requestCommands.send(C.makeRequestId('00000000-0000-4000-8000-000000000004'), active, guest, target, body, at)).Sent.aggregate;
+        const sent = value(requestCommands.send(C.makeRequestId('00000000-0000-4000-8000-000000000004'), active, guest, [target], body, at, undefined, [])).Sent
+            .aggregate;
         const dismissed = value(requestCommands.dismiss(sent, facilitator, later));
         expect(dismissed.Dismissed.aggregate).toEqual({ ...sent, state: 'Dismissed', dismissedBy: facilitator, dismissedAt: later });
     });
@@ -271,7 +286,7 @@ describe('transitions', () => {
                 {
                     request: C.makeRequestId('00000000-0000-4000-8000-000000000004'),
                     author: guest,
-                    target: { target: { kind: 'Workspace' }, sourceRevision: base },
+                    targets: [],
                     body: value(C.makeText('x')),
                 },
             ],
@@ -290,7 +305,7 @@ describe('transitions', () => {
     });
 
     test('finish completes a run that meets the success rule and fails one that does not, with its report', () => {
-        const done = value(agentRunCommands.finish(running, report(0), result, true, later));
+        const done = value(agentRunCommands.finish(running, report(0), result, true, undefined, later));
         expect(done.Completed?.aggregate).toMatchObject({ state: 'Completed', resultRevision: result, changed: true, baseRevision: base });
         expect(done.Completed?.events.RunCompleted).toEqual({
             type: 'RunCompleted',
@@ -299,10 +314,10 @@ describe('transitions', () => {
             changed: true,
             finishedAt: later,
         });
-        const failed = value(agentRunCommands.finish(running, report(2), base, false, later));
+        const failed = value(agentRunCommands.finish(running, report(2), base, false, undefined, later));
         expect(failed.Failed?.aggregate).toMatchObject({ state: 'Failed', reason: 'RuleNotMet', report: report(2), resultRevision: base });
-        expect(agentRunCommands.finish(running, report(0), base, true, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
-        expect(agentRunCommands.finish(running, report(0), result, false, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
+        expect(agentRunCommands.finish(running, report(0), base, true, undefined, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
+        expect(agentRunCommands.finish(running, report(0), result, false, undefined, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
     });
 
     test('fail needs a reason other than the rule; cancel keeps the base revision of a running run', () => {
@@ -430,5 +445,147 @@ describe('comparing revisions', () => {
             ['c.dt', 'Dt', 'removed'],
             ['d.dtes', 'Dtes', 'added'],
         ]);
+    });
+});
+
+describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () => {
+    const L = REPLY_LIMITS;
+    const read = (raw: unknown, requests = 2): ReturnType<typeof readReply<number>> => readReply(raw, requestNumber(requests), requests);
+    const question = { id: 'q1', text: 'Which?', options: [{ id: 'a', label: 'A' }], multiple: false };
+    const asking = { outcome: 'clarification', summary: 'One question.', requests: [], questions: [question] };
+    const many = <T>(n: number, f: (i: number) => T): T[] => Array.from({ length: n }, (_, i) => f(i));
+
+    test('every limit is the one of REPLY_LIMITS: at the limit it is taken, one past it refused, at the path named', () => {
+        const cases: [string, (n: number) => unknown, number][] = [
+            ['reply.title', (n) => ({ ...asking, title: 't'.repeat(n) }), L.title],
+            ['reply.summary', (n) => ({ ...asking, summary: 's'.repeat(n) }), L.summary],
+            ['reply.requests[0].note', (n) => ({ ...asking, requests: [{ request: 1, status: 'partial', note: 'n'.repeat(n) }] }), L.requestNote],
+            ['reply.questions', (n) => ({ ...asking, questions: many(n, (i) => ({ ...question, id: `q${i}` })) }), L.questions],
+            ['reply.questions[0].text', (n) => ({ ...asking, questions: [{ ...question, text: 't'.repeat(n) }] }), L.questionText],
+            [
+                'reply.questions[0].options',
+                (n) => ({ ...asking, questions: [{ ...question, options: many(n, (i) => ({ id: `o${i}`, label: 'x' })) }] }),
+                L.options,
+            ],
+            [
+                'reply.questions[0].options[0].label',
+                (n) => ({ ...asking, questions: [{ ...question, options: [{ id: 'a', label: 'l'.repeat(n) }] }] }),
+                L.optionLabel,
+            ],
+            [
+                'reply.questions[0].options[0].detail',
+                (n) => ({ ...asking, questions: [{ ...question, options: [{ id: 'a', label: 'A', detail: 'd'.repeat(n) }] }] }),
+                L.optionDetail,
+            ],
+            ['reply.questions[0].id', (n) => ({ ...asking, questions: [{ ...question, id: 'k'.repeat(n) }] }), L.key],
+            ['reply.assumptions', (n) => ({ ...asking, assumptions: many(n, () => ({ text: 'x' })) }), L.assumptions],
+            ['reply.assumptions[0].text', (n) => ({ ...asking, assumptions: [{ text: 'a'.repeat(n) }] }), L.assumptionText],
+            [
+                'reply.assumptions[0].alternatives',
+                (n) => ({ ...asking, assumptions: [{ text: 'x', alternatives: many(n, (i) => ({ id: `a${i}`, label: 'x' })) }] }),
+                L.alternatives,
+            ],
+            [
+                'reply.assumptions[0].alternatives[0].label',
+                (n) => ({ ...asking, assumptions: [{ text: 'x', alternatives: [{ id: 'a', label: 'l'.repeat(n) }] }] }),
+                L.alternativeLabel,
+            ],
+        ];
+        for (const [where, make, limit] of cases) {
+            expect([where, read(make(limit)).ok]).toEqual([where, true]);
+            const refused = read(make(limit + 1));
+            expect([where, !refused.ok && refused.error.path]).toEqual([where, where]);
+        }
+    });
+
+    test('the title: optional, trimmed, on one line; kept in the model value when given', () => {
+        expect(read(asking)).toMatchObject({ ok: true, value: { summary: 'One question.' } });
+        expect(read({ ...asking, title: '  請求書の税区分 ' })).toMatchObject({ ok: true, value: { title: '請求書の税区分' } });
+        expect(read({ ...asking, title: '請求書の\n税区分' })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        expect(read({ ...asking, title: ' ' })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        expect(read({ ...asking, title: 3 })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        const titled = read({ ...asking, title: '税区分' });
+        if (!titled.ok) throw new Error(titled.error.message);
+        expect(String(toAgentReply({ ...titled.value, requests: [], questions: [], assumptions: [] }).title)).toBe('税区分');
+        const untitled = read(asking);
+        if (!untitled.ok) throw new Error(untitled.error.message);
+        expect('title' in toAgentReply({ ...untitled.value, requests: [], questions: [], assumptions: [] })).toBe(false);
+    });
+
+    test('the shape: an outcome of three, questions for a clarification only, notes for partial and skipped, keys, plain text', () => {
+        expect(read({ ...asking, outcome: 'maybe' })).toMatchObject({ ok: false, error: { path: 'reply.outcome' } });
+        expect(read({ ...asking, questions: [] })).toMatchObject({ ok: false, error: { path: 'reply.questions' } });
+        expect(read({ ...asking, outcome: 'done' })).toMatchObject({ ok: false, error: { path: 'reply.questions' } });
+        expect(read({ ...asking, requests: [{ request: 1, status: 'skipped' }] })).toMatchObject({ ok: false, error: { path: 'reply.requests[0].note' } });
+        expect(read({ ...asking, requests: [{ request: 3, status: 'done' }] })).toMatchObject({ ok: false, error: { path: 'reply.requests[0].request' } });
+        expect(read({ ...asking, questions: [{ ...question, id: 'a b' }] })).toMatchObject({ ok: false, error: { path: 'reply.questions[0].id' } });
+        expect(read({ ...asking, questions: [{ ...question, options: [{ id: 'a', label: 'A\nB' }] }] })).toMatchObject({
+            ok: false,
+            error: { path: 'reply.questions[0].options[0].label' },
+        });
+        expect(read({ ...asking, summary: 'a\u0000b' })).toMatchObject({ ok: false, error: { path: 'reply.summary' } });
+        expect(read({ ...asking, questions: [question, question] })).toMatchObject({ ok: false, error: { path: 'reply.questions' } });
+        // a valid reply makes a model value that holds every invariant
+        const ok = read({ ...asking, requests: [{ request: 1, status: 'partial', note: 'half' }] });
+        if (!ok.ok) throw new Error(ok.error.message);
+        const reply = toAgentReply({ ...ok.value, requests: [], questions: ok.value.questions.map((q) => ({ ...q, requests: [] })), assumptions: [] });
+        expect(checkAgentReplyDeep(reply)).toEqual([]);
+    });
+
+    test('an answer: its shape, then the questions and options of the run it answers', () => {
+        expect(readAnswer({ answers: [] })).toMatchObject({ ok: false, error: { path: 'answer.answers' } });
+        expect(readAnswer({ answers: [{ question: 'q1', options: [] }] })).toMatchObject({ ok: false, error: { path: 'answer.answers[0]' } });
+        expect(readAnswer({ answers: [{ question: 'q1', options: [], text: 't'.repeat(L.answerText + 1) }] })).toMatchObject({
+            ok: false,
+            error: { path: 'answer.answers[0].text' },
+        });
+        expect(readAnswer({ answers: [{ question: 'q1', options: ['a', 'a'] }] })).toMatchObject({ ok: false, error: { path: 'answer.answers[0].options' } });
+        const reply = toAgentReply({ outcome: 'clarification', summary: 's', requests: [], questions: [{ ...question, requests: [] }], assumptions: [] });
+        const run = C.makeAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000009');
+        const answer = readAnswer({ answers: [{ question: 'q1', options: ['a'], text: 'and more' }] });
+        if (!answer.ok) throw new Error(answer.error.message);
+        const resolved = resolveAnswer(answer.value, run, reply);
+        expect(resolved as unknown).toEqual({
+            ok: true,
+            value: { answerTo: run, answers: [{ question: 'q1', text: 'Which?', chosen: [{ id: 'a', label: 'A' }], freeText: 'and more' }] },
+        });
+        if (resolved.ok) expect([...C.checkAnswer(resolved.value), ...resolved.value.answers.flatMap((a) => C.checkAnsweredQuestion(a))]).toEqual([]);
+        expect(resolveAnswer({ answers: [{ question: 'q1', options: ['z'] }] }, run, reply)).toMatchObject({
+            ok: false,
+            error: { path: 'answer.answers[0].options[0]' },
+        });
+    });
+    test('a pick is of a completed run with assumptions, one of its alternatives, with its requests queued again', () => {
+        const id = C.makeAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const m = C.makeRequestId('00000000-0000-4000-8000-000000000001');
+        const n = C.makeRequestId('00000000-0000-4000-8000-000000000002');
+        const assumption = { text: 'With tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] };
+        const run = (state: string, assumptions: unknown[] = [assumption]): C.AgentRun =>
+            ({
+                id,
+                state,
+                input: { requests: [{ request: m }, { request: n }] },
+                ...(state === 'Completed' && { reply: { summary: 's', requests: [], questions: [], assumptions } }),
+            }) as unknown as C.AgentRun;
+        const pick = (assumptionAt = 0, alternative = 'net'): PickData => {
+            const tally = C.makeTally(assumptionAt);
+            const key = C.makeReplyKey(alternative);
+            if (!tally.ok || !key.ok) throw new Error('not a pick');
+            return { pickOf: id, assumption: tally.value, alternative: key.value };
+        };
+        expect(resolvePick(pick(), run('Completed'), [n, m]) as unknown).toEqual({
+            ok: true,
+            value: { pickOf: id, assumption: 0, text: 'With tax', alternative: { id: 'net', label: 'Without tax' } },
+        });
+        expect(resolvePick(pick(), run('Completed', []), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        for (const state of ['Queued', 'Running', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled'])
+            expect(resolvePick(pick(), run(state), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'PickMismatch', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m, n, C.makeRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
+            ok: false,
+            error: { type: 'PickMismatch', run: id },
+        });
     });
 });

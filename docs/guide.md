@@ -1873,8 +1873,8 @@ make two occurrences the same happening, so read a path along one timeline's nam
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
-`dt view`, the イベントストーミング tab shows one storming at a time, with the timeline and the level picked in its
-toolbar; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
+`dt view`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
+its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
@@ -2396,12 +2396,12 @@ formatting, hover, an outline and go to definition.
 ## Collaboration sessions
 
 A **session** is the Live View shared by several people while an AI agent edits the model: the facilitator runs
-`dt session start` on their machine, the participants open the page in their browsers, see each other, and send
-**requests** about elements of the `.dt` model or the `.dtes` stormings; the facilitator bundles requests into
-**runs**, and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
+`dt session start` on their machine, the participants open the page in their browsers, see each other, and post
+**messages** in a chat, about elements of the `.dt` model or the `.dtes` stormings; the facilitator applies messages as
+**runs** (requests to the agent), and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
 time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
 `.dtes` sources that can be compared, marked confirmed or restored. `dt view` is unchanged: it has no session, and its
-page no session panel. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
+page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
 **The commands.** All three find the workspace like `dt check` (`-r`, `-c`):
@@ -2416,30 +2416,169 @@ page no session panel. Sessions need Node.js 22.13 or later (for `node:sqlite`).
 - `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
   the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
 
-**Roles.** Everyone signed in is a **participant**: they see the Live View and the session panel, send requests,
-dismiss their own, and compare revisions. The **facilitator** is whoever opened the facilitator link while signed in
-(never derived from Cloudflare Access); a new link moves the role, and the previous holder's pages reconnect as a
-participant. Only the facilitator queues and cancels runs, dismisses others' requests, records, confirms and restores
-revisions, changes the shared 比較対象 (baseline) and closes the session (`POST /api/session/close`, e.g. with `fetch`
-from the browser console: the page has no button for it). The server checks every role; the page only hides what is
-not yours. The facilitator is listed once in the panel, under their own name.
+**Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
+right end of the page — チャット: every message posted, one card per run, and the composer; 履歴: the runs that changed
+files — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
+agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
+opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
+collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
+facilitator applies messages, answers the agent, cancels runs, records, confirms and restores revisions, changes the
+shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
+only hides what is not yours.
 
-**Requests and targets.** A request is a text (up to 10,000 characters) about a **target**: the whole workspace, a
-`.dt` element (a context's element, a state or a command, by its model ID), a `.dtes` element (by storming and local
-ID), or one **occurrence** of an event in a timeline. The selection gives the target: selecting a note in one
-timeline's view of a storming targets that occurrence (the timeline and the step), while the integrated canvas, which
-draws each event once, targets the event's definition. Drafts stay in your browser (IndexedDB, per session and
-participant) until you select some and send them, each as its own request. A sent request never changes; dismissing
-it is a mark. Each target shows whether it is still in the sources (`current`), no longer found (`stale`: a target is
-never re-bound to something else), or `unknown` while the file it would be in does not parse.
+**The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars, how
+many are online and コラボ中 ▾ — that opens the participants (where each is, and → to open the view another is on) and
+the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
+behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
+ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
+lists what is not finished — runs queued or running, questions waiting for an answer, and the results recorded since
+the last revision confirmed — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
+files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
+when it ended; the session's record stays in the workspace's `.domaintrail`.
 
-**Runs.** The facilitator selects requests (up to 100), adds a note if needed (up to 4,000 characters) and queues a
-run; its input is frozen then, and a request stays as it was, so it can go into another run later. A run is `Queued`,
-`Running`, then `Completed`, `NeedsClarification` (the agent asked a question, shown in the panel; queue the requests
-again with the answer in the note), `Failed` or `Cancelled`; the facilitator can cancel a queued or running one. A run
-**succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new `.dt` error compared with the run's
-base revision, and every `.dtes` file still parses; diagnostics that were there before and `.dtes` warnings are shown
-(before → after), not a failure. A run that changes nothing completes with its base revision as its result.
+**Messages and apply.** Everything posted in the chat is a **message**, shown in the stream as it is sent; nothing
+runs until the facilitator **applies** it. On each message the facilitator has ⤓ (apply: a run of that message,
+queued at once; runs are serial, so it waits as 実行待ち while another runs) and ▾ (補足を付けてアプライ: a note for the
+agent first; 選択: choose several). Shift- or ⌘-click chooses messages too; a bar then offers a note and まとめてアプライ,
+one run of all of them, and Esc leaves it. Right after applying, 取り消す cancels the run while it is still queued.
+Participants see a run only once it is in the stream: there is no queue to watch. A message that was applied shows the
+mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for everyone; the tooltip names the card and the
+state, and a click goes to the card.
+
+**Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
+failed or cancelled. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
+(about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
+runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
+time's tooltip); before the AI gave a title (still running, or a run from before titles) it reads `AI · 19:21`, the
+quotes under it saying what it is about. Where a card must be named without any title (履歴, a reply, a mark's tooltip), the head of its first
+message stands for it, on one line. In 履歴, each card's heading is its name with its time span (`19:21–22:32`), then,
+small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how many runs and how many files it changed, then
+the files it changed (`→ billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
+card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
+the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
+hovering either one marks the other. A
+run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
+card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
+tooltip); a run of the same messages after a completed one too. The card stays where its first run was queued; when it
+changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
+when it says so) and 答えて再実行 queues the run's messages again with that answer at once. その他 is the last row, a
+radio or checkbox like the options: its own words are written in a dialog — ✎ at the row's end, or choosing その他
+while it has none (Space or Enter on it too) — with the question at its top; 決定 (⌘/Ctrl+Enter) chooses その他 with the
+words, キャンセル (Esc) leaves it as it was, and 決定 on an emptied text clears it. The row then reads
+`その他: <the words>` on one line (all of them on hover). In a single-choice question その他 is one of the group: the
+answer is one option or the own words, never both; choosing an option deselects その他 but keeps its words, so choosing
+it again brings them back. In a multiple-choice question it is a checkbox, sent together with the options chosen. Words
+under an unselected その他 are not sent. On a
+done card, an alternative of an assumption queues them again with that pick and a note asking for it; ✕ on a queued or running card
+(or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
+it was before the run (asked first) or compares the two.
+
+**Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a
+reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
+a queued or running run is not replied to yet). Anyone can reply. A chip `↩ 「請求書の税区分」への返信 ✕` (the card's
+name) sits above the composer,
+whose targets start with those of the run's messages (change them as usual); ✕, or Esc on an empty text, stops the
+reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), applied or not by the
+facilitator (⤓ runs it at once, or choose several replies to apply as one run; in collab mode the facilitator's own reply
+too) — and shows `↩ 請求書の税区分: <what the AI said>` on one muted line at its top, a click going to the card. The run
+made from replies continues the replied run's card in place, quoting the replies like any applied message, and a reply to
+that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
+(summary, per-message status, assumptions, questions) and what it changed — the unified diff of the sources between
+its base and result revisions, or only the list of the changed files when the diffs of all the replied runs together
+exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
+that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
+
+**Votes and reactions.** Participants signal a preference; the facilitator decides. On a question's options, everyone
+but the facilitator sees ♡ at the right of each option: a click votes for it (again to take it back). In a
+single-choice question each participant has one vote, and voting another option moves it; in a multiple-choice question
+any number. The same goes for an assumption of a done card: ♡ on 前提 means "keep it as it is", ♡ on an alternative
+asks for that one — one vote per assumption, moving. Counts show as `♡ 2`, small; your own vote is a filled ♥ in violet.
+Who voted is not on the screen: hover the count for the names, or click it for a small list (on touch). The facilitator
+sees the counts (and the same names) next to the options of the answer form and next to 前提 and each 別案, never votes,
+and nothing is chosen for them. A vote closes when its run is no longer the latest run of its messages — answering the
+question, picking an alternative, or applying the same messages again — or when the run no longer waits for an answer;
+cancelling that later run before it started opens it again. Closed votes are frozen, muted and not clickable (who
+voted is still on hover and click). Once answered, a question stays as it was asked — the same options in the same
+order, with their frozen votes — with the filled mark on what was chosen (その他 and its words as a last row, on one line: hover it for all of them, or click it to read them in a dialog), the other
+options muted, and `回答 name · time` under the questions; the amber bar is gone. Each option starts with the mark of
+its kind, the shape of the facilitator's controls: ○ for a single-choice question, ☐ for a multiple-choice one, filled
+(◉, ☑) once chosen; screen readers hear 選択 / 未選択. An assumption is a group of rows, one under the other —
+`○ 前提: …` and `○ 別案: …` for each alternative, each with its votes —, of which one is taken. One whose alternative
+was picked shows ◉ on it, the others muted, and `選択 name · time` under it (the time goes to the run the pick queued, in
+the same card); one
+left as it was (a later run without a pick) has nothing filled and keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
+every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
+there, faint) and ☺+ at its right end offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
+and ＋, a small field where any one emoji can be typed or pasted (the OS emoji picker works there; Enter adds it, Escape
+closes the field), with who reacted under them. The app gives no emoji a meaning. A reaction is exactly one emoji — a
+ZWJ sequence (👨‍👩‍👧‍👦), a skin tone (👍🏽), a flag (🇯🇵) or a keycap (1️⃣) counts as one; text and two emoji are refused —
+kept in one form, so ❤ and ❤️ are the same reaction. The reactions placed show under the message as emoji with counts, in
+the order they first appeared; yours has its count in violet with a faint violet outline; a click toggles yours; the
+tooltip shows the emoji and who. A message or a turn holds at most 20 different emoji (adding to one already there is
+always possible). No closing, and neither votes nor reactions count as unread or notify anyone. A page that joins late
+gets every vote and reaction with the session's state.
+
+**Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
+whole workspace, and such a message shows no target line (nor the composer any chip). A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
+element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `#`
+to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
+Enter or Tab, Esc; Japanese input works, `＃` too: a candidate is never picked while the IME converts): it becomes a
+chip under the text and `#name[n]` in the text, n its number. (Messages written before `#` named elements have
+`@name[n]`: they still read as elements.) The chips are the request's targets: delete every mention of one to
+drop it, or remove it with ×, which leaves its mentions as plain text. What you select (on the canvas or in the
+explorer) is suggested as dashed chips: sending makes them targets, × drops a suggestion until the selection changes;
+the 💬 button next to the selection on the canvas, or `C`, makes them chips and puts the caret in the text. Selecting a
+note in one timeline's view of a storming targets that occurrence (the timeline and the step), the integrated canvas,
+which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
+text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
+sent message never changes. (Sessions from before kept a *dismissed* mark on some requests; they load and show as
+messages, and the page no longer dismisses.) Each target shows whether it is still in the sources
+(`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
+would be in does not parse. The agent sees each request's targets numbered from 1, so `#注文[1]` in one request never
+means another request's target.
+
+**Mentioning people.** Type `@` in the composer to mention someone in the session: the list offers the others —
+online first, then those away, the facilitator among them, never you — with their avatar and name; it does not open
+when no one else is in the session. Picking writes `@name[pN]` (shown as `@佐藤`, by the name they have now) and the
+message names them (up to 20 people; the server checks each is a participant of the session). In the stream a
+mentioned person is a link that opens the participants at them. The person mentioned sees that message with a faint
+blue background in their own stream, and while their chat is closed its floating button shows `@ 2` for the new
+messages that mention them instead of the count of new items. Nothing else notifies: no sound, no e-mail. The agent
+reads a person mentioned as a plain `@name`, never as a target.
+
+**Runs.** A run is up to 100 applied messages (requests) with the facilitator's note if any (up to 4,000
+characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.
+A run is `Queued`, `Running`, then `Completed`, `NeedsClarification` (the agent asked questions, answered in its card), `Declined` (the agent would not do the requests: they break its rules or are not
+about the model; the chat shows why, and no `dt fmt`/`dt check` runs), `Failed` or `Cancelled`; the facilitator can
+cancel a queued or running one. A run **succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new
+`.dt` error compared with the run's base revision, and every `.dtes` file still parses; diagnostics that were there
+before and `.dtes` warnings are shown (before → after), not a failure. A run that changes nothing completes with its
+base revision as its result.
+
+**The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
+request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
+request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
+options (the page always adds "other"). The chat shows what the AI says, as plain text, then the measured facts,
+small — `2 ファイル変更`, counted from the revisions before and after the run; nothing when no file changed. The AI names
+elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
+name display setting (a state or a command without its aggregate, a storming element without its storming; the whole
+name in its tooltip), as a link to the element. Whether a run succeeded is
+never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
+summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). An answer chosen in the
+card is frozen into the next run as `answerTo` and `answer` (the question and the options as they were shown); another
+alternative picked is frozen as `pick` (the run, the assumption and the alternative as they were shown), with a note
+asking for it; the agent is given the run it assumed in, and the card shows the pick with ◉.
+
+**Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
+Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
+message appears at once; its classification follows, shown to the facilitator only (a small 依頼 / 会話 mark).
+⤓ is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a probability near
+`threshold` leaves a message applicable — while a message read as talk can still be applied from its ▾. Results are
+kept in memory: after a restart, earlier messages are all applicable. **The text of each message is sent to
+Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
+the file); Cloudflare states that it does not use customer content processed by Workers AI to train models
+([Workers AI data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)). Disabled (the default),
+nothing is sent and every message can be applied.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
@@ -2488,14 +2627,31 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       "port": 0,               // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
       // Claude Code permission rules; this is the default
       "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+      // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
+      // ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], relative to this file, outside the workspace:
+      // "dt": ["node", "../domaintrail/dist/dt.js"]
+      // the most characters of diff given to the agent of the runs a run replies to or answers, all together;
+      // past it, only their changed files (default 20480)
+      // "maxPreviousRunDiff": 20480
     },
-    "maxParticipants": 50
+    "maxParticipants": 50,
+    // the emoji ☺+ offers first in the chat (1 to 8, each one emoji, distinct); any other can be typed there
+    "quickReactions": ["👍", "👀", "🤔", "🎉", "❤️", "🙏"],
+    // opt-in: messages classified by Cloudflare Workers AI (their text is sent to Cloudflare)
+    "classifier": {
+      "enabled": false,
+      "provider": "cloudflare-clef",
+      "model": "clef-flash",   // or "clef"
+      // "accountId": "<your Cloudflare account ID, 32 hex digits>", // required when enabled
+      "apiTokenEnv": "CLOUDFLARE_API_TOKEN",       // the NAME of the variable holding a Workers AI token
+      "threshold": 0.5         // from this probability a message is a request
+    }
   }
 }
 ```
 
 **Identity modes.** `dev` is for a session on one machine: the first visit gets a join form asking for a name, and an
-HttpOnly cookie keeps the sign-in (the panel's *Leave* signs out). `access` puts the session behind Cloudflare Access
+HttpOnly cookie keeps the sign-in (the collab menu's 退出 signs out). `access` puts the session behind Cloudflare Access
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
@@ -2507,10 +2663,10 @@ hand. `--port` and `--host` win over the file.
 A **revision** is every `.dt` and `.dtes` source of the workspace at one moment, with the validation per DSL (`.dt`
 errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One is taken when the session starts,
 before and after each run, when the facilitator records the current state (*Record the current state*), and around a
-restore; saves while a run is in progress make none. The panel lists them newest first, numbered in the order taken,
-with their origin.
+restore; saves while a run is in progress make none. They are numbered in the order taken; the chat shows those
+confirmed or restored, and a run's card reaches the two around it (its ⋯).
 
-- **Compare**: anyone chooses two revisions and gets every file of either, `.dt` and `.dtes` together, as added,
+- **Compare**: a run's card (⋯ → 比較) shows its revisions compared, every file of either, `.dt` and `.dtes` together, as added,
   removed, changed or unchanged, with a line diff, and both validations side by side. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
@@ -2536,10 +2692,21 @@ with their origin.
 --permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
 tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
-stormings; then `dt fmt` and `dt check` run (this same `dt`), and the server records the result.
+stormings; then `dt fmt` and `dt check` run, and the server records the result.
 
-- **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests in a
-  delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
+- **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
+  for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
+  the workspace. It runs `session.agent.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
+  clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
+  That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
+  pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
+  workspace (symbolic links followed), and fingerprinted: a run does not start once either file changed. The agent's
+  `dt` takes `fmt` or `check` and then `.dt` / `.dtes` files of the workspace only; any option or other argument is
+  refused with a message to the agent, and `-r <workspace>` is always added by the shim. Both the agent's `dt` and the
+  `dt fmt` / `dt check` after the agent run with a private working directory, never the workspace.
+
+- **Request text is untrusted.** Any participant writes it, and the agent reads it: the prompt puts the requests (and,
+  for replies and answers, the earlier run's messages, reply and diff) in a delimited block of JSON marked as data, but admit only people you trust, and keep `allowedTools` narrow (never a
   plain `Bash`).
 - **Your own settings still apply.** `--setting-sources user` keeps the workspace's `.claude/settings.json` and
   `.claude/settings.local.json` out (the agent could write them), but loads `~/.claude/settings.json` of whoever runs

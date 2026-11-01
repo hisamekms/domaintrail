@@ -1,12 +1,17 @@
 // Drafts of requests (ADR 0026, Request): kept only in this browser's IndexedDB, per session and participant, and
 // saved as they are typed. Nothing about a draft reaches the server until it is sent; each draft sent becomes its own
 // request (immutable once sent: a correction is a new request), and only then is the draft removed.
+import type { ComposerChip } from './mentions';
 import type { TargetDraft } from './targets';
 
 export interface Draft {
     readonly id: string;
     readonly target: TargetDraft;
     readonly body: string;
+    /** The composer's draft only: its targets (none: the whole workspace; absent in a draft saved before there were several). */
+    readonly chips?: readonly ComposerChip[];
+    /** The composer's draft only: the people its text mentions (absent in a draft saved before people could be). */
+    readonly people?: readonly string[];
     /** Milliseconds since the epoch. */
     readonly createdAt: number;
     readonly updatedAt: number;
@@ -28,6 +33,15 @@ export interface DraftStorage {
 }
 
 export const scopeKey = (scope: DraftScope): string => `${scope.session}\u0000${scope.participant}`;
+
+/**
+ * Where the chat's composer keeps its one unsent request (text and targets): a scope of its own next to the participant's drafts, so that
+ * the drafts list (the facilitator's panel) never shows it. A participant ID has no NUL, so no participant has it.
+ */
+export const composerScope = (scope: DraftScope): DraftScope => ({ session: scope.session, participant: `${scope.participant}\u0000composer` });
+
+/** The ID of the composer's one draft in its scope. */
+export const COMPOSER_DRAFT = 'composer';
 
 export const newDraft = (id: string, target: TargetDraft, now: number): Draft => ({ id, target, body: '', createdAt: now, updatedAt: now });
 

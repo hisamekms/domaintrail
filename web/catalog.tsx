@@ -6,8 +6,9 @@ import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import type { DomainModel, ElementModel, FieldModel, InvariantModel } from '@domaintrail/modeling/model/model';
 import { useT, type Messages } from './i18n';
 import { PersistenceBadge } from './behavior';
-import { ContextPicker } from './context-picker';
+import { ContextList } from './context-picker';
 import {
+    CATALOG_SECTIONS,
     catalogSections,
     commandsWithOutcome,
     fieldSetUsers,
@@ -17,12 +18,14 @@ import {
     orderedContexts,
     policiesReactingTo,
     policyTarget,
+    type CatalogFilter,
     type CatalogSection,
-    type CatalogSectionKey,
     type Namer,
 } from './model-utils';
 import { ownerElement } from './render';
 import { usagesOf } from './usages';
+import { shownKinds, toggleKind } from './view/filters';
+import { FilterSection } from './view/toolbar';
 
 interface CatalogProps {
     model: DomainModel;
@@ -33,23 +36,101 @@ interface CatalogProps {
     onSelect: (id: string) => void;
 }
 
+/** The catalog's filter (text, kinds and contexts), kept by the page while it is open: never remembered across reloads. */
+export function useCatalogFilter(): { filter: CatalogFilter; setFilter: (filter: CatalogFilter) => void } {
+    // not remembered, so that a reload never hides elements without saying so
+    const [filter, setFilter] = useState<CatalogFilter>({ query: '', sections: [], contexts: null });
+    return { filter, setFilter };
+}
+
+/** The catalog's text filter, at the left end of the view toolbar. */
+export function CatalogSearch(props: { filter: CatalogFilter; onChange: (filter: CatalogFilter) => void }) {
+    const { filter, onChange } = props;
+    const t = useT();
+    const setQuery = (query: string): void => onChange({ ...filter, query });
+    return (
+        <div className="explorer-filter view-search">
+            <Search size={14} aria-hidden />
+            <input
+                value={filter.query}
+                placeholder={t.filter}
+                aria-label={t.filter}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === 'Escape') setQuery('');
+                }}
+            />
+            {filter.query && (
+                <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
+                    <X size={14} aria-hidden />
+                </button>
+            )}
+        </div>
+    );
+}
+
+/** The catalog's part of the 絞り込み popover: the contexts and the kinds shown (none chosen: every kind). */
+export function CatalogFilters(props: { model: DomainModel; mode: DisplayMode; filter: CatalogFilter; onChange: (filter: CatalogFilter) => void }) {
+    const { model, filter, onChange } = props;
+    const t = useT();
+    const contextList = orderedContexts(model);
+    const keys = CATALOG_SECTIONS.map((s) => s.key);
+    const shown = shownKinds(keys, filter.sections);
+    const allKinds = filter.sections.length === 0;
+    const checkAll = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        if (checkAll.current) checkAll.current.indeterminate = !allKinds;
+    });
+    return (
+        <>
+            <FilterSection title={t.filters.contexts}>
+                <ContextList
+                    contexts={contextList}
+                    labels={model.contextLabels}
+                    selected={filter.contexts ?? contextList}
+                    mode={props.mode}
+                    onChange={(cs) => onChange({ ...filter, contexts: cs.length === contextList.length ? null : cs })}
+                />
+            </FilterSection>
+            <FilterSection title={t.filters.kinds}>
+                <div className="kind-list" role="group" aria-label={t.catalogKinds}>
+                    <label className="check kind-list-all">
+                        <input ref={checkAll} type="checkbox" checked={allKinds} disabled={allKinds} onChange={() => onChange({ ...filter, sections: [] })} />
+                        {t.filters.allKinds}
+                    </label>
+                    {CATALOG_SECTIONS.map((s) => {
+                        const on = shown.includes(s.key);
+                        return (
+                            <label key={s.key} className="check">
+                                <input
+                                    type="checkbox"
+                                    checked={on}
+                                    // the last kind shown stays: none chosen would show them all
+                                    disabled={on && shown.length === 1}
+                                    onChange={() => onChange({ ...filter, sections: toggleKind(keys, filter.sections, s.key) })}
+                                />
+                                <span className={`kind-dot kind-${s.kinds[0]}`} aria-hidden />
+                                {t.catalogSections[s.key]}
+                            </label>
+                        );
+                    })}
+                </div>
+            </FilterSection>
+        </>
+    );
+}
+
 /**
  * Cards to look over the model's elements, one section per kind of element.
- * The filter (text, kinds and contexts) hides what does not match, sections included.
+ * The filter (text, kinds and contexts, chosen in the view toolbar) hides what does not match, sections included.
  */
-export function Catalog(props: CatalogProps) {
-    const { model } = props;
-    const t = useT();
+export function Catalog(props: CatalogProps & { filter: CatalogFilter }) {
+    const { model, filter, ...rest } = props;
     const root = useRef<HTMLDivElement>(null);
-    // the filter is not remembered, so that a reload never hides elements without saying so
-    const [query, setQuery] = useState('');
-    const [kinds, setKinds] = useState<CatalogSectionKey[]>([]);
-    const [contexts, setContexts] = useState<string[] | null>(null);
-    const filter = { query, sections: kinds, contexts };
+    const t = useT();
     const filtering = isCatalogFiltered(filter);
     const all = catalogSections(model);
     const sections = filterCatalog(all, filter).filter((s) => !filtering || s.shown > 0);
-    const contextList = orderedContexts(model);
     const names = namer(props.mode, model);
     const shared = new Set(model.sharedContexts);
     const severity = new Map<string, 'error' | 'warning'>();
@@ -66,59 +147,14 @@ export function Catalog(props: CatalogProps) {
 
     return (
         <div className="catalog" ref={root}>
-            <div className="catalog-top">
-                <div className="catalog-filter-row">
-                    <div className="explorer-filter catalog-filter">
-                        <Search size={14} aria-hidden />
-                        <input
-                            value={query}
-                            placeholder={t.filter}
-                            aria-label={t.filter}
-                            onChange={(e) => setQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Escape') setQuery('');
-                            }}
-                        />
-                        {query && (
-                            <button className="icon-button" onClick={() => setQuery('')} data-tooltip={t.clearFilter} aria-label={t.clearFilter}>
-                                <X size={14} aria-hidden />
-                            </button>
-                        )}
-                    </div>
-                    <ContextPicker
-                        contexts={contextList}
-                        labels={model.contextLabels}
-                        selected={contexts ?? contextList}
-                        mode={props.mode}
-                        onChange={(cs) => setContexts(cs.length === contextList.length ? null : cs)}
-                    />
-                </div>
-                <div className="catalog-kinds" role="group" aria-label={t.catalogKinds}>
-                    {all.map((s) => (
-                        <button
-                            key={s.key}
-                            className={`catalog-kind kind-${s.kinds[0]}${kinds.length && !kinds.includes(s.key) ? ' off' : ''}`}
-                            aria-pressed={kinds.includes(s.key)}
-                            onClick={() =>
-                                setKinds(
-                                    kinds.includes(s.key)
-                                        ? kinds.filter((k) => k !== s.key)
-                                        : all.map((x) => x.key).filter((k) => k === s.key || kinds.includes(k)),
-                                )
-                            }
-                        >
-                            {t.catalogSections[s.key]}
-                        </button>
-                    ))}
-                </div>
-            </div>
             {sections.length === 0 && <p className="muted">{t.catalogNoMatches}</p>}
             {sections.map((s) => (
                 <Section
                     key={s.key}
                     section={s}
                     hits={filtering ? `${s.shown}/${s.count}` : undefined}
-                    {...props}
+                    model={model}
+                    {...rest}
                     names={names}
                     shared={shared}
                     severity={severity}

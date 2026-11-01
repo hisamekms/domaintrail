@@ -5,11 +5,12 @@
 import type { Json } from '@domaintrail/collaboration/protocol';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
 import type { DomainModel } from '@domaintrail/modeling/model/model';
+import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
 import type { SourceRange as StormingRange } from '@domaintrail/modeling/storming/ir';
 import type { RenderGraph } from '@domaintrail/visualization/domain/storming/ir';
 import { firstDeclarations } from '@domaintrail/visualization/domain/storming/semantic';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { resolve, selectedFile, withLabel } from '../model-utils';
+import { nameIn, namer, resolve, selectedFile, withLabel } from '../model-utils';
 import { locationOf } from '../source';
 
 export type ModelTarget = Json<Collaboration.ModelTarget>;
@@ -157,4 +158,68 @@ export function occurrenceNode(render: RenderGraph, t: Extract<ModelTarget, { ki
             n.eventId === t.eventName &&
             n.occurrences.some((o) => o.timelineId === t.timeline && occurrencePath(o.stepPath) === t.occurrence),
     )?.id;
+}
+
+/** What names a target as the page shows it now: the name display setting, the model and the stormings. */
+export interface NamingContext {
+    readonly mode: DisplayMode;
+    readonly model: DomainModel | null;
+    readonly stormings: readonly Pick<StormingView, 'id' | 'storming'>[];
+}
+
+/**
+ * A target's name in the current display mode (ラベル / 名前 / 両方), resolved from the model and the stormings now, as
+ * the inspector and the storming view name the same item; undefined for the whole workspace and for a target that no
+ * longer resolves (the caller falls back to the label stored with the request).
+ */
+export function targetName(t: ModelTarget, ctx: NamingContext): string | undefined {
+    switch (t.kind) {
+        case 'Workspace':
+            return undefined;
+        case 'DtElement': {
+            const r = ctx.model ? resolve(ctx.model, t.element) : undefined;
+            if (!r || r.kind === 'context') return undefined;
+            return namer(ctx.mode, ctx.model).id(t.element);
+        }
+        case 'DtesElement':
+        case 'DtesOccurrence': {
+            const view = ctx.stormings.find((s) => s.id === t.storming);
+            const local = t.kind === 'DtesElement' ? t.local : t.eventName;
+            const byId = view && firstDeclarations(view.storming);
+            const declaration = byId?.get(local);
+            if (!view || !byId || !declaration) return undefined;
+            const element = `${nameIn(ctx.mode, view.id, view.storming.label)} / ${nameIn(ctx.mode, local, declaration.label)}`;
+            if (t.kind === 'DtesElement') return element;
+            const timeline = byId.get(t.timeline);
+            const step = t.occurrence
+                .split('.')
+                .map((i) => Number(i) + 1)
+                .join('.');
+            return `${element} @ ${nameIn(ctx.mode, t.timeline, timeline?.label)} #${step}`;
+        }
+    }
+}
+
+/**
+ * A target's own name in the current display mode, without what it is in: a state's or a command's without its
+ * aggregate, a storming element's without its storming (`targetName` says the whole path). An occurrence keeps its
+ * timeline and step. Undefined where `targetName` is.
+ */
+export function targetShortName(t: ModelTarget, ctx: NamingContext): string | undefined {
+    switch (t.kind) {
+        case 'DtElement': {
+            const r = ctx.model ? resolve(ctx.model, t.element) : undefined;
+            if (!r || r.kind === 'context') return undefined;
+            if (r.kind === 'element') return nameIn(ctx.mode, r.el.name, r.el.label);
+            const own = r.kind === 'state' ? r.state : r.command;
+            return nameIn(ctx.mode, own.name, own.label);
+        }
+        case 'DtesElement': {
+            const view = ctx.stormings.find((s) => s.id === t.storming);
+            const declaration = view && firstDeclarations(view.storming).get(t.local);
+            return declaration ? nameIn(ctx.mode, t.local, declaration.label) : undefined;
+        }
+        default:
+            return targetName(t, ctx);
+    }
 }

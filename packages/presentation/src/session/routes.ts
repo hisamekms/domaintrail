@@ -1,18 +1,35 @@
 // The browser's side of a session (ADR 0026, S4): the REST API under `/api/session/`, the pages under `/session/` (the
 // join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
-// requests and dismiss their own; only the facilitator queues and cancels runs, takes, confirms and restores
+// requests and dismiss their own, react to messages and AI turns and vote on a question's options or an assumption's
+// choices; only the facilitator queues and cancels runs, takes, confirms and restores
 // revisions, dismisses others' requests and closes the session.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { IdentityKey } from '@domaintrail/collaboration/application/identity';
 import type { CollaborationUseCases, SessionState } from '@domaintrail/collaboration/application/use-cases';
-import type { Collaboration } from '@domaintrail/collaboration/generated/index';
+import { Collaboration } from '@domaintrail/collaboration/generated/index';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
-import { body, displayName, MAX_NOTE, MAX_REQUEST_TEXT, requestIds, targetSnapshot, text, uuid, type InvalidInput } from './input.js';
+import type { AnswerData, PickData } from '@domaintrail/collaboration/domain/reply';
+import {
+    answer as answerInput,
+    body,
+    pick as pickInput,
+    displayName,
+    markSign,
+    markTarget,
+    MAX_NOTE,
+    MAX_REQUEST_TEXT,
+    requestIds,
+    mentionIds,
+    requestTargets,
+    text,
+    uuid,
+    type InvalidInput,
+} from './input.js';
 import { joinPage, messagePage, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
 
@@ -46,8 +63,12 @@ export interface SessionHttpDeps {
     readonly facilitatorChanged: () => void;
     /** The facilitator closed the session (after the use case): revoke, disconnect, stop. */
     readonly closed: () => Promise<void>;
+    /** Another one-time facilitator link (`POST /api/session/facilitator/link`). */
+    readonly issueFacilitatorLink: () => Promise<{ readonly link: string; readonly expiresAt: string }>;
     /** The cookie is `Secure` (the session is served over https). */
     readonly secureCookie: boolean;
+    /** The emoji the add-reaction popover offers first (`session.quickReactions`), sent with the state. */
+    readonly quickReactions: readonly string[];
     readonly log: (line: string) => void;
 }
 
@@ -59,8 +80,19 @@ export function statusOf(type: string): number {
     switch (type) {
         case 'InvalidInput':
         case 'InvalidTarget':
+        case 'TooManyTargets':
+        case 'DuplicateTarget':
+        case 'WorkspaceTarget':
+        case 'TooManyMentions':
+        case 'DuplicateMention':
+        case 'MentionedNotAParticipant':
         case 'NoRequests':
         case 'UnknownRevision':
+        case 'InvalidReply':
+        case 'InvalidAnswer':
+        case 'AlternativeNotFound':
+        case 'PickMismatch':
+        case 'MarkNotForTarget':
             return 400;
         case 'Unauthenticated':
             return 401;
@@ -68,12 +100,16 @@ export function statusOf(type: string): number {
         case 'FacilitatorOnly':
         case 'NotYourRequest':
         case 'NotAParticipant':
+        case 'FacilitatorDoesNotVote':
             return 403;
         case 'NotFound':
         case 'SessionNotFound':
         case 'RequestNotFound':
         case 'RevisionNotFound':
         case 'RevisionOfAnotherSession':
+        case 'MarkTargetNotFound':
+        case 'RunNotFound':
+        case 'RunOfAnotherSession':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':
@@ -100,10 +136,15 @@ export function meOf(session: Collaboration.SessionId, who: Identified): Me {
     };
 }
 
-/** The state for the pages: the session's aggregates at `seq`, and the participant holding the facilitator's role, if any. */
-export function stateBody(state: SessionState, seq: number, facilitatorHolder?: Collaboration.ParticipantId): SessionStateBody {
+/** The state for the pages: the session's aggregates at `seq`, the quick reactions, and the participant holding the facilitator's role, if any. */
+export function stateBody(
+    state: SessionState,
+    seq: number,
+    quickReactions: readonly string[],
+    facilitatorHolder?: Collaboration.ParticipantId,
+): SessionStateBody {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded (dates as ISO strings)
-    return { ...state, seq, ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
+    return { ...state, seq, quickReactions, ...(facilitatorHolder && { facilitatorHolder }) } as unknown as SessionStateBody;
 }
 
 /** The cookie that signs a browser in (dev), or out (`secret` undefined). */
@@ -119,6 +160,20 @@ interface Route {
     /** Who may call it: anyone admitted (sign-in), any participant, or the facilitator only. */
     readonly role: 'anyone' | 'participant' | 'facilitator';
     readonly handle: (ctx: { req: IncomingMessage; res: ServerResponse; auth: Admitted; params: string[] }) => Promise<void>;
+}
+
+/**
+ * `apply` of a sent message: absent or false (only sent), true, or `{ note }` (queued at once as a run of its own, with
+ * the facilitator's note). `false` here is "do not apply", `undefined` an invalid input already answered.
+ */
+function applyInput(raw: unknown): { ok: true; value: false | { note?: Collaboration.Text } } | { ok: false; error: InvalidInput } {
+    if (raw === undefined || raw === false) return { ok: true, value: false };
+    if (raw === true) return { ok: true, value: {} };
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw) || Object.keys(raw).some((k) => k !== 'note'))
+        return { ok: false, error: { type: 'InvalidInput', field: 'apply', message: 'Expected true, or { "note": … }.' } };
+    if (!('note' in raw) || raw.note === undefined) return { ok: true, value: {} };
+    const note = text(raw.note, 'apply.note', MAX_NOTE);
+    return note.ok ? { ok: true, value: { note: note.value } } : note;
 }
 
 /** The participant of a route that needs one (checked before the route is called). */
@@ -243,7 +298,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'participant',
             handle: async ({ res }) => {
                 const seq = deps.cursor();
-                sendJson(res, 200, stateBody(await state(), seq, await identities.facilitatorParticipant()));
+                sendJson(res, 200, stateBody(await state(), seq, deps.quickReactions, await identities.facilitatorParticipant()));
             },
         },
         {
@@ -257,31 +312,65 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/requests$/,
             role: 'participant',
             handle: async ({ req, res, auth }) => {
-                const raw = await input(req, res, ['target', 'body']);
+                // `target` (one) is the former body, still taken; `apply` (the facilitator's): queued as a run at once
+                const raw = await input(req, res, ['targets', 'target', 'body', 'apply', 'replyTo', 'mentions']);
                 if (!raw) return;
-                const target = checked(res, targetSnapshot(raw.target));
-                if (!target) return;
+                const me = who(auth);
+                const apply = checked(res, applyInput(raw.apply));
+                if (apply === undefined) return;
+                if (apply && me.role !== 'facilitator') return fail(res, { type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' });
+                const targets = checked(res, requestTargets(raw));
+                if (!targets) return;
                 const t = checked(res, text(raw.body, 'body', MAX_REQUEST_TEXT));
                 if (!t) return;
-                if (!(await state()).revisions.some((r) => r.id === target.sourceRevision))
-                    return fail(res, { type: 'UnknownRevision', field: 'target.sourceRevision', message: 'Not a revision of this session.' });
-                const sent = await use.sendRequest({ session, author: who(auth).participant.id, target, body: t });
-                await answer(res, sent, 201, (request) => ({ request }));
+                // a reply to a run of the session (ended, not waiting for an answer): the use case checks the run
+                let replyTo: Collaboration.AgentRunId | undefined;
+                if (raw.replyTo !== undefined) {
+                    const id = checked(res, uuid(raw.replyTo, 'replyTo'));
+                    if (!id) return;
+                    replyTo = Collaboration.makeAgentRunId(id);
+                }
+                // the people `@name[pN]` mentions: participants of the session, each once (the use case checks who)
+                const mentions = checked(res, mentionIds(raw.mentions));
+                if (!mentions) return;
+                const revisions = (await state()).revisions;
+                const unknown = targets.findIndex((target) => !revisions.some((r) => r.id === target.sourceRevision));
+                if (unknown >= 0)
+                    return fail(res, {
+                        type: 'UnknownRevision',
+                        field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
+                        message: 'Not a revision of this session.',
+                    });
+                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t, ...(replyTo && { replyTo }), mentions });
+                if (!sent.ok || !apply) return answer(res, sent, 201, (request) => ({ request }));
+                // sent and applied: the message is in the stream whatever the run's fate
+                const queued = await use.queueRun({ session, requests: [sent.value.id], queuedBy: me.participant.id, ...(apply.note && { note: apply.note }) });
+                await answer(res, queued, 201, (run) => ({ request: sent.value, run }));
             },
         },
         {
             method: 'POST',
-            path: /^\/api\/session\/requests\/([^/]+)\/dismiss$/,
+            path: /^\/api\/session\/marks$/,
             role: 'participant',
-            handle: async ({ res, auth, params }) => {
-                const id = checked(res, uuid(params[0], 'id'));
-                if (!id) return;
-                const request = (await state()).requests.find((r) => r.id === id);
-                if (!request) return fail(res, { type: 'NotFound', aggregate: 'Request', id });
+            handle: async ({ req, res, auth }) => {
+                // a vote or a reaction of mine, placed or taken off; the facilitator's vote is refused by the model too
+                const raw = await input(req, res, ['target', 'sign', 'placed']);
+                if (!raw) return;
+                const target = checked(res, markTarget(raw.target));
+                if (!target) return;
+                const sign = checked(res, markSign(raw.sign));
+                if (!sign) return;
+                if (typeof raw.placed !== 'boolean') return fail(res, { type: 'InvalidInput', field: 'placed', message: 'Expected true or false.' });
                 const me = who(auth);
-                if (me.role !== 'facilitator' && request.author !== me.participant.id)
-                    return fail(res, { type: 'NotYourRequest', message: "Only the facilitator dismisses others' requests." });
-                await answer(res, await use.dismissRequest({ request: request.id, by: me.participant.id }), 200, (r) => ({ request: r }));
+                if (sign.kind === 'Vote' && me.role === 'facilitator')
+                    return fail(res, { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." });
+                const set = await use.setMark({ session, participant: me.participant.id, target, sign, placed: raw.placed });
+                if (!set.ok && set.error.type === 'ReactionLimitReached')
+                    return fail(res, {
+                        ...set.error,
+                        message: `A message or a turn holds at most ${set.error.limit} different emoji: add one already there, or take one off first.`,
+                    });
+                await answer(res, set, 200, (r) => ({ ...(r.placed && { placed: r.placed }), removed: r.removed }));
             },
         },
         {
@@ -295,7 +384,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/runs$/,
             role: 'facilitator',
             handle: async ({ req, res, auth }) => {
-                const raw = await input(req, res, ['requests', 'note']);
+                const raw = await input(req, res, ['requests', 'note', 'answerTo', 'answer', 'pick']);
                 if (!raw) return;
                 const ids = checked(res, requestIds(raw.requests));
                 if (!ids) return;
@@ -304,7 +393,30 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     note = checked(res, text(raw.note, 'note', MAX_NOTE));
                     if (!note) return;
                 }
-                const queued = await use.queueRun({ session, requests: ids, queuedBy: who(auth).participant.id, ...(note && { note }) });
+                // the answer to a run's questions: both fields, or neither
+                let answered: { answerTo: Collaboration.AgentRunId; answer: AnswerData } | undefined;
+                if (raw.answerTo !== undefined || raw.answer !== undefined) {
+                    if (raw.answerTo === undefined) return fail(res, { type: 'InvalidInput', field: 'answerTo', message: 'Expected the run answered.' });
+                    const to = checked(res, uuid(raw.answerTo, 'answerTo'));
+                    if (!to) return;
+                    const a = checked(res, answerInput(raw.answer));
+                    if (!a) return;
+                    answered = { answerTo: Collaboration.makeAgentRunId(to), answer: a };
+                }
+                // an alternative picked of a completed run's assumption: its requests queued again (checked by the use case)
+                let picked: PickData | undefined;
+                if (raw.pick !== undefined) {
+                    picked = checked(res, pickInput(raw.pick));
+                    if (!picked) return;
+                }
+                const queued = await use.queueRun({
+                    session,
+                    requests: ids,
+                    queuedBy: who(auth).participant.id,
+                    ...(note && { note }),
+                    ...(answered && { answer: answered }),
+                    ...(picked && { pick: picked }),
+                });
                 await answer(res, queued, 201, (run) => ({ run }));
             },
         },
@@ -410,6 +522,16 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const t = await use.targetStatuses({ session });
                 if (!t.ok) return fail(res, t.error);
                 sendJson(res, 200, { contentHash: t.value.contentHash, statuses: Object.fromEntries(t.value.statuses) });
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/facilitator\/link$/,
+            role: 'facilitator',
+            handle: async ({ req, res }) => {
+                if (!(await input(req, res, []))) return;
+                // another one-time link, to hand the role over (as `dt session link`)
+                sendJson(res, 201, await deps.issueFacilitatorLink());
             },
         },
         {

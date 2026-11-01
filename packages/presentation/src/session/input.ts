@@ -1,5 +1,19 @@
 // The inputs of the session APIs, checked at the boundary before any use case sees them: IDs, targets, text lengths.
 // A failure names the field and why, and is answered 400 (`InvalidInput`).
+import {
+    checkAgentReplyDeep,
+    readAnswer,
+    readReply,
+    REPLY_LIMITS,
+    toAgentReply,
+    type AnswerData,
+    type PickData,
+    type ReplyOutcome,
+} from '@domaintrail/collaboration/domain/reply';
+import { makeEmoji, VOTE } from '@domaintrail/collaboration/domain/marks';
+import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
+import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration/domain/body';
+import { MAX_EMOJI_BYTES, readEmoji } from '@domaintrail/modeling/core/emoji';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
 /** Why an input was refused. */
@@ -178,6 +192,45 @@ export function targetSnapshot(v: unknown, field = 'target'): Result<Collaborati
     return Collaboration.checkTargetSnapshot(snapshot).length ? invalid(`${field}.range`, 'A workspace target has no range.') : ok(snapshot);
 }
 
+/**
+ * What a request is about: 0 to 20 targets, each once, none of them the whole workspace (no target is the whole
+ * workspace). The body `{ targets }` is checked; the former `{ target }` (one target, the workspace's when it was
+ * about the whole workspace) is still taken, as a list of one or none.
+ */
+export function requestTargets(raw: Raw): Result<Collaboration.TargetSnapshot[], InvalidInput> {
+    if (raw.targets !== undefined && raw.target !== undefined) return invalid('target', "Give 'targets' only.");
+    if (raw.target !== undefined) {
+        const one = targetSnapshot(raw.target, 'target');
+        if (!one.ok) return one;
+        return ok(one.value.target.kind === 'Workspace' ? [] : [one.value]);
+    }
+    const v = raw.targets ?? [];
+    if (!Array.isArray(v) || v.length > MAX_REQUEST_TARGETS) return invalid('targets', `Expected 0 to ${MAX_REQUEST_TARGETS} targets.`);
+    const targets: Collaboration.TargetSnapshot[] = [];
+    for (const [i, item] of v.entries()) {
+        const t = targetSnapshot(item, `targets[${i}]`);
+        if (!t.ok) return t;
+        if (t.value.target.kind === 'Workspace') return invalid(`targets[${i}].target.kind`, 'No target is the whole workspace: leave the targets out.');
+        if (targets.some((o) => Collaboration.equalModelTarget(o.target, t.value.target))) return invalid(`targets[${i}].target`, 'Each target once.');
+        targets.push(t.value);
+    }
+    return ok(targets);
+}
+
+/** The people a message mentions: 0 to `MAX_REQUEST_MENTIONS` participant IDs, each once (the session's: the use case checks). */
+export function mentionIds(v: unknown, field = 'mentions'): Result<Collaboration.ParticipantId[], InvalidInput> {
+    if (v === undefined) return ok([]);
+    if (!Array.isArray(v) || v.length > MAX_REQUEST_MENTIONS) return invalid(field, `Expected 0 to ${MAX_REQUEST_MENTIONS} participant IDs.`);
+    const ids: Collaboration.ParticipantId[] = [];
+    for (const [i, raw] of v.entries()) {
+        const id = typeof raw === 'string' && raw.length <= 200 && !hasControl(raw) ? Collaboration.makeParticipantId(raw) : undefined;
+        if (!id?.ok) return invalid(`${field}[${i}]`, 'Expected a participant ID.');
+        if (ids.includes(id.value)) return invalid(`${field}[${i}]`, 'Each person once.');
+        ids.push(id.value);
+    }
+    return ok(ids);
+}
+
 /** The requests a run bundles: 1 to `MAX_RUN_REQUESTS` request IDs, in order. */
 export function requestIds(v: unknown, field = 'requests'): Result<Collaboration.RequestId[], InvalidInput> {
     if (!Array.isArray(v) || v.length === 0 || v.length > MAX_RUN_REQUESTS) return invalid(field, `Expected 1 to ${MAX_RUN_REQUESTS} request IDs.`);
@@ -188,4 +241,119 @@ export function requestIds(v: unknown, field = 'requests'): Result<Collaboration
         ids.push(Collaboration.makeRequestId(id.value));
     }
     return ok(ids);
+}
+
+/**
+ * The agent's reply as the subscriber sends it (`AgentReplyBody`), validated against the shape and `REPLY_LIMITS`, with
+ * the outcome the route ends the run with; its requests are IDs (that they are the run's requests is the model's
+ * `replyAboutInput`).
+ */
+export function agentReply(v: unknown, outcome: ReplyOutcome, field = 'reply'): Result<Collaboration.AgentReply, InvalidInput> {
+    const read = readReply(v, (x) => (uuid(x, field).ok ? Collaboration.makeRequestId(String(x)) : undefined), MAX_RUN_REQUESTS);
+    if (!read.ok) return invalid(read.error.path, read.error.message);
+    if (read.value.outcome !== outcome) return invalid(`${field}.outcome`, `Expected '${outcome}'.`);
+    const reply = toAgentReply(read.value);
+    const violated = checkAgentReplyDeep(reply);
+    return violated.length ? invalid(field, `Breaks ${violated.join(', ')}.`) : ok(reply);
+}
+
+/** The facilitator's answer to a run's questions (`AnswerBody`): its shape and limits; the run's questions are checked later. */
+export function answer(v: unknown, field = 'answer'): Result<AnswerData, InvalidInput> {
+    const read = readAnswer(v);
+    return read.ok ? read : invalid(read.error.path.replace(/^answer/, field), read.error.message);
+}
+
+/** A reply's key (a question's, an option's, an alternative's): letters, digits, `_` and `-`, at most `REPLY_LIMITS.key`. */
+function replyKey(v: unknown, field: string): Result<Collaboration.ReplyKey, InvalidInput> {
+    if (typeof v !== 'string' || !v || v.length > REPLY_LIMITS.key) return invalid(field, `Expected a key of 1 to ${REPLY_LIMITS.key} characters.`);
+    const k = Collaboration.makeReplyKey(v);
+    return k.ok ? k : invalid(field, 'Letters, digits, _ and - only.');
+}
+
+/** An assumption's number: its index in the reply, 0 to `REPLY_LIMITS.assumptions` - 1. */
+function assumptionNumber(n: unknown, field: string): Result<Collaboration.Tally, InvalidInput> {
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n >= REPLY_LIMITS.assumptions)
+        return invalid(field, `Expected an assumption's number, 0 to ${REPLY_LIMITS.assumptions - 1}.`);
+    const assumption = Collaboration.makeTally(n);
+    return assumption.ok ? assumption : invalid(field, 'Expected a number.');
+}
+
+/** The alternative picked of a completed run's assumption: `{ pickOf, assumption, alternative }` (its number and the alternative's key). */
+export function pick(v: unknown, field = 'pick'): Result<PickData, InvalidInput> {
+    if (!isObject(v)) return invalid(field, 'Expected { "pickOf": …, "assumption": …, "alternative": … }.');
+    const keys = ['pickOf', 'assumption', 'alternative'];
+    if (!body(v, keys).ok) return invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
+    const of = uuid(v.pickOf, `${field}.pickOf`);
+    if (!of.ok) return of;
+    const assumption = assumptionNumber(v.assumption, `${field}.assumption`);
+    if (!assumption.ok) return assumption;
+    const alternative = replyKey(v.alternative, `${field}.alternative`);
+    if (!alternative.ok) return alternative;
+    return ok({ pickOf: Collaboration.makeAgentRunId(of.value), assumption: assumption.value, alternative: alternative.value });
+}
+
+/** What a mark is on: a message, an AI turn, a question's option, or an assumption's choice (none: kept as it is). */
+export function markTarget(v: unknown, field = 'target'): Result<Collaboration.MarkTarget, InvalidInput> {
+    if (!isObject(v)) return invalid(field, 'Expected a mark target.');
+    const only = (keys: readonly string[]): Result<Raw, InvalidInput> =>
+        body(v, keys).ok ? ok(v) : invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
+    const id = <T>(name: string, make: (s: string) => T): Result<T, InvalidInput> => {
+        const u = uuid(v[name], `${field}.${name}`);
+        return u.ok ? ok(make(u.value)) : u;
+    };
+    switch (v.kind) {
+        case 'Message': {
+            const o = only(['kind', 'request']);
+            if (!o.ok) return o;
+            const request = id('request', Collaboration.makeRequestId);
+            return request.ok ? ok({ kind: 'Message', request: request.value }) : request;
+        }
+        case 'Turn': {
+            const o = only(['kind', 'run']);
+            if (!o.ok) return o;
+            const run = id('run', Collaboration.makeAgentRunId);
+            return run.ok ? ok({ kind: 'Turn', run: run.value }) : run;
+        }
+        case 'QuestionOption': {
+            const o = only(['kind', 'run', 'question', 'option']);
+            if (!o.ok) return o;
+            const run = id('run', Collaboration.makeAgentRunId);
+            if (!run.ok) return run;
+            const question = replyKey(v.question, `${field}.question`);
+            if (!question.ok) return question;
+            const option = replyKey(v.option, `${field}.option`);
+            if (!option.ok) return option;
+            return ok({ kind: 'QuestionOption', run: run.value, question: question.value, option: option.value });
+        }
+        case 'AssumptionChoice': {
+            const o = only(['kind', 'run', 'assumption', 'alternative']);
+            if (!o.ok) return o;
+            const run = id('run', Collaboration.makeAgentRunId);
+            if (!run.ok) return run;
+            const assumption = assumptionNumber(v.assumption, `${field}.assumption`);
+            if (!assumption.ok) return assumption;
+            if (v.alternative === undefined) return ok({ kind: 'AssumptionChoice', run: run.value, assumption: assumption.value });
+            const alternative = replyKey(v.alternative, `${field}.alternative`);
+            if (!alternative.ok) return alternative;
+            return ok({ kind: 'AssumptionChoice', run: run.value, assumption: assumption.value, alternative: alternative.value });
+        }
+        default:
+            return invalid(`${field}.kind`, 'Expected Message, Turn, QuestionOption or AssumptionChoice.');
+    }
+}
+
+/**
+ * A mark's sign: `{ kind: 'Vote' }`, or `{ kind: 'Reaction', emoji }` with exactly one emoji (one grapheme, at most
+ * `MAX_EMOJI_BYTES` bytes), turned into the form reactions are kept (NFC, fully qualified: ❤ is ❤️).
+ */
+export function markSign(v: unknown, field = 'sign'): Result<Collaboration.MarkSign, InvalidInput> {
+    if (!isObject(v)) return invalid(field, 'Expected { "kind": "Vote" } or { "kind": "Reaction", "emoji": … }.');
+    const keys = v.kind === 'Reaction' ? ['kind', 'emoji'] : ['kind'];
+    if (!body(v, keys).ok) return invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
+    if (v.kind === 'Vote') return ok(VOTE);
+    if (v.kind !== 'Reaction') return invalid(`${field}.kind`, 'Expected Vote or Reaction.');
+    const read = typeof v.emoji === 'string' ? readEmoji(v.emoji) : undefined;
+    const emoji = read === undefined ? undefined : makeEmoji(read);
+    if (!emoji?.ok) return invalid(`${field}.emoji`, `Expected exactly one emoji (at most ${MAX_EMOJI_BYTES} bytes).`);
+    return ok({ kind: 'Reaction', emoji: emoji.value });
 }

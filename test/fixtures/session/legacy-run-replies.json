@@ -1,0 +1,135 @@
+{
+  "_comment": "Rows as the session database held them before the agent's reply was structured (schema user_version 3): a run that needs clarification had its question as plain text only, a completed run no reply, and a run's input no answer. Copied in shape from a real session.db (whose requests still had one `target`); the content is made up.",
+  "session": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "state": "Open",
+    "data": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "facilitator": "local:facilitator",
+      "participants": [
+        {
+          "id": "local:facilitator",
+          "name": "Facilitator",
+          "role": "Facilitator",
+          "joinedAt": {
+            "$date": "2026-10-31T10:00:00.000Z"
+          }
+        }
+      ],
+      "startedAt": {
+        "$date": "2026-10-31T10:00:00.000Z"
+      },
+      "state": "Open"
+    }
+  },
+  "runs": [
+    {
+      "id": "00000000-0000-4000-8000-000000000030",
+      "state": "NeedsClarification",
+      "data": {
+        "state": "NeedsClarification",
+        "id": "00000000-0000-4000-8000-000000000030",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "input": {
+          "requests": [
+            {
+              "request": "00000000-0000-4000-8000-000000000010",
+              "author": "local:facilitator",
+              "target": {
+                "target": {
+                  "kind": "Workspace"
+                },
+                "sourceRevision": "00000000-0000-4000-8000-000000000020"
+              },
+              "body": "請求書に税区分を入れたい"
+            }
+          ]
+        },
+        "queuedBy": "local:facilitator",
+        "queuedAt": {
+          "$date": "2026-10-31T10:21:39.488Z"
+        },
+        "baseRevision": "00000000-0000-4000-8000-000000000021",
+        "startedAt": {
+          "$date": "2026-10-31T10:21:39.536Z"
+        },
+        "question": "税区分は (a) 金額が税抜か税込かを示す区分ですか、(b) 税抜額と税込額の両方ですか？",
+        "resultRevision": "00000000-0000-4000-8000-000000000021",
+        "finishedAt": {
+          "$date": "2026-10-31T10:21:55.903Z"
+        }
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000031",
+      "state": "Completed",
+      "data": {
+        "state": "Completed",
+        "id": "00000000-0000-4000-8000-000000000031",
+        "session": "00000000-0000-4000-8000-000000000001",
+        "input": {
+          "requests": [
+            {
+              "request": "00000000-0000-4000-8000-000000000010",
+              "author": "local:facilitator",
+              "target": {
+                "target": {
+                  "kind": "Workspace"
+                },
+                "sourceRevision": "00000000-0000-4000-8000-000000000020"
+              },
+              "body": "請求書に税区分を入れたい"
+            }
+          ],
+          "note": "一旦固定で税込"
+        },
+        "queuedBy": "local:facilitator",
+        "queuedAt": {
+          "$date": "2026-10-31T10:23:41.328Z"
+        },
+        "baseRevision": "00000000-0000-4000-8000-000000000022",
+        "startedAt": {
+          "$date": "2026-10-31T10:23:41.373Z"
+        },
+        "report": {
+          "exitCode": 0,
+          "formatted": true,
+          "checked": true,
+          "newDtErrors": 0,
+          "unparsedDtes": 0
+        },
+        "resultRevision": "00000000-0000-4000-8000-000000000023",
+        "changed": true,
+        "finishedAt": {
+          "$date": "2026-10-31T10:24:03.388Z"
+        }
+      }
+    }
+  ],
+  "outbox": [
+    {
+      "type": "RunNeedsClarification",
+      "payload": {
+        "type": "RunNeedsClarification",
+        "runId": "00000000-0000-4000-8000-000000000030",
+        "question": "税区分は (a) 金額が税抜か税込かを示す区分ですか、(b) 税抜額と税込額の両方ですか？",
+        "resultRevision": "00000000-0000-4000-8000-000000000021",
+        "finishedAt": {
+          "$date": "2026-10-31T10:21:55.903Z"
+        }
+      }
+    },
+    {
+      "type": "RunCompleted",
+      "payload": {
+        "type": "RunCompleted",
+        "runId": "00000000-0000-4000-8000-000000000031",
+        "resultRevision": "00000000-0000-4000-8000-000000000023",
+        "changed": true,
+        "finishedAt": {
+          "$date": "2026-10-31T10:24:03.388Z"
+        }
+      }
+    }
+  ]
+}

@@ -48,6 +48,7 @@
     "test": "bun test",
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
+    "session:seed": "bun ./scripts/session-seed.ts",
     "prepack": "bun run build"
   },
   "dependencies": {

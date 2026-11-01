@@ -1,5 +1,5 @@
 import { ChevronRight, Database, Diff, Folder, FolderOpen, PanelLeftClose, Search, TriangleAlert, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
 import type { ModelDiff } from '@domaintrail/visualization/domain/graph/diff';
 import type { DisplayMode } from '@domaintrail/visualization/domain/graph/ir';
@@ -33,6 +33,14 @@ interface RowState {
     visible: boolean;
     open?: boolean;
     onToggle?: () => void;
+}
+
+/**
+ * A row's depth, for its indentation in styles.css (`.tree-item`, `.tree-group`): one level deeper than the section
+ * titles, so that the first level is not flush with them, and in rem, so that it grows with the text size.
+ */
+export function indent(depth: number): CSSProperties & { '--depth': number } {
+    return { '--depth': depth };
 }
 
 /**
@@ -100,7 +108,7 @@ export function Explorer(props: ExplorerProps) {
             <div
                 ref={selected && row.visible ? selectedRef : undefined}
                 className={`tree-item${selected ? ' selected' : ''}`}
-                style={{ paddingLeft: 8 + row.depth * 14 }}
+                style={indent(row.depth)}
                 onClick={() => props.onSelect(id)}
                 onDoubleClick={() => props.onOpen(id)}
                 title={id}
@@ -118,7 +126,7 @@ export function Explorer(props: ExplorerProps) {
 
     /** A row that only opens and closes: a group of elements or a directory. */
     const group = (children: ReactNode, row: RowState & { open: boolean; onToggle: () => void }, className = 'tree-group') => (
-        <div className={className} style={{ paddingLeft: 8 + row.depth * 14 }} onClick={row.onToggle} aria-expanded={row.open}>
+        <div className={className} style={indent(row.depth)} onClick={row.onToggle} aria-expanded={row.open}>
             <Twisty row={row} />
             {children}
         </div>
@@ -325,7 +333,7 @@ export function Explorer(props: ExplorerProps) {
                     key={node.path}
                     ref={selected && visible ? selectedRef : undefined}
                     className={`tree-item${selected ? ' selected' : ''}`}
-                    style={{ paddingLeft: 8 + depth * 14 }}
+                    style={indent(depth)}
                     onClick={() => props.onSelect(id)}
                     title={node.path}
                 >

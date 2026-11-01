@@ -6,10 +6,12 @@ import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqli
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
 import type { Identity, IdentityKey, IdentityMode } from '../application/identity.js';
+import { markKey, signKey } from '../domain/marks.js';
 import type {
     AccessStore,
     EventOutbox,
     Lease,
+    MarkRepository,
     OutboxEntry,
     RequestRepository,
     RevisionStore,
@@ -22,6 +24,7 @@ import type {
     Stores,
     UnitOfWork,
 } from '../application/ports.js';
+import { upgradeEvent, upgradeRequest, upgradeRun } from './legacy.js';
 import { DATABASE_FILE, checkPlain, sessionDirectory } from './session-dir.js';
 
 /**
@@ -141,6 +144,52 @@ export const MIGRATIONS: readonly string[] = [
     ) STRICT;
     CREATE INDEX restore_operations_by_session ON restore_operations(session_id, seq);
     `,
+    // votes and reactions (ADR 0026, appendix "Votes and reactions"): a mark is kept when removed; at most one placed
+    // mark per participant, target (its key, `markKey`) and sign
+    `
+    CREATE TABLE marks (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        participant TEXT NOT NULL,
+        target_key TEXT NOT NULL,
+        sign TEXT NOT NULL,
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX marks_placed ON marks(session_id, participant, seq) WHERE state = 'Placed';
+    CREATE UNIQUE INDEX marks_one_placed ON marks(session_id, participant, target_key, sign) WHERE state = 'Placed';
+    `,
+    // ---------- replies to runs ----------
+    // a message that replies to a run (ADR 0026, amendment "replies to runs"): the run it names, kept next to the JSON so
+    // that the database refuses a reply to a run it does not hold; rows written before reply to none (NULL)
+    `
+    ALTER TABLE requests ADD COLUMN reply_to TEXT REFERENCES agent_runs(id);
+    CREATE INDEX requests_by_reply_to ON requests(reply_to) WHERE reply_to IS NOT NULL;
+    `,
+    // ---------- reactions as emoji ----------
+    // reactions are emoji the participants choose (ADR 0026, appendix "Votes and reactions"): a sign is the vote or a
+    // reaction with its emoji (`{ "kind": "Reaction", "emoji": "👍" }`), and the `sign` column its key (`signKey`:
+    // `Vote` or the emoji). The four named reactions become emoji — Agree 👍, Doubt 🤔, Like ❤️, Seen 👀 — in the
+    // marks and in the outbox's MarkPlaced / MarkRemoved, so that a page replaying them reads the same signs. The
+    // mapping is one to one: the unique index holds.
+    `
+    CREATE TEMP TABLE legacy_signs (name TEXT PRIMARY KEY, emoji TEXT NOT NULL);
+    INSERT INTO legacy_signs VALUES ('Agree', '👍'), ('Doubt', '🤔'), ('Like', '❤️'), ('Seen', '👀');
+    UPDATE marks
+       SET data = json_set(data, '$.sign', json_object('kind', 'Reaction', 'emoji', (SELECT emoji FROM legacy_signs WHERE name = marks.sign))),
+           sign = (SELECT emoji FROM legacy_signs WHERE name = marks.sign)
+     WHERE sign IN (SELECT name FROM legacy_signs);
+    UPDATE marks SET data = json_set(data, '$.sign', json_object('kind', 'Vote')) WHERE sign = 'Vote' AND json_type(data, '$.sign') = 'text';
+    UPDATE outbox
+       SET payload = json_set(payload, '$.sign', json(CASE json_extract(payload, '$.sign')
+               WHEN 'Vote' THEN json_object('kind', 'Vote')
+               ELSE json_object('kind', 'Reaction', 'emoji', (SELECT emoji FROM legacy_signs WHERE name = json_extract(payload, '$.sign')))
+           END))
+     WHERE type IN ('MarkPlaced', 'MarkRemoved') AND json_type(payload, '$.sign') = 'text'
+       AND (json_extract(payload, '$.sign') = 'Vote' OR json_extract(payload, '$.sign') IN (SELECT name FROM legacy_signs));
+    DROP TABLE legacy_signs;
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -244,9 +293,9 @@ export function decodeJson(json: string): unknown {
     });
 }
 
-/** An aggregate or event of our own rows: written by `encodeJson` from a value of that type. */
+/** An aggregate or event of our own rows: written by `encodeJson` from a value of that type (or its former shape, `upgrade`d). */
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- our own rows, written from values of the type by the stores below
-const decoded = <T>(json: string): T => decodeJson(json) as T;
+const decoded = <T>(json: string, upgrade: (v: unknown) => unknown = (v) => v): T => upgrade(decodeJson(json)) as T;
 
 const params = (values: Record<string, SQLInputValue>): Record<string, SQLInputValue> => values;
 
@@ -275,21 +324,21 @@ function sessions(db: DatabaseSync): SessionRepository {
 function requests(db: DatabaseSync): RequestRepository {
     const load = db.prepare('SELECT data FROM requests WHERE id = :id');
     const save = db.prepare(
-        `INSERT INTO requests (id, session_id, seq, state, data)
-         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data)
+        `INSERT INTO requests (id, session_id, seq, state, data, reply_to)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo)
          ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
     );
     const list = db.prepare('SELECT data FROM requests WHERE session_id = :session ORDER BY seq');
     return {
         load(id) {
             const r = load.get(params({ id }));
-            return r ? decoded<Collaboration.Request>(text(r, 'data')) : undefined;
+            return r ? decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest) : undefined;
         },
         save(request) {
-            save.run(params({ id: request.id, session: request.session, state: request.state, data: encodeJson(request) }));
+            save.run(params({ id: request.id, session: request.session, state: request.state, data: encodeJson(request), replyTo: request.replyTo ?? null }));
         },
         listBySession(session) {
-            return list.all(params({ session })).map((r) => decoded<Collaboration.Request>(text(r, 'data')));
+            return list.all(params({ session })).map((r) => decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest));
         },
     };
 }
@@ -298,7 +347,7 @@ function storedRun(r: Row): StoredRun {
     const token = optionalText(r, 'lease_token');
     const lease: Lease | undefined =
         token === undefined ? undefined : { owner: text(r, 'lease_owner'), token, expiresAt: new Date(integer(r, 'lease_expires_at')) };
-    return { run: decoded<Collaboration.AgentRun>(text(r, 'data')), lease, completedWith: optionalText(r, 'completed_with') };
+    return { run: decoded<Collaboration.AgentRun>(text(r, 'data'), upgradeRun), lease, completedWith: optionalText(r, 'completed_with') };
 }
 
 function runs(db: DatabaseSync): RunQueue {
@@ -350,7 +399,7 @@ function runs(db: DatabaseSync): RunQueue {
             if (save.run(params({ id: run.id, state: run.state, data: encodeJson(run) })).changes !== 1) throw new Error(`Run ${run.id} was never queued`);
         },
         listBySession(session) {
-            return list.all(params({ session })).map((r) => decoded<Collaboration.AgentRun>(text(r, 'data')));
+            return list.all(params({ session })).map((r) => decoded<Collaboration.AgentRun>(text(r, 'data'), upgradeRun));
         },
         active(session, now) {
             const r = active.get(params({ session, now: now.getTime() }));
@@ -413,6 +462,42 @@ function revisions(db: DatabaseSync): RevisionStore {
     };
 }
 
+function marks(db: DatabaseSync): MarkRepository {
+    const load = db.prepare('SELECT data FROM marks WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO marks (id, session_id, seq, participant, target_key, sign, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM marks), :participant, :key, :sign, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
+    );
+    const placed = db.prepare("SELECT data FROM marks WHERE session_id = :session AND state = 'Placed' ORDER BY seq");
+    const placedBy = db.prepare("SELECT data FROM marks WHERE session_id = :session AND participant = :participant AND state = 'Placed' ORDER BY seq");
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.Mark>(text(r, 'data')) : undefined;
+        },
+        save(mark) {
+            save.run(
+                params({
+                    id: mark.id,
+                    session: mark.session,
+                    participant: mark.participant,
+                    key: markKey(mark.target),
+                    sign: signKey(mark.sign),
+                    state: mark.state,
+                    data: encodeJson(mark),
+                }),
+            );
+        },
+        placedBySession(session) {
+            return placed.all(params({ session })).map((r) => decoded<Collaboration.PlacedMark>(text(r, 'data')));
+        },
+        placedBy(session, participant) {
+            return placedBy.all(params({ session, participant })).map((r) => decoded<Collaboration.PlacedMark>(text(r, 'data')));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -423,7 +508,7 @@ function outbox(db: DatabaseSync): EventOutbox {
         seq: integer(r, 'seq'),
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the session of an outbox row, written from a SessionId
         session: text(r, 'session_id') as Collaboration.SessionId,
-        event: decoded<Collaboration.PersistentEvent>(text(r, 'payload')),
+        event: decoded<Collaboration.PersistentEvent>(text(r, 'payload'), upgradeEvent),
         recordedAt: new Date(text(r, 'recorded_at')),
     });
     return {
@@ -564,6 +649,7 @@ export function createStores(db: DatabaseSync): Stores {
         requests: requests(db),
         runs: runs(db),
         revisions: revisions(db),
+        marks: marks(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),
