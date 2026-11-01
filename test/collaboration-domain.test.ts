@@ -260,7 +260,8 @@ describe('transitions', () => {
             [guest, 'Participant'],
         ]);
         expect(sessionCommands.join(joined, guest, name, later)).toEqual({ ok: false, error: { type: 'AlreadyJoined', participant: guest } });
-        expect(value(sessionCommands.close(joined, later)).Closed.aggregate).toMatchObject({ state: 'Closed', closedAt: later });
+        expect(value(sessionCommands.close(joined, 'Facilitator', later)).Closed.aggregate).toMatchObject({ state: 'Closed', closedAt: later });
+        expect(sessionCommands.close(joined, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
     });
 
     test('a request is dismissed as a mark: it keeps its content', () => {
@@ -320,18 +321,23 @@ describe('transitions', () => {
         expect(agentRunCommands.finish(running, report(0), result, false, undefined, later)).toEqual({ ok: false, error: { type: 'ChangedMismatch' } });
     });
 
-    test('fail needs a reason other than the rule; cancel keeps the base revision of a running run', () => {
+    test("fail needs a reason other than the rule; cancel, the facilitator's, keeps the base revision of a running run", () => {
         expect(agentRunCommands.fail(running, 'RuleNotMet', later)).toEqual({ ok: false, error: { type: 'ReportRequired' } });
         const failed = value(agentRunCommands.fail(running, 'LeaseExpired', later)).Failed.aggregate;
         expect(failed).toMatchObject({ state: 'Failed', reason: 'LeaseExpired', finishedAt: later });
         expect('report' in failed).toBe(false);
-        expect(value(agentRunCommands.cancel(running, facilitator, later)).Cancelled.aggregate).toMatchObject({ baseRevision: base, cancelledBy: facilitator });
+        expect(value(agentRunCommands.cancel(running, facilitator, 'Facilitator', later)).Cancelled.aggregate).toMatchObject({
+            baseRevision: base,
+            cancelledBy: facilitator,
+        });
+        expect(agentRunCommands.cancel(running, guest, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
         const { baseRevision: _b, startedAt: _s, ...rest } = running;
         const queued: C.QueuedAgentRun = { ...rest, state: 'Queued' };
-        expect('baseRevision' in value(agentRunCommands.cancel(queued, facilitator, later)).Cancelled.aggregate).toBe(false);
+        expect('baseRevision' in value(agentRunCommands.cancel(queued, facilitator, 'Facilitator', later)).Cancelled.aggregate).toBe(false);
+        expect(agentRunCommands.cancel(queued, guest, 'Participant', later)).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
     });
 
-    test('take and restore require the content hash of the files', () => {
+    test('take and restore require the content hash of the files; restore, the facilitator', () => {
         const files = [snapshotFile(path('a.dt'), bytes('context A {}'))];
         const validation = summarize([], false);
         const id = C.makeRevisionId('00000000-0000-4000-8000-000000000006');
@@ -344,7 +350,11 @@ describe('transitions', () => {
         ).toEqual({ ok: false, error: { type: 'RestoreNeedsCheck' } });
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for MakeRestorableRevision's check
         const restorable = base as C.RestorableRevision;
-        const restored = value(revisionCommands.restore(id, sessionId, restorable, result, snapshotHash(files), files, validation, at)).Recorded;
+        expect(revisionCommands.restore(id, sessionId, restorable, result, snapshotHash(files), files, validation, 'Participant', at)).toEqual({
+            ok: false,
+            error: { type: 'FacilitatorOnly' },
+        });
+        const restored = value(revisionCommands.restore(id, sessionId, restorable, result, snapshotHash(files), files, validation, 'Facilitator', at)).Recorded;
         expect(restored.aggregate.origin).toEqual({ kind: 'Restored', restoredFrom: base, preRestore: result });
         expect(restored.events.RevisionRestored).toMatchObject({ restoredFrom: base, preRestore: result });
     });

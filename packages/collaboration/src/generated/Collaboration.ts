@@ -735,15 +735,18 @@ export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: Ag
 /**
  * AgentRun.queue (new -> Queued) — factory
  * 実行を登録する
+ * 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
  * @param id エージェント実行ID
  * @param session セッション
  * @param requests 未処理の依頼
  * @param input 実行の入力
  * @param queuedBy 参加者ID
+ * @param queuedByRole 役割
+ * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
  * @emits RunQueued — exactly once when the command succeeds
- * @see model/agent-run.dt:227
+ * @see model/agent-run.dt:228
  */
 export type QueueAgentRun = (
     id: AgentRunId,
@@ -751,22 +754,24 @@ export type QueueAgentRun = (
     requests: readonly [PendingRequest, ...PendingRequest[]],
     input: RunInput,
     queuedBy: ParticipantId,
+    queuedByRole: ParticipantRole,
     queuedAt: Timestamp,
 ) => Result<{
     readonly Queued: {
         readonly aggregate: QueuedAgentRun;
         readonly events: { readonly RunQueued: RunQueued };
     };
-}, DuplicateRequest | InputMismatch>;
+}, FacilitatorOnly | DuplicateRequest | InputMismatch>;
 
 /**
  * AgentRun.queue, decided by one function; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
  * new -> Queued — set: every field
  * @emits RunQueued — exactly once when the command succeeds
- * @see model/agent-run.dt:227
+ * @see model/agent-run.dt:228
  */
 export type QueueAgentRunDecision = (
     id: AgentRunId,
@@ -774,19 +779,21 @@ export type QueueAgentRunDecision = (
     requests: readonly [PendingRequest, ...PendingRequest[]],
     input: RunInput,
     queuedBy: ParticipantId,
+    queuedByRole: ParticipantRole,
     queuedAt: Timestamp,
 ) => Result<{
     readonly Queued: {
         readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp };
         readonly events: { readonly RunQueued: RunQueued };
     };
-}, DuplicateRequest | InputMismatch>;
+}, FacilitatorOnly | DuplicateRequest | InputMismatch>;
 
 /**
  * The first requirement of AgentRun.queue that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:227
+ * @see model/agent-run.dt:228
  */
-export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSession, requests: readonly [PendingRequest, ...PendingRequest[]], input: RunInput, _queuedBy: ParticipantId, _queuedAt: Timestamp): 'distinctRequests' | 'inputCoversRequests' | undefined {
+export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSession, requests: readonly [PendingRequest, ...PendingRequest[]], input: RunInput, _queuedBy: ParticipantId, queuedByRole: ParticipantRole, _queuedAt: Timestamp): 'facilitatorQueues' | 'distinctRequests' | 'inputCoversRequests' | undefined {
+    if (!(queuedByRole === "Facilitator")) return 'facilitatorQueues';
     if (!(distinct(requests, ($16: RequestId, $17: RequestId) => $16 === $17))) return 'distinctRequests';
     if (!((input.requests.length === requests.length) && requests.every(($r) => input.requests.some(($i) => ($i.request === $r))))) return 'inputCoversRequests';
     return undefined;
@@ -799,7 +806,7 @@ export function checkQueueAgentRunRequires(_id: AgentRunId, _session: ActiveSess
  * @param baseRevision リビジョンID
  * @changes none — the command changes no common field
  * @emits RunStarted — exactly once when the command succeeds
- * @see model/agent-run.dt:236
+ * @see model/agent-run.dt:240
  */
 export type StartAgentRun = (
     agentRun: QueuedAgentRun,
@@ -817,7 +824,7 @@ export type StartAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
  * Queued -> Running — set: baseRevision (new in Running), startedAt (new in Running); carried over: id, session, input, queuedBy, queuedAt
- * @see model/agent-run.dt:236
+ * @see model/agent-run.dt:240
  */
 export type StartAgentRunDecision = {
     /** @emits RunStarted — exactly once when the command succeeds */
@@ -843,7 +850,7 @@ export type StartAgentRunDecision = {
  * @changes none — the command changes no common field
  * @emits RunCompleted — exactly once when it ends in Completed
  * @emits RunFailed — exactly once when it ends in Failed
- * @see model/agent-run.dt:242
+ * @see model/agent-run.dt:246
  */
 export type FinishAgentRun = (
     agentRun: RunningAgentRun,
@@ -879,7 +886,7 @@ export type FinishAgentRun = (
  * @changes none — the command changes no common field
  * Running -> Completed — set: report (new in Completed), resultRevision (new in Completed), changed (new in Completed), reply (new in Completed), finishedAt (new in Completed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:242
+ * @see model/agent-run.dt:246
  */
 export type FinishAgentRunDecision = {
     /**
@@ -907,7 +914,7 @@ export type FinishAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.finish that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:242
+ * @see model/agent-run.dt:246
  */
 export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: RunReport, resultRevision: RevisionId, changed: boolean, reply: AgentReply | undefined, _finishedAt: Timestamp): 'changedMatchesResult' | 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!((!(changed === true) || !(resultRevision === agentRun.baseRevision)) && (!(changed === false) || (resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
@@ -926,7 +933,7 @@ export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, _report: 
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunNeedsClarification — exactly once when the command succeeds
- * @see model/agent-run.dt:256
+ * @see model/agent-run.dt:260
  */
 export type AskClarificationAgentRun = (
     agentRun: RunningAgentRun,
@@ -948,7 +955,7 @@ export type AskClarificationAgentRun = (
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> NeedsClarification — set: question (new in NeedsClarification), reply (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:256
+ * @see model/agent-run.dt:260
  */
 export type AskClarificationAgentRunDecision = {
     /** @emits RunNeedsClarification — exactly once when the command succeeds */
@@ -962,7 +969,7 @@ export type AskClarificationAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.askClarification that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:256
+ * @see model/agent-run.dt:260
  */
 export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, _question: Text, reply: AgentReply | undefined, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsks' | 'replyAboutInput' | undefined {
     if (!(!(reply !== undefined) || (reply.questions.length >= 1))) return 'replyAsks';
@@ -980,7 +987,7 @@ export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun,
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunDeclined — exactly once when the command succeeds
- * @see model/agent-run.dt:267
+ * @see model/agent-run.dt:271
  */
 export type DeclineAgentRun = (
     agentRun: RunningAgentRun,
@@ -1001,7 +1008,7 @@ export type DeclineAgentRun = (
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> Declined — set: reply (new in Declined), resultRevision (new in Declined), finishedAt (new in Declined); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:267
+ * @see model/agent-run.dt:271
  */
 export type DeclineAgentRunDecision = {
     /** @emits RunDeclined — exactly once when the command succeeds */
@@ -1015,7 +1022,7 @@ export type DeclineAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.decline that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:267
+ * @see model/agent-run.dt:271
  */
 export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: AgentReply, _resultRevision: RevisionId, _finishedAt: Timestamp): 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!(reply.questions.length === 0)) return 'replyAsksNothing';
@@ -1031,7 +1038,7 @@ export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, reply: A
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * @emits RunFailed — exactly once when the command succeeds
- * @see model/agent-run.dt:276
+ * @see model/agent-run.dt:280
  */
 export type FailAgentRun = (
     agentRun: RunningAgentRun,
@@ -1050,7 +1057,7 @@ export type FailAgentRun = (
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see model/agent-run.dt:276
+ * @see model/agent-run.dt:280
  */
 export type FailAgentRunDecision = {
     /** @emits RunFailed — exactly once when the command succeeds */
@@ -1064,7 +1071,7 @@ export type FailAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.fail that does not hold, in declaration order; `undefined` when all hold.
- * @see model/agent-run.dt:276
+ * @see model/agent-run.dt:280
  */
 export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: FailureReason, _finishedAt: Timestamp): 'abnormal' | undefined {
     if (!(!(reason === "RuleNotMet"))) return 'abnormal';
@@ -1074,46 +1081,60 @@ export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, reason: Fa
 /**
  * AgentRun.cancel (Queued | Running -> Cancelled)
  * 実行を取り消す
+ * 取り消すのはファシリテーター。
  * @param cancelledBy 参加者ID
+ * @param cancelledByRole 役割
+ * @requires facilitatorCancels (ファシリテーターが取り消す) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits RunCancelled — exactly once when the command succeeds
- * @see model/agent-run.dt:281
+ * @see model/agent-run.dt:286
  */
 export type CancelAgentRun = (
     agentRun: QueuedAgentRun | RunningAgentRun,
     cancelledBy: ParticipantId,
+    cancelledByRole: ParticipantRole,
     cancelledAt: Timestamp,
 ) => Result<{
     readonly Cancelled: {
         readonly aggregate: CancelledAgentRun;
         readonly events: { readonly RunCancelled: RunCancelled };
     };
-}, never>;
+}, FacilitatorOnly>;
 
 /**
  * AgentRun.cancel, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires facilitatorCancels (ファシリテーターが取り消す) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt
  * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
- * @see model/agent-run.dt:281
+ * @see model/agent-run.dt:286
  */
 export type CancelAgentRunDecision = {
     /** @emits RunCancelled — exactly once when the command succeeds */
-    readonly Queued: (agentRun: QueuedAgentRun, cancelledBy: ParticipantId, cancelledAt: Timestamp) => Result<{
+    readonly Queued: (agentRun: QueuedAgentRun, cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) => Result<{
         readonly Cancelled: {
             readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
             readonly events: { readonly RunCancelled: RunCancelled };
         };
-    }, never>;
+    }, FacilitatorOnly>;
     /** @emits RunCancelled — exactly once when the command succeeds */
-    readonly Running: (agentRun: RunningAgentRun, cancelledBy: ParticipantId, cancelledAt: Timestamp) => Result<{
+    readonly Running: (agentRun: RunningAgentRun, cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) => Result<{
         readonly Cancelled: {
             readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
             readonly events: { readonly RunCancelled: RunCancelled };
         };
-    }, never>;
+    }, FacilitatorOnly>;
 };
+
+/**
+ * The first requirement of AgentRun.cancel that does not hold, in declaration order; `undefined` when all hold.
+ * @see model/agent-run.dt:286
+ */
+export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, _cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, _cancelledAt: Timestamp): 'facilitatorCancels' | undefined {
+    if (!(cancelledByRole === "Facilitator")) return 'facilitatorCancels';
+    return undefined;
+}
 
 /**
  * Command contracts of AgentRun. Implement this interface by hand.
@@ -1146,7 +1167,7 @@ export type AgentRunEvent = RunQueued | RunStarted | RunCompleted | RunFailed | 
 /**
  * 実行登録
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:286
+ * @see model/agent-run.dt:294
  */
 export interface RunQueued {
     readonly type: 'RunQueued';
@@ -1164,7 +1185,7 @@ export interface RunQueued {
 /**
  * 実行開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:294
+ * @see model/agent-run.dt:302
  */
 export interface RunStarted {
     readonly type: 'RunStarted';
@@ -1178,7 +1199,7 @@ export interface RunStarted {
 /**
  * 実行完了
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:300
+ * @see model/agent-run.dt:308
  */
 export interface RunCompleted {
     readonly type: 'RunCompleted';
@@ -1193,7 +1214,7 @@ export interface RunCompleted {
 /**
  * 確認依頼
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:307
+ * @see model/agent-run.dt:315
  */
 export interface RunNeedsClarification {
     readonly type: 'RunNeedsClarification';
@@ -1209,7 +1230,7 @@ export interface RunNeedsClarification {
 /**
  * 実行辞退
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:314
+ * @see model/agent-run.dt:322
  */
 export interface RunDeclined {
     readonly type: 'RunDeclined';
@@ -1223,7 +1244,7 @@ export interface RunDeclined {
 /**
  * 実行失敗
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:320
+ * @see model/agent-run.dt:328
  */
 export interface RunFailed {
     readonly type: 'RunFailed';
@@ -1237,7 +1258,7 @@ export interface RunFailed {
 /**
  * 実行取消
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/agent-run.dt:326
+ * @see model/agent-run.dt:334
  */
 export interface RunCancelled {
     readonly type: 'RunCancelled';
@@ -1251,7 +1272,7 @@ export interface RunCancelled {
 /**
  * 依頼の重複
  * 同じ依頼を2回束ねた。
- * @see model/agent-run.dt:333
+ * @see model/agent-run.dt:341
  */
 export interface DuplicateRequest {
     readonly type: 'DuplicateRequest';
@@ -1260,7 +1281,7 @@ export interface DuplicateRequest {
 /**
  * 入力の不一致
  * 凍結した入力が、束ねた依頼と合わない。
- * @see model/agent-run.dt:336
+ * @see model/agent-run.dt:344
  */
 export interface InputMismatch {
     readonly type: 'InputMismatch';
@@ -1269,7 +1290,7 @@ export interface InputMismatch {
 /**
  * 変更の有無の不一致
  * 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
- * @see model/agent-run.dt:339
+ * @see model/agent-run.dt:347
  */
 export interface ChangedMismatch {
     readonly type: 'ChangedMismatch';
@@ -1278,7 +1299,7 @@ export interface ChangedMismatch {
 /**
  * 報告が必要
  * 成功の条件を満たさない失敗は、報告とともに finish で終える。
- * @see model/agent-run.dt:342
+ * @see model/agent-run.dt:350
  */
 export interface ReportRequired {
     readonly type: 'ReportRequired';
@@ -1287,7 +1308,7 @@ export interface ReportRequired {
 /**
  * 別案を選べない実行
  * 別案を選んだ実行は、完了していないか、返答に前提がない（別案を選べるのは前提のある完了の実行）。
- * @see model/agent-run.dt:345
+ * @see model/agent-run.dt:353
  */
 export interface RunNotPickable {
     readonly type: 'RunNotPickable';
@@ -1298,7 +1319,7 @@ export interface RunNotPickable {
 /**
  * 返答にない別案
  * 選んだ前提の番号または別案のキーが、その実行の返答にない。
- * @see model/agent-run.dt:350
+ * @see model/agent-run.dt:358
  */
 export interface AlternativeNotFound {
     readonly type: 'AlternativeNotFound';
@@ -1309,7 +1330,7 @@ export interface AlternativeNotFound {
 /**
  * 選んだ実行と依頼の不一致
  * 別案を選んでやり直す実行の依頼が、選んだ実行の依頼と同じでない。
- * @see model/agent-run.dt:355
+ * @see model/agent-run.dt:363
  */
 export interface PickMismatch {
     readonly type: 'PickMismatch';
@@ -1320,7 +1341,7 @@ export interface PickMismatch {
 /**
  * 返答の不整合
  * エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
- * @see model/agent-run.dt:360
+ * @see model/agent-run.dt:368
  */
 export interface InvalidReply {
     readonly type: 'InvalidReply';
@@ -2926,6 +2947,7 @@ export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequir
  * Revision.restore (new -> Recorded) — factory
  * リビジョンを復元する
  * 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
+ * 復元するのはファシリテーター。
  * @param id リビジョンID
  * @param session セッション
  * @param restoredFrom 復元元
@@ -2933,9 +2955,11 @@ export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequir
  * @param contentHash 内容ハッシュ
  * @param files スナップショットのファイル
  * @param validation 検証の要約
+ * @param restoredByRole 役割
+ * @requires facilitatorRestores (ファシリテーターが復元する) else FacilitatorOnly: restoredByRole == ParticipantRole.Facilitator
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see model/revision.dt:82
+ * @see model/revision.dt:83
  */
 export type RestoreRevision = (
     id: RevisionId,
@@ -2945,21 +2969,23 @@ export type RestoreRevision = (
     contentHash: ContentHash,
     files: readonly SnapshotFile[],
     validation: ValidationSummary,
+    restoredByRole: ParticipantRole,
     takenAt: Timestamp,
 ) => Result<{
     readonly Recorded: {
         readonly aggregate: RecordedRevision;
         readonly events: { readonly RevisionRestored: RevisionRestored };
     };
-}, ContentHashMismatch>;
+}, FacilitatorOnly | ContentHashMismatch>;
 
 /**
  * Revision.restore, decided by one function; implement it with `decide(RevisionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * @requires facilitatorRestores (ファシリテーターが復元する) else FacilitatorOnly: restoredByRole == ParticipantRole.Facilitator
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * new -> Recorded — set: every field
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see model/revision.dt:82
+ * @see model/revision.dt:83
  */
 export type RestoreRevisionDecision = (
     id: RevisionId,
@@ -2969,27 +2995,29 @@ export type RestoreRevisionDecision = (
     contentHash: ContentHash,
     files: readonly SnapshotFile[],
     validation: ValidationSummary,
+    restoredByRole: ParticipantRole,
     takenAt: Timestamp,
 ) => Result<{
     readonly Recorded: {
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
         readonly events: { readonly RevisionRestored: RevisionRestored };
     };
-}, ContentHashMismatch>;
+}, FacilitatorOnly | ContentHashMismatch>;
 
 /**
  * The requirements of Revision.restore that the DSL does not express: implement them in your code and pass them to `checkRestoreRevisionRequiresWith`.
- * @see model/revision.dt:82
+ * @see model/revision.dt:83
  */
-export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => boolean };
+export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, restoredByRole: ParticipantRole, takenAt: Timestamp) => boolean };
 
 /**
  * The first requirement of Revision.restore that does not hold, in declaration order; `undefined` when all hold.
- * @see model/revision.dt:82
+ * @see model/revision.dt:83
  */
-export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, takenAt: Timestamp) => 'hashMatchesFiles' | undefined {
-    return (id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt) => {
-        if (!checks.hashMatchesFiles(id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt)) return 'hashMatchesFiles';
+export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: readonly SnapshotFile[], validation: ValidationSummary, restoredByRole: ParticipantRole, takenAt: Timestamp) => 'facilitatorRestores' | 'hashMatchesFiles' | undefined {
+    return (id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt) => {
+        if (!(restoredByRole === "Facilitator")) return 'facilitatorRestores';
+        if (!checks.hashMatchesFiles(id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt)) return 'hashMatchesFiles';
         return undefined;
     };
 }
@@ -2997,38 +3025,52 @@ export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclared
 /**
  * Revision.confirm (Recorded -> Confirmed)
  * リビジョンを確認済みにする
+ * 確認済みにするのはファシリテーター。
  * @param confirmedBy 参加者ID
+ * @param confirmedByRole 役割
+ * @requires facilitatorConfirms (ファシリテーターが確認する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits RevisionConfirmed — exactly once when the command succeeds
- * @see model/revision.dt:88
+ * @see model/revision.dt:93
  */
 export type ConfirmRevision = (
     revision: RecordedRevision,
     confirmedBy: ParticipantId,
+    confirmedByRole: ParticipantRole,
     confirmedAt: Timestamp,
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedRevision;
         readonly events: { readonly RevisionConfirmed: RevisionConfirmed };
     };
-}, never>;
+}, FacilitatorOnly>;
 
 /**
  * Revision.confirm, decided per source state; implement it with `decide(RevisionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires facilitatorConfirms (ファシリテーターが確認する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Recorded -> Confirmed — set: confirmedBy (new in Confirmed), confirmedAt (new in Confirmed); carried over: id, session, origin, contentHash, files, validation, takenAt
- * @see model/revision.dt:88
+ * @see model/revision.dt:93
  */
 export type ConfirmRevisionDecision = {
     /** @emits RevisionConfirmed — exactly once when the command succeeds */
-    readonly Recorded: (revision: RecordedRevision, confirmedBy: ParticipantId, confirmedAt: Timestamp) => Result<{
+    readonly Recorded: (revision: RecordedRevision, confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, confirmedAt: Timestamp) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedBy: ParticipantId; readonly confirmedAt: Timestamp };
             readonly events: { readonly RevisionConfirmed: RevisionConfirmed };
         };
-    }, never>;
+    }, FacilitatorOnly>;
 };
+
+/**
+ * The first requirement of Revision.confirm that does not hold, in declaration order; `undefined` when all hold.
+ * @see model/revision.dt:93
+ */
+export function checkConfirmRevisionRequires(_revision: RecordedRevision, _confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, _confirmedAt: Timestamp): 'facilitatorConfirms' | undefined {
+    if (!(confirmedByRole === "Facilitator")) return 'facilitatorConfirms';
+    return undefined;
+}
 
 /**
  * Command contracts of Revision. Implement this interface by hand.
@@ -3053,7 +3095,7 @@ export type RevisionEvent = RevisionRecorded | RevisionRestored | RevisionConfir
 /**
  * リビジョン記録
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/revision.dt:93
+ * @see model/revision.dt:101
  */
 export interface RevisionRecorded {
     readonly type: 'RevisionRecorded';
@@ -3073,7 +3115,7 @@ export interface RevisionRecorded {
 /**
  * リビジョン復元
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/revision.dt:102
+ * @see model/revision.dt:110
  */
 export interface RevisionRestored {
     readonly type: 'RevisionRestored';
@@ -3095,7 +3137,7 @@ export interface RevisionRestored {
 /**
  * リビジョン確認
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/revision.dt:112
+ * @see model/revision.dt:120
  */
 export interface RevisionConfirmed {
     readonly type: 'RevisionConfirmed';
@@ -3109,7 +3151,7 @@ export interface RevisionConfirmed {
 /**
  * リビジョンなし
  * 指定したリビジョンがない。
- * @see model/revision.dt:119
+ * @see model/revision.dt:127
  */
 export interface RevisionNotFound {
     readonly type: 'RevisionNotFound';
@@ -3120,7 +3162,7 @@ export interface RevisionNotFound {
 /**
  * 別のセッションのリビジョン
  * リビジョンは別のセッションのもの。
- * @see model/revision.dt:124
+ * @see model/revision.dt:132
  */
 export interface RevisionOfAnotherSession {
     readonly type: 'RevisionOfAnotherSession';
@@ -3131,7 +3173,7 @@ export interface RevisionOfAnotherSession {
 /**
  * シンボリックリンク
  * ワークスペースのソースのパスにシンボリックリンクがある。
- * @see model/revision.dt:129
+ * @see model/revision.dt:137
  */
 export interface SymlinkInWorkspace {
     readonly type: 'SymlinkInWorkspace';
@@ -3142,7 +3184,7 @@ export interface SymlinkInWorkspace {
 /**
  * ルートの外のパス
  * リビジョンのパスがワークスペースのルートの外を指す。
- * @see model/revision.dt:134
+ * @see model/revision.dt:142
  */
 export interface PathOutsideRoot {
     readonly type: 'PathOutsideRoot';
@@ -3152,7 +3194,7 @@ export interface PathOutsideRoot {
 /**
  * 外部での変更
  * 最後のスナップショットのあとで、ワークスペースのソースが外部で変わった。
- * @see model/revision.dt:139
+ * @see model/revision.dt:147
  */
 export interface ExternalChangesSinceSnapshot {
     readonly type: 'ExternalChangesSinceSnapshot';
@@ -3163,7 +3205,7 @@ export interface ExternalChangesSinceSnapshot {
 /**
  * 内容ハッシュの不一致
  * 内容ハッシュが、ファイルのパスと内容ハッシュから決まるものと合わない。
- * @see model/revision.dt:144
+ * @see model/revision.dt:152
  */
 export interface ContentHashMismatch {
     readonly type: 'ContentHashMismatch';
@@ -3172,7 +3214,7 @@ export interface ContentHashMismatch {
 /**
  * 復元は確認が必要
  * 復元の由来のリビジョンは、復元できると確かめてから restore で記録する。
- * @see model/revision.dt:147
+ * @see model/revision.dt:155
  */
 export interface RestoreNeedsCheck {
     readonly type: 'RestoreNeedsCheck';
@@ -3494,36 +3536,50 @@ export function checkJoinSessionRequires(session: OpenSession, participant: Part
 /**
  * Session.close (Open -> Closed)
  * セッションを終える
+ * セッションを終えるのはファシリテーター。
+ * @param closedByRole 役割
+ * @requires facilitatorCloses (ファシリテーターが終える) else FacilitatorOnly: closedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits SessionClosed — exactly once when the command succeeds
- * @see model/session.dt:48
+ * @see model/session.dt:49
  */
 export type CloseSession = (
     session: OpenSession,
+    closedByRole: ParticipantRole,
     closedAt: Timestamp,
 ) => Result<{
     readonly Closed: {
         readonly aggregate: ClosedSession;
         readonly events: { readonly SessionClosed: SessionClosed };
     };
-}, never>;
+}, FacilitatorOnly>;
 
 /**
  * Session.close, decided per source state; implement it with `decide(SessionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires facilitatorCloses (ファシリテーターが終える) else FacilitatorOnly: closedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Open -> Closed — set: closedAt (new in Closed); carried over: id, facilitator, participants, startedAt
- * @see model/session.dt:48
+ * @see model/session.dt:49
  */
 export type CloseSessionDecision = {
     /** @emits SessionClosed — exactly once when the command succeeds */
-    readonly Open: (session: OpenSession, closedAt: Timestamp) => Result<{
+    readonly Open: (session: OpenSession, closedByRole: ParticipantRole, closedAt: Timestamp) => Result<{
         readonly Closed: {
             readonly set: { readonly closedAt: Timestamp };
             readonly events: { readonly SessionClosed: SessionClosed };
         };
-    }, never>;
+    }, FacilitatorOnly>;
 };
+
+/**
+ * The first requirement of Session.close that does not hold, in declaration order; `undefined` when all hold.
+ * @see model/session.dt:49
+ */
+export function checkCloseSessionRequires(_session: OpenSession, closedByRole: ParticipantRole, _closedAt: Timestamp): 'facilitatorCloses' | undefined {
+    if (!(closedByRole === "Facilitator")) return 'facilitatorCloses';
+    return undefined;
+}
 
 /**
  * Command contracts of Session. Implement this interface by hand.
@@ -3547,7 +3603,7 @@ export type SessionEvent = SessionStarted | ParticipantJoined | SessionClosed;
 
 /**
  * 参加者
- * @see model/session.dt:53
+ * @see model/session.dt:57
  */
 export interface Participant {
     /** 参加者ID */
@@ -3562,7 +3618,7 @@ export interface Participant {
 
 /**
  * Whether two Participant are the same entity: by `id` (ADR 0016).
- * @see model/session.dt:53
+ * @see model/session.dt:57
  */
 export function equalParticipant(a: Participant, b: Participant): boolean {
     return a.id === b.id;
@@ -3571,7 +3627,7 @@ export function equalParticipant(a: Participant, b: Participant): boolean {
 /**
  * セッション開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/session.dt:60
+ * @see model/session.dt:64
  */
 export interface SessionStarted {
     readonly type: 'SessionStarted';
@@ -3587,7 +3643,7 @@ export interface SessionStarted {
 /**
  * 参加
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/session.dt:67
+ * @see model/session.dt:71
  */
 export interface ParticipantJoined {
     readonly type: 'ParticipantJoined';
@@ -3603,7 +3659,7 @@ export interface ParticipantJoined {
 /**
  * セッション終了
  * @persistent Persisted: storing this event is part of its contract.
- * @see model/session.dt:74
+ * @see model/session.dt:78
  */
 export interface SessionClosed {
     readonly type: 'SessionClosed';
@@ -3615,7 +3671,7 @@ export interface SessionClosed {
 /**
  * 参加済み
  * その参加者はすでにセッションに参加している。
- * @see model/session.dt:80
+ * @see model/session.dt:84
  */
 export interface AlreadyJoined {
     readonly type: 'AlreadyJoined';
@@ -3624,9 +3680,18 @@ export interface AlreadyJoined {
 }
 
 /**
+ * ファシリテーターだけの操作
+ * ファシリテーターだけができる操作（実行の登録と取消、スナップショット、リビジョンの確認と復元、セッションの終了）を、参加者が求めた。
+ * @see model/session.dt:89
+ */
+export interface FacilitatorOnly {
+    readonly type: 'FacilitatorOnly';
+}
+
+/**
  * セッションなし
  * 指定したセッションがない。
- * @see model/session.dt:85
+ * @see model/session.dt:92
  */
 export interface SessionNotFound {
     readonly type: 'SessionNotFound';
@@ -3635,7 +3700,7 @@ export interface SessionNotFound {
 /**
  * セッション終了済み
  * セッションはすでに終わっている。
- * @see model/session.dt:88
+ * @see model/session.dt:95
  */
 export interface SessionAlreadyClosed {
     readonly type: 'SessionAlreadyClosed';

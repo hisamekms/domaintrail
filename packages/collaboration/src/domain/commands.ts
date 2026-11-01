@@ -2,7 +2,8 @@
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
 // PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
-// what each outcome sets.
+// what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator, and
+// dismissing a request, take the role (and the participant) of who acts as parameters, from the use case's `Actor`.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 import { holdsHashOfFiles } from './snapshot.js';
 import { succeeded } from './validation.js';
@@ -31,8 +32,10 @@ export const sessionCommands: Collaboration.SessionCommands = {
     }),
 
     close: decide<Collaboration.CloseSessionDecision>(Collaboration.SessionShape, {
-        Open: (session, closedAt) =>
-            ok({ Closed: { set: { closedAt }, events: { SessionClosed: { type: 'SessionClosed', sessionId: session.id, closedAt } } } }),
+        Open: (session, closedByRole, closedAt) => {
+            if (Collaboration.checkCloseSessionRequires(session, closedByRole, closedAt) === 'facilitatorCloses') return err({ type: 'FacilitatorOnly' });
+            return ok({ Closed: { set: { closedAt }, events: { SessionClosed: { type: 'SessionClosed', sessionId: session.id, closedAt } } } });
+        },
     }),
 };
 
@@ -71,8 +74,10 @@ export const requestCommands: Collaboration.RequestCommands = {
 };
 
 export const agentRunCommands: Collaboration.AgentRunCommands = {
-    queue: decide<Collaboration.QueueAgentRunDecision>(Collaboration.AgentRunShape, (id, session, requests, input, queuedBy, queuedAt) => {
-        switch (Collaboration.checkQueueAgentRunRequires(id, session, requests, input, queuedBy, queuedAt)) {
+    queue: decide<Collaboration.QueueAgentRunDecision>(Collaboration.AgentRunShape, (id, session, requests, input, queuedBy, queuedByRole, queuedAt) => {
+        switch (Collaboration.checkQueueAgentRunRequires(id, session, requests, input, queuedBy, queuedByRole, queuedAt)) {
+            case 'facilitatorQueues':
+                return err({ type: 'FacilitatorOnly' });
             case 'distinctRequests':
                 return err({ type: 'DuplicateRequest' });
             case 'inputCoversRequests':
@@ -159,20 +164,26 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
 
     // a running run keeps its base revision; a queued one has none
     cancel: decide<Collaboration.CancelAgentRunDecision>(Collaboration.AgentRunShape, {
-        Queued: (run, cancelledBy, cancelledAt) =>
-            ok({
+        Queued: (run, cancelledBy, cancelledByRole, cancelledAt) => {
+            if (Collaboration.checkCancelAgentRunRequires(run, cancelledBy, cancelledByRole, cancelledAt) === 'facilitatorCancels')
+                return err({ type: 'FacilitatorOnly' });
+            return ok({
                 Cancelled: {
                     set: { baseRevision: undefined, cancelledBy, cancelledAt },
                     events: { RunCancelled: { type: 'RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
                 },
-            }),
-        Running: (run, cancelledBy, cancelledAt) =>
-            ok({
+            });
+        },
+        Running: (run, cancelledBy, cancelledByRole, cancelledAt) => {
+            if (Collaboration.checkCancelAgentRunRequires(run, cancelledBy, cancelledByRole, cancelledAt) === 'facilitatorCancels')
+                return err({ type: 'FacilitatorOnly' });
+            return ok({
                 Cancelled: {
                     set: { baseRevision: run.baseRevision, cancelledBy, cancelledAt },
                     events: { RunCancelled: { type: 'RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
                 },
-            }),
+            });
+        },
     }),
 };
 
@@ -199,10 +210,14 @@ export const revisionCommands: Collaboration.RevisionCommands = {
 
     restore: decide<Collaboration.RestoreRevisionDecision>(
         Collaboration.RevisionShape,
-        (id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt) => {
+        (id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt) => {
             const check = Collaboration.checkRestoreRevisionRequiresWith({ hashMatchesFiles: (_i, _s, _r, _p, hash, fs) => hashMatchesFiles(hash, fs) });
-            if (check(id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt) === 'hashMatchesFiles')
-                return err({ type: 'ContentHashMismatch' });
+            switch (check(id, session, restoredFrom, preRestore, contentHash, files, validation, restoredByRole, takenAt)) {
+                case 'facilitatorRestores':
+                    return err({ type: 'FacilitatorOnly' });
+                case 'hashMatchesFiles':
+                    return err({ type: 'ContentHashMismatch' });
+            }
             return ok({
                 Recorded: {
                     set: { id, session, origin: { kind: 'Restored', restoredFrom, preRestore }, contentHash, files, validation, takenAt },
@@ -215,13 +230,16 @@ export const revisionCommands: Collaboration.RevisionCommands = {
     ),
 
     confirm: decide<Collaboration.ConfirmRevisionDecision>(Collaboration.RevisionShape, {
-        Recorded: (revision, confirmedBy, confirmedAt) =>
-            ok({
+        Recorded: (revision, confirmedBy, confirmedByRole, confirmedAt) => {
+            if (Collaboration.checkConfirmRevisionRequires(revision, confirmedBy, confirmedByRole, confirmedAt) === 'facilitatorConfirms')
+                return err({ type: 'FacilitatorOnly' });
+            return ok({
                 Confirmed: {
                     set: { confirmedBy, confirmedAt },
                     events: { RevisionConfirmed: { type: 'RevisionConfirmed', revisionId: revision.id, confirmedBy, confirmedAt } },
                 },
-            }),
+            });
+        },
     }),
 };
 

@@ -1,9 +1,11 @@
 // The browser's side of a session (ADR 0026, S4): the REST API under `/api/session/`, the pages under `/session/` (the
 // join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
-// requests and dismiss their own, react to messages and AI turns and vote on a question's options or an assumption's
-// choices; only the facilitator queues and cancels runs, takes, confirms and restores
-// revisions, dismisses others' requests and closes the session.
+// requests, react to messages and AI turns and vote on a question's options or an assumption's choices; only the
+// facilitator queues and cancels runs, takes, confirms and restores revisions, hands the role over and closes the
+// session. Who may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its
+// commands refuse what the role does not allow; the role of each route below is a hint that answers first, with the
+// same status and body as the refusal of the domain.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { IdentityKey } from '@domaintrail/collaboration/application/identity';
 import type { CollaborationUseCases, SessionState } from '@domaintrail/collaboration/application/use-cases';
@@ -120,8 +122,22 @@ export function statusOf(type: string): number {
     }
 }
 
-const fail = <E extends { readonly type: string; readonly message?: string }>(res: ServerResponse, error: E): void =>
-    sendError(res, statusOf(error.type), error.type, error.message, error);
+/** What a participant gets for an operation reserved to the facilitator: from a route's role, or from a command. */
+const FACILITATOR_ONLY = 'Only the facilitator may do this.';
+
+/** The message of an error that has none of its own: the domain's refusals read as the routes' always did. */
+const defaultMessage = (type: string): string | undefined => (type === 'FacilitatorOnly' ? FACILITATOR_ONLY : undefined);
+
+/** The status and the body of an error of the use cases (and of this layer). */
+export function errorAnswer(error: { readonly type: string; readonly message?: string }): { status: number; body: { error: object } } {
+    const message = error.message ?? defaultMessage(error.type);
+    return { status: statusOf(error.type), body: { error: { ...error, type: error.type, ...(message !== undefined && { message }) } } };
+}
+
+const fail = <E extends { readonly type: string; readonly message?: string }>(res: ServerResponse, error: E): void => {
+    const { status, body } = errorAnswer(error);
+    sendJson(res, status, body);
+};
 
 const bodyError = (res: ServerResponse, e: unknown): void => {
     if (e instanceof BodyError) return sendError(res, e.status, e.type, e.message);
@@ -341,10 +357,10 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         field: raw.target === undefined ? `targets[${unknown}].sourceRevision` : 'target.sourceRevision',
                         message: 'Not a revision of this session.',
                     });
-                const sent = await use.sendRequest({ session, author: me.participant.id, targets, body: t, ...(replyTo && { replyTo }), mentions });
+                const sent = await use.sendRequest({ session, actor: me.actor, targets, body: t, ...(replyTo && { replyTo }), mentions });
                 if (!sent.ok || !apply) return answer(res, sent, 201, (request) => ({ request }));
                 // sent and applied: the message is in the stream whatever the run's fate
-                const queued = await use.queueRun({ session, requests: [sent.value.id], queuedBy: me.participant.id, ...(apply.note && { note: apply.note }) });
+                const queued = await use.queueRun({ session, requests: [sent.value.id], actor: me.actor, ...(apply.note && { note: apply.note }) });
                 await answer(res, queued, 201, (run) => ({ request: sent.value, run }));
             },
         },
@@ -364,7 +380,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const me = who(auth);
                 if (sign.kind === 'Vote' && me.role === 'facilitator')
                     return fail(res, { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." });
-                const set = await use.setMark({ session, participant: me.participant.id, target, sign, placed: raw.placed });
+                const set = await use.setMark({ session, actor: me.actor, target, sign, placed: raw.placed });
                 if (!set.ok && set.error.type === 'ReactionLimitReached')
                     return fail(res, {
                         ...set.error,
@@ -412,7 +428,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const queued = await use.queueRun({
                     session,
                     requests: ids,
-                    queuedBy: who(auth).participant.id,
+                    actor: who(auth).actor,
                     ...(note && { note }),
                     ...(answered && { answer: answered }),
                     ...(picked && { pick: picked }),
@@ -429,7 +445,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!id) return;
                 const run = (await state()).runs.find((r) => r.id === id);
                 if (!run) return fail(res, { type: 'NotFound', aggregate: 'AgentRun', id });
-                await answer(res, await use.cancelRun({ run: run.id, by: who(auth).participant.id }), 200, (r) => ({ run: r }));
+                await answer(res, await use.cancelRun({ run: run.id, actor: who(auth).actor }), 200, (r) => ({ run: r }));
             },
         },
         {
@@ -444,7 +460,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             role: 'facilitator',
             handle: async ({ req, res, auth }) => {
                 if (!(await input(req, res, []))) return;
-                await answer(res, await use.takeRevision({ session, by: who(auth).participant.id }), 201, (revision) => ({ revision }));
+                await answer(res, await use.takeRevision({ session, actor: who(auth).actor }), 201, (revision) => ({ revision }));
             },
         },
         {
@@ -456,7 +472,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!id) return;
                 const revision = (await state()).revisions.find((r) => r.id === id);
                 if (!revision) return fail(res, { type: 'NotFound', aggregate: 'Revision', id });
-                await answer(res, await use.confirmRevision({ revision: revision.id, by: who(auth).participant.id }), 200, (r) => ({ revision: r }));
+                await answer(res, await use.confirmRevision({ revision: revision.id, actor: who(auth).actor }), 200, (r) => ({ revision: r }));
             },
         },
         {
@@ -478,8 +494,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         use.restoreRevision({
                             session,
                             revision: revision.id,
-                            by: me.participant.id,
-                            identity: me.participant.identity,
+                            actor: me.actor,
                             recordExternalChanges: raw.recordExternalChanges === true,
                         }),
                     (r) => r.ok || r.error.type === 'ManualRecoveryNeeded',
@@ -538,9 +553,9 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             method: 'POST',
             path: /^\/api\/session\/close$/,
             role: 'facilitator',
-            handle: async ({ req, res }) => {
+            handle: async ({ req, res, auth }) => {
                 if (!(await input(req, res, []))) return;
-                const closed = await use.closeSession({ session });
+                const closed = await use.closeSession({ session, actor: who(auth).actor });
                 if (!closed.ok) return fail(res, closed.error);
                 await deps.pump();
                 sendJson(res, 200, { session: closed.value });
@@ -557,7 +572,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         if (!matching.length) return sendError(res, 404, 'NotFound', 'No such session API.');
         if (!route) return sendError(res, 405, 'MethodNotAllowed', `Use ${matching.map((r) => r.method).join(' or ')}.`);
         if (route.role === 'facilitator' && (auth.kind !== 'participant' || auth.role !== 'facilitator'))
-            return sendError(res, 403, 'FacilitatorOnly', 'Only the facilitator may do this.');
+            return sendError(res, 403, 'FacilitatorOnly', FACILITATOR_ONLY);
         const params = route.path.exec(url.pathname)?.slice(1) ?? [];
         await route.handle({ req, res, auth, params });
     };

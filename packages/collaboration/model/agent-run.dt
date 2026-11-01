@@ -224,8 +224,12 @@ context Collaboration {
       cancelledAt: Timestamp "取消日時"
     }
 
-    create command queue(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedAt: Timestamp) "実行を登録する"
+    /// 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
+    create command queue(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedByRole: ParticipantRole, queuedAt: Timestamp) "実行を登録する"
       -> Queued
+      requires facilitatorQueues "ファシリテーターが登録する" {
+        queuedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       requires distinctRequests "依頼は1件1回" { unique(requests) } else DuplicateRequest
       requires inputCoversRequests "入力は束ねた依頼の写し" {
         count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
@@ -278,8 +282,12 @@ context Collaboration {
       requires abnormal "報告のない失敗" { reason != FailureReason.RuleNotMet } else ReportRequired
       emits RunFailed
 
-    command cancel(cancelledBy: ParticipantId, cancelledAt: Timestamp) "実行を取り消す"
+    /// 取り消すのはファシリテーター。
+    command cancel(cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) "実行を取り消す"
       Queued | Running -> Cancelled
+      requires facilitatorCancels "ファシリテーターが取り消す" {
+        cancelledByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       emits RunCancelled
   }
 

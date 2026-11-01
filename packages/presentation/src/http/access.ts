@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
+import type { Actor } from '@domaintrail/collaboration/application/actor';
 import type { Identity } from '@domaintrail/collaboration/application/identity';
 import type { Collaboration } from '@domaintrail/collaboration/generated/index';
 import type { Role } from '@domaintrail/collaboration/protocol';
@@ -26,17 +27,21 @@ export interface SessionParticipant {
     readonly identity: Identity;
 }
 
+/** Who sent a request: their participant and role, and the `Actor` the collaboration's use cases take. */
+export interface Identified {
+    readonly participant: SessionParticipant;
+    readonly role: Role;
+    readonly actor: Actor;
+}
+
 /**
  * What the access check decides about a request: refused (unexpected Host or Origin), let in without an identity
  * (always so in `dt view`; in a session, someone who has not signed in), or a participant with their role.
  */
-export type Authorization =
-    | { readonly kind: 'forbidden' }
-    | { readonly kind: 'anonymous' }
-    | { readonly kind: 'participant'; readonly participant: SessionParticipant; readonly role: Role };
+export type Authorization = { readonly kind: 'forbidden' } | { readonly kind: 'anonymous' } | ({ readonly kind: 'participant' } & Identified);
 
-/** Who sent a request whose Host and Origin passed: their participant and role, or `undefined` (no identity). */
-export type Identify = (headers: IncomingHttpHeaders) => Promise<{ readonly participant: SessionParticipant; readonly role: Role } | undefined>;
+/** Who sent a request whose Host and Origin passed, or `undefined` (no identity). */
+export type Identify = (headers: IncomingHttpHeaders) => Promise<Identified | undefined>;
 
 /** What the access check applies. */
 export interface AccessPolicy {
@@ -61,7 +66,7 @@ export async function checkAccess(headers: IncomingHttpHeaders, policy: AccessPo
     if (!hostAndOriginAllowed(headers, policy)) return { kind: 'forbidden' };
     if (!policy.identify) return { kind: 'anonymous' };
     const who = await policy.identify(headers);
-    return who ? { kind: 'participant', participant: who.participant, role: who.role } : { kind: 'anonymous' };
+    return who ? { kind: 'participant', participant: who.participant, role: who.role, actor: who.actor } : { kind: 'anonymous' };
 }
 
 function hostAndOriginAllowed(headers: IncomingHttpHeaders, policy: AccessPolicy): boolean {

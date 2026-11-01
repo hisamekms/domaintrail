@@ -166,7 +166,7 @@ register(
             examples: {
                 AgentRun: {
                     commands: {
-                        queue: [[running.id, active, [pending], { requests: [frozen] }, facilitator, at]],
+                        queue: [[running.id, active, [pending], { requests: [frozen] }, facilitator, 'Facilitator', at]],
                         finish: [
                             [running, success, revision, false, undefined, at],
                             [running, success, C.makeRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'), true, reply, at],
@@ -188,6 +188,7 @@ register(
                                 snapshotHash(files),
                                 files,
                                 validation,
+                                'Facilitator',
                                 at,
                             ],
                         ],

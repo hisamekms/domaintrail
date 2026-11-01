@@ -2,8 +2,9 @@
 // into domain values (IDs and times from the ports, verified types from their factories), loads the aggregates in one
 // transaction, rejects a state the command does not accept, calls the command, and on success saves the aggregate and
 // appends its events to the outbox in the same transaction. Workspace snapshots are read and stored as blobs before
-// the transaction that records them. Who may call which use case (facilitator, participant, the agent's credential)
-// is decided by the caller (S4); the use cases take the participant as a fact.
+// the transaction that records them. Each use case a person calls takes the `Actor` this application built from the
+// authenticated identity (ADR 0027): the participant and the role reach the commands as parameters, and the commands'
+// `requires` decide who may do what. The agent's use cases take the token of the lease it claimed.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
@@ -13,7 +14,7 @@ import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChan
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
-import type { IdentityKey } from './identity.js';
+import type { Actor } from './actor.js';
 import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
@@ -175,6 +176,7 @@ export interface TargetStatuses {
 
 export type RestoreError =
     | NotFound
+    | Collaboration.FacilitatorOnly
     | RunInProgress
     | BlobMissing
     | Collaboration.RevisionNotFound
@@ -198,10 +200,15 @@ export interface CollaborationUseCases {
     }): Promise<
         Result<{ readonly session: Collaboration.OpenSession; readonly joined: boolean }, Collaboration.SessionNotFound | Collaboration.SessionAlreadyClosed>
     >;
-    closeSession(input: { readonly session: SessionId }): Promise<Result<Collaboration.ClosedSession, NotFound | NotAllowed>>;
+    /** Closes the session: the facilitator's. */
+    closeSession(input: {
+        readonly session: SessionId;
+        readonly actor: Actor;
+    }): Promise<Result<Collaboration.ClosedSession, NotFound | NotAllowed | Collaboration.FacilitatorOnly>>;
+    /** Sends a request of the actor, a participant of the session. */
     sendRequest(input: {
         readonly session: SessionId;
-        readonly author: ParticipantId;
+        readonly actor: Actor;
         /** What the request is about: none for the whole workspace. */
         readonly targets: readonly Collaboration.TargetSnapshot[];
         readonly body: Collaboration.Text;
@@ -240,7 +247,7 @@ export interface CollaborationUseCases {
      */
     setMark(input: {
         readonly session: SessionId;
-        readonly participant: ParticipantId;
+        readonly actor: Actor;
         readonly target: Collaboration.MarkTarget;
         readonly sign: Collaboration.MarkSign;
         readonly placed: boolean;
@@ -257,7 +264,7 @@ export interface CollaborationUseCases {
             | Collaboration.ReactionLimitReached
         >
     >;
-    /** Bundles sent requests of the session into a queued run, freezing their content as its input. */
+    /** Bundles sent requests of the session into a queued run, freezing their content as its input: the facilitator's. */
     queueRun(input: {
         readonly session: SessionId;
         readonly requests: readonly Collaboration.RequestId[];
@@ -269,10 +276,11 @@ export interface CollaborationUseCases {
          * are that run's requests, queued again (`domain/reply.ts` `resolvePick`).
          */
         readonly pick?: PickData;
-        readonly queuedBy: ParticipantId;
+        readonly actor: Actor;
     }): Promise<
         Result<
             Collaboration.QueuedAgentRun,
+            | Collaboration.FacilitatorOnly
             | Collaboration.SessionNotFound
             | Collaboration.SessionAlreadyClosed
             | Collaboration.RequestNotFound
@@ -344,33 +352,38 @@ export interface CollaborationUseCases {
         readonly token: string;
         readonly reason: Exclude<Collaboration.FailureReason, 'RuleNotMet'>;
     }): Promise<Result<Ended<Collaboration.FailedAgentRun>, NotFound | LeaseLost | NotAllowed>>;
-    cancelRun(input: { readonly run: AgentRunId; readonly by: ParticipantId }): Promise<Result<Collaboration.CancelledAgentRun, NotFound | NotAllowed>>;
+    /** Cancels a queued or running run: the facilitator's. */
+    cancelRun(input: {
+        readonly run: AgentRunId;
+        readonly actor: Actor;
+    }): Promise<Result<Collaboration.CancelledAgentRun, NotFound | NotAllowed | Collaboration.FacilitatorOnly>>;
     /**
      * The recovery policy, at startup and periodically: a running run whose lease expired fails (LeaseExpired), a
      * queued run whose claim expired goes back to the queue. A run is never executed twice.
      */
     expireLeases(): Promise<{ readonly failed: readonly Collaboration.FailedAgentRun[]; readonly released: readonly AgentRunId[] }>;
-    /** Records the workspace as it is now (Manual): to keep external changes before a restore, for instance. */
+    /** Records the workspace as it is now (Manual): to keep external changes before a restore, for instance. The facilitator's. */
     takeRevision(input: {
         readonly session: SessionId;
-        readonly by: ParticipantId;
-    }): Promise<Result<Collaboration.RecordedRevision, NotFound | Collaboration.PathOutsideRoot>>;
+        readonly actor: Actor;
+    }): Promise<Result<Collaboration.RecordedRevision, NotFound | Collaboration.FacilitatorOnly | Collaboration.PathOutsideRoot>>;
+    /** Marks a recorded revision confirmed: the facilitator's. */
     confirmRevision(input: {
         readonly revision: RevisionId;
-        readonly by: ParticipantId;
-    }): Promise<Result<Collaboration.ConfirmedRevision, NotFound | NotAllowed>>;
+        readonly actor: Actor;
+    }): Promise<Result<Collaboration.ConfirmedRevision, NotFound | NotAllowed | Collaboration.FacilitatorOnly>>;
     /**
      * Writes a past revision back: refused while a run is running or claimed, or when the workspace has a symbolic
      * link, a path outside the root, or changes since the session's last revision — unless `recordExternalChanges`,
      * which records them first (Manual) and goes on. The workspace before is recorded first (PreRestore), then written,
      * validated and recorded (Restored). A failure once the write started is `ManualRecoveryNeeded` with the
-     * pre-restore revision; nothing is recorded as restored then. Every attempt is kept in the operation log.
+     * pre-restore revision; nothing is recorded as restored then. Every attempt is kept in the operation log. The
+     * facilitator's: anyone else is refused before the workspace is read.
      */
     restoreRevision(input: {
         readonly session: SessionId;
         readonly revision: RevisionId;
-        readonly by: ParticipantId;
-        readonly identity?: IdentityKey;
+        readonly actor: Actor;
         readonly recordExternalChanges?: boolean;
     }): Promise<Result<Restored, RestoreError>>;
     /** Two revisions of the session side by side: each file's status and line diff (bounded), and both validations. */
@@ -578,20 +591,23 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async closeSession({ session }) {
+        async closeSession({ session, actor }) {
             return uow.transaction((stores) => {
                 const found = stores.sessions.load(session);
                 if (!found) return err(notFound('Session', session));
                 if (found.state !== 'Open') return err(notAllowed('close', found.state));
                 const at = clock.now();
-                const { Closed } = decided(sessionCommands.close(found, at));
+                const closed = sessionCommands.close(found, actor.role, at);
+                if (!closed.ok) return closed;
+                const { Closed } = closed.value;
                 stores.sessions.save(Closed.aggregate);
                 publish(stores, session, Closed.events, at);
                 return ok(Closed.aggregate);
             });
         },
 
-        async sendRequest({ session, author, targets, body, replyTo, mentions = [] }) {
+        async sendRequest({ session, actor, targets, body, replyTo, mentions = [] }) {
+            const author = actor.participant;
             const violated = targets.flatMap((target) => [
                 ...Collaboration.checkTargetSnapshot(target),
                 ...(target.range ? Collaboration.checkSourceRange(target.range) : []),
@@ -636,14 +652,13 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async setMark({ session, participant, target, sign, placed }) {
+        async setMark({ session, actor, target, sign, placed }) {
+            const { participant, role } = actor;
             return uow.transaction(async (stores) => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
                 if (!active.ok) return active;
-                // the role is the session's, never the caller's word
-                const who = stores.sessions.load(session)?.participants.find((p) => p.id === participant);
-                if (!who) return err({ type: 'NotAParticipant', participant });
+                if (!stores.sessions.load(session)?.participants.some((p) => p.id === participant)) return err({ type: 'NotAParticipant', participant });
                 const open = await verify.makeOpenMarkTarget(target, session);
                 if (!open.ok) return open;
                 const runs = stores.runs.listBySession(session);
@@ -661,7 +676,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     )
                         return err({ type: 'ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
                     // decided before anything is removed: a refused mark changes nothing
-                    const decided = markCommands.place(Collaboration.makeMarkId(ids.newId()), active.value, participant, who.role, open.value, sign, at);
+                    const decided = markCommands.place(Collaboration.makeMarkId(ids.newId()), active.value, participant, role, open.value, sign, at);
                     if (!decided.ok) return decided;
                     made = decided.value.Placed.aggregate;
                     events.push(decided.value.Placed.events.MarkPlaced);
@@ -682,7 +697,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async queueRun({ session, requests, note, answer, pick, queuedBy }) {
+        async queueRun({ session, requests, note, answer, pick, actor }) {
             return uow.transaction(async (stores) => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
@@ -725,7 +740,8 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     active.value,
                     bundled,
                     { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }), ...(picked && { pick: picked }) },
-                    queuedBy,
+                    actor.participant,
+                    actor.role,
                     at,
                 );
                 if (!queued.ok) return queued;
@@ -866,14 +882,16 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async cancelRun({ run, by }) {
+        async cancelRun({ run, actor }) {
             return uow.transaction((stores) => {
                 const stored = stores.runs.load(run);
                 if (!stored) return err(notFound('AgentRun', run));
                 const r = stored.run;
                 if (r.state !== 'Queued' && r.state !== 'Running') return err(notAllowed('cancel', r.state));
                 const at = clock.now();
-                const { Cancelled } = decided(agentRunCommands.cancel(r, by, at));
+                const cancelled = agentRunCommands.cancel(r, actor.participant, actor.role, at);
+                if (!cancelled.ok) return cancelled;
+                const { Cancelled } = cancelled.value;
                 stores.runs.save(Cancelled.aggregate);
                 stores.runs.endLease(run, undefined);
                 publish(stores, r.session, Cancelled.events, at);
@@ -902,28 +920,34 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async takeRevision({ session, by }) {
+        async takeRevision({ session, actor }) {
             const exists = await uow.transaction((stores) => stores.sessions.load(session) !== undefined);
             if (!exists) return err(notFound('Session', session));
+            // `take` records every snapshot, the system's too (the session's start, a run's base and result, a restore's
+            // before): who may take one by hand is this use case's to check
+            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
             const captured = await capture(deps);
             if (!captured.ok) return captured;
-            return uow.transaction((stores) => ok(record(stores, session, { kind: 'Manual', takenBy: by }, captured.value, clock.now())));
+            return uow.transaction((stores) => ok(record(stores, session, { kind: 'Manual', takenBy: actor.participant }, captured.value, clock.now())));
         },
 
-        async confirmRevision({ revision, by }) {
+        async confirmRevision({ revision, actor }) {
             return uow.transaction((stores) => {
                 const found = stores.revisions.load(revision);
                 if (!found) return err(notFound('Revision', revision));
                 if (found.state !== 'Recorded') return err(notAllowed('confirm', found.state));
                 const at = clock.now();
-                const { Confirmed } = decided(revisionCommands.confirm(found, by, at));
+                const confirmed = revisionCommands.confirm(found, actor.participant, actor.role, at);
+                if (!confirmed.ok) return confirmed;
+                const { Confirmed } = confirmed.value;
                 stores.revisions.save(Confirmed.aggregate);
                 publish(stores, found.session, Confirmed.events, at);
                 return ok(Confirmed.aggregate);
             });
         },
 
-        async restoreRevision({ session, revision, by, identity, recordExternalChanges }) {
+        async restoreRevision({ session, revision, actor, recordExternalChanges }) {
+            const { participant: by, identity } = actor;
             const exists = await uow.transaction((stores) => stores.sessions.load(session) !== undefined);
             if (!exists) return err(notFound('Session', session));
             const recorded: { manual?: Collaboration.RecordedRevision; preRestore?: Collaboration.RecordedRevision } = {};
@@ -950,6 +974,9 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
 
             let writing = false;
             try {
+                // the restore command requires the facilitator (facilitatorRestores): asked first, before the workspace is
+                // read or a revision recorded on the way
+                if (actor.role !== 'Facilitator') return refused<Collaboration.FacilitatorOnly>({ type: 'FacilitatorOnly' });
                 const busy = await uow.transaction((stores) => stores.runs.active(session, clock.now()));
                 if (busy) return refused<RunInProgress>({ type: 'RunInProgress', run: busy.run.id });
                 let restorable = await makeRestorable(revision, session);
@@ -1003,6 +1030,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                             after.value.contentHash,
                             after.value.files,
                             after.value.validation,
+                            actor.role,
                             at,
                         );
                         if (!made.ok) throw new Error(`Recording the restore failed: ${made.error.type}`);

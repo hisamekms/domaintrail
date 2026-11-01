@@ -15,6 +15,7 @@ import { openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blob
 import { createUnitOfWork, openDatabase, openSessionDatabase } from '@domaintrail/collaboration/infrastructure/sqlite';
 import { createModelValidator } from '@domaintrail/collaboration/infrastructure/validator';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
+import type { Actor } from '@domaintrail/collaboration/application/actor';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -111,9 +112,16 @@ async function started(s: Session): Promise<{ id: C.SessionId; start: C.Recorded
 
 async function queuedRun(s: Session, id: C.SessionId, start: C.RecordedRevision): Promise<C.QueuedAgentRun> {
     const target: C.TargetSnapshot = { target: { kind: 'DtElement', element: value(C.makeElementName('Sales.Order')) }, sourceRevision: start.id };
-    const request = value(await s.use.sendRequest({ session: id, author: guest, targets: [target], body: text('Add a cancel command.') }));
-    return value(await s.use.queueRun({ session: id, requests: [request.id], queuedBy: facilitator }));
+    const request = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [target], body: text('Add a cancel command.') }));
+    return value(await s.use.queueRun({ session: id, requests: [request.id], actor: actor(facilitator) }));
 }
+
+/** The actor of a participant of these tests: `facilitator` holds the facilitator's role. */
+const actor = (participant: C.ParticipantId): Actor => ({
+    kind: 'participant',
+    participant,
+    role: participant === 'facilitator' ? 'Facilitator' : 'Participant',
+});
 
 describe('sessions and requests', () => {
     test('a session starts with a revision of every source, .dt and .dtes, and its events in the outbox', async () => {
@@ -138,7 +146,7 @@ describe('sessions and requests', () => {
             sourceRevision: start.id,
         });
         const stranger = value(C.makeParticipantId('stranger'));
-        expect(error(await s.use.sendRequest({ session: id, author: stranger, targets: [], body: text('x') }))).toEqual({
+        expect(error(await s.use.sendRequest({ session: id, actor: actor(stranger), targets: [], body: text('x') }))).toEqual({
             type: 'NotAParticipant',
             participant: stranger,
         });
@@ -152,43 +160,45 @@ describe('sessions and requests', () => {
                 endColumn: value(C.makeColumnNumber(2)),
             },
         };
-        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: [element('Sales.Customer'), backwards], body: text('x') }))).toEqual({
+        expect(error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [element('Sales.Customer'), backwards], body: text('x') }))).toEqual({
             type: 'InvalidTarget',
             violated: ['ordered'],
         });
         // several targets: at most 20, each once, and never the whole workspace (which is no target at all)
         const many = Array.from({ length: 21 }, (_, i) => element(`Sales.E${i}`));
-        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: many, body: text('x') }))).toEqual({ type: 'TooManyTargets' });
+        expect(error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: many, body: text('x') }))).toEqual({ type: 'TooManyTargets' });
         expect(
-            error(await s.use.sendRequest({ session: id, author: guest, targets: [element('Sales.Order'), element('Sales.Order')], body: text('x') })),
+            error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [element('Sales.Order'), element('Sales.Order')], body: text('x') })),
         ).toEqual({ type: 'DuplicateTarget' });
         expect(
             error(
                 await s.use.sendRequest({
                     session: id,
-                    author: guest,
+                    actor: actor(guest),
                     targets: [{ target: { kind: 'Workspace' }, sourceRevision: start.id }],
                     body: text('x'),
                 }),
             ),
         ).toEqual({ type: 'WorkspaceTarget' });
-        const two = value(await s.use.sendRequest({ session: id, author: guest, targets: many.slice(0, 20), body: text('x') }));
+        const two = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: many.slice(0, 20), body: text('x') }));
         expect(two.targets).toHaveLength(20);
         const target: readonly C.TargetSnapshot[] = [];
-        const sent = value(await s.use.sendRequest({ session: id, author: guest, targets: target, body: text('x') }));
+        const sent = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: target, body: text('x') }));
         value(await s.use.dismissRequest({ request: sent.id, by: facilitator }));
         expect(error(await s.use.dismissRequest({ request: sent.id, by: facilitator }))).toEqual({
             type: 'NotAllowed',
             command: 'dismiss',
             state: 'Dismissed',
         });
-        expect(error(await s.use.queueRun({ session: id, requests: [sent.id], queuedBy: facilitator }))).toEqual({
+        expect(error(await s.use.queueRun({ session: id, requests: [sent.id], actor: actor(facilitator) }))).toEqual({
             type: 'RequestAlreadyDismissed',
             request: sent.id,
         });
-        expect(error(await s.use.queueRun({ session: id, requests: [], queuedBy: facilitator }))).toEqual({ type: 'NoRequests' });
-        value(await s.use.closeSession({ session: id }));
-        expect(error(await s.use.sendRequest({ session: id, author: guest, targets: target, body: text('x') }))).toEqual({ type: 'SessionAlreadyClosed' });
+        expect(error(await s.use.queueRun({ session: id, requests: [], actor: actor(facilitator) }))).toEqual({ type: 'NoRequests' });
+        value(await s.use.closeSession({ session: id, actor: actor(facilitator) }));
+        expect(error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: target, body: text('x') }))).toEqual({
+            type: 'SessionAlreadyClosed',
+        });
     });
 
     test('a run freezes its requests at queueing, and a request bundled twice is refused', async () => {
@@ -201,9 +211,9 @@ describe('sessions and requests', () => {
         value(await s.use.dismissRequest({ request, by: facilitator }));
         const state = value(await s.use.sessionState({ session: id }));
         expect(state.runs[0]).toEqual(run);
-        expect(error(await s.use.queueRun({ session: id, requests: [request], queuedBy: facilitator }))).toMatchObject({ type: 'RequestAlreadyDismissed' });
-        const again = value(await s.use.sendRequest({ session: id, author: guest, targets: run.input.requests[0].targets, body: text('y') }));
-        expect(error(await s.use.queueRun({ session: id, requests: [again.id, again.id], queuedBy: facilitator }))).toEqual({ type: 'DuplicateRequest' });
+        expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(facilitator) }))).toMatchObject({ type: 'RequestAlreadyDismissed' });
+        const again = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: run.input.requests[0].targets, body: text('y') }));
+        expect(error(await s.use.queueRun({ session: id, requests: [again.id, again.id], actor: actor(facilitator) }))).toEqual({ type: 'DuplicateRequest' });
     });
 });
 
@@ -280,7 +290,10 @@ describe('agent runs', () => {
 
         const c = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
         value(await s.use.startRun({ run: cancelled.id, token: c.lease.token }));
-        expect(value(await s.use.cancelRun({ run: cancelled.id, by: facilitator }))).toMatchObject({ state: 'Cancelled', baseRevision: expect.any(String) });
+        expect(value(await s.use.cancelRun({ run: cancelled.id, actor: actor(facilitator) }))).toMatchObject({
+            state: 'Cancelled',
+            baseRevision: expect.any(String),
+        });
         expect(error(await s.use.heartbeat({ run: cancelled.id, token: c.lease.token, leaseMs: 1000 }))).toEqual({ type: 'LeaseLost', run: cancelled.id });
         expect(error(await s.use.finishRun({ run: cancelled.id, token: c.lease.token, facts }))).toEqual({ type: 'LeaseLost', run: cancelled.id });
     });
@@ -429,7 +442,7 @@ describe('agent replies', () => {
         });
         value(await s.use.askClarification({ run: run.id, token, question: text('Which state?'), reply: asking }));
         const queue = (answers: { question: string; options: string[]; text?: string }[], answerTo = run.id) =>
-            s.use.queueRun({ session: id, requests: [request], queuedBy: facilitator, answer: { answerTo, answer: { answers } } });
+            s.use.queueRun({ session: id, requests: [request], actor: actor(facilitator), answer: { answerTo, answer: { answers } } });
 
         expect(error(await queue([{ question: 'q9', options: ['draft'] }]))).toMatchObject({ type: 'InvalidAnswer', field: 'answer.answers[0].question' });
         expect(error(await queue([{ question: 'q1', options: ['draft', 'open'] }]))).toMatchObject({
@@ -473,7 +486,7 @@ describe('agent replies', () => {
             s.use.queueRun({
                 session: id,
                 requests,
-                queuedBy: facilitator,
+                actor: actor(facilitator),
                 note: text('redo it'),
                 pick: { pickOf: of, assumption: tally(assumption), alternative: key(alternative) },
             });
@@ -499,7 +512,7 @@ describe('agent replies', () => {
         expect(error(await pickOf(run.id, 0, 'any'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
         expect(error(await pickOf(run.id, 1, 'other'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
         // the requests queued again are the run's, no fewer and no more
-        const other = value(await s.use.sendRequest({ session: id, author: guest, targets: [], body: text('Also rename it.') }));
+        const other = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [], body: text('Also rename it.') }));
         expect(error(await pickOf(run.id, 1, 'any', [request, other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
         expect(error(await pickOf(run.id, 1, 'any', [other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
         expect(value(await s.use.sessionState({ session: id })).runs).toHaveLength(1);
@@ -524,11 +537,11 @@ describe('agent replies', () => {
         const { s, id, run, token, request } = await runningRun();
         const assumptions = [{ text: 'Only drafts.', requests: [request], alternatives: [{ id: 'all', label: 'Any state' }] }];
         value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
-        value(await s.use.closeSession({ session: id }));
+        value(await s.use.closeSession({ session: id, actor: actor(facilitator) }));
         const { id: second } = await started(s);
-        const mine = value(await s.use.sendRequest({ session: second, author: guest, targets: [], body: text('Again.') }));
+        const mine = value(await s.use.sendRequest({ session: second, actor: actor(guest), targets: [], body: text('Again.') }));
         const pick = { pickOf: run.id, assumption: value(C.makeTally(0)), alternative: value(C.makeReplyKey('all')) };
-        expect(error(await s.use.queueRun({ session: second, requests: [mine.id], queuedBy: facilitator, pick }))).toEqual({
+        expect(error(await s.use.queueRun({ session: second, requests: [mine.id], actor: actor(facilitator), pick }))).toEqual({
             type: 'RunOfAnotherSession',
             run: run.id,
         });
@@ -539,9 +552,9 @@ describe('revisions', () => {
     test('restore writes a past revision back after a pre-restore snapshot, and records it', async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const confirmed = value(await s.use.confirmRevision({ revision: start.id, by: facilitator }));
+        const confirmed = value(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) }));
         expect(confirmed.state).toBe('Confirmed');
-        expect(error(await s.use.confirmRevision({ revision: start.id, by: facilitator }))).toEqual({
+        expect(error(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) }))).toEqual({
             type: 'NotAllowed',
             command: 'confirm',
             state: 'Confirmed',
@@ -550,10 +563,10 @@ describe('revisions', () => {
         await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
         await mkdir(path.join(s.root, 'extra'), { recursive: true });
         await s.write('extra/new.dt', 'context Extra {}\n');
-        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         expect(manual.origin).toEqual({ kind: 'Manual', takenBy: facilitator });
 
-        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
         expect(await s.read('sales/sales.dt')).toBe(SALES);
         expect(await readFile(path.join(s.root, 'extra/new.dt')).catch(() => 'gone')).toBe('gone');
         expect(preRestore).toMatchObject({ origin: { kind: 'PreRestore', restoring: start.id }, contentHash: manual.contentHash });
@@ -567,7 +580,7 @@ describe('revisions', () => {
         const { id, start } = await started(s);
         const broken = RETURNS.replace('  timeline Normal {', '  timeline Normal {{');
         await s.write('stormings/returns.dtes', broken);
-        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         expect(Number(manual.validation.dtesErrors)).toBeGreaterThan(0);
         expect(Number(manual.validation.dtErrors)).toBe(0);
         expect(manual.files.map((f): string => f.path)).toEqual(['sales/sales.dt', 'stormings/returns.dtes']);
@@ -577,10 +590,10 @@ describe('revisions', () => {
         expect(dtes?.status).toBe('changed');
         expect(dtes?.diff?.kind === 'diff' && dtes.diff.unified).toContain('+  timeline Normal {{');
 
-        value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        value(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
         expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
         // and back again: the broken revision can be restored as it was
-        value(await s.use.restoreRevision({ session: id, revision: manual.id, by: facilitator }));
+        value(await s.use.restoreRevision({ session: id, revision: manual.id, actor: actor(facilitator) }));
         expect(await s.read('stormings/returns.dtes')).toBe(broken);
     });
 
@@ -588,14 +601,14 @@ describe('revisions', () => {
         const s = await session();
         const { id, start } = await started(s);
         await s.write('sales/sales.dt', `${SALES}\n`);
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
             type: 'ExternalChangesSinceSnapshot',
             paths: [value(C.makeWorkspacePath('sales/sales.dt'))],
         });
-        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
 
         await symlink(path.join(s.root, 'sales'), path.join(s.root, 'linked'));
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
             type: 'SymlinkInWorkspace',
             path: value(C.makeWorkspacePath('linked')),
         });
@@ -603,14 +616,17 @@ describe('revisions', () => {
 
         const run = await queuedRun(s, id, start);
         const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({ type: 'RunInProgress', run: run.id });
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
+            type: 'RunInProgress',
+            run: run.id,
+        });
         value(await s.use.releaseRun({ run: run.id, token: lease.token }));
         expect(
-            error(await s.use.restoreRevision({ session: id, revision: C.makeRevisionId('00000000-0000-4000-8000-999999999999'), by: facilitator })),
+            error(await s.use.restoreRevision({ session: id, revision: C.makeRevisionId('00000000-0000-4000-8000-999999999999'), actor: actor(facilitator) })),
         ).toMatchObject({
             type: 'RevisionNotFound',
         });
-        value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        value(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
         expect(await s.read('sales/sales.dt')).toBe(SALES);
     });
 
@@ -620,9 +636,9 @@ describe('revisions', () => {
         await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
         await s.write('stormings/returns.dtes', RETURNS.replace('  event Received', '  event Received\n  event Refunded'));
         await s.write('stormings/more.dtes', 'storming More {\n  event Happened\n}\n');
-        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         const identity = { provider: 'dev' as const, subject: 'ada' };
-        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator, identity }));
+        const { restored, preRestore } = value(await s.use.restoreRevision({ session: id, revision: start.id, actor: { ...actor(facilitator), identity } }));
         expect([await s.read('sales/sales.dt'), await s.read('stormings/returns.dtes')]).toEqual([SALES, RETURNS]);
         expect(await readFile(path.join(s.root, 'stormings/more.dtes')).catch(() => 'gone')).toBe('gone');
         expect(restored.files.map((f): string[] => [f.path, f.language])).toEqual([
@@ -661,7 +677,7 @@ describe('revisions', () => {
         const edited = SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled');
         await s.write('sales/sales.dt', edited);
         // during the run: refused, nothing written
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator, recordExternalChanges: true }))).toEqual({
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator), recordExternalChanges: true }))).toEqual({
             type: 'RunInProgress',
             run: run.id,
         });
@@ -671,7 +687,7 @@ describe('revisions', () => {
         // after the run: an edit by hand is an external change
         const byHand = `${edited}\n// by hand\n`;
         await s.write('sales/sales.dt', byHand);
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
             type: 'ExternalChangesSinceSnapshot',
             paths: [value(C.makeWorkspacePath('sales/sales.dt'))],
         });
@@ -680,7 +696,7 @@ describe('revisions', () => {
         expect(before).toBe(3); // SessionStart, RunBase, RunResult: a refusal records nothing
 
         const { manual, preRestore, restored } = value(
-            await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator, recordExternalChanges: true }),
+            await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator), recordExternalChanges: true }),
         );
         expect(await s.read('sales/sales.dt')).toBe(SALES);
         expect(manual).toMatchObject({ origin: { kind: 'Manual', takenBy: facilitator } });
@@ -702,15 +718,15 @@ describe('revisions', () => {
         // the same workspace with narrower sources: the revision's .dtes is not a source there
         const narrow: CollaborationDeps = { ...s.deps, workspace: createWorkspaceSnapshot(root, ['sales/**/*.dt']) };
         const use = createCollaboration(narrow);
-        value(await use.takeRevision({ session: id, by: facilitator }));
-        const refused = error(await use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        value(await use.takeRevision({ session: id, actor: actor(facilitator) }));
+        const refused = error(await use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
         expect(refused).toEqual({ type: 'PathOutsideRoot', path: 'stormings/returns.dtes' });
         expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
 
         // a link appears between the checks and the write: the writer refuses before writing anything
-        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         await s.write('sales/sales.dt', `${SALES}\n`);
-        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         const racing: CollaborationDeps = {
             ...s.deps,
             workspace: {
@@ -721,7 +737,7 @@ describe('revisions', () => {
                 },
             },
         };
-        expect(error(await createCollaboration(racing).restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({
+        expect(error(await createCollaboration(racing).restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
             type: 'SymlinkInWorkspace',
             path: value(C.makeWorkspacePath('linked')),
         });
@@ -739,7 +755,7 @@ describe('revisions', () => {
         const edited = SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled');
         await s.write('sales/sales.dt', edited);
         await s.write('stormings/returns.dtes', RETURNS.replace('  event Received', '  event Received\n  event Refunded'));
-        value(await s.use.takeRevision({ session: id, by: facilitator }));
+        value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         const failing: CollaborationDeps = {
             ...s.deps,
             workspace: {
@@ -752,7 +768,7 @@ describe('revisions', () => {
                 },
             },
         };
-        const failed = error(await createCollaboration(failing).restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        const failed = error(await createCollaboration(failing).restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
         const history = value(await s.use.sessionState({ session: id })).revisions;
         const preRestore = history.at(-1);
         expect(preRestore?.origin).toEqual({ kind: 'PreRestore', restoring: start.id });
@@ -772,8 +788,10 @@ describe('revisions', () => {
 
         // the workspace differs from the last revision now: the two-step records it and restores the pre-restore one
         const pre = preRestore?.id ?? start.id;
-        expect(error(await s.use.restoreRevision({ session: id, revision: pre, by: facilitator }))).toMatchObject({ type: 'ExternalChangesSinceSnapshot' });
-        value(await s.use.restoreRevision({ session: id, revision: pre, by: facilitator, recordExternalChanges: true }));
+        expect(error(await s.use.restoreRevision({ session: id, revision: pre, actor: actor(facilitator) }))).toMatchObject({
+            type: 'ExternalChangesSinceSnapshot',
+        });
+        value(await s.use.restoreRevision({ session: id, revision: pre, actor: actor(facilitator), recordExternalChanges: true }));
         expect(await s.read('sales/sales.dt')).toBe(edited);
     });
 
@@ -782,12 +800,18 @@ describe('revisions', () => {
         const { id, start } = await started(s);
         const run = await queuedRun(s, id, start);
         const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({ type: 'RunInProgress', run: run.id });
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
+            type: 'RunInProgress',
+            run: run.id,
+        });
         value(await s.use.startRun({ run: run.id, token: lease.token }));
-        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }))).toEqual({ type: 'RunInProgress', run: run.id });
+        expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
+            type: 'RunInProgress',
+            run: run.id,
+        });
         // cancelled: the lease ends, the restore goes on (the workspace is still the run's base)
-        value(await s.use.cancelRun({ run: run.id, by: facilitator }));
-        value(await s.use.restoreRevision({ session: id, revision: start.id, by: facilitator }));
+        value(await s.use.cancelRun({ run: run.id, actor: actor(facilitator) }));
+        value(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
     });
 
     test('compare: each file by DSL, added, removed, changed or unchanged, with a line diff, and both validations', async () => {
@@ -800,7 +824,7 @@ describe('revisions', () => {
         await rm(path.join(s.root, 'stormings/returns.dtes'));
         await s.write('stormings/more.dtes', 'storming More {\n  event Happened\n}\n');
         await s.write('sales/other.dt', 'context Other {}\n');
-        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         const c = value(await s.use.compareRevisions({ session: id, before: start.id, after: manual.id }));
         expect(c.files.map((f): string[] => [f.path, f.language, f.status])).toEqual([
             ['sales/other.dt', 'Dt', 'added'],
@@ -849,7 +873,7 @@ describe('revisions', () => {
         await s.write('sales/0-huge.dt', `// ${'x'.repeat(MAX_DIFF_BYTES)}\n`);
         const row = (i: number): string => `// ${String(i).padStart(6, '0')} ${'y'.repeat(490)}`;
         for (const f of ['a', 'b', 'c']) await s.write(`sales/${f}.dt`, `${Array.from({ length: 900 }, (_, i) => row(i)).join('\n')}\n`);
-        const manual = value(await s.use.takeRevision({ session: id, by: facilitator }));
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
         const read: string[] = [];
         const counting: CollaborationDeps = {
             ...s.deps,
@@ -873,7 +897,7 @@ describe('revisions', () => {
             value(
                 await s.use.sendRequest({
                     session: id,
-                    author: guest,
+                    actor: actor(guest),
                     targets: targets.map((target) => ({ target, sourceRevision: start.id })),
                     body: text('x'),
                 }),

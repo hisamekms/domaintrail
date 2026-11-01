@@ -16,6 +16,7 @@ import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
 import type { Me, Presence, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { mentionablePeople, mentionsMe, streamItems, unreadMentions } from '@domaintrail/web/session/stream';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
+import type { Actor } from '@domaintrail/collaboration/application/actor';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -46,6 +47,13 @@ async function workspace(): Promise<string> {
     await writeFile(path.join(root, 'sales.dt'), DT);
     return root;
 }
+
+/** The actor of a participant of these tests: `facilitator` holds the facilitator's role. */
+const actor = (participant: C.ParticipantId): Actor => ({
+    kind: 'participant',
+    participant,
+    role: participant === 'facilitator' ? 'Facilitator' : 'Participant',
+});
 
 describe("a body's tokens", () => {
     const counts = { targets: 2, people: 1 };
@@ -120,24 +128,24 @@ describe('sending a message that mentions people', () => {
     });
 
     test('the session’s participants, each once, kept in order; the facilitator too', async () => {
-        const sent = value(await use.sendRequest({ session, author: ann, targets: [], body, mentions: [bob, facilitator] }));
+        const sent = value(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: [bob, facilitator] }));
         expect(sent.mentions).toEqual([bob, facilitator]);
         const state = value(await use.sessionState({ session }));
         expect(state.requests.find((r) => r.id === sent.id)?.mentions).toEqual([bob, facilitator]);
         // none: an empty list
-        expect(value(await use.sendRequest({ session, author: ann, targets: [], body })).mentions).toEqual([]);
+        expect(value(await use.sendRequest({ session, actor: actor(ann), targets: [], body })).mentions).toEqual([]);
     });
 
     test('not someone outside the session (of another one, or unknown), nor twice, nor more than 20', async () => {
-        expect(error(await use.sendRequest({ session, author: ann, targets: [], body, mentions: [bob, stranger] }))).toEqual({
+        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: [bob, stranger] }))).toEqual({
             type: 'MentionedNotAParticipant',
             participant: stranger,
         });
         expect(other).not.toBe(session);
-        expect(error(await use.sendRequest({ session, author: ann, targets: [], body, mentions: [bob, bob] }))).toEqual({ type: 'DuplicateMention' });
+        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: [bob, bob] }))).toEqual({ type: 'DuplicateMention' });
         // 21 participants are not needed to pass the limit: the count is checked before anything is sent
         const many = Array.from({ length: MAX_REQUEST_MENTIONS + 1 }, () => bob);
-        expect(error(await use.sendRequest({ session, author: ann, targets: [], body, mentions: many })).type).toBe('TooManyMentions');
+        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: many })).type).toBe('TooManyMentions');
         // nothing was sent
         const state = value(await use.sessionState({ session }));
         expect(state.requests.filter((r) => r.mentions.includes(stranger) || r.mentions.length > 2)).toEqual([]);

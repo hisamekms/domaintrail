@@ -5,20 +5,12 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { secretHash, type LinkInvalid, type SessionAccess } from '@domaintrail/collaboration/application/access';
-import {
-    FACILITATOR_PARTICIPANT,
-    participantOf,
-    sameIdentity,
-    type Identity,
-    type IdentityKey,
-    type IdentityMode,
-    type IdentityProvider,
-} from '@domaintrail/collaboration/application/identity';
+import { actorOf } from '@domaintrail/collaboration/application/actor';
+import { participantOf, type Identity, type IdentityKey, type IdentityMode, type IdentityProvider } from '@domaintrail/collaboration/application/identity';
 import type { SignIn } from '@domaintrail/collaboration/application/ports';
 import type { CollaborationUseCases } from '@domaintrail/collaboration/application/use-cases';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
-import type { Role } from '@domaintrail/collaboration/protocol';
-import type { SessionParticipant } from '../http/access.js';
+import type { Identified } from '../http/access.js';
 
 /** The cookie of a `dev` sign-in. */
 export const DEV_COOKIE = 'dt_session';
@@ -29,10 +21,7 @@ export const ACCESS_COOKIE = 'CF_Authorization';
 /** A secret of `SecretGenerator` (base64url of 32 bytes); anything else is not looked up. */
 const SECRET = /^[A-Za-z0-9_-]{43}$/;
 
-export interface Identified {
-    readonly participant: SessionParticipant;
-    readonly role: Role;
-}
+export type { Identified };
 
 /** The session has as many participants as it admits. */
 export interface SessionFull {
@@ -113,9 +102,9 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
     const facilitatorKey = (): Promise<IdentityKey | undefined> => (facilitator ??= access.facilitator(session));
 
     const identified = async (identity: Identity): Promise<Identified> => {
-        const holder = await facilitatorKey();
-        if (holder && sameIdentity(holder, identity)) return { participant: { id: FACILITATOR_PARTICIPANT, identity }, role: 'facilitator' };
-        return { participant: { id: participantOf(identity), identity }, role: 'participant' };
+        // the collaboration's application binds the identity to a participant and a role
+        const actor = actorOf(identity, await facilitatorKey());
+        return { participant: { id: actor.participant, identity }, role: actor.role === 'Facilitator' ? 'facilitator' : 'participant', actor };
     };
 
     /** Joins `identity` unless it did; refused when the session is full or not open. */

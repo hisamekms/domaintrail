@@ -37,6 +37,7 @@ import { startSessionServer, type SessionServer } from '@domaintrail/composition
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
 import { canVote, markIndex, names, quickReactions, reaction, reactionFits, reactionsOn, tallyOf } from '@domaintrail/web/session/marks';
 import { applyEvent } from '@domaintrail/web/session/state';
+import type { Actor } from '@domaintrail/collaboration/application/actor';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -82,6 +83,13 @@ const choice = (alternative?: string, r = 'r1', assumption = 0): MarkTargetData 
     run: r,
     assumption,
     ...(alternative !== undefined && { alternative }),
+});
+
+/** The actor of a participant of these tests: `facilitator` holds the facilitator's role. */
+const actor = (participant: C.ParticipantId): Actor => ({
+    kind: 'participant',
+    participant,
+    role: participant === 'facilitator' ? 'Facilitator' : 'Participant',
 });
 
 describe('one emoji (a reaction)', () => {
@@ -298,13 +306,13 @@ async function fixture(): Promise<Fixture> {
     const use = createCollaboration(deps);
     const { session } = value(await use.startSession({ facilitator, name }));
     for (const p of [ann, bob]) value(await use.joinSession({ session: session.id, participant: p, name }));
-    const message = value(await use.sendRequest({ session: session.id, author: ann, targets: [], body: text('Add cancel.') })).id;
+    const message = value(await use.sendRequest({ session: session.id, actor: actor(ann), targets: [], body: text('Add cancel.') })).id;
     return { use, deps, id: session.id, message };
 }
 
 /** Runs the message to an end: a clarification asking q1 (single) and q2 (multiple), or a completion with an assumption. */
 async function ended(f: Fixture, how: 'clarification' | 'completed'): Promise<C.AgentRunId> {
-    const queued = value(await f.use.queueRun({ session: f.id, requests: [f.message], queuedBy: facilitator }));
+    const queued = value(await f.use.queueRun({ session: f.id, requests: [f.message], actor: actor(facilitator) }));
     const { lease } = value(await f.use.claimNextRun({ session: f.id, owner: 'agent', leaseMs: 30_000 }));
     value(await f.use.startRun({ run: queued.id, token: lease.token }));
     if (how === 'clarification') {
@@ -358,7 +366,7 @@ describe('setting marks', () => {
         const run = await ended(f, 'clarification');
         const opt = (q: string, o: string): C.MarkTarget => ({ kind: 'QuestionOption', run, question: key(q), option: key(o) });
         const set = (participant: C.ParticipantId, target: C.MarkTarget, placed = true) =>
-            f.use.setMark({ session: f.id, participant, target, sign: VOTE, placed });
+            f.use.setMark({ session: f.id, actor: actor(participant), target, sign: VOTE, placed });
 
         const first = value(await set(ann, opt('q1', 'a')));
         expect(first.placed).toMatchObject({ participant: ann, target: opt('q1', 'a') });
@@ -390,17 +398,17 @@ describe('setting marks', () => {
         const f = await fixture();
         const run = await ended(f, 'clarification');
         const target: C.MarkTarget = { kind: 'QuestionOption', run, question: key('q1'), option: key('a') };
-        value(await f.use.setMark({ session: f.id, participant: ann, target, sign: VOTE, placed: true }));
+        value(await f.use.setMark({ session: f.id, actor: actor(ann), target, sign: VOTE, placed: true }));
         value(
             await f.use.queueRun({
                 session: f.id,
                 requests: [f.message],
-                queuedBy: facilitator,
+                actor: actor(facilitator),
                 answer: { answerTo: run, answer: { answers: [{ question: 'q1', options: ['a'] }] } },
             }),
         );
-        expect(error(await f.use.setMark({ session: f.id, participant: bob, target, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
-        expect(error(await f.use.setMark({ session: f.id, participant: ann, target, sign: VOTE, placed: false }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, actor: actor(bob), target, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, actor: actor(ann), target, sign: VOTE, placed: false }))).toEqual({ type: 'MarkTargetClosed' });
         expect(value(await f.use.sessionState({ session: f.id })).marks).toHaveLength(1);
     });
 
@@ -409,10 +417,10 @@ describe('setting marks', () => {
         const run = await ended(f, 'completed');
         const keep: C.MarkTarget = { kind: 'AssumptionChoice', run, assumption: value(C.makeTally(0)) };
         const all: C.MarkTarget = { ...keep, alternative: key('all') };
-        value(await f.use.setMark({ session: f.id, participant: ann, target: keep, sign: VOTE, placed: true }));
-        expect(value(await f.use.setMark({ session: f.id, participant: ann, target: all, sign: VOTE, placed: true })).removed).toHaveLength(1);
-        value(await f.use.queueRun({ session: f.id, requests: [f.message], queuedBy: facilitator, note: text('前提「Only drafts.」は採らず…') }));
-        expect(error(await f.use.setMark({ session: f.id, participant: bob, target: keep, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
+        value(await f.use.setMark({ session: f.id, actor: actor(ann), target: keep, sign: VOTE, placed: true }));
+        expect(value(await f.use.setMark({ session: f.id, actor: actor(ann), target: all, sign: VOTE, placed: true })).removed).toHaveLength(1);
+        value(await f.use.queueRun({ session: f.id, requests: [f.message], actor: actor(facilitator), note: text('前提「Only drafts.」は採らず…') }));
+        expect(error(await f.use.setMark({ session: f.id, actor: actor(bob), target: keep, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
     });
 
     test('refused: the facilitator voting, a sign that does not fit, a target not in the session, a stranger, a closed session', async () => {
@@ -420,7 +428,7 @@ describe('setting marks', () => {
         const run = await ended(f, 'clarification');
         const target: C.MarkTarget = { kind: 'QuestionOption', run, question: key('q1'), option: key('a') };
         const set = (participant: C.ParticipantId, t: C.MarkTarget, sign: C.MarkSign) =>
-            f.use.setMark({ session: f.id, participant, target: t, sign, placed: true });
+            f.use.setMark({ session: f.id, actor: actor(participant), target: t, sign, placed: true });
         expect(error(await set(facilitator, target, VOTE))).toEqual({ type: 'FacilitatorDoesNotVote' });
         expect(error(await set(ann, target, react('👍')))).toEqual({ type: 'MarkNotForTarget' });
         expect(error(await set(ann, { kind: 'Message', request: f.message }, VOTE))).toEqual({ type: 'MarkNotForTarget' });
@@ -436,7 +444,7 @@ describe('setting marks', () => {
         value(await set(facilitator, { kind: 'Message', request: f.message }, react('👀')));
         value(await set(ann, { kind: 'Turn', run }, react('🤔')));
         expect(value(await f.use.sessionState({ session: f.id })).marks.map((m) => signKey(m.sign))).toEqual(['👍', '👀', '🤔']);
-        value(await f.use.closeSession({ session: f.id }));
+        value(await f.use.closeSession({ session: f.id, actor: actor(facilitator) }));
         expect(error(await set(ann, { kind: 'Message', request: f.message }, react('❤️')))).toEqual({ type: 'SessionAlreadyClosed' });
     });
 
@@ -444,18 +452,18 @@ describe('setting marks', () => {
         const f = await fixture();
         const message: C.MarkTarget = { kind: 'Message', request: f.message };
         const set = (participant: C.ParticipantId, emoji: string) =>
-            f.use.setMark({ session: f.id, participant, target: message, sign: react(emoji), placed: true });
+            f.use.setMark({ session: f.id, actor: actor(participant), target: message, sign: react(emoji), placed: true });
         for (const [i, e] of TWENTY.entries()) value(await set(i % 2 === 0 ? ann : bob, e));
         expect(error(await set(ann, '🙃'))).toEqual({ type: 'ReactionLimitReached', limit: value(C.makeTally(MAX_REACTION_EMOJI)) });
         // joining an emoji there is fine; taking one off makes room
         value(await set(ann, '😁'));
-        value(await f.use.setMark({ session: f.id, participant: ann, target: message, sign: react('😀'), placed: false }));
+        value(await f.use.setMark({ session: f.id, actor: actor(ann), target: message, sign: react('😀'), placed: false }));
         value(await set(ann, '🙃'));
         // another target has its own room
         value(
             await f.use.setMark({
                 session: f.id,
-                participant: ann,
+                actor: actor(ann),
                 target: { kind: 'Turn', run: await ended(f, 'completed') },
                 sign: react('🙃'),
                 placed: true,

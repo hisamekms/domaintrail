@@ -384,7 +384,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             assets: live.assets,
             upgrade: (req, socket, head, auth) => {
                 if (auth.kind !== 'participant') return void socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
-                hub.handleUpgrade(req, socket, head, { participant: auth.participant, role: auth.role });
+                hub.handleUpgrade(req, socket, head, { participant: auth.participant, role: auth.role, actor: auth.actor });
             },
             session: surface,
         });

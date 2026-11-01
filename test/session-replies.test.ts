@@ -25,6 +25,7 @@ import { changeUnits } from '@domaintrail/web/session/history';
 import { isReplyable, replyReference, replyTargets } from '@domaintrail/web/session/replies';
 import { applyEvent } from '@domaintrail/web/session/state';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
+import type { Actor } from '@domaintrail/collaboration/application/actor';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -103,7 +104,7 @@ async function fixture(): Promise<Fixture> {
         deps,
         id: session.id,
         send: async (body, replyTo) =>
-            value(await use.sendRequest({ session: session.id, author: ann, targets: [], body: text(body), ...(replyTo && { replyTo }) })),
+            value(await use.sendRequest({ session: session.id, actor: actor(ann), targets: [], body: text(body), ...(replyTo && { replyTo }) })),
     };
 }
 
@@ -116,10 +117,10 @@ async function runTo(
     how: Ending,
     answer?: { answerTo: C.AgentRunId; answer: { answers: { question: string; options: string[] }[] } },
 ): Promise<C.AgentRunId> {
-    const queued = value(await f.use.queueRun({ session: f.id, requests: [...requests], queuedBy: facilitator, ...(answer && { answer }) }));
+    const queued = value(await f.use.queueRun({ session: f.id, requests: [...requests], actor: actor(facilitator), ...(answer && { answer }) }));
     if (how === 'queued') return queued.id;
     if (how === 'cancelled') {
-        value(await f.use.cancelRun({ run: queued.id, by: facilitator }));
+        value(await f.use.cancelRun({ run: queued.id, actor: actor(facilitator) }));
         return queued.id;
     }
     const { lease } = value(await f.use.claimNextRun({ session: f.id, owner: 'agent', leaseMs: 30_000 }));
@@ -170,6 +171,13 @@ async function runTo(
     return queued.id;
 }
 
+/** The actor of a participant of these tests: `facilitator` holds the facilitator's role. */
+const actor = (participant: C.ParticipantId): Actor => ({
+    kind: 'participant',
+    participant,
+    role: participant === 'facilitator' ? 'Facilitator' : 'Participant',
+});
+
 describe('replying to a run', () => {
     test('a message replies to an ended run of its session: completed, failed, declined or cancelled', async () => {
         const f = await fixture();
@@ -188,7 +196,7 @@ describe('replying to a run', () => {
 
     test('not to a run that is queued, running or waits for an answer, nor one that is not of the session', async () => {
         const f = await fixture();
-        const reply = (to: C.AgentRunId) => f.use.sendRequest({ session: f.id, author: ann, targets: [], body: text('And?'), replyTo: to });
+        const reply = (to: C.AgentRunId) => f.use.sendRequest({ session: f.id, actor: actor(ann), targets: [], body: text('And?'), replyTo: to });
         const asked = await runTo(f, [(await f.send('a')).id], 'clarification');
         expect(error(await reply(asked))).toEqual({ type: 'RunNotReplyable', run: asked });
         const queued = await runTo(f, [(await f.send('b')).id], 'queued');
@@ -201,9 +209,9 @@ describe('replying to a run', () => {
 
         // a run of another session (a session started later in the same workspace)
         const other = value(await f.use.startSession({ facilitator, name })).session;
-        const elsewhere = value(await f.use.sendRequest({ session: other.id, author: facilitator, targets: [], body: text('x') }));
-        const theirs = value(await f.use.queueRun({ session: other.id, requests: [elsewhere.id], queuedBy: facilitator }));
-        value(await f.use.cancelRun({ run: theirs.id, by: facilitator }));
+        const elsewhere = value(await f.use.sendRequest({ session: other.id, actor: actor(facilitator), targets: [], body: text('x') }));
+        const theirs = value(await f.use.queueRun({ session: other.id, requests: [elsewhere.id], actor: actor(facilitator) }));
+        value(await f.use.cancelRun({ run: theirs.id, actor: actor(facilitator) }));
         expect(error(await reply(theirs.id))).toEqual({ type: 'RunOfAnotherSession', run: theirs.id });
         // nothing was sent
         expect(value(await f.use.sessionState({ session: f.id })).requests.filter((r) => r.replyTo !== undefined)).toEqual([]);

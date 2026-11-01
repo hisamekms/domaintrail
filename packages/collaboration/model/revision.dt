@@ -79,14 +79,22 @@ context Collaboration {
       emits RevisionRecorded
 
     /// 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
-    create command restore(id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: SnapshotFile[0..*], validation: ValidationSummary, takenAt: Timestamp) "リビジョンを復元する"
+    /// 復元するのはファシリテーター。
+    create command restore(id: RevisionId, session: SessionId, restoredFrom: RestorableRevision, preRestore: RevisionId, contentHash: ContentHash, files: SnapshotFile[0..*], validation: ValidationSummary, restoredByRole: ParticipantRole, takenAt: Timestamp) "リビジョンを復元する"
       -> Recorded
+      requires facilitatorRestores "ファシリテーターが復元する" {
+        restoredByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
       requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
       emits RevisionRestored
 
-    command confirm(confirmedBy: ParticipantId, confirmedAt: Timestamp) "リビジョンを確認済みにする"
+    /// 確認済みにするのはファシリテーター。
+    command confirm(confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, confirmedAt: Timestamp) "リビジョンを確認済みにする"
       Recorded -> Confirmed
+      requires facilitatorConfirms "ファシリテーターが確認する" {
+        confirmedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       emits RevisionConfirmed
   }
 

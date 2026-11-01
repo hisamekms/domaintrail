@@ -45,8 +45,12 @@ context Collaboration {
       changes participants
       emits ParticipantJoined
 
-    command close(closedAt: Timestamp) "セッションを終える"
+    /// セッションを終えるのはファシリテーター。
+    command close(closedByRole: ParticipantRole, closedAt: Timestamp) "セッションを終える"
       Open -> Closed
+      requires facilitatorCloses "ファシリテーターが終える" {
+        closedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
       emits SessionClosed
   }
 
@@ -80,6 +84,9 @@ context Collaboration {
   error AlreadyJoined "参加済み" {
     participant: ParticipantId
   }
+
+  /// ファシリテーターだけができる操作（実行の登録と取消、スナップショット、リビジョンの確認と復元、セッションの終了）を、参加者が求めた。
+  error FacilitatorOnly "ファシリテーターだけの操作"
 
   /// 指定したセッションがない。
   error SessionNotFound "セッションなし"

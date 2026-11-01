@@ -46,20 +46,21 @@ const open = async () => {
 if (step === 'run') {
     const { db, use } = await open();
     const facilitator = must(C.makeParticipantId('facilitator'));
+    const actor = { kind: 'participant', participant: facilitator, role: 'Facilitator' };
     const { session, revision } = must(await use.startSession({ facilitator, name: must(C.makeDisplayName('Ada')) }));
     const request = must(await use.sendRequest({
         session: session.id,
-        author: facilitator,
+        actor,
         targets: [{ target: { kind: 'DtElement', element: must(C.makeElementName('Sales.Order')) }, sourceRevision: revision.id }],
         body: must(C.makeText('Add a note.')),
     }));
-    const run = must(await use.queueRun({ session: session.id, requests: [request.id], queuedBy: facilitator }));
+    const run = must(await use.queueRun({ session: session.id, requests: [request.id], actor }));
     const { lease } = must(await use.claimNextRun({ session: session.id, owner: 'node', leaseMs: 60000 }));
     must(await use.startRun({ run: run.id, token: lease.token }));
     const file = path.join(root, 'sales.dt');
     writeFileSync(file, readFileSync(file, 'utf8').replace('id: OrderId', 'id: OrderId\\n    note: String?'));
     const finished = must(await use.finishRun({ run: run.id, token: lease.token, facts: { exitCode: 0, formatted: true, checked: true } }));
-    const restored = must(await use.restoreRevision({ session: session.id, revision: revision.id, by: facilitator }));
+    const restored = must(await use.restoreRevision({ session: session.id, revision: revision.id, actor }));
     db.close();
     console.log(JSON.stringify({ session: session.id, run: finished.run.state, changed: finished.run.changed, restored: restored.restored.contentHash === revision.contentHash }));
 } else {
