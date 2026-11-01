@@ -5,6 +5,11 @@ written against `main` at `8a77a8d`; the large pull request in flight (#23) land
 plan with the code there: **the input of the work is `main` at `9f28344`**. Where the code differed, the code won and
 this plan was corrected (the code map, the notes of T1, T2, T6 and T12, [What #23 changed](#what-23-changed)).
 
+**Status: done.** Every task, T0–T13, is carried out on `refactor/boundaries`; ADR 0027 is implemented, and its
+Implementation notes say what differs from its text. The code map below gives where each piece went; the task notes
+say how each step went and are kept as written; [Open in the tasks](#open-in-the-tasks) lists every question with its
+decision. The packages and the rules as enforced are in `CONTRIBUTING.md` (Boundaries).
+
 ## Landing
 
 *Decided by the maintainer:* as for M0, one integration branch `refactor/boundaries` from `main`, one worktree and
@@ -20,7 +25,7 @@ Every task leaves:
 
 ## Code map
 
-From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each package's `src/`.
+From `main` at `9f28344` to the layout of ADR 0027, as carried out. Paths are relative to each package's `src/`.
 
 ### `packages/modeling`
 
@@ -28,14 +33,14 @@ From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each p
 |---|---|---|
 | `language/domain.langium`, `language/generated`, `domain-module.ts`, `parser-messages.ts` | `contexts/modeling/src/infrastructure/syntax/` | T8 |
 | `storming/storming.langium`, `storming/language/module.ts` | `contexts/storming/src/infrastructure/syntax/` | T8 |
-| `model/` (`model.ts`, `build.ts`, `ids.ts`, `usages.ts`, `dependencies.ts`) | `contexts/modeling/src/domain/` (`build.ts`, the AST → model mapping, to `infrastructure/syntax/`; `ids.ts`'s `elementIdOf`, which walks the AST, to `infrastructure/syntax/element-id.ts`) | T8, T9 |
-| `core/checker/*` except `tsnames.ts` | `contexts/modeling/src/domain/rules/` | T8; onto the typed model in T10 |
+| `model/` (`model.ts`, `build.ts`, `ids.ts`, `usages.ts`, `dependencies.ts`) | `contexts/modeling/src/domain/` (`build.ts`, the AST → model mapping, to `infrastructure/syntax/`; `ids.ts`'s `elementIdOf`, which walks the AST, to `infrastructure/syntax/element-id.ts`); the Typed Model's types generated from `contexts/modeling/model/*.dt` into `src/generated` (T11), the helpers by hand in `domain/model.ts` | T8, T11 |
+| `core/checker/*` except `tsnames.ts` | `contexts/modeling/src/domain/rules/`, reading the model as written (`domain/source-model.ts`, T9) | T8, T10 |
 | `core/checker/tsnames.ts`, `generator/naming.ts` | `capabilities/generation/src/core/` (since T5 `generator/tsnames.ts` next to `generator/naming.ts`; T8 moves them with the generator) | T5, T8 |
-| `core/model-index.ts`, `core/types.ts`, `core/labels.ts`, `core/diagnostic-sink.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
+| `core/model-index.ts`, `core/types.ts`, `core/labels.ts`, `core/diagnostic-sink.ts` | `contexts/modeling/src/infrastructure/syntax/` (T8); after T10: `model-index.ts` the AST index of the language server and the builders, `labels.ts` its `LabelResolver` (the rules' in `domain/labels.ts`); `types.ts` removed (the static types are `domain/types.ts`); `diagnostic-sink.ts` became `site.ts` (`siteOf`, `FileResolver`), `DiagnosticSink` removed (the rules report through `domain/diagnostics.ts`'s `RuleSink`) | T8, T10 |
 | `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` (`modeling/src/kernel/` in T3, `shared/kernel/src/` in T8) | T3, T8 |
 | `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/src/application/analyze.ts` (since T4 `analysis/analyze.ts`); `isStormingFile` to Storming's `domain/files.ts` (T8); Modeling's analysis of `.dt`, `analyzeDomain`, to `contexts/modeling/src/application/analyze.ts` (T8) | T4, T8 |
-| `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/src/core/sources.ts` (T8). Since #23 it also holds `session.agent.dt` (checked with `realpathSync`: the only I/O in the file), `session.agent.maxPreviousRunDiff`, `session.quickReactions` and `session.classifier`; see T6 | T6 |
-| `core/emoji.ts` (new in #23: one emoji, its normal form, `DEFAULT_QUICK_REACTIONS`) | not Modeling's language: the rule of Collaboration's `Emoji` primitive (`model/mark.dt`) and of `session.quickReactions`. Proposed: `collaboration/src/domain/emoji.ts` in T6, with the `session.quickReactions` section (T8 then moves it with `collaboration/`); the alternative is `shared/kernel` (see Open in the tasks) | T6 |
+| `core/config.ts` | split by owner (T6): `capabilities/analysis/src/core/sources.ts`, `capabilities/generation/src/core/config.ts`, `contexts/collaboration/src/application/config.ts`, `capabilities/agent/src/adapters/config.ts`, composed in `apps/dt/src/config/` (T8). Since #23 it also holds `session.agent.dt` (checked with `realpathSync`: the only I/O in the file), `session.agent.maxPreviousRunDiff`, `session.quickReactions` and `session.classifier`; see T6 | T6 |
+| `core/emoji.ts` (new in #23: one emoji, its normal form, `DEFAULT_QUICK_REACTIONS`) | not Modeling's language: the rule of Collaboration's `Emoji` primitive (`model/mark.dt`) and of `session.quickReactions`: `contexts/collaboration/src/domain/emoji.ts` (T6, *decided*; T8 moved it with `collaboration/`) | T6 |
 | `format/format.ts` | `contexts/modeling/src/infrastructure/syntax/format.ts` (T8: the whole file is the printer, which works on the CST; no use case is left for `application/`) | T8 |
 | `generator/` (`typescript.ts`, `checks.ts`, `tests.ts`, `testing/`, `config.ts`) | `capabilities/generation/src/core/` | T8 |
 | `storming/` (`parse`, `validate`, `link`, `format`, `analyze`, `ir`, `semantic`) | `contexts/storming/src/` (`ir`, `validate`, `link`, `semantic`, `rule-ids`, `files` to `domain/`; `analyze` to `application/`; `parse`, `format` to `infrastructure/syntax/`) | T8 |
@@ -521,6 +526,38 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   status; `editors/zed`'s grammar `rev` points at a commit before the keyword change (point it at the merged commit).
 - **T13 — wrap-up.** `CONTRIBUTING.md` (the package table, the boundary rules, the bootstrap steps), ADR 0027's status
   to implemented, this plan reconciled with what was built.
+  **T13 (done).** `CONTRIBUTING.md`: a Boundaries section with the package table (path, kind, upstream; a new
+  architecture test compares it with the map), the kinds and what each may depend on, and every rule by the name a
+  failure gives; Adding a keyword as its own section (every place a keyword lives); the Zed `rev` at a commit of
+  `main`. ADR 0027: accepted, implemented, with Implementation notes (what differs from the text: the model as written,
+  the kernel as a kind, one Langium project per context, the rules added, the DSL additions, the reshaped Typed Model;
+  what is left). This plan: the status above, the code map as carried out, the Open list. Stale comments (the
+  tree-sitter grammar's path to the Langium grammar, its stamp rewritten; the subscriber's owner) fixed; the Live View's
+  highlighter reads a keyword after `.` as a name. The changelogs have no Unreleased section (`docs/releasing.md`): the
+  entries for the next release are listed in [For the next release](#for-the-next-release). *After the merge:*
+  `editors/zed/extension.toml`'s `rev` still points at `235dd77`, before the keyword change; point it at the squash
+  merge commit on `main` in a follow-up.
+
+## For the next release
+
+The changelogs are written when releasing (`docs/releasing.md`); what this work changes for users, to write then:
+
+- *Added:* the declaration keywords (`context`, `event`, `error`, `errors`, `emits`, `aggregate`, `command`, `state`,
+  `owns`, `references`, `enum`, `union`, `entity`, `primitive`, `create`, `shared`, `terms`, `invariant`) may name
+  fields, parameters, terms, commands and discriminators, and any keyword (the words of expressions and the primitive
+  types included) may name an enum value or a variant and follow a `.` (`Op.and`). A keyword read neither way is one
+  syntax error that says what may follow (two errors before).
+- *Added:* value objects and unions may be recursive when each has a finite value (through `?`, a list that may be
+  empty, or a variant out of the cycle; M012); cycles through entities and aggregates stay errors. The contract tests
+  generate no values of recursive types yet, and `dt generate ts` warns about what they leave out.
+- *Added:* value objects take field sets (`with`; M016, M014, M012).
+- *Changed:* the model in the Live View payload and the elements in `dt show --format json` have a new shape:
+  `{ contexts, elements }` lists in declaration order, each element a variant by `kind` with exactly its parts, enum
+  values as `{ name, label }`, binary operators as names (`eq`, `and`, ...). Only for anyone reading that JSON; the
+  generated TypeScript is unchanged. (*Upgrading* step for readers of the JSON.)
+- *Fixed:* the Live View's source highlights a keyword after `.` as a name.
+- Internal, one line at most: the code is split into contexts, capabilities, the platform, the shared kernel and apps
+  (ADR 0027), with boundaries checked by the architecture test; contributors see `CONTRIBUTING.md`.
 
 ## What #23 changed
 
@@ -565,3 +602,9 @@ Tests that every task keeps green; a deliberate change updates a snapshot with `
   tests move next to the code and read it relatively; integration tests and the scripts use the entries only (done in
   T2).
 - T12 (from T0): `dismiss` has no route since #23 — *decided by the maintainer:* removed (done in T12).
+- T9, T10: whether the Typed Model is built from the model as written — left as it is (the Typed Model is still built
+  from the AST); recorded in ADR 0027's Implementation notes, Left for later.
+- T11: the contract tests and values of recursive types — left out for now, with a warning of `dt generate ts`;
+  `tests.maxRecursionDepth` is planned (ADR 0027, Implementation notes).
+- T13: the Zed extension's grammar `rev` — set after the merge, at the squash merge commit on `main` (a branch's commits
+  are gone once it is squash merged).
