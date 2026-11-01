@@ -113,7 +113,6 @@ export const MAP: Record<string, Module> = {
             // its index and the diagnostic sink from `infrastructure/syntax/` (and Langium), one entry per file; each
             // checker's task removes its entry
             syntax: [
-                'domain/rules/events.ts',
                 'domain/rules/expressions.ts',
                 'domain/rules/labels.ts',
                 'domain/rules/names.ts',
