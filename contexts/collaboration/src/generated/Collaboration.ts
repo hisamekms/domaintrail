@@ -6,22 +6,48 @@ import { distinct, err, ok, sameList, sameOptional } from './_runtime.js';
 /**
  * エージェント実行ID
  * エージェント実行の識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
  * Make it with `makeAgentRunId`; never `as AgentRunId` (see dt guide lint).
  * @see model/agent-run.dt:3
  */
 export type AgentRunId = string & { readonly __domain: 'Collaboration.AgentRunId' };
 
 /**
- * Creates a AgentRunId. It has no invariants, so creation cannot fail.
+ * A value that violates an invariant of AgentRunId.
  * @see model/agent-run.dt:3
  */
-export type MakeAgentRunId = (value: string) => AgentRunId;
+export interface InvalidAgentRunId {
+    readonly type: 'InvalidAgentRunId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
 
 /**
- * Creates a AgentRunId: it has no invariants, so every value is one.
+ * Creates a AgentRunId, checking its invariants: generated as `makeAgentRunId`, or written by hand.
  * @see model/agent-run.dt:3
  */
-export const makeAgentRunId: MakeAgentRunId = (value) => value as AgentRunId;
+export type MakeAgentRunId = (value: string) => Result<AgentRunId, InvalidAgentRunId>;
+
+/**
+ * The invariants of AgentRunId that a value violates, in declaration order after 'uuid'; empty when it is a AgentRunId.
+ * @see model/agent-run.dt:3
+ */
+export function checkAgentRunId(value: string): readonly InvalidAgentRunId['invariant'][] {
+    const violated: InvalidAgentRunId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a AgentRunId, checking its invariants with `checkAgentRunId`: the first one violated is reported.
+ * @see model/agent-run.dt:3
+ */
+export const makeAgentRunId: MakeAgentRunId = (value) => {
+    const [invariant] = checkAgentRunId(value);
+    if (invariant === undefined) return ok(value as AgentRunId);
+    return err({ type: 'InvalidAgentRunId', value, invariant });
+};
 
 /**
  * 失敗の理由
@@ -1642,22 +1668,48 @@ export type SourceLanguage =
 /**
  * 印ID
  * 印の識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
  * Make it with `makeMarkId`; never `as MarkId` (see dt guide lint).
  * @see model/mark.dt:3
  */
 export type MarkId = string & { readonly __domain: 'Collaboration.MarkId' };
 
 /**
- * Creates a MarkId. It has no invariants, so creation cannot fail.
+ * A value that violates an invariant of MarkId.
  * @see model/mark.dt:3
  */
-export type MakeMarkId = (value: string) => MarkId;
+export interface InvalidMarkId {
+    readonly type: 'InvalidMarkId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
 
 /**
- * Creates a MarkId: it has no invariants, so every value is one.
+ * Creates a MarkId, checking its invariants: generated as `makeMarkId`, or written by hand.
  * @see model/mark.dt:3
  */
-export const makeMarkId: MakeMarkId = (value) => value as MarkId;
+export type MakeMarkId = (value: string) => Result<MarkId, InvalidMarkId>;
+
+/**
+ * The invariants of MarkId that a value violates, in declaration order after 'uuid'; empty when it is a MarkId.
+ * @see model/mark.dt:3
+ */
+export function checkMarkId(value: string): readonly InvalidMarkId['invariant'][] {
+    const violated: InvalidMarkId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a MarkId, checking its invariants with `checkMarkId`: the first one violated is reported.
+ * @see model/mark.dt:3
+ */
+export const makeMarkId: MakeMarkId = (value) => {
+    const [invariant] = checkMarkId(value);
+    if (invariant === undefined) return ok(value as MarkId);
+    return err({ type: 'InvalidMarkId', value, invariant });
+};
 
 /**
  * 絵文字
@@ -2146,22 +2198,48 @@ export interface ReactionLimitReached {
 /**
  * 依頼ID
  * 依頼の識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
  * Make it with `makeRequestId`; never `as RequestId` (see dt guide lint).
  * @see model/request.dt:3
  */
 export type RequestId = string & { readonly __domain: 'Collaboration.RequestId' };
 
 /**
- * Creates a RequestId. It has no invariants, so creation cannot fail.
+ * A value that violates an invariant of RequestId.
  * @see model/request.dt:3
  */
-export type MakeRequestId = (value: string) => RequestId;
+export interface InvalidRequestId {
+    readonly type: 'InvalidRequestId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
 
 /**
- * Creates a RequestId: it has no invariants, so every value is one.
+ * Creates a RequestId, checking its invariants: generated as `makeRequestId`, or written by hand.
  * @see model/request.dt:3
  */
-export const makeRequestId: MakeRequestId = (value) => value as RequestId;
+export type MakeRequestId = (value: string) => Result<RequestId, InvalidRequestId>;
+
+/**
+ * The invariants of RequestId that a value violates, in declaration order after 'uuid'; empty when it is a RequestId.
+ * @see model/request.dt:3
+ */
+export function checkRequestId(value: string): readonly InvalidRequestId['invariant'][] {
+    const violated: InvalidRequestId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a RequestId, checking its invariants with `checkRequestId`: the first one violated is reported.
+ * @see model/request.dt:3
+ */
+export const makeRequestId: MakeRequestId = (value) => {
+    const [invariant] = checkRequestId(value);
+    if (invariant === undefined) return ok(value as RequestId);
+    return err({ type: 'InvalidRequestId', value, invariant });
+};
 
 /**
  * 未処理の依頼
@@ -2582,22 +2660,48 @@ export interface WorkspaceTarget {
 /**
  * リビジョンID
  * リビジョンの識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
  * Make it with `makeRevisionId`; never `as RevisionId` (see dt guide lint).
  * @see model/revision.dt:3
  */
 export type RevisionId = string & { readonly __domain: 'Collaboration.RevisionId' };
 
 /**
- * Creates a RevisionId. It has no invariants, so creation cannot fail.
+ * A value that violates an invariant of RevisionId.
  * @see model/revision.dt:3
  */
-export type MakeRevisionId = (value: string) => RevisionId;
+export interface InvalidRevisionId {
+    readonly type: 'InvalidRevisionId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
 
 /**
- * Creates a RevisionId: it has no invariants, so every value is one.
+ * Creates a RevisionId, checking its invariants: generated as `makeRevisionId`, or written by hand.
  * @see model/revision.dt:3
  */
-export const makeRevisionId: MakeRevisionId = (value) => value as RevisionId;
+export type MakeRevisionId = (value: string) => Result<RevisionId, InvalidRevisionId>;
+
+/**
+ * The invariants of RevisionId that a value violates, in declaration order after 'uuid'; empty when it is a RevisionId.
+ * @see model/revision.dt:3
+ */
+export function checkRevisionId(value: string): readonly InvalidRevisionId['invariant'][] {
+    const violated: InvalidRevisionId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a RevisionId, checking its invariants with `checkRevisionId`: the first one violated is reported.
+ * @see model/revision.dt:3
+ */
+export const makeRevisionId: MakeRevisionId = (value) => {
+    const [invariant] = checkRevisionId(value);
+    if (invariant === undefined) return ok(value as RevisionId);
+    return err({ type: 'InvalidRevisionId', value, invariant });
+};
 
 /**
  * 復元できるリビジョン
@@ -3224,22 +3328,48 @@ export interface RestoreNeedsCheck {
 /**
  * セッションID
  * セッションの識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
  * Make it with `makeSessionId`; never `as SessionId` (see dt guide lint).
  * @see model/session.dt:3
  */
 export type SessionId = string & { readonly __domain: 'Collaboration.SessionId' };
 
 /**
- * Creates a SessionId. It has no invariants, so creation cannot fail.
+ * A value that violates an invariant of SessionId.
  * @see model/session.dt:3
  */
-export type MakeSessionId = (value: string) => SessionId;
+export interface InvalidSessionId {
+    readonly type: 'InvalidSessionId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
 
 /**
- * Creates a SessionId: it has no invariants, so every value is one.
+ * Creates a SessionId, checking its invariants: generated as `makeSessionId`, or written by hand.
  * @see model/session.dt:3
  */
-export const makeSessionId: MakeSessionId = (value) => value as SessionId;
+export type MakeSessionId = (value: string) => Result<SessionId, InvalidSessionId>;
+
+/**
+ * The invariants of SessionId that a value violates, in declaration order after 'uuid'; empty when it is a SessionId.
+ * @see model/session.dt:3
+ */
+export function checkSessionId(value: string): readonly InvalidSessionId['invariant'][] {
+    const violated: InvalidSessionId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a SessionId, checking its invariants with `checkSessionId`: the first one violated is reported.
+ * @see model/session.dt:3
+ */
+export const makeSessionId: MakeSessionId = (value) => {
+    const [invariant] = checkSessionId(value);
+    if (invariant === undefined) return ok(value as SessionId);
+    return err({ type: 'InvalidSessionId', value, invariant });
+};
 
 /**
  * 参加者ID

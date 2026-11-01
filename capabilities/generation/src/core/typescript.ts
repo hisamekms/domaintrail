@@ -18,7 +18,7 @@ import type {
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { contextNames, elementOf, elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
-import { CheckWriter, type DomainPrimitive } from './checks.js';
+import { CheckWriter, primitiveInvariants, type DomainPrimitive } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
 import {
     AGGREGATE_TYPE,
@@ -525,13 +525,14 @@ class ContextEmitter {
      */
     private primitive(p: DomainPrimitive): void {
         const base = PRIMITIVES[p.base];
+        const invariants = primitiveInvariants(p);
         const summary = p.kind === 'id' && !p.label ? [`Identifier of ${p.name}.`] : [];
-        const make = `make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}`;
+        const make = `make${p.name}${invariants.some((i) => !i.source) ? 'With' : ''}`;
         const noCast = `Make it with \`${make}\`; never \`as ${p.name}\` (see dt guide lint).`;
-        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(p.invariants), noCast, seeLine(p.location)]);
+        this.jsdoc([...describedLines(p), ...summary, ...invariantLines(invariants), noCast, seeLine(p.location)]);
         this.line(`export type ${p.name} = ${base} & { readonly __domain: '${p.id}' };`);
         this.out.push('');
-        if (p.invariants.length === 0) {
+        if (invariants.length === 0) {
             this.jsdoc([`Creates a ${p.name}. It has no invariants, so creation cannot fail.`, seeLine(p.location)]);
             this.line(`export type ${makeTypeName(p)} = (value: ${base}) => ${p.name};`);
             this.push(this.checks.primitive(p));
@@ -542,11 +543,11 @@ class ContextEmitter {
         this.line(`    readonly type: '${invalidTypeName(p)}';`);
         this.line(`    readonly value: ${base};`);
         this.line(`    /** The violated invariant. */`);
-        this.line(`    readonly invariant: ${p.invariants.map((i) => `'${i.name}'`).join(' | ')};`);
+        this.line(`    readonly invariant: ${invariants.map((i) => `'${i.name}'`).join(' | ')};`);
         this.line('}');
         this.out.push('');
         this.jsdoc([
-            `Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${p.invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`,
+            `Creates a ${p.name}, checking its invariants: generated as \`make${p.name}${invariants.some((i) => !i.source) ? 'With' : ''}\`, or written by hand.`,
             seeLine(p.location),
         ]);
         this.line(`export type ${makeTypeName(p)} = (value: ${base}) => Result<${p.name}, ${invalidTypeName(p)}>;`);

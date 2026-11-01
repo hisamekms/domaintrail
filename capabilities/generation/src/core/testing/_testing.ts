@@ -207,7 +207,7 @@ export function anyOf(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
     }
 }
 
-/** Values at the edges of the hints: on and next to each bound. */
+/** Values at the edges of the hints: on and next to each bound (for a UUID, next to its form, and in upper case). */
 export function boundaries(b: Base, h: Hints, seed: number): unknown[] {
     const out: unknown[] = [];
     if (b === 'Int' || b === 'Decimal') {
@@ -218,8 +218,10 @@ export function boundaries(b: Base, h: Hints, seed: number): unknown[] {
         return [...new Set(n)].map((x) => (b === 'Int' ? x : decimal(x)));
     }
     if (b === 'String' || b === 'UUID') {
-        const [sample] = h.pattern !== undefined ? fc.sample(fc.stringMatching(new RegExp(h.pattern)), { seed, numRuns: 1 }) : ['a'];
+        const sampled = h.pattern !== undefined ? fc.stringMatching(new RegExp(h.pattern)) : b === 'UUID' ? fc.uuid() : undefined;
+        const [sample] = sampled ? fc.sample(sampled, { seed, numRuns: 1 }) : ['a'];
         out.push('', sample, `${sample}x`, `x${sample}`, sample.slice(0, -1));
+        if (b === 'UUID') out.push(sample.toUpperCase());
         for (const n of [h.minLength, h.maxLength])
             if (n !== undefined) for (const m of [n - 1, n, n + 1]) if (m >= 0) out.push(sample.padEnd(m, 'a').slice(0, m));
         return [...new Set(out)];

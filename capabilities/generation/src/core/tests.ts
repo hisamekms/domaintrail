@@ -10,6 +10,7 @@ import {
     declaredChecksName,
     declaredRequiresName,
     hasDeclared,
+    primitiveInvariants,
     quote,
     requiresName,
     requiresWithName,
@@ -319,7 +320,8 @@ class TestsEmitter {
                 case 'id':
                 case 'primitive': {
                     const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base}', ${literal(hintsOf(el.invariants))})), seed)`;
-                    add(el.name, valid(el.name, raw, el.invariants.length ? this.holds(el.name, el.name, el.invariants) : undefined));
+                    const invs = primitiveInvariants(el);
+                    add(el.name, valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined));
                     break;
                 }
                 case 'verified': {
@@ -422,18 +424,15 @@ class TestsEmitter {
     }
 
     private primitiveCase(p: DomainPrimitive): string {
-        const declared = p.invariants.filter((i) => !i.expr).map((i) => `'${i.name}'`);
-        const check = !p.invariants.length
-            ? '() => () => []'
-            : declared.length
-              ? `${this.ctx}.${checkWithName(p.name)}`
-              : `() => ${this.ctx}.${checkName(p.name)}`;
+        const invs = primitiveInvariants(p);
+        const declared = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
+        const check = !invs.length ? '() => () => []' : declared.length ? `${this.ctx}.${checkWithName(p.name)}` : `() => ${this.ctx}.${checkName(p.name)}`;
         return [
             `...(impl.make.${p.name} ? testing.primitiveCases({`,
             `    type: '${this.ctx}.${p.name}',`,
             `    base: '${p.base}',`,
             `    hints: ${literal(hintsOf(p.invariants))},`,
-            `    invariants: [${p.invariants.map((i) => `'${i.name}'`).join(', ')}],`,
+            `    invariants: [${invs.map((i) => `'${i.name}'`).join(', ')}],`,
             `    declared: [${declared.join(', ')}],`,
             `    check: ${check},`,
             `    make: impl.make.${p.name},`,
@@ -497,7 +496,14 @@ class TestsEmitter {
         const el = elementOf(this.model, f.type.ref);
         if (!el) return '() => true';
         const ctx = el.context;
-        const invs = el.kind === 'union' ? unionInvariants(el) : el.kind === 'aggregate' ? [] : invariantsOf(el);
+        const invs =
+            el.kind === 'union'
+                ? unionInvariants(el)
+                : el.kind === 'aggregate'
+                  ? []
+                  : el.kind === 'id' || el.kind === 'primitive'
+                    ? primitiveInvariants(el)
+                    : invariantsOf(el);
         const inner = new Set([...outer, el.id]);
         const shape =
             el.kind === 'enum'

@@ -103,6 +103,22 @@ export const declaredRequiresName = (commandType: string): string => `${commandT
 /** Whether an element's or state's invariants include one without an expression (a slot). */
 export const hasDeclared = (invs: readonly { readonly expr?: ExprModel }[]): boolean => invs.some((i) => !i.expr);
 
+/** The form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version. */
+export const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+
+/** The invariant that a value of an ID or domain primitive on `UUID` is a UUID (ADR 0028, decision 1). */
+const UUID_INVARIANT: InvariantModel = {
+    name: 'uuid',
+    source: 'the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version',
+    expr: { k: 'matches', operand: { k: 'name', name: 'value' }, pattern: UUID_PATTERN },
+};
+
+/**
+ * The invariants that the constructor of an ID or domain primitive checks: on a `UUID` base, the generated `'uuid'`
+ * first (the form the other invariants assume), then those of the model (none is named `uuid`, M002).
+ */
+export const primitiveInvariants = (p: DomainPrimitive): readonly InvariantModel[] => (p.base === 'UUID' ? [UUID_INVARIANT, ...p.invariants] : p.invariants);
+
 /** Every invariant of an aggregate: its own, then those of each state (names are unique across them, M002). */
 export const aggregateInvariants = (agg: AggregateModel): InvariantModel[] => [...agg.invariants, ...agg.states.flatMap((s) => s.invariants)];
 
@@ -504,14 +520,15 @@ export class CheckWriter {
     primitive(p: DomainPrimitive): string[] {
         const base = BASE[p.base];
         const type = p.name;
-        if (p.invariants.length === 0) {
+        const invariants = primitiveInvariants(p);
+        if (invariants.length === 0) {
             return [
                 ...this.env.jsdoc([`Creates a ${p.name}: it has no invariants, so every value is one.`], p.location),
                 `export const ${makeName(p)}: ${makeTypeName(p)} = (value) => value as ${type};`,
             ];
         }
         const scope: Scope = new Map([['value', { js: 'value', ty: { k: 'prim', name: p.base } }]]);
-        const declared = hasDeclared(p.invariants);
+        const declared = hasDeclared(invariants);
         const result = `${invalidTypeName(p)}['invariant']`;
         const out: string[] = [];
         if (declared)
@@ -519,18 +536,20 @@ export class CheckWriter {
                 ...this.declaredType(
                     type,
                     p.location,
-                    p.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: `value: ${base}` })),
+                    invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: `value: ${base}` })),
                 ),
             );
         out.push(
             ...this.checkFunction(
-                [`The invariants of ${p.name} that a value violates, in declaration order; empty when it is a ${p.name}.`],
+                [
+                    `The invariants of ${p.name} that a value violates, in declaration order${p.base === 'UUID' ? " after 'uuid'" : ''}; empty when it is a ${p.name}.`,
+                ],
                 p.location,
                 type,
                 { name: 'value', type: base },
                 result,
                 declared && type,
-                collect(items(this.compiler, p.invariants, scope, 'value'), ''),
+                collect(items(this.compiler, invariants, scope, 'value'), ''),
             ),
             '',
         );

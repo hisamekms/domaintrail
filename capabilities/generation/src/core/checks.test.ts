@@ -41,6 +41,8 @@ context Sales {
     invariant short { length(value) <= 8 }
   }
   primitive Code: String { matches(value, "^a/b$") }
+  primitive Note: String
+  primitive Token: UUID { invariant v4 { matches(value, "^.{14}4") } }
   enum Reason { Requested Other }
   value Period {
     from: Timestamp
@@ -141,7 +143,30 @@ describe('generated checks', () => {
     test('make<Name> reports the first violated invariant, and creation without invariants cannot fail', () => {
         expect(Sales.makeQuantity(5)).toEqual({ ok: true, value: 5 });
         expect(Sales.makeQuantity(0)).toEqual({ ok: false, error: { type: 'InvalidQuantity', value: 0, invariant: 'valid' } });
-        expect(Sales.makeOrderId('x')).toBe('x');
+        expect(Sales.makeNote('x')).toBe('x');
+    });
+
+    test("an ID or primitive on UUID checks the form of RFC 9562 as the invariant 'uuid', before its own", () => {
+        for (const v of [
+            '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b',
+            '3F2B8C1E-9A4D-4E6F-8B7A-1C2D3E4F5A6B',
+            '01890a5d-ac96-774b-bcce-b302099a8057',
+            '00000000-0000-0000-0000-000000000000',
+        ])
+            expect(Sales.makeOrderId(v)).toEqual({ ok: true, value: v });
+        for (const v of [
+            'order-1',
+            '',
+            '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6',
+            '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6bc',
+            '3f2b8c1e9a4d4e6f8b7a1c2d3e4f5a6b',
+            '{3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b}',
+            'gf2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b',
+        ])
+            expect(Sales.makeOrderId(v)).toEqual({ ok: false, error: { type: 'InvalidOrderId', value: v, invariant: 'uuid' } });
+        expect(Sales.checkToken('x')).toEqual(['uuid', 'v4']);
+        expect(Sales.makeToken('01890a5d-ac96-774b-bcce-b302099a8057')).toMatchObject({ ok: false, error: { invariant: 'v4' } });
+        expect(Sales.makeToken('3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b')).toMatchObject({ ok: true });
     });
 
     test('regular expressions are JavaScript, with a slash in the pattern', () => {

@@ -156,6 +156,8 @@ const makeCode = (v: string) => {
     if (v.length > 3) return err({ type: 'InvalidCode', value: v, invariant: 'short' });
     return ok(v);
 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const makeCartId = (v: string) => (UUID.test(v) ? ok(v) : err({ type: 'InvalidCartId', value: v, invariant: 'uuid' }));
 
 /** Runs every case of a suite: the error message of each that fails, by name; todo cases as 'todo'. */
 async function run(suite: unknown): Promise<Record<string, string | undefined>> {
@@ -185,7 +187,7 @@ describe('generated contract tests', () => {
     });
 
     test('pass for a correct implementation, with todo cases for the constraints without an expression', async () => {
-        const r = await run(contract({ make: { Qty: makeQty, Code: makeCode, CartId: (v: string) => v }, Cart: cart() }));
+        const r = await run(contract({ make: { Qty: makeQty, Code: makeCode, CartId: makeCartId }, Cart: cart() }));
         expect(failing(r)).toEqual([]);
         expect(todos(r)).toEqual([
             "Shop > domain primitives > invariant 'reserved' of Shop.Code is not expressed in the DSL and not checked: pass a check in options.declared",
@@ -235,6 +237,15 @@ describe('generated contract tests', () => {
         expect(Object.values(r2).join()).toMatch(
             /returned the error \{"type":"InvalidCode","value":".*","invariant":"short"\}; expected \{ type: 'InvalidCode', value: ".*", invariant: 'format' \}/,
         );
+    });
+
+    test('T1 catches an ID on UUID whose constructor accepts any string, or only lower case', async () => {
+        const r1 = await run(contract({ make: { CartId: (v: string) => ok(v) } }));
+        expect(failing(r1)).toHaveLength(1);
+        expect(Object.values(r1).join()).toContain("accepted a value that violates 'uuid'");
+        const lower = (v: string) => (/^[0-9a-f-]{36}$/.test(v) ? makeCartId(v) : err({ type: 'InvalidCartId', value: v, invariant: 'uuid' }));
+        expect(failing(await run(contract({ make: { CartId: lower } })))).toHaveLength(1);
+        expect(failing(await run(contract({ make: { CartId: makeCartId } })))).toEqual([]);
     });
 
     test('T2 catches requirements checked in the wrong order, a missing one, and an error returned although all hold', async () => {
@@ -368,7 +379,9 @@ describe('the shop example', () => {
         expect(r.exitCode).toBe(0);
         const demo = Bun.spawnSync([process.execPath, 'src/demo.ts'], { cwd: shop });
         expect(demo.stderr.toString()).toBe('');
-        expect(demo.stdout.toString()).toContain('policy BillConfirmedOrder: issued invoice-1 for order-1: 3380 JPY');
+        expect(demo.stdout.toString()).toContain(
+            'policy BillConfirmedOrder: issued invoice-1 for order-1: 3380 JPY',
+        );
         expect(demo.exitCode).toBe(0);
     }, 30_000);
 });

@@ -136,10 +136,11 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
             if (el.kind === 'id' || el.kind === 'primitive') {
                 out.push({ name: makeTypeName(el), origin: `the constructor of '${el.name}'`, at });
                 const invs = written.primitiveInvariants(el);
-                if (invs.length) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, at });
+                const checked = invs.length > 0 || el.base === 'UUID'; // a UUID base adds the invariant 'uuid'
+                if (checked) out.push({ name: invalidTypeName(el), origin: `the error of '${el.name}'`, at });
                 const declared = invs.some((i) => !i.expr);
                 out.push({ name: `make${el.name}${declared ? 'With' : ''}`, origin: `the generated constructor of '${el.name}'`, at });
-                if (invs.length) out.push(...checkNames(el.name, declared, at));
+                if (checked) out.push(...checkNames(el.name, declared, at));
             } else if (el.kind === 'verified') {
                 out.push({ name: makeTypeName(el), origin: `the factory of '${el.name}'`, at });
             } else if (el.kind === 'valueObject' || el.kind === 'entity' || el.kind === 'union') {
