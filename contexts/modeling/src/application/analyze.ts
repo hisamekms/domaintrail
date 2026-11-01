@@ -26,6 +26,7 @@ import type { DomainModel } from '../domain/model.js';
 import type { SourceModel } from '../domain/source-model.js';
 import { RuleSink } from '../domain/diagnostics.js';
 import type { ModelingRuleId } from '../domain/rule-ids.js';
+import { RuleSink } from '../domain/diagnostics.js';
 import { checkChanges, checkCommands, checkFactoryIds } from '../domain/rules/commands.js';
 import { checkEventIds } from '../domain/rules/events.js';
 import { checkFieldSets } from '../domain/rules/field-sets.js';
@@ -133,9 +134,9 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
     // built before the rules run: they move onto it one by one (T10 of docs/plans/0027-boundaries.md), reporting through
     // a `RuleSink` (domain/diagnostics.ts) that shares the list of `sink`, so that the diagnostics keep their order
     const sourceModel = syntaxOk ? buildSourceModel(index, resolveFile) : undefined;
-    if (syntaxOk) {
+    if (sourceModel) {
         const sink = new DiagnosticSink(resolveFile);
-        checkNames(index, sink);
+        checkNames(sourceModel, new RuleSink(sink.items));
         checkShared(index, sink);
         checkStructure(index, sink);
         checkUnions(index, sink);

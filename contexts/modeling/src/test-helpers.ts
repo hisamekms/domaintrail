@@ -72,7 +72,7 @@ export function ruleDiagnostics(a: DomainAnalysis): Diagnostic[] {
     const ast = (rule: (index: ModelIndex, sink: DiagnosticSink) => void) => (): void => rule(a.index, sink);
     const written = (rule: (model: SourceModel, rules: RuleSink) => void) => (): void => rule(model, rules);
     for (const run of [
-        ast(checkNames),
+        written(checkNames),
         ast(checkShared),
         ast(checkStructure),
         ast(checkUnions),
