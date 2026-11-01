@@ -5010,6 +5010,70 @@ del.was.block {
 .chat-unit-body .run-card {
     margin-top: 0;
 }
+/* ---------- answered questions and chosen alternatives ---------- */
+
+/* a question once answered (or left): the same rows as when it was asked, ✓ where the radio was, the rest muted */
+.reply-option.decided-option > .decided-mark {
+    flex: none;
+    width: 13px;
+}
+.reply-option.decided-option > .decided-mark + span {
+    flex: 1;
+    min-width: 0;
+}
+.decided-mark {
+    color: var(--text);
+    text-align: center;
+}
+.decided-option.chosen {
+    color: var(--text);
+}
+.decided-option.unchosen,
+.decided-option.unchosen .reply-option-detail {
+    color: var(--muted);
+}
+.decided-other {
+    flex: 1;
+    min-width: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+/* an alternative picked: ✓ before it, the other alternatives muted */
+.reply-alternative.chosen {
+    color: var(--text);
+}
+.reply-alternative.unchosen {
+    color: var(--muted);
+}
+/* who decided and when: small and muted, under what was decided */
+.decided-line {
+    margin: 0.375rem 0 0;
+    color: var(--muted);
+    font-size: 0.6875rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+}
+.reply-assumption .decided-line {
+    margin-top: 2px;
+}
+/* the run a pick queued: a link */
+.session-chat button.decided-run {
+    display: inline;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+.session-chat button.decided-run:hover {
+    text-decoration: underline;
+}
+/* a vote that can no longer change: muted, mine too (violet is for what can be clicked) */
+.vote-mark.frozen.mine {
+    color: var(--muted);
+}
+
 /* ---------- votes and reactions (web/session/mark-controls.tsx) ---------- */
 
 /* a row with a vote at its right end: a question's option */

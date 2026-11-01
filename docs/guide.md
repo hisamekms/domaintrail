@@ -2470,8 +2470,12 @@ Who voted is not on the screen: hover the count for the names, or click it for a
 sees the counts (and the same names) next to the options of the answer form and next to 前提 and each 別案, never votes,
 and nothing is chosen for them. A vote closes when its run is no longer the latest run of its messages — answering the
 question, picking an alternative, or applying the same messages again — or when the run no longer waits for an answer;
-cancelling that later run before it started opens it again. Closed votes are frozen and not clickable; the answer's line
-(`↳ 回答 …`) and the note's line of a picked alternative keep the counts and names in their tooltip. On every message and
+cancelling that later run before it started opens it again. Closed votes are frozen, muted and not clickable (who
+voted is still on hover and click). Once answered, a question stays as it was asked — the same options in the same
+order, with their frozen votes — with ✓ on what was chosen (その他 in own words as a last row), the other options muted,
+and `回答 name · time` under the questions; the amber bar is gone. An assumption whose alternative was picked shows ✓ on
+it, the others muted, and `選択 name · time → #5` under it (#5 goes to the run that picked it); one left as it was (a
+later run without a pick) keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
 every AI turn, anyone (the facilitator too) can **react**: hover the message (on touch it is always there, faint) and
 ☺+ at its right end offers 👍 賛成, 🤔 疑問・引っかかる, ♡ いいね and ✓ 了解・見た, with who reacted under them. The
 reactions placed show under the message as icons with counts; a click toggles yours; the tooltip names who. Several
@@ -2516,7 +2520,7 @@ name in its tooltip), as a link to the element. Whether a run succeeded is
 never taken from the reply. A reply that does not fit its shape or limits is shown as far as it can be read (its
 summary or question), never failing the run. The limits live in one module (`domain/reply.ts`). An answer chosen in the
 card is frozen into the next run as `answerTo` and `answer` (the question and the options as they were shown); another
-alternative is asked for in the run's note.
+alternative is asked for in the run's note (the card recognizes the pick by that note, in either language of the page).
 
 **Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
 Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The

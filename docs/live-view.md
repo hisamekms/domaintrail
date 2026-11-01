@@ -176,7 +176,9 @@ The chat has two views:
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
   restore and comparison from a card's ⋯ and the session's actions from the head's ⋯.
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
-  run waits; the facilitator sees the counts and decides. Anyone reacts to a message or an AI turn (☺+ on hover:
+  run waits; the facilitator sees the counts and decides. An answered question keeps its options, with ✓ on what was
+  chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked alternative has ✓ and
+  `選択 name · time → #n`. Anyone reacts to a message or an AI turn (☺+ on hover:
   賛成, 疑問, いいね, 了解). Counts are small; who marked is in the tooltip and, for a vote, in a list on a click.
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ AI #3 への返信 ✕`), the targets of its
   messages to start with; the posted reply shows `↩ AI #3: …` on top, a click going to the card. Replies are applied
