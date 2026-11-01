@@ -1491,6 +1491,13 @@ export function checkConfirmOrderRequires(order: DraftOrder, _at: Timestamp): 'h
 }
 ```
 
+The translation reads like the `.dt` it comes from: a violated `A implies B` is tested as `A && !B`
+(`if (order.reason === 'Other' && !(order.note !== undefined))`), lambda variables keep their names
+(`(item) => item.quantity > 0`; the second element of `unique(items, item => item.sku)` is `item2`), and strings are in
+single quotes. A lambda variable gets a number (`item2`) only when its name would clash with another variable in scope,
+the check's parameters, a reserved word of TypeScript or a name the module imports; the generator's own temporaries
+start with `$` (`$0`), which a `.dt` name cannot.
+
 A constraint without an expression cannot be generated. Instead the check gets a **slot**: a type naming the
 function your code provides, and a `…With` variant that takes it and combines it with the generated parts, in
 declaration order. Generated code never imports your code; you pass the function in:
