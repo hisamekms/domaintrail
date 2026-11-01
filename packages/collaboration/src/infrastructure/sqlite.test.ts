@@ -6,20 +6,12 @@ import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
-import type { Stores } from '@domaintrail/collaboration/application/ports';
-import { agentRunCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
-import { createFileBlobs, openSessionBlobs } from '@domaintrail/collaboration/infrastructure/blobs';
-import { UnsafeSessionPath } from '@domaintrail/collaboration/infrastructure/session-dir';
-import {
-    MIGRATIONS,
-    NewerSchema,
-    createUnitOfWork,
-    decodeJson,
-    encodeJson,
-    openDatabase,
-    openSessionDatabase,
-} from '@domaintrail/collaboration/infrastructure/sqlite';
+import { Collaboration as C } from '../generated/index.js';
+import type { Stores } from '../application/ports.js';
+import { agentRunCommands, sessionCommands } from '../domain/commands.js';
+import { createFileBlobs, openSessionBlobs } from './blobs.js';
+import { UnsafeSessionPath } from './session-dir.js';
+import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
 
 /** The error a promise rejects with (fails when it resolves). */
 async function thrown(p: Promise<unknown>): Promise<Error> {
@@ -293,7 +285,7 @@ describe('the session directory and blobs', () => {
 describe('rows written before requests had several targets', () => {
     // a request, a run's frozen request and the RequestSent event held one `target` (0.6.0): read as a list, nothing rewritten
     test('are read as a list of targets: none for the whole workspace, else that one', async () => {
-        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, 'fixtures', 'session', 'legacy-rows.json'), 'utf8')) as {
+        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, '..', '..', 'test-fixtures', 'session', 'legacy-rows.json'), 'utf8')) as {
             session: { id: string; state: string; data: unknown };
             requests: { id: string; state: string; data: unknown }[];
             runs: { id: string; state: string; data: unknown }[];
@@ -355,7 +347,7 @@ describe('rows written before requests had several targets', () => {
 describe("rows written before the agent's reply was structured", () => {
     // a run that needs clarification had a plain question, a completed run no reply, an input no answer: read as they are
     test('load as runs without a reply, and still hold the invariants of their state', async () => {
-        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, 'fixtures', 'session', 'legacy-run-replies.json'), 'utf8')) as {
+        const fixture = JSON.parse(await readFile(path.join(import.meta.dir, '..', '..', 'test-fixtures', 'session', 'legacy-run-replies.json'), 'utf8')) as {
             session: { id: string; state: string; data: unknown };
             runs: { id: string; state: string; data: unknown }[];
             outbox: { type: string; payload: unknown }[];

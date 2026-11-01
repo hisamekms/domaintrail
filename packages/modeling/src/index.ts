@@ -123,7 +123,7 @@ export {
 } from './core/config.js';
 
 // ---- not Modeling's language: the emoji rule of Collaboration's `Emoji` (T6: moves to collaboration) ------------
-export { DEFAULT_QUICK_REACTIONS, isNormalEmoji, MAX_EMOJI_BYTES, readEmoji } from './core/emoji.js';
+export { DEFAULT_QUICK_REACTIONS, isNormalEmoji, isSingleEmoji, MAX_EMOJI_BYTES, normalizeEmoji, readEmoji } from './core/emoji.js';
 
 // ---- the syntax, for the language server (T8: Modeling's and Storming's infrastructure/syntax) -----------------
 export * as ast from './language/generated/ast.js';

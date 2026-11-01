@@ -1,14 +1,15 @@
+// The agent's dt (session.agent.dt) with real processes: the shim on the PATH, the Claude Code runner with a fake agent,
+// dt fmt / dt check after a run, and the setting as the configuration reads it (the shim's pure parts:
+// packages/agent/src/infrastructure/dt-shim.test.ts).
 import { afterAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createClaudeCodeRunner } from '@domaintrail/agent/infrastructure/claude-code';
-import { agentDtArguments, dtShim, findProgram, inside, launcherScript, pinDt, withPathFirst, writeDtShim } from '@domaintrail/agent/infrastructure/dt-shim';
-import { createDtTools } from '@domaintrail/agent/infrastructure/dt-tools';
-import { ConfigError } from '@domaintrail/modeling/core/config';
-import { loadConfig } from '@domaintrail/workspace/infrastructure/config';
+import { createClaudeCodeRunner, createDtTools, pinDt, writeDtShim } from '@domaintrail/agent';
+import { ConfigError } from '@domaintrail/modeling';
+import { loadConfig } from '@domaintrail/workspace';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -38,50 +39,9 @@ const thrown = (f: () => unknown): string => {
     }
 };
 const run = { prompt: 'p', allowedTools: ['Bash(dt fmt:*)'], requests: 1 };
-const node = realpathSync(findProgram('node') ?? process.execPath);
+const node = realpathSync(Bun.which('node') ?? process.execPath);
 
 describe("the agent's dt (session.agent.dt)", () => {
-    test('the shim only starts the runtime on the launcher; the pinned dt is JSON in the launcher, spawned without a shell in a private directory', () => {
-        expect(dtShim('/usr/bin/node', "/tmp/it's/launcher.mjs", 'darwin')).toEqual({
-            file: 'dt',
-            text: `#!/bin/sh\nexec '/usr/bin/node' '/tmp/it'\\''s/launcher.mjs' "$@"\n`,
-        });
-        expect(dtShim('C:\\node.exe', 'C:\\Temp\\launcher.mjs', 'win32')).toEqual({
-            file: 'dt.cmd',
-            text: '@echo off\r\n"C:\\node.exe" "C:\\Temp\\launcher.mjs" %*\r\n',
-        });
-        // what cmd.exe interprets never reaches a .cmd file
-        for (const bad of ['C:\\a&b\\node.exe', 'C:\\%PATH%\\node.exe', 'C:\\a"b\\node.exe', 'C:\\a|b\\node.exe'])
-            expect(() => dtShim(bad, 'C:\\Temp\\launcher.mjs', 'win32')).toThrow();
-        const launcher = launcherScript({ runtime: '/usr/bin/node', script: '/opt/a&b %x%/dt.js' }, '/ws', '/tmp/shim');
-        expect(launcher).toContain(JSON.stringify(['/usr/bin/node', '/opt/a&b %x%/dt.js']));
-        expect(launcher).toContain('shell: false');
-        expect(launcher).toContain('cwd: "/tmp/shim"');
-    });
-
-    test('first on the PATH, keeping the rest; a program found on the PATH (with PATHEXT on Windows)', async () => {
-        expect(withPathFirst({ PATH: `/usr/bin${path.delimiter}/bin`, HOME: '/h' }, '/shim')).toEqual({
-            PATH: `/shim${path.delimiter}/usr/bin${path.delimiter}/bin`,
-            HOME: '/h',
-        });
-        expect(withPathFirst({ Path: 'C:\\bin' }, 'D:\\shim')).toEqual({ Path: `D:\\shim${path.delimiter}C:\\bin` });
-        const bin = await scratch();
-        await writeFile(path.join(bin, 'node.EXE'), '');
-        expect(findProgram('node', { PATH: bin, PATHEXT: '.EXE' }, 'win32')).toBe(path.join(bin, 'node.EXE'));
-        expect(findProgram('node', { PATH: bin }, 'linux')).toBeUndefined();
-    });
-
-    test('inside the workspace by path segments: `<root>/..evil` is inside, a sibling `<root>-other` is not', async () => {
-        const base = await scratch();
-        const root = path.join(base, 'ws');
-        await mkdir(path.join(root, '..evil'), { recursive: true });
-        await mkdir(`${root}-other`);
-        expect(inside(root, path.join(root, '..evil', 'x.js'))).toBe(true);
-        expect(inside(root, path.join(`${root}-other`, 'x.js'))).toBe(false);
-        expect(inside(root, root)).toBe(true);
-        expect(inside(root, base)).toBe(false);
-    });
-
     test('only two shapes: [node|bun|deno, script] or [dt executable], as absolute real paths outside the workspace', async () => {
         const root = await scratch();
         const outside = await scratch();
@@ -124,27 +84,6 @@ describe("the agent's dt (session.agent.dt)", () => {
             expect(await configured(dt)).toContain("'session.agent.dt' may not run anything inside the workspace");
     });
 
-    test("the agent's arguments: fmt or check, then .dt / .dtes files of the workspace; no option; -r is the launcher's", async () => {
-        const root = await scratch();
-        expect(agentDtArguments(['fmt'], root, root)).toEqual({ ok: true, args: ['-r', root, 'fmt'] });
-        expect(agentDtArguments(['check', 'sales/order.dt', 'es.dtes'], path.join(root, 'x'), root)).toEqual({
-            ok: true,
-            args: ['-r', root, 'check', path.join(root, 'x', 'sales', 'order.dt'), path.join(root, 'x', 'es.dtes')],
-        });
-        for (const given of [
-            ['generate', 'ts'],
-            [],
-            ['fmt', '--prefix', '/'],
-            ['fmt', '-r', '/'],
-            ['fmt', '--config=/x'],
-            ['fmt', '-C', '/'],
-            ['fmt', 'x.ts'],
-            ['fmt', '../out.dt'],
-            ['fmt', '/etc/x.dt'],
-        ])
-            expect(agentDtArguments(given, root, root).ok).toBe(false);
-    });
-
     test.skipIf(process.platform === 'win32')(
         '`dt …` on that PATH runs the pinned dt on the workspace from a private directory, or refuses what the agent may not ask',
         async () => {
@@ -154,7 +93,7 @@ describe("the agent's dt (session.agent.dt)", () => {
             const root = await scratch();
             const shim = await writeDtShim(pinDt({ command: 'node', args: [echo] }, root), root);
             const dt = (args: string[]): ReturnType<typeof spawnSync> =>
-                spawnSync('dt', args, { cwd: root, env: withPathFirst(process.env, shim.dir), encoding: 'utf8' });
+                spawnSync('dt', args, { cwd: root, env: { ...process.env, PATH: `${shim.dir}${path.delimiter}${process.env.PATH ?? ''}` }, encoding: 'utf8' });
             try {
                 expect((await stat(shim.dir)).mode & 0o777).toBe(0o700);
                 expect((await stat(path.join(shim.dir, 'dt'))).mode & 0o777).toBe(0o700);
@@ -223,7 +162,7 @@ describe("the agent's dt (session.agent.dt)", () => {
         const dtTools = createDtTools({ dt: { command: node, args: [record] }, root, log: () => {} });
         expect(await dtTools.check()).toBe(true);
         const ran = JSON.parse(await readFile(out, 'utf8')) as { cwd: string; mode: number; args: string[] };
-        expect(inside(root, ran.cwd)).toBe(false);
+        expect(path.relative(root, ran.cwd).startsWith('..')).toBe(true);
         expect(path.basename(ran.cwd)).toStartWith('domaintrail-dt-run-');
         expect(ran.mode).toBe(0o700);
         expect(await gone(ran.cwd)).toBe(true);

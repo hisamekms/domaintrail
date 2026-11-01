@@ -3,35 +3,16 @@
 // check (test/collaboration-contract-run.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import type { Diagnostic } from '@domaintrail/modeling/core/diagnostics';
-import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
-import { agentRunCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
-import {
-    compareFiles,
-    LINE_CUT,
-    lineDiff,
-    MAX_DIFF_BYTES,
-    MAX_DIFF_LINES,
-    MAX_EDITS,
-    MAX_LINE_CHARS,
-    MAX_OUTPUT_LINES,
-} from '@domaintrail/collaboration/domain/compare';
-import {
-    checkAgentReplyDeep,
-    readAnswer,
-    readReply,
-    REPLY_LIMITS,
-    requestNumber,
-    resolveAnswer,
-    resolvePick,
-    toAgentReply,
-    type PickData,
-} from '@domaintrail/collaboration/domain/reply';
-import { sha256Hex } from '@domaintrail/collaboration/domain/sha256';
-import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from '@domaintrail/collaboration/domain/snapshot';
-import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from '@domaintrail/collaboration/domain/targets';
-import { diagnosticsDiff, runReport, succeeded, summarize, tally, unparsedDtes } from '@domaintrail/collaboration/domain/validation';
-import { check } from './helpers.js';
+import type { Diagnostic } from '@domaintrail/modeling';
+import { Collaboration as C } from '../generated/index.js';
+import { agentRunCommands, revisionCommands, sessionCommands } from './commands.js';
+import { compareFiles, LINE_CUT, lineDiff, MAX_DIFF_BYTES, MAX_DIFF_LINES, MAX_EDITS, MAX_LINE_CHARS, MAX_OUTPUT_LINES } from './compare.js';
+import { checkAgentReplyDeep, readAnswer, readReply, REPLY_LIMITS, requestNumber, resolveAnswer, resolvePick, toAgentReply, type PickData } from './reply.js';
+import { sha256Hex } from './sha256.js';
+import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from './snapshot.js';
+import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from './targets.js';
+import { diagnosticsDiff, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
+import { check } from '../test-helpers.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);

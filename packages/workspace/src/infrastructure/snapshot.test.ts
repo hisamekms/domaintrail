@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
+import { createWorkspaceSnapshot } from './snapshot.js';
 
 const dirs: string[] = [];
 afterAll(async () => {

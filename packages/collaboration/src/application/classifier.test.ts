@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { applicable, classificationOf, createClassifications, type MessageClassifier } from '@domaintrail/collaboration/application/classifier';
-import { clefProbability, clefRequest, createClefClassifier } from '@domaintrail/collaboration/infrastructure/clef';
+import { applicable, classificationOf, createClassifications, type MessageClassifier } from './classifier.js';
+import { clefProbability, clefRequest, createClefClassifier } from '../infrastructure/clef.js';
 
 describe('classifying the chat’s messages', () => {
     test('a request from the threshold on, talk below it; unsure near it (applicable), unknown without a probability', () => {

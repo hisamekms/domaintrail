@@ -47,6 +47,7 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+export { previousRunIds } from './domain/previous-runs.js';
 
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
 export { createCollaboration, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
@@ -79,6 +80,6 @@ export {
     writeServerAddress,
     type AgentCredential,
 } from './infrastructure/session-files.js';
-export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
+export { createUnitOfWork, openDatabase, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';
 export { createModelValidator } from './infrastructure/validator.js';

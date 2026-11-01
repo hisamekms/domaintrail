@@ -85,7 +85,6 @@ async function run(...args: string[]): Promise<{ code: number; out: string[]; er
     return { code, out, err };
 }
 
-
 describe('dt check', () => {
     test('prints the .dtes diagnostics with the .dt ones and exits 1 on an error', async () => {
         const dir = await workspace({ 'domain.dt': DT, 'flow.dtes': FLOW });

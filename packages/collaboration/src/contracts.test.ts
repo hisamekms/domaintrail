@@ -5,13 +5,13 @@
 // that reach the successful outcomes the random inputs rarely meet (a frozen input that covers its requests, a content
 // hash that matches its files, a changed flag that agrees with the result revision).
 import * as fc from 'fast-check';
-import { Collaboration as C } from '@domaintrail/collaboration/generated/index';
-import { Collaboration as Contract, register } from '@domaintrail/collaboration/generated/tests/index';
-import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
-import { hashBytes, snapshotFile, snapshotHash } from '@domaintrail/collaboration/domain/snapshot';
-import { tally } from '@domaintrail/collaboration/domain/validation';
-import { makeEmoji, markCommands } from '@domaintrail/collaboration/domain/marks';
-import { isNormalEmoji } from '@domaintrail/modeling/core/emoji';
+import { Collaboration as C } from './generated/index.js';
+import { Collaboration as Contract, register } from './generated/tests/index.js';
+import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, sessionCommands } from './domain/commands.js';
+import { hashBytes, snapshotFile, snapshotHash } from './domain/snapshot.js';
+import { tally } from './domain/validation.js';
+import { makeEmoji, markCommands } from './domain/marks.js';
+import { isNormalEmoji } from '@domaintrail/modeling';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`invalid example: ${JSON.stringify(r.error)}`);
