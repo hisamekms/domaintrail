@@ -11,7 +11,7 @@ A review of what `dt generate ts` writes for `examples/shop` found seven points,
   `capabilities/generation`, and these tasks work on that layout.
 - As for ADR 0027: one integration branch from `main`, one worktree and branch per task, each done by a worker and
   merged into the integration branch after review, one pull request to `main`, squash merged.
-- G1, G5 and G6 break the code users write against the generated code; they ship in one release, with the breaking
+- G1, G2, G5 and G6 break the code users write against the generated code; they ship in one release, with the breaking
   changes in the changelog.
 - Every task leaves typecheck, lint, fmt, tests and build passing, and regenerates `examples/shop`, which stays
   consistent with the generated code (its own tests pass).
@@ -37,7 +37,7 @@ A review of what `dt generate ts` writes for `examples/shop` found seven points,
 |---|---|---|---|
 | G0 | ADR 0028: decisions 1–10, amending ADR 0001 (type mapping of `UUID`), 0020 (contract test inputs, the testing package, recursive arbitraries) and 0023 (the context parameter, infrastructure failures) | — | — |
 | G1 | Decision 1: the `UUID` check in `make<Name>` for IDs and primitives, the invariant name, the arbitraries, `examples/shop` and the guide | breaking | G0 |
-| G2 | Decision 2: `check<Aggregate>Common` | additive | G0 |
+| G2 | Decision 2: `check<Aggregate>Common`, the slots of aggregate invariants on `<Aggregate>Common` | breaking | G0 |
 | G3 | Decision 3: the expression translation (implies, lambda names, quotes) | same behaviour | G0 |
 | G4 | Decisions 4, 6 and 10: `{@link}` for references; the context parameter's and the rejection's doc comments; the guide's example | same behaviour | G0 |
 | G5 | Decision 5: `domaintrail/testing` (the subpath, version check), generated tests importing it | breaking | G0 |

@@ -112,13 +112,18 @@ export function checkCancelledOrder(order: CancelledOrder): readonly ('quantitie
 }
 ```
 
-It exists where `<Aggregate>Common` does — an aggregate with states — and the aggregate has invariants of its own. An
-aggregate without states keeps `check<Aggregate>`, which already is that check. With invariants declared without an
-expression it takes the `…With` form of ADR 0020 (`check<Aggregate>CommonWith(checks)`), like every check with slots.
+It exists where `<Aggregate>Common` does: every aggregate with states, even with no invariants of its own (it then
+returns no errors). An aggregate without states keeps `check<Aggregate>`, which already is that check. With invariants
+declared without an expression it takes the `…With` form of ADR 0020 (`check<Aggregate>CommonWith(checks)`), like every
+check with slots. An aggregate's invariant holds in every state, so what it may read is exactly `<Aggregate>Common`: the
+slot of one without an expression is typed `(order: OrderCommon) => boolean` (it took the aggregate, `Order`), and
+`check<Aggregate>CommonWith` takes `<Aggregate>Common` like the plain form.
 
 **Why.** One translation of each invariant, read once; and users can check the common part alone.
 
-**Compatibility.** Additive (G2): a new export; the existing checks return the same values.
+**Compatibility.** Breaking (G2): a new export, and the existing checks return the same values, but the slot of an
+aggregate's invariant without an expression takes `<Aggregate>Common`; an implementation typed with the aggregate no
+longer fits.
 
 **Rejected.**
 
@@ -454,8 +459,8 @@ maintainer. A task that finds one of them unworkable records a different choice 
 
 ## Consequences
 
-- Three breaking changes (G1, G5, G6) in one release, with the changelog stating each and what to change: handle the
-  `Result` of `make<Id>` and use UUIDs in fixtures; import `domaintrail/testing` (domaintrail as a dev dependency); pass command parameters as an object.
+- Four breaking changes (G1, G2, G5, G6) in one release, with the changelog stating each and what to change: handle the
+  `Result` of `make<Id>` and use UUIDs in fixtures; type the slots of aggregate invariants with `<Aggregate>Common`; import `domaintrail/testing` (domaintrail as a dev dependency); pass command parameters as an object.
 - The generated checks read like the model, once per invariant; references are navigable.
 - Contract tests reach recursive types, and a project with contract tests imports `domaintrail/testing` from its dev
   dependency on domaintrail.

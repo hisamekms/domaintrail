@@ -1552,8 +1552,9 @@ export const makeSku = Sales.makeSkuWith({ reserved: (value) => !RESERVED.has(va
 The same holds for the other checks: `<Type>DeclaredChecks` and `check<Type>With(checks)` for value types and
 aggregates (one object per aggregate, keyed by invariant name, for all its states), and
 `<Command>DeclaredRequires` and `check<Command>RequiresWith(checks)` for requirements. A type without such a
-constraint has only the plain function. `check<Aggregate>Common` has the `…With` form when an invariant of the aggregate
-itself has a slot; it then takes the aggregate, the argument of that slot, rather than `<Aggregate>Common`.
+constraint has only the plain function. The slot of an aggregate's own invariant takes `<Aggregate>Common` (an
+invariant of the aggregate holds in every state, so it reads only the common fields), the slot of a state's invariant
+that state's type; `check<Aggregate>CommonWith` exists when the aggregate's own invariants have a slot.
 
 <!-- topic: tests -->
 ### Generated tests
