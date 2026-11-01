@@ -381,6 +381,67 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
 - **T9 — the typed model for the checkers (P4).** The typed model gains what the checkers read from the AST
   (source locations of every element, member and expression; the expression tree; resolved references), built in
   `infrastructure/syntax`. No checker moves yet.
+  **T9 (done).** *What the checkers read* (the 13 of `domain/rules/` and generation's name check): `names` (M002) the
+  duplicates by qualified name and every scope's members, `changes` by index; `shared` (M014) the fragments' `shared`,
+  each element's kind and every type reference in it with its target's context; `structure` (M003–M005, M012, M013) the
+  fields of owners, states, variants, payloads and parameters with their kind, type target (by identity), `references`
+  aggregate, multiplicity and the identity field, `lookupVisible`; `unions` (M015) variants, fields, discriminator and
+  the bound enum's values; `field-sets` (M016) members' kinds, the `with` references by index, the fields taken; `verified`
+  (M024) `of`/`for` targets and chains, every field; `commands` (M006, M020, M021) transitions and `when` as written and
+  resolved, `transitions`/`from`/`to` by index, `changes`, the identity type, `sameField` (types); `events` (M017) emits'
+  targets, events' fields with the taken ones; `payloads` (M022) parameters, a parameter's struct fields, the aggregate's
+  and its states' fields by outcome, the requirements' and `errors`' references by index; `policies` (M023) the three
+  references and `isShared`; `expressions` (M001, M008–M010, M018, M019) the trees with a site for every part
+  (`collection`, `operand`, `pattern`, `keys` by index, `left`, `right`, `member`, `body`), a key's text, the regular
+  expression as written, invariants' labels and `///`, the scopes and the lookups, the types; `labels` (M002, L001–L003)
+  the fragments' labels and terms, every inline label and the term or type a label comes from; generation's M011 the
+  generated names per context (elements in order, policies' command by identity, invariants and requirements with or
+  without an expression) at `name`, `fieldSets` by index and `event`. Every report is a node plus a property and index
+  (`DiagnosticSink`, with the CST fallbacks) and the node's element ID.
+  *Added:* `domain/source-model.ts`, **the model as written**: `SourceModel` (fragments with their terms, every element in
+  order with duplicates, `byName`, contexts, shared contexts), the twelve element kinds and their members (fields of kind
+  `field`/`owns`/`references`, parameters, invariants, states, commands with transitions, requirements, `changes`, emits
+  with `when`, `errors`; enum values; variants), `TypeRef`, `Multiplicity`, `Ref<T>` (text as written, the declaration
+  it resolves to, its site) and `Expr` (the tree of `ExprModel` with sites and text); a `Site` (file, 1-based `start`
+  and `end` of the kernel's `Position`, element ID) for each declaration (`at`), its `nameAt`, `labelAt` and every
+  property a rule reports on (`typeAt`, `exprAt`, `baseAt`, `forAt`, `whenAt`, `transitionsAt`, ...); the lookups and
+  member helpers of the AST index over it (`lookup`, `lookupVisible`, `duplicates`, `fieldsOf`, `includedFields`,
+  `identityField`, `primitiveInvariants`, `typeRefsIn`, ...). `domain/types.ts`: the static types (`Ty`, `baseType`,
+  `memberType`, `sameType`, `multiplicityText`, `cardinality`, ...) over it. `domain/diagnostics.ts`: `RuleSink`,
+  reporting at a site with the fields of `DiagnosticSink` in the same order and able to share its list. Built by
+  `infrastructure/syntax/build-source.ts` (`buildSourceModel`); `siteOf` (`diagnostic-sink.ts`) is what the sink and
+  the builder both use; `DomainAnalysis.sourceModel` carries it when the sources parse (built before the rules run).
+  Modeling's `.` exports its types and `RuleSink` (not published language).
+  *Decisions:* a second model next to the Typed Model, not new fields in `DomainModel`: the Typed Model is the Live View
+  payload (a T0 baseline) and the input of `fingerprints`, deduplicated and resolved to names, while the rules need
+  duplicates, references as written, declarations by identity and a range per property. `ElementModel.location` is
+  unchanged; the kernel's `Location` (lines only) is not a diagnostic's range, so a `Site` is built on its `Position`,
+  and the kernel is unchanged. References are the declarations themselves (references resolve to the first of a name,
+  as Langium links; the model may have cycles and is never serialized). Two names differ from the grammar because they
+  would clash: a verified type's `context` is `for` (`forOptional`, `forAt`), a `references` field's `target` is
+  `aggregate`. The helpers are ported now, not by the first checker that needs them, so that the T10 tasks share
+  nothing but `analyze.ts`, where each changes its own line; until the last one moves, the AST index's helpers and
+  `infrastructure/syntax/types.ts` exist twice. The helpers are not on `.` (the syntax's of the same names are, for the
+  language server and generation).
+  *Tests:* `infrastructure/syntax/build-source.test.ts` (over examples/shop and a fixture with every construct: every
+  AST node but terms blocks, lambda parameters and multiplicities has a site at its range; every reference is a `Ref`
+  at its name's range resolved to the declaration at the target's range, 70 in examples/shop; the expression trees
+  equal the Typed Model's; the sites of names, labels, `with`, `changes`, `errors` and their element IDs; duplicates and
+  unresolved references); `domain/source-model.test.ts` (the helpers); `infrastructure/syntax/types.test.ts` (both
+  static types agree for every field and parameter); `infrastructure/syntax/diagnostic-sink.test.ts` (`RuleSink` and
+  `DiagnosticSink` give the same JSON); and Modeling's `check` (test-helpers) now fails a rule test when the model as
+  written has no site for one of the rules' diagnostics. 1336 → 1354 passing (7 todo; unit 983 → 1001, integration 353);
+  T0 baselines byte-identical; exceptions unchanged.
+  *For T10:* a checker takes `SourceModel` and a `RuleSink` (`new RuleSink(sink.items)` in `analyzeDomain`, at its
+  place in the order) instead of `ModelIndex` and `DiagnosticSink`; `sink.error(code, m, node, 'p', i, hint)` becomes
+  `rules.error(code, m, decl.pAt or ref.at, hint)` (a property without index is index 0: `fieldSets[0].at`,
+  `from[0].at`). `regexSource` (it reads the CST) is in `rules/expressions.ts` and both builders import it: the
+  expressions task moves it into `infrastructure/syntax`. `LabelResolver` (`termFor`, `fieldLabel`) is the labels
+  task's to port; `storedTypeText` the verified task's. Generation's task exports the helpers it needs from `.` without
+  clashing with the syntax's (the language server keeps `commandsOf` of the AST) and gives `GeneratedName` a site. The
+  last task removes `test-helpers`' site check, `infrastructure/syntax/types.ts` and the AST index's helpers the rules
+  used; whether the Typed Model is then built from the model as written is open (T11: the model as written is the
+  shape of the language, which ADR 0027 keeps out of `.dt`).
 - **T10 — checkers onto the typed model (P4).** One task per checker (13), any order; each removes its exceptions from
   the map. Diagnostics (rule, message, range, order) stay the same. Done when Langium is imported only under
   `infrastructure/syntax` and the exception list has no syntax entries.
