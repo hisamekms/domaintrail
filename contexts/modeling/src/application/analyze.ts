@@ -139,6 +139,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkNames(sourceModel, new RuleSink(sink.items));
         checkShared(sourceModel, new RuleSink(sink.items));
         checkStructure(sourceModel, new RuleSink(sink.items));
+<<<<<<< HEAD
         checkUnions(index, sink);
         checkFieldSets(sourceModel!, new RuleSink(sink.items));
         checkVerified(sourceModel!, new RuleSink(sink.items));
@@ -149,6 +150,18 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkPayloadNames(sourceModel!, new RuleSink(sink.items));
         checkPolicies(sourceModel!, new RuleSink(sink.items));
         checkInvariants(sourceModel!, new RuleSink(sink.items));
+=======
+        checkUnions(sourceModel, new RuleSink(sink.items));
+        checkFieldSets(index, sink);
+        checkVerified(index, sink);
+        checkCommands(index, sink);
+        checkFactoryIds(index, sink);
+        checkChanges(index, sink);
+        checkEventIds(index, sink);
+        checkPayloadNames(index, sink);
+        checkPolicies(index, sink);
+        checkInvariants(index, sink);
+>>>>>>> 2195985 (refactor(modeling): check unions on the model as written)
         checkLabels(index, sink);
         diagnostics.push(...sink.items);
     }
