@@ -154,8 +154,8 @@ export const MAP: Record<string, Module> = {
     },
     collaboration: {
         kind: 'context',
-        dir: 'packages/collaboration',
-        sources: 'packages/collaboration/src',
+        dir: 'contexts/collaboration',
+        sources: 'contexts/collaboration/src',
         // Collaboration → Modeling, Storming (Storming is part of modeling until T8). Today's test also let it take
         // visualization's types; it imports none, and the map does not carry that edge over (ADR 0027).
         upstream: ['modeling'],

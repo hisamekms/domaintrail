@@ -54,7 +54,7 @@
         "fast-check": "4.10.2",
       },
     },
-    "packages/collaboration": {
+    "contexts/collaboration": {
       "name": "@domaintrail/collaboration",
       "dependencies": {
         "@domaintrail/modeling": "workspace:*",
@@ -140,7 +140,7 @@
 
     "@domaintrail/agent": ["@domaintrail/agent@workspace:capabilities/agent"],
 
-    "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:packages/collaboration"],
+    "@domaintrail/collaboration": ["@domaintrail/collaboration@workspace:contexts/collaboration"],
 
     "@domaintrail/composition": ["@domaintrail/composition@workspace:packages/composition"],
 

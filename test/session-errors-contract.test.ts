@@ -35,7 +35,7 @@ const DT = `context Shop {
 }
 `;
 
-const MODEL = path.join(import.meta.dir, '..', 'packages', 'collaboration', 'model');
+const MODEL = path.join(import.meta.dir, '..', 'contexts', 'collaboration', 'model');
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const json = { 'content-type': 'application/json' };
 

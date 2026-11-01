@@ -15,5 +15,5 @@
     "allowImportingTsExtensions": false,
     "resolveJsonModule": true
   },
-  "include": ["packages", "capabilities", "platform", "bin", "web", "test", "scripts"]
+  "include": ["packages", "contexts", "capabilities", "platform", "bin", "web", "test", "scripts"]
 }

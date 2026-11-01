@@ -84,7 +84,7 @@ function node(args: string[]): { code: number; out: string } {
 describe('collaboration on Node', () => {
     test('the sources the CLI bundles use no Bun API', async () => {
         const offending: string[] = [];
-        for (const dir of ['packages/collaboration/src', 'platform/workspace/src']) {
+        for (const dir of ['contexts/collaboration/src', 'platform/workspace/src']) {
             for await (const rel of new Glob('**/*.ts').scan({ cwd: path.join(ROOT, dir) })) {
                 // the generated contract tests register with bun:test; the unit tests run on Bun and are not bundled
                 if (rel.startsWith('generated/tests/') || rel.endsWith('.test.ts') || rel === 'test-helpers.ts') continue;

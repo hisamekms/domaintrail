@@ -600,7 +600,7 @@ describe('integration tests, scripts and bin/', () => {
 
 describe('runtimes', () => {
     test('collaboration runs on Node: only its infrastructure imports node:*, and nothing but the generated bun tests imports bun', () => {
-        const runtime = IMPORTS.collaboration.filter((i) => !i.file.startsWith('packages/collaboration/src/generated/tests/'));
+        const runtime = IMPORTS.collaboration.filter((i) => !i.file.startsWith('contexts/collaboration/src/generated/tests/'));
         expect(show(runtime.filter((i) => i.specifier === 'bun' || i.specifier.startsWith('bun:')))).toEqual([]);
         expect(show(runtime.filter((i) => i.specifier.startsWith('node:') && !segments(i.file).includes('infrastructure')))).toEqual([]);
     });

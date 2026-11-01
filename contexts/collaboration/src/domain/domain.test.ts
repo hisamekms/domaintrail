@@ -1,4 +1,4 @@
-// The pure decisions of packages/collaboration/src/domain (ADR 0026): content hashes, the run success rule and the
+// The pure decisions of contexts/collaboration/src/domain (ADR 0026): content hashes, the run success rule and the
 // diagnostics diff, target staleness, and the transitions of the commands beyond what the generated contract tests
 // check (src/contracts.test.ts).
 import { describe, expect, test } from 'bun:test';

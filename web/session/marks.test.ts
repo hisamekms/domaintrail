@@ -7,7 +7,7 @@ import { applyEvent } from './state';
 /** As many different emoji as a message or a turn holds. */
 const TWENTY: readonly string[] = ['😀', '😁', '😂', '🤣', '😃', '😄', '😅', '😆', '😉', '😊', '😋', '😎', '😍', '😘', '🥰', '😗', '😙', '🥲', '😚', '🙂'];
 
-/** A run as the state holds it (the rules' view of one: packages/collaboration/src/domain/marks.test.ts). */
+/** A run as the state holds it (the rules' view of one: contexts/collaboration/src/domain/marks.test.ts). */
 const run = (id: string, state: string, requests: string[], over: object = {}): object => ({
     id,
     state,

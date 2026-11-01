@@ -2,7 +2,7 @@
  * The `access` identity mode (ADR 0026, S8) against a local stand-in for Cloudflare: RSA keys made with `node:crypto`,
  * a JWKS and `get-identity` served from a local HTTP server, tokens signed here. The session server in access mode (no
  * identity, no answer; roles; Host and Origin; e-mail never sent; pages closed at the token's expiry and on leaving).
- * The verifier and the Identity API: packages/collaboration/src/infrastructure/identity.test.ts.
+ * The verifier and the Identity API: contexts/collaboration/src/infrastructure/identity.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';

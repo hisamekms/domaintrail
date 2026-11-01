@@ -1,5 +1,5 @@
-// Runs the contract tests generated from the collaboration model (packages/collaboration/src/generated/tests) against
-// the hand-written commands of packages/collaboration/src/domain, registered with bun:test like examples/shop's
+// Runs the contract tests generated from the collaboration model (contexts/collaboration/src/generated/tests) against
+// the hand-written commands of contexts/collaboration/src/domain, registered with bun:test like examples/shop's
 // contract.test.ts. The generated arbitraries cannot make every state on their own: a completed run must meet the run
 // success rule and a revision's content hash must be the one its files give, so those are given here, with examples
 // that reach the successful outcomes the random inputs rarely meet (a frozen input that covers its requests, a content

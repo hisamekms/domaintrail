@@ -1,6 +1,6 @@
-// The collaboration contracts (ADR 0026): packages/collaboration/model is a .dt model whose generated TypeScript is
-// committed in packages/collaboration/src/generated. The model checks clean and is formatted, and generating it again
-// gives exactly the committed files: after changing the model, run `bun run dt -r packages/collaboration generate ts`.
+// The collaboration contracts (ADR 0026): contexts/collaboration/model is a .dt model whose generated TypeScript is
+// committed in contexts/collaboration/src/generated. The model checks clean and is formatted, and generating it again
+// gives exactly the committed files: after changing the model, run `bun run dt -r contexts/collaboration generate ts`.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,7 @@ import { Glob } from 'bun';
 import { cliDeps } from '@domaintrail/composition';
 import { runCli } from '@domaintrail/presentation';
 
-const PACKAGE = path.join(import.meta.dir, '..', 'packages', 'collaboration');
+const PACKAGE = path.join(import.meta.dir, '..', 'contexts', 'collaboration');
 const GENERATED = 'src/generated';
 
 const dirs: string[] = [];
