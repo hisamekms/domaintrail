@@ -18,6 +18,7 @@ import {
     type MarkRun,
     type MarkTargetData,
 } from './marks.js';
+import { knownAgentRunId, knownMarkId, knownSessionId } from './ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -190,15 +191,15 @@ describe('the rules of marks', () => {
 
     test('the place command: the sign must fit the target, and the facilitator does not vote', () => {
         const at = new Date('2026-11-01T09:00:00Z');
-        const id = C.makeMarkId('00000000-0000-4000-8000-000000000001');
+        const id = knownMarkId('00000000-0000-4000-8000-000000000001');
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for what the factories check
-        const session = C.makeSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession;
+        const session = knownSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession;
         const who = value(C.makeParticipantId('p'));
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for what the factories check
         const open = (t: C.MarkTarget): C.OpenMarkTarget => t as C.OpenMarkTarget;
         const target: C.MarkTarget = {
             kind: 'QuestionOption',
-            run: C.makeAgentRunId('00000000-0000-4000-8000-000000000003'),
+            run: knownAgentRunId('00000000-0000-4000-8000-000000000003'),
             question: value(C.makeReplyKey('q1')),
             option: value(C.makeReplyKey('a')),
         };

@@ -13,6 +13,9 @@ import {
     createCollaboration,
     createUnitOfWork,
     FACILITATOR_PARTICIPANT,
+    knownAgentRunId,
+    knownRequestId,
+    knownRevisionId,
     openSessionBlobs,
     openSessionDatabase,
     type ReplyData,
@@ -362,7 +365,7 @@ describe('agent replies', () => {
 
     test('a completed run keeps the reply; a reply about another request is refused before anything is recorded', async () => {
         const { s, id, run, token, request } = await runningRun();
-        const stranger = C.makeRequestId('00000000-0000-4000-8000-0000000000ff');
+        const stranger = knownRequestId('00000000-0000-4000-8000-0000000000ff');
         const before = value(await s.use.sessionState({ session: id })).revisions.length;
         await s.write('sales/sales.dt', SALES.replace('    command confirm()', '    command cancel()\n      Draft -> Draft\n\n    command confirm()'));
         expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request: stranger, status: 'done' }] }) }))).toEqual({
@@ -460,7 +463,7 @@ describe('agent replies', () => {
             field: 'answer.answers[0].options',
         });
         expect(error(await queue([{ question: 'q1', options: ['closed'] }]))).toMatchObject({ type: 'InvalidAnswer', field: 'answer.answers[0].options[0]' });
-        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ee');
         expect(error(await queue([{ question: 'q1', options: ['draft'] }], unknown))).toEqual({ type: 'NotFound', aggregate: 'AgentRun', id: unknown });
 
         const next = value(
@@ -515,7 +518,7 @@ describe('agent replies', () => {
         ];
         value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
 
-        const unknown = C.makeAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ee');
         expect(error(await pickOf(unknown))).toEqual({ type: 'RunNotFound', run: unknown });
         // an assumption or an alternative the reply does not have
         expect(error(await pickOf(run.id, 2))).toEqual({ type: 'AlternativeNotFound', run: run.id });
@@ -632,7 +635,7 @@ describe('revisions', () => {
         });
         value(await s.use.releaseRun({ run: run.id, token: lease.token }));
         expect(
-            error(await s.use.restoreRevision({ session: id, revision: C.makeRevisionId('00000000-0000-4000-8000-999999999999'), actor: actor(facilitator) })),
+            error(await s.use.restoreRevision({ session: id, revision: knownRevisionId('00000000-0000-4000-8000-999999999999'), actor: actor(facilitator) })),
         ).toMatchObject({
             type: 'RevisionNotFound',
         });

@@ -18,6 +18,7 @@ import type { Actor } from './actor.js';
 import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
+import { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 type SessionId = Collaboration.SessionId;
 type AgentRunId = Collaboration.AgentRunId;
@@ -459,15 +460,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
 
     /** Records a captured snapshot as a new revision (take). */
     const record = (stores: Stores, session: SessionId, origin: Collaboration.RevisionOrigin, captured: Captured, at: Date): Collaboration.RecordedRevision => {
-        const taken = revisionCommands.take(
-            Collaboration.makeRevisionId(ids.newId()),
-            session,
-            origin,
-            captured.contentHash,
-            captured.files,
-            captured.validation,
-            at,
-        );
+        const taken = revisionCommands.take(knownRevisionId(ids.newId()), session, origin, captured.contentHash, captured.files, captured.validation, at);
         // the hash is computed from the files, and the origins taken here are never Restored
         if (!taken.ok) throw new Error(`Taking a revision failed: ${taken.error.type}`);
         stores.revisions.save(taken.value.Recorded.aggregate);
@@ -563,7 +556,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             if (!captured.ok) return captured;
             return uow.transaction((stores) => {
                 const at = clock.now();
-                const id = Collaboration.makeSessionId(ids.newId());
+                const id = knownSessionId(ids.newId());
                 const { Open } = decided(sessionCommands.start(id, facilitator, name, at));
                 stores.sessions.save(Open.aggregate);
                 publish(stores, id, Open.events, at);
@@ -626,7 +619,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     mentioned.push(p.value);
                 }
                 const at = clock.now();
-                const sent = requestCommands.send(Collaboration.makeRequestId(ids.newId()), active.value, author, targets, body, at, replyable, mentioned);
+                const sent = requestCommands.send(knownRequestId(ids.newId()), active.value, author, targets, body, at, replyable, mentioned);
                 if (!sent.ok) return sent;
                 const { Sent } = sent.value;
                 stores.requests.save(Sent.aggregate);
@@ -659,7 +652,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     )
                         return err({ type: 'ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
                     // decided before anything is removed: a refused mark changes nothing
-                    const decided = markCommands.place(Collaboration.makeMarkId(ids.newId()), active.value, participant, role, open.value, sign, at);
+                    const decided = markCommands.place(knownMarkId(ids.newId()), active.value, participant, role, open.value, sign, at);
                     if (!decided.ok) return decided;
                     made = decided.value.Placed.aggregate;
                     events.push(decided.value.Placed.events.MarkPlaced);
@@ -719,7 +712,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (!bundled || !input) return err({ type: 'NoRequests' });
                 const at = clock.now();
                 const queued = agentRunCommands.queue(
-                    Collaboration.makeAgentRunId(ids.newId()),
+                    knownAgentRunId(ids.newId()),
                     active.value,
                     bundled,
                     { requests: input, ...(note !== undefined && { note }), ...(answered && { answer: answered }), ...(picked && { pick: picked }) },
@@ -1006,7 +999,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     .transaction((stores) => {
                         const at = clock.now();
                         const made = revisionCommands.restore(
-                            Collaboration.makeRevisionId(ids.newId()),
+                            knownRevisionId(ids.newId()),
                             session,
                             restorable.value,
                             preRestore.id,

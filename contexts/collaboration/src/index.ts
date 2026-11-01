@@ -47,6 +47,8 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
+// the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
+export { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
 // the rule of the `Emoji` primitive: what counts as one emoji and the form it is kept in (the page decides alike)
 export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 

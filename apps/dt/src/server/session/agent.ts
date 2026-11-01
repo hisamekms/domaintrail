@@ -6,7 +6,7 @@
 // fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { Collaboration, type CollaborationUseCases, type OutboxEntry } from '@domaintrail/collaboration';
+import { Collaboration, type CollaborationUseCases, knownAgentRunId, type OutboxEntry } from '@domaintrail/collaboration';
 import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
@@ -179,7 +179,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     const runRoute = async (req: IncomingMessage, res: ServerResponse, rawId: string, action: string): Promise<void> => {
         const id = uuid(rawId, 'id');
         if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'id' });
-        const run = Collaboration.makeAgentRunId(id.value);
+        const run = knownAgentRunId(id.value);
         switch (action) {
             case 'start': {
                 const b = await input(req, res, ['token']);

@@ -13,6 +13,7 @@ import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, worksp
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from './targets.js';
 import { diagnosticsDiff, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
 import { check } from '../test-helpers.js';
+import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
@@ -225,9 +226,9 @@ describe('transitions', () => {
     const facilitator = value(C.makeParticipantId('facilitator'));
     const guest = value(C.makeParticipantId('guest'));
     const name = value(C.makeDisplayName('Ada'));
-    const sessionId = C.makeSessionId('00000000-0000-4000-8000-000000000001');
-    const base = C.makeRevisionId('00000000-0000-4000-8000-000000000002');
-    const result = C.makeRevisionId('00000000-0000-4000-8000-000000000003');
+    const sessionId = knownSessionId('00000000-0000-4000-8000-000000000001');
+    const base = knownRevisionId('00000000-0000-4000-8000-000000000002');
+    const result = knownRevisionId('00000000-0000-4000-8000-000000000003');
 
     test('a session starts with its facilitator, admits a newcomer once, and closes', () => {
         const open = value(sessionCommands.start(sessionId, facilitator, name, at)).Open.aggregate;
@@ -244,12 +245,12 @@ describe('transitions', () => {
 
     const running: C.RunningAgentRun = {
         state: 'Running',
-        id: C.makeAgentRunId('00000000-0000-4000-8000-000000000005'),
+        id: knownAgentRunId('00000000-0000-4000-8000-000000000005'),
         session: sessionId,
         input: {
             requests: [
                 {
-                    request: C.makeRequestId('00000000-0000-4000-8000-000000000004'),
+                    request: knownRequestId('00000000-0000-4000-8000-000000000004'),
                     author: guest,
                     targets: [],
                     body: value(C.makeText('x')),
@@ -304,7 +305,7 @@ describe('transitions', () => {
     test('take and restore require the content hash of the files; restore, the facilitator', () => {
         const files = [snapshotFile(path('a.dt'), bytes('context A {}'))];
         const validation = summarize([], false);
-        const id = C.makeRevisionId('00000000-0000-4000-8000-000000000006');
+        const id = knownRevisionId('00000000-0000-4000-8000-000000000006');
         expect(revisionCommands.take(id, sessionId, { kind: 'Manual', takenBy: facilitator }, snapshotHash([]), files, validation, at)).toEqual({
             ok: false,
             error: { type: 'ContentHashMismatch' },
@@ -515,7 +516,7 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         });
         expect(readAnswer({ answers: [{ question: 'q1', options: ['a', 'a'] }] })).toMatchObject({ ok: false, error: { path: 'answer.answers[0].options' } });
         const reply = toAgentReply({ outcome: 'clarification', summary: 's', requests: [], questions: [{ ...question, requests: [] }], assumptions: [] });
-        const run = C.makeAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000009');
+        const run = knownAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000009');
         const answer = readAnswer({ answers: [{ question: 'q1', options: ['a'], text: 'and more' }] });
         if (!answer.ok) throw new Error(answer.error.message);
         const resolved = resolveAnswer(answer.value, run, reply);
@@ -530,9 +531,9 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         });
     });
     test('a pick is of a completed run with assumptions, one of its alternatives, with its requests queued again', () => {
-        const id = C.makeAgentRunId('00000000-0000-4000-8000-00000000000a');
-        const m = C.makeRequestId('00000000-0000-4000-8000-000000000001');
-        const n = C.makeRequestId('00000000-0000-4000-8000-000000000002');
+        const id = knownAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const m = knownRequestId('00000000-0000-4000-8000-000000000001');
+        const n = knownRequestId('00000000-0000-4000-8000-000000000002');
         const assumption = { text: 'With tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] };
         const run = (state: string, assumptions: unknown[] = [assumption]): C.AgentRun =>
             ({
@@ -557,7 +558,7 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
         expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
         expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
         expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'PickMismatch', run: id } });
-        expect(resolvePick(pick(), run('Completed'), [m, n, C.makeRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
+        expect(resolvePick(pick(), run('Completed'), [m, n, knownRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
             ok: false,
             error: { type: 'PickMismatch', run: id },
         });

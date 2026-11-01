@@ -12,6 +12,7 @@ import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
 import { UnsafeSessionPath } from './session-dir.js';
 import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
+import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 /** The error a promise rejects with (fails when it resolves). */
 async function thrown(p: Promise<unknown>): Promise<Error> {
@@ -43,10 +44,10 @@ const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T 
 const at = new Date('2026-10-31T09:00:00Z');
 const plus = (ms: number): Date => new Date(at.getTime() + ms);
 const facilitator = value(C.makeParticipantId('facilitator'));
-const sessionId = C.makeSessionId('00000000-0000-4000-8000-000000000001');
-const otherSession = C.makeSessionId('00000000-0000-4000-8000-000000000002');
-const request = C.makeRequestId('00000000-0000-4000-8000-000000000010');
-const revision = C.makeRevisionId('00000000-0000-4000-8000-000000000020');
+const sessionId = knownSessionId('00000000-0000-4000-8000-000000000001');
+const otherSession = knownSessionId('00000000-0000-4000-8000-000000000002');
+const request = knownRequestId('00000000-0000-4000-8000-000000000010');
+const revision = knownRevisionId('00000000-0000-4000-8000-000000000020');
 
 function openSession(stores: Stores, id: C.SessionId): void {
     const { Open } = value(sessionCommands.start(id, facilitator, value(C.makeDisplayName('Ada')), at));
@@ -57,7 +58,7 @@ function openSession(stores: Stores, id: C.SessionId): void {
 function queued(id: number, session: C.SessionId = sessionId): C.QueuedAgentRun {
     return {
         state: 'Queued',
-        id: C.makeAgentRunId(`00000000-0000-4000-8000-0000000001${String(id).padStart(2, '0')}`),
+        id: knownAgentRunId(`00000000-0000-4000-8000-0000000001${String(id).padStart(2, '0')}`),
         session,
         input: {
             requests: [{ request, author: facilitator, targets: [], body: value(C.makeText('x')) }],
@@ -310,7 +311,7 @@ describe('rows written before requests had several targets', () => {
             );
         const stored = JSON.stringify(db.prepare('SELECT data FROM requests').all());
         const uow = createUnitOfWork(db);
-        const session = C.makeSessionId(fixture.session.id);
+        const session = knownSessionId(fixture.session.id);
         const element: unknown = {
             target: { kind: 'DtElement', element: 'Billing.Invoice' },
             sourceRevision: revision,
@@ -368,7 +369,7 @@ describe("rows written before the agent's reply was structured", () => {
                 at.toISOString(),
             );
         const uow = createUnitOfWork(db);
-        const session = C.makeSessionId(fixture.session.id);
+        const session = knownSessionId(fixture.session.id);
         const { runs, events } = await uow.transaction((st) => ({ runs: st.runs.listBySession(session), events: st.outbox.readAfter(0, 10, session) }));
         expect(runs.map((r) => r.state)).toEqual(['NeedsClarification', 'Completed']);
         const [asked, done] = runs;

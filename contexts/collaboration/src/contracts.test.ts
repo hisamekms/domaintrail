@@ -12,6 +12,7 @@ import { hashBytes, snapshotFile, snapshotHash } from './domain/snapshot.js';
 import { tally } from './domain/validation.js';
 import { makeEmoji, markCommands } from './domain/marks.js';
 import { isNormalEmoji } from './domain/emoji.js';
+import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`invalid example: ${JSON.stringify(r.error)}`);
@@ -59,10 +60,10 @@ const OpenSession: fc.Arbitrary<C.OpenSession> = fc
 /** A revision's content hash is the one its files give. */
 const hashed = <R extends C.Revision>(arb: fc.Arbitrary<R>): fc.Arbitrary<R> => arb.map((r) => ({ ...r, contentHash: snapshotHash(r.files) }));
 
-const session = C.makeSessionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000001');
+const session = knownSessionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000001');
 const facilitator = value(C.makeParticipantId('facilitator'));
-const request = C.makeRequestId('6f0b0b1e-1f0a-4c3e-9a4e-000000000002');
-const revision = C.makeRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000003');
+const request = knownRequestId('6f0b0b1e-1f0a-4c3e-9a4e-000000000002');
+const revision = knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000003');
 const files = [
     snapshotFile(value(C.makeWorkspacePath('sales/order.dt')), new TextEncoder().encode('context Sales {}\n')),
     snapshotFile(value(C.makeWorkspacePath('stormings/order.dtes')), new TextEncoder().encode('storming Order {}\n')),
@@ -76,7 +77,7 @@ const frozen: C.FrozenRequest = {
 };
 const running: C.RunningAgentRun = {
     state: 'Running',
-    id: C.makeAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000004'),
+    id: knownAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000004'),
     session,
     input: { requests: [frozen] },
     queuedBy: facilitator,
@@ -169,7 +170,7 @@ register(
                         queue: [[running.id, active, [pending], { requests: [frozen] }, facilitator, 'Facilitator', at]],
                         finish: [
                             [running, success, revision, false, undefined, at],
-                            [running, success, C.makeRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'), true, reply, at],
+                            [running, success, knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000005'), true, reply, at],
                             [running, { ...success, newDtErrors: tally(1) }, revision, false, reply, at],
                         ],
                         askClarification: [[running, value(C.makeText('Which orders?')), asking, revision, at]],
@@ -181,7 +182,7 @@ register(
                         take: [[revision, session, { kind: 'SessionStart', session }, snapshotHash(files), files, validation, at]],
                         restore: [
                             [
-                                C.makeRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000006'),
+                                knownRevisionId('6f0b0b1e-1f0a-4c3e-9a4e-000000000006'),
                                 session,
                                 restorable,
                                 revision,

@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
 import { makeEmoji, markKey, VOTE, type MarkTargetData } from '../domain/marks.js';
 import { createUnitOfWork, MIGRATIONS, openDatabase } from './sqlite.js';
+import { knownAgentRunId, knownMarkId, knownRequestId, knownSessionId } from '../domain/ids.js';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -56,22 +57,22 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
         const uow = createUnitOfWork(db);
-        const sid = C.makeSessionId(id);
+        const sid = knownSessionId(id);
         expect(await uow.transaction((s) => [s.sessions.load(sid)?.state, s.marks.placedBySession(sid)])).toEqual(['Open', []]);
 
         // one placed mark per participant, target and sign, whatever the code above does
         const mark: C.PlacedMark = {
             state: 'Placed',
-            id: C.makeMarkId('00000000-0000-4000-8000-000000000002'),
+            id: knownMarkId('00000000-0000-4000-8000-000000000002'),
             session: sid,
             participant: value(C.makeParticipantId('ann')),
-            target: { kind: 'Message', request: C.makeRequestId('00000000-0000-4000-8000-000000000003') },
+            target: { kind: 'Message', request: knownRequestId('00000000-0000-4000-8000-000000000003') },
             sign: react('❤️'),
             placedAt: new Date('2026-11-01T09:00:00Z'),
         };
         await uow.transaction((s) => s.marks.save(mark));
         const duplicate = await uow
-            .transaction((s) => s.marks.save({ ...mark, id: C.makeMarkId('00000000-0000-4000-8000-000000000004') }))
+            .transaction((s) => s.marks.save({ ...mark, id: knownMarkId('00000000-0000-4000-8000-000000000004') }))
             .then(
                 () => 'saved',
                 () => 'refused',
@@ -79,7 +80,7 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
         expect(duplicate).toBe('refused');
         // removed, it stays as a row; another can be placed
         await uow.transaction((s) => s.marks.save({ ...mark, state: 'Removed', removedAt: new Date('2026-11-01T09:01:00Z') }));
-        await uow.transaction((s) => s.marks.save({ ...mark, id: C.makeMarkId('00000000-0000-4000-8000-000000000005') }));
+        await uow.transaction((s) => s.marks.save({ ...mark, id: knownMarkId('00000000-0000-4000-8000-000000000005') }));
         expect(await uow.transaction((s): unknown[] => [s.marks.placedBySession(sid).map((m): string => m.id), s.marks.load(mark.id)?.state])).toEqual([
             ['00000000-0000-4000-8000-000000000005'],
             'Removed',
@@ -130,7 +131,7 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
             ['Vote', 'Placed'],
         ]);
         const uow = createUnitOfWork(db);
-        const id = C.makeSessionId(sid);
+        const id = knownSessionId(sid);
         const placed = await uow.transaction((s) => s.marks.placedBySession(id));
         expect(placed.map((m) => m.sign)).toEqual([react('👍'), react('🤔'), react('❤️'), VOTE]);
         expect(placed[0].placedAt).toEqual(new Date('2026-11-01T09:00:00.000Z'));
@@ -145,7 +146,7 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
             'Agree',
         ]);
         // the unique index holds for the emoji: a second 👍 of ann's on the message is refused
-        const again: C.PlacedMark = { ...placed[0], id: C.makeMarkId('00000000-0000-4000-8000-000000000200') };
+        const again: C.PlacedMark = { ...placed[0], id: knownMarkId('00000000-0000-4000-8000-000000000200') };
         expect(
             await uow
                 .transaction((s) => s.marks.save(again))
@@ -198,35 +199,35 @@ describe('the reply_to column (migration 5)', () => {
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
         expect(MIGRATIONS.length).toBe(6);
         const uow = createUnitOfWork(db);
-        const loaded = await uow.transaction((s) => s.requests.load(C.makeRequestId(rid)));
+        const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
         expect(loaded?.replyTo).toBeUndefined();
         // a run frozen before picks were recorded loads as it was: no pick
-        const oldRun = await uow.transaction((s) => s.runs.load(C.makeAgentRunId(runId))?.run);
+        const oldRun = await uow.transaction((s) => s.runs.load(knownAgentRunId(runId))?.run);
         expect(oldRun?.input).toEqual(run.input as unknown as C.RunInput);
         expect(db.prepare('SELECT reply_to FROM requests WHERE id = ?').get(rid)).toEqual({ reply_to: null });
 
         // a reply keeps its run in the column; a reply to a run the database does not hold is refused
         const reply: C.SentRequest = {
             state: 'Sent',
-            id: C.makeRequestId('00000000-0000-4000-8000-000000000004'),
-            session: C.makeSessionId(sid),
+            id: knownRequestId('00000000-0000-4000-8000-000000000004'),
+            session: knownSessionId(sid),
             author: value(C.makeParticipantId('local:facilitator')),
             targets: [],
             body: text('Why?'),
             sentAt: new Date('2026-11-01T09:00:00Z'),
-            replyTo: C.makeAgentRunId(runId),
+            replyTo: knownAgentRunId(runId),
             mentions: [],
         };
         await uow.transaction((s) => s.requests.save(reply));
         expect(db.prepare('SELECT reply_to FROM requests WHERE id = ?').get(reply.id)).toEqual({ reply_to: runId });
-        expect(await uow.transaction((s) => s.requests.load(reply.id)?.replyTo)).toBe(C.makeAgentRunId(runId));
+        expect(await uow.transaction((s) => s.requests.load(reply.id)?.replyTo)).toBe(knownAgentRunId(runId));
         const dangling = await uow
             .transaction((s) =>
                 s.requests.save({
                     ...reply,
-                    id: C.makeRequestId('00000000-0000-4000-8000-000000000005'),
-                    replyTo: C.makeAgentRunId('00000000-0000-4000-8000-0000000000aa'),
+                    id: knownRequestId('00000000-0000-4000-8000-000000000005'),
+                    replyTo: knownAgentRunId('00000000-0000-4000-8000-0000000000aa'),
                 }),
             )
             .then(

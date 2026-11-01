@@ -13,6 +13,7 @@ import {
     type CollaborationUseCases,
     createCollaboration,
     createUnitOfWork,
+    knownAgentRunId,
     makeEmoji,
     MAX_REACTION_EMOJI,
     openSessionBlobs,
@@ -236,7 +237,7 @@ describe('setting marks', () => {
         expect(error(await set(ann, target, react('👍')))).toEqual({ type: 'MarkNotForTarget' });
         expect(error(await set(ann, { kind: 'Message', request: f.message }, VOTE))).toEqual({ type: 'MarkNotForTarget' });
         expect(error(await set(ann, { ...target, option: key('zz') }, VOTE))).toEqual({ type: 'MarkTargetNotFound' });
-        expect(error(await set(ann, { kind: 'Turn', run: C.makeAgentRunId('00000000-0000-4000-8000-0000000000ff') }, react('❤️')))).toEqual({
+        expect(error(await set(ann, { kind: 'Turn', run: knownAgentRunId('00000000-0000-4000-8000-0000000000ff') }, react('❤️')))).toEqual({
             type: 'MarkTargetNotFound',
         });
         expect(error(await set(value(C.makeParticipantId('stranger')), { kind: 'Message', request: f.message }, react('❤️')))).toMatchObject({

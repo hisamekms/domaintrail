@@ -7,7 +7,15 @@
 // commands refuse what the role does not allow; the role of each route below is a hint that answers first, with the
 // same status and body as the refusal of the domain.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { type AnswerData, Collaboration, type CollaborationUseCases, type IdentityKey, type PickData, type SessionState } from '@domaintrail/collaboration';
+import {
+    type AnswerData,
+    Collaboration,
+    type CollaborationUseCases,
+    type IdentityKey,
+    knownAgentRunId,
+    type PickData,
+    type SessionState,
+} from '@domaintrail/collaboration';
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
@@ -341,7 +349,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (raw.replyTo !== undefined) {
                     const id = checked(res, uuid(raw.replyTo, 'replyTo'));
                     if (!id) return;
-                    replyTo = Collaboration.makeAgentRunId(id);
+                    replyTo = knownAgentRunId(id);
                 }
                 // the people `@name[pN]` mentions: participants of the session, each once (the use case checks who)
                 const mentions = checked(res, mentionIds(raw.mentions));
@@ -414,7 +422,7 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     if (!to) return;
                     const a = checked(res, answerInput(raw.answer));
                     if (!a) return;
-                    answered = { answerTo: Collaboration.makeAgentRunId(to), answer: a };
+                    answered = { answerTo: knownAgentRunId(to), answer: a };
                 }
                 // an alternative picked of a completed run's assumption: its requests queued again (checked by the use case)
                 let picked: PickData | undefined;
