@@ -464,7 +464,7 @@ function Stream({ items }: { items: StreamItem[] }) {
                     {rows.map((row, i) => (
                         <li
                             key={row.key}
-                            className={`chat-item chat-${row.kind}${follows[i] ? ' continued' : ''}${initial.has(row.key) ? '' : ' motion-pop motion-pop-up'}`}
+                            className={`chat-item chat-item-${row.kind}${follows[i] ? ' continued' : ''}${initial.has(row.key) ? '' : ' motion-pop motion-pop-up'}`}
                             data-item={row.key}
                             onAnimationEnd={(e) => {
                                 // once in, it is an item like the others: shown again (the tab switched back), it does not come in again
@@ -574,8 +574,6 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     };
     const side = (
         <div className="chat-message-side">
-            {/* first, so that the mark stays at the right end while ☺+ is hidden */}
-            {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
             {control && classification && classification.kind !== 'unknown' && (
                 <span
                     className={`chat-class class-${classification.kind}`}
@@ -609,6 +607,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                     <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
                 </span>
             )}
+            {/* last: ☺+ at the right end of every row, messages and turns alike */}
+            {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
         </div>
     );
     return (
@@ -980,7 +980,7 @@ function Bubble(props: {
     /** It continues the bubble before, of the same author: no avatar nor name; the time on hover. */
     continues?: boolean;
     className?: string;
-    /** At the right end of the bubble: a message's mark and the facilitator's tools. */
+    /** At the right end of the name line (of a continued message, its first line): its mark, the facilitator's tools, ☺+. */
     side?: ReactNode;
     children: ReactNode;
 }) {
@@ -989,8 +989,8 @@ function Bubble(props: {
             <div className={`chat-message continued ${props.className ?? ''}`} {...(props.at && { title: time(props.at) })}>
                 <span className="chat-avatar-space" aria-hidden />
                 <div className="chat-message-main">
-                    <div className="chat-bubble">{props.children}</div>
                     {props.side}
+                    <div className="chat-bubble">{props.children}</div>
                 </div>
             </div>
         );
@@ -1007,9 +1007,9 @@ function Bubble(props: {
                             {time(props.at)}
                         </time>
                     )}
+                    {props.side}
                 </div>
                 <div className="chat-bubble">{props.children}</div>
-                {props.side}
             </div>
         </div>
     );

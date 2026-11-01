@@ -73,10 +73,11 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                         </span>
                     )}
                     <span className="run-card-tools">
-                        {!compact && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
                         {control && !compact && <CardMenu last={last.run} />}
                         {actions}
                         {!compact && <ReplyButton run={last.run} />}
+                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
+                        {!compact && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
                     </span>
                 </div>
                 {runs.map((r, i) => (
@@ -88,7 +89,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
 }
 
 /**
- * ↩ at the far right of an AI turn whose latest run ended (completed, failed, declined, cancelled; not a question,
+ * ↩ at the right end of an AI turn (just before ☺+) whose latest run ended (completed, failed, declined, cancelled; not a question,
  * which has its form): anyone starts a reply to it, shown on hover or focus (always, faint, on touch).
  */
 function ReplyButton({ run }: { run: RunJson }) {

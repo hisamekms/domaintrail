@@ -3854,9 +3854,11 @@ del.was.block {
     margin: 0;
     padding: 0;
 }
-/* the stream is separated by space: 1.25rem between turns, 0.5rem between messages of one speaker (.continued) and
+/* the stream is separated by space: 1.25rem between turns, none between messages of one speaker (.continued: their rows touch) and
    0.375rem inside a message; no rules nor boxes */
 .chat-item {
+    /* its own formatting context: the row's negative margins do not fold into the item's */
+    display: flow-root;
     margin-top: 1.25rem;
 }
 .chat-system {
@@ -4270,9 +4272,6 @@ del.was.block {
 
 /* the stream, with less text */
 .chat-item.continued {
-    margin-top: 0.5rem;
-}
-.chat-message.continued {
     margin-top: 0;
 }
 .chat-avatar-space {
@@ -4816,18 +4815,42 @@ del.was.block {
     display: flex;
     flex-direction: column;
 }
-.chat-row {
+/* a row of the stream — a message, or an AI turn with its chained runs — is one box as wide as the stream (its
+   padding and all): its backgrounds (hovered or paired, chosen, mentioning me, flashed) span it whole, the same for
+   every row. Its tools sit at its top-right, ☺+ last, so that ☺+ is at the same x on every row; the body leaves the
+   same room on its right (--chat-tools-room, ☺+'s column) on every row, so that all text wraps at one width and no
+   tool covers it */
+.chat-row,
+.chat-item-card > .run-card {
+    --chat-tools-room: 28px;
     position: relative;
     /* within the item's width, so that long chips are cut short instead of widening the bubble */
     min-width: 0;
+    /* room for the subtle background, without moving the text */
+    margin: -3px -6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+}
+.chat-row {
     display: flex;
     align-items: flex-start;
     gap: 6px;
     flex-wrap: wrap;
-    /* room for the subtle background of a paired or chosen message, without moving it */
-    margin: -3px -6px;
-    padding: 3px 6px;
-    border-radius: 6px;
+}
+.chat-item-card > .run-card:hover {
+    background: var(--hover);
+}
+.chat-row .chat-bubble,
+.chat-item-card > .run-card .run-section {
+    margin-right: var(--chat-tools-room);
+}
+/* jumped to: the row's box flashes, not the item inside the stream's padding */
+.chat-item.chat-flash {
+    animation: none;
+}
+.chat-item.chat-flash > .chat-row,
+.chat-item.chat-flash > .run-card {
+    animation: chat-flash 1.6s ease;
 }
 .chat-row > .chat-message {
     flex: 1;
@@ -4849,26 +4872,25 @@ del.was.block {
 .chat-message-main {
     position: relative;
 }
-/* at the right end of the message's row: its mark, how it reads, the facilitator's tools */
+/* at the right end of the message's name line: how it reads, its mark, the facilitator's tools, ☺+ (last). A continued
+   message has no name line: ☺+ alone sits in the body's room on the right; with more, they make a line of their own
+   above the body, so that they never cover its text nor narrow it */
 .chat-message-side {
-    position: absolute;
-    top: 0;
-    right: 0;
+    margin-left: auto;
+    align-self: center;
     display: flex;
     justify-content: flex-end;
     align-items: center;
     gap: 4px;
+    margin-block: -4px;
 }
-.chat-row .chat-message:not(.continued) .chat-message-side {
+.chat-message.continued .chat-message-side {
+    margin-block: 0 2px;
+}
+.chat-message.continued .chat-message-side:not(:has(> :not(.reaction-add))) {
+    position: absolute;
     top: 0;
-}
-.chat-row .chat-message.continued .chat-message-side {
-    top: 2px;
-}
-/* the side's room: beside the name, or beside a continued message's body */
-.chat-row .chat-bubble-request .chat-message-head,
-.chat-row .chat-bubble-request.continued .chat-bubble {
-    margin-right: 84px;
+    right: 0;
 }
 .chat-message-side:empty {
     display: none;
@@ -5677,7 +5699,7 @@ del.was.block {
 }
 
 /* ---------- replies to runs ---------- */
-/* ↩ at the far right of an AI turn: like ☺+, on hover or focus, always (faint) on touch */
+/* ↩ at the right end of an AI turn, just before ☺+: like ☺+, on hover or focus, always (faint) on touch */
 .session-chat button.run-card-reply {
     width: 22px;
     height: 20px;
