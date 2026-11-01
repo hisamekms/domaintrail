@@ -1,8 +1,8 @@
 // Votes and reactions as the page shows them (ADR 0026, appendix "Votes and reactions"), without React: the session's
 // placed marks counted per target and sign, who placed them (names on hover, in a popover on a click), and whether one
 // is mine; the emoji placed on a message or a turn, in the order they first appeared, and whether another one fits
-// (`MAX_REACTION_EMOJI`); whether a vote can still change (the rules of `domain/marks.ts`, the same as the server's);
-// the lines of the tooltips that keep a closed vote's counts. Everything is derived from the session's state on the page.
+// (`MAX_REACTION_EMOJI`); whether a vote can still change (the rules of `domain/marks.ts`, the same as the server's).
+// Everything is derived from the session's state on the page.
 import {
     isVoteTarget,
     markKey,
@@ -83,40 +83,3 @@ export function canVote(
 
 /** The names of who marked, joined (`、` or `, `). */
 export const names = (tally: Tally, nameOf: (id: string) => string, separator: string): string => tally.who.map(nameOf).join(separator);
-
-/**
- * The votes on a question's options, one line per option that got any (`label ♡ 2: Ann、Bob`), for the tooltip of the
- * answer that closed them. Empty when nobody voted.
- */
-export function questionVoteLines(
-    index: MarkIndex,
-    run: string,
-    question: { readonly id: string; readonly options: readonly { readonly id: string; readonly label: string }[] },
-    nameOf: (id: string) => string,
-    separator: string,
-): string[] {
-    return question.options.flatMap((o) => {
-        const t = tallyOf(index, { kind: 'QuestionOption', run, question: question.id, option: o.id }, VOTE);
-        return t.count > 0 ? [`${o.label} ♡ ${t.count}: ${names(t, nameOf, separator)}`] : [];
-    });
-}
-
-/**
- * The votes on an assumption's choices — kept as it is (`keep`), then each alternative — one line per choice that got
- * any, for the tooltip of the note of the run that picked an alternative. Empty when nobody voted.
- */
-export function assumptionVoteLines(
-    index: MarkIndex,
-    run: string,
-    assumption: number,
-    alternatives: readonly { readonly id: string; readonly label: string }[],
-    keep: string,
-    nameOf: (id: string) => string,
-    separator: string,
-): string[] {
-    const choices = [{ id: undefined, label: keep }, ...alternatives];
-    return choices.flatMap((c) => {
-        const t = tallyOf(index, { kind: 'AssumptionChoice', run, assumption, ...(c.id !== undefined && { alternative: c.id }) }, VOTE);
-        return t.count > 0 ? [`${c.label} ♡ ${t.count}: ${names(t, nameOf, separator)}`] : [];
-    });
-}

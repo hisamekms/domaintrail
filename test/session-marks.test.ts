@@ -35,18 +35,7 @@ import { isNormalEmoji, isSingleEmoji, normalizeEmoji, readEmoji } from '@domain
 import { createWorkspaceSnapshot } from '@domaintrail/workspace/infrastructure/snapshot';
 import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/modeling/core/config';
-import {
-    assumptionVoteLines,
-    canVote,
-    markIndex,
-    names,
-    questionVoteLines,
-    quickReactions,
-    reaction,
-    reactionFits,
-    reactionsOn,
-    tallyOf,
-} from '@domaintrail/web/session/marks';
+import { canVote, markIndex, names, quickReactions, reaction, reactionFits, reactionsOn, tallyOf } from '@domaintrail/web/session/marks';
 import { applyEvent } from '@domaintrail/web/session/state';
 
 const dirs: string[] = [];
@@ -812,20 +801,6 @@ describe("the page's derivations", () => {
     test("the quick reactions: the session's, or the default ones (a state from before them)", () => {
         expect(quickReactions({ quickReactions: ['🔥', '✅'] })).toEqual(['🔥', '✅']);
         expect(quickReactions({})).toEqual(['👍', '👀', '🤔', '🎉', '❤️', '🙏']);
-    });
-
-    test("the lines that keep a closed vote's counts in a tooltip", () => {
-        const index = markIndex({ marks }, 'me');
-        const question = {
-            id: 'q1',
-            options: [
-                { id: 'a', label: 'A' },
-                { id: 'b', label: 'B' },
-            ],
-        };
-        expect(questionVoteLines(index, 'r1', question, nameOf, ', ')).toEqual(['A ♡ 2: ANN, BOB']);
-        const kept = markIndex({ marks: [mark('6', 'ann', { kind: 'AssumptionChoice', run: 'r2', assumption: 0 }, VOTE)] }, 'me');
-        expect(assumptionVoteLines(kept, 'r2', 0, [{ id: 'x', label: 'X' }], 'As is', nameOf, ', ')).toEqual(['As is ♡ 1: ANN']);
     });
 
     test('a participant votes while the run waits; the facilitator and a closed session only see', () => {
