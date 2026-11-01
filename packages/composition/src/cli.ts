@@ -1,6 +1,4 @@
-import { consoleIO, runCli, type CliIO } from '@domaintrail/presentation/cli/main';
-import type { CliDeps } from '@domaintrail/presentation/cli/ports';
-import type { LanguageServerFiles } from '@domaintrail/presentation/lsp/server';
+import { type CliDeps, type CliIO, consoleIO, type LanguageServerFiles, runCli, startLanguageServer } from '@domaintrail/presentation';
 import { createGeneratedOutput, findDomainFiles, hasCastLintRule, LINT_HINT, loadConfig, loadWorkspace, SourceScope } from '@domaintrail/workspace';
 
 /** The language server's view of the workspace: the config and the sources, as `dt check` finds them. */
@@ -47,9 +45,8 @@ export function cliDeps(): CliDeps {
             process.once('SIGTERM', interrupted);
             return subscriber;
         },
-        startLanguageServer: async (options) => {
-            (await import('@domaintrail/presentation/lsp/server')).startLanguageServer(options, languageServerFiles);
-        },
+        // loads the language server only when `dt lsp` starts it
+        startLanguageServer: (options) => startLanguageServer(options, languageServerFiles),
     };
 }
 

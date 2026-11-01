@@ -36,16 +36,24 @@ import {
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { DEFAULT_SOURCES, type ResolvedSessionConfig } from '@domaintrail/modeling';
-import { SessionError } from '@domaintrail/presentation/cli/ports';
-import { isLoopbackBind, sessionHostPolicy } from '@domaintrail/presentation/http/access';
-import { createApiRoutes } from '@domaintrail/presentation/http/routes';
-import { createViewHttpServer } from '@domaintrail/presentation/http/server';
-import { createAgentApi } from '@domaintrail/presentation/session/agent';
-import { createSessionIdentities } from '@domaintrail/presentation/session/identities';
-import { createPresenceRelay, type SessionConnection } from '@domaintrail/presentation/session/presence';
-import { createEventRelay, lastSeq } from '@domaintrail/presentation/session/relay';
-import { createSessionHttp, meOf, stateBody } from '@domaintrail/presentation/session/routes';
-import { createWebSocketHub, type Connection } from '@domaintrail/presentation/websocket/hub';
+import {
+    type Connection,
+    createAgentApi,
+    createApiRoutes,
+    createEventRelay,
+    createPresenceRelay,
+    createSessionHttp,
+    createSessionIdentities,
+    createViewHttpServer,
+    createWebSocketHub,
+    isLoopbackBind,
+    lastSeq,
+    meOf,
+    type SessionConnection,
+    SessionError,
+    sessionHostPolicy,
+    stateBody,
+} from '@domaintrail/presentation';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
