@@ -2,12 +2,14 @@
 // aggregate. Each is the only code that asserts its type; the check holds when it is made, so the stores enforce what
 // they can where they save (a request is bundled while sent, one active run per session).
 import { Collaboration, err, ok } from '../generated/index.js';
+import { markTargetStatus } from '../domain/marks.js';
 import { changedPaths, workspacePath } from '../domain/snapshot.js';
 import type { Stores, UnitOfWork, WorkspaceSnapshot } from './ports.js';
 
 export interface StoreVerifications {
     readonly makeActiveSession: Collaboration.MakeActiveSession;
     readonly makePendingRequest: Collaboration.MakePendingRequest;
+    readonly makeOpenMarkTarget: Collaboration.MakeOpenMarkTarget;
 }
 
 /** The checks over the stores, made inside the transaction that then uses the verified value. */
@@ -27,6 +29,14 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             if (request.state === 'Dismissed') return err({ type: 'RequestAlreadyDismissed', request: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(id as Collaboration.PendingRequest);
+        },
+        async makeOpenMarkTarget(target, session) {
+            // the session's requests and runs, in queue order: whether the target is there, and whether its vote closed
+            const status = markTargetStatus(target, { requests: stores.requests.listBySession(session), runs: stores.runs.listBySession(session) });
+            if (status === 'missing') return err({ type: 'MarkTargetNotFound' });
+            if (status === 'closed') return err({ type: 'MarkTargetClosed' });
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
+            return ok(target as Collaboration.OpenMarkTarget);
         },
     };
 }

@@ -6,10 +6,12 @@ import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqli
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
 import type { Identity, IdentityKey, IdentityMode } from '../application/identity.js';
+import { markKey } from '../domain/marks.js';
 import type {
     AccessStore,
     EventOutbox,
     Lease,
+    MarkRepository,
     OutboxEntry,
     RequestRepository,
     RevisionStore,
@@ -141,6 +143,22 @@ export const MIGRATIONS: readonly string[] = [
         CHECK ((identity_provider IS NULL) = (identity_subject IS NULL))
     ) STRICT;
     CREATE INDEX restore_operations_by_session ON restore_operations(session_id, seq);
+    `,
+    // votes and reactions (ADR 0026, appendix "Votes and reactions"): a mark is kept when removed; at most one placed
+    // mark per participant, target (its key, `markKey`) and sign
+    `
+    CREATE TABLE marks (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        participant TEXT NOT NULL,
+        target_key TEXT NOT NULL,
+        sign TEXT NOT NULL,
+        state TEXT NOT NULL,
+        data TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX marks_placed ON marks(session_id, participant, seq) WHERE state = 'Placed';
+    CREATE UNIQUE INDEX marks_one_placed ON marks(session_id, participant, target_key, sign) WHERE state = 'Placed';
     `,
 ];
 
@@ -414,6 +432,42 @@ function revisions(db: DatabaseSync): RevisionStore {
     };
 }
 
+function marks(db: DatabaseSync): MarkRepository {
+    const load = db.prepare('SELECT data FROM marks WHERE id = :id');
+    const save = db.prepare(
+        `INSERT INTO marks (id, session_id, seq, participant, target_key, sign, state, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM marks), :participant, :key, :sign, :state, :data)
+         ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
+    );
+    const placed = db.prepare("SELECT data FROM marks WHERE session_id = :session AND state = 'Placed' ORDER BY seq");
+    const placedBy = db.prepare("SELECT data FROM marks WHERE session_id = :session AND participant = :participant AND state = 'Placed' ORDER BY seq");
+    return {
+        load(id) {
+            const r = load.get(params({ id }));
+            return r ? decoded<Collaboration.Mark>(text(r, 'data')) : undefined;
+        },
+        save(mark) {
+            save.run(
+                params({
+                    id: mark.id,
+                    session: mark.session,
+                    participant: mark.participant,
+                    key: markKey(mark.target),
+                    sign: mark.sign,
+                    state: mark.state,
+                    data: encodeJson(mark),
+                }),
+            );
+        },
+        placedBySession(session) {
+            return placed.all(params({ session })).map((r) => decoded<Collaboration.PlacedMark>(text(r, 'data')));
+        },
+        placedBy(session, participant) {
+            return placedBy.all(params({ session, participant })).map((r) => decoded<Collaboration.PlacedMark>(text(r, 'data')));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -565,6 +619,7 @@ export function createStores(db: DatabaseSync): Stores {
         requests: requests(db),
         runs: runs(db),
         revisions: revisions(db),
+        marks: marks(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),

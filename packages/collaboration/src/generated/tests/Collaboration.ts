@@ -43,6 +43,15 @@ export interface Arbitraries {
     readonly ContentHash: fc.Arbitrary<Collaboration.ContentHash>;
     readonly WorkspacePath: fc.Arbitrary<Collaboration.WorkspacePath>;
     readonly SourceLanguage: fc.Arbitrary<Collaboration.SourceLanguage>;
+    readonly MarkId: fc.Arbitrary<Collaboration.MarkId>;
+    readonly MarkSign: fc.Arbitrary<Collaboration.MarkSign>;
+    readonly MarkTarget: fc.Arbitrary<Collaboration.MarkTarget>;
+    readonly OpenMarkTarget: fc.Arbitrary<Collaboration.OpenMarkTarget>;
+    readonly PlacedMark: fc.Arbitrary<Collaboration.PlacedMark>;
+    readonly RemovedMark: fc.Arbitrary<Collaboration.RemovedMark>;
+    readonly Mark: fc.Arbitrary<Collaboration.Mark>;
+    readonly MarkPlaced: fc.Arbitrary<Collaboration.MarkPlaced>;
+    readonly MarkRemoved: fc.Arbitrary<Collaboration.MarkRemoved>;
     readonly RequestId: fc.Arbitrary<Collaboration.RequestId>;
     readonly PendingRequest: fc.Arbitrary<Collaboration.PendingRequest>;
     readonly SentRequest: fc.Arbitrary<Collaboration.SentRequest>;
@@ -98,6 +107,10 @@ export interface Examples {
         readonly states?: { readonly Queued?: readonly Collaboration.QueuedAgentRun[]; readonly Running?: readonly Collaboration.RunningAgentRun[]; readonly Completed?: readonly Collaboration.CompletedAgentRun[]; readonly NeedsClarification?: readonly Collaboration.NeedsClarificationAgentRun[]; readonly Declined?: readonly Collaboration.DeclinedAgentRun[]; readonly Failed?: readonly Collaboration.FailedAgentRun[]; readonly Cancelled?: readonly Collaboration.CancelledAgentRun[] };
         readonly commands?: { readonly queue?: readonly Parameters<Collaboration.AgentRunCommands['queue']>[]; readonly start?: readonly Parameters<Collaboration.AgentRunCommands['start']>[]; readonly finish?: readonly Parameters<Collaboration.AgentRunCommands['finish']>[]; readonly askClarification?: readonly Parameters<Collaboration.AgentRunCommands['askClarification']>[]; readonly decline?: readonly Parameters<Collaboration.AgentRunCommands['decline']>[]; readonly fail?: readonly Parameters<Collaboration.AgentRunCommands['fail']>[]; readonly cancel?: readonly Parameters<Collaboration.AgentRunCommands['cancel']>[] };
     };
+    readonly Mark?: {
+        readonly states?: { readonly Placed?: readonly Collaboration.PlacedMark[]; readonly Removed?: readonly Collaboration.RemovedMark[] };
+        readonly commands?: { readonly place?: readonly Parameters<Collaboration.MarkCommands['place']>[]; readonly remove?: readonly Parameters<Collaboration.MarkCommands['remove']>[] };
+    };
     readonly Request?: {
         readonly states?: { readonly Sent?: readonly Collaboration.SentRequest[]; readonly Dismissed?: readonly Collaboration.DismissedRequest[] };
         readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[]; readonly dismiss?: readonly Parameters<Collaboration.RequestCommands['dismiss']>[] };
@@ -126,8 +139,9 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
     readonly AgentRun?: Collaboration.AgentRunCommands;
+    readonly Mark?: Collaboration.MarkCommands;
     readonly Request?: Collaboration.RequestCommands;
     readonly Revision?: Collaboration.RevisionCommands;
     readonly Session?: Collaboration.SessionCommands;
@@ -177,6 +191,15 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ContentHash: () => testing.valid(given.ContentHash ?? testing.collide(testing.cast<Collaboration.ContentHash>(testing.base('String', { pattern: "^[0-9a-f]{64}$" })), seed), (v) => Collaboration.checkContentHash(v).length === 0, 'Collaboration.ContentHash'),
         WorkspacePath: () => testing.valid(given.WorkspacePath ?? testing.collide(testing.cast<Collaboration.WorkspacePath>(testing.base('String', { pattern: "^[^/\\\\]+(/[^/\\\\]+)*$" })), seed), (v) => Collaboration.checkWorkspacePath(v).length === 0, 'Collaboration.WorkspacePath'),
         SourceLanguage: () => given.SourceLanguage ?? fc.constantFrom<Collaboration.SourceLanguage>('Dt', 'Dtes'),
+        MarkId: () => given.MarkId ?? testing.collide(testing.cast<Collaboration.MarkId>(testing.base('UUID', {})), seed),
+        MarkSign: () => given.MarkSign ?? fc.constantFrom<Collaboration.MarkSign>('Vote', 'Agree', 'Doubt', 'Like', 'Seen'),
+        MarkTarget: () => given.MarkTarget ?? testing.cast<Collaboration.MarkTarget>(fc.oneof(fc.record({ kind: fc.constant('Message' as const), request: a.RequestId }), fc.record({ kind: fc.constant('Turn' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('QuestionOption' as const), run: a.AgentRunId, question: a.ReplyKey, option: a.ReplyKey }), fc.record({ kind: fc.constant('AssumptionChoice' as const), run: a.AgentRunId, assumption: a.Tally, alternative: a.ReplyKey }, { requiredKeys: ['kind', 'run', 'assumption'] }))),
+        OpenMarkTarget: () => given.OpenMarkTarget ?? testing.cast<Collaboration.OpenMarkTarget>(a.MarkTarget),
+        PlacedMark: () => testing.withExamples(testing.valid(given.PlacedMark ?? testing.cast<Collaboration.PlacedMark>(fc.record({ state: fc.constant('Placed' as const), id: a.MarkId, session: a.SessionId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, placedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkPlacedMark(v).length === 0, 'Collaboration.PlacedMark'), options.examples?.Mark?.states?.Placed, Collaboration.checkPlacedMark, 'Collaboration.PlacedMark'),
+        RemovedMark: () => testing.withExamples(testing.valid(given.RemovedMark ?? testing.cast<Collaboration.RemovedMark>(fc.record({ state: fc.constant('Removed' as const), id: a.MarkId, session: a.SessionId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, placedAt: testing.cast<Date>(scalar.Timestamp), removedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRemovedMark(v).length === 0, 'Collaboration.RemovedMark'), options.examples?.Mark?.states?.Removed, Collaboration.checkRemovedMark, 'Collaboration.RemovedMark'),
+        Mark: () => given.Mark ?? fc.oneof(a.PlacedMark, a.RemovedMark),
+        MarkPlaced: () => given.MarkPlaced ?? testing.cast<Collaboration.MarkPlaced>(fc.record({ type: fc.constant('MarkPlaced' as const), markId: a.MarkId, session: a.SessionId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, placedAt: testing.cast<Date>(scalar.Timestamp) })),
+        MarkRemoved: () => given.MarkRemoved ?? testing.cast<Collaboration.MarkRemoved>(fc.record({ type: fc.constant('MarkRemoved' as const), markId: a.MarkId, participant: a.ParticipantId, target: a.MarkTarget, sign: a.MarkSign, removedAt: testing.cast<Date>(scalar.Timestamp) })),
         RequestId: () => given.RequestId ?? testing.collide(testing.cast<Collaboration.RequestId>(testing.base('UUID', {})), seed),
         PendingRequest: () => given.PendingRequest ?? testing.cast<Collaboration.PendingRequest>(a.RequestId),
         SentRequest: () => testing.withExamples(testing.valid(given.SentRequest ?? testing.cast<Collaboration.SentRequest>(fc.record({ state: fc.constant('Sent' as const), id: a.RequestId, session: a.SessionId, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkSentRequest(v).length === 0, 'Collaboration.SentRequest'), options.examples?.Request?.states?.Sent, Collaboration.checkSentRequest, 'Collaboration.SentRequest'),
@@ -304,6 +327,15 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkWorkspacePath,
                 make: impl.make.WorkspacePath,
+            }, options) : []),
+            ...(impl.make.MarkId ? testing.primitiveCases({
+                type: 'Collaboration.MarkId',
+                base: 'UUID',
+                hints: {},
+                invariants: [],
+                declared: [],
+                check: () => () => [],
+                make: impl.make.MarkId,
             }, options) : []),
             ...(impl.make.RequestId ? testing.primitiveCases({
                 type: 'Collaboration.RequestId',
@@ -506,6 +538,35 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 invariants: Collaboration.checkAgentRunWith,
                 declaredInvariants: ['serial'],
                 givenInvariants: declared.AgentRun,
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
+        impl.Mark && testing.suite('Mark', [
+            ...testing.commandCases({
+                name: 'Mark.place',
+                run: impl.Mark.place,
+                input: () => fc.tuple(a.MarkId, a.ActiveSession, a.ParticipantId, a.ParticipantRole, a.OpenMarkTarget, a.MarkSign, testing.cast<Date>(scalar.Timestamp)),
+                examples: options.examples?.Mark?.commands?.place ?? [],
+                factory: true,
+                requires: [{ name: 'fitsTarget', error: 'MarkNotForTarget' }, { name: 'participantsVote', error: 'FacilitatorDoesNotVote' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkPlaceMarkRequires,
+                invariants: () => Collaboration.checkMark,
+                declaredInvariants: [],
+                stateful: true,
+                counted: [],
+            }, options),
+            ...testing.commandCases({
+                name: 'Mark.remove',
+                run: impl.Mark.remove,
+                input: () => fc.tuple(fc.oneof(a.PlacedMark), a.OpenMarkTarget, testing.cast<Date>(scalar.Timestamp)),
+                examples: options.examples?.Mark?.commands?.remove ?? [],
+                factory: false,
+                requires: [],
+                declaredRequires: [],
+                invariants: () => Collaboration.checkMark,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),

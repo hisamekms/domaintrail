@@ -1,6 +1,14 @@
 // The inputs of the session APIs, checked at the boundary before any use case sees them: IDs, targets, text lengths.
 // A failure names the field and why, and is answered 400 (`InvalidInput`).
-import { checkAgentReplyDeep, readAnswer, readReply, toAgentReply, type AnswerData, type ReplyOutcome } from '@domaintrail/collaboration/domain/reply';
+import {
+    checkAgentReplyDeep,
+    readAnswer,
+    readReply,
+    REPLY_LIMITS,
+    toAgentReply,
+    type AnswerData,
+    type ReplyOutcome,
+} from '@domaintrail/collaboration/domain/reply';
 import { MAX_REQUEST_TARGETS } from '@domaintrail/collaboration/domain/targets';
 import { Collaboration, err, ok, type Result } from '@domaintrail/collaboration/generated/index';
 
@@ -235,4 +243,72 @@ export function agentReply(v: unknown, outcome: ReplyOutcome, field = 'reply'): 
 export function answer(v: unknown, field = 'answer'): Result<AnswerData, InvalidInput> {
     const read = readAnswer(v);
     return read.ok ? read : invalid(read.error.path.replace(/^answer/, field), read.error.message);
+}
+
+const MARK_SIGNS: readonly Collaboration.MarkSign[] = ['Vote', 'Agree', 'Doubt', 'Like', 'Seen'];
+
+/** A reply's key (a question's, an option's, an alternative's): letters, digits, `_` and `-`, at most `REPLY_LIMITS.key`. */
+function replyKey(v: unknown, field: string): Result<Collaboration.ReplyKey, InvalidInput> {
+    if (typeof v !== 'string' || !v || v.length > REPLY_LIMITS.key) return invalid(field, `Expected a key of 1 to ${REPLY_LIMITS.key} characters.`);
+    const k = Collaboration.makeReplyKey(v);
+    return k.ok ? k : invalid(field, 'Letters, digits, _ and - only.');
+}
+
+/** What a mark is on: a message, an AI turn, a question's option, or an assumption's choice (none: kept as it is). */
+export function markTarget(v: unknown, field = 'target'): Result<Collaboration.MarkTarget, InvalidInput> {
+    if (!isObject(v)) return invalid(field, 'Expected a mark target.');
+    const only = (keys: readonly string[]): Result<Raw, InvalidInput> =>
+        body(v, keys).ok ? ok(v) : invalid(`${field}.${Object.keys(v).find((k) => !keys.includes(k))}`, 'Unknown field.');
+    const id = <T>(name: string, make: (s: string) => T): Result<T, InvalidInput> => {
+        const u = uuid(v[name], `${field}.${name}`);
+        return u.ok ? ok(make(u.value)) : u;
+    };
+    switch (v.kind) {
+        case 'Message': {
+            const o = only(['kind', 'request']);
+            if (!o.ok) return o;
+            const request = id('request', Collaboration.makeRequestId);
+            return request.ok ? ok({ kind: 'Message', request: request.value }) : request;
+        }
+        case 'Turn': {
+            const o = only(['kind', 'run']);
+            if (!o.ok) return o;
+            const run = id('run', Collaboration.makeAgentRunId);
+            return run.ok ? ok({ kind: 'Turn', run: run.value }) : run;
+        }
+        case 'QuestionOption': {
+            const o = only(['kind', 'run', 'question', 'option']);
+            if (!o.ok) return o;
+            const run = id('run', Collaboration.makeAgentRunId);
+            if (!run.ok) return run;
+            const question = replyKey(v.question, `${field}.question`);
+            if (!question.ok) return question;
+            const option = replyKey(v.option, `${field}.option`);
+            if (!option.ok) return option;
+            return ok({ kind: 'QuestionOption', run: run.value, question: question.value, option: option.value });
+        }
+        case 'AssumptionChoice': {
+            const o = only(['kind', 'run', 'assumption', 'alternative']);
+            if (!o.ok) return o;
+            const run = id('run', Collaboration.makeAgentRunId);
+            if (!run.ok) return run;
+            const n = v.assumption;
+            if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n >= REPLY_LIMITS.assumptions)
+                return invalid(`${field}.assumption`, `Expected an assumption's number, 0 to ${REPLY_LIMITS.assumptions - 1}.`);
+            const assumption = Collaboration.makeTally(n);
+            if (!assumption.ok) return invalid(`${field}.assumption`, 'Expected a number.');
+            if (v.alternative === undefined) return ok({ kind: 'AssumptionChoice', run: run.value, assumption: assumption.value });
+            const alternative = replyKey(v.alternative, `${field}.alternative`);
+            if (!alternative.ok) return alternative;
+            return ok({ kind: 'AssumptionChoice', run: run.value, assumption: assumption.value, alternative: alternative.value });
+        }
+        default:
+            return invalid(`${field}.kind`, 'Expected Message, Turn, QuestionOption or AssumptionChoice.');
+    }
+}
+
+/** A mark's sign: `Vote`, or one of the reactions (`Agree`, `Doubt`, `Like`, `Seen`). */
+export function markSign(v: unknown, field = 'sign'): Result<Collaboration.MarkSign, InvalidInput> {
+    const sign = MARK_SIGNS.find((s) => s === v);
+    return sign ? ok(sign) : invalid(field, `Expected one of ${MARK_SIGNS.join(', ')}.`);
 }

@@ -103,6 +103,7 @@ describe('schema and transactions', () => {
             'agent_runs',
             'facilitator_links',
             'facilitators',
+            'marks',
             'outbox',
             'requests',
             'restore_operations',

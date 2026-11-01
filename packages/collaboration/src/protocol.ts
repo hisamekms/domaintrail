@@ -37,6 +37,8 @@ export interface SessionStateBody {
     readonly requests: Json<readonly Collaboration.Request[]>;
     readonly runs: Json<readonly Collaboration.AgentRun[]>;
     readonly revisions: Json<readonly Collaboration.Revision[]>;
+    /** The marks still placed (votes and reactions), in the order they were placed: a page that joins late sees them. */
+    readonly marks: Json<readonly Collaboration.PlacedMark[]>;
     /** The outbox position the state includes: event messages with a `seq` up to it are already in it. */
     readonly seq: number;
     /**
@@ -97,6 +99,8 @@ export const EVENT_MESSAGE_TYPES = {
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
     RevisionConfirmed: 'revision.confirmed',
+    MarkPlaced: 'mark.placed',
+    MarkRemoved: 'mark.removed',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -121,7 +125,7 @@ export type SessionServerMessage =
     | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
     | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification };
 
-/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `presence.*`). */
+/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];
 
 /** An error of the session APIs: `{ "error": { "type": …, … } }` with an HTTP status. */
@@ -148,6 +152,25 @@ export interface ClaimBody {
 export interface SendRequestBody {
     readonly targets: readonly Json<Collaboration.TargetSnapshot>[];
     readonly body: string;
+}
+
+/**
+ * `POST /api/session/marks` (any participant): sets one of my marks — a vote (♡) on a question's option or an
+ * assumption's choice, a reaction on a message or an AI turn — placed or taken off (`placed`). Placing a vote moves my
+ * vote of the same single-choice question or assumption. The facilitator does not vote (`FacilitatorDoesNotVote`); a
+ * vote that closed is refused (`MarkTargetClosed`). → 200 `MarkSetBody`; the change reaches every page as
+ * `mark.placed` / `mark.removed`.
+ */
+export interface SetMarkBody {
+    readonly target: Json<Collaboration.MarkTarget>;
+    readonly sign: Collaboration.MarkSign;
+    readonly placed: boolean;
+}
+
+/** `POST /api/session/marks` → 200: the mark placed (none if it was there already, or taken off) and the marks removed. */
+export interface MarkSetBody {
+    readonly placed?: Json<Collaboration.PlacedMark>;
+    readonly removed: Json<readonly Collaboration.RemovedMark[]>;
 }
 
 /**

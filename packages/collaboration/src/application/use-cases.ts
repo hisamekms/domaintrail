@@ -6,6 +6,7 @@
 // is decided by the caller (S4); the use cases take the participant as a fact.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
+import { exclusiveGroup, markChange, markCommands } from '../domain/marks.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, type AnswerData } from '../domain/reply.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
@@ -147,6 +148,15 @@ export interface SessionState {
     readonly requests: readonly Collaboration.Request[];
     readonly runs: readonly Collaboration.AgentRun[];
     readonly revisions: readonly Collaboration.Revision[];
+    /** The marks still placed (votes and reactions), in the order they were placed. */
+    readonly marks: readonly Collaboration.PlacedMark[];
+}
+
+/** What setting a mark changed: the mark placed (none when it was there already or taken off) and the marks removed. */
+export interface MarkSet {
+    readonly placed: Collaboration.PlacedMark | undefined;
+    /** The mark taken off, or the votes of its exclusive group that it moved from. */
+    readonly removed: readonly Collaboration.RemovedMark[];
 }
 
 /** Whether each target of each request still resolves in the workspace as it is now (in the request's order of targets). */
@@ -204,6 +214,30 @@ export interface CollaborationUseCases {
         readonly request: Collaboration.RequestId;
         readonly by: ParticipantId;
     }): Promise<Result<Collaboration.DismissedRequest, NotFound | NotAllowed>>;
+    /**
+     * Places or takes off a participant's mark (a vote or a reaction; `placed`: whether it should be there). Placing
+     * a vote moves the participant's vote of the same exclusive group; setting a mark to what it is changes nothing.
+     * Refused when the target is not the session's, or is a vote that closed (`domain/marks.ts`), when the sign does
+     * not fit the target, and for a vote of the facilitator.
+     */
+    setMark(input: {
+        readonly session: SessionId;
+        readonly participant: ParticipantId;
+        readonly target: Collaboration.MarkTarget;
+        readonly sign: Collaboration.MarkSign;
+        readonly placed: boolean;
+    }): Promise<
+        Result<
+            MarkSet,
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | NotAParticipant
+            | Collaboration.MarkTargetNotFound
+            | Collaboration.MarkTargetClosed
+            | Collaboration.MarkNotForTarget
+            | Collaboration.FacilitatorDoesNotVote
+        >
+    >;
     /** Bundles sent requests of the session into a queued run, freezing their content as its input. */
     queueRun(input: {
         readonly session: SessionId;
@@ -552,6 +586,44 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 stores.requests.save(Dismissed.aggregate);
                 publish(stores, found.session, Dismissed.events, at);
                 return ok(Dismissed.aggregate);
+            });
+        },
+
+        async setMark({ session, participant, target, sign, placed }) {
+            return uow.transaction(async (stores) => {
+                const verify = storeVerifications(stores);
+                const active = await verify.makeActiveSession(session);
+                if (!active.ok) return active;
+                // the role is the session's, never the caller's word
+                const who = stores.sessions.load(session)?.participants.find((p) => p.id === participant);
+                if (!who) return err({ type: 'NotAParticipant', participant });
+                const open = await verify.makeOpenMarkTarget(target, session);
+                if (!open.ok) return open;
+                const runs = stores.runs.listBySession(session);
+                const change = markChange(stores.marks.placedBy(session, participant), target, sign, placed, (t) => exclusiveGroup(t, runs));
+                const at = clock.now();
+                let made: Collaboration.PlacedMark | undefined;
+                const events: Collaboration.PersistentEvent[] = [];
+                if (change.place) {
+                    // decided before anything is removed: a refused mark changes nothing
+                    const decided = markCommands.place(Collaboration.makeMarkId(ids.newId()), active.value, participant, who.role, open.value, sign, at);
+                    if (!decided.ok) return decided;
+                    made = decided.value.Placed.aggregate;
+                    events.push(decided.value.Placed.events.MarkPlaced);
+                }
+                const removed: Collaboration.RemovedMark[] = [];
+                for (const mark of change.remove) {
+                    // the votes moved from are in the same run's question or assumption: open as the target is
+                    const off = await verify.makeOpenMarkTarget(mark.target, session);
+                    if (!off.ok) return off;
+                    const { Removed } = decided(markCommands.remove(mark, off.value, at));
+                    stores.marks.save(Removed.aggregate);
+                    removed.push(Removed.aggregate);
+                    events.unshift(Removed.events.MarkRemoved);
+                }
+                if (made) stores.marks.save(made);
+                stores.outbox.append(session, events, at);
+                return ok({ placed: made, removed });
             });
         },
 
@@ -953,6 +1025,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     requests: stores.requests.listBySession(session),
                     runs: stores.runs.listBySession(session),
                     revisions: stores.revisions.listBySession(session),
+                    marks: stores.marks.placedBySession(session),
                 });
             });
         },

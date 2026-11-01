@@ -10,6 +10,7 @@ import { Collaboration as Contract, register } from '@domaintrail/collaboration/
 import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, sessionCommands } from '@domaintrail/collaboration/domain/commands';
 import { hashBytes, snapshotFile, snapshotHash } from '@domaintrail/collaboration/domain/snapshot';
 import { tally } from '@domaintrail/collaboration/domain/validation';
+import { markCommands } from '@domaintrail/collaboration/domain/marks';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
     if (!r.ok) throw new Error(`invalid example: ${JSON.stringify(r.error)}`);
@@ -132,11 +133,13 @@ register(
                 StormingEventName: C.makeStormingEventName,
                 OccurrencePath: C.makeOccurrencePath,
                 ReplyKey: C.makeReplyKey,
+                MarkId: C.makeMarkId,
             },
             Session: sessionCommands,
             Request: requestCommands,
             AgentRun: agentRunCommands,
             Revision: revisionCommands,
+            Mark: markCommands,
         },
         {
             // `serial` is the run queue's (one running run per session, a unique index of the store): not a property of one run

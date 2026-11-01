@@ -9,6 +9,7 @@ type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 type SessionJson = SessionStateBody['session'];
+type MarkJson = SessionStateBody['marks'][number];
 
 export interface SessionModel {
     readonly state: SessionStateBody | undefined;
@@ -162,6 +163,23 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'RevisionRestored':
             // the revision's files are not in the event
             return { state: at, refetch: !state.revisions.some((r) => r.id === e.revisionId) };
+        case 'MarkPlaced': {
+            // a state from before marks were sent has none
+            const marks = state.marks ?? [];
+            if (marks.some((m) => m.id === e.markId)) return { state: at, refetch: false };
+            const mark: MarkJson = {
+                id: e.markId,
+                session: e.session,
+                participant: e.participant,
+                target: e.target,
+                sign: e.sign,
+                placedAt: e.placedAt,
+                state: 'Placed',
+            };
+            return { state: { ...at, marks: [...marks, mark] }, refetch: false };
+        }
+        case 'MarkRemoved':
+            return { state: { ...at, marks: (state.marks ?? []).filter((m) => m.id !== e.markId) }, refetch: false };
         case 'RevisionConfirmed':
             return {
                 state: {

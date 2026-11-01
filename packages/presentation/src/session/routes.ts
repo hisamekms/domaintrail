@@ -1,7 +1,8 @@
 // The browser's side of a session (ADR 0026, S4): the REST API under `/api/session/`, the pages under `/session/` (the
 // join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
-// requests and dismiss their own; only the facilitator queues and cancels runs, takes, confirms and restores
+// requests and dismiss their own, react to messages and AI turns and vote on a question's options or an assumption's
+// choices; only the facilitator queues and cancels runs, takes, confirms and restores
 // revisions, dismisses others' requests and closes the session.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { IdentityKey } from '@domaintrail/collaboration/application/identity';
@@ -13,7 +14,20 @@ import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '.
 import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
 import type { AnswerData } from '@domaintrail/collaboration/domain/reply';
-import { answer as answerInput, body, displayName, MAX_NOTE, MAX_REQUEST_TEXT, requestIds, requestTargets, text, uuid, type InvalidInput } from './input.js';
+import {
+    answer as answerInput,
+    body,
+    displayName,
+    markSign,
+    markTarget,
+    MAX_NOTE,
+    MAX_REQUEST_TEXT,
+    requestIds,
+    requestTargets,
+    text,
+    uuid,
+    type InvalidInput,
+} from './input.js';
 import { joinPage, messagePage, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
 
@@ -69,6 +83,7 @@ export function statusOf(type: string): number {
         case 'UnknownRevision':
         case 'InvalidReply':
         case 'InvalidAnswer':
+        case 'MarkNotForTarget':
             return 400;
         case 'Unauthenticated':
             return 401;
@@ -76,12 +91,14 @@ export function statusOf(type: string): number {
         case 'FacilitatorOnly':
         case 'NotYourRequest':
         case 'NotAParticipant':
+        case 'FacilitatorDoesNotVote':
             return 403;
         case 'NotFound':
         case 'SessionNotFound':
         case 'RequestNotFound':
         case 'RevisionNotFound':
         case 'RevisionOfAnotherSession':
+        case 'MarkTargetNotFound':
             return 404;
         case 'BlobMissing':
         case 'ManualRecoveryNeeded':
@@ -303,6 +320,26 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 // sent and applied: the message is in the stream whatever the run's fate
                 const queued = await use.queueRun({ session, requests: [sent.value.id], queuedBy: me.participant.id, ...(apply.note && { note: apply.note }) });
                 await answer(res, queued, 201, (run) => ({ request: sent.value, run }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/marks$/,
+            role: 'participant',
+            handle: async ({ req, res, auth }) => {
+                // a vote or a reaction of mine, placed or taken off; the facilitator's vote is refused by the model too
+                const raw = await input(req, res, ['target', 'sign', 'placed']);
+                if (!raw) return;
+                const target = checked(res, markTarget(raw.target));
+                if (!target) return;
+                const sign = checked(res, markSign(raw.sign));
+                if (!sign) return;
+                if (typeof raw.placed !== 'boolean') return fail(res, { type: 'InvalidInput', field: 'placed', message: 'Expected true or false.' });
+                const me = who(auth);
+                if (sign === 'Vote' && me.role === 'facilitator')
+                    return fail(res, { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." });
+                const set = await use.setMark({ session, participant: me.participant.id, target, sign, placed: raw.placed });
+                await answer(res, set, 200, (r) => ({ ...(r.placed && { placed: r.placed }), removed: r.removed }));
             },
         },
         {

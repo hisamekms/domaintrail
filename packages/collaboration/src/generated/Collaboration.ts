@@ -1550,6 +1550,407 @@ export type SourceLanguage =
     | 'Dtes'; // イベントストーミング（.dtes）
 
 /**
+ * 印ID
+ * 印の識別子。
+ * Make it with `makeMarkId`; never `as MarkId` (see dt guide lint).
+ * @see model/mark.dt:3
+ */
+export type MarkId = string & { readonly __domain: 'Collaboration.MarkId' };
+
+/**
+ * Creates a MarkId. It has no invariants, so creation cannot fail.
+ * @see model/mark.dt:3
+ */
+export type MakeMarkId = (value: string) => MarkId;
+
+/**
+ * Creates a MarkId: it has no invariants, so every value is one.
+ * @see model/mark.dt:3
+ */
+export const makeMarkId: MakeMarkId = (value) => value as MarkId;
+
+/**
+ * 印の種類
+ * 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応はメッセージと AI のターンに誰でも付ける。
+ * @see model/mark.dt:6
+ */
+export type MarkSign =
+    | 'Vote' // 票
+    | 'Agree' // 賛成
+    | 'Doubt' // 疑問
+    | 'Like' // いいね
+    | 'Seen'; // 了解
+
+/**
+ * 印の対象
+ * 印を付けるもの。
+ * @see model/mark.dt:9
+ */
+export type MarkTarget =
+    /**
+     * メッセージ
+     * 人のメッセージ（依頼）。
+     */
+    | {
+          readonly kind: 'Message';
+          /** 依頼ID */
+          readonly request: RequestId;
+      }
+    /**
+     * AI のターン
+     * AI のターン（エージェント実行）。
+     */
+    | {
+          readonly kind: 'Turn';
+          /** エージェント実行ID */
+          readonly run: AgentRunId;
+      }
+    /**
+     * 問いの選択肢
+     * 確認待ちの実行の、問いの選択肢。
+     */
+    | {
+          readonly kind: 'QuestionOption';
+          /** エージェント実行ID */
+          readonly run: AgentRunId;
+          /** 問い */
+          readonly question: ReplyKey;
+          /** 選択肢 */
+          readonly option: ReplyKey;
+      }
+    /**
+     * 前提の選び方
+     * 返答の前提（0 始まりの番号）について、そのままにする（別案なし）か、別案のどれか。
+     */
+    | {
+          readonly kind: 'AssumptionChoice';
+          /** エージェント実行ID */
+          readonly run: AgentRunId;
+          /** 前提の番号 */
+          readonly assumption: Tally;
+          /** 別案（なければ前提のまま） */
+          readonly alternative?: ReplyKey;
+      };
+
+/**
+ * Whether two MarkTarget values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see model/mark.dt:9
+ */
+export function equalMarkTarget(a: MarkTarget, b: MarkTarget): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'Message') {
+        const y = b as Extract<MarkTarget, { readonly kind: 'Message' }>;
+        return a.request === y.request;
+    }
+    if (a.kind === 'Turn') {
+        const y = b as Extract<MarkTarget, { readonly kind: 'Turn' }>;
+        return a.run === y.run;
+    }
+    if (a.kind === 'QuestionOption') {
+        const y = b as Extract<MarkTarget, { readonly kind: 'QuestionOption' }>;
+        return a.run === y.run && a.question === y.question && a.option === y.option;
+    }
+    if (a.kind === 'AssumptionChoice') {
+        const y = b as Extract<MarkTarget, { readonly kind: 'AssumptionChoice' }>;
+        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($14: ReplyKey, $15: ReplyKey) => $14 === $15);
+    }
+    return true;
+}
+
+/**
+ * 付け外しできる対象
+ * いま印を付け外しできると、付け外しのときに確かめた対象: セッションにあり、票なら締め切られていない。
+ * A value of MarkTarget for which MakeOpenMarkTarget made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your `MakeOpenMarkTarget` factory; never `as OpenMarkTarget` outside it (see dt guide lint).
+ * @see model/mark.dt:33
+ */
+export type OpenMarkTarget = MarkTarget & { readonly 'verified:Collaboration.OpenMarkTarget': true };
+
+/**
+ * Checks a value of MarkTarget, given the SessionId the check needs, and returns it as OpenMarkTarget when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * @see model/mark.dt:33
+ */
+export type MakeOpenMarkTarget = (value: MarkTarget, context: SessionId) => Promise<Result<OpenMarkTarget, MarkTargetNotFound | MarkTargetClosed>>;
+
+/**
+ * Fields shared by every state of 印 (Mark).
+ * @invariant fitsTarget (印の種類が対象に合う): (sign == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign != MarkSign.Vote implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+ * @see model/mark.dt:37
+ */
+export interface MarkCommon {
+    /** 印ID */
+    readonly id: MarkId;
+    /** セッション */
+    readonly session: SessionId; // -> Collaboration.Session
+    /** 参加者 */
+    readonly participant: ParticipantId;
+    /** 印の対象 */
+    readonly target: MarkTarget;
+    /** 印の種類 */
+    readonly sign: MarkSign;
+    /** 付けた日時 */
+    readonly placedAt: Timestamp;
+}
+
+/**
+ * 付いている
+ * @see model/mark.dt:50
+ */
+export interface PlacedMark extends MarkCommon {
+    readonly state: 'Placed';
+}
+
+/**
+ * 外した
+ * @see model/mark.dt:51
+ */
+export interface RemovedMark extends MarkCommon {
+    readonly state: 'Removed';
+    /** 外した日時 */
+    readonly removedAt: Timestamp;
+}
+
+/**
+ * 印
+ * 参加者が対象に付ける印。票と反応は同じ仕組み（だれが・なにに・どの印を）で、対象の種類ごとの規則（同じ組で1つだけ、
+ * 締め切り、だれが付けられるか）はコード（`domain/marks.ts`）が決める。外した印は残し、付け直しは新しい印になる。
+ * @see model/mark.dt:37
+ */
+export type Mark = PlacedMark | RemovedMark;
+
+/**
+ * The fields of Mark as data for `decide`: the common fields, and the fields of each state on top of them.
+ * @see model/mark.dt:37
+ */
+export const MarkShape: Shape = {
+    fields: ['id', 'session', 'participant', 'target', 'sign', 'placedAt'],
+    states: { Placed: [], Removed: ['removedAt'] },
+};
+
+/**
+ * The invariants of Mark in state Placed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * @see model/mark.dt:50
+ */
+export function checkPlacedMark(mark: PlacedMark): readonly 'fitsTarget'[] {
+    const violated: 'fitsTarget'[] = [];
+    if (!((!(mark.sign === "Vote") || ((mark.target.kind === "QuestionOption") || (mark.target.kind === "AssumptionChoice"))) && (!(!(mark.sign === "Vote")) || ((mark.target.kind === "Message") || (mark.target.kind === "Turn"))))) violated.push('fitsTarget');
+    return violated;
+}
+
+/**
+ * The invariants of Mark in state Removed (the aggregate's and the state's) that an aggregate violates, in declaration order.
+ * @see model/mark.dt:51
+ */
+export function checkRemovedMark(mark: RemovedMark): readonly 'fitsTarget'[] {
+    const violated: 'fitsTarget'[] = [];
+    if (!((!(mark.sign === "Vote") || ((mark.target.kind === "QuestionOption") || (mark.target.kind === "AssumptionChoice"))) && (!(!(mark.sign === "Vote")) || ((mark.target.kind === "Message") || (mark.target.kind === "Turn"))))) violated.push('fitsTarget');
+    return violated;
+}
+
+/**
+ * The invariants of Mark in the state it is in that an aggregate violates (see the check of each state).
+ * @see model/mark.dt:37
+ */
+export function checkMark(mark: Mark): readonly 'fitsTarget'[] {
+    switch (mark.state) {
+        case 'Placed': return checkPlacedMark(mark);
+        case 'Removed': return checkRemovedMark(mark);
+    }
+}
+
+/**
+ * Mark.place (new -> Placed) — factory
+ * 印を付ける
+ * @param id 印ID
+ * @param session セッション
+ * @param participant 参加者
+ * @param role 役割
+ * @param target 付け外しできる対象
+ * @param sign 印の種類
+ * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (sign == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign != MarkSign.Vote implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+ * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: sign == MarkSign.Vote implies role == ParticipantRole.Participant
+ * @emits MarkPlaced — exactly once when the command succeeds
+ * @see model/mark.dt:55
+ */
+export type PlaceMark = (
+    id: MarkId,
+    session: ActiveSession,
+    participant: ParticipantId,
+    role: ParticipantRole,
+    target: OpenMarkTarget,
+    sign: MarkSign,
+    placedAt: Timestamp,
+) => Result<{
+    readonly Placed: {
+        readonly aggregate: PlacedMark;
+        readonly events: { readonly MarkPlaced: MarkPlaced };
+    };
+}, MarkNotForTarget | FacilitatorDoesNotVote>;
+
+/**
+ * Mark.place, decided by one function; implement it with `decide(MarkShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (sign == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign != MarkSign.Vote implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn))
+ * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: sign == MarkSign.Vote implies role == ParticipantRole.Participant
+ * new -> Placed — set: every field
+ * @emits MarkPlaced — exactly once when the command succeeds
+ * @see model/mark.dt:55
+ */
+export type PlaceMarkDecision = (
+    id: MarkId,
+    session: ActiveSession,
+    participant: ParticipantId,
+    role: ParticipantRole,
+    target: OpenMarkTarget,
+    sign: MarkSign,
+    placedAt: Timestamp,
+) => Result<{
+    readonly Placed: {
+        readonly set: { readonly id: MarkId; readonly session: SessionId; readonly participant: ParticipantId; readonly target: MarkTarget; readonly sign: MarkSign; readonly placedAt: Timestamp };
+        readonly events: { readonly MarkPlaced: MarkPlaced };
+    };
+}, MarkNotForTarget | FacilitatorDoesNotVote>;
+
+/**
+ * The first requirement of Mark.place that does not hold, in declaration order; `undefined` when all hold.
+ * @see model/mark.dt:55
+ */
+export function checkPlaceMarkRequires(_id: MarkId, _session: ActiveSession, _participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, _placedAt: Timestamp): 'fitsTarget' | 'participantsVote' | undefined {
+    if (!((!(sign === "Vote") || ((target.kind === "QuestionOption") || (target.kind === "AssumptionChoice"))) && (!(!(sign === "Vote")) || ((target.kind === "Message") || (target.kind === "Turn"))))) return 'fitsTarget';
+    if (!(!(sign === "Vote") || (role === "Participant"))) return 'participantsVote';
+    return undefined;
+}
+
+/**
+ * Mark.remove (Placed -> Removed)
+ * 印を外す
+ * 締め切られた票は外せない（対象を付け外しできると確かめてから外す）。
+ * @param open 付け外しできる対象
+ * @changes none — the command changes no common field
+ * @emits MarkRemoved — exactly once when the command succeeds
+ * @see model/mark.dt:67
+ */
+export type RemoveMark = (
+    mark: PlacedMark,
+    open: OpenMarkTarget,
+    removedAt: Timestamp,
+) => Result<{
+    readonly Removed: {
+        readonly aggregate: RemovedMark;
+        readonly events: { readonly MarkRemoved: MarkRemoved };
+    };
+}, never>;
+
+/**
+ * Mark.remove, decided per source state; implement it with `decide(MarkShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @changes none — the command changes no common field
+ * Placed -> Removed — set: removedAt (new in Removed); carried over: id, session, participant, target, sign, placedAt
+ * @see model/mark.dt:67
+ */
+export type RemoveMarkDecision = {
+    /** @emits MarkRemoved — exactly once when the command succeeds */
+    readonly Placed: (mark: PlacedMark, open: OpenMarkTarget, removedAt: Timestamp) => Result<{
+        readonly Removed: {
+            readonly set: { readonly removedAt: Timestamp };
+            readonly events: { readonly MarkRemoved: MarkRemoved };
+        };
+    }, never>;
+};
+
+/**
+ * Command contracts of Mark. Implement this interface by hand.
+ * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
+ * @see model/mark.dt:37
+ */
+export interface MarkCommands {
+    /** 印を付ける */
+    readonly place: PlaceMark;
+    /** 印を外す */
+    readonly remove: RemoveMark;
+}
+
+/**
+ * Events that the commands of Mark may emit.
+ * @see model/mark.dt:37
+ */
+export type MarkEvent = MarkPlaced | MarkRemoved;
+
+/**
+ * 印を付けた
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see model/mark.dt:72
+ */
+export interface MarkPlaced {
+    readonly type: 'MarkPlaced';
+    /** 印ID */
+    readonly markId: MarkId;
+    /** セッション */
+    readonly session: SessionId;
+    /** 参加者 */
+    readonly participant: ParticipantId;
+    /** 印の対象 */
+    readonly target: MarkTarget;
+    /** 印の種類 */
+    readonly sign: MarkSign;
+    readonly placedAt: Timestamp;
+}
+
+/**
+ * 印を外した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see model/mark.dt:81
+ */
+export interface MarkRemoved {
+    readonly type: 'MarkRemoved';
+    /** 印ID */
+    readonly markId: MarkId;
+    /** 参加者 */
+    readonly participant: ParticipantId;
+    /** 印の対象 */
+    readonly target: MarkTarget;
+    /** 印の種類 */
+    readonly sign: MarkSign;
+    readonly removedAt: Timestamp;
+}
+
+/**
+ * 印の対象なし
+ * 印の対象がセッションにない（メッセージ・実行・問い・選択肢・前提・別案のどれか）。
+ * @see model/mark.dt:90
+ */
+export interface MarkTargetNotFound {
+    readonly type: 'MarkTargetNotFound';
+}
+
+/**
+ * 締め切られた票
+ * 票が締め切られている（回答した・別案を選んだ・あとの実行が同じ依頼を扱った・実行が確認待ちでない）。
+ * @see model/mark.dt:93
+ */
+export interface MarkTargetClosed {
+    readonly type: 'MarkTargetClosed';
+}
+
+/**
+ * 対象に合わない印
+ * 印の種類が対象に合わない（票は選択肢と前提に、反応はメッセージとターンに）。
+ * @see model/mark.dt:96
+ */
+export interface MarkNotForTarget {
+    readonly type: 'MarkNotForTarget';
+}
+
+/**
+ * ファシリテーターの票
+ * ファシリテーターは票を入れない。
+ * @see model/mark.dt:99
+ */
+export interface FacilitatorDoesNotVote {
+    readonly type: 'FacilitatorDoesNotVote';
+}
+
+/**
  * 依頼ID
  * 依頼の識別子。
  * Make it with `makeRequestId`; never `as RequestId` (see dt guide lint).
@@ -3298,7 +3699,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($14: string, $15: string) => $14 === $15);
+        return sameOptional(a.scope, y.scope, ($16: string, $17: string) => $16 === $17);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -3374,7 +3775,7 @@ export interface TargetSnapshot {
  * @see model/target.dt:56
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($16: string, $17: string) => $16 === $17) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($18: string, $19: string) => $18 === $19) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**
@@ -3388,10 +3789,10 @@ export function checkTargetSnapshot(targetSnapshot: TargetSnapshot): readonly 'w
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */
-export type PersistentEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
+export type PersistentEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
+export type DomainEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Aggregates of Collaboration. */
-export type Aggregate = AgentRun | Request | Revision | Session;
+export type Aggregate = AgentRun | Mark | Request | Revision | Session;

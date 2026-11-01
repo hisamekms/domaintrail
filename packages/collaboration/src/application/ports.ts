@@ -40,6 +40,17 @@ export interface RequestRepository {
     listBySession(session: SessionId): Collaboration.Request[];
 }
 
+/** The marks of the sessions (votes and reactions): every mark kept, placed or removed. */
+export interface MarkRepository {
+    load(id: Collaboration.MarkId): Collaboration.Mark | undefined;
+    /** Inserts or replaces the mark. At most one placed mark per participant, target and sign (a unique index). */
+    save(mark: Collaboration.Mark): void;
+    /** The marks of a session still placed, in the order they were placed. */
+    placedBySession(session: SessionId): Collaboration.PlacedMark[];
+    /** The marks a participant still has placed in a session, in the order they were placed. */
+    placedBy(session: SessionId, participant: Collaboration.ParticipantId): Collaboration.PlacedMark[];
+}
+
 /** A claim on a run: who holds it, its secret token, and until when. */
 export interface Lease {
     readonly owner: string;
@@ -177,6 +188,7 @@ export interface Stores {
     readonly requests: RequestRepository;
     readonly runs: RunQueue;
     readonly revisions: RevisionStore;
+    readonly marks: MarkRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;
