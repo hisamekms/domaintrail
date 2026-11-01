@@ -1,9 +1,9 @@
 # Plan: carrying out ADR 0027 (domain and application boundaries)
 
-The decisions are in [ADR 0027](../adr/0027-domain-and-application-boundaries.md); this plan says how they land. It is
-written against `main` at `8a77a8d`. **Work starts only after the large pull request in flight has landed**, and the
-first task (T0) reconciles this plan with the code as it is then: where the code differs, the code wins and this plan
-is corrected in the same task.
+The decisions are in [ADR 0027](../adr/0027-domain-and-application-boundaries.md); this plan says how they land. It was
+written against `main` at `8a77a8d`; the large pull request in flight (#23) landed as `9f28344`, and T0 reconciled this
+plan with the code there: **the input of the work is `main` at `9f28344`**. Where the code differed, the code won and
+this plan was corrected (the code map, the notes of T1, T2, T6 and T12, [What #23 changed](#what-23-changed)).
 
 ## Landing
 
@@ -20,7 +20,7 @@ Every task leaves:
 
 ## Code map
 
-From `main` at `8a77a8d` to the layout of ADR 0027. Paths are relative to each package's `src/`.
+From `main` at `9f28344` to the layout of ADR 0027. Paths are relative to each package's `src/`.
 
 ### `packages/modeling`
 
@@ -34,7 +34,8 @@ From `main` at `8a77a8d` to the layout of ADR 0027. Paths are relative to each p
 | `core/model-index.ts`, `core/types.ts`, `core/labels.ts` | AST helpers for the checkers: `contexts/modeling/src/infrastructure/syntax/` until T10, then removed or folded into the domain | T8, T10 |
 | `core/diagnostics.ts`, `core/suggest.ts`, `SourceFile` (from `core/analyze.ts`) | `shared/kernel/` | T3 |
 | `core/analyze.ts` (the rest), `isStormingFile` | `capabilities/analysis/` | T4 |
-| `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/` | T6 |
+| `core/config.ts` | split by owner (T6); the `sources` section to `capabilities/analysis/`. Since #23 it also holds `session.agent.dt` (checked with `realpathSync`: the only I/O in the file), `session.agent.maxPreviousRunDiff`, `session.quickReactions` and `session.classifier`; see T6 | T6 |
+| `core/emoji.ts` (new in #23: one emoji, its normal form, `DEFAULT_QUICK_REACTIONS`) | not Modeling's language: the rule of Collaboration's `Emoji` primitive (`model/mark.dt`) and of `session.quickReactions`. Proposed: `collaboration/src/domain/emoji.ts` in T6, with the `session.quickReactions` section (T8 then moves it with `collaboration/`); the alternative is `shared/kernel` (see Open in the tasks) | T6 |
 | `format/format.ts` | `contexts/modeling/src/application/` (formatting) with its printer in `infrastructure/syntax/` | T8 |
 | `generator/` (`typescript.ts`, `checks.ts`, `tests.ts`, `testing/`) | `capabilities/generation/src/core/` | T8 |
 | `storming/` (`parse`, `validate`, `link`, `format`, `analyze`, `ir`) | `contexts/storming/src/` (`ir`, `validate`, `link` to `domain/`; `analyze` to `application/`; `parse`, `format` to `infrastructure/syntax/`) | T8 |
@@ -55,6 +56,7 @@ From `main` at `8a77a8d` to the layout of ADR 0027. Paths are relative to each p
 | `presentation/` (`cli`, `http`, `lsp`, `session`, `websocket`) | `apps/dt/src/` (`cli`, `lsp`, `server/{http,session,websocket}`) | T8 |
 | `composition/` | `apps/dt/src/` (`main.ts` and the wiring) | T8 |
 | `web/` | `apps/web/` (inner layout unchanged in this plan) | T8 |
+| `scripts/session-seed.ts`, `scripts/session-seed/` (new in #23; `bun run session:seed`, `test/session-seed.test.ts`) | stays in `scripts/`; its deep imports (agent's application and infrastructure, `composition/subscriber`, collaboration's `domain/reply`, `domain/body`, `protocol`, `infrastructure/session-files`, modeling's `core/config`, workspace's `infrastructure/files`) go through public surfaces (T2) and new paths (T8) | T2, T8 |
 
 ## Tasks
 
@@ -73,9 +75,18 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `collaboration` as contexts, `visualization` and `agent` as capabilities, `workspace` as platform, `presentation`,
   `composition` and `web` as apps. `test/architecture.test.ts` derives its checks from the map and replaces the
   per-package rules; every current violation is an exception entry; a stale exception fails; failures name the rule,
-  the ADR and the fix.
+  the ADR and the fix. Since #23 the test's agent rule is no longer "types only": agent imports collaboration's
+  `domain/reply` and `domain/body` at run time (listed as exceptions in the test); and collaboration imports
+  modeling's `core/emoji` (run time) and `core/config` (the type `ClefModel`), which are not Modeling's published
+  language — exception entries until T6.
 - **T2 — public surfaces (P1).** An `index.ts` (and `protocol.ts` where there are wire types) per package; `exports`
-  narrowed to `.` and `./protocol`; every deep import replaced. The architecture test checks the `exports`.
+  narrowed to `.` and `./protocol`; every deep import replaced. The architecture test checks the `exports`. Deep
+  imports also come from outside the packages, which the architecture test does not read: `scripts/session-seed*`
+  (see the code map) and the tests (79 files under `test/`, 117 distinct `@domaintrail/*` specifiers, many into
+  `infrastructure/`); narrowing `exports` breaks them at typecheck (see Open in the tasks). New since #23 among the
+  packages' own: collaboration's `domain/reply`, `domain/body`, `domain/marks` (agent, presentation, web, composition),
+  `application/classifier` and `infrastructure/clef` (composition), agent's `application/ports` and
+  `infrastructure/dt-shim` (composition), modeling's `core/emoji` (collaboration, presentation, web).
 - **T3 — the kernel (P2).** `Diagnostic`, `SourceFile`, `Location`, `didYouMean` and the other suggestions into
   `modeling/src/kernel/` (moved to `shared/kernel` in T8). Nothing in the kernel imports Langium.
 - **T4 — the analysis split (P2).** `core/analyze` into an analysis of `.dt` alone, the storming analysis taking the
@@ -86,13 +97,29 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
   `core/config` stops importing the generator (T6 takes the options).
 - **T6 — configuration by owner (P2).** Each owner defines its section's type, defaults and validation; `composition`
   (later `apps/dt`) composes the schema of `domaintrail.jsonc`; `workspace` reads the file and receives what it needs
-  (sources, ignored directories) as values. The resolved configuration and its errors stay as they are.
+  (sources, ignored directories) as values. The resolved configuration and its errors stay as they are. The sections
+  #23 added, with the owner proposed by T0 (to confirm in the task): `session.agent.dt` → agent (its adapter
+  `infrastructure/dt-shim` runs it; the check that it lies outside the workspace uses `realpathSync` and moves out of
+  the pure validation); `session.agent.maxPreviousRunDiff` → collaboration (its `domain/previous-runs` and the agent
+  API apply it, despite the section's name); `session.quickReactions` → collaboration, with `core/emoji`;
+  `session.classifier` → collaboration (`application/classifier`, `infrastructure/clef`, which imports `ClefModel`
+  from `core/config` today). `schema/domaintrail.schema.json` is written by hand and no test compares it with the
+  code.
 - **T7 — domain knowledge out of visualization (P2).** The items of the code map marked T7. `markLineChanges`, the trie
   and rendering stay.
 - **T12 — authorization.** Before T8, to keep the moves last. `Actor` in Collaboration; `dismiss` and the
   facilitator-only operations (confirm, restore, close) get role/participant parameters and `requires` in
   `collaboration/model/*.dt`; regenerate; the use cases build the `Actor` and pass it; the routes map the domain
-  errors to the same statuses and bodies as today; the route role table stays as a hint.
+  errors to the same statuses and bodies as today; the route role table stays as a hint. Since #23: there is no
+  dismiss route any more (`POST /api/session/requests/:id/dismiss` answers 404; messages are chat), so the "author or
+  the facilitator" rule is enforced nowhere, and the use case `dismissRequest` is called only by tests (see Open in
+  the tasks). Two more rules of the work sit in route handlers: only the facilitator applies a message on sending it
+  (`POST /requests` with `apply`, `FacilitatorOnly`) and the facilitator does not vote (`POST /marks`,
+  `FacilitatorDoesNotVote`). The second is already modelled the way ADR 0027 asks — `Mark.place` takes
+  `role: ParticipantRole` with `requires participantsVote … else FacilitatorDoesNotVote`, and `setMark` takes the role
+  from the session — but the route answers first, with a `message` the domain error lacks; the bodies are pinned by
+  `test/session-errors-contract.test.ts`. Facilitator-only routes today: queue and cancel runs, take, confirm and
+  restore revisions, issue a facilitator link, close.
 - **T8 — the move (P3).** The code map's T8 rows. `modeling` splits into `contexts/modeling`, `contexts/storming`,
   `capabilities/generation`, `capabilities/analysis` and `shared/kernel`; `presentation` and `composition` merge into
   `apps/dt`. Updated with it: `tsconfig.json`, `bunfig.toml` and the root `package.json` workspaces, `scripts/build.ts`,
@@ -114,8 +141,40 @@ T0 → T1 → T2 → T3 → T4 → T5 ─┐
 - **T13 — wrap-up.** `CONTRIBUTING.md` (the package table, the boundary rules, the bootstrap steps), ADR 0027's status
   to implemented, this plan reconciled with what was built.
 
+## What #23 changed
+
+Found by T0 against `9f28344`; the code map and the task notes above carry them.
+
+- New files: `modeling/core/emoji.ts`; collaboration's `domain/{body,marks,previous-runs,reply}.ts`,
+  `application/classifier.ts`, `infrastructure/{clef,legacy}.ts`, `model/mark.dt`, migrations 4–6 (in
+  `infrastructure/sqlite.ts`); agent's `infrastructure/dt-shim.ts`; most of `web/session/` and some of `web/view/`,
+  `web/app/`; `scripts/session-seed*`.
+- New cross-package imports: listed under T2. The architecture test gained exceptions for agent → collaboration
+  `domain/reply` and `domain/body` (run time).
+- `modeling` itself is unchanged apart from `core/config.ts` and `core/emoji.ts`: the cycles, the checkers and the
+  rows of the code map hold.
+- Configuration: four sections more (T6), and the first I/O in `core/config.ts`.
+- Authorization: the dismiss route is gone; marks already use a role parameter and `requires` (T12).
+
+## Baseline (T0)
+
+Tests that every task keeps green; a deliberate change updates a snapshot with `bun test -u` and says why.
+
+| What | Test |
+|---|---|
+| `dt check` (text and JSON, stream, exit code) over `.dt` only, `.dtes` only, both, broken refs, syntax errors in either language, `examples/shop` | `test/check-contract.test.ts` (fixtures in `test/fixtures/check/`, `test/fixtures/dtes/`) |
+| every file `dt generate ts` writes for `examples/shop`, in full | `test/generate-contract.test.ts`; their hashes with `--out`: `test/live-contract.test.ts` |
+| Collaboration's generated TypeScript | `test/collaboration-contracts.test.ts` (generating again gives the committed `src/generated`) |
+| Live View payloads of `examples/shop` with and without stormings, and after a change | `test/live-payload-contract.test.ts` (readable parts and hashes; `DT_CONTRACT_DUMP=<dir>` writes the payloads to diff); the payload's keys over the server: `test/live-contract.test.ts` |
+| HTTP: status and error body of the session routes' refusals; `statusOf` of every error type | `test/session-errors-contract.test.ts`; the rest of HTTP, the WebSocket and the agent API: `test/session-server.test.ts`, `test/session-access.test.ts`, `test/session-stream.test.ts`, `test/live-contract.test.ts` |
+
 ## Open in the tasks
 
 - T5: where `camel` lives (kernel or model).
 - T8: one Langium project per context, or a shared grammar part; where `docComment` goes.
 - T11: how much of the typed model the `.dt` can express today; what stays hand-written is listed in the task.
+- T6 (from T0): where `core/emoji.ts` goes — Collaboration's domain (proposed) or `shared/kernel` — and the owners of
+  the sections #23 added.
+- T2 (from T0): how the tests and `scripts/session-seed*` reach what is not public — through the public surfaces only,
+  a test-only export, or relative paths into `packages/`.
+- T12 (from T0): `dismiss` has no route since #23 — give `dismissRequest` the `requires` anyway, or remove it.

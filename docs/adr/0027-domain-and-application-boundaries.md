@@ -7,7 +7,9 @@
   parameters and `requires` without new syntax, and one integration branch with one pull request (marked *Decided
   by the maintainer*).
 - Date: 2026-11-01
-- Input: the code on `main` at `8a77a8d` (M0, ADR 0025, and M1, ADR 0026, merged).
+- Input: the code on `main` at `8a77a8d` (M0, ADR 0025, and M1, ADR 0026, merged). The facts were checked again
+  against `main` at `9f28344` (#23 merged) in T0 of [the plan](../plans/0027-boundaries.md); those that changed are
+  marked *Since #23*. No decision changed.
 
 ## Context
 
@@ -36,12 +38,17 @@ Mixing them has costs the code already shows:
   `@domaintrail/visualization/domain/graph/ir`, `@domaintrail/modeling/core/analyze`, ...).
 - Rules between packages are added one by one to `test/architecture.test.ts` ("collaboration reaches only modeling and
   the types of visualization", "only agent, composition, presentation and web depend on collaboration"). They are a
-  dependency graph that is nowhere declared as one.
+  dependency graph that is nowhere declared as one. *Since #23* the agent's rule has two exceptions more: agent
+  imports collaboration's `domain/reply` and `domain/body` at run time.
 - `core/config.ts` in `modeling` holds settings owned by others: the generator's options, the server's port and host,
-  the session's identity mode and participant limit, the agent's tools.
+  the session's identity mode and participant limit, the agent's tools. *Since #23* also the agent's `dt` command
+  (checked against the file system), the most diff the agent is given of earlier runs, the chat's quick reactions
+  and its message classifier; and `modeling/core/emoji.ts` holds the rule of Collaboration's `Emoji` primitive.
 - Business rules about who may do what live in HTTP routes: `presentation/src/session/routes.ts` keeps a per-route
   role table, and the handler of `dismiss` decides "the author or the facilitator". Another entry point calling the
-  same use case would skip them.
+  same use case would skip them. *Since #23* there is no dismiss route (the use case remains, called by no route);
+  the handlers decide that only the facilitator applies a message on sending it, and that the facilitator does not
+  vote — the latter also a `requires` of `Mark.place`, which takes the role as a parameter.
 
 ## Decision
 
@@ -123,7 +130,9 @@ apps/                      deliverables: entry points and wiring
 | apps | published language and application only | ✓ | ✓ | ✓ |
 
 Upstream contexts: Storming → Modeling; Collaboration → Modeling, Storming. Today's test also lets Collaboration
-take visualization's types; it imports none, and the map does not carry that edge over.
+take visualization's types; it imports none, and the map does not carry that edge over. *Since #23* Collaboration
+also imports `modeling/core/emoji` and the type `ClefModel` of `modeling/core/config`, neither of which is Modeling's
+published language; the plan places them (T6).
 
 - Across packages only what `package.json` `exports` lists is imported: `.` (published language and use cases) and
   `./protocol` where a module has wire types. Deep imports are rejected.
