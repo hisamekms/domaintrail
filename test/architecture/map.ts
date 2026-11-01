@@ -69,13 +69,7 @@ export type Rule =
      * an import by a file of the kernel (shared/kernel) of anything but the kernel's own files and the pure builtins
      * (Langium, the model, any other module) — `<file>: <specifier>`
      */
-    | 'kernel'
-    /**
-     * an import across the inner modules of a package (`inner`): by the rest of the package, of an inner module; by an
-     * inner module, of another one it does not list in its `upstream`, or of a module it lists in `never` —
-     * `<file>: <specifier>`
-     */
-    | 'inner-modules';
+    | 'kernel';
 
 export interface Module {
     kind: Kind;
@@ -94,14 +88,6 @@ export interface Module {
      * capabilities; a context importing it violates `public-surface`, keyed by the module it reaches.
      */
     published?: readonly string[];
-    /**
-     * The modules that lie inside its sources until T8 moves them into packages of their own, by directory (as `kernel`
-     * for the shared kernel): the module each becomes, the other inner modules it may import (`upstream`), and the
-     * modules of the package it must not import (`never`, without `.js`). The rest of the package is the package
-     * itself, which an inner module may import; it imports no inner module (index.ts, the entry, exports them all).
-     * So the move adds no cycle (rule `inner-modules`).
-     */
-    inner?: Record<string, { becomes: string; upstream: readonly string[]; never?: readonly string[] }>;
     /** The violations it still has, by rule; the comment of each group names the task that removes it. */
     exceptions?: Partial<Record<Rule, readonly string[]>>;
 }
@@ -115,42 +101,34 @@ export const MAP: Record<string, Module> = {
         dir: 'packages/modeling',
         sources: 'packages/modeling/src',
         upstream: ['kernel'],
-        // the typed model with its dependencies and diff, Modeling's rule IDs; Storming's IR, semantic graph and
-        // occurrences, its rule IDs (T8: contexts/storming)
-        published: [
-            'model/model',
-            'model/dependencies',
-            'model/usages',
-            'model/ids',
-            'model/aggregates',
-            'model/diff',
-            'model/rule-ids',
-            'storming/ir',
-            'storming/semantic',
-            'storming/rule-ids',
-            'storming/files',
-        ],
-        inner: {
-            // Storming reads Modeling's typed model, which knows nothing of it; its analysis takes the model as its
-            // input and does not run Modeling's analysis (T4)
-            storming: { becomes: 'contexts/storming', upstream: [], never: ['core/analyze'] },
-        },
+        // the typed model with its dependencies and diff, Modeling's rule IDs
+        published: ['model/model', 'model/dependencies', 'model/usages', 'model/ids', 'model/aggregates', 'model/diff', 'model/rule-ids'],
+    },
+    storming: {
+        kind: 'context',
+        dir: 'contexts/storming',
+        sources: 'contexts/storming/src',
+        // Storming → Modeling: it reads Modeling's typed model, which knows nothing of it; its analysis takes the model
+        // as its input and does not run Modeling's analysis (T4)
+        upstream: ['kernel', 'modeling'],
+        // the IR of a storming, its semantic graph and timeline occurrences, its rule IDs, its files
+        published: ['domain/ir', 'domain/semantic', 'domain/rule-ids', 'domain/files'],
     },
     collaboration: {
         kind: 'context',
         dir: 'contexts/collaboration',
         sources: 'contexts/collaboration/src',
-        // Collaboration → Modeling, Storming (Storming is part of modeling until T8). Today's test also let it take
-        // visualization's types; it imports none, and the map does not carry that edge over (ADR 0027).
-        upstream: ['kernel', 'modeling'],
+        // Collaboration → Modeling, Storming. Today's test also let it take visualization's types; it imports none, and
+        // the map does not carry that edge over (ADR 0027).
+        upstream: ['kernel', 'modeling', 'storming'],
     },
     analysis: {
         kind: 'capability',
         dir: 'capabilities/analysis',
         sources: 'capabilities/analysis/src',
         // the project analysis runs Modeling's analysis, then Storming's with the model, and the generation's checks
-        // (T4, T5); Storming is part of modeling until it moves (T8)
-        upstream: ['generation', 'kernel', 'modeling'],
+        // (T4, T5)
+        upstream: ['generation', 'kernel', 'modeling', 'storming'],
     },
     generation: {
         kind: 'capability',
@@ -166,7 +144,7 @@ export const MAP: Record<string, Module> = {
         dir: 'capabilities/visualization',
         sources: 'capabilities/visualization/src',
         // the view service and the git baseline analyze the workspace through the project analysis
-        upstream: ['analysis', 'kernel', 'modeling'],
+        upstream: ['analysis', 'kernel', 'modeling', 'storming'],
     },
     agent: {
         kind: 'capability',
@@ -195,13 +173,13 @@ export const MAP: Record<string, Module> = {
         sources: 'apps/dt/src',
         // the one binary: the CLI, the language server, the servers, and the wiring of every adapter (presentation and
         // composition until T8)
-        upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'modeling', 'visualization', 'workspace'],
+        upstream: ['agent', 'analysis', 'collaboration', 'generation', 'kernel', 'modeling', 'storming', 'visualization', 'workspace'],
     },
     web: {
         kind: 'app',
         dir: 'apps/web',
         sources: 'apps/web',
         // its unit tests analyze examples/shop through the project analysis (a devDependency)
-        upstream: ['analysis', 'collaboration', 'kernel', 'modeling', 'visualization'],
+        upstream: ['analysis', 'collaboration', 'kernel', 'modeling', 'storming', 'visualization'],
     },
 };

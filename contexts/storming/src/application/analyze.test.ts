@@ -1,8 +1,8 @@
 // Storming's analysis of the .dtes sources, given the Typed Model of the .dt sources (the project analysis runs it after
 // Modeling's: analysis/analyze.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { analyzeDomain } from '../core/analyze.js';
-import type { DomainModel } from '../model/model.js';
+import { analyzeDomain } from '@domaintrail/modeling';
+import type { DomainModel } from '@domaintrail/modeling';
 import { analyzeStormings } from './analyze.js';
 
 const DT = `context Delivery {

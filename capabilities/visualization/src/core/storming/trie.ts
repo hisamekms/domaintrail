@@ -3,7 +3,7 @@
  * timelines, compared by `stepKey` (a group is the set of its events), and never depends on the order of the timelines:
  * its node IDs are derived from the keys of their path, and every list it gives is sorted.
  */
-import type { EventOccurrence, Timeline } from '@domaintrail/modeling';
+import type { EventOccurrence, Timeline } from '@domaintrail/storming';
 import { stepKey, type Step, type StepKey } from './ir.js';
 
 /** A step shared by the timelines whose prefix up to it is the same. */

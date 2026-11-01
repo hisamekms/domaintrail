@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { DisplayMode, Lang, ViewLevel } from '@domaintrail/visualization';
-import type { ElementKind, SemanticEdgeKind, StormingElementKind as EsElementKind } from '@domaintrail/modeling';
+import type { ElementKind } from '@domaintrail/modeling';
+import type { SemanticEdgeKind, StormingElementKind as EsElementKind } from '@domaintrail/storming';
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
 import type { Role } from '@domaintrail/collaboration/protocol';

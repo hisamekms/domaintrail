@@ -1,7 +1,7 @@
 // The content of a snapshot, decided without I/O: the normalized path of each source, its language, the hash of its
 // bytes, and the content hash of the whole snapshot (the declared invariant `hashOfFiles` of Revision and the
 // requirement `hashMatchesFiles` of take and restore).
-import { isStormingFile } from '@domaintrail/modeling';
+import { isStormingFile } from '@domaintrail/storming';
 import { Collaboration, err, type Result } from '../generated/index.js';
 import { sha256Hex } from './sha256.js';
 

@@ -43,7 +43,7 @@
     "apps/*"
   ],
   "scripts": {
-    "langium:generate": "langium generate --file packages/modeling/langium-config.json",
+    "langium:generate": "langium generate --file packages/modeling/langium-config.json && langium generate --file contexts/storming/langium-config.json",
     "build": "bun run langium:generate && bun ./scripts/build.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --type-aware --deny-warnings",
@@ -75,6 +75,7 @@
     "@domaintrail/generation": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/web": "workspace:*",
     "@domaintrail/workspace": "workspace:*",

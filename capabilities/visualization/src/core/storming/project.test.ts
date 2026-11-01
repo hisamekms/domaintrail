@@ -12,7 +12,7 @@ import {
     type StormingElement,
     type Timeline,
     timelineOccurrences,
-} from '@domaintrail/modeling';
+} from '@domaintrail/storming';
 import { VIEW_LEVELS, type RenderEventNode, type RenderGraph, type ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
 

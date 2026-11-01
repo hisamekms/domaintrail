@@ -1,7 +1,8 @@
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { formatDomain, formatStorming, isStormingFile } from '@domaintrail/modeling';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming, isStormingFile } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';

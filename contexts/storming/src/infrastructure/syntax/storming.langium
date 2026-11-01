@@ -1,7 +1,7 @@
 // The Event Storming DSL `.dtes` (docs/dtes-v0.1.md, ADR 0024). Every rule and type starts with `Es`, so the AST types
 // generated next to the `.dt` ones never collide. The grammar is permissive where the validator gives better messages:
 // every element may have a body and every body takes every clause; which clauses an element may have, how many, and the
-// kinds of their targets are rules S003–S009 (src/dtes/validate.ts), not syntax errors.
+// kinds of their targets are rules S003–S009 (domain/validate.ts), not syntax errors.
 grammar EventStorming
 
 entry EsFile:
@@ -90,7 +90,8 @@ EsName returns string:
     ID | 'storming' | 'event' | 'actor' | 'external' | 'command' | 'policy' | 'aggregate' | 'readmodel' | 'hotspot' |
     'timeline' | 'group' | 'ref' | 'reads' | 'target' | 'emits' | 'on' | 'issues' | 'status' | 'resolution';
 
-// The terminals of src/language/domain.langium, copied verbatim (a test keeps them equal); INT and DECIMAL are unused.
+// The terminals of Modeling's grammar (packages/modeling/src/language/domain.langium), copied verbatim
+// (test/grammars.test.ts keeps them equal); INT and DECIMAL are unused.
 hidden terminal WS: /\s+/;
 terminal STRING: /"(\\.|[^"\\])*"/;
 terminal ID: /[_a-zA-Z][\w_]*/;

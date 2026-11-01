@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
-import { formatDomain, formatStorming } from '@domaintrail/modeling';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
 import { check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');

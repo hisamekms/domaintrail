@@ -5,7 +5,7 @@
  * of one view (`ViewOptions`), where one event node may stand for several occurrences of the same event (a pure drawing
  * optimization: it never adds a semantic edge).
  */
-import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep } from '@domaintrail/modeling';
+import type { EventOccurrence, NodeElementKind, SemanticEdgeKind, TimelineStep } from '@domaintrail/storming';
 
 // ---- Semantic edges as drawn (spec §9.4) ----
 

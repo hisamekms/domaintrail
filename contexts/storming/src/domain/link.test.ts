@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Diagnostic } from '@domaintrail/kernel';
 import { esElementId, type Clause, type NodeElement, type NodeElementKind, type SourceRange, type Storming } from './ir.js';
 import { linkStormings, resolveDtRef } from './link.js';
-import type { DomainModel } from '../model/model.js';
+import type { DomainModel } from '@domaintrail/modeling';
 import { check } from '../test-helpers.js';
 
 // Spec §4's example, as `.dt`: two contexts, a policy across them, and exhaustive `emits`.

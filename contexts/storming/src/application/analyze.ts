@@ -1,12 +1,12 @@
 import type { SourceFile } from '@domaintrail/kernel';
 import { compareDiagnostics } from '@domaintrail/kernel';
-import type { DomainModel } from '../model/model.js';
-import type { StormingAnalysis } from './ir.js';
-import { linkStormings } from './link.js';
-import { parseStormings } from './parse.js';
-import { validateStormings } from './validate.js';
+import type { DomainModel } from '@domaintrail/modeling';
+import type { StormingAnalysis } from '../domain/ir.js';
+import { linkStormings } from '../domain/link.js';
+import { parseStormings } from '../infrastructure/syntax/parse.js';
+import { validateStormings } from '../domain/validate.js';
 
-export type { StormingAnalysis } from './ir.js';
+export type { StormingAnalysis } from '../domain/ir.js';
 
 /**
  * Analyzes the `.dtes` sources of a workspace (ADR 0024, T6): parses them, then validates the stormings of the files that

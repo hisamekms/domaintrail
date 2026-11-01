@@ -1,11 +1,13 @@
 import { CstUtils, isLeafCstNode, type AstNode, type CstNode, type LeafCstNode } from 'langium';
-import * as ast from '../language/generated/ast.js';
-import { FormatError } from '../format/format.js';
-import { createStormingServices } from './language/module.js';
+import * as ast from './generated/ast.js';
+import { createStormingServices } from './module.js';
+
+/** Lexer or parser errors: the file is not formatted (Modeling's printer has its own, for `.dt` files). */
+export class FormatError extends Error {}
 
 /**
- * `dt fmt` for `.dtes`: the one canonical layout of a storming file, in the spirit of the `.dt` formatter
- * (`../format/format.ts`). The printer keeps every token and comment in order and only decides the whitespace between
+ * `dt fmt` for `.dtes`: the one canonical layout of a storming file, in the spirit of Modeling's `.dt` formatter
+ * (its `infrastructure/syntax/format.ts`). The printer keeps every token and comment in order and only decides the whitespace between
  * them, except that an empty `{}` of an element is dropped (it means the same as no body).
  *
  * The rules:

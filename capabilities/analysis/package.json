@@ -10,6 +10,7 @@
     "@domaintrail/generation": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
     "picomatch": "4.0.7"
   },
   "devDependencies": {

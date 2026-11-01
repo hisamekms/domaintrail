@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
-import { formatDomain, formatStorming } from '@domaintrail/modeling';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
 
 const DT = `context Delivery {
   id ShipmentId: UUID

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { type Storming } from '@domaintrail/modeling';
+import { type Storming } from '@domaintrail/storming';
 import { analyze } from '@domaintrail/analysis';
 import type { ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';

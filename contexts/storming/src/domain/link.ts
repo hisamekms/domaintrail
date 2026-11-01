@@ -9,8 +9,8 @@
  */
 import type { Diagnostic } from '@domaintrail/kernel';
 import { didYouMean, type Candidate } from '@domaintrail/kernel';
-import { commandId } from '../model/ids.js';
-import { elementList, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '../model/model.js';
+import { commandId } from '@domaintrail/modeling';
+import { elementList, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '@domaintrail/modeling';
 import { esDiagnostic, esElementId, REF_KINDS, type Clause, type NodeElement, type Storming } from './ir.js';
 
 export type DtRefKind = 'event' | 'aggregate' | 'command';

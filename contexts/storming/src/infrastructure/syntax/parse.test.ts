@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { GrammarAST, GrammarUtils, URI } from 'langium';
-import { Domain, EventStorming, isEsCommand, isEsRelationClause, isEsStorming, type EsFile } from '../language/generated/ast.js';
-import { DomainGrammar, EventStormingGrammar } from '../language/generated/grammar.js';
-import { declarations, type Clause, type NodeElement, type Storming, type Timeline } from './ir.js';
-import { createStormingServices } from './language/module.js';
+import { EventStormingTerminals, isEsCommand, isEsRelationClause, isEsStorming, type EsFile } from './generated/ast.js';
+import { EventStormingGrammar } from './generated/grammar.js';
+import { declarations, type Clause, type NodeElement, type Storming, type Timeline } from '../../domain/ir.js';
+import { createStormingServices } from './module.js';
 import { parseStormings, toStormingIr } from './parse.js';
-import { validateStormings } from './validate.js';
+import { validateStormings } from '../../domain/validate.js';
 
-const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
+const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
 async function parseOne(text: string): Promise<Storming[]> {
     const r = await parseStormings([{ path: 'a.dtes', text }]);
@@ -368,23 +368,22 @@ describe('services: local references resolve within the storming, whatever the k
     });
 });
 
-describe('lexer: terminals shared with .dt (spec §14 item 1)', () => {
+describe('lexer: terminals shared with .dt (spec §14 item 1; the same as the .dt ones: test/grammars.test.ts)', () => {
     const terminals = (grammar: GrammarAST.Grammar) =>
         Object.fromEntries(
             grammar.rules.filter(GrammarAST.isTerminalRule).map((r) => [r.name, { hidden: r.hidden, regex: GrammarUtils.terminalRegex(r).source }]),
         );
 
-    test('every .dtes terminal is the .dt one, verbatim and with the same hiddenness; only INT and DECIMAL are left out', () => {
-        expect(EventStorming.Terminals).toEqual({ ...Domain.Terminals, INT: undefined, DECIMAL: undefined } as never);
+    test('the .dtes terminals are the five of .dt it uses, and the generated AST lists them', () => {
         const es = terminals(EventStormingGrammar());
-        const dt = terminals(DomainGrammar());
         expect(Object.keys(es).sort()).toEqual(['ID', 'ML_COMMENT', 'SL_COMMENT', 'STRING', 'WS']);
-        for (const [name, t] of Object.entries(es)) expect(t).toEqual(dt[name]);
+        expect(Object.keys(EventStormingTerminals).sort()).toEqual(Object.keys(es).sort());
         expect(
-            Object.keys(dt)
-                .filter((n) => !(n in es))
+            Object.entries(es)
+                .filter(([, t]) => t.hidden)
+                .map(([n]) => n)
                 .sort(),
-        ).toEqual(['DECIMAL', 'INT']);
+        ).toEqual(['ML_COMMENT', 'SL_COMMENT', 'WS']);
     });
 
     test('tokens: IDs, strings with escapes, comments hidden, keywords', () => {

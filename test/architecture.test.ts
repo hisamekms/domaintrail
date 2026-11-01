@@ -249,13 +249,6 @@ const RULES: Record<Rule, RuleText> = {
         fix: () =>
             'keep the kernel to plain types and functions: leave what needs Langium or the model in the module that uses it (as `DiagnosticSink` in core/), or pass it in as a value',
     },
-    'inner-modules': {
-        section: 'Layout; Project analysis and configuration',
-        statement:
-            "the modules that lie inside a package until T8 (the map's `inner`: Storming, the project analysis, the generator) depend in one direction: the package's own code imports none of them, and an inner module imports another only when the map lists it in its `upstream`, never a module of its `never`.",
-        fix: () =>
-            "turn the dependency around: the downstream module takes what it needs as its input (Storming's analysis takes the typed model, a checker takes a name rule from the kernel), and the project analysis (`analysis/`) runs the analyses and the generation's checks and combines them",
-    },
 };
 
 /** The problems of a rule: violations that no exception lists, and exceptions that no longer occur. */
@@ -319,9 +312,6 @@ describe('the boundary map', () => {
     test('its upstreams are other packages of the map, and its exceptions name known rules once each', () => {
         for (const [name, entry] of Object.entries(MAP)) {
             expect({ name, unknown: entry.upstream.filter((u) => !(u in MAP) || u === name) }).toEqual({ name, unknown: [] });
-            for (const [dir, inner] of Object.entries(entry.inner ?? {})) {
-                expect({ name, dir, unknown: inner.upstream.filter((u) => !(u in entry.inner!) || u === dir) }).toEqual({ name, dir, unknown: [] });
-            }
             for (const [rule, keys] of Object.entries(entry.exceptions ?? {})) {
                 expect({ name, rule, known: rule in RULES }).toEqual({ name, rule, known: true });
                 expect({ name, rule, duplicated: keys.filter((k, i) => keys.indexOf(k) !== i) }).toEqual({ name, rule, duplicated: [] });
@@ -511,26 +501,6 @@ describe('layers', () => {
                 .filter(({ name, imp }) => (imp.resolved ? !inKernel(name, imp.resolved) : !PURE_BUILTINS.includes(imp.specifier)))
                 .map(({ name, imp }) => atFile(name, imp)),
         );
-    });
-
-    test('the inner modules of a package depend in one direction, the package itself on none of them (inner-modules)', () => {
-        const innerOf = (name: string, file: string): string | undefined => {
-            const { inner, sources } = MAP[name];
-            const dir = file.startsWith(`${sources}/`) ? local(name, file).split('/')[0] : undefined;
-            return inner && dir !== undefined && dir in inner ? dir : undefined;
-        };
-        const violations = all
-            .filter(({ name, imp }) => MAP[name].inner !== undefined && imp.resolved !== undefined && local(name, imp.file) !== 'index.ts')
-            .filter(({ name, imp }) => {
-                const from = innerOf(name, imp.file);
-                const to = innerOf(name, imp.resolved!);
-                if (from === undefined) return to !== undefined;
-                const { upstream, never = [] } = MAP[name].inner![from];
-                return (to !== undefined && to !== from && !upstream.includes(to)) || never.includes(local(name, imp.resolved!).replace(/\.js$/, ''));
-            })
-            .map(({ name, imp }) => atFile(name, imp));
-        expect(Object.values(MAP).some((m) => m.inner !== undefined)).toBe(true);
-        expectNoProblems('inner-modules', violations);
     });
 
     test('application/ imports no I/O (application-io)', () => {

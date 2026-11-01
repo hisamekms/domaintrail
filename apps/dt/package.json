@@ -12,6 +12,7 @@
     "@domaintrail/generation": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/workspace": "workspace:*",
     "commander": "15.0.0",

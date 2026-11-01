@@ -6,6 +6,7 @@
     "@domaintrail/collaboration": "workspace:*",
     "@domaintrail/kernel": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "lucide-react": "1.62.0",
     "react": "19.3.1",

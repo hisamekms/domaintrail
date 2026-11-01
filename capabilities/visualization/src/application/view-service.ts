@@ -1,14 +1,5 @@
-import {
-    diffModels,
-    type DomainModel,
-    EMPTY_DIFF,
-    fingerprints,
-    type ModelDiff,
-    type Storming,
-    type StormingAnalysis,
-    stormingTimelines,
-    supportingContexts,
-} from '@domaintrail/modeling';
+import { diffModels, type DomainModel, EMPTY_DIFF, fingerprints, type ModelDiff, supportingContexts } from '@domaintrail/modeling';
+import { type Storming, type StormingAnalysis, stormingTimelines } from '@domaintrail/storming';
 import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { VIEW_LEVELS, type RenderGraph, type ViewOptions } from '../core/storming/ir.js';
 import { matchRenderNodes, projectView } from '../core/storming/render.js';

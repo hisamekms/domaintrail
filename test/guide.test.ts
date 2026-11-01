@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import { formatDomain, formatStorming } from '@domaintrail/modeling';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
 import { generateTypeScript } from '@domaintrail/generation';
 import { analyze, sourceSelection } from '@domaintrail/analysis';
 import { resolveConfig } from '@domaintrail/dt';
@@ -24,7 +25,7 @@ async function ruleIds(): Promise<string> {
         new RegExp(`export type ${name} =([^;]*);`).exec(await readFile(path.join(ROOT, ...file), 'utf8'))![1];
     return [
         await union(['packages', 'modeling', 'src', 'model', 'rule-ids.ts'], 'ModelingRuleId'),
-        await union(['packages', 'modeling', 'src', 'storming', 'rule-ids.ts'], 'StormingRuleId'),
+        await union(['contexts', 'storming', 'src', 'domain', 'rule-ids.ts'], 'StormingRuleId'),
     ].join('');
 }
 
@@ -77,7 +78,7 @@ describe('dt guide', () => {
     });
 
     test('its storming examples use every keyword of the .dtes grammar', async () => {
-        const grammar = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'storming', 'storming.langium'), 'utf8');
+        const grammar = await readFile(path.join(ROOT, 'contexts', 'storming', 'src', 'infrastructure', 'syntax', 'storming.langium'), 'utf8');
         const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
         const examples = blocks('dtes')
             .filter((b) => /^\/\/ \S+\.dtes\n/.test(b))

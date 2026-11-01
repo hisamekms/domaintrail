@@ -1,17 +1,17 @@
 import { ChevronRight, Microscope, Telescope, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { type DomainModel } from '@domaintrail/modeling';
 import {
     type AnyDeclaration,
     buildSemanticGraph,
     declarations,
-    type DomainModel,
     type EventOccurrence,
     firstDeclarations,
     type NodeElement,
     type Storming,
     stormingTimelines,
     timelineOccurrences,
-} from '@domaintrail/modeling';
+} from '@domaintrail/storming';
 import { type Diagnostic } from '@domaintrail/kernel';
 import {
     type DisplayMode,

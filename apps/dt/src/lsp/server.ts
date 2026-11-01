@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { format } from 'node:util';
 import {
+    AbstractAstReflection,
     AstUtils,
     CstUtils,
     DefaultWorkspaceManager,
@@ -63,21 +64,8 @@ import {
     type WorkspaceEdit,
     type WorkspaceFolder,
 } from 'vscode-languageserver/node';
-import {
-    ast,
-    commandsOf,
-    docComment,
-    DomainGeneratedModule,
-    DomainGeneratedSharedModule,
-    DomainModule,
-    elementIdOf,
-    EventStormingGeneratedModule,
-    EventStormingModule,
-    formatDomain,
-    formatStorming,
-    LabelResolver,
-    ModelIndex,
-} from '@domaintrail/modeling';
+import { ast, commandsOf, docComment, DomainGeneratedModule, DomainModule, elementIdOf, formatDomain, LabelResolver, ModelIndex } from '@domaintrail/modeling';
+import { docComment as stormingDocComment, EventStormingGeneratedModule, EventStormingModule, formatStorming, stormingAst } from '@domaintrail/storming';
 import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { type Diagnostic } from '@domaintrail/kernel';
 import { CONFIG_FILES, ConfigError, defaultConfig, type ResolvedConfig } from '../config/config.js';
@@ -464,14 +452,14 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isIdType(node) || ast.isPrimitiveDecl(node) || ast.isVerifiedDecl(node) || ast.isUnionDecl(node)) return SymbolKind.TypeParameter;
         if (ast.isEnumDecl(node)) return SymbolKind.Enum;
         if (ast.isEnumValue(node) || ast.isState(node)) return SymbolKind.EnumMember;
-        if (ast.isEventDecl(node) || ast.isEsEvent(node)) return SymbolKind.Event;
-        if (ast.isPolicy(node) || ast.isEsPolicy(node)) return SymbolKind.Interface;
-        if (ast.isCommand(node) || ast.isEsCommand(node)) return SymbolKind.Method;
-        if (ast.isEsStorming(node)) return SymbolKind.Namespace;
-        if (ast.isEsAggregate(node)) return SymbolKind.Class;
-        if (ast.isEsTimeline(node) || ast.isEsGroup(node)) return SymbolKind.Array;
-        if (ast.isEsActor(node) || ast.isEsExternal(node) || ast.isEsReadModel(node)) return SymbolKind.Object;
-        if (ast.isEsHotspot(node)) return SymbolKind.Key;
+        if (ast.isEventDecl(node) || stormingAst.isEsEvent(node)) return SymbolKind.Event;
+        if (ast.isPolicy(node) || stormingAst.isEsPolicy(node)) return SymbolKind.Interface;
+        if (ast.isCommand(node) || stormingAst.isEsCommand(node)) return SymbolKind.Method;
+        if (stormingAst.isEsStorming(node)) return SymbolKind.Namespace;
+        if (stormingAst.isEsAggregate(node)) return SymbolKind.Class;
+        if (stormingAst.isEsTimeline(node) || stormingAst.isEsGroup(node)) return SymbolKind.Array;
+        if (stormingAst.isEsActor(node) || stormingAst.isEsExternal(node) || stormingAst.isEsReadModel(node)) return SymbolKind.Object;
+        if (stormingAst.isEsHotspot(node)) return SymbolKind.Key;
         if (ast.isParameter(node)) return SymbolKind.Variable;
         if (ast.isInvariant(node) || ast.isRequirement(node)) return SymbolKind.Boolean;
         return SymbolKind.Field;
@@ -482,8 +470,8 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isValueObject(node) || ast.isFieldSet(node) || ast.isErrorDecl(node)) return CompletionItemKind.Struct;
         if (ast.isEnumDecl(node)) return CompletionItemKind.Enum;
         if (ast.isState(node)) return CompletionItemKind.EnumMember;
-        if (ast.isEventDecl(node) || ast.isEsEvent(node)) return CompletionItemKind.Event;
-        if (ast.isEsDeclaration(node)) return CompletionItemKind.Reference;
+        if (ast.isEventDecl(node) || stormingAst.isEsEvent(node)) return CompletionItemKind.Event;
+        if (stormingAst.isEsDeclaration(node)) return CompletionItemKind.Reference;
         return CompletionItemKind.TypeParameter;
     }
 }
@@ -567,17 +555,17 @@ class DomainFormatter implements Formatter {
 
 /** What a `.dtes` declaration is called in hovers. */
 function stormingKindOf(node: AstNode): string | undefined {
-    if (ast.isEsStorming(node)) return 'storming';
-    if (ast.isEsEvent(node)) return 'event';
-    if (ast.isEsActor(node)) return 'actor';
-    if (ast.isEsExternal(node)) return 'external';
-    if (ast.isEsCommand(node)) return 'command';
-    if (ast.isEsPolicy(node)) return 'policy';
-    if (ast.isEsAggregate(node)) return 'aggregate';
-    if (ast.isEsReadModel(node)) return 'read model';
-    if (ast.isEsHotspot(node)) return 'hotspot';
-    if (ast.isEsTimeline(node)) return 'timeline';
-    if (ast.isEsGroup(node)) return 'group';
+    if (stormingAst.isEsStorming(node)) return 'storming';
+    if (stormingAst.isEsEvent(node)) return 'event';
+    if (stormingAst.isEsActor(node)) return 'actor';
+    if (stormingAst.isEsExternal(node)) return 'external';
+    if (stormingAst.isEsCommand(node)) return 'command';
+    if (stormingAst.isEsPolicy(node)) return 'policy';
+    if (stormingAst.isEsAggregate(node)) return 'aggregate';
+    if (stormingAst.isEsReadModel(node)) return 'read model';
+    if (stormingAst.isEsHotspot(node)) return 'hotspot';
+    if (stormingAst.isEsTimeline(node)) return 'timeline';
+    if (stormingAst.isEsGroup(node)) return 'group';
     return undefined;
 }
 
@@ -585,12 +573,12 @@ function stormingKindOf(node: AstNode): string | undefined {
 class StormingHoverProvider extends AstNodeHoverProvider {
     protected override getAstNodeHoverContent(node: AstNode): string | undefined {
         const kind = stormingKindOf(node);
-        if (!kind || !(ast.isEsDeclaration(node) || ast.isEsStorming(node))) return undefined;
-        const storming = ast.isEsStorming(node) ? undefined : AstUtils.getContainerOfType(node, ast.isEsStorming);
+        if (!kind || !(stormingAst.isEsDeclaration(node) || stormingAst.isEsStorming(node))) return undefined;
+        const storming = stormingAst.isEsStorming(node) ? undefined : AstUtils.getContainerOfType(node, stormingAst.isEsStorming);
         const lines = [`**${kind} \`${node.name}\`**${node.label ? ` ${node.label}` : ''}${storming ? ` — storming \`${storming.name}\`` : ''}`];
-        const doc = docComment(node);
+        const doc = stormingDocComment(node);
         if (doc) lines.push(doc);
-        const refs = ast.isEsNode(node) ? node.clauses.filter(ast.isEsRefClause) : [];
+        const refs = stormingAst.isEsNode(node) ? node.clauses.filter(stormingAst.isEsRefClause) : [];
         if (refs.length) lines.push(`\`\`\`dtes\n${refs.map((r) => `ref ${r.path}`).join('\n')}\n\`\`\``);
         return lines.join('\n\n');
     }
@@ -607,7 +595,7 @@ class StormingDefinitionProvider extends DefaultDefinitionProvider {
 
     protected override findLinks(source: CstNode): GoToLink[] {
         const clause = source.astNode;
-        if (!ast.isEsRefClause(clause)) return super.findLinks(source);
+        if (!stormingAst.isEsRefClause(clause)) return super.findLinks(source);
         const path = clause.$cstNode && GrammarUtils.findNodeForProperty(clause.$cstNode, 'path');
         const names = path
             ? CstUtils.flattenCst(path)
@@ -643,13 +631,26 @@ function lastSegment(document: LangiumDocument, range: Range): Range {
     return { start, end: range.end };
 }
 
+/**
+ * The AST of both languages for the services they share (the index, the linker, the documents): Modeling's and
+ * Storming's grammars are two Langium projects (ADR 0027: one per context), each with its own generated reflection, and
+ * Storming's types all start with `Es`, so they never collide.
+ */
+class DomainTrailAstReflection extends AbstractAstReflection {
+    override readonly types = { ...new ast.DomainAstReflection().types, ...new stormingAst.EventStormingAstReflection().types };
+}
+
 export function createDomainLspServices(connection: Connection, options: LanguageServerOptions, files: LanguageServerFiles) {
     const workspace = new DomainWorkspace(options, files);
     const warn = (message: string) => void connection.sendNotification(ShowMessageNotification.type, { type: MessageType.Warning, message });
-    const shared = inject(createDefaultSharedModule({ connection, ...NodeFileSystem }), DomainGeneratedSharedModule, {
-        workspace: { WorkspaceManager: (s: LangiumSharedServices) => new DomainWorkspaceManager(s, workspace, warn) },
-        lsp: { NodeKindProvider: () => new DomainNodeKindProvider() },
-    });
+    const shared = inject(
+        createDefaultSharedModule({ connection, ...NodeFileSystem }),
+        { AstReflection: () => new DomainTrailAstReflection() },
+        {
+            workspace: { WorkspaceManager: (s: LangiumSharedServices) => new DomainWorkspaceManager(s, workspace, warn) },
+            lsp: { NodeKindProvider: () => new DomainNodeKindProvider() },
+        },
+    );
     const Domain = inject(createDefaultModule({ shared }), DomainGeneratedModule, DomainModule, {
         lsp: {
             HoverProvider: (s: LangiumServices) => new DomainHoverProvider(s),

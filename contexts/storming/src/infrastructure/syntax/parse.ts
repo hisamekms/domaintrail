@@ -21,12 +21,12 @@ import {
     type EsNode,
     type EsStorming,
     type EsTimeline,
-} from '../language/generated/ast.js';
+} from './generated/ast.js';
 import type { SourceFile } from '@domaintrail/kernel';
 import { compareDiagnostics, type Diagnostic } from '@domaintrail/kernel';
-import { docComment } from '../core/labels.js';
-import type { Clause, EventStepRef, Group, NodeElement, NodeElementKind, SourceRange, Storming, Timeline } from './ir.js';
-import { createStormingServices } from './language/module.js';
+import { docComment } from './doc-comment.js';
+import type { Clause, EventStepRef, Group, NodeElement, NodeElementKind, SourceRange, Storming, Timeline } from '../../domain/ir.js';
+import { createStormingServices } from './module.js';
 
 /**
  * Parses `.dtes` sources (ADR 0024, T2). The diagnostics are syntax errors only (`SYNTAX`); the storming IR is built for

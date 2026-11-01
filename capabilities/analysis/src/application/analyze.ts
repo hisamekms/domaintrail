@@ -3,7 +3,8 @@
 // generation's checks, combined into one `Analysis`. `dt check`, the language server, the view service, the git
 // baseline and Collaboration's validator (implemented by the app) use it.
 import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic, type SourceFile } from '@domaintrail/kernel';
-import { analyzeDomain, analyzeStormings, isStormingFile, type DomainAnalysis, type DomainModel, type StormingAnalysis } from '@domaintrail/modeling';
+import { analyzeDomain, type DomainAnalysis, type DomainModel } from '@domaintrail/modeling';
+import { analyzeStormings, isStormingFile, type StormingAnalysis } from '@domaintrail/storming';
 import { checkGeneratedNames } from '@domaintrail/generation';
 
 /** The sources by language, each in the order given: the `.dt` sources (Modeling's) and the `.dtes` sources (Storming's). */

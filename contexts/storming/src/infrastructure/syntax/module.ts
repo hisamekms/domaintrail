@@ -13,9 +13,9 @@ import {
     type ReferenceInfo,
     type Scope,
 } from 'langium';
-import { isEsGroup, isEsStorming, isEsTimeline, type EsDeclaration, type EsStorming } from '../../language/generated/ast.js';
-import { DomainGeneratedSharedModule, EventStormingGeneratedModule } from '../../language/generated/module.js';
-import { DomainParserErrorMessageProvider } from '../../language/parser-messages.js';
+import { isEsGroup, isEsStorming, isEsTimeline, type EsDeclaration, type EsStorming } from './generated/ast.js';
+import { EventStormingGeneratedModule, EventStormingGeneratedSharedModule } from './generated/module.js';
+import { StormingParserErrorMessageProvider } from './parser-messages.js';
 
 /** Every declaration of a storming in source order, the groups of its timelines included: one namespace (spec §2). */
 export function stormingDeclarations(storming: EsStorming): EsDeclaration[] {
@@ -45,7 +45,7 @@ export type EventStormingServices = LangiumCoreServices;
 
 export const EventStormingModule = {
     parser: {
-        ParserErrorMessageProvider: () => new DomainParserErrorMessageProvider(),
+        ParserErrorMessageProvider: () => new StormingParserErrorMessageProvider(),
     },
     references: {
         ScopeComputation: (services: LangiumCoreServices) => new EventStormingScopeComputation(services),
@@ -54,7 +54,7 @@ export const EventStormingModule = {
 };
 
 export function createStormingServices(): { shared: LangiumSharedCoreServices; EventStorming: EventStormingServices } {
-    const shared = inject(createDefaultSharedCoreModule(EmptyFileSystem), DomainGeneratedSharedModule);
+    const shared = inject(createDefaultSharedCoreModule(EmptyFileSystem), EventStormingGeneratedSharedModule);
     const EventStorming = inject(createDefaultCoreModule({ shared }), EventStormingGeneratedModule, EventStormingModule);
     shared.ServiceRegistry.register(EventStorming);
     return { shared, EventStorming };
