@@ -170,10 +170,7 @@ describe('target staleness', () => {
 }
 `,
     };
-    const scopeOf = async (files: Record<string, string>): Promise<TargetScope> => {
-        const a = await check(files);
-        return { model: a.model, stormings: a.stormings.stormings, stormingsComplete: a.stormings.syntaxOk };
-    };
+    const scopeOf = (files: Record<string, string>): Promise<TargetScope> => check(files);
     const dt = (element: string): C.ModelTarget => ({ kind: 'DtElement', element: value(C.makeElementName(element)) });
     const es = (storming: string, local: string): C.ModelTarget => ({
         kind: 'DtesElement',

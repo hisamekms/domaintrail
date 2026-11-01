@@ -11,7 +11,6 @@ import {
     type CollaborationDeps,
     type CollaborationUseCases,
     createCollaboration,
-    createModelValidator,
     createUnitOfWork,
     FACILITATOR_PARTICIPANT,
     openSessionBlobs,
@@ -19,6 +18,7 @@ import {
     type ReplyData,
     toAgentReply,
 } from '@domaintrail/collaboration';
+import { createModelValidator } from '@domaintrail/composition';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/modeling';
 

@@ -13,14 +13,13 @@ import {
     type CollaborationDeps,
     type CollaborationUseCases,
     createCollaboration,
-    createModelValidator,
     createUnitOfWork,
     openSessionBlobs,
     openSessionDatabase,
     toAgentReply,
 } from '@domaintrail/collaboration';
 import type { AgentPreviousRun } from '@domaintrail/collaboration/protocol';
-import { type SessionServer, startSessionServer } from '@domaintrail/composition';
+import { type SessionServer, startSessionServer, createModelValidator } from '@domaintrail/composition';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/modeling';

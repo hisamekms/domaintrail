@@ -12,7 +12,6 @@ import {
     createClefClassifier,
     createCloudflareAccess,
     createCollaboration,
-    createModelValidator,
     createSessionAccess,
     createUnitOfWork,
     FACILITATOR_NAME,
@@ -58,6 +57,7 @@ import {
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
+import { createModelValidator } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 

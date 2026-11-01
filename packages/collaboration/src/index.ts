@@ -78,7 +78,7 @@ export {
     type CollaborationConfigFile,
     type ResolvedCollaborationConfig,
 } from './application/config.js';
-export { type Clock, type CollaborationDeps, type OutboxEntry, type SignIn, type Stores } from './application/ports.js';
+export { type Clock, type CollaborationDeps, type ModelValidator, type OutboxEntry, type SignIn, type Stores } from './application/ports.js';
 
 // ---- infrastructure, for the app that wires it -----------------------------------------------------------------
 export { openSessionBlobs } from './infrastructure/blobs.js';
@@ -96,4 +96,3 @@ export {
 } from './infrastructure/session-files.js';
 export { createUnitOfWork, openSessionDatabase } from './infrastructure/sqlite.js';
 export { randomIds, randomSecrets, systemClock } from './infrastructure/system.js';
-export { createModelValidator } from './infrastructure/validator.js';

@@ -21,16 +21,8 @@ afterAll(async () => {
 const ENTRY = `
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
-import {
-    Collaboration as C,
-    createCollaboration,
-    createModelValidator,
-    createUnitOfWork,
-    openSessionBlobs,
-    openSessionDatabase,
-    randomIds,
-    systemClock,
-} from '@domaintrail/collaboration';
+import { Collaboration as C, createCollaboration, createUnitOfWork, openSessionBlobs, openSessionDatabase, randomIds, systemClock } from '@domaintrail/collaboration';
+import { createModelValidator } from '@domaintrail/composition';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { sourceSelection } from '@domaintrail/modeling';
 

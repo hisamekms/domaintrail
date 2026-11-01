@@ -132,6 +132,7 @@ export const MAP: Record<string, Module> = {
             'storming/ir',
             'storming/semantic',
             'storming/rule-ids',
+            'storming/files',
         ],
         // diagnostics, suggestions, sources and locations, `camel` (T8: shared/kernel)
         kernel: 'kernel',
@@ -158,14 +159,6 @@ export const MAP: Record<string, Module> = {
         // Collaboration → Modeling, Storming (Storming is part of modeling until T8). Today's test also let it take
         // visualization's types; it imports none, and the map does not carry that edge over (ADR 0027).
         upstream: ['modeling'],
-        exceptions: {
-            'public-surface': [
-                // the project analysis (`isStormingFile`, `analyze`; modeling's `analysis/` since T4): the capability
-                // `analysis`, which a context may not import; the validator goes behind Collaboration's ModelValidator
-                // port, implemented in the app (T8)
-                '@domaintrail/modeling/analysis/analyze',
-            ],
-        },
     },
     visualization: {
         kind: 'capability',

@@ -13,11 +13,7 @@ import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } fro
 import type { SourceFile } from '../kernel/source.js';
 import type { DomainModel } from '../model/model.js';
 import { analyzeStormings, type StormingAnalysis } from '../storming/analyze.js';
-
-/** Whether a source is an Event Storming file (`.dtes`, ADR 0024); every other source is a `.dt` file. */
-export function isStormingFile(file: string): boolean {
-    return file.endsWith('.dtes');
-}
+import { isStormingFile } from '../storming/files.js';
 
 /** The sources by language, each in the order given: the `.dt` sources (Modeling's) and the `.dtes` sources (Storming's). */
 function byLanguage(sources: readonly SourceFile[]): { domain: SourceFile[]; storming: SourceFile[] } {

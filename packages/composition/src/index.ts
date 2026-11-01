@@ -15,3 +15,4 @@ export {
 } from './session.js';
 export { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from './subscriber.js';
 export { createWatcherHold, ECHO_MS, type WatcherHold } from './watcher-hold.js';
+export { createModelValidator } from './validator.js';

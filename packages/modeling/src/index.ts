@@ -106,9 +106,14 @@ export {
     type SemanticGraph,
 } from './storming/semantic.js';
 export type { StormingRuleId } from './storming/rule-ids.js';
+export { isStormingFile } from './storming/files.js';
+
+// ---- use cases: Modeling's analysis of the `.dt` sources, Storming's of the `.dtes` sources ---------------------
+export { analyzeDomain, type DomainAnalysis } from './core/analyze.js';
+export { analyzeStormings } from './storming/analyze.js';
 
 // ---- use cases: the project analysis (T8: capabilities/analysis) ------------------------------------------------
-export { analyze, isStormingFile, type Analysis } from './analysis/analyze.js';
+export { analyze, type Analysis } from './analysis/analyze.js';
 // its section of domaintrail.jsonc, `sources` (T6), composed by the app; the workspace receives `sourceSelection`
 export {
     DEFAULT_SOURCES,

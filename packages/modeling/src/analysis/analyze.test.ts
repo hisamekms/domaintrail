@@ -1,7 +1,7 @@
 // The project analysis: the .dt and .dtes sources of a workspace analyzed together, the .dtes against the .dt model
 // (through the CLI: test/dtes-cli.test.ts), and the generation's checks.
 import { describe, expect, test } from 'bun:test';
-import { analyze, isStormingFile } from './analyze.js';
+import { analyze } from './analyze.js';
 import { check, exampleSources, only } from './test-helpers.js';
 
 const DT = `context Delivery {
@@ -130,10 +130,6 @@ const ORDER = `
 `;
 
 describe('sources by language', () => {
-    test('a .dtes source is a storming, every other source is a .dt source', () => {
-        expect(['a.dtes', 'a.dt', 'dtes', 'a.dtes.bak'].map(isStormingFile)).toEqual([true, false, false, false]);
-    });
-
     test("the generation's checks run once the .dt sources parse, and are left out while they do not", async () => {
         const parsed = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrder\n}\n` });
         expect(only(parsed, 'M011').map((d) => `${d.file}:${d.start.line}`)).toEqual(['sales.dt:13']);
