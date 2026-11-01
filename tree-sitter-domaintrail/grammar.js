@@ -21,11 +21,16 @@ const PREC = {
   member: 6,
 };
 
-/** Keywords that may also name fields, parameters and lambda parameters (FeatureName). */
+/** Keywords that may also name fields, parameters, terms, commands and lambda parameters (FeatureName). */
 const FEATURE_KEYWORDS = [
   'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes', 'verified', 'of', 'for', 'policy',
+  'context', 'shared', 'terms', 'primitive', 'enum', 'union', 'entity', 'aggregate', 'state', 'owns', 'references', 'create',
+  'command', 'emits', 'errors', 'event', 'error', 'invariant',
   'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains',
 ];
+
+/** The other keywords that may name enum values, union variants and members after `.` (ValueName). */
+const VALUE_KEYWORDS = ['not', 'in', 'and', 'or', 'implies', 'true', 'false', 'String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'];
 
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
 const pipeSep1 = (rule) => seq(rule, repeat(seq('|', rule)));
@@ -114,7 +119,7 @@ module.exports = grammar({
       '}',
     ),
 
-    enum_value: ($) => seq(field('name', $.identifier), optional(field('label', $.string))),
+    enum_value: ($) => seq(field('name', $._value_name), optional(field('label', $.string))),
 
     value_declaration: ($) => seq(
       'value',
@@ -149,7 +154,7 @@ module.exports = grammar({
     ),
 
     variant: ($) => seq(
-      field('name', $.identifier),
+      field('name', $._value_name),
       optional(field('label', $.string)),
       optional(field('body', $.member_block)),
     ),
@@ -345,7 +350,7 @@ module.exports = grammar({
 
     not_expression: ($) => prec(PREC.not, seq('not', field('operand', $._expression))),
 
-    member_expression: ($) => prec(PREC.member, seq(field('object', $._expression), '.', field('member', $._feature_name))),
+    member_expression: ($) => prec(PREC.member, seq(field('object', $._expression), '.', field('member', $._value_name))),
 
     parenthesized_expression: ($) => seq('(', $._expression, ')'),
 
@@ -376,6 +381,8 @@ module.exports = grammar({
     // ---- Names and tokens ----
 
     _feature_name: ($) => choice($.identifier, alias(choice(...FEATURE_KEYWORDS), $.identifier)),
+
+    _value_name: ($) => choice($._feature_name, alias(choice(...VALUE_KEYWORDS), $.identifier)),
 
     qualified_name: ($) => seq($.identifier, repeat(seq('.', $.identifier))),
 

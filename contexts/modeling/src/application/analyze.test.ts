@@ -50,7 +50,40 @@ describe('diagnostics carry file position and rule ID', () => {
         const unclosed = await analyzeDomain([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {' }]);
         expect(unclosed.diagnostics.map((d) => d.message)).toEqual(["Expecting token of type '}' but found end of file."]);
         const noAlternative = await analyzeDomain([{ path: 'a.dt', text: 'context Shop {\n  aggregate Order {\n    command' }]);
-        expect(noAlternative.diagnostics.map((d) => d.message)).toEqual([expect.stringMatching(/\nbut found end of file$/)]);
+        expect(noAlternative.diagnostics.map((d) => d.message)).toEqual([
+            "Expecting a name after `command` (or ':' for a field named `command`) but found end of file.",
+        ]);
+    });
+
+    test('a keyword that may be a name and is neither: one error, at the keyword, naming what may follow', async () => {
+        const messages = async (members: string): Promise<string[]> =>
+            (
+                await analyzeDomain([{ path: 'a.dt', text: `context A {\n  id GId: UUID\n  aggregate G {\n    id: GId\n    state S\n${members}\n  }\n}\n` }])
+            ).diagnostics.map((d) => `${d.start.line}:${d.start.column} ${d.message}`);
+        expect(await messages('    command')).toEqual(["6:5 Expecting a name after `command` (or ':' for a field named `command`) but found `}`."]);
+        expect(await messages('    state')).toEqual(["6:5 Expecting a name after `state` (or ':' for a field named `state`) but found `}`."]);
+        expect(await messages('    create go(id: GId) -> S')).toEqual([
+            "6:5 Expecting 'command' after `create` (or ':' for a field named `create`) but found `go`.",
+        ]);
+        expect(await messages('    invariant { id == id }')).toEqual([
+            "6:5 Expecting a name after `invariant` (or ':' for a field named `invariant`) but found `{`.",
+        ]);
+        expect(await messages('    create command go(id: GId) -> S emits')).toEqual([
+            "7:3 Expecting token of type ':' but found `}`. `emits` is read here as the name of a field; as a keyword it is followed by a name.",
+        ]);
+    });
+
+    test('a declaration keyword read as a field name in an unclosed block says that a } may be missing', async () => {
+        const a = await analyzeDomain([{ path: 'a.dt', text: 'context A {\n  value Money { amount: Int\n  aggregate {\n}\n' }]);
+        expect(a.diagnostics.map((d) => `${d.start.line}:${d.start.column} ${d.message}`)).toEqual([
+            "3:13 Expecting token of type ':' but found `{`. `aggregate` is read here as the name of a field: a '}' may be missing before it.",
+            "4:2 Expecting token of type '}' but found end of file.",
+        ]);
+    });
+
+    test('a missing name or type is "a name" or "a type", not the identifier and every keyword that may be one', async () => {
+        const type = await checkSales('value V {\n x:\n }');
+        expect(type.diagnostics.map((d) => d.message)).toEqual(['Expecting a type but found `}`.']);
     });
 
     test('M001 unresolved type reference', async () => {
@@ -58,6 +91,42 @@ describe('diagnostics carry file position and rule ID', () => {
         const [d] = only(a, 'M001');
         expect(d).toMatchObject({ file: 'sales.dt', start: { line: 13 }, elementId: 'Sales.V' });
         expect(d.message).toContain("'Nope'");
+    });
+});
+
+describe('keywords as names', () => {
+    test('declaration keywords name fields, parameters and commands; any word an enum value or a variant', async () => {
+        const a = await check({
+            'a.dt': `context A {
+  enum Op { implies or and not in true false String state }
+  union TypeExpr {
+    primitive { name: String }
+    not { operand: Int }
+  }
+  value V {
+    context: String
+    event: String?
+    errors: String[0..*]
+    op: Op
+    invariant k { op == Op.and implies exists(event) }
+  }
+  id GId: UUID
+  aggregate G {
+    id: GId
+    state: Int
+    state S
+    create command command(id: GId, state: Int, error: String) -> S
+    command emits(errors: Int) S -> S
+  }
+}`,
+        });
+        expect(a.diagnostics).toEqual([]);
+        const els = a.model!.elements;
+        expect(els['A.Op'].values).toEqual(['implies', 'or', 'and', 'not', 'in', 'true', 'false', 'String', 'state']);
+        expect(els['A.TypeExpr'].variants?.map((v) => v.name)).toEqual(['primitive', 'not']);
+        expect(els['A.V'].fields.map((f) => f.name)).toEqual(['context', 'event', 'errors', 'op']);
+        expect(els['A.G'].commands?.map((c) => `${c.name}(${c.params.map((p) => p.name).join(', ')})`)).toEqual(['command(id, state, error)', 'emits(errors)']);
+        expect(els['A.G'].states?.map((s) => s.name)).toEqual(['S']);
     });
 });
 

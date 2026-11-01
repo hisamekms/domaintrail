@@ -325,10 +325,9 @@ exports[`dt check dt syntax error: text 1`] = `
 {
   "code": 1,
   "lines": [
-    "err: broken.dt:3:3 - error SYNTAX: Expecting token of type '}' but found \`aggregate\`.",
-    "err: broken.dt:3:13 - error SYNTAX: Expecting token of type 'ID' but found \`{\`.",
+    "err: broken.dt:3:13 - error SYNTAX: Expecting token of type ':' but found \`{\`. \`aggregate\` is read here as the name of a field: a '}' may be missing before it.",
     "err: broken.dt:4:2 - error SYNTAX: Expecting token of type '}' but found end of file.",
-    "err: 1 file(s) checked: 3 error(s), 0 warning(s).",
+    "err: 1 file(s) checked: 2 error(s), 0 warning(s).",
   ],
 }
 `;
@@ -343,22 +342,12 @@ exports[`dt check dt syntax error: json 1`] = `
     {
       "file": "broken.dt",
       "line": 3,
-      "column": 3,
-      "endLine": 3,
-      "endColumn": 12,
-      "severity": "error",
-      "code": "SYNTAX",
-      "message": "Expecting token of type '}' but found \`aggregate\`."
-    },
-    {
-      "file": "broken.dt",
-      "line": 3,
       "column": 13,
       "endLine": 3,
       "endColumn": 14,
       "severity": "error",
       "code": "SYNTAX",
-      "message": "Expecting token of type 'ID' but found \`{\`."
+      "message": "Expecting token of type ':' but found \`{\`. \`aggregate\` is read here as the name of a field: a '}' may be missing before it."
     },
     {
       "file": "broken.dt",
@@ -373,7 +362,7 @@ exports[`dt check dt syntax error: json 1`] = `
   ],
   "summary": {
     "files": 1,
-    "errors": 3,
+    "errors": 2,
     "warnings": 0
   }
 }"

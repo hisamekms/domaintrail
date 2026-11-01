@@ -137,6 +137,14 @@ It regenerates the parser, runs the corpus tests and builds `tree-sitter-domaint
 parser and the wasm. Commit all of them: the tests parse with the committed wasm and fail when the stamp is stale, so
 CI needs neither the tree-sitter CLI nor the wasi-sdk.
 
+When adding a keyword to the DSL, decide whether it may also be a name: a field, parameter or command name
+(`FeatureName` in the Langium grammar, `FEATURE_KEYWORDS` in `grammar.js`) — the declaration keywords are — and an enum
+value or variant name (`ValueName`, `VALUE_KEYWORDS`: every keyword); `test/tree-sitter.test.ts` checks that both
+grammars agree. The words of expressions are not field names. A new declaration should start with its keyword followed
+by a name, never like `name :`, which is how a field starts: the parser tells a keyword used as a name from the keyword
+by the token after it. Compare the syntax errors of common mistakes (a keyword with its name missing, a block left
+open) before and after; `parser-messages.ts` rewrites those that read worse.
+
 ## The Zed extension
 
 `editors/zed` is a Rust extension (built by Zed, which needs Rust installed with rustup). Install it locally with *zed:

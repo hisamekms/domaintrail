@@ -65,11 +65,12 @@ describe('tree-sitter grammar', () => {
         expect(problems('context A { aggregate G { command c() -> } }')).not.toEqual([]);
     });
 
-    test('takes the keywords that may name fields from the Langium grammar', async () => {
+    test('takes the keywords that may be names from the Langium grammar', async () => {
         const langium = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
         const grammar = await readFile(path.join(GRAMMAR_DIR, 'grammar.js'), 'utf8');
         const quoted = (s: string) => [...s.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
         expect(quoted(/FEATURE_KEYWORDS = \[([^\]]*)\]/.exec(grammar)![1])).toEqual(quoted(/FeatureName returns string:([^;]*);/.exec(langium)![1]));
+        expect(quoted(/VALUE_KEYWORDS = \[([^\]]*)\]/.exec(grammar)![1])).toEqual(quoted(/ValueName returns string:([^;]*);/.exec(langium)![1]));
         expect(quoted(/primitive_type: \(_\) => choice\(([^)]*)\)/.exec(grammar)![1])).toEqual(
             quoted(/PrimitiveType returns string:([^;]*);/.exec(langium)![1]),
         );

@@ -300,6 +300,12 @@ context Sales {
   states, commands have no transitions. A command that keeps the state writes it out: `Draft -> Draft`.
 - `value`, `state`, `event` and `error` bodies are optional (`state Draft`, `error EmptyOrder`).
 - Other contexts' elements are referenced with qualified names: `Sales.OrderId`, `-> Sales.Order`.
+- Keywords as names: a field, parameter, term, command, discriminator or lambda parameter may be named with a
+  declaration keyword (`event: EventName`, `state: Status`, `errors: Reason[0..*]`, `command emits(…)`): a name is
+  followed by `:` (or `(` for a command), a declaration by its name. The words of expressions (`not`, `in`, `and`,
+  `or`, `implies`, `true`, `false`) and the primitive types are not field names. Enum values and union variants may be
+  any word, those included (`enum Op { and or not }`, written `Op.and` in an expression). Elements and contexts are
+  named with identifiers only.
 - Comments: `// …` and `/* … */`; `///` is a description (see [Names](#names-labels-and-descriptions)).
 
 <!-- topic: primitives -->

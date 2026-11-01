@@ -43,7 +43,7 @@ EnumDecl:
     'enum' name=ID label=STRING? '{' (values+=EnumValue (','? values+=EnumValue)*)? '}';
 
 EnumValue:
-    name=ID label=STRING?;
+    name=ValueName label=STRING?;
 
 ValueObject:
     'value' name=ID label=STRING? WithFieldSets? ('{' members+=DataMember* '}')?;
@@ -64,7 +64,7 @@ UnionDecl:
     '{' variants+=Variant* '}';
 
 Variant:
-    name=ID label=STRING? ('{' members+=DataMember* '}')?;
+    name=ValueName label=STRING? ('{' members+=DataMember* '}')?;
 
 Entity:
     'entity' name=ID label=STRING? WithFieldSets? '{' members+=DataMember* '}';
@@ -174,7 +174,7 @@ Unary infers Expression:
     {infer NotExpr} 'not' operand=Unary | Postfix;
 
 Postfix infers Expression:
-    Primary ({infer MemberAccess.receiver=current} '.' member=FeatureName)*;
+    Primary ({infer MemberAccess.receiver=current} '.' member=ValueName)*;
 
 Primary infers Expression:
     '(' Expression ')'
@@ -194,10 +194,20 @@ Primary infers Expression:
 LambdaParam:
     name=FeatureName;
 
-// Keywords that may also name fields; the functions of invariant expressions are told apart from names by their `(`.
+// Keywords that may also name fields, parameters, terms, commands, discriminators and lambda parameters: the
+// declaration keywords and the functions of invariant expressions (told apart from names by their `(`). A declaration
+// keyword is told apart from a name by what follows: a name is followed by `:` (or `(` for a command). The words of
+// expressions (`not`, `in`, `and`, `or`, `implies`, `true`, `false`) and the primitive types are not names.
 FeatureName returns string:
     ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes' | 'verified' | 'of' | 'for' | 'policy'
+    | 'context' | 'shared' | 'terms' | 'primitive' | 'enum' | 'union' | 'entity' | 'aggregate' | 'state' | 'owns' | 'references' | 'create'
+    | 'command' | 'emits' | 'errors' | 'event' | 'error' | 'invariant'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
+
+// Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never
+// read alone in an expression: it is written after a `.` (`Op.and`).
+ValueName returns string:
+    FeatureName | 'not' | 'in' | 'and' | 'or' | 'implies' | 'true' | 'false' | 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
 
 QualifiedName returns string:
     ID ('.' ID)*;

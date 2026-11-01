@@ -25,6 +25,7 @@ import {
     type Policy,
 } from './generated/ast.js';
 import { createDomainServices } from './domain-module.js';
+import { nameKeywords } from './parser-messages.js';
 import type { FileResolver } from './site.js';
 import { elementIdOf } from './element-id.js';
 import { ModelIndex, commandsOf, statesOf } from './model-index.js';
@@ -57,7 +58,8 @@ const LINK_RULES: Record<string, ModelingRuleId> = {
 
 /** Parses and links a set of `.dt` sources as one workspace, with Langium's built-in validation only. */
 export async function parseDomain(sources: readonly SourceFile[]): Promise<ParsedDomain> {
-    const { shared } = createDomainServices();
+    const { shared, Domain } = createDomainServices();
+    const names = nameKeywords(Domain.Grammar);
     const factory = shared.workspace.LangiumDocumentFactory;
     const fileOf = new Map<string, string>();
 
@@ -76,11 +78,22 @@ export async function parseDomain(sources: readonly SourceFile[]): Promise<Parse
     const diagnostics: Diagnostic[] = [];
     let syntaxOk = true;
     for (const doc of documents) {
+        const cutoff = recoveryStart(doc, names);
+        let previous: string | undefined;
         for (const d of doc.diagnostics ?? []) {
             // Langium's diagnostic data (typed `any` by the LSP types)
             const data: { code?: string; property?: string; refText?: string } | undefined = d.data;
             const isLink = data?.code === 'linking-error';
-            if (!isLink) syntaxOk = false;
+            if (!isLink) {
+                syntaxOk = false;
+                // one syntax error per place, and none of those the parser's recovery makes after a keyword it could
+                // not read either as a keyword or as a name
+                const at = `${d.range.start.line}:${d.range.start.character}`;
+                const recovered =
+                    cutoff && (d.range.start.line > cutoff.line || (d.range.start.line === cutoff.line && d.range.start.character > cutoff.character));
+                if (at === previous || recovered) continue;
+                previous = at;
+            }
             const property = data?.property ?? '';
             const node = isLink ? nodeAt(doc, d.range.start.line, d.range.start.character) : undefined;
             const policy = node && AstUtils.getContainerOfType(node, isPolicy);
@@ -106,6 +119,16 @@ export async function parseDomain(sources: readonly SourceFile[]): Promise<Parse
         }
     }
     return { documents, index, diagnostics, syntaxOk, resolveFile };
+}
+
+/**
+ * Where the parser could not read a keyword that may also be a name, either way (`command }`, `invariant {`): no
+ * alternative of the block matches, so the parser leaves the block there and every later syntax error of the document
+ * comes from that. The 0-based position of the keyword, or `undefined`.
+ */
+function recoveryStart(doc: DomainDocument, names: ReadonlySet<string>): { line: number; character: number } | undefined {
+    const e = doc.parseResult.parserErrors.find((x) => x.name === 'NoViableAltException' && names.has(x.token.image));
+    return e ? { line: (e.token.startLine ?? 1) - 1, character: (e.token.startColumn ?? 1) - 1 } : undefined;
 }
 
 const LINK_KINDS: Record<string, string> = {
