@@ -55,6 +55,9 @@ const ROUTE_ERRORS = [
     'LinkInvalid',
     'BlobMissing',
     'ManualRecoveryNeeded',
+    'NothingToUndo',
+    'RunInProgress',
+    'SubscriberOutdated',
 ];
 
 describe('the status of each error type', () => {

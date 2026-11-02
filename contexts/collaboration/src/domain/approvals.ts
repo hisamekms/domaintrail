@@ -5,6 +5,7 @@
 // votes' closing) and the page (the card's buttons) decide the same way.
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 import { laterRunOf, type MarkRun } from './marks.js';
+import { undoStatus } from './undo.js';
 
 /** An approval as the rules read it (the aggregate, or its JSON on a page): which assumption of which run. */
 export interface ApprovalFacts {
@@ -18,8 +19,9 @@ export function approvalOf<A extends ApprovalFacts>(approvals: readonly A[], run
 
 /**
  * Whether an assumption of a run can be decided now: `notApprovable` when the run is not completed or its reply has no
- * assumptions, `missing` when the index is not in its reply, `closed` when it was approved or a later run took over
- * the run's requests (a pick of one of its alternatives among them, `laterRunOf`), `open` otherwise.
+ * assumptions, `missing` when the index is not in its reply, `closed` when it was approved, a later run took over
+ * the run's requests (a pick of one of its alternatives among them, `laterRunOf`) or the run was undone (`undo.ts`),
+ * `open` otherwise.
  */
 export function assumptionStatus(
     run: MarkRun,
@@ -29,7 +31,7 @@ export function assumptionStatus(
 ): 'notApprovable' | 'missing' | 'closed' | 'open' {
     if (run.state !== 'Completed' || !run.reply || run.reply.assumptions.length === 0) return 'notApprovable';
     if (!Number.isInteger(assumption) || assumption < 0 || assumption >= run.reply.assumptions.length) return 'missing';
-    if (approvalOf(approvals, run.id, assumption) || laterRunOf(run, runs)) return 'closed';
+    if (approvalOf(approvals, run.id, assumption) || laterRunOf(run, runs) || undoStatus(run, runs).kind === 'undone') return 'closed';
     return 'open';
 }
 

@@ -14,6 +14,7 @@ import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparis
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
+import { isUndo, reverseChanges, undoableChanges, undoChanges, type UndoChanges } from '../domain/undo.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { Actor } from './actor.js';
@@ -98,6 +99,26 @@ export interface ManualRecoveryNeeded {
     readonly message: string;
 }
 
+/** The workspace already has none of the changes of the run to undo (undone by hand, or by later changes). */
+export interface NothingToUndo {
+    readonly type: 'NothingToUndo';
+    readonly run: AgentRunId;
+}
+
+/**
+ * The next queued run needs what the claiming subscriber did not say it can do (`capabilities` of the claim): an undo
+ * needs `undo`. The run stays queued for a subscriber that can; this one is told to update.
+ */
+export interface SubscriberOutdated {
+    readonly type: 'SubscriberOutdated';
+    readonly run: AgentRunId;
+    readonly needs: string;
+    readonly message: string;
+}
+
+/** What a subscriber says it can run, when it claims: `undo`, a run that undoes another run's changes. */
+export const UNDO_CAPABILITY = 'undo';
+
 export type { BlobMissing };
 
 // ---- Results ----
@@ -181,6 +202,39 @@ export interface TargetStatuses {
     /** The content hash of the workspace the targets were resolved in. */
     readonly contentHash: Collaboration.ContentHash;
     readonly statuses: ReadonlyMap<Collaboration.RequestId, readonly TargetStatus[]>;
+}
+
+/** Why an undo was left to the AI rather than done mechanically. */
+export type UndoObstacle =
+    /** Later changes touch what the run changed (or a file is too large to merge): the paths. */
+    | { readonly kind: 'conflict'; readonly paths: readonly Collaboration.WorkspacePath[] }
+    /** Undone, the sources would not check: `.dt` errors the workspace does not have now, `.dtes` files that do not parse. */
+    | { readonly kind: 'check'; readonly newDtErrors: number; readonly unparsedDtes: readonly string[] }
+    /** The run's sources before or after it are no longer stored. */
+    | { readonly kind: 'unreadable' };
+
+/** How an undo went: done mechanically (recorded as a run of its own), or queued for the AI and why. */
+export type Undone =
+    | { readonly way: 'mechanical'; readonly request: Collaboration.SentRequest; readonly run: Collaboration.RevertedAgentRun }
+    | { readonly way: 'agent'; readonly request: Collaboration.SentRequest; readonly run: Collaboration.QueuedAgentRun; readonly obstacle: UndoObstacle };
+
+export type UndoError =
+    | Collaboration.FacilitatorOnly
+    | Collaboration.SessionNotFound
+    | Collaboration.SessionAlreadyClosed
+    | Collaboration.RunNotFound
+    | Collaboration.RunOfAnotherSession
+    | Collaboration.RunNotUndoable
+    | RunInProgress
+    | NothingToUndo
+    | Collaboration.PathOutsideRoot
+    | Collaboration.ExternalChangesSinceSnapshot
+    | Collaboration.SymlinkInWorkspace;
+
+/** A run that a run undoes, with what it changed file by file (for the agent asked to undo it). */
+export interface UndoneRun {
+    readonly run: Collaboration.AgentRun;
+    readonly changes: UndoChanges;
 }
 
 export type RestoreError =
@@ -332,12 +386,17 @@ export interface CollaborationUseCases {
             | Collaboration.AssumptionClosed
         >
     >;
-    /** Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. */
+    /**
+     * Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. A run
+     * that needs a capability the subscriber did not name (`capabilities`: an undo needs `undo`) is left queued:
+     * `SubscriberOutdated`.
+     */
     claimNextRun(input: {
         readonly session: SessionId;
         readonly owner: string;
         readonly leaseMs: number;
-    }): Promise<Result<Claimed, NothingQueued | RunInProgress>>;
+        readonly capabilities?: readonly string[];
+    }): Promise<Result<Claimed, NothingQueued | RunInProgress | SubscriberOutdated>>;
     /** Extends a live lease by `leaseMs` from now. */
     heartbeat(input: { readonly run: AgentRunId; readonly token: string; readonly leaseMs: number }): Promise<Result<Lease, LeaseLost>>;
     /**
@@ -403,6 +462,26 @@ export interface CollaborationUseCases {
      * queued run whose claim expired goes back to the queue. A run is never executed twice.
      */
     expireLeases(): Promise<{ readonly failed: readonly Collaboration.FailedAgentRun[]; readonly released: readonly AgentRunId[] }>;
+    /**
+     * Undoes the changes of a run of the session (one that changed files, not undone yet nor being undone): the
+     * facilitator's, refused while a run is running or claimed. The facilitator's message `body` (what is undone, for
+     * everyone) is sent as an undo request. The run's changes — its base and result revisions, file by file — are
+     * reversed onto the workspace as it is now (`domain/undo.ts`); when that merges and the result checks as a run's
+     * would (no `.dt` error the workspace does not have, every `.dtes` parses; formatted), it is written and recorded
+     * as a mechanical undo (a run `Reverted`, with its base and result revisions). Otherwise the request is queued for
+     * the AI, with why. `NothingToUndo` when the workspace has none of the run's changes any more.
+     */
+    undoRun(input: {
+        readonly session: SessionId;
+        readonly actor: Actor;
+        readonly run: AgentRunId;
+        readonly body: Collaboration.Text;
+    }): Promise<Result<Undone, UndoError>>;
+    /**
+     * The runs a run undoes (its undo requests), each with what it changed, file by file: a unified diff per file while
+     * they fit `MAX_UNDO_DIFF` characters, else the file's line counts. Measured now, from the revisions (for the run's start).
+     */
+    undoneRuns(input: { readonly run: AgentRunId }): Promise<Result<readonly UndoneRun[], NotFound>>;
     /** Records the workspace as it is now (Manual): to keep external changes before a restore, for instance. The facilitator's. */
     takeRevision(input: {
         readonly session: SessionId;
@@ -494,6 +573,9 @@ function frozenReplyTarget(target: Collaboration.ReplyTarget | undefined, stores
     const original = stores.requests.load(target.request);
     return original && { kind: 'Message', request: original.id, author: original.author, body: original.body };
 }
+
+const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 
 /** The success value of a command that cannot fail. */
 function decided<T>(r: Result<T, never>): T {
@@ -808,7 +890,14 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
                     if (r && !frozen.some((f) => f.request === id)) {
                         const replyTo = frozenReplyTarget(r.replyTo, stores);
-                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(replyTo && { replyTo }) });
+                        frozen.push({
+                            request: id,
+                            author: r.author,
+                            targets: r.targets,
+                            body: r.body,
+                            ...(replyTo && { replyTo }),
+                            ...(r.undoes && { undoes: r.undoes }),
+                        });
                     }
                 }
                 const bundled = nonEmpty(pending);
@@ -854,7 +943,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async claimNextRun({ session, owner, leaseMs }) {
+        async claimNextRun({ session, owner, leaseMs, capabilities = [] }) {
             return uow.transaction((stores) => {
                 const now = clock.now();
                 const active = stores.runs.active(session, now);
@@ -864,6 +953,16 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (id === undefined) return err({ type: 'NothingQueued' });
                 const run = stores.runs.load(id)?.run;
                 if (run?.state !== 'Queued') throw new Error(`The claimed run ${id} is not queued`);
+                // a subscriber that cannot run an undo would run it as a plain request: it stays queued for one that can
+                if (isUndo(run) && !capabilities.includes(UNDO_CAPABILITY)) {
+                    stores.runs.release(id, lease.token);
+                    return err({
+                        type: 'SubscriberOutdated',
+                        run: id,
+                        needs: UNDO_CAPABILITY,
+                        message: 'The next run undoes a run: this subscriber cannot run it. Update DomainTrail and restart `dt session subscribe`.',
+                    });
+                }
                 return ok({ run, lease });
             });
         },
@@ -1036,6 +1135,189 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 }
                 return { failed, released };
             });
+        },
+
+        async undoRun({ session, actor, run, body }) {
+            // requestUndo and revert require the facilitator: asked first, before the workspace is read
+            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            const verified = async (
+                stores: Stores,
+            ): Promise<Result<{ active: Collaboration.ActiveSession; undoable: Collaboration.UndoableRun }, UndoError>> => {
+                const verify = storeVerifications(stores);
+                const active = await verify.makeActiveSession(session);
+                if (!active.ok) return active;
+                const undoable = await verify.makeUndoableRun(run, session);
+                if (!undoable.ok) return undoable;
+                // the merge reads the workspace: no agent may be writing it
+                const busy = stores.runs.active(session, clock.now());
+                if (busy) return err({ type: 'RunInProgress', run: busy.run.id });
+                return ok({ active: active.value, undoable: undoable.value });
+            };
+            const checked = await uow.transaction(
+                async (stores): Promise<Result<{ base: Collaboration.Revision; result: Collaboration.Revision }, UndoError>> => {
+                    const v = await verified(stores);
+                    if (!v.ok) return v;
+                    const undone = stores.runs.load(run)?.run;
+                    const changes = undone && undoableChanges(undone);
+                    const base = changes && stores.revisions.load(knownRevisionId(changes.base));
+                    const result = changes && stores.revisions.load(knownRevisionId(changes.result));
+                    if (!base || !result) throw new Error(`The revisions of run ${run} are missing`);
+                    return ok({ base, result });
+                },
+            );
+            if (!checked.ok) return checked;
+
+            // the workspace now, kept as the undo's base; the run's sources before and after it
+            const scan = await deps.workspace.read();
+            const current = await capture(deps, scan);
+            if (!current.ok) return current;
+            const before = await sourcesOf(deps, checked.value.base);
+            const after = await sourcesOf(deps, checked.value.result);
+            const texts = (files: readonly { readonly path: string; readonly bytes: Uint8Array }[]): Map<string, string> =>
+                new Map(files.map((f) => [f.path, decoder.decode(f.bytes)]));
+            const now = texts(scan.files);
+            let plan: { readonly kind: 'agent'; readonly obstacle: UndoObstacle } | { readonly kind: 'write'; readonly sources: Map<string, string> };
+            if (!before.ok || !after.ok) plan = { kind: 'agent', obstacle: { kind: 'unreadable' } };
+            else {
+                const merge = reverseChanges(texts(before.value), texts(after.value), now);
+                if (merge.kind === 'nothing') return err({ type: 'NothingToUndo', run });
+                if (merge.kind === 'conflict') {
+                    const paths: Collaboration.WorkspacePath[] = [];
+                    for (const raw of merge.paths) {
+                        const p = workspacePath(raw);
+                        if (p.ok) paths.push(p.value);
+                    }
+                    plan = { kind: 'agent', obstacle: { kind: 'conflict', paths } };
+                } else {
+                    const sources = new Map(now);
+                    for (const path of merge.remove) sources.delete(path);
+                    for (const [path, text] of merge.write) sources.set(path, text);
+                    // checked as a run is: no .dt error the workspace does not have now, every .dtes parses
+                    const analysis = await deps.validator.validate([...sources].map(([path, text]) => ({ path, text })));
+                    const diff = diagnosticsDiff(current.value.analysis.diagnostics, analysis.diagnostics);
+                    if (diff.newDtErrors.length > 0 || diff.unparsedDtes.length > 0)
+                        plan = { kind: 'agent', obstacle: { kind: 'check', newDtErrors: diff.newDtErrors.length, unparsedDtes: diff.unparsedDtes } };
+                    else {
+                        // formatted as `dt fmt` formats a run's edits: the sources it wrote that parse
+                        const broken = new Set(analysis.diagnostics.filter((d) => d.code === 'SYNTAX').map((d) => d.file));
+                        for (const [path, text] of merge.write) if (deps.formatter && !broken.has(path)) sources.set(path, deps.formatter.format(path, text));
+                        const same = sources.size === now.size && [...sources].every(([path, text]) => now.get(path) === text);
+                        if (same) return err({ type: 'NothingToUndo', run });
+                        plan = { kind: 'write', sources };
+                    }
+                }
+            }
+
+            let written: Captured | undefined;
+            if (plan.kind === 'write') {
+                const files = [...plan.sources].map(([path, text]) => ({ path, bytes: encoder.encode(text) }));
+                const wrote = await deps.workspace.write(files, scan.files);
+                if (!wrote.ok) return err(writeRefusal(wrote.error));
+                const read = await capture(deps);
+                if (!read.ok) return read;
+                written = read.value;
+            }
+            const mechanical = written;
+            return uow.transaction(async (stores): Promise<Result<Undone, UndoError>> => {
+                const v = await verified(stores);
+                if (!v.ok) return v;
+                const at = clock.now();
+                const sent = requestCommands.requestUndo({
+                    id: knownRequestId(ids.newId()),
+                    session: v.value.active,
+                    author: actor.participant,
+                    authorRole: actor.role,
+                    body,
+                    sentAt: at,
+                    undoes: v.value.undoable,
+                });
+                if (!sent.ok) return sent;
+                const request = sent.value.Sent.aggregate;
+                stores.requests.save(request);
+                publish(stores, session, sent.value.Sent.events, at);
+                const pending = await storeVerifications(stores).makePendingRequest(request.id, session);
+                if (!pending.ok) throw new Error(`The undo request ${request.id} just sent is not pending: ${pending.error.type}`);
+                const input: Collaboration.RunInput = {
+                    requests: [{ request: request.id, author: request.author, targets: [], body: request.body, undoes: run }],
+                };
+                const id = knownAgentRunId(ids.newId());
+                if (mechanical) {
+                    const base = record(stores, session, { kind: 'RunBase', run: id }, current.value, at);
+                    const result = record(stores, session, { kind: 'RunResult', run: id }, mechanical, at);
+                    const reverted = agentRunCommands.revert({
+                        id,
+                        session: v.value.active,
+                        requests: [pending.value],
+                        input,
+                        queuedBy: actor.participant,
+                        queuedByRole: actor.role,
+                        queuedAt: at,
+                        baseRevision: base.id,
+                        resultRevision: result.id,
+                    });
+                    // the role was checked, the request is the one undo, and the merge changed the sources
+                    if (!reverted.ok) throw new Error(`Recording the undo of run ${run} failed: ${reverted.error.type}`);
+                    stores.runs.enqueue(reverted.value.Reverted.aggregate);
+                    publish(stores, session, reverted.value.Reverted.events, at);
+                    return ok({ way: 'mechanical', request, run: reverted.value.Reverted.aggregate });
+                }
+                if (plan.kind !== 'agent') throw new Error("An undo that wrote nothing is the agent's");
+                const queued = agentRunCommands.queue({
+                    id,
+                    session: v.value.active,
+                    requests: [pending.value],
+                    input,
+                    queuedBy: actor.participant,
+                    queuedByRole: actor.role,
+                    queuedAt: at,
+                });
+                if (!queued.ok) throw new Error(`Queueing the undo of run ${run} failed: ${queued.error.type}`);
+                stores.runs.enqueue(queued.value.Queued.aggregate);
+                publish(stores, session, queued.value.Queued.events, at);
+                return ok({ way: 'agent', request, run: queued.value.Queued.aggregate, obstacle: plan.obstacle });
+            });
+        },
+
+        async undoneRuns({ run }) {
+            const found = await uow.transaction((stores) => {
+                const r = stores.runs.load(run)?.run;
+                if (!r) return undefined;
+                const ids = [...new Set(r.input.requests.flatMap((q) => (q.undoes ? [q.undoes] : [])))];
+                // of the run's session only (checked when the undo was asked)
+                return ids.flatMap((id) => {
+                    const u = stores.runs.load(id)?.run;
+                    return u && u.session === r.session ? [u] : [];
+                });
+            });
+            if (!found) return err(notFound('AgentRun', run));
+            const out: UndoneRun[] = [];
+            for (const u of found) {
+                const changes = undoableChanges(u);
+                if (!changes) {
+                    out.push({ run: u, changes: { files: [], diffsOmitted: false } });
+                    continue;
+                }
+                const before = knownRevisionId(changes.base);
+                const after = knownRevisionId(changes.result);
+                const c = await useCases.compareRevisions({ session: u.session, before, after });
+                if (c.ok) {
+                    const files = c.value.files.flatMap((f) =>
+                        f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status, ...(f.diff && { diff: f.diff }) }],
+                    );
+                    out.push({ run: u, changes: undoChanges(files) });
+                    continue;
+                }
+                // the bytes are gone: the files by hash, without their diff
+                const revisions = await uow.transaction((stores) => ({ a: stores.revisions.load(before), b: stores.revisions.load(after) }));
+                const files =
+                    revisions.a && revisions.b
+                        ? compareFiles(revisions.a.files, revisions.b.files).flatMap((f) =>
+                              f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status }],
+                          )
+                        : [];
+                out.push({ run: u, changes: { files, diffsOmitted: files.length > 0 } });
+            }
+            return ok(out);
         },
 
         async takeRevision({ session, actor }) {

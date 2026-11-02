@@ -1,6 +1,6 @@
 // The commands of the collaboration aggregates, checked against the generated contracts (ADR 0026). Each is a pure
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
-// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision) are parameters that the application makes. The requirements are checked with the
+// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision, UndoableRun) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
 // what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator take
 // the role of who acts as a parameter, from the use case's `Actor`. A command takes its parameters as one object
@@ -60,8 +60,22 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, undoes: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
+            },
+        });
+    }),
+
+    // an undo of a run's changes: about the workspace as a whole (no target, no mention), the facilitator's
+    requestUndo: decide<Collaboration.RequestUndoRequestDecision>(Collaboration.RequestShape, (params) => {
+        if (Collaboration.checkRequestUndoRequestRequires(params) === 'facilitatorUndoes') return err({ type: 'FacilitatorOnly' });
+        const { id, session, author, body, sentAt } = params;
+        // the run without its evidence: the aggregate stores the base type
+        const undoes: Collaboration.AgentRunId = params.undoes;
+        return ok({
+            Sent: {
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], undoes },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], undoes } },
             },
         });
     }),
@@ -82,6 +96,40 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             Queued: {
                 set: { id, session, input, queuedBy, queuedAt },
                 events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
+            },
+        });
+    }),
+
+    // the record of a mechanical undo: no agent, done when it is recorded
+    revert: decide<Collaboration.RevertAgentRunDecision>(Collaboration.AgentRunShape, (params) => {
+        switch (Collaboration.checkRevertAgentRunRequires(params)) {
+            case 'facilitatorReverts':
+                return err({ type: 'FacilitatorOnly' });
+            case 'distinctRequests':
+                return err({ type: 'DuplicateRequest' });
+            case 'inputCoversRequests':
+            case 'inputUndoes':
+                return err({ type: 'InputMismatch' });
+            case 'revertChanges':
+                return err({ type: 'ChangedMismatch' });
+        }
+        const { id, session, requests, input, queuedBy, queuedAt, baseRevision, resultRevision } = params;
+        return ok({
+            Reverted: {
+                set: { id, session, input, queuedBy, queuedAt, baseRevision, resultRevision, finishedAt: queuedAt },
+                events: {
+                    RunReverted: {
+                        type: 'RunReverted',
+                        runId: id,
+                        session,
+                        requests,
+                        queuedBy,
+                        queuedAt,
+                        baseRevision,
+                        resultRevision,
+                        finishedAt: queuedAt,
+                    },
+                },
             },
         });
     }),

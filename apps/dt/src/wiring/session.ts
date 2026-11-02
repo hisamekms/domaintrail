@@ -51,7 +51,7 @@ import { type ResolvedSessionConfig } from '../config/config.js';
 import type { ViewService } from '@domaintrail/visualization';
 import { createWorkspaceSnapshot } from '@domaintrail/workspace';
 import { processAlive } from './process.js';
-import { createModelValidator } from './validator.js';
+import { createModelValidator, createSourceFormatter } from './validator.js';
 import { prepareLiveView, serverUrl, watchLiveView, type ViewServerOptions } from './view.js';
 import { createWatcherHold, type WatcherHold } from './watcher-hold.js';
 
@@ -220,6 +220,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             workspace: snapshot,
             blobs: await openSessionBlobs(options.root),
             validator: createModelValidator(),
+            formatter: createSourceFormatter(),
             clock,
             ids: randomIds,
         });

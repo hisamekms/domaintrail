@@ -28,6 +28,8 @@ context Collaboration {
     /// 依頼が返信した相手。実行なら、エージェントにその実行の依頼・返答・変更を前の実行として渡す。
     /// メッセージなら、その依頼者と本文を引いて渡す。
     replyTo: FrozenReplyTarget? "返信先"
+    /// 取り消しの依頼なら、変更を取り消す実行。エージェントには、その実行の依頼・返答・ファイルごとの差分を渡す。
+    undoes: AgentRunId? "取り消す実行"
   }
 
   /// 登録のときに写し取った、依頼の返信先。メッセージへの返信は、そのときの依頼者と本文を写し取る。
@@ -154,6 +156,8 @@ context Collaboration {
   }
 
   /// ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
+  /// 作業の取り消しを機械的にできたときは、エージェントを使わずに、その記録（機械的な取り消し）も実行として残す。
+  /// チャットでは、どちらも作業のひとまとまり（カード）になる。
   aggregate AgentRun "エージェント実行" {
     id: AgentRunId
     references session: SessionId -> Session
@@ -238,6 +242,19 @@ context Collaboration {
       cancelledBy: ParticipantId "取り消した人"
       cancelledAt: Timestamp "取消日時"
     }
+    /// エージェントを使わずに、ある実行の変更を機械的に取り消した記録。その実行の基準と結果の差を、いまのワークスペースに
+    /// 逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。取り消しの依頼を束ね、取り消す前のワークスペース
+    /// が基準リビジョン、取り消した後が結果リビジョン。
+    state Reverted "機械的な取り消し" {
+      baseRevision: RevisionId "基準リビジョン"
+      resultRevision: RevisionId "結果リビジョン"
+      finishedAt: Timestamp "終了日時"
+
+      /// 機械的な取り消しは、ワークスペースを変える。
+      invariant revertChanges "取り消しで変わる" { resultRevision != baseRevision }
+      /// 機械的な取り消しが束ねるのは、取り消しの依頼だけ。
+      invariant revertsUndoRequests "取り消しの依頼を束ねる" { all(input.requests, r => exists(r.undoes)) }
+    }
 
     /// 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
     create command queue(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedByRole: ParticipantRole, queuedAt: Timestamp) "実行を登録する"
@@ -250,6 +267,20 @@ context Collaboration {
         count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
       } else InputMismatch
       emits RunQueued
+
+    /// 取り消しの依頼を、エージェントを使わずに機械的に取り消した記録として残す。取り消すのはファシリテーター。
+    create command revert(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedByRole: ParticipantRole, queuedAt: Timestamp, baseRevision: RevisionId "基準リビジョン", resultRevision: RevisionId "結果リビジョン") "機械的に取り消す"
+      -> Reverted
+      requires facilitatorReverts "ファシリテーターが取り消す" {
+        queuedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      requires distinctRequests "依頼は1件1回" { unique(requests) } else DuplicateRequest
+      requires inputCoversRequests "入力は束ねた依頼の写し" {
+        count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+      } else InputMismatch
+      requires inputUndoes "入力は取り消しの依頼" { all(input.requests, r => exists(r.undoes)) } else InputMismatch
+      requires revertChanges "取り消しで変わる" { resultRevision != baseRevision } else ChangedMismatch
+      emits RunReverted
 
     /// 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
     command start(baseRevision: RevisionId, startedAt: Timestamp) "実行を始める"
@@ -312,6 +343,17 @@ context Collaboration {
     requests: RequestId[1..*]
     queuedBy: ParticipantId
     queuedAt: Timestamp
+  }
+
+  persistent event RunReverted "機械的な取り消し" {
+    runId: AgentRunId
+    session: SessionId
+    requests: RequestId[1..*]
+    queuedBy: ParticipantId
+    queuedAt: Timestamp
+    baseRevision: RevisionId "基準リビジョン"
+    resultRevision: RevisionId "結果リビジョン"
+    finishedAt: Timestamp
   }
 
   persistent event RunStarted "実行開始" {

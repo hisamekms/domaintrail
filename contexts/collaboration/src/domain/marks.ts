@@ -17,6 +17,7 @@
 //
 // Pure, and over the plain shapes of the runs and requests, so that the server (the generated types) and the page
 // (their JSON) decide the same way.
+import { undoStatus } from './undo.js';
 import { isNormalEmoji } from './emoji.js';
 import { Collaboration, decide, err, ok } from '../generated/index.js';
 
@@ -51,6 +52,8 @@ export interface MarkRun {
         readonly requests: readonly {
             readonly request: string;
             readonly replyTo?: { readonly kind: 'Run'; readonly run: string } | { readonly kind: 'Message' };
+            /** The run an undo request undoes (`undo.ts`): an undone run's assumptions are closed. */
+            readonly undoes?: string;
         }[];
         readonly answer?: { readonly answerTo: string };
         readonly pick?: { readonly pickOf: string };
@@ -144,7 +147,8 @@ export function markTargetStatus(target: MarkTargetData, scope: MarkScope): Mark
             if (!assumption) return 'missing';
             if (target.alternative !== undefined && !assumption.alternatives.some((a) => a.id === target.alternative)) return 'missing';
             const approved = (scope.approvals ?? []).some((a) => a.assumption.run === run.id && a.assumption.assumption === target.assumption);
-            return run.state === 'Completed' && !approved && !laterRunOf(run, scope.runs) ? 'open' : 'closed';
+            // closed once decided: approved, taken over by a later run, or its run undone
+            return run.state === 'Completed' && !approved && !laterRunOf(run, scope.runs) && undoStatus(run, scope.runs).kind !== 'undone' ? 'open' : 'closed';
         }
     }
 }

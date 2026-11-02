@@ -47,6 +47,8 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { approvalOf, assumptionStatus, type ApprovalFacts } from './domain/approvals.js';
+// undoing a run: which runs can be undone, whether one was undone (its assumptions closed), what the agent is told
+export { isUndo, MAX_UNDO_DIFF, undoableChanges, undoStatus, type UndoChanges, type UndoFile, type UndoRun, type UndoStatus } from './domain/undo.js';
 // what a running run is doing: the phases any agent maps its own events onto, and the check of an activity
 export {
     isActivityPhase,
@@ -65,7 +67,14 @@ export { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId
 export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
-export { createCollaboration, type CollaborationUseCases, type SessionState } from './application/use-cases.js';
+export {
+    createCollaboration,
+    UNDO_CAPABILITY,
+    type CollaborationUseCases,
+    type SessionState,
+    type Undone,
+    type UndoObstacle,
+} from './application/use-cases.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';
 export {
@@ -93,7 +102,15 @@ export {
     type CollaborationConfigFile,
     type ResolvedCollaborationConfig,
 } from './application/config.js';
-export { type Clock, type CollaborationDeps, type ModelValidator, type OutboxEntry, type SignIn, type Stores } from './application/ports.js';
+export {
+    type Clock,
+    type CollaborationDeps,
+    type ModelValidator,
+    type OutboxEntry,
+    type SignIn,
+    type SourceFormatter,
+    type Stores,
+} from './application/ports.js';
 
 // ---- infrastructure, for the app that wires it -----------------------------------------------------------------
 export { openSessionBlobs } from './infrastructure/blobs.js';

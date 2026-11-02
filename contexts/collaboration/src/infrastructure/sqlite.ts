@@ -225,6 +225,14 @@ export const MIGRATIONS: readonly string[] = [
      WHERE state = 'Confirmed';
     DELETE FROM outbox WHERE type = 'RevisionConfirmed';
     `,
+    // ---------- undoing a run ----------
+    // a request that undoes a run's changes (ADR 0026, amendment "Undo a run"): the run it names, kept next to the JSON
+    // so that the database refuses an undo of a run it does not hold. Rows written before undo none (NULL); their JSON
+    // has no `undoes` and loads unchanged. The mechanical undo is a run like the others (state `Reverted`)
+    `
+    ALTER TABLE requests ADD COLUMN undoes TEXT REFERENCES agent_runs(id);
+    CREATE INDEX requests_by_undoes ON requests(undoes) WHERE undoes IS NOT NULL;
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -359,8 +367,8 @@ function sessions(db: DatabaseSync): SessionRepository {
 function requests(db: DatabaseSync): RequestRepository {
     const load = db.prepare('SELECT data FROM requests WHERE id = :id');
     const save = db.prepare(
-        `INSERT INTO requests (id, session_id, seq, state, data, reply_to, reply_to_request)
-         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo, :replyToRequest)
+        `INSERT INTO requests (id, session_id, seq, state, data, reply_to, reply_to_request, undoes)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo, :replyToRequest, :undoes)
          ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
     );
     const list = db.prepare('SELECT data FROM requests WHERE session_id = :session ORDER BY seq');
@@ -379,6 +387,7 @@ function requests(db: DatabaseSync): RequestRepository {
                     data: encodeJson(request),
                     replyTo: to?.kind === 'Run' ? to.run : null,
                     replyToRequest: to?.kind === 'Message' ? to.request : null,
+                    undoes: request.undoes ?? null,
                 }),
             );
         },

@@ -1,6 +1,6 @@
 // Databases written by earlier versions, upgraded in place: before marks and emoji reactions (migration 4), before
 // replies (migration 5), before replies to messages (migration 7), before approvals (migration 8), with confirmed
-// revisions (migration 9). The store itself: sqlite.test.ts.
+// revisions (migration 9), before undoing runs (migration 10). The store itself: sqlite.test.ts.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -198,7 +198,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(9);
+        expect(MIGRATIONS.length).toBe(10);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -478,6 +478,73 @@ describe('no confirmed revisions (migration 9)', () => {
         }));
         expect(read.revision).toEqual({ ...revision(confirmed), takenAt: new Date('2026-10-31T09:00:00.000Z') } as unknown as C.Revision);
         expect(read.events.map((e) => e.event.type)).toEqual(['RevisionRecorded']);
+        db.close();
+    });
+});
+
+describe('the undoes column (migration 10)', () => {
+    test('a database of the schema before undoing runs is upgraded in place: its requests load as they were; an undo keeps its run, and the database refuses an unknown one', async () => {
+        const dir = await workspace({});
+        const file = path.join(dir, 'session.db');
+        // the schema before undoing runs (9 migrations), with a request and the completed run that bundled it
+        const old = new DatabaseSync(file);
+        for (const m of MIGRATIONS.slice(0, 9)) old.exec(m);
+        old.exec('PRAGMA user_version = 9');
+        const sid = '00000000-0000-4000-8000-000000000001';
+        const rid = '00000000-0000-4000-8000-000000000002';
+        const runId = '00000000-0000-4000-8000-000000000003';
+        const at = { $date: '2026-10-31T09:00:00.000Z' };
+        const who = 'local:facilitator';
+        const session = {
+            state: 'Open',
+            id: sid,
+            facilitator: who,
+            participants: [{ id: who, name: 'Facilitator', role: 'Facilitator', joinedAt: at }],
+            startedAt: at,
+        };
+        const request = { state: 'Sent', id: rid, session: sid, author: who, targets: [], body: 'Add cancel.', sentAt: at, mentions: [] };
+        const run = {
+            state: 'Queued',
+            id: runId,
+            session: sid,
+            input: { requests: [{ request: rid, author: who, targets: [], body: 'Add cancel.' }] },
+            queuedBy: who,
+            queuedAt: at,
+        };
+        old.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(sid, 'Open', JSON.stringify(session));
+        old.prepare('INSERT INTO requests (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)').run(rid, sid, 1, 'Sent', JSON.stringify(request));
+        old.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)').run(runId, sid, 1, 'Queued', JSON.stringify(run));
+        old.close();
+
+        const db = openDatabase(file);
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
+        const uow = createUnitOfWork(db);
+        const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
+        expect(loaded?.undoes).toBeUndefined();
+        expect(loaded?.body).toBe(text('Add cancel.'));
+
+        const undo = (id: string, undoes: string): C.Request => ({
+            state: 'Sent',
+            id: knownRequestId(id),
+            session: knownSessionId(sid),
+            author: value(C.makeParticipantId(who)),
+            targets: [],
+            body: text('Undo the changes of Add cancel.'),
+            sentAt: new Date('2026-11-03T09:00:00Z'),
+            mentions: [],
+            undoes: knownAgentRunId(undoes),
+        });
+        const kept = undo('00000000-0000-4000-8000-000000000004', runId);
+        await uow.transaction((s) => s.requests.save(kept));
+        expect(await uow.transaction((s) => s.requests.load(kept.id))).toEqual(kept);
+        expect(db.prepare('SELECT undoes FROM requests WHERE id = ?').get(kept.id)).toEqual({ undoes: runId });
+        const unknown = await uow
+            .transaction((s) => s.requests.save(undo('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-0000000000ff')))
+            .then(
+                () => 'saved',
+                () => 'refused',
+            );
+        expect(unknown).toBe('refused');
         db.close();
     });
 });

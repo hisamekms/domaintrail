@@ -5,11 +5,12 @@
 import type { ElementChange, ElementChanges } from './domain/changes.js';
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
+import type { UndoChanges, UndoFile } from './domain/undo.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 
-export type { Classification, RunActivity, RunActivityPhase };
+export type { Classification, RunActivity, RunActivityPhase, UndoChanges, UndoFile };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -103,6 +104,7 @@ export const EVENT_MESSAGE_TYPES = {
     RunDeclined: 'run.declined',
     RunFailed: 'run.failed',
     RunCancelled: 'run.cancelled',
+    RunReverted: 'run.reverted',
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
     MarkPlaced: 'mark.placed',
@@ -265,6 +267,35 @@ export interface ManualRecoveryNeededBody {
     readonly error: { readonly type: 'ManualRecoveryNeeded'; readonly preRestore: string; readonly cause: string; readonly message: string };
 }
 
+/**
+ * `POST /api/session/runs/:id/undo` (the facilitator): undo the changes of the run `:id` of the session (one that
+ * changed files, not undone yet nor being undone). `body` is the message everyone sees in the chat, sent as the undo
+ * request (「〈作業名〉の変更を取り消す」). Done mechanically when the run's changes reverse cleanly onto the workspace
+ * and the result checks, else queued for the AI (`UndoneBody`). Refused with `FacilitatorOnly` (403), `RunNotFound` /
+ * `RunOfAnotherSession` (404), `RunNotUndoable` (409: it changed no file, or it is undone or being undone),
+ * `RunInProgress` (409: a run is running or claimed), `NothingToUndo` (409: the workspace has none of its changes),
+ * `ExternalChangesSinceSnapshot` (409: the workspace changed while it was undone; nothing was written).
+ */
+export interface UndoRunBody {
+    readonly body: string;
+}
+
+/** Why an undo went to the AI: later changes conflict (the paths), the undone sources do not check, or the run's sources are gone. */
+export type UndoObstacleBody =
+    | { readonly kind: 'conflict'; readonly paths: readonly string[] }
+    | { readonly kind: 'check'; readonly newDtErrors: number; readonly unparsedDtes: readonly string[] }
+    | { readonly kind: 'unreadable' };
+
+/** `POST /api/session/runs/:id/undo` → 201: the undo request, and the mechanical undo recorded or the AI's run queued. */
+export type UndoneBody =
+    | { readonly way: 'mechanical'; readonly request: Json<Collaboration.SentRequest>; readonly run: Json<Collaboration.RevertedAgentRun> }
+    | {
+          readonly way: 'agent';
+          readonly request: Json<Collaboration.SentRequest>;
+          readonly run: Json<Collaboration.QueuedAgentRun>;
+          readonly obstacle: UndoObstacleBody;
+      };
+
 /** A file of a comparison: its status by path and DSL, and the line diff of its texts unless it is unchanged. */
 export interface ComparedFileBody extends Json<FileComparison> {
     /** Absent for an unchanged file, and for the files after the comparison's diffs reached their limit (`diffsOmitted`). */
@@ -322,10 +353,19 @@ export interface AgentParticipantsBody {
     readonly participants: readonly { readonly id: string; readonly name: string }[];
 }
 
+/**
+ * What a subscriber of this version can run, named when it claims: `undo`, a run whose request undoes another run
+ * (it gets that run's changes when it starts, `AgentStartedBody.undo`). A subscriber that does not name it is never
+ * given such a run: its claim is refused with `SubscriberOutdated` (409) and the run stays queued.
+ */
+export const AGENT_CAPABILITIES = ['undo'] as const;
+
 /** `POST /agent/runs/claim`. */
 export interface AgentClaimBody {
     /** Who claims (shown to the facilitator): e.g. `claude@host`. */
     readonly owner: string;
+    /** What it can run (`AGENT_CAPABILITIES`); none when left out. */
+    readonly capabilities?: readonly string[];
 }
 
 /** The lease of a claimed run: its token goes with every later call about the run. */
@@ -355,11 +395,24 @@ export interface AgentPreviousRun {
     readonly changes: PreviousRunChanges;
 }
 
-/** `POST /agent/runs/:id/start` → 200: the running run, its base revision, and the runs it continues, in its input's order. */
+/**
+ * A run the started run undoes (an undo request of its input names it), with what it changed from its base to its
+ * result revision, file by file: each file's unified diff while they fit `MAX_UNDO_DIFF` characters, else its line counts.
+ */
+export interface AgentUndoneRun {
+    readonly run: Json<Collaboration.AgentRun>;
+    readonly changes: UndoChanges;
+}
+
+/**
+ * `POST /agent/runs/:id/start` → 200: the running run, its base revision, the runs it continues, in its input's order,
+ * and the runs it undoes (`undo`, for an undo: absent from a server before undoing runs).
+ */
 export interface AgentStartedBody {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns: readonly AgentPreviousRun[];
+    readonly undo?: readonly AgentUndoneRun[];
 }
 
 /**

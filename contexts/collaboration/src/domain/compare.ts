@@ -225,3 +225,30 @@ export function lineDiff(before: string, after: string, budget = Number.POSITIVE
         truncated,
     };
 }
+
+/**
+ * Each line of `a` matched to its line in `b` by a shortest edit script (`-1`: removed), in increasing order; `undefined`
+ * when either side is longer than `MAX_DIFF_LINES` lines or they differ by more than `MAX_EDITS` edits. The lines are
+ * compared as they are (with their line ends, when the caller keeps them): what a three-way merge reads (`undo.ts`).
+ */
+export function matchLines(a: readonly string[], b: readonly string[]): Int32Array | undefined {
+    if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) return undefined;
+    const matched = new Int32Array(a.length).fill(-1);
+    let start = 0;
+    while (start < a.length && start < b.length && a[start] === b[start]) {
+        matched[start] = start;
+        start++;
+    }
+    let end = 0;
+    while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) {
+        matched[a.length - 1 - end] = b.length - 1 - end;
+        end++;
+    }
+    const ma = a.slice(start, a.length - end);
+    const mb = b.slice(start, b.length - end);
+    if (ma.length === 0 || mb.length === 0) return matched;
+    const ops = shortestEdit(ma, mb, MAX_EDITS);
+    if (!ops) return undefined;
+    for (const o of ops) if (o.op === ' ') matched[o.a + start] = o.b + start;
+    return matched;
+}

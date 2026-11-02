@@ -9,7 +9,8 @@ context Collaboration {
   }
 
   /// いま決められると、承認のときに確かめた前提: そのセッションの完了した実行の返答にあり、まだ決まっていない（承認も
-  /// 別案の選択もなく、あとの実行がその実行の依頼を引き継いでいない）。
+  /// 別案の選択もなく、あとの実行がその実行の依頼を引き継いでおらず、その実行が取り消されていない）。取り消された実行の前提は
+  /// 「取り消し済み」で閉じる（取り消しの記録か、取り消しを終えた AI の実行から決まり、承認は残さない）。
   verified DecidableAssumption "決められる前提" of AssumptionRef for SessionId errors RunNotFound, RunOfAnotherSession, RunNotApprovable, AssumptionNotFound, AssumptionClosed
 
   /// ファシリテーターが、AI が仮に決めた前提をそのままでよいと決めたこと。AI には何も送らない（記録だけ）。前提1つに決定は
@@ -50,7 +51,7 @@ context Collaboration {
     run: AgentRunId
   }
 
-  /// 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ）。
+  /// 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ・その実行を取り消した）。
   error AssumptionClosed "決まった前提" {
     run: AgentRunId
   }

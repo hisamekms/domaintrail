@@ -79,8 +79,11 @@ export interface StoredRun {
  * lease or is running (`serial`); the store enforces it where it saves (a unique index), the claim checks it.
  */
 export interface RunQueue {
-    /** Adds a queued run at the end of its session's queue, with the requests it bundles. */
-    enqueue(run: Collaboration.QueuedAgentRun): void;
+    /**
+     * Adds a run at the end of its session's queue, with the requests it bundles: a queued run, or a mechanical undo,
+     * recorded done (it is never claimed).
+     */
+    enqueue(run: Collaboration.QueuedAgentRun | Collaboration.RevertedAgentRun): void;
     load(id: AgentRunId): StoredRun | undefined;
     /** Replaces a run's aggregate (its new state); the lease is kept. */
     save(run: Collaboration.AgentRun): void;
@@ -268,12 +271,22 @@ export interface ModelValidator {
     validate(sources: readonly { readonly path: string; readonly text: string }[]): Promise<ValidationResult>;
 }
 
+/**
+ * Formats a source as `dt fmt` does (a `.dt` or a `.dtes` by its path), given that it parses: what a mechanical undo
+ * writes is formatted as a run's edits are.
+ */
+export interface SourceFormatter {
+    format(path: string, text: string): string;
+}
+
 /** Everything the use cases need. */
 export interface CollaborationDeps {
     readonly uow: UnitOfWork;
     readonly workspace: WorkspaceSnapshot;
     readonly blobs: SnapshotBlobs;
     readonly validator: ModelValidator;
+    /** Formats what a mechanical undo writes; without one it is written as merged. */
+    readonly formatter?: SourceFormatter;
     readonly clock: Clock;
     readonly ids: IdGenerator;
 }
