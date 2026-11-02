@@ -38,10 +38,12 @@ describe('the budget of previous runs', () => {
 
     test('a reply run closes the votes of the run it replies to, as the run that continues its card', () => {
         const replied = { id: 'x', state: 'Completed', input: { requests: [{ request: 'm' }] }, baseRevision: 'b' };
-        const reply = { id: 'y', state: 'Queued', input: { requests: [{ request: 'r', replyTo: 'x' }] } };
+        const reply = { id: 'y', state: 'Queued', input: { requests: [{ request: 'r', replyTo: { kind: 'Run' as const, run: 'x' } }] } };
         const unrelated = { id: 'z', state: 'Queued', input: { requests: [{ request: 's' }] } };
-        expect(laterRunOf(replied, [replied, unrelated])).toBeUndefined();
-        expect(laterRunOf(replied, [replied, unrelated, reply])?.id).toBe('y');
+        // a reply to a message continues no run, even when that message was applied by the run
+        const toMessage = { id: 'w', state: 'Queued', input: { requests: [{ request: 't', replyTo: { kind: 'Message' as const } }] } };
+        expect(laterRunOf(replied, [replied, unrelated, toMessage])).toBeUndefined();
+        expect(laterRunOf(replied, [replied, unrelated, toMessage, reply])?.id).toBe('y');
     });
 
     test('a pick closes the votes of the run it picked from, and that run is a previous run of it', () => {
@@ -57,7 +59,11 @@ describe('the budget of previous runs', () => {
         const pickOf = (of: C.AgentRunId): C.AlternativePick => ({ pickOf: of, assumption: value(C.makeTally(0)), text: text('With tax'), alternative });
         expect(previousRunIds({ requests: [frozen], pick: pickOf(x) })).toEqual([x]);
         // after the runs replied to, once
-        expect(previousRunIds({ requests: [{ ...frozen, replyTo: y }], pick: pickOf(x) })).toEqual([y, x]);
-        expect(previousRunIds({ requests: [{ ...frozen, replyTo: x }], pick: pickOf(x) })).toEqual([x]);
+        const toRun = (run: C.AgentRunId): C.FrozenReplyTarget => ({ kind: 'Run', run });
+        expect(previousRunIds({ requests: [{ ...frozen, replyTo: toRun(y) }], pick: pickOf(x) })).toEqual([y, x]);
+        expect(previousRunIds({ requests: [{ ...frozen, replyTo: toRun(x) }], pick: pickOf(x) })).toEqual([x]);
+        // a reply to a message continues no run
+        const toMessage: C.FrozenReplyTarget = { kind: 'Message', request: frozen.request, author: facilitator, body: text('m') };
+        expect(previousRunIds({ requests: [{ ...frozen, replyTo: toMessage }] })).toEqual([]);
     });
 });

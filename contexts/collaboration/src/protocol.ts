@@ -152,14 +152,15 @@ export interface ClaimBody {
  * `POST /api/session/requests`: 0 to 20 targets, each once, none of them the whole workspace (no target: the whole
  * workspace); `#name[n]` in the body mentions target n (`@name[n]`, as bodies were written before, too), `@name[pN]`
  * the N-th of `mentions`: 0 to 20 participants of the session, each once (`MentionedNotAParticipant`,
- * `TooManyMentions`, `DuplicateMention` 400 otherwise). The former body with one `target` is still taken. `replyTo`: the
- * run of the session the message replies to — completed, failed, declined or cancelled (`RunNotFound` 404,
- * `RunOfAnotherSession` 404, `RunNotReplyable` 409 otherwise).
+ * `TooManyMentions`, `DuplicateMention` 400 otherwise). The former body with one `target` is still taken. `replyTo`:
+ * what the message replies to — `{ kind: 'Run', run }`, a run of the session that is completed, failed, declined or
+ * cancelled (`RunNotFound` 404, `RunOfAnotherSession` 404, `RunNotReplyable` 409 otherwise), or `{ kind: 'Message',
+ * request }`, a message of the session, one's own too (`RequestNotFound` 404, `RequestOfAnotherSession` 404).
  */
 export interface SendRequestBody {
     readonly targets: readonly Json<Collaboration.TargetSnapshot>[];
     readonly body: string;
-    readonly replyTo?: string;
+    readonly replyTo?: Json<Collaboration.ReplyTarget>;
     readonly mentions?: readonly string[];
 }
 

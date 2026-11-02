@@ -5,9 +5,22 @@ context Collaboration {
   /// まだ見送られていない、そのセッションの依頼だと、エージェント実行に束ねるときに確かめたもの。
   verified PendingRequest "未処理の依頼" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestAlreadyDismissed
 
-  /// 返信できると、依頼を送るときに確かめた実行。そのセッションの、終わった実行（完了・失敗・辞退・取消）。
+  /// 依頼が返信する相手。AI の実行か、人のメッセージ（依頼）のどちらか1つ。
+  union ReplyTarget "返信先" {
+    /// AI の実行への返信。
+    Run "実行" {
+      references run: AgentRunId -> AgentRun "実行"
+    }
+    /// メッセージへの返信。
+    Message "メッセージ" {
+      references request: RequestId -> Request "メッセージ"
+    }
+  }
+
+  /// 返信できると、依頼を送るときに確かめた相手。実行なら、そのセッションの終わった実行（完了・失敗・辞退・取消）。
   /// 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
-  verified ReplyableRun "返信できる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable
+  /// メッセージなら、そのセッションのメッセージ（自分のものも、見送られたものも）。
+  verified ReplyableTarget "返信できる相手" of ReplyTarget for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable, RequestNotFound, RequestOfAnotherSession
 
   /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
   verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
@@ -22,8 +35,8 @@ context Collaboration {
     owns targets: TargetSnapshot[0..20] "対象"
     body: Text "本文"
     sentAt: Timestamp "送信日時"
-    /// AI の実行への返信なら、その実行。返信も依頼で、適用するかはファシリテーターが決める。
-    references replyTo: AgentRunId? -> AgentRun "返信先"
+    /// 返信なら、その相手（AI の実行か、人のメッセージ）。返信も依頼で、適用するかはファシリテーターが決める。
+    replyTo: ReplyTarget? "返信先"
     /// 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。
     mentions: ParticipantId[0..20] "言及した人"
 
@@ -44,7 +57,7 @@ context Collaboration {
       dismissedAt: Timestamp "見送り日時"
     }
 
-    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableRun?, mentions: MentionableParticipant[0..20]) "依頼を送る"
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20]) "依頼を送る"
       -> Sent
       requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
       requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
@@ -63,7 +76,7 @@ context Collaboration {
     targets: TargetSnapshot[0..20]
     body: Text
     sentAt: Timestamp
-    replyTo: AgentRunId?
+    replyTo: ReplyTarget?
     mentions: ParticipantId[0..20] "言及した人"
   }
 

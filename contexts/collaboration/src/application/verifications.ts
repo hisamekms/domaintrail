@@ -10,7 +10,7 @@ export interface StoreVerifications {
     readonly makeActiveSession: Collaboration.MakeActiveSession;
     readonly makePendingRequest: Collaboration.MakePendingRequest;
     readonly makeOpenMarkTarget: Collaboration.MakeOpenMarkTarget;
-    readonly makeReplyableRun: Collaboration.MakeReplyableRun;
+    readonly makeReplyableTarget: Collaboration.MakeReplyableTarget;
     readonly makeMentionableParticipant: Collaboration.MakeMentionableParticipant;
 }
 
@@ -43,13 +43,21 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(target as Collaboration.OpenMarkTarget);
         },
-        async makeReplyableRun(id, session) {
-            const run = stores.runs.load(id)?.run;
-            if (!run) return err({ type: 'RunNotFound', run: id });
-            if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: id });
-            if (!REPLYABLE_STATES.includes(run.state)) return err({ type: 'RunNotReplyable', run: id });
+        async makeReplyableTarget(target, session) {
+            if (target.kind === 'Message') {
+                // any message of the session, one's own too, whatever its state
+                const request = stores.requests.load(target.request);
+                if (!request) return err({ type: 'RequestNotFound', request: target.request });
+                if (request.session !== session) return err({ type: 'RequestOfAnotherSession', request: target.request });
+            } else {
+                const id = target.run;
+                const run = stores.runs.load(id)?.run;
+                if (!run) return err({ type: 'RunNotFound', run: id });
+                if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: id });
+                if (!REPLYABLE_STATES.includes(run.state)) return err({ type: 'RunNotReplyable', run: id });
+            }
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
-            return ok(id as Collaboration.ReplyableRun);
+            return ok(target as Collaboration.ReplyableTarget);
         },
         async makeMentionableParticipant(id, session) {
             // anyone who joined the session, online or not (the facilitator too)

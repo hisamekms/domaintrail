@@ -25,8 +25,23 @@ context Collaboration {
     author: ParticipantId "依頼者"
     targets: TargetSnapshot[0..20] "対象"
     body: Text "本文"
-    /// 依頼が返信だった実行。エージェントには、その実行の依頼・返答・変更を前の実行として渡す。
-    replyTo: AgentRunId? "返信先"
+    /// 依頼が返信した相手。実行なら、エージェントにその実行の依頼・返答・変更を前の実行として渡す。
+    /// メッセージなら、その依頼者と本文を引いて渡す。
+    replyTo: FrozenReplyTarget? "返信先"
+  }
+
+  /// 登録のときに写し取った、依頼の返信先。メッセージへの返信は、そのときの依頼者と本文を写し取る。
+  union FrozenReplyTarget "凍結した返信先" {
+    /// AI の実行への返信。
+    Run "実行" {
+      run: AgentRunId "実行"
+    }
+    /// メッセージへの返信。
+    Message "メッセージ" {
+      request: RequestId "メッセージ"
+      author: ParticipantId "依頼者"
+      body: Text "本文"
+    }
   }
 
   /// 登録のときに凍結した、実行の入力。束ねた依頼（依頼と実行の多対多）はここにある。

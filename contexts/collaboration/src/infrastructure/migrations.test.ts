@@ -1,5 +1,5 @@
 // Databases written by earlier versions, upgraded in place: before marks and emoji reactions (migration 4), before
-// replies (migration 5). The store itself: sqlite.test.ts.
+// replies (migration 5), before replies to messages (migration 7). The store itself: sqlite.test.ts.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -197,7 +197,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(6);
+        expect(MIGRATIONS.length).toBe(7);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -216,18 +216,122 @@ describe('the reply_to column (migration 5)', () => {
             targets: [],
             body: text('Why?'),
             sentAt: new Date('2026-11-01T09:00:00Z'),
-            replyTo: knownAgentRunId(runId),
+            replyTo: { kind: 'Run', run: knownAgentRunId(runId) },
             mentions: [],
         };
         await uow.transaction((s) => s.requests.save(reply));
         expect(db.prepare('SELECT reply_to FROM requests WHERE id = ?').get(reply.id)).toEqual({ reply_to: runId });
-        expect(await uow.transaction((s) => s.requests.load(reply.id)?.replyTo)).toBe(knownAgentRunId(runId));
+        expect(await uow.transaction((s) => s.requests.load(reply.id)?.replyTo)).toEqual({ kind: 'Run', run: knownAgentRunId(runId) });
         const dangling = await uow
             .transaction((s) =>
                 s.requests.save({
                     ...reply,
                     id: knownRequestId('00000000-0000-4000-8000-000000000005'),
-                    replyTo: knownAgentRunId('00000000-0000-4000-8000-0000000000aa'),
+                    replyTo: { kind: 'Run', run: knownAgentRunId('00000000-0000-4000-8000-0000000000aa') },
+                }),
+            )
+            .then(
+                () => 'saved',
+                () => 'refused',
+            );
+        expect(dangling).toBe('refused');
+        db.close();
+    });
+});
+
+describe('the reply_to_request column (migration 7)', () => {
+    test('a database of the schema before replies to messages: a reply to a run reads as one, the run and its event too; replies to messages keep their message', async () => {
+        const dir = await workspace({});
+        const file = path.join(dir, 'session.db');
+        // the schema before replies to messages (6 migrations): a reply to a run as it was written, by the run's ID alone
+        const old = new DatabaseSync(file);
+        for (const m of MIGRATIONS.slice(0, 6)) old.exec(m);
+        old.exec('PRAGMA user_version = 6');
+        const sid = '00000000-0000-4000-8000-000000000001';
+        const rid = '00000000-0000-4000-8000-000000000002';
+        const runId = '00000000-0000-4000-8000-000000000003';
+        const replyId = '00000000-0000-4000-8000-000000000004';
+        const replyRunId = '00000000-0000-4000-8000-000000000005';
+        const at = { $date: '2026-10-31T09:00:00.000Z' };
+        const who = 'local:facilitator';
+        const session = {
+            state: 'Open',
+            id: sid,
+            facilitator: who,
+            participants: [{ id: who, name: 'Facilitator', role: 'Facilitator', joinedAt: at }],
+            startedAt: at,
+        };
+        const request = { state: 'Sent', id: rid, session: sid, author: who, targets: [], body: 'Add cancel.', sentAt: at, mentions: [] };
+        const reply = { ...request, id: replyId, body: 'Why?', replyTo: runId };
+        const frozen = (r: typeof request) => ({ request: r.id, author: who, targets: [], body: r.body });
+        const ended = { state: 'Cancelled', session: sid, queuedBy: who, queuedAt: at, cancelledBy: who, cancelledAt: at };
+        const run = { ...ended, id: runId, input: { requests: [frozen(request)] } };
+        const replyRun = { ...ended, id: replyRunId, input: { requests: [{ ...frozen(reply), replyTo: runId }] } };
+        old.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(sid, 'Open', JSON.stringify(session));
+        const insertRequest = old.prepare('INSERT INTO requests (id, session_id, seq, state, data, reply_to) VALUES (?, ?, ?, ?, ?, ?)');
+        const insertRun = old.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)');
+        insertRequest.run(rid, sid, 1, 'Sent', JSON.stringify(request), null);
+        insertRun.run(runId, sid, 1, 'Cancelled', JSON.stringify(run));
+        insertRequest.run(replyId, sid, 2, 'Sent', JSON.stringify(reply), runId);
+        insertRun.run(replyRunId, sid, 2, 'Cancelled', JSON.stringify(replyRun));
+        old.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
+            sid,
+            'RequestSent',
+            JSON.stringify({
+                type: 'RequestSent',
+                requestId: replyId,
+                session: sid,
+                author: who,
+                targets: [],
+                body: 'Why?',
+                sentAt: at,
+                replyTo: runId,
+                mentions: [],
+            }),
+            '2026-10-31T09:00:00.000Z',
+        );
+        old.close();
+
+        const db = openDatabase(file);
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
+        const uow = createUnitOfWork(db);
+        const toRun = { kind: 'Run', run: runId };
+        const stored = JSON.stringify(db.prepare('SELECT data FROM requests').all());
+        const read = await uow.transaction((s) => ({
+            plain: s.requests.load(knownRequestId(rid)),
+            reply: s.requests.load(knownRequestId(replyId)),
+            run: s.runs.load(knownAgentRunId(replyRunId))?.run,
+            events: s.outbox.readAfter(0, 10, knownSessionId(sid)),
+        }));
+        expect(read.plain?.replyTo).toBeUndefined();
+        expect(read.reply?.replyTo).toEqual(toRun as C.ReplyTarget);
+        expect(read.run?.input.requests[0].replyTo).toEqual(toRun as C.FrozenReplyTarget);
+        expect(read.events.map((e) => (e.event.type === 'RequestSent' ? e.event.replyTo : undefined))).toEqual([toRun as C.ReplyTarget]);
+        // reading rewrites nothing
+        expect(JSON.stringify(db.prepare('SELECT data FROM requests').all())).toBe(stored);
+        expect(db.prepare('SELECT reply_to_request FROM requests WHERE id = ?').get(replyId)).toEqual({ reply_to_request: null });
+
+        // a reply to a message keeps the message in its column (not the run's); one to a message the database does not hold is refused
+        const toMessage: C.SentRequest = {
+            state: 'Sent',
+            id: knownRequestId('00000000-0000-4000-8000-000000000006'),
+            session: knownSessionId(sid),
+            author: value(C.makeParticipantId(who)),
+            targets: [],
+            body: text('Same here.'),
+            sentAt: new Date('2026-11-01T09:00:00Z'),
+            replyTo: { kind: 'Message', request: knownRequestId(rid) },
+            mentions: [],
+        };
+        await uow.transaction((s) => s.requests.save(toMessage));
+        expect(db.prepare('SELECT reply_to, reply_to_request FROM requests WHERE id = ?').get(toMessage.id)).toEqual({ reply_to: null, reply_to_request: rid });
+        expect(await uow.transaction((s) => s.requests.load(toMessage.id)?.replyTo)).toEqual({ kind: 'Message', request: knownRequestId(rid) });
+        const dangling = await uow
+            .transaction((s) =>
+                s.requests.save({
+                    ...toMessage,
+                    id: knownRequestId('00000000-0000-4000-8000-000000000007'),
+                    replyTo: { kind: 'Message', request: knownRequestId('00000000-0000-4000-8000-0000000000aa') },
                 }),
             )
             .then(

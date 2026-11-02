@@ -213,8 +213,11 @@ export interface CollaborationUseCases {
         /** What the request is about: none for the whole workspace. */
         readonly targets: readonly Collaboration.TargetSnapshot[];
         readonly body: Collaboration.Text;
-        /** The run of the session it replies to: ended (completed, failed, declined or cancelled), not waiting for an answer. */
-        readonly replyTo?: AgentRunId;
+        /**
+         * What it replies to: a run of the session, ended (completed, failed, declined or cancelled), not waiting for an
+         * answer; or a message of the session (one's own too).
+         */
+        readonly replyTo?: Collaboration.ReplyTarget;
         /** The participants of the session the body mentions (`@name[pN]` names the N-th), each once, at most 20. */
         readonly mentions?: readonly ParticipantId[];
     }): Promise<
@@ -226,6 +229,8 @@ export interface CollaborationUseCases {
             | Collaboration.RunNotFound
             | Collaboration.RunOfAnotherSession
             | Collaboration.RunNotReplyable
+            | Collaboration.RequestNotFound
+            | Collaboration.RequestOfAnotherSession
             | Collaboration.MentionedNotAParticipant
             | Collaboration.TooManyMentions
             | Collaboration.DuplicateMention
@@ -436,6 +441,17 @@ function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinceSnapsh
     return { type: 'PathOutsideRoot', path: e.path };
 }
 
+/**
+ * What a request replies to, as a run's input freezes it: a run by its ID; a message with its author and body as they
+ * are now (a message is never changed, so they are as it was sent). A message the store no longer holds (it never
+ * forgets one) is left out.
+ */
+function frozenReplyTarget(target: Collaboration.ReplyTarget | undefined, stores: Stores): Collaboration.FrozenReplyTarget | undefined {
+    if (target === undefined || target.kind === 'Run') return target;
+    const original = stores.requests.load(target.request);
+    return original && { kind: 'Message', request: original.id, author: original.author, body: original.body };
+}
+
 /** The success value of a command that cannot fail. */
 function decided<T>(r: Result<T, never>): T {
     if (!r.ok) throw new Error('A command without errors returned one');
@@ -614,9 +630,9 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === author)) return err({ type: 'NotAParticipant', participant: author });
-                let replyable: Collaboration.ReplyableRun | undefined;
+                let replyable: Collaboration.ReplyableTarget | undefined;
                 if (replyTo !== undefined) {
-                    const r = await storeVerifications(stores).makeReplyableRun(replyTo, session);
+                    const r = await storeVerifications(stores).makeReplyableTarget(replyTo, session);
                     if (!r.ok) return r;
                     replyable = r.value;
                 }
@@ -729,8 +745,10 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     pending.push(p.value);
                     const r = stores.requests.load(id);
                     // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
-                    if (r && !frozen.some((f) => f.request === id))
-                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(r.replyTo && { replyTo: r.replyTo }) });
+                    if (r && !frozen.some((f) => f.request === id)) {
+                        const replyTo = frozenReplyTarget(r.replyTo, stores);
+                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(replyTo && { replyTo }) });
+                    }
                 }
                 const bundled = nonEmpty(pending);
                 const input = nonEmpty(frozen);

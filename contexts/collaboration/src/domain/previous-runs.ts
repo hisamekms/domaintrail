@@ -6,10 +6,13 @@
 import type { Collaboration } from '../generated/index.js';
 import type { FileStatus, LineDiff } from './compare.js';
 
-/** The runs a run's input continues: those its messages reply to, then the run its answer answers, then the run it picked an alternative of; each once. */
+/**
+ * The runs a run's input continues: those its messages reply to, then the run its answer answers, then the run it picked an alternative of; each once.
+ * A message that replies to a message continues no run.
+ */
 export function previousRunIds(input: Collaboration.RunInput): Collaboration.AgentRunId[] {
     const ids: Collaboration.AgentRunId[] = [];
-    for (const r of input.requests) if (r.replyTo !== undefined && !ids.includes(r.replyTo)) ids.push(r.replyTo);
+    for (const r of input.requests) if (r.replyTo?.kind === 'Run' && !ids.includes(r.replyTo.run)) ids.push(r.replyTo.run);
     if (input.answer && !ids.includes(input.answer.answerTo)) ids.push(input.answer.answerTo);
     if (input.pick && !ids.includes(input.pick.pickOf)) ids.push(input.pick.pickOf);
     return ids;

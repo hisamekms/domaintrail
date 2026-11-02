@@ -46,7 +46,11 @@ export interface MarkRun {
     readonly id: string;
     readonly state: string;
     readonly input: {
-        readonly requests: readonly { readonly request: string; readonly replyTo?: string }[];
+        /** `replyTo`: the run or the message it replied to (only a run is continued). */
+        readonly requests: readonly {
+            readonly request: string;
+            readonly replyTo?: { readonly kind: 'Run'; readonly run: string } | { readonly kind: 'Message' };
+        }[];
         readonly answer?: { readonly answerTo: string };
         readonly pick?: { readonly pickOf: string };
     };
@@ -112,7 +116,7 @@ export function laterRunOf(run: MarkRun, runs: readonly MarkRun[]): MarkRun | un
                 !undone(r) &&
                 (r.input.answer?.answerTo === run.id ||
                     r.input.pick?.pickOf === run.id ||
-                    r.input.requests.some((q) => mine.has(q.request) || q.replyTo === run.id)),
+                    r.input.requests.some((q) => mine.has(q.request) || (q.replyTo?.kind === 'Run' && q.replyTo.run === run.id))),
         );
 }
 
