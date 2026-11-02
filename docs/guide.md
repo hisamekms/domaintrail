@@ -2634,6 +2634,14 @@ its base and result revisions, or only the list of the changed files when the di
 exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
 that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
 
+**Replies to a message.** People answer each other too: ↩ just before ☺+ on any message (on hover, faint on touch),
+one's own included, starts a reply to it. The chip reads `↩ 田中への返信 ✕` (the author by their current name), the
+composer's targets start with those of the message, and the posted reply shows `↩ 田中: <the head of its text>` on one
+muted line at its top, a click scrolling to the message and flashing it (nothing shows when the message is not there).
+A reply to your message is marked in your stream as a message that mentions you is; nothing else notifies, and the
+stream stays one list (no threads). Applied, such a reply continues no card, and the agent is given the message it
+replies to — its author and text as they were sent — as context for the request.
+
 **Votes and reactions.** Participants signal a preference; the facilitator decides. On a question's options, everyone
 but the facilitator sees ♡ at the right of each option: a click votes for it (again to take it back). In a
 single-choice question each participant has one vote, and voting another option moves it; in a multiple-choice question

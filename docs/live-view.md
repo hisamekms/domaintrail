@@ -192,7 +192,9 @@ The chat has two views:
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ 「請求書の税区分」への返信 ✕`), the targets of its
   messages to start with; the posted reply shows `↩ <the card's name>: …` on top, a click going to the card. Replies are applied
   like any message, and the run made from them continues the replied run's card; the agent gets that run's messages,
-  reply and diff as context.
+  reply and diff as context. ↩ on any message replies to it the same way (`↩ 田中への返信 ✕`, its targets to start
+  with); the reply shows `↩ 田中: …` on top, a click going to the message, and a reply to my message is marked in my
+  stream as a mention of me is. The agent gets the replied message's author and text.
   The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
   rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
