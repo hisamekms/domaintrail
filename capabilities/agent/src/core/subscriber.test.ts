@@ -470,10 +470,14 @@ describe('the prompt with previous runs', () => {
     ]);
     const replyInput = (to: string[]): Json<Collaboration.RunInput> => ({
         requests: [
-            { request: REPLY, author: 'dev:ann', targets: [], body: 'Only drafts? Make it any state.', replyTo: to[0] },
-            ...to
-                .slice(1)
-                .map((replyTo, i) => ({ request: `00000000-0000-4000-8000-0000000000d${i}`, author: 'dev:bob', targets: [], body: 'Same there.', replyTo })),
+            { request: REPLY, author: 'dev:ann', targets: [], body: 'Only drafts? Make it any state.', replyTo: { kind: 'Run', run: to[0] } },
+            ...to.slice(1).map((run, i) => ({
+                request: `00000000-0000-4000-8000-0000000000d${i}`,
+                author: 'dev:bob',
+                targets: [],
+                body: 'Same there.',
+                replyTo: { kind: 'Run' as const, run },
+            })),
         ] as [Json<Collaboration.FrozenRequest>, ...Json<Collaboration.FrozenRequest>[]],
     });
     const DIFF = '--- a/sales/sales.dt\n+++ b/sales/sales.dt\n@@ -9,2 +9,5 @@\n+    command cancel()\n+      Draft -> Draft\n';
@@ -508,6 +512,33 @@ describe('the prompt with previous runs', () => {
         ]);
         expect(prompt).toContain('The current files are the truth: other runs may have happened after a previous run');
         expect(prompt).toContain('`previousRuns`, when present, are earlier runs');
+    });
+
+    test('a reply to a message quotes it: its author by name, its body with elements and people by name; it is no previous run', () => {
+        const input: Json<Collaboration.RunInput> = {
+            requests: [
+                {
+                    request: REPLY,
+                    author: 'dev:ann',
+                    targets: [],
+                    body: 'Same here, @Bob[p1].',
+                    replyTo: { kind: 'Message', request: M1, author: 'dev:bob', body: '#Order[1] needs a state, ask @Ann[p1].' },
+                },
+            ],
+        };
+        const prompt = buildPrompt(input, names, 'n');
+        const data = previousBlock(prompt, 'n');
+        expect(data.requests).toEqual([
+            {
+                number: 1,
+                author: 'Ann',
+                targets: 'the whole workspace',
+                body: 'Same here, @Bob.',
+                inReplyToMessage: { author: 'Bob', body: '#Order needs a state, ask @Ann.' },
+            },
+        ]);
+        expect(data).not.toHaveProperty('previousRuns');
+        expect(prompt).toContain("A request's `inReplyToMessage`, when present, quotes the earlier\n   message of the session it replies to");
     });
 
     test('past the limit, the files only; several previous runs, each numbered; no previous run, no block field', () => {
