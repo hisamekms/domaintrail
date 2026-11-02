@@ -30,11 +30,13 @@ import {
     KIND_ORDER,
     fieldSetUsers,
     inCatalog,
+    labelOrName,
     namer,
     policiesReactingTo,
     policiesRunning,
     resolve,
     selectedFile,
+    shownLabel,
     type Namer,
     type Resolved,
     type Select,
@@ -227,7 +229,7 @@ export function Inspector(props: InspectorProps) {
                         </div>
                         {baseHead && baseHead.label !== head.label && (
                             <div className="was-line">
-                                <del className="was">{props.mode === 'both' ? (baseHead.label ?? baseHead.name) : names.of(baseHead)}</del>
+                                <del className="was">{props.mode === 'both' ? labelOrName(baseHead) : names.of(baseHead)}</del>
                             </div>
                         )}
                         <div className="inspector-title">
@@ -275,13 +277,19 @@ export function Inspector(props: InspectorProps) {
 function headOf(r: Resolved): { kind: ItemKind; name: string; label?: string; doc?: string; location?: Location } {
     switch (r.kind) {
         case 'context':
-            return { kind: 'context', name: r.name, label: r.label };
+            return { kind: 'context', name: r.name, label: shownLabel(r.label) };
         case 'element':
-            return { kind: r.el.kind, name: r.el.id, label: r.el.label, doc: r.el.doc, location: r.el.location };
+            return { kind: r.el.kind, name: r.el.id, label: shownLabel(r.el.label), doc: r.el.doc, location: r.el.location };
         case 'state':
-            return { kind: 'state', name: `${r.agg.name}.${r.state.name}`, label: r.state.label, doc: r.state.doc, location: r.state.location };
+            return { kind: 'state', name: `${r.agg.name}.${r.state.name}`, label: shownLabel(r.state.label), doc: r.state.doc, location: r.state.location };
         case 'command':
-            return { kind: 'command', name: `${r.agg.name}.${r.command.name}`, label: r.command.label, doc: r.command.doc, location: r.command.location };
+            return {
+                kind: 'command',
+                name: `${r.agg.name}.${r.command.name}`,
+                label: shownLabel(r.command.label),
+                doc: r.command.doc,
+                location: r.command.location,
+            };
     }
 }
 
@@ -458,7 +466,7 @@ function Body(props: InspectorProps & { r: Resolved; tab: InspectorTab }) {
                             was?.kind === 'enum' ? was.values.map((v) => v.name) : undefined,
                             (v) => v,
                         ).map(({ item: v, change }) => {
-                            const label = el.values.find((x) => x.name === v)?.label;
+                            const label = shownLabel(el.values.find((x) => x.name === v)?.label);
                             return (
                                 <code key={v} className={rowClass(change)}>
                                     {names.mode === 'both' ? v : names.of({ name: v, label })}
@@ -927,8 +935,8 @@ function Fields({
                         <tr key={`${f.name}:${change ?? ''}`} title={f.doc} className={rowClass(change)}>
                             {names.mode === 'both' && (
                                 <td className="flabel">
-                                    {before && before.label !== f.label && before.label && <del className="was">{before.label}</del>}
-                                    {f.label}
+                                    {before && before.label !== f.label && shownLabel(before.label) && <del className="was">{before.label}</del>}
+                                    {shownLabel(f.label)}
                                     {f.labelSource && f.labelSource !== 'inline' && <span className="label-src">{tx.labelSources[f.labelSource]}</span>}
                                 </td>
                             )}
@@ -998,7 +1006,7 @@ export function Invariants({
     return (
         <Section title={title}>
             {rows.map(({ item: i, change, before }) => {
-                const nameOnly = labelOnly && !!i.label;
+                const nameOnly = labelOnly && !!shownLabel(i.label);
                 return (
                     <div key={`${i.name}:${change ?? ''}`} className={rowClass(change, 'sub')}>
                         <strong>{names.of(i)}</strong>

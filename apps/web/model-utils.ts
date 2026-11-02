@@ -1,4 +1,4 @@
-import { type DisplayMode, PRIMITIVE_LABELS, typeText } from '@domaintrail/visualization';
+import { type DisplayMode, PRIMITIVE_LABELS, shownLabel, typeText } from '@domaintrail/visualization';
 import {
     commandsOf,
     contextNames,
@@ -37,12 +37,22 @@ export const KIND_ORDER: ElementKind[] = [
 
 export const shortName = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
 
-/** `確定済み (Confirmed)` when a label exists, otherwise the name. */
-export const withLabel = (x: { name: string; label?: string }): string => (x.label ? `${x.label} (${x.name})` : x.name);
+export { shownLabel };
 
-/** A name in the given display mode. */
-export const nameIn = (mode: DisplayMode, name: string, label?: string): string =>
-    mode === 'name' || !label ? name : mode === 'label' ? label : `${label} (${name})`;
+/**
+ * A name in the given display mode. A label missing, empty or only whitespace counts as none (`shownLabel`): the name
+ * stands in for it, and 両方 shows the name alone.
+ */
+export const nameIn = (mode: DisplayMode, name: string, label?: string): string => {
+    const shown = shownLabel(label);
+    return mode === 'name' || !shown ? name : mode === 'label' ? shown : `${shown} (${name})`;
+};
+
+/** `確定済み (Confirmed)` when a label exists, otherwise the name. */
+export const withLabel = (x: { name: string; label?: string }): string => nameIn('both', x.name, x.label);
+
+/** The label, or the name when there is none: the heading of 両方, whose name goes on a line of its own. */
+export const labelOrName = (x: { name: string; label?: string }): string => shownLabel(x.label) ?? x.name;
 
 export type Resolved =
     | { kind: 'context'; name: string; label?: string; shared: boolean }
@@ -131,7 +141,7 @@ export const isCatalogFiltered = (f: CatalogFilter): boolean => f.query.trim() !
 /** The element's label, name or description contains the query, ignoring case. */
 export function matchesQuery(el: ElementModel, query: string): boolean {
     const q = query.trim().toLowerCase();
-    return !q || [el.label, el.name, el.doc].some((s) => s?.toLowerCase().includes(q));
+    return !q || [shownLabel(el.label), el.name, el.doc].some((s) => s?.toLowerCase().includes(q));
 }
 
 /**
@@ -163,7 +173,12 @@ export function policyTarget(model: DomainModel, p: PolicyElement): { agg: Aggre
 
 /** The labels of the contexts that have one, by name. */
 export const contextLabels = (model: DomainModel): Record<string, string> =>
-    Object.fromEntries(model.contexts.flatMap((c) => (c.label === undefined ? [] : [[c.name, c.label]])));
+    Object.fromEntries(
+        model.contexts.flatMap((c) => {
+            const label = shownLabel(c.label);
+            return label === undefined ? [] : [[c.name, label]];
+        }),
+    );
 
 /** Contexts with shared ones first. */
 export function orderedContexts(model: DomainModel): string[] {
@@ -205,7 +220,7 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         type(t, ctx) {
             const byName = typeText(t, ctx, model ? sharedContexts(model) : []);
             if (mode !== 'label') return byName;
-            return t.kind === 'primitive' ? PRIMITIVE_LABELS[t.name] : ((model && elementOf(model, t.ref)?.label) ?? byName);
+            return t.kind === 'primitive' ? PRIMITIVE_LABELS[t.name] : ((model && shownLabel(elementOf(model, t.ref)?.label)) ?? byName);
         },
         primitive: (name) => (mode === 'label' ? (PRIMITIVE_LABELS[name] ?? name) : name),
         state,
@@ -217,7 +232,7 @@ export function namer(mode: DisplayMode, model: DomainModel | null): Namer {
         short(id) {
             const el = model && elementOf(model, id);
             if (!el) return shortName(id);
-            return mode === 'both' ? (el.label ?? el.name) : of(el);
+            return mode === 'both' ? labelOrName(el) : of(el);
         },
         id(id) {
             const r = model ? resolve(model, id) : undefined;

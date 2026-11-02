@@ -13,7 +13,7 @@ import { commandsOf, contextOf, statesOf } from '@domaintrail/modeling';
 import { declarations, firstDeclarations } from '@domaintrail/storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, parseBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
-import { nameIn } from '../model-utils';
+import { labelOrName, nameIn, shownLabel } from '../model-utils';
 import { targetKey, targetName, targetOfSelection, type NamingContext, type TargetDraft } from './targets';
 
 export { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS };
@@ -227,7 +227,7 @@ export function mentionCandidates(
             qualified,
             kind: { language, kind },
             where,
-            search: [label ?? '', short, qualified].filter(Boolean),
+            search: [shownLabel(label) ?? '', short, qualified].filter(Boolean),
         });
     };
     if (model) {
@@ -235,9 +235,9 @@ export function mentionCandidates(
         for (const el of model.elements) {
             add(el.id, 'dt', el.kind, contextName(el.context), el.name, el.label);
             for (const s of statesOf(el))
-                add(s.id, 'dt', 'state', contextName(el.context), `${el.name}.${s.name}`, s.label && `${el.label ?? el.name}.${s.label}`);
+                add(s.id, 'dt', 'state', contextName(el.context), `${el.name}.${s.name}`, shownLabel(s.label) && `${labelOrName(el)}.${s.label}`);
             for (const c of commandsOf(el))
-                add(c.id, 'dt', 'command', contextName(el.context), `${el.name}.${c.name}`, c.label && `${el.label ?? el.name}.${c.label}`);
+                add(c.id, 'dt', 'command', contextName(el.context), `${el.name}.${c.name}`, shownLabel(c.label) && `${labelOrName(el)}.${c.label}`);
         }
     }
     for (const view of ctx.stormings) {

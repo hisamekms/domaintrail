@@ -39,6 +39,12 @@ export type EdgeKind = 'owns' | 'value' | 'references' | 'transition' | 'depends
 export type DisplayMode = 'label' | 'name' | 'both';
 export const DISPLAY_MODES: DisplayMode[] = ['label', 'name', 'both'];
 
+/**
+ * A label as it is shown: none when it is missing, empty or only whitespace (labels are optional), so that the name
+ * stands in for it in every display mode.
+ */
+export const shownLabel = (label: string | undefined): string | undefined => (label?.trim() ? label : undefined);
+
 /** Language of the Live View's own words (the model's names and labels are shown as written). */
 export type Lang = 'ja' | 'en';
 export const LANGS: Lang[] = ['ja', 'en'];

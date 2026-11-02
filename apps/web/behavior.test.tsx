@@ -76,6 +76,20 @@ describe('behaviour cards', () => {
         expect(html).toContain('dot-error');
     });
 
+    test('in 両方, a command card without labels shows the names alone (no blank heading or chip)', async () => {
+        const blank = (
+            await check({
+                'a.dt': 'context S { id AId: UUID\n aggregate A "" { id: AId\n state Open "  "\n state Done ""\n command close() " " Open -> Done } }',
+            })
+        ).model!;
+        const agg = elementOf(blank, 'S.A')!;
+        const html = renderToStaticMarkup(
+            <CommandCard agg={agg} c={commandsOf(agg)[0]} model={blank} names={namer('both', blank)} tx={tx} onSelect={() => {}} />,
+        );
+        expect(html).not.toContain('bcard-name');
+        expect(text(html)).toContain('closeOpen→Done');
+    });
+
     test('a factory command shows the creation badge and starts at the initial marker', () => {
         const html = renderToStaticMarkup(<CommandCard agg={order} c={command('place')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
         expect(html).toContain(`factory-badge">${tx.factory}<`);

@@ -24,7 +24,7 @@ import {
 } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { useT } from './i18n';
-import { fileSelection, nameIn, type Select } from './model-utils';
+import { fileSelection, labelOrName, nameIn, shownLabel, type Select } from './model-utils';
 import type { SourceFocus } from './source';
 import { LevelSwitch, SubjectPicker, ToolbarSubject } from './view/toolbar';
 
@@ -209,10 +209,10 @@ export function StormingDetails({
                     <span className={`kind kind-es-${item.kind ?? 'storming'}`}>{item.kind ? t.esKinds[item.kind] : t.inStorming}</span>
                 </div>
                 <div className="inspector-title">
-                    <h2>{mode === 'both' && item.label ? item.label : nameIn(mode, item.id, item.label)}</h2>
+                    <h2>{mode === 'both' ? labelOrName({ name: item.id, label: item.label }) : nameIn(mode, item.id, item.label)}</h2>
                     {headingAction}
                 </div>
-                {mode === 'both' && item.label && <div className="canonical-name">{item.id}</div>}
+                {mode === 'both' && shownLabel(item.label) && <div className="canonical-name">{item.id}</div>}
                 {item.doc && <p className="doc">{item.doc}</p>}
                 <div className="reveal">
                     <span className="muted small">

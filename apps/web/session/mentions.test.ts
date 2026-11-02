@@ -255,4 +255,17 @@ describe('the # candidates', () => {
         const byName = mentionCandidates({ mode: 'name', model, stormings, sources }).find((c) => c.qualified === 'Sales.Order');
         expect([byName?.name, byName?.mention]).toEqual(['Order', 'Order']);
     });
+
+    test('an element without a label (empty or blank) is named and mentioned by its name', async () => {
+        const text =
+            'context S " " {\n  id AId: UUID\n  aggregate A "" {\n    id: AId\n    state Open "  "\n    state Done "完了"\n    command close() "" Open -> Done\n  }\n}\n';
+        const blank = (await analyze([{ path: 's.dt', text }])).model as DomainModel;
+        const found = mentionCandidates({ mode: 'label', model: blank, stormings: [], sources: [{ path: 's.dt', text }] });
+        const of = (q: string) => found.find((c) => c.qualified === q);
+        expect([of('S.A')?.name, of('S.A')?.mention, of('S.A')?.where]).toEqual(['A', 'A', 'S']);
+        expect([of('S.A#Open')?.name, of('S.A#Open')?.mention]).toEqual(['A.Open', 'A.Open']);
+        expect([of('S.A#Done')?.name, of('S.A#Done')?.mention]).toEqual(['A.完了', 'A.完了']);
+        expect([of('S.A:close')?.name, of('S.A:close')?.mention]).toEqual(['A.close', 'A.close']);
+        expect(of('S.A')?.search.every((s) => s.trim() !== '')).toBe(true);
+    });
 });

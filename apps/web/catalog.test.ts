@@ -116,6 +116,16 @@ describe('catalog', () => {
             expect(html).toContain(tx.kinds.fieldSet);
             expect(html).not.toContain('persistence-badge');
         });
+
+        test('shows the name alone for an empty or blank label', async () => {
+            const model = await shopModel();
+            const order = model.elements.find((e) => e.kind === 'aggregate')!;
+            for (const label of ['', '  ']) {
+                const html = head({ ...order, label });
+                expect(lines(html)).toEqual(['card-tags', 'card-name']);
+                expect(html).toContain(`title="${order.name}">${order.name}</span>`);
+            }
+        });
     });
 });
 
