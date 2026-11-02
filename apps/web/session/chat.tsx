@@ -2,12 +2,12 @@
 // is here and what the agent is doing at a glance, then two views. チャット: one stream of every message (each is chat;
 // the facilitator applies some: a run), one card per run with the runs that continue it (`card.tsx`), the revisions
 // confirmed or restored, and the composer of a message about the selection. 履歴: the history of changes, the same
-// cards. The facilitator's controls are in the stream itself: apply on a message (⤓, ▾ with a note, several selected
-// with Shift/⌘), answer or pick an alternative on a card, cancel, and the menus of the cards and of the head.
+// cards. The facilitator's controls are in the stream itself: send a message to the AI (the Bot button; … for sending
+// it again, with a comment, or several together, also chosen with Shift/⌘), answer or pick an alternative on a card,
+// cancel, and the menus of the cards and of the head.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-    ArrowDownToLine,
-    ChevronDown,
+    Bot,
     ChevronRight,
     CircleCheck,
     CircleHelp,
@@ -15,6 +15,7 @@ import {
     CircleSlash,
     CircleX,
     Clock,
+    Ellipsis,
     FileDiff,
     LoaderCircle,
     MessagesSquare,
@@ -550,7 +551,7 @@ const MARK_GLYPH: Record<MarkState, string> = {
 
 /**
  * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓`;
- * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
+ * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, how it reads and the tools to send it to the AI.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
@@ -603,7 +604,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                             aria-label={tx.chat.apply}
                             data-tooltip={tx.chat.apply}
                         >
-                            <ArrowDownToLine size={14} aria-hidden />
+                            <Bot size={14} aria-hidden />
                         </button>
                     )}
                     <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
@@ -668,7 +669,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                         onChange={(e) => setNote(e.target.value)}
                     />
                     <button type="submit" className="chat-small primary" disabled={actions.busy}>
-                        <ArrowDownToLine size={12} aria-hidden /> {tx.chat.applyNow}
+                        <Bot size={12} aria-hidden /> {tx.chat.applyNow}
                     </button>
                     <button type="button" className="icon-button" onClick={() => setNote(undefined)} aria-label={tx.restoreFlow.cancel}>
                         <X size={13} aria-hidden />
@@ -703,7 +704,10 @@ function ReplyReferenceLine({ run }: { run: string }) {
     );
 }
 
-/** A message's menu (the facilitator's): apply with a note (▾), choose it among several, apply it anyway. */
+/**
+ * A message's menu (the facilitator's, …): send it again (once sent) or anyway (classified as chat, where the button is
+ * not shown), send it with a comment, choose it among several to send together.
+ */
 function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boolean; talk: boolean; onNote: () => void }) {
     const { tx, actions, selection } = useChat();
     const [open, setOpen] = useState(false);
@@ -723,28 +727,28 @@ function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boole
                 data-tooltip={tx.chat.messageMenu}
                 onClick={() => setOpen(!open)}
             >
-                <ChevronDown size={13} aria-hidden />
+                <Ellipsis size={13} aria-hidden />
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
+                    {(applied || talk) && (
+                        <button role="menuitem" onClick={pick(() => void actions.apply([id]))}>
+                            {applied ? tx.chat.applyAgain : tx.chat.applyAnyway}
+                        </button>
+                    )}
                     <button role="menuitem" onClick={pick(onNote)}>
                         {tx.chat.applyWithNote}
                     </button>
                     <button role="menuitem" onClick={pick(() => selection.start(id))}>
                         {tx.chat.selectMany}
                     </button>
-                    {(applied || talk) && (
-                        <button role="menuitem" onClick={pick(() => void actions.apply([id]))}>
-                            {applied ? tx.chat.applyAgain : tx.chat.applyAnyway}
-                        </button>
-                    )}
                 </div>
             )}
         </div>
     );
 }
 
-/** The bar of the messages chosen to apply together, as one run. */
+/** The bar of the messages chosen to send to the AI together, as one run. */
 function SelectionBar() {
     const { tx, selection, actions } = useChat();
     const [note, setNote] = useState('');
@@ -780,7 +784,7 @@ function SelectionBar() {
                 </button>
             )}
             <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void apply()}>
-                <ArrowDownToLine size={12} aria-hidden /> {tx.chat.applySelected}
+                <Bot size={12} aria-hidden /> {tx.chat.applySelected}
             </button>
             <button className="icon-button" onClick={() => selection.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
                 <X size={14} aria-hidden />
@@ -789,7 +793,7 @@ function SelectionBar() {
     );
 }
 
-/** Right after applying: 取り消す, while the run is still queued. */
+/** Right after sending to the AI: 取り消す, while the run is still queued. */
 function UndoBar() {
     const { tx, actions, session } = useChat();
     const run = session.state.runs.find((r) => r.id === actions.undo?.run);
