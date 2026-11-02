@@ -110,7 +110,8 @@ dashes (they point at an aggregate root).
 On every canvas, the overlays keep their own channel and never recolour a node's kind: the local selection is an
 indigo ring outside the node; a change from the baseline is a green (added) or yellow (changed) ring with a 追加 / 変更
 badge, and a removed element a faded, dashed ghost with its name struck through and a 削除 badge; a diagnostic is a ✕
-or ! mark on the node's corner, with its text in the inspector and the problems list.
+or ! mark on the node's corner, with its text in the inspector and the problems list (a state view's transitions keep
+their command's blue). The others' cursors and names have a light halo, so that they read over any sticky note.
 
 ## Inspector (right or below)
 

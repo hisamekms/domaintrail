@@ -84,7 +84,7 @@ export type DomainNodeShape = TLShape<'domain-node'>;
 export type DomainGroupShape = TLShape<'domain-group'>;
 export type DomainEdgeShape = TLShape<'domain-edge'>;
 export type DomainInternalShape = TLShape<'domain-internal'>;
-export type EdgeTone = 'normal' | 'added' | 'changed' | 'error';
+export type EdgeTone = 'normal' | 'added' | 'changed';
 
 const changeMark = T.literalEnum('none', 'added', 'changed', 'removed');
 const diagMark = T.literalEnum('none', 'warning', 'error');
@@ -279,7 +279,7 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
         ly: T.number,
         lw: T.number,
         lh: T.number,
-        tone: T.literalEnum('normal', 'added', 'changed', 'error'),
+        tone: T.literalEnum('normal', 'added', 'changed'),
     };
 
     getDefaultProps(): DomainEdgeShape['props'] {

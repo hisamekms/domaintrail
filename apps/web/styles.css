@@ -318,6 +318,9 @@
     --participant-6: var(--p-person-green);
     --on-participant: var(--p-white);
     --participant-halo: var(--surface);
+    /* the halo of a cursor and its name over the canvas: light in both themes, so that it reads over a sticky note of a
+       close luminance (the dark theme's deep papers); the header's and the chat's avatars keep --participant-halo */
+    --participant-halo-canvas: var(--p-white);
 
     /* ---------- older hues, kept for the chat and the chrome until their tasks move them ---------- */
     /* the diagrams no longer use them (they use the meaning tokens above); violet is the old accent's family and now
@@ -471,6 +474,7 @@
     --chat-unread: var(--p-indigo-300);
     --agent-avatar: var(--p-slate-300);
     --on-agent-avatar: var(--p-night-950);
+    --participant-halo-canvas: var(--p-slate-100);
 
     /* older hues (chat and chrome) */
     --violet-text: var(--p-indigo-200);
@@ -1372,12 +1376,6 @@ a.field-origin {
 .de-tone-changed .de-head {
     fill: var(--changed);
 }
-.de-tone-error .de-line {
-    stroke: var(--error);
-}
-.de-tone-error .de-head {
-    fill: var(--error);
-}
 
 /* ---------- cursors: everything that reacts to a click shows a pointer ---------- */
 
@@ -1432,6 +1430,12 @@ select,
 .segmented button.active {
     background: var(--accent);
     color: var(--on-action);
+}
+/* the keyboard focus inside a segmented control, whose overflow clips the page's outer ring: drawn inside the button,
+   with a gap of the surface so that it also reads on the selected (filled) one */
+.segmented button:focus-visible {
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--surface);
 }
 
 .doc {
@@ -4035,12 +4039,12 @@ del.was.block {
     color: var(--on-participant);
     font-size: 0.75rem;
     white-space: nowrap;
-    /* a halo of the surface, so that the name reads over any sticky note or edge */
-    box-shadow: 0 0 0 1.5px var(--participant-halo);
+    /* a light halo, so that the name reads over any sticky note or edge */
+    box-shadow: 0 0 0 1.5px var(--participant-halo-canvas);
 }
-/* the arrow: the participant's hue (currentColor) edged with the halo */
+/* the arrow: the participant's hue (currentColor) edged with the canvas's halo */
 .peer-cursor-arrow {
-    stroke: var(--participant-halo);
+    stroke: var(--participant-halo-canvas);
 }
 
 /* ---------- the revision timeline, its comparison and the restore (dt session start only) ---------- */
@@ -6007,8 +6011,8 @@ button.add-to-request.added:hover {
 .reply-section.assumed > .reply-section-label {
     color: var(--text-secondary);
 }
-/* an assumption not yet decided: a small warning badge (承認待ち) at the start of its row; deciding it is 承認 or
-   送り直す */
+/* an assumption not yet decided: a small warning badge (承認待ち) at the start of its row, for those who cannot decide
+   it (the facilitator sees 承認 and 送り直す there instead) */
 .reply-awaiting {
     display: inline-flex;
     align-items: center;

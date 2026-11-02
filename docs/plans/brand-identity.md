@@ -206,7 +206,8 @@ red) but has its own tokens: added (green-700) is not success (emerald-700), rem
 | `--agent-avatar` / `--on-agent-avatar` | `#475569` / `#FFFFFF` | `#CBD5E1` / `#10131D` | the AI's avatar on every turn (its icon says AI): a stable neutral mark, not the activity hue (issue #33 §4.1) |
 | `--participant-1` … `-6` | `#0F766E` teal, `#7C3AED` violet, `#B45309` ochre, `#BE185D` pink, `#0369A1` sky, `#4D7C0F` green | same | a participant's avatar, cursor, remote selection |
 | `--on-participant` | `#FFFFFF` | `#FFFFFF` | name and initials on the participant's hue |
-| `--participant-halo` | = `--surface` | | the ring around an avatar or cursor label |
+| `--participant-halo` | = `--surface` | | the ring around an avatar (header, chat) |
+| `--participant-halo-canvas` | `#FFFFFF` | `#F1F5F9` | the halo of a cursor's arrow and name over the canvas (W4) |
 
 The agent's other cases use the status tokens: queued and cancelled → idle; completed → success; needs clarification
 and an assumption waiting for approval → warning; declined → info (not a failure); failed and interrupted → danger.
@@ -281,8 +282,8 @@ Connection states use the status tokens too, never a participant's hue. `partici
   cross it.
 - Diagnostics (§5): the ✕ / ! mark on the node's corner, its text in the inspector and the problems list; the node's
   edge is no longer recoloured red (`.dn-diag-error`), nor an internal transition's text (`.di-diag-error .di-main`).
-  Left as they were: a catalog card's red edge (`.card-error`: the cards carry no kind on their edge) and, in a state
-  view, the red tone of an erroneous element's transitions (`de-tone-error`, set in `render.ts`).
+  Left as they were: a catalog card's red edge (`.card-error`: the cards carry no kind on their edge). A state view's
+  transitions of an erroneous element were still red (`de-tone-error`, set in `render.ts`) until W4 (below).
 - Source view: the `--syntax-*` tokens (AA on the surface and on the error, warning and focused rows).
 - Docs: `docs/live-view.md` (the storming's colours, the modeling's cues, the overlays) and `docs/dtes-v0.1.md` (the
   notes' colours now carry the kind; still not part of the DSL).
@@ -772,6 +773,32 @@ Composites are computed over tldraw's canvas (`#F9FAFB` / `#101011`); a frame's 
 | syntax-comment / focused row (selected-bg) | `#94A3B8` | `#30345A` | 4.64 | 4.5 | pass |
 | syntax-comment / warning row | `#94A3B8` | `#47361F` | 4.51 | 4.5 | pass |
 
+## What W4 changed (follow-up fixes and the combined-overlay QA)
+
+- **承認待ち** shows only to those who cannot approve the assumption; the facilitator sees the 承認 button there
+  instead (`session/card.tsx`).
+- **Cursor halo over the canvas**: `--participant-halo-canvas` (white / slate-100) on `.peer-cursor-arrow` and
+  `.peer-cursor-name`; the header's and the chat's avatars keep `--participant-halo`. Dark: 4.73–7.91:1 against every
+  deep paper (was 1.93–3.24:1 with the surface), 17.36:1 on the canvas; each participant hue 4.56–5.51:1 against it.
+  Light: the halo is white as before (1.07–2.26:1 on the pale papers, informative); the hue carries there.
+- **Transitions of an element with an error** keep their kind's colour (or their diff tone): the `error` edge tone is
+  gone from `render.ts`, `shapes.tsx` and the CSS; the error is told by the ✕ / ! mark and its text (§5).
+- **Keyboard focus in a segmented control** (the view toggles, the storming's level switch, the chat's チャット /
+  AI の作業): `.segmented` clips its overflow, so the page's outer ring was cut off and the focus did not show. It is
+  drawn inside the button (`outline-offset: -2px`) with a 4px gap of the surface, so it also reads on the selected
+  (filled) segment (focus on surface 4.47:1 / 8.41:1; surface gap on the action fill 7.90:1 / 8.41:1).
+
+Combined states reviewed in both themes: a selected Event with a validation error (indigo ring, tldraw's outline,
+✕ mark, text in the inspector); a changed aggregate root that is also selected and has an error (変更 ring and badge,
+selection ring, ✕); removed ghosts (dashed, struck through, 削除); peer cursors over a Command note; an assumption
+waiting while the agent is idle (確認待ち in the header, 承認待ち / 承認 on the assumption); the agent running with its
+phase; a disconnected session (the banner, 切断 in the status bar, the last diagram kept); keyboard focus on the
+chrome and the chat. Colour-vision simulation (protanopia, deuteranopia, tritanopia, achromatopsia) on the storming
+diagram and legend, the structure's diffs and AI の作業: the hues merge as expected (event and aggregate olive in
+protan/deutan dark, event and hotspot red in tritan), and each meaning keeps its non-colour cue (stereotype text,
+legend names, badges and `+ ~ −` marks, state icons and words). At 200% zoom (and with 特大) the chrome, the chat and
+AI の作業 stay legible with nothing clipped.
+
 ## Open for a human decision
 
 - The dark sticky notes use deep papers with pale text; the alternative is mid-tone papers with dark text (closer to
@@ -780,17 +807,17 @@ Composites are computed over tldraw's canvas (`#F9FAFB` / `#101011`); a frame's 
   had plain text; own (`#EEF2FF`) and other (`#F1F5F9`) are close, told apart by the name (「あなた」).
 - The AI's avatar moved from the accent to a neutral slate (`--agent-avatar`), so that indigo beside a turn means it is
   running; keeping indigo would only need `--agent-avatar: var(--brand-ink)`.
-- In the dark theme a participant's cursor over a deep sticky note relies on its halo (`--participant-halo` = the
-  surface); a light halo there would read better over notes but heavier around the header's avatars.
 - Same-value tokens across roles (`--es-actor-border` = `--diff-changed`; `--model-command-tint` = the dark info
   background; participant ochre vs the warning): accepted as the issue allows; the overlay rules (§5) keep them apart
   by channel.
 - (W3) The selection is drawn twice: our indigo ring outside the node and tldraw's own thin blue outline on its edge.
   Hiding tldraw's would take an override of a `--tl-*` variable or `.tl-*` rule, which the issue rules out.
-- (W3) A state view still draws the transitions of an element with an error in the error's red (`de-tone-error`,
-  decided in `render.ts`); §5 would rather keep them blue with the mark on the state. Left as it was: it is the
-  renderer's choice, not a colour token.
 - (W3) A field's type in a card moved from blue to `--text-secondary` (blue is now the command's hue); the cards read
   calmer but the type column stands out less.
 - (W3) The context map's "borrows types" edge moved from indigo to the strong neutral ink (`--model-ink`, 2px): indigo
   is the ID reference's (dashed), which points at an aggregate root.
+- (W4) At 200% browser zoom the canvas area becomes very short and the legend (and the zoom controls) overlap the view
+  tabs and the toolbar; the same happens on `main`, so it is a layout matter for another issue.
+- (W4) Storming diagrams draw no diff decoration (an added or removed note shows as an ordinary note); the issue's
+  diff overlay applies to the modeling views only today.
+- (W4) Peer cursors are drawn above the legend and the canvas controls (`z-index: 300`), as on `main`.
