@@ -7,6 +7,7 @@
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration';
 import { bodyText } from './mentions';
+import type { AgentStatus } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
@@ -200,6 +201,25 @@ export function workGroups(units: readonly ChangeUnit[]): WorkGroups {
         queued: units.filter((u) => u.outcome === 'queued').sort((a, b) => latest(a).number - latest(b).number),
         finished: units.filter((u) => u.outcome !== 'clarification' && u.outcome !== 'running' && u.outcome !== 'queued'),
     };
+}
+
+/**
+ * The unit the chat's header status stands for, the one a click on it opens in AI の作業, by the status's own priority
+ * (`agentStatus`): running, the running unit; queued, the next to run; waiting for an answer, the one waiting the
+ * longest (it asked first); idle, none.
+ */
+export function statusUnit(status: AgentStatus['kind'], units: readonly ChangeUnit[]): ChangeUnit | undefined {
+    const groups = workGroups(units);
+    switch (status) {
+        case 'running':
+            return groups.running[0];
+        case 'queued':
+            return groups.queued[0];
+        case 'clarification':
+            return groups.awaiting.reduce<ChangeUnit | undefined>((oldest, u) => (!oldest || u.at < oldest.at ? u : oldest), undefined);
+        case 'idle':
+            return undefined;
+    }
 }
 
 /** How many units are not finished yet, the badge of AI の作業: running and queued (not those awaiting an answer). */

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { answerBody } from './actions';
 import { cardRuns, messageMarks, quoteDisplay, updatedCards } from './cards';
-import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unfinishedCount, unitName, workGroups } from './history';
+import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, statusUnit, unfinishedCount, unitName, workGroups } from './history';
 import { latestAt, revisionLookup, streamItems, unreadCount } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -276,6 +276,28 @@ describe('the history of changes', () => {
         expect(shownUnits(groups.finished, false).map((u) => u.key)).toEqual(['done']);
         expect(unfinishedCount(units)).toBe(3);
         expect(unfinishedCount(changeUnits({ runs: [done, asked], revisions }))).toBe(0);
+    });
+
+    test('the header status opens the unit it stands for: the running one, else the next to run, else the one waiting the longest', () => {
+        const asked = (id: string, minute: number): RunJson =>
+            run(id, minute, [request(`q-${id}`, 'dev:a')], {
+                state: 'NeedsClarification',
+                baseRevision: 'r0',
+                startedAt: at(minute),
+                question: 'Which one?',
+                resultRevision: 'r0',
+                finishedAt: at(minute + 1),
+            });
+        const running = run('running', 7, [qa], { state: 'Running', startedAt: at(8) });
+        const first = run('first', 9, [qb], { state: 'Queued' });
+        const second = run('second', 10, [qc], { state: 'Queued' });
+        const units = changeUnits({ runs: [asked('older', 1), asked('newer', 3), running, second, first], revisions });
+        expect(statusUnit('running', units)?.key).toBe('running');
+        expect(statusUnit('queued', units)?.key).toBe('first');
+        expect(statusUnit('clarification', units)?.key).toBe('older');
+        expect(statusUnit('idle', units)).toBeUndefined();
+        // nothing of that kind (the status moved on meanwhile): none
+        expect(statusUnit('running', changeUnits({ runs: [first], revisions }))).toBeUndefined();
     });
 });
 

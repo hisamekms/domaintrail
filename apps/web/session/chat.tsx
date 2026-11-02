@@ -35,7 +35,7 @@ import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
-import { changeUnits, requestersOf, shownUnits, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
+import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
     composerKey,
@@ -81,6 +81,8 @@ import type { ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
 
 type RequestJson = SessionData['state']['requests'][number];
+/** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
+type Peek = { readonly key: string; readonly n: number };
 
 /** A run's answer before anything was chosen. */
 const NO_CHOICES: Readonly<Record<string, QuestionChoice>> = {};
@@ -273,6 +275,14 @@ export function SessionChat(props: {
         });
     }, []);
 
+    // the header status clicked: AI の作業, at the unit it stands for (opened and revealed); the chat keeps its scroll
+    const [peek, setPeek] = useState<Peek | undefined>();
+    const peekStatus = (): void => {
+        setView('history');
+        const unit = statusUnit(status.kind, units);
+        if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
+    };
+
     // a person shown among the participants (a mention of them clicked): the collab menu opens at them
     const showPerson = useCallback((id: string): void => openPeople(id), []);
     // the unit whose run is being cancelled: the dialog asking first
@@ -317,6 +327,7 @@ export function SessionChat(props: {
                     onOpenView={props.onOpenView}
                     onLeave={() => void leave()}
                     onClose={props.onClose}
+                    onPeek={peekStatus}
                     tx={tx}
                 />
                 <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
@@ -371,7 +382,7 @@ export function SessionChat(props: {
                     )}
                 </div>
                 <div className="chat-view" role="tabpanel" hidden={view !== 'history'}>
-                    <History units={units} />
+                    <History units={units} reveal={peek} />
                 </div>
                 {revisions.dialog}
                 {control && cancellingUnit && <CancelDialog unit={cancellingUnit} onClose={closeCancel} />}
@@ -392,6 +403,7 @@ function ChatHeader(props: {
     onOpenView: (target: ViewTarget) => void;
     onLeave: () => void;
     onClose: () => void;
+    onPeek: () => void;
     tx: Tx;
 }) {
     const { session, status, tx } = props;
@@ -408,15 +420,20 @@ function ChatHeader(props: {
                 onOpenView={props.onOpenView}
                 onLeave={props.onLeave}
             />
-            {/* idle says nothing: only running, a question or a queued run shows */}
+            {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {status.kind !== 'idle' && (
-                    <span className={`chat-status status-${status.kind}`} data-tooltip={tx.chat.statusHint[status.kind]}>
+                    <button
+                        className={`chat-status status-${status.kind}`}
+                        data-tooltip={tx.chat.peek}
+                        aria-label={`${label} — ${tx.chat.peek}`}
+                        onClick={props.onPeek}
+                    >
                         <span className="chat-status-mark" aria-hidden>
                             {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
                         </span>
                         {label}
-                    </span>
+                    </button>
                 )}
             </span>
             <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
@@ -918,11 +935,24 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
  * under the same left edge, the unit's card (compact, with the AI's question to answer or vote on, as in the chat) and
  * a link to it in the chat. The card's own menu is the place of the facilitator's other actions on a unit.
  */
-function History({ units: all }: { units: readonly ChangeUnit[] }) {
+function History({ units: all, reveal }: { units: readonly ChangeUnit[]; reveal: Peek | undefined }) {
     const { tx } = useChat();
     const h = tx.chat.history;
     const [everything, setEverything] = useState(false);
     const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+    const ref = useRef<HTMLDivElement | null>(null);
+    // the unit the header status stands for: opened (the others stay as they are), scrolled to and marked for a moment
+    useEffect(() => {
+        if (!reveal) return;
+        setOpen((o) => (o.has(reveal.key) ? o : new Set([...o, reveal.key])));
+        requestAnimationFrame(() => {
+            const el = ref.current?.querySelector<HTMLElement>(`[data-unit="${CSS.escape(reveal.key)}"]`);
+            if (!el) return;
+            el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            el.classList.add('chat-flash');
+            setTimeout(() => el.classList.remove('chat-flash'), 1600);
+        });
+    }, [reveal]);
     const groups = workGroups(all);
     const finished = shownUnits(groups.finished, everything);
     const toggle = (key: string): void => {
@@ -939,7 +969,7 @@ function History({ units: all }: { units: readonly ChangeUnit[] }) {
         </ol>
     );
     return (
-        <div className="chat-history">
+        <div className="chat-history" ref={ref}>
             {groups.awaiting.length > 0 && (
                 <section className="chat-work-group awaiting">
                     <h3 className="chat-work-label">{h.groups.awaiting}</h3>

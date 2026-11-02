@@ -159,7 +159,10 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
 the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
-the agent's status at a glance, with ✕ to close it; while it is closed, a round 💬 button at the bottom right of the
+the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing when idle), with ✕ to
+close it. A click on the status (AI の作業を見る) switches to AI の作業 and opens the card it stands for — the running one,
+else the next to run, else the one waiting longest for an answer — scrolled to and marked for a moment, besides those
+already open; the chat keeps its scroll, so チャット brings the reader back where they were. While the chat is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
 messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection (on the canvas,
 or next to the element's name in the inspector) and `C` add the selection as targets and open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
