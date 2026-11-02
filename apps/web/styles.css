@@ -1372,12 +1372,6 @@ a.field-origin {
 .de-tone-changed .de-head {
     fill: var(--changed);
 }
-.de-tone-error .de-line {
-    stroke: var(--error);
-}
-.de-tone-error .de-head {
-    fill: var(--error);
-}
 
 /* ---------- cursors: everything that reacts to a click shows a pointer ---------- */
 
