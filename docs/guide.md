@@ -12,8 +12,9 @@ its heading, e.g. `dt guide requires`), `dt guide <rule>` one rule (`dt guide M0
 ## Quick reference
 
 **The loop.** Edit `.dt` files → `dt fmt` → `dt check` until it exits 0 → `dt generate ts` → implement each command
-with `decide` against its generated `<Command><Aggregate>Decision` type → type-check your code (`tsc --noEmit`) → run
-the generated contract tests. Never edit generated files; change the `.dt` sources and generate again.
+with `decide` against its generated `<Command><Aggregate>Decision` type → type-check your code (`tsc --noEmit` or
+`bun check`) → run the generated contract tests. Never edit generated files; change the `.dt` sources and generate
+again.
 
 **The DSL at a glance** (one file of a valid workspace):
 
@@ -114,7 +115,7 @@ change the DSL, not the implementation: never emit an event or set a field only 
 4. Run `dt generate ts` to write the TypeScript (it runs `check` first and writes nothing on errors).
 5. Implement the generated contracts in your own code — each command as a decision with `decide` (see
    [Decisions and `decide`](#decisions-and-decide)) — and type-check that code with your own TypeScript setup
-   (e.g. `tsc --noEmit`). `dt` does not run the TypeScript compiler.
+   (e.g. `tsc --noEmit`, or `bun check` with Bun). `dt` does not run the TypeScript compiler.
 6. With `generate.ts.tests` configured, run the generated contract tests against your implementation with your test
    runner (see [Generated tests](#generated-tests)).
 
