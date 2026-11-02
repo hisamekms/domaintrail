@@ -408,6 +408,8 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 }
 ```
 
+Bun を使う場合は、`"typecheck": "bun check"` でも同じように型検査できます。
+
 ```jsonc
 // tsconfig.json
 {

@@ -417,6 +417,8 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 }
 ```
 
+With Bun, `"typecheck": "bun check"` type-checks the same way.
+
 ```jsonc
 // tsconfig.json
 {
