@@ -55,7 +55,8 @@ I/O; only composition imports infrastructure).
   `resultRevision = baseRevision`.
 - **Revision**: every source of the workspace (`sources` globs, `.dt` and `.dtes`) in one snapshot by content hash,
   with paths, bytes and validation summarized per DSL (`.dt` errors; `.dtes` errors and warnings; link warnings; stale).
-  `confirmedAt/By` is a mark, not a gate. Restore writes a past snapshot as a new revision after a pre-restore snapshot;
+  `confirmedAt/By` is a mark, not a gate (*amended*: a revision is no longer confirmed — see "revisions are not
+  confirmed" below). Restore writes a past snapshot as a new revision after a pre-restore snapshot;
   it refuses on symlinks, paths outside the root, and external changes since the last snapshot.
 - **Run success rule** (decided here, from the plan's recommendation): the agent process exits 0, `dt fmt` and `dt
   check` ran, no new `.dt` error compared with the base revision, and every `.dtes` file still parses. Pre-existing
@@ -153,7 +154,7 @@ checked against the tests in S9. *Manual* marks what only a person can check, wi
 | The queue restarts → resumes by lease expiry and the outbox, no double commit | `collaboration-use-cases` › recovery: an expired lease fails a running run (LeaseExpired) and frees a claimed one, across a restart; `session-subscriber` › a subscriber that dies leaves its run to the lease: after a restart of the server, Running → Failed (LeaseExpired); `session-subscriber` › a broken stream is resumed with Last-Event-ID; a run whose event was missed is claimed on reconnection; `session-subscriber` › a finish whose answer is lost is sent again and replayed by the server: the run completes once; `session-server` › claim, start, heartbeat and finish over HTTP; a repeated finish is a replay; SSE resumes with Last-Event-ID; `collaboration-store` › serial: a running run blocks claims, and the store refuses a second running run or lease of a session; `collaboration-store` › the outbox is written in the transaction of the aggregates: a failure rolls both back |
 | Restore → `.dt` and `.dtes` from one snapshot | `collaboration-use-cases` › restore writes .dt and .dtes together from one snapshot; the older revisions stay; the operation is logged; `session-server` › a restore over HTTP runs behind the hold and leaves the workspace as the revision was; `collaboration-node` › a session runs from start to restore with node:sqlite under node, and a second process reads it back |
 | Not signed in to Access → HTTP, WS and the source API refused | `session-access` › without a valid token nothing is served: page, assets, view API, session API, WebSocket; `session-server` › serves nothing without an identity: the page is the join form, the APIs and the WebSocket answer 401; `session-server` › is not reachable through the public port, with or without an identity. *Manual* against the real Cloudflare: [the runbook](../session-access.md), "Refused without Access". |
-| Not the facilitator → queue management, confirm and restore refused | `session-server` › a participant cannot reach the facilitator routes; dismisses only their own requests; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores; `session-server` › the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant; `session-access` › Access lets the user in, not into the facilitator’s role: only the local link gives it |
+| Not the facilitator → queue management and restore refused | `session-server` › a participant cannot reach the facilitator routes; dismisses only their own requests; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes and restores; `session-server` › the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant; `session-access` › Access lets the user in, not into the facilitator’s role: only the local link gives it |
 | Plain `dt view` → no session feature, compatible | `session-baseline` › answers /api/session and anything below it with 404; `session-baseline` › sends only type "update" over the WebSocket and ignores messages from the page; `test/__snapshots__` unchanged from `main` (`live-contract`) |
 
 | Plan §12 | Covered by |
@@ -446,7 +447,8 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   a side over 1 MiB is `tooLarge` without its blob being read; at most 10,000 lines and 1,000 edits a file (else
   `tooLarge`); a line is shown up to 1,000 characters; each emitted line counts against the comparison's 512 KiB budget
   (and 2,000 lines a file), the diff stops there (`truncated`) and the files after it get none (`diffsOmitted`).
-- **Confirm** stays a mark: the facilitator's, on any recorded revision; it blocks nothing.
+- **Confirm** stays a mark: the facilitator's, on any recorded revision; it blocks nothing. (*Amended*: removed — see
+  "revisions are not confirmed" below.)
 - **The page** (`web/session/revisions.tsx`, `timeline.ts`): the timeline newest first, numbered in the order taken,
   with the origin (session start; before/result of run *n*; manual, by whom; before restoring #*k*; restored from #*k*
   with its pre-restore), time, validation per DSL, the confirmed mark; two revisions chosen → the comparison in a
@@ -625,7 +627,8 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   run's **note** (`前提「…」は採らず、「…」としてやり直してください。`): `answer` is reserved for a run that asked
   (`NothingToAnswer` otherwise), and a note needs no change to the model (*amended*: the pick is now recorded as
   `input.pick` too — see "Picks are recorded" below). Cancel is ✕ on the status (head) and on queued
-  or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯; recording, a new
+  or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯ (*amended*: no
+  confirm any more — see "revisions are not confirmed" below); recording, a new
   facilitator link (`POST /api/session/facilitator/link`, what `dt session link` does) and closing the session in the
   head's ⋯.
 - **Cards.** One card per change unit, updated in place (`web/session/history.ts`, `cards.ts`, pure and unit-tested). A
@@ -1100,7 +1103,8 @@ named, not numbered".
   この作業の結果を確認済みにする, この作業の前に戻す… and 変更を見る; the restore box, the stream's notices (`… がこの作業の
   結果を確認済みにしました`, `作業の前に戻しました`) and the AI's done line (`完了しました。モデルを変更しました。`) carry no
   revision and no number. A revision's number stays in tooltips and in the engineers' source diff. The revisions, their
-  numbers and the API are unchanged.
+  numbers and the API are unchanged. (*Amended*: the confirm item and its notice are gone — see "revisions are not
+  confirmed" below.)
 - **The changes are model elements first.** What a unit changed is listed as the elements it added, changed and
   removed: under a run's text and under a unit in AI の作業, up to three chips (`＋` added, `✎` changed, `−` removed, in
   green, amber and red on a faint wash, then `#` and the element's own name, its whole name in the tooltip; a removed one
@@ -1139,3 +1143,23 @@ named, not numbered".
   the sign-in and not-found pages) are Japanese when the best supported match of `Accept-Language` (by q-value) is `ja`
   or a `ja-*`, else English; they set `<html lang>` and `Vary: Accept-Language`. Their texts are one table per language
   next to them (`apps/dt/src/server/session/page-texts.ts`). Still no script; the CSP is unchanged.
+
+## Appendix: revisions are not confirmed (amendment)
+
+*Decided by the maintainer* (2026-11-03): nobody has time to mark results during a collab. The mark was meant to say
+"this result was looked at", but in a live session the people are discussing and sending the next request, not
+going back to mark the last one; unmarked results then made the end dialog list `確認済みにしていない結果 n 件` for
+work everyone had already seen. The mark gated nothing, so it is removed rather than kept unused. This amends the
+concept of a revision, S7 ("Confirm"), the card's ⋯ of "messages, apply…" and "changes in the model's words".
+
+- **The model.** `Revision` has one state, `Recorded`: no `Confirmed` state (`confirmedBy`, `confirmedAt`), no
+  `confirm` command (`facilitatorConfirms`), no `RevisionConfirmed` event (`revision.confirmed` on the agent API). A
+  revision is taken or restored, then never changes.
+- **The API.** `POST /api/session/revisions/:id/confirm` and the use case `confirmRevision` are gone; the route is
+  `NotFound` like any unknown one. The state's revisions carry no confirmation.
+- **The page.** A card's ⋯ offers この作業の前に戻す… and 変更を見る; the stream has no 「… がこの作業の結果を確認済みにしました」
+  notice; ending the collab counts the runs queued and running and the questions unanswered, not results.
+- **Sessions written before** (migration 9): a confirmed revision becomes the recorded one it was (`state` and the
+  JSON's `state` set to `Recorded`, `confirmedBy` and `confirmedAt` removed), and the outbox's `RevisionConfirmed`
+  events are deleted, so that a page or an agent replaying the outbox reads only events that exist. The outbox's
+  positions are not renumbered: a cursor stays valid, and gaps were already there (one outbox for every session).

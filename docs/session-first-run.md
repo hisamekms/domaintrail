@@ -49,8 +49,8 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    a reload. The agent runs `dt fmt` / `dt check` itself through the `dt` the subscriber puts on its `PATH`.
 7. **Check the files**: `git -C /tmp/dt-session status --short` lists only `.dt` and `.dtes` files, and
    `git -C /tmp/dt-session diff` is what the requests asked for. `--once` has ended the subscriber.
-8. **Revisions** (as Ada): the card's ⋯ → 比較 compares the run's revisions (the diff matches `git diff`); ⋯ → 確認済み
-   marks the result; ⋯ → 実行前に戻す… restores the workspace as before the run: both pages show the model as it was, and
+8. **Revisions** (as Ada): the card's ⋯ → 比較 compares the run's revisions (the diff matches `git diff`);
+   ⋯ → 実行前に戻す… restores the workspace as before the run: both pages show the model as it was, and
    `git -C /tmp/dt-session diff` is empty.
 9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt session start`). To end it,
    as Ada, the collab menu → コラボを終える… → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.

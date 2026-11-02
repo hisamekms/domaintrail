@@ -2544,7 +2544,7 @@ A **session** is the Live View shared by several people while an AI agent edits 
 **messages** in a chat, about elements of the `.dt` model or the `.dtes` stormings; the facilitator applies messages as
 **runs** (requests to the agent), and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
 time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
-`.dtes` sources that can be compared, marked confirmed or restored. `dt view` is unchanged: it has no session, and its
+`.dtes` sources that can be compared or restored. `dt view` is unchanged: it has no session, and its
 page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
@@ -2566,7 +2566,7 @@ awaiting an answer, running, queued and finished — and post messages. Closed, 
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
 collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
-facilitator applies messages, answers the agent, cancels runs, records, confirms and restores revisions, changes the
+facilitator applies messages, answers the agent, cancels runs, records and restores revisions, changes the
 shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
 only hides what is not yours.
 
@@ -2575,8 +2575,7 @@ many are online ▾ — that opens the participants (where each is, and → to o
 the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
 behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
 ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
-lists what is not finished — runs queued or running, questions waiting for an answer, and the results recorded since
-the last revision confirmed — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
+lists what is not finished — runs queued or running and questions waiting for an answer — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
 files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
 when it ended; the session's record stays in the workspace's `.domaintrail`.
 
@@ -2637,8 +2636,7 @@ under an unselected その他 are not sent. On a
 done card, an alternative of an assumption queues them again with that pick and a note asking for it; the facilitator's ✕ (a bordered
 button first among a queued or running card's actions, and at the end of its row in AI の作業) cancels it after a
 dialog asks: 実行を取り消しますか？ for a running run (its work so far is not applied), 依頼を取り消しますか？ for a queued
-one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks the work's result as confirmed (この作業の結果を確認済みにする),
-restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
+one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
 
 **Replies to an AI turn.** Hover an AI turn (on touch it is always there) and ↩ 返信 in its actions starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
@@ -2859,7 +2857,6 @@ around it (its ⋯).
   does not parse, the model is not compared and the source diff is open. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
-- **Mark as confirmed**: the facilitator's mark on a revision. It blocks nothing.
 - **Restore**: the facilitator writes a past revision back: every source becomes that revision's, on everyone's page
   at once. The current state is kept first as a *before a restore* revision, so a restore can itself be undone by
   restoring that one. A restore is refused, and nothing is written, when:
