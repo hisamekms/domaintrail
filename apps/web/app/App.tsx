@@ -204,9 +204,11 @@ export function App() {
                                 mode={mode}
                                 diagnostics={current?.diagnostics ?? []}
                                 history={history}
+                                headingAction={session.inspectorAction}
                                 onSelect={(x) => select(x)}
                             />
                         )}
+                        headingAction={session.inspectorAction}
                         tab={inspectorTab}
                         onTab={setInspectorTab}
                         onSelect={(id) => select(id)}

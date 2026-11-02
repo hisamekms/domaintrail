@@ -92,6 +92,8 @@ export interface InspectorProps {
     menu?: ReactNode;
     /** Where the inspector is docked: its close button points that way. */
     dock?: 'right' | 'bottom';
+    /** Placed next to the selected element's name (in a session, the 💬 that adds it as a request's target). */
+    headingAction?: ReactNode;
 }
 
 /** Tabs that make sense for a selected item, in display order. */
@@ -228,7 +230,10 @@ export function Inspector(props: InspectorProps) {
                                 <del className="was">{props.mode === 'both' ? (baseHead.label ?? baseHead.name) : names.of(baseHead)}</del>
                             </div>
                         )}
-                        <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
+                        <div className="inspector-title">
+                            <h2>{props.mode === 'both' && head.label ? head.label : title}</h2>
+                            {props.headingAction}
+                        </div>
                         {props.mode === 'both' && head.label && <div className="canonical-name">{head.name}</div>}
                         {props.removedItem && <p className="muted small">{tx.removedFromBaseline}</p>}
                         {baseHead?.doc && baseHead.doc !== head.doc && (

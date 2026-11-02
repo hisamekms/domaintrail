@@ -70,7 +70,6 @@ import {
     type AgentStatus,
     type StreamItem,
 } from './stream';
-import { dismiss, NO_DISMISSALS, suggestions, targetsToSend, type Dismissals } from './suggestions';
 import { targetKey, type ModelTarget, type TargetDraft } from './targets';
 import { continued, isMac } from './views';
 import type { ViewScope, ViewTarget } from './views';
@@ -118,11 +117,9 @@ function useNow(active: boolean): number {
 export function SessionChat(props: {
     session: SessionData;
     composer: ComposerDraft;
-    /** What the selection can be a request about: one target, or several for a selection of several shapes. */
-    selectionTargets: readonly TargetDraft[];
     /** What `#` offers. */
     candidates: readonly MentionCandidate[];
-    /** The composer is asked to take the focus (the selection was just confirmed with 💬 or `C`). */
+    /** The composer is asked to take the focus (the selection was just added with 💬 or `C`). */
     focusPending: boolean;
     onFocused: () => void;
     onNavigate: (target: ModelTarget) => void;
@@ -338,7 +335,6 @@ export function SessionChat(props: {
                         <Composer
                             session={session}
                             composer={composer}
-                            selectionTargets={props.selectionTargets}
                             candidates={props.candidates}
                             focusPending={focusPending}
                             onFocused={props.onFocused}
@@ -1153,7 +1149,6 @@ function PersonOption({ person, tx }: { person: PersonCandidate; tx: Tx }) {
 function Composer(props: {
     session: SessionData;
     composer: ComposerDraft;
-    selectionTargets: readonly TargetDraft[];
     candidates: readonly MentionCandidate[];
     focusPending: boolean;
     onFocused: () => void;
@@ -1163,7 +1158,7 @@ function Composer(props: {
     onReplyDone: () => void;
     tx: Tx;
 }) {
-    const { session, composer, selectionTargets, tx, reply, onReplyDone } = props;
+    const { session, composer, tx, reply, onReplyDone } = props;
     const personName = useChat().nameOf;
     const replyingTo =
         reply?.kind === 'Message'
@@ -1181,9 +1176,6 @@ function Composer(props: {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [notice, setNotice] = useState<string | undefined>();
-    // the selection as dashed chips: sent as targets unless dismissed (until the selection changes); never stored
-    const [dismissals, setDismissals] = useState<Dismissals>(NO_DISMISSALS);
-    const suggested = suggestions(value, selectionTargets, dismissals);
     const query = mentionQuery(value.text, caret);
     // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
     const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
@@ -1239,7 +1231,7 @@ function Composer(props: {
     const moveCaret = (to: number): void => {
         pendingCaret.current = to;
     };
-    // the selection confirmed with 💬 or `C`: the text takes the focus, the caret at its end
+    // the selection added with 💬 or `C`: the text takes the focus, the caret at its end
     const { focusPending, onFocused } = props;
     useEffect(() => {
         const el = input.current;
@@ -1276,17 +1268,14 @@ function Composer(props: {
         if (!revision || !canSend) return;
         setSending(true);
         try {
-            const targets = targetsToSend(value, suggested);
             await sessionApi.sendRequest({
-                targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })),
+                targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })),
                 body: value.text,
                 ...(reply && { replyTo: replyTargetOf(reply) }),
                 ...(value.people.length > 0 && { mentions: value.people }),
             });
             await composer.clear();
             onReplyDone();
-            // what was just sent is not suggested again for the same selection
-            setDismissals(suggested.targets.reduce((d, t) => dismiss(d, selectionTargets, t), dismissals));
             setError(undefined);
             setNotice(undefined);
         } catch (e) {
@@ -1295,8 +1284,6 @@ function Composer(props: {
             setSending(false);
         }
     };
-
-    const count = value.chips.length + suggested.targets.length;
 
     return (
         <div className="chat-composer">
@@ -1381,7 +1368,10 @@ function Composer(props: {
                 />
             </div>
             <div className="chat-composer-bar">
-                <div className="chat-chips" aria-label={count > 0 ? `${tx.chat.target} ${tx.chat.targetCount(count, MAX_REQUEST_TARGETS)}` : tx.chat.target}>
+                <div
+                    className="chat-chips"
+                    aria-label={value.chips.length > 0 ? `${tx.chat.target} ${tx.chat.targetCount(value.chips.length, MAX_REQUEST_TARGETS)}` : tx.chat.target}
+                >
                     {value.chips.map((c, i) => (
                         <span
                             key={targetKey(c.target.target)}
@@ -1399,28 +1389,6 @@ function Composer(props: {
                             </button>
                         </span>
                     ))}
-                    {suggested.targets.map((s, i) => (
-                        <span
-                            key={`suggested:${targetKey(s.target)}`}
-                            className={`chat-chip suggested kind-${s.target.kind}`}
-                            role="note"
-                            aria-label={tx.chat.suggested(nameOf(s))}
-                            data-tooltip={tx.chat.suggested(nameOf(s))}
-                        >
-                            <span className="chat-chip-number" aria-hidden>
-                                {value.chips.length + i + 1}
-                            </span>
-                            <span className="chat-chip-name">{shortOf(s)}</span>
-                            <button
-                                className="chat-chip-remove"
-                                aria-label={tx.chat.dismissSuggestion(nameOf(s))}
-                                onClick={() => setDismissals(dismiss(dismissals, selectionTargets, s))}
-                            >
-                                <X size={12} aria-hidden />
-                            </button>
-                        </span>
-                    ))}
-                    {suggested.overLimit > 0 && <span className="muted small">{tx.chat.targetsLimit(MAX_REQUEST_TARGETS)}</span>}
                 </div>
                 <div className="chat-composer-actions">
                     {/* the shortcut is in the tooltip */}

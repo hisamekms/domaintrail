@@ -2633,6 +2633,16 @@ svg.chat-launcher-mark {
     font-size: 1.1875rem;
     word-break: break-all;
 }
+.inspector-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: 6px;
+}
+.inspector-head .inspector-title h2 {
+    margin: 0;
+    min-width: 0;
+}
 .inspector-head .canonical-name {
     font-size: 0.875rem;
     color: var(--muted);
@@ -4146,17 +4156,6 @@ del.was.block {
     background: var(--hover);
     color: var(--text);
 }
-.chat-chip.suggested {
-    border-style: dashed;
-    border-color: var(--border-strong);
-}
-.chat-chip.suggested .chat-chip-name {
-    color: var(--text-soft);
-}
-.chat-chip.suggested .chat-chip-number {
-    background: transparent;
-    border: 1px dashed var(--border-strong);
-}
 /* the selection's 💬 on the canvas: next to its bounds, above the shapes */
 .selection-action {
     position: absolute;
@@ -4165,8 +4164,14 @@ del.was.block {
     pointer-events: none;
     z-index: 310;
 }
-.selection-action button {
+.selection-action .add-to-request {
     position: absolute;
+    box-shadow: 0 1px 4px var(--shadow);
+    pointer-events: auto;
+}
+/* the 💬 itself, on the canvas and in the inspector's heading; a muted ✓ once the selection is added */
+button.add-to-request {
+    flex: none;
     display: grid;
     place-items: center;
     width: 28px;
@@ -4176,13 +4181,19 @@ del.was.block {
     border-radius: 14px;
     background: var(--panel);
     color: var(--accent);
-    box-shadow: 0 1px 4px var(--shadow);
-    pointer-events: auto;
     cursor: pointer;
 }
-.selection-action button:hover {
+button.add-to-request:hover {
     background: var(--accent);
     color: #fff;
+}
+button.add-to-request.added {
+    border-color: var(--border-strong);
+    color: var(--muted);
+}
+button.add-to-request.added:hover {
+    background: var(--hover);
+    color: var(--text);
 }
 .session-chat .session-text.chat-input {
     margin-top: 0;

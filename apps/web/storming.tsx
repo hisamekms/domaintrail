@@ -166,6 +166,7 @@ export function StormingDetails({
     mode,
     diagnostics,
     history,
+    headingAction,
     onSelect,
 }: {
     stormings: readonly StormingView[];
@@ -177,6 +178,8 @@ export function StormingDetails({
     diagnostics: Diagnostic[];
     /** The back and close buttons. */
     history: ReactNode;
+    /** Placed next to the element's name (in a session, the 💬 that adds it as a request's target). */
+    headingAction?: ReactNode;
     onSelect: Select;
 }) {
     const t = useT();
@@ -205,7 +208,10 @@ export function StormingDetails({
                 <div className="inspector-row">
                     <span className={`kind kind-es-${item.kind ?? 'storming'}`}>{item.kind ? t.esKinds[item.kind] : t.inStorming}</span>
                 </div>
-                <h2>{mode === 'both' && item.label ? item.label : nameIn(mode, item.id, item.label)}</h2>
+                <div className="inspector-title">
+                    <h2>{mode === 'both' && item.label ? item.label : nameIn(mode, item.id, item.label)}</h2>
+                    {headingAction}
+                </div>
                 {mode === 'both' && item.label && <div className="canonical-name">{item.id}</div>}
                 {item.doc && <p className="doc">{item.doc}</p>}
                 <div className="reveal">

@@ -19,8 +19,8 @@ import { ChatLauncher, SessionChat } from './chat';
 import { PeerCursors } from './cursors';
 import { TargetNamingProvider } from './naming';
 import { viewLocation } from './location';
-import { SelectionAction } from './selection-action';
-import { confirmSelection, isConfirmKey, isTyping } from './suggestions';
+import { AddButton, SelectionAction, type AddAction } from './selection-action';
+import { confirmSelection, isAdded, isConfirmKey, isTyping } from './selection';
 import type { ComposerValue } from './mentions';
 import { cursorsOn } from './presence';
 import { mentionCandidates } from './mentions';
@@ -35,8 +35,10 @@ const NODE_SHAPE = 'shape:n:';
 export interface SessionPage {
     /** The session's chat for `AppShell`'s `conversation`, for everyone; undefined outside a session. */
     readonly conversation: Conversation | undefined;
-    /** The others' cursors over the canvas; undefined outside a session. */
+    /** The others' cursors over the canvas, and the selection's 💬; undefined outside a session. */
     readonly canvasOverlay: ReactNode;
+    /** The 💬 next to the selected element's name in the inspector's heading, while a session is live. */
+    readonly inspectorAction: ReactNode;
     /** In a session only the facilitator changes the shared baseline (the server answers others 403). */
     readonly baselineLocked: boolean;
     /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
@@ -130,18 +132,22 @@ export function useSessionPage(input: {
     const scope = session && { session: session.me.session, participant: session.me.participant.id };
     const composer = useComposerDraft(storage, scope);
 
-    // the selection confirmed as the request's targets (💬 on the canvas, or `C`): the chat shown, the caret in its text
+    // the selection added as the request's targets (💬 on the canvas or in the inspector, or `C`): the chat shown, the
+    // caret in its text; what already is a chip is not added again
     const [focusPending, setFocusPending] = useState(false);
     const onFocused = useCallback(() => setFocusPending(false), []);
     const composerValue = composer.value;
     const setComposerValue = useCallback((v: ComposerValue) => composer.setValue(v), [composer]);
     const { conversationOpen, setConversationOpen } = panes;
-    const confirm = useCallback(() => {
-        if (selectionTargets.length === 0) return;
-        setComposerValue(confirmSelection(composerValue, selectionTargets).value);
-        setConversationOpen(true);
-        setFocusPending(true);
-    }, [selectionTargets, composerValue, setComposerValue, setConversationOpen]);
+    const confirm = useCallback(
+        (targets: readonly TargetDraft[]) => {
+            if (targets.length === 0) return;
+            setComposerValue(confirmSelection(composerValue, targets).value);
+            setConversationOpen(true);
+            setFocusPending(true);
+        },
+        [composerValue, setComposerValue, setConversationOpen],
+    );
     const live = session?.status === 'live' && session.state.session.state === 'Open';
     useEffect(() => {
         if (!live) return;
@@ -149,12 +155,23 @@ export function useSessionPage(input: {
             if (selectionTargets.length === 0 || !isConfirmKey(e, isTyping(document.activeElement))) return;
             e.preventDefault();
             e.stopPropagation();
-            confirm();
+            confirm(selectionTargets);
         };
         // before tldraw's own shortcuts (it binds no plain `c`, but the key is ours here)
         document.addEventListener('keydown', onKey, true);
         return () => document.removeEventListener('keydown', onKey, true);
-    }, [live, selectionTargets.length, confirm]);
+    }, [live, selectionTargets, confirm]);
+    const addAction = (targets: readonly TargetDraft[]): AddAction | undefined =>
+        live && targets.length > 0
+            ? {
+                  added: isAdded(composerValue, targets),
+                  label: t.session.chat.addToRequest('C'),
+                  addedLabel: t.session.chat.addedToRequest,
+                  onAdd: () => confirm(targets),
+              }
+            : undefined;
+    // the inspector's 💬 adds the element the inspector shows
+    const inspectorAdd = addAction(selectionTarget ? [selectionTarget] : []);
 
     // the chat is the session's first place: the conversation opens when the page joins a session
     const inSession = session !== undefined;
@@ -262,7 +279,7 @@ export function useSessionPage(input: {
         [setView, setMapAll, setStructureLevel, setStructureContexts, setHiddenContexts, stormingChoice, setStormingChoice],
     );
 
-    if (!session) return { conversation: undefined, canvasOverlay: undefined, baselineLocked: false, ended: false };
+    if (!session) return { conversation: undefined, canvasOverlay: undefined, inspectorAction: undefined, baselineLocked: false, ended: false };
     const facilitator = session.me.participant.role === 'facilitator';
     return {
         baselineLocked: !facilitator,
@@ -270,16 +287,16 @@ export function useSessionPage(input: {
         canvasOverlay: (
             <>
                 <PeerCursors editor={editor} cursors={cursorsOn(session.peers, location)} />
-                <SelectionAction editor={editor} enabled={live && selectionTargets.length > 0} label={t.session.chat.addToRequest('C')} onConfirm={confirm} />
+                <SelectionAction editor={editor} action={addAction(selectionTargets)} />
             </>
         ),
+        inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
         conversation: {
             content: (
                 <TargetNamingProvider value={naming}>
                     <SessionChat
                         session={session}
                         composer={composer}
-                        selectionTargets={selectionTargets}
                         candidates={candidates}
                         focusPending={focusPending}
                         onFocused={onFocused}
