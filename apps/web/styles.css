@@ -5339,6 +5339,11 @@ del.was.block {
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
+.run-answer-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
 .reply-actions {
     display: flex;
 }
