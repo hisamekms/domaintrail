@@ -345,6 +345,29 @@ export function unreadMentions(
 }
 
 /**
+ * What arrived in the stream while the reader was away from its bottom: the messages and the AI turns (cards) whose keys
+ * are not among `known` (the items there when they scrolled up) — a card moving on is not one, nor a message of mine —
+ * and how many of those messages are for me (`toMe`: they mention me or reply to me).
+ */
+export function arrivedBelow(
+    items: readonly StreamItem[],
+    known: ReadonlySet<string>,
+    me: string,
+    toMe: (request: RequestJson) => boolean,
+): { readonly count: number; readonly forMe: number } {
+    let count = 0;
+    let forMe = 0;
+    for (const i of items) {
+        if (known.has(i.key)) continue;
+        if (i.kind === 'card') count++;
+        if (i.kind !== 'message' || i.request.author === me) continue;
+        count++;
+        if (toMe(i.request)) forMe++;
+    }
+    return { count, forMe };
+}
+
+/**
  * The people `@` offers: everyone in the session but me, online first then away, by name within each (the order of
  * the header). The facilitator is one of them; no one else in the session: none.
  */

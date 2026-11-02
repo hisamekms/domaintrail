@@ -7,6 +7,7 @@
 // cancel, and the menus of the cards and of the head.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
+    ArrowDown,
     Bot,
     ChevronRight,
     CircleCheck,
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
+import { motionMs } from '../shared/motion';
 import { useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
 import { sessionApi } from './api';
@@ -56,6 +58,7 @@ import { CancelButton, CancelDialog, RowActions, StateLabel, StatusSizer, Status
 import { latestRevision } from './state';
 import {
     agentStatus,
+    arrivedBelow,
     elapsed,
     isFacilitator,
     mentionablePeople,
@@ -433,14 +436,40 @@ const inViewOf = (list: HTMLElement, item: HTMLElement): boolean => {
 };
 
 function Stream({ items }: { items: StreamItem[] }) {
-    const { tx, jump } = useChat();
+    const { tx, jump, session } = useChat();
     const ref = useRef<HTMLDivElement | null>(null);
     // follows the newest item only while the reader is at the bottom (true until they scroll up)
     const atBottom = useRef(true);
+    // the keys of the items there when the reader left the bottom, while they are away from it: 最新へ shows meanwhile,
+    // with how many arrived since
+    const [away, setAway] = useState<ReadonlySet<string> | undefined>();
+    // on the way back to the bottom (最新へ): the smooth scroll does not count as leaving it, unless the reader scrolls
+    const returning = useRef(false);
+    const follow = (el: HTMLElement): void => {
+        const bottom = atBottomOf(el);
+        if (bottom) returning.current = false;
+        if (returning.current) return;
+        atBottom.current = bottom;
+        setAway((known) => (bottom ? undefined : (known ?? new Set(items.map((i) => i.key)))));
+    };
     const toBottom = (): void => {
         const el = ref.current;
-        if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+        if (!el) return;
+        if (atBottom.current) el.scrollTop = el.scrollHeight;
+        // the bottom came into view without a scroll (the pane grew)
+        else follow(el);
     };
+    const toLatest = (): void => {
+        const el = ref.current;
+        if (!el) return;
+        atBottom.current = true;
+        returning.current = true;
+        setAway(undefined);
+        el.scrollTo({ top: el.scrollHeight, behavior: motionMs('--motion-enter') === 0 ? 'auto' : 'smooth' });
+    };
+    const me = session.me.participant.id;
+    const arrived = away && arrivedBelow(items, away, me, (r) => mentionsMe(r, session.state, me) || repliesToMe(r, session.state.requests, session.state, me));
+    const latestLabel = tx.chat.latest(arrived?.count ?? 0, arrived?.forMe ?? 0);
     const signature = items.map((i) => `${i.key}@${i.kind === 'card' ? i.updatedAt : i.at}`).join('|');
     useLayoutEffect(toBottom, [signature]);
     // the pane shown again, resized, or a bubble grown: still at the bottom
@@ -471,7 +500,7 @@ function Stream({ items }: { items: StreamItem[] }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
     const onScroll = (el: HTMLElement): void => {
-        atBottom.current = atBottomOf(el);
+        follow(el);
         if (!pill) return;
         const item = el.querySelector<HTMLElement>(`[data-item="${CSS.escape(pill.key)}"]`);
         if (item && inViewOf(el, item)) setPill(undefined);
@@ -485,7 +514,17 @@ function Stream({ items }: { items: StreamItem[] }) {
     if (initial.size === 0) for (const row of rows) initial.add(row.key);
     return (
         <div className="chat-stream-wrap">
-            <div className="chat-stream" ref={ref} onScroll={(e) => onScroll(e.currentTarget)}>
+            <div
+                className="chat-stream"
+                ref={ref}
+                onScroll={(e) => onScroll(e.currentTarget)}
+                onWheel={() => {
+                    returning.current = false;
+                }}
+                onTouchStart={() => {
+                    returning.current = false;
+                }}
+            >
                 <ol className="chat-items">
                     {rows.map((row, i) => (
                         <li
@@ -513,6 +552,24 @@ function Stream({ items }: { items: StreamItem[] }) {
                     }}
                 >
                     <span className="chat-updated-pill-text">{tx.chat.cardUpdated(pill.name)}</span>
+                </button>
+            )}
+            {/* away from the bottom: back to the newest, with how many arrived below (`@ n` when some are for me, as 💬) */}
+            {arrived && (
+                <button className="chat-latest motion-pop motion-pop-up" onClick={toLatest} aria-label={latestLabel} data-tooltip={latestLabel}>
+                    <ArrowDown size={16} aria-hidden />
+                    {arrived.forMe > 0 ? (
+                        <span className="chat-launcher-count mentions" aria-hidden>
+                            <span className="chat-launcher-at">@</span>
+                            {arrived.forMe}
+                        </span>
+                    ) : (
+                        arrived.count > 0 && (
+                            <span className="chat-launcher-count" aria-hidden>
+                                {arrived.count}
+                            </span>
+                        )
+                    )}
                 </button>
             )}
         </div>

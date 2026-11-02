@@ -6413,10 +6413,36 @@ button.add-to-request.added:hover {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-/* the "updated" pill names the card: one line, cut */
+/* the "updated" pill names the card: one line, cut — and, centred, clear of 最新へ on either side (its width, its
+   right offset and a gap), so that the two never overlap, at the chat's narrowest too */
 .chat-updated-pill {
-    max-width: calc(100% - 32px);
+    max-width: calc(100% - 2 * (var(--chat-latest-size) + var(--space-4) + var(--space-2)));
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+/* 最新へ: away from the bottom of the stream, a round button at its bottom right, just above the composer; the count of
+   what arrived below is the launcher's (`.chat-launcher-count`) */
+.chat-stream-wrap {
+    --chat-latest-size: 32px;
+}
+.chat-latest {
+    position: absolute;
+    right: var(--space-4);
+    bottom: var(--space-2);
+    width: var(--chat-latest-size);
+    height: var(--chat-latest-size);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--text-soft);
+    box-shadow: 0 2px 8px var(--shadow);
+    cursor: pointer;
+}
+.chat-latest:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
 }
