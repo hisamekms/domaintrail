@@ -39,7 +39,7 @@ import {
     uuid,
     type InvalidInput,
 } from './input.js';
-import { joinPage, messagePage, safeNext } from './pages.js';
+import { joinPage, messagePage, nameCookie, pageLanguage, rememberedName, safeNext } from './pages.js';
 import { publicParticipant } from './presence.js';
 
 /** Largest body of a session API request (a request's text is at most 10,000 characters). */
@@ -617,56 +617,63 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
     };
 
     const signInAnswer: SessionSurface['signIn'] = (req, url, res) => {
-        if (identities.mode === 'dev') return joinPage(res, 401, `${url.pathname}${url.search}`);
-        messagePage(res, 401, 'Sign in required', 'Open this session through its Cloudflare Access URL to sign in.');
+        const language = pageLanguage(req.headers['accept-language']);
+        if (identities.mode === 'dev') return joinPage(res, language, 401, `${url.pathname}${url.search}`, { name: rememberedName(req.headers) });
+        messagePage(res, language, 401, 'signInRequired');
     };
 
     const pages: SessionSurface['pages'] = async (req, url, res, auth) => {
+        const language = pageLanguage(req.headers['accept-language']);
         if (url.pathname === '/session/join') {
-            if (identities.mode !== 'dev') return messagePage(res, 404, 'Not found', 'Participants of this session sign in through Cloudflare Access.');
+            if (identities.mode !== 'dev') return messagePage(res, language, 404, 'signInThroughAccess');
+            const remembered = { name: rememberedName(req.headers) };
             if (req.method === 'GET' || req.method === 'HEAD') {
                 if (auth.kind === 'participant') return redirect(res, safeNext(url.searchParams.get('next')));
-                return joinPage(res, 200, safeNext(url.searchParams.get('next')));
+                return joinPage(res, language, 200, safeNext(url.searchParams.get('next')), remembered);
             }
-            if (req.method !== 'POST') return messagePage(res, 405, 'Method not allowed', 'Use the form.');
-            if (mediaType(req) !== 'application/x-www-form-urlencoded') return messagePage(res, 415, 'Unsupported form', 'Use the form.');
+            if (req.method !== 'POST') return messagePage(res, language, 405, 'formMethod');
+            if (mediaType(req) !== 'application/x-www-form-urlencoded') return messagePage(res, language, 415, 'formMediaType');
             let form: URLSearchParams;
             try {
                 form = new URLSearchParams(await readText(req, MAX_FORM));
             } catch (e) {
-                if (e instanceof BodyError) return messagePage(res, e.status, 'Form too large', e.message);
+                if (e instanceof BodyError) return messagePage(res, language, e.status, 'formTooLarge');
                 throw e;
             }
             const next = safeNext(form.get('next'));
             if (auth.kind === 'participant') return redirect(res, next);
             const name = displayName(form.get('name') ?? '');
-            if (!name.ok) return joinPage(res, 400, next, name.error.message);
+            if (!name.ok) return joinPage(res, language, 400, next, { ...remembered, error: 'invalidName' });
             const r = await signIn(name.value);
-            if (!r.ok) return joinPage(res, statusOf(r.error.type), next, r.error.type === 'SessionFull' ? 'The session is full.' : 'The session is not open.');
-            return redirect(res, next, devCookie(r.secret, deps.secureCookie));
+            if (!r.ok)
+                return joinPage(res, language, statusOf(r.error.type), next, {
+                    ...remembered,
+                    error: r.error.type === 'SessionFull' ? 'sessionFull' : 'sessionNotOpen',
+                });
+            // the name is remembered for the next join form, of this session or another one on the host
+            return redirect(res, next, [devCookie(r.secret, deps.secureCookie), nameCookie(name.value, deps.secureCookie)]);
         }
         if (url.pathname === '/session/facilitator') {
-            if (req.method !== 'GET' && req.method !== 'HEAD') return messagePage(res, 405, 'Method not allowed', 'Open the link.');
+            if (req.method !== 'GET' && req.method !== 'HEAD') return messagePage(res, language, 405, 'linkMethod');
             const code = url.searchParams.get('code') ?? '';
-            if (!/^[A-Za-z0-9_-]{16,128}$/.test(code)) return messagePage(res, 400, 'Not a facilitator link', 'The link is incomplete.');
+            if (!/^[A-Za-z0-9_-]{16,128}$/.test(code)) return messagePage(res, language, 400, 'linkIncomplete');
             if (auth.kind !== 'participant') return signInAnswer(req, url, res);
             // opening the link while signed in claims it: the code is the secret, single use and short-lived
             const claimed = await identities.claimFacilitator(code, auth.participant.identity);
-            if (!claimed.ok)
-                return messagePage(res, 409, 'Link not valid', 'This facilitator link was used already or has expired. Ask for a new one (dt session link).');
+            if (!claimed.ok) return messagePage(res, language, 409, 'linkNotValid');
             if (claimed.value.previous) deps.disconnect(claimed.value.previous, 'facilitator changed');
             deps.disconnect(auth.participant.identity, 'facilitator changed');
             deps.facilitatorChanged();
             deps.log('facilitator claimed');
             return redirect(res, '/');
         }
-        messagePage(res, 404, 'Not found', 'No such page.');
+        messagePage(res, language, 404, 'notFound');
     };
 
     return { policy: { ...deps.hostPolicy, identify: (headers) => identities.identify(headers) }, api, pages, signIn: signInAnswer };
 }
 
-function redirect(res: ServerResponse, location: string, cookie?: string): void {
+function redirect(res: ServerResponse, location: string, cookie?: string | string[]): void {
     res.writeHead(303, { location, 'cache-control': 'no-store', ...(cookie && { 'set-cookie': cookie }) });
     res.end();
 }

@@ -1206,6 +1206,59 @@ describe('the join form (dev)', () => {
             await server.stop();
         }
     });
+
+    test('remembers the name it joined with for the next join form; speaks the browser’s language', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            const first = await fetch(server.url, { headers: { 'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8' } });
+            expect(first.status).toBe(401);
+            expect(first.headers.get('vary')).toBe('Accept-Language');
+            const firstHtml = await first.text();
+            expect(firstHtml).toContain('<html lang="ja">');
+            expect(firstHtml).toContain('DomainTrail のセッションに参加');
+            expect(firstHtml).toMatch(/autocomplete="nickname">/);
+
+            const posted = await fetch(`${server.url}session/join`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ name: ' Ada "the first" ', next: '/' }).toString(),
+                redirect: 'manual',
+            });
+            expect(posted.status).toBe(303);
+            const set = posted.headers.getSetCookie();
+            const remembered = set.find((c) => c.startsWith('dt_name=')) ?? '';
+            expect(remembered).toBe('dt_name=Ada%20%22the%20first%22; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000');
+            expect(set.some((c) => c.startsWith('dt_session='))).toBe(true);
+
+            // signed out (only the name's cookie), the form starts with the name, escaped
+            const again = await fetch(`${server.url}session/join`, { headers: { cookie: remembered.split(';')[0], 'accept-language': 'en-US,ja;q=0.8' } });
+            const html = await again.text();
+            expect(html).toContain('<html lang="en">');
+            expect(html).toContain('value="Ada &quot;the first&quot;"');
+            // a cookie that is no valid name is ignored
+            const broken = await fetch(`${server.url}session/join`, { headers: { cookie: 'dt_name=%0A' } });
+            expect(await broken.text()).toMatch(/autocomplete="nickname">/);
+            // a failed join sets no cookie and keeps the language
+            const blank = await fetch(`${server.url}session/join`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded', 'accept-language': 'ja' },
+                body: 'name=%20',
+                redirect: 'manual',
+            });
+            expect(blank.status).toBe(400);
+            expect(blank.headers.get('set-cookie')).toBeNull();
+            expect(await blank.text()).toContain('名前は1行・60文字以内で入力してください。');
+
+            // the other pages too
+            const missing = await fetch(`${server.url}session/nope`, { headers: { 'accept-language': 'ja' } });
+            expect([missing.status, missing.headers.get('vary')]).toEqual([404, 'Accept-Language']);
+            expect(await missing.text()).toContain('<h1>ページがありません</h1>');
+            expect(await (await fetch(`${server.url}session/nope`, { headers: { 'accept-language': 'fr' } })).text()).toContain('<h1>Not found</h1>');
+        } finally {
+            await server.stop();
+        }
+    });
 });
 
 describe('the facilitator’s holder', () => {
