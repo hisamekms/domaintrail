@@ -65,6 +65,7 @@ import {
     participantNames,
     speakerName,
     streamItems,
+    targetShortText,
     targetText,
     type AgentStatus,
     type StreamItem,
@@ -1194,7 +1195,9 @@ function Composer(props: {
           : matchPeople(people, query.query).map((p) => ({ kind: 'person', key: p.id, person: p }));
     const canSend = !sending && value.text.trim() !== '';
     const mac = isMac(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent);
+    // a chip shows the target's own name; its whole name is in the tooltip and the labels
     const nameOf = (target: TargetDraft): string => targetText(target, tx.workspace, naming);
+    const shortOf = (target: TargetDraft): string => targetShortText(target, tx.workspace, naming);
     const kindOf = (c: MentionCandidate): string => {
         const names: Readonly<Record<string, string>> = c.kind.language === 'dt' ? t.kinds : t.esKinds;
         return names[c.kind.kind] ?? c.kind.kind;
@@ -1386,7 +1389,7 @@ function Composer(props: {
                             data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
                         >
                             <span className="chat-chip-number">{i + 1}</span>
-                            <span className="chat-chip-name">{nameOf(c.target)}</span>
+                            <span className="chat-chip-name">{shortOf(c.target)}</span>
                             <button
                                 className="chat-chip-remove"
                                 aria-label={tx.chat.removeTarget(nameOf(c.target))}
@@ -1407,7 +1410,7 @@ function Composer(props: {
                             <span className="chat-chip-number" aria-hidden>
                                 {value.chips.length + i + 1}
                             </span>
-                            <span className="chat-chip-name">{nameOf(s)}</span>
+                            <span className="chat-chip-name">{shortOf(s)}</span>
                             <button
                                 className="chat-chip-remove"
                                 aria-label={tx.chat.dismissSuggestion(nameOf(s))}

@@ -8,8 +8,8 @@ import { SessionApiError } from './api';
 import { parseBody } from './mentions';
 import { useTargetNaming } from './naming';
 import { initials, participantColor } from './presence';
-import { targetText } from './stream';
-import { targetKey, targetShortName, type ModelTarget } from './targets';
+import { targetShortText, targetText } from './stream';
+import { targetKey, type ModelTarget } from './targets';
 
 type Tx = Messages['session'];
 type FrozenRequest = SessionStateBody['runs'][number]['input']['requests'][number];
@@ -47,7 +47,7 @@ export function TargetChip({
 }) {
     const naming = useTargetNaming();
     const text = targetText(target, tx.workspace, naming);
-    const shown = <span className="chat-chip-name">#{(naming && targetShortName(target.target, naming)) ?? text}</span>;
+    const shown = <span className="chat-chip-name">#{targetShortText(target, tx.workspace, naming)}</span>;
     const kind = `chat-chip chat-target kind-${target.target.kind}`;
     if (status === 'current' && target.target.kind !== 'Workspace')
         return (
@@ -87,8 +87,9 @@ export function TargetChips(props: {
 }
 
 /**
- * A body with its mentions as links: an element to its target (named as the chips are, `#注文`), a person to their row
- * among the participants (`@佐藤`, by the name they have now); the rest stays text.
+ * A body with its mentions as links: an element to its target (named as the chips are, by its own name, `#支払済み`; its
+ * whole name in the tooltip), a person to their row among the participants (`@佐藤`, by the name they have now); the
+ * rest stays text.
  */
 export function MentionedText(props: {
     body: string;
@@ -125,13 +126,15 @@ export function MentionedText(props: {
                     );
                 }
                 const target = targets[seg.index];
-                const name = `#${naming ? targetText(target, tx.workspace, naming) : seg.name}`;
+                const name = `#${naming ? targetShortText(target, tx.workspace, naming) : seg.name}`;
+                const full = naming ? targetText(target, tx.workspace, naming) : undefined;
+                const tooltip = full !== undefined && `#${full}` !== name ? { 'data-tooltip': full } : {};
                 return props.statuses?.[seg.index] === 'current' ? (
-                    <a key={i} className="chat-mention" onClick={() => props.onNavigate(target.target)}>
+                    <a key={i} className="chat-mention" onClick={() => props.onNavigate(target.target)} {...tooltip}>
                         {name}
                     </a>
                 ) : (
-                    <span key={i} className="chat-mention stale">
+                    <span key={i} className="chat-mention stale" {...tooltip}>
                         {name}
                     </span>
                 );

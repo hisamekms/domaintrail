@@ -44,7 +44,7 @@ const MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Ski
 
 /** The first characters of a request's body on one line. */
 function head(r: ReplyRequest, max = 48): string {
-    const text = oneLine(bodyText(r.request.body, r.request.targets.length));
+    const text = oneLine(bodyText(r.request.body, r.request.targets));
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 

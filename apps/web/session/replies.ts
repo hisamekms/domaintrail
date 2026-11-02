@@ -96,7 +96,7 @@ export interface MessageReference {
 /** The reference of a reply to the message `request`; `undefined` when the session does not hold it. */
 export function messageReference(requests: readonly RequestJson[], request: string): MessageReference | undefined {
     const r = requests.find((q) => q.id === request);
-    return r && { request, author: r.author, head: oneLine(bodyText(r.body, r.targets.length, r.mentions.length)) };
+    return r && { request, author: r.author, head: oneLine(bodyText(r.body, r.targets, r.mentions.length)) };
 }
 
 /**

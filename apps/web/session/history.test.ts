@@ -205,6 +205,12 @@ describe('the history of changes', () => {
             // a token past the request's targets stays as written; one written before `#`, with `@`, is an element too
             expect(requestHead({ body: '#x[2] stays', targets: [] })).toBe('#x[2] stays');
             expect(requestHead({ body: '@請求書[1] old', targets: mentioning.targets })).toBe('請求書 old');
+            // a state or a command by its own name, as the chips show it; an element with a dot in its name keeps it
+            const member = (element: string): RequestJson['targets'] =>
+                [{ target: { kind: 'DtElement', element }, sourceRevision: 'r0', label: 'x' }] as unknown as RequestJson['targets'];
+            expect(requestHead({ body: '#請求書.支払済み[1] にする', targets: member('Billing.Invoice#Paid') })).toBe('支払済み にする');
+            expect(requestHead({ body: '#Invoice.issue[1] で', targets: member('Billing.Invoice:issue') })).toBe('issue で');
+            expect(requestHead({ body: '#Billing.Invoice[1] を', targets: member('Billing.Invoice') })).toBe('Billing.Invoice を');
             const queued = run('run2', 2, [qc], { state: 'Queued' });
             expect(unitName(changeUnits({ runs: [queued], revisions })[0])).toEqual({ kind: 'request', text: 'body of qc' });
         });

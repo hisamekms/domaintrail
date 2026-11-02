@@ -22,6 +22,7 @@ import {
     revisionLookup,
     speakerName,
     targetsSummary,
+    targetShortText,
     targetText,
 } from './stream';
 
@@ -326,6 +327,13 @@ describe('targets named in the display setting', () => {
         const customer = { target: { kind: 'DtElement', element: 'Sales.Customer' } } as const;
         expect(targetsSummary([order, customer, customer], 'All', naming('label'))).toBe('注文 +2');
         expect(targetsSummary([order], 'All', naming('name'))).toBe('Order');
+        // a state by its own name, without its aggregate (the whole name is the tooltip's)
+        const draft = { target: { kind: 'DtElement', element: 'Sales.Order#Draft' } } as const;
+        expect(targetsSummary([draft, order], 'All', naming('label'))).toBe('下書き +1');
+        expect(targetShortText(draft, 'All', naming('label'))).toBe('下書き');
+        expect(targetText(draft, 'All', naming('label'))).toBe('注文.下書き');
+        // one no longer in the sources: the label it was taken with
+        expect(targetShortText({ target: { kind: 'DtElement', element: 'Sales.Gone' }, label: 'なくなった' }, 'All', naming('label'))).toBe('なくなった');
         expect(targetsSummary([], 'All', naming('label'))).toBe('All');
     });
 

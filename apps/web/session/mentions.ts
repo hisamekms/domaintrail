@@ -12,7 +12,7 @@
 import { commandsOf, contextOf, statesOf } from '@domaintrail/modeling';
 import { declarations, firstDeclarations } from '@domaintrail/storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, plainBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
+import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, parseBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
 import { nameIn } from '../model-utils';
 import { targetKey, targetName, targetOfSelection, type NamingContext, type TargetDraft } from './targets';
 
@@ -34,12 +34,35 @@ export interface ComposerValue {
 
 export const EMPTY_COMPOSER: ComposerValue = { text: '', chips: [], people: [] };
 
+/** A request's target as a body's token reads it: only what tells a state or a command from an element. */
+export interface TokenTarget {
+    readonly target: { readonly kind: string; readonly element?: string };
+}
+
 /**
- * A body as one reads it on one line: each element as `#name`, each person as `@name`, without their numbers. Only
- * the targets the request has are elements; people are read whatever their number (a run's frozen request does not
- * keep whom it mentioned).
+ * A token's name for its target on one line: the target's own name, as the chips show it — a state or a command
+ * (`Agg#State`, `Agg:cmd`), written with its aggregate (`請求書.支払済み`), without it; anything else as written.
  */
-export const bodyText = (text: string, targets: number, people = MAX_REQUEST_MENTIONS): string => plainBody(text, { targets, people });
+export function ownTokenName(name: string, target: TokenTarget | undefined): string {
+    const member = target?.target.kind === 'DtElement' && /[#:]/.test(target.target.element ?? '');
+    const dot = name.indexOf('.');
+    return member && dot > 0 && dot < name.length - 1 ? name.slice(dot + 1) : name;
+}
+
+/**
+ * A body as one reads it on one line: each element as `#name` (its own name, `ownTokenName`), each person as `@name`,
+ * without their numbers (`bare`: the names alone). Only the targets the request has are elements; people are read
+ * whatever their number (a run's frozen request does not keep whom it mentioned).
+ */
+export function bodyText(text: string, targets: readonly TokenTarget[], people = MAX_REQUEST_MENTIONS, bare = false): string {
+    return parseBody(text, { targets: targets.length, people })
+        .map((seg) => {
+            if (seg.kind === 'text') return seg.text;
+            const name = seg.kind === 'element' ? ownTokenName(seg.name, targets[seg.index]) : seg.name;
+            return bare ? name : `${seg.kind === 'element' ? '#' : '@'}${name}`;
+        })
+        .join('');
+}
 
 /** The numbers (0-based) of the targets, and of the people, a text mentions. */
 function mentionedIn(text: string): { readonly targets: Set<number>; readonly people: Set<number> } {

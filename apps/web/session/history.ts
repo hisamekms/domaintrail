@@ -5,7 +5,8 @@
 // People read a unit as one chunk of change, so it is named, not numbered: its title is the one the AI gave its first
 // run that has one (the runs that continue it never rename it), else the head of the first message it applied.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { MAX_REQUEST_MENTIONS, plainBody } from '@domaintrail/collaboration';
+import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration';
+import { bodyText } from './mentions';
 
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
@@ -206,10 +207,11 @@ export const unfinishedCount = (units: readonly ChangeUnit[]): number => units.f
 
 /**
  * A request's text on one line, its tokens (elements and people, `body.ts`) as the names they were written with,
- * without sign nor number. A frozen request does not keep whom it mentioned, so every person token is read as one.
+ * without sign nor number; an element by its own name (`ownTokenName`). A frozen request does not keep whom it mentioned,
+ * so every person token is read as one.
  */
 export const requestHead = (r: Pick<FrozenRequest, 'body' | 'targets'>): string =>
-    plainBody(r.body, { targets: r.targets.length, people: MAX_REQUEST_MENTIONS }, true).replace(/\s+/g, ' ').trim();
+    bodyText(r.body, r.targets, MAX_REQUEST_MENTIONS, true).replace(/\s+/g, ' ').trim();
 
 /**
  * What a unit is called: its title, else the head of the first message its first run applied (on one line; the page

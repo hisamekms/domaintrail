@@ -240,7 +240,7 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
 function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
     const { tx, nameOf, hovered, hover, jump, onNavigate } = useChat();
     const r = quote.request;
-    const head = oneLine(bodyText(r.body, r.targets.length));
+    const head = oneLine(bodyText(r.body, r.targets));
     return (
         <li
             className={`run-quote${hovered === r.request ? ' paired' : ''}${quote.progress ? ` status-${quote.progress}` : ''}`}

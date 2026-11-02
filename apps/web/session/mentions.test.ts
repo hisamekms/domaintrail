@@ -69,7 +69,12 @@ describe('mentions in a body', () => {
         expect(parseBody('＃注文[1]', { targets: 1, people: 0 })).toEqual([{ kind: 'element', name: '注文', index: 0 }]);
         expect(parseBody('no mention', { targets: 0, people: 0 })).toEqual([{ kind: 'text', text: 'no mention' }]);
         // on one line: elements as #name (an old @name[n] too), people as @name
-        expect(bodyText('#注文[1] と @顧客[1] と #謎[3] を @佐藤[p1]', 1)).toBe('#注文 と #顧客 と #謎[3] を @佐藤');
+        const order = { target: { kind: 'DtElement', element: 'Sales.Order' } };
+        expect(bodyText('#注文[1] と @顧客[1] と #謎[3] を @佐藤[p1]', [order])).toBe('#注文 と #顧客 と #謎[3] を @佐藤');
+        // a state or a command by its own name, as the chips show it
+        const paid = { target: { kind: 'DtElement', element: 'Billing.Invoice#Paid' } };
+        expect(bodyText('#請求書.支払済み[1] に @佐藤[p1]', [paid])).toBe('#支払済み に @佐藤');
+        expect(bodyText('#請求書.支払済み[1] に @佐藤[p1]', [paid], 1, true)).toBe('支払済み に 佐藤');
         expect(mentionName('注文 (Order)')).toBe('注文(Order)');
         expect(mentionName('a[b]@c#d')).toBe('abcd');
     });

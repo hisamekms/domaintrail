@@ -2680,7 +2680,10 @@ whole workspace, and such a message shows no target chips (nor the composer any 
 element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `#`
 to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
 Enter or Tab, Esc; Japanese input works, `＃` too: a candidate is never picked while the IME converts): it becomes a
-chip under the text and `#name[n]` in the text, n its number. (Messages written before `#` named elements have
+chip under the text and `#name[n]` in the text, n its number. Wherever a target is shown on its own — a chip, being
+written or sent, a mention in a sent text, a card named after its first message — it reads as its own name, without
+what it is in (`#支払済み`, not `#請求書.支払済み`), its whole name in the tooltip; only the `#` list keeps the kind and
+where beside each name, to tell the candidates apart. (Messages written before `#` named elements have
 `@name[n]`: they still read as elements.) The chips are the request's targets: delete every mention of one to
 drop it, or remove it with ×, which leaves its mentions as plain text. What you select (on the canvas or in the
 explorer) is suggested as dashed chips: sending makes them targets, × drops a suggestion until the selection changes;
@@ -2690,7 +2693,7 @@ which draws each event once, targets the event's definition, and a selection of 
 text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
 sent message never changes. (Sessions from before kept a *dismissed* mark on some requests; they load and show as
 messages, and the page no longer dismisses.) A sent message shows its targets above its text as read-only chips, each
-by its own name (`#支払済み`, its whole name in the tooltip), a link to each; each target shows whether it is still in the sources
+by its own name (`#支払済み`, its whole name in the tooltip), and its mentions the same way, a link to each; each target shows whether it is still in the sources
 (`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
 would be in does not parse. The agent sees each request's targets numbered from 1, so `#注文[1]` in one request never
 means another request's target.

@@ -7,7 +7,7 @@ import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
 import type { PersonCandidate } from './mentions';
-import { targetKey, targetName, type NamingContext, type TargetDraft } from './targets';
+import { targetKey, targetName, targetShortName, type NamingContext, type TargetDraft } from './targets';
 
 type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
@@ -234,11 +234,21 @@ export function targetText(target: Pick<TargetDraft, 'target' | 'label'>, worksp
     return (naming && targetName(target.target, naming)) ?? target.label ?? targetKey(target.target);
 }
 
-/** A request's targets on one line: the first one's name and how many more (`注文 +2`); none: the whole workspace. */
+/**
+ * What a target is shown as where it stands alone (a chip, a mention, a one-line summary): its own name, without what it
+ * is in (`targetShortName`: `支払済み`, not `請求書.支払済み`), else its whole name as `targetText` gives it. The whole
+ * name goes in the tooltip.
+ */
+export function targetShortText(target: Pick<TargetDraft, 'target' | 'label'>, workspace: string, naming?: NamingContext): string {
+    if (target.target.kind === 'Workspace') return workspace;
+    return (naming && targetShortName(target.target, naming)) ?? targetText(target, workspace, naming);
+}
+
+/** A request's targets on one line: the first one's own name and how many more (`注文 +2`); none: the whole workspace. */
 export function targetsSummary(targets: readonly Pick<TargetDraft, 'target' | 'label'>[], workspace: string, naming?: NamingContext): string {
     const [first, ...rest] = targets;
     if (!first) return workspace;
-    const name = targetText(first, workspace, naming);
+    const name = targetShortText(first, workspace, naming);
     return rest.length ? `${name} +${rest.length}` : name;
 }
 
