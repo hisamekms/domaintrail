@@ -92,10 +92,10 @@ inspector's 状態遷移 diagram has the same controls.
   (possible, not "happened"), dashed orange arrows the order of a timeline (the event's orange, not a warning),
   dotted lines the other relations (without an arrowhead for a hotspot's event). The notes take the convention's
   colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
-  aggregate yellow, read model green, hotspot pink-red, actor pale yellow (rounded), external system fuchsia (dashed
-  edge), and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
-  («イベント»), so the colour is never the only cue. Light: pale paper and dark text; dark: deep paper of the same
-  hue and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
+  aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
+  and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
+  («イベント»), so the colour is never the only cue. Light: soft pastel paper, a coloured edge and dark text; dark:
+  muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
 
 The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
 concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and

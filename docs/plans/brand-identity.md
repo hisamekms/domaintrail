@@ -107,26 +107,31 @@ aggregate root (`--model-aggregate`); each has its own name so that one can chan
 
 ### 3. Meaning
 
-**Event Storming** (issue #33 §3.2): conventional hues. Light: pale paper and dark text; dark: deep paper of the same
-hue and pale text. Both the `-text` token and the theme's `--text` read on every paper (≥ 4.5:1), so the notes stay
+**Event Storming** (issue #33 §3.2): conventional hues in `main`'s soft sticky-note tone (W5, the human's choice over
+the issue's saturated values; their `main` values are the primitives `--p-note-*`). Light: soft pastel paper, a
+coloured edge and dark text; dark: muted deep paper of the same hue, a coloured edge and pale text. Both the `-text` token and the theme's `--text` read on every paper (≥ 4.5:1), so the notes stay
 legible until the diagrams task wires `-text`.
 
 | Kind | `--es-<kind>` light | `-text` | `-border` | dark paper | `-text` | `-border` |
 | --- | --- | --- | --- | --- | --- | --- |
-| Domain event (`event`) | `#FB923C` | `#431407` | `#C2410C` | `#C2410C` | `#FFEDD5` | `#FB923C` |
-| Command (`command`) | `#93C5FD` | `#172554` | `#2563EB` | `#1D4ED8` | `#DBEAFE` | `#93C5FD` |
-| Policy (`policy`) | `#C4B5FD` | `#2E1065` | `#7C3AED` | `#6D28D9` | `#EDE9FE` | `#C4B5FD` |
-| Aggregate (`aggregate`) | `#FDE68A` | `#78350F` | `#D97706` | `#975A0A` | `#FEF9C3` | `#FDE68A` |
-| Read model (`readmodel`) | `#A7F3D0` | `#064E3B` | `#059669` | `#047857` | `#D1FAE5` | `#6EE7B7` |
-| Hotspot (`hotspot`) | `#FCA5A5` | `#7F1D1D` | `#DC2626` | `#9D174D` | `#FCE7F3` | `#FCA5A5` |
-| Actor (`actor`) | `#FEF9C3` | `#713F12` | `#A16207` | `#713F12` | `#FEF9C3` | `#FACC15` |
-| External system (`external`) | `#F5D0FE` | `#4A044E` | `#C026D3` | `#86198F` | `#FAE8FF` | `#F0ABFC` |
+| Domain event (`event`) | `#FFD8A8` | `#431407` | `#E8590C` | `#4A2B14` | `#FFEDD5` | `#FF922B` |
+| Command (`command`) | `#CFE5FF` | `#172554` | `#1C7ED6` | `#16304D` | `#DBEAFE` | `#4DABF7` |
+| Policy (`policy`) | `#E5DBFF` | `#2E1065` | `#7048E8` | `#2C2250` | `#EDE9FE` | `#9775FA` |
+| Aggregate (`aggregate`) | `#FFF3BF` | `#78350F` | `#B8860B` | `#3D3410` | `#FEF9C3` | `#FCC419` |
+| Read model (`readmodel`) | `#D3F9D8` | `#064E3B` | `#2F9E44` | `#173A22` | `#D1FAE5` | `#51CF66` |
+| Hotspot (`hotspot`) | `#FFDEEB` | `#831843` | `#D6336C` | `#4A1A2E` | `#FCE7F3` | `#F06595` |
+| Actor (`actor`) | `#FFF9DB` | `#713F12` | `#A07D00` | `#36321A` | `#FEF9C3` | `#E0C050` |
+| External system (`external`) | `#F4D0F8` | `#4A044E` | `#A632B8` | `#44204C` | `#FAE8FF` | `#D65FE0` |
 | Group of a timeline (`--es-group-*`) | 35% of the event's paper | = event | = event | 35% of the event's paper | = event | = event |
 | Timeline arrows (`--es-sequence`, `-text` for their labels) | `#EA580C` | `#9A3412` | | `#FB923C` | `#FDBA74` | |
 
-Actor and external system are not in the issue's table: the actor takes the convention's small pale-yellow note (told
-from the aggregate by its rounded shape and lighter paper), the external system fuchsia (the convention's pink/lilac,
-kept apart from the hotspot's red and the policy's lavender, with its dashed edge). A timeline's group is a dashed
+The papers and edges are `main`'s except two: the aggregate's light edge, darkened from `main`'s `#D9A400` (2.17:1 on
+the canvas) to `#B8860B` (3.11:1), and the external system's (below). `main` had no `-text`: each kind's text is the
+deep (light) or pale (dark) shade of its hue. Actor and external system are not in the issue's table: the actor takes
+the convention's small pale-yellow note (told from the aggregate by its rounded shape and lighter paper), the external
+system a soft lilac (W3 had a saturated fuchsia; W5 takes `main`'s grape family a step towards orchid, `#F4D0F8` with a
+`#A632B8` edge, so that it sits between the policy's lavender and the hotspot's pink and further from both than
+`main`'s `#F1E4F7`, and keeps its dashed edge). A timeline's group is a dashed
 frame of the event's hue, its caption in the event's text (`.kind-es-group`, `.dg-esGroup`); a timeline itself has no
 note (it is drawn as its arrows; its kind chip in the inspector has a dashed edge of the arrows' orange). The timeline
 arrows are the event's hue (an order of events), not a warning: W3 moved them from orange-700 (`#C2410C`, close to the
@@ -196,9 +201,6 @@ red) but has its own tokens: added (green-700) is not success (emerald-700), rem
 
 | Token | Light | Dark | Role |
 | --- | --- | --- | --- |
-| `--chat-own-bg` | `#EEF2FF` | `#292D4C` | own message |
-| `--chat-other-bg` | `#F1F5F9` | `#252B3B` | another participant's message |
-| `--chat-agent-bg` | `#FFFFFF` | `#191D2B` | the agent's response (its icon and label say AI) |
 | `--chat-mention-bg` | `#E0E7FF` | `#373C67` | a mention |
 | `--chat-unread` | `#4338CA` | `#A5B4FC` | the unread marker (with a count or text) |
 | `--agent-active` | = `--action` | | every running phase: reading, editing, checking, finishing (told apart by icon and text) |
@@ -246,7 +248,7 @@ Connection states use the status tokens too, never a participant's hue. `partici
 | `--warning`, `--warning-wash`, `--banner-bg`, `--banner-border` | aliases of `--status-warning-*` | |
 | `--added`, `--changed`, `--removed` | aliases of `--diff-*` | used for diffs only: run states, the health and the connection moved to `--status-*` (W2) |
 | `--amber` | alias of `--model-event` | it was only the event's dot and band, never the brand's amber |
-| `--es-*`, `--es-*-border`, `--es-sequence` | kept, re-valued (conventional); `--es-*-text` added | |
+| `--es-*`, `--es-*-border`, `--es-sequence` | kept; papers and edges back to `main`'s values (W5); `--es-*-text` added | the values are the primitives `--p-note-*` |
 | `--grey*`, `--node-*`, `--ink-strong`, `--stub-bg`, `--context-*`, `--edge*`, `--gutter` | kept, slate-based | |
 | `--purple-*`, `--teal-*`, `--blue`, `--blue-text`, `--green`, `--green-wash`, `--orange-text`, `--amber`, `--violet`, `--violet-wash`, `--grey-text` | removed (W3) | their diagram uses moved to `--model-*`, `--syntax-*`, `--model-edge*` |
 | `--ref-edge`, `--ref-label`, `--edge`, `--edge-label`, `--ink-strong`, `--context-label`, `--boundary-border`, `--boundary-bg`, `--shared-bg`, `--keyword`, `--doc-comment` | removed (W3) | `--model-aggregate`, `--model-edge`, `--model-edge-label`, `--model-ink`, `--text-secondary`, `--syntax-*` |
@@ -345,10 +347,9 @@ stay apart: the decision is marked on the question or the assumption itself, nev
 
 **Chat (issue #33 §4.1).**
 
-- Message rows take their role's background: mine `--chat-own-bg` (`.chat-row.own`), another participant's
-  `--chat-other-bg` (`.chat-row.other`); an AI turn stays on `--chat-agent-bg` (the surface). One speaker's
-  consecutive messages join into one block. Hover is a tint over the role's colour (a `background-image`), so the role
-  stays.
+- Message rows have no background by role (W5, below): W2 gave mine and another participant's a faint box
+  (`--chat-own-bg`, `--chat-other-bg`) as §4.1 asks; the human found the boxes unnecessary. Hover is a tint (a
+  `background-image`) over whatever the row has, so a mention or a chosen row keeps its colour.
 - The AI's avatar is `--agent-avatar` (neutral slate) on every turn; the running hue is only beside it.
 - A message mentioning me: `--chat-mention-bg`, a 3px `--chat-unread` bar, a hidden label (あなた宛て / For you);
   inside it `--muted` is `--text-secondary`, since the quietest text is 4.39:1 on that background.
@@ -375,7 +376,7 @@ use the status tokens with their words (接続中, 接続済み, 切断). The pa
 WCAG 2 ratios of the token pairs, computed from the values above (a small script, not in the repository: relative
 luminance and `(L1 + 0.05) / (L2 + 0.05)`). Text needs 4.5:1; the focus ring, control edges, sticky-note edges
 against the canvas and participant hues against the background need 3:1; separators and disabled controls are listed
-for information (WCAG does not require them). All 200 pairs pass.
+for information (WCAG does not require them). All 194 pairs pass.
 
 Notes on values that differ from issue #33:
 
@@ -390,11 +391,11 @@ Notes on values that differ from issue #33:
 - `--status-idle-bg` (light `#F8FAFC`): the issue gives no idle background; on `#F1F5F9` the idle ink is 4.34:1.
 - `--model-context-tint` (`#F8FAFC`) and `--model-command-tint` (`#EFF6FF` instead of `#DBEAFE`): the accent on its
   tint reaches 4.5:1 only with the lighter tint.
-- `--es-actor-border` light `#A16207` (yellow-700): yellow-600 is 2.8:1 on the canvas. It has the same value as
-  `--diff-changed`; the roles stay apart.
-- The dark sticky papers (not in the issue): deep fills of each hue, so that the light text of the dark theme reads
-  on them; the aggregate's paper is `#975A0A` (yellow-700 gives 4.49:1 with `--text`), the hotspot's pink-800
-  `#9D174D` (red-700 looked like the event's orange-700 side by side).
+- The Event Storming papers follow `main`'s softer tone by the human's choice (W5), not the issue's saturated values;
+  the light aggregate's edge is darker than `main`'s (`#B8860B`, 3.11:1 on the canvas; `main`'s `#D9A400` was 2.17:1)
+  and the external system is a soft lilac (`#F4D0F8`, edge `#A632B8`).
+- The dark sticky papers (not in the issue): `main`'s muted deep papers with coloured edges and pale text (W5; W1–W4
+  had vivid deep fills).
 
 The tables (light, then dark):
 
@@ -461,30 +462,30 @@ The tables (light, then dark):
 
 | Pair | Fg | Bg | Ratio | Needs | |
 | --- | --- | --- | --- | --- | --- |
-| event text / fill | `#431407` | `#FB923C` | 6.92 | 4.5 | pass |
-| event theme text (until wired) / fill | `#0F172A` | `#FB923C` | 7.89 | 4.5 | pass |
-| event border / canvas | `#C2410C` | `#F9FAFB` | 4.96 | 3 | pass |
-| command text / fill | `#172554` | `#93C5FD` | 8.15 | 4.5 | pass |
-| command theme text (until wired) / fill | `#0F172A` | `#93C5FD` | 9.90 | 4.5 | pass |
-| command border / canvas | `#2563EB` | `#F9FAFB` | 4.95 | 3 | pass |
-| policy text / fill | `#2E1065` | `#C4B5FD` | 8.25 | 4.5 | pass |
-| policy theme text (until wired) / fill | `#0F172A` | `#C4B5FD` | 9.67 | 4.5 | pass |
-| policy border / canvas | `#7C3AED` | `#F9FAFB` | 5.45 | 3 | pass |
-| aggregate text / fill | `#78350F` | `#FDE68A` | 7.28 | 4.5 | pass |
-| aggregate theme text (until wired) / fill | `#0F172A` | `#FDE68A` | 14.33 | 4.5 | pass |
-| aggregate border / canvas | `#D97706` | `#F9FAFB` | 3.05 | 3 | pass |
-| readmodel text / fill | `#064E3B` | `#A7F3D0` | 7.58 | 4.5 | pass |
-| readmodel theme text (until wired) / fill | `#0F172A` | `#A7F3D0` | 13.92 | 4.5 | pass |
-| readmodel border / canvas | `#059669` | `#F9FAFB` | 3.61 | 3 | pass |
-| hotspot text / fill | `#7F1D1D` | `#FCA5A5` | 5.28 | 4.5 | pass |
-| hotspot theme text (until wired) / fill | `#0F172A` | `#FCA5A5` | 9.41 | 4.5 | pass |
-| hotspot border / canvas | `#DC2626` | `#F9FAFB` | 4.62 | 3 | pass |
-| actor text / fill | `#713F12` | `#FEF9C3` | 8.07 | 4.5 | pass |
-| actor theme text (until wired) / fill | `#0F172A` | `#FEF9C3` | 16.62 | 4.5 | pass |
-| actor border / canvas | `#A16207` | `#F9FAFB` | 4.71 | 3 | pass |
-| external text / fill | `#4A044E` | `#F5D0FE` | 10.81 | 4.5 | pass |
-| external theme text (until wired) / fill | `#0F172A` | `#F5D0FE` | 13.04 | 4.5 | pass |
-| external border / canvas | `#C026D3` | `#F9FAFB` | 4.51 | 3 | pass |
+| event text / paper | `#431407` | `#FFD8A8` | 11.66 | 4.5 | pass |
+| event theme text / paper | `#0F172A` | `#FFD8A8` | 13.30 | 4.5 | pass |
+| event edge / canvas | `#E8590C` | `#F9FAFB` | 3.43 | 3 | pass |
+| command text / paper | `#172554` | `#CFE5FF` | 11.41 | 4.5 | pass |
+| command theme text / paper | `#0F172A` | `#CFE5FF` | 13.86 | 4.5 | pass |
+| command edge / canvas | `#1C7ED6` | `#F9FAFB` | 4.02 | 3 | pass |
+| policy text / paper | `#2E1065` | `#E5DBFF` | 11.54 | 4.5 | pass |
+| policy theme text / paper | `#0F172A` | `#E5DBFF` | 13.52 | 4.5 | pass |
+| policy edge / canvas | `#7048E8` | `#F9FAFB` | 5.31 | 3 | pass |
+| aggregate text / paper | `#78350F` | `#FFF3BF` | 8.13 | 4.5 | pass |
+| aggregate theme text / paper | `#0F172A` | `#FFF3BF` | 16.00 | 4.5 | pass |
+| aggregate edge / canvas | `#B8860B` | `#F9FAFB` | 3.11 | 3 | pass |
+| readmodel text / paper | `#064E3B` | `#D3F9D8` | 8.48 | 4.5 | pass |
+| readmodel theme text / paper | `#0F172A` | `#D3F9D8` | 15.57 | 4.5 | pass |
+| readmodel edge / canvas | `#2F9E44` | `#F9FAFB` | 3.30 | 3 | pass |
+| hotspot text / paper | `#831843` | `#FFDEEB` | 7.76 | 4.5 | pass |
+| hotspot theme text / paper | `#0F172A` | `#FFDEEB` | 14.37 | 4.5 | pass |
+| hotspot edge / canvas | `#D6336C` | `#F9FAFB` | 4.42 | 3 | pass |
+| actor text / paper | `#713F12` | `#FFF9DB` | 8.19 | 4.5 | pass |
+| actor theme text / paper | `#0F172A` | `#FFF9DB` | 16.85 | 4.5 | pass |
+| actor edge / canvas | `#A07D00` | `#F9FAFB` | 3.70 | 3 | pass |
+| external text / paper | `#4A044E` | `#F4D0F8` | 10.73 | 4.5 | pass |
+| external theme text / paper | `#0F172A` | `#F4D0F8` | 12.94 | 4.5 | pass |
+| external edge / canvas | `#A632B8` | `#F9FAFB` | 5.33 | 3 | pass |
 
 #### Modeling accents (light)
 
@@ -509,9 +510,6 @@ The tables (light, then dark):
 
 | Pair | Fg | Bg | Ratio | Needs | |
 | --- | --- | --- | --- | --- | --- |
-| text / own | `#0F172A` | `#EEF2FF` | 15.97 | 4.5 | pass |
-| text / other | `#0F172A` | `#F1F5F9` | 16.30 | 4.5 | pass |
-| text / agent | `#0F172A` | `#FFFFFF` | 17.85 | 4.5 | pass |
 | text / mention | `#0F172A` | `#E0E7FF` | 14.49 | 4.5 | pass |
 | unread / surface | `#4338CA` | `#FFFFFF` | 7.90 | 3 | pass |
 | on-action / unread | `#FFFFFF` | `#4338CA` | 7.90 | 4.5 | pass |
@@ -596,30 +594,30 @@ The tables (light, then dark):
 
 | Pair | Fg | Bg | Ratio | Needs | |
 | --- | --- | --- | --- | --- | --- |
-| event text / fill | `#FFEDD5` | `#C2410C` | 4.52 | 4.5 | pass |
-| event theme text (until wired) / fill | `#F1F5F9` | `#C2410C` | 4.73 | 4.5 | pass |
-| event border / canvas | `#FB923C` | `#101011` | 8.40 | 3 | pass |
-| command text / fill | `#DBEAFE` | `#1D4ED8` | 5.49 | 4.5 | pass |
-| command theme text (until wired) / fill | `#F1F5F9` | `#1D4ED8` | 6.12 | 4.5 | pass |
-| command border / canvas | `#93C5FD` | `#101011` | 10.55 | 3 | pass |
-| policy text / fill | `#EDE9FE` | `#6D28D9` | 5.98 | 4.5 | pass |
-| policy theme text (until wired) / fill | `#F1F5F9` | `#6D28D9` | 6.49 | 4.5 | pass |
-| policy border / canvas | `#C4B5FD` | `#101011` | 10.30 | 3 | pass |
-| aggregate text / fill | `#FEF9C3` | `#975A0A` | 5.17 | 4.5 | pass |
-| aggregate theme text (until wired) / fill | `#F1F5F9` | `#975A0A` | 5.07 | 4.5 | pass |
-| aggregate border / canvas | `#FDE68A` | `#101011` | 15.27 | 3 | pass |
-| readmodel text / fill | `#D1FAE5` | `#047857` | 4.84 | 4.5 | pass |
-| readmodel theme text (until wired) / fill | `#F1F5F9` | `#047857` | 5.01 | 4.5 | pass |
-| readmodel border / canvas | `#6EE7B7` | `#101011` | 12.48 | 3 | pass |
-| hotspot text / fill | `#FCE7F3` | `#9D174D` | 6.71 | 4.5 | pass |
-| hotspot theme text (until wired) / fill | `#F1F5F9` | `#9D174D` | 7.20 | 4.5 | pass |
-| hotspot border / canvas | `#FCA5A5` | `#101011` | 10.02 | 3 | pass |
-| actor text / fill | `#FEF9C3` | `#713F12` | 8.07 | 4.5 | pass |
-| actor theme text (until wired) / fill | `#F1F5F9` | `#713F12` | 7.91 | 4.5 | pass |
-| actor border / canvas | `#FACC15` | `#101011` | 12.42 | 3 | pass |
-| external text / fill | `#FAE8FF` | `#86198F` | 7.08 | 4.5 | pass |
-| external theme text (until wired) / fill | `#F1F5F9` | `#86198F` | 7.52 | 4.5 | pass |
-| external border / canvas | `#F0ABFC` | `#101011` | 10.81 | 3 | pass |
+| event text / paper | `#FFEDD5` | `#4A2B14` | 11.13 | 4.5 | pass |
+| event theme text / paper | `#F1F5F9` | `#4A2B14` | 11.64 | 4.5 | pass |
+| event edge / canvas | `#FF922B` | `#101011` | 8.51 | 3 | pass |
+| command text / paper | `#DBEAFE` | `#16304D` | 11.00 | 4.5 | pass |
+| command theme text / paper | `#F1F5F9` | `#16304D` | 12.26 | 4.5 | pass |
+| command edge / canvas | `#4DABF7` | `#101011` | 7.68 | 3 | pass |
+| policy text / paper | `#EDE9FE` | `#2C2250` | 12.18 | 4.5 | pass |
+| policy theme text / paper | `#F1F5F9` | `#2C2250` | 13.20 | 4.5 | pass |
+| policy edge / canvas | `#9775FA` | `#101011` | 5.65 | 3 | pass |
+| aggregate text / paper | `#FEF9C3` | `#3D3410` | 11.52 | 4.5 | pass |
+| aggregate theme text / paper | `#F1F5F9` | `#3D3410` | 11.30 | 4.5 | pass |
+| aggregate edge / canvas | `#FCC419` | `#101011` | 11.82 | 3 | pass |
+| readmodel text / paper | `#D1FAE5` | `#173A22` | 11.12 | 4.5 | pass |
+| readmodel theme text / paper | `#F1F5F9` | `#173A22` | 11.51 | 4.5 | pass |
+| readmodel edge / canvas | `#51CF66` | `#101011` | 9.48 | 3 | pass |
+| hotspot text / paper | `#FCE7F3` | `#4A1A2E` | 12.08 | 4.5 | pass |
+| hotspot theme text / paper | `#F1F5F9` | `#4A1A2E` | 12.97 | 4.5 | pass |
+| hotspot edge / canvas | `#F06595` | `#101011` | 6.34 | 3 | pass |
+| actor text / paper | `#FEF9C3` | `#36321A` | 12.01 | 4.5 | pass |
+| actor theme text / paper | `#F1F5F9` | `#36321A` | 11.77 | 4.5 | pass |
+| actor edge / canvas | `#E0C050` | `#101011` | 10.71 | 3 | pass |
+| external text / paper | `#FAE8FF` | `#44204C` | 11.60 | 4.5 | pass |
+| external theme text / paper | `#F1F5F9` | `#44204C` | 12.31 | 4.5 | pass |
+| external edge / canvas | `#D65FE0` | `#101011` | 5.95 | 3 | pass |
 
 #### Modeling accents (dark)
 
@@ -644,9 +642,6 @@ The tables (light, then dark):
 
 | Pair | Fg | Bg | Ratio | Needs | |
 | --- | --- | --- | --- | --- | --- |
-| text / own | `#F1F5F9` | `#292D4C` | 12.18 | 4.5 | pass |
-| text / other | `#F1F5F9` | `#252B3B` | 12.89 | 4.5 | pass |
-| text / agent | `#F1F5F9` | `#191D2B` | 15.31 | 4.5 | pass |
 | text / mention | `#F1F5F9` | `#373C67` | 9.56 | 4.5 | pass |
 | unread / surface | `#A5B4FC` | `#191D2B` | 8.41 | 3 | pass |
 | on-action / unread | `#10131D` | `#A5B4FC` | 9.30 | 4.5 | pass |
@@ -674,11 +669,7 @@ The pairs W2 added (both themes; `bun contrast.ts` over the values). All pass.
 
 | Pair | Light | Ratio | Dark | Ratio | Needs |
 | --- | --- | --- | --- | --- | --- |
-| muted / chat-own-bg | `#5E6B7F` / `#EEF2FF` | 4.83 | `#94A3B8` / `#292D4C` | 5.20 | 4.5 |
-| muted / chat-other-bg | `#5E6B7F` / `#F1F5F9` | 4.93 | `#94A3B8` / `#252B3B` | 5.51 | 4.5 |
 | muted (= text-secondary there) / chat-mention-bg | `#475569` / `#E0E7FF` | 6.15 | `#CBD5E1` / `#373C67` | 7.06 | 4.5 |
-| action (links) / chat-own-bg | `#4338CA` / `#EEF2FF` | 7.07 | `#A5B4FC` / `#292D4C` | 6.69 | 4.5 |
-| action (links) / chat-other-bg | `#4338CA` / `#F1F5F9` | 7.21 | `#A5B4FC` / `#252B3B` | 7.08 | 4.5 |
 | action (links, inline chip) / chat-mention-bg | `#4338CA` / `#E0E7FF` | 6.41 | `#A5B4FC` / `#373C67` | 5.25 | 4.5 |
 | unread bar / chat-mention-bg | `#4338CA` / `#E0E7FF` | 6.41 | `#A5B4FC` / `#373C67` | 5.25 | 3 |
 | on-agent-avatar / agent-avatar | `#FFFFFF` / `#475569` | 7.58 | `#10131D` / `#CBD5E1` | 12.48 | 4.5 |
@@ -692,12 +683,11 @@ The pairs W2 added (both themes; `bun contrast.ts` over the values). All pass.
 | diff-changed / diff-changed-bg | `#A16207` / `#FEF9C3` | 4.58 | `#FDE047` / `#3A3214` | 9.68 | 4.5 |
 | diff-removed / diff-removed-bg | `#BE123C` / `#FFE4E6` | 5.24 | `#FDA4AF` / `#4A1D2A` | 7.40 | 4.5 |
 | model-event / its tint (storming kind label) | `#C2410C` / `#FFEDD5` | 4.52 | `#FDBA74` / `#43291A` | 7.93 | 4.5 |
-| chat-own-bg / surface (row edge, informative) | `#EEF2FF` / `#FFFFFF` | 1.12 | `#292D4C` / `#191D2B` | 1.26 | — |
-| chat-other-bg / surface (row edge, informative) | `#F1F5F9` / `#FFFFFF` | 1.10 | `#252B3B` / `#191D2B` | 1.19 | — |
 
-Participants over the sticky notes (informative): in light the hues are 2.4–4.0:1 on the papers; in dark the deep
-papers and the hues are close (1.1–1.3:1), so a cursor over a note is told apart by its halo (the dark surface, 1.9–3.2:1
-on the papers) and its name label (`--on-participant` on the hue, ≥ 4.99:1).
+Participants over the sticky notes (informative, W5 values): in light the hues are 3.62–5.70:1 on the papers; in dark
+the deep papers and the hues are close (2.05–2.90:1), so a cursor over a note is told apart by its halo
+(`--participant-halo-canvas`, 11.30–13.20:1 on the papers) and its name label (`--on-participant` on the hue,
+≥ 4.99:1).
 
 #### Diagrams (W3)
 
@@ -709,8 +699,8 @@ Composites are computed over tldraw's canvas (`#F9FAFB` / `#101011`); a frame's 
 | --- | --- | --- | --- | --- | --- |
 | es-sequence (timeline arrow) / canvas | `#EA580C` | `#F9FAFB` | 3.41 | 3 | pass |
 | es-sequence-text (its label) / canvas | `#9A3412` | `#F9FAFB` | 6.99 | 4.5 | pass |
-| es-group-text / group frame (35% event over canvas) | `#431407` | `#FAD6B8` | 11.46 | 4.5 | pass |
-| es-group-border / canvas | `#C2410C` | `#F9FAFB` | 4.96 | 3 | pass |
+| es-group-text / group frame (35% event over canvas) | `#431407` | `#FBEEDE` | 13.70 | 4.5 | pass |
+| es-group-border / canvas | `#E8590C` | `#F9FAFB` | 3.43 | 3 | pass |
 | model-state / surface | `#475569` | `#FFFFFF` | 7.58 | 4.5 | pass |
 | model-state / its tint | `#475569` | `#F1F5F9` | 6.92 | 4.5 | pass |
 | model-error / surface | `#991B1B` | `#FFFFFF` | 8.31 | 4.5 | pass |
@@ -744,8 +734,8 @@ Composites are computed over tldraw's canvas (`#F9FAFB` / `#101011`); a frame's 
 | --- | --- | --- | --- | --- | --- |
 | es-sequence / canvas | `#FB923C` | `#101011` | 8.40 | 3 | pass |
 | es-sequence-text / canvas | `#FDBA74` | `#101011` | 11.28 | 4.5 | pass |
-| es-group-text / group frame (35% event over canvas) | `#FFEDD5` | `#4E210F` | 11.84 | 4.5 | pass |
-| es-group-border / canvas | `#FB923C` | `#101011` | 8.40 | 3 | pass |
+| es-group-text / group frame (35% event over canvas) | `#FFEDD5` | `#241912` | 14.99 | 4.5 | pass |
+| es-group-border / canvas | `#FF922B` | `#101011` | 8.51 | 3 | pass |
 | model-state / surface | `#CBD5E1` | `#191D2B` | 11.30 | 4.5 | pass |
 | model-state / its tint | `#CBD5E1` | `#252B3B` | 9.51 | 4.5 | pass |
 | model-error / surface | `#FCA5A5` | `#191D2B` | 8.84 | 4.5 | pass |
@@ -799,15 +789,42 @@ protan/deutan dark, event and hotspot red in tritan), and each meaning keeps its
 legend names, badges and `+ ~ −` marks, state icons and words). At 200% zoom (and with 特大) the chrome, the chat and
 AI の作業 stay legible with nothing clipped.
 
+## What W5 changed (the human's review: chat boxes, the storming's tone)
+
+- **Chat: no background by role.** The faint boxes around every participant's message (`.chat-row.own` /
+  `.chat-row.other`, `--chat-own-bg` / `--chat-other-bg`, and the joined corners of one speaker's consecutive messages)
+  are gone, as on `main`; the tokens are removed in both themes, with `--chat-agent-bg` (it named the surface and had
+  no use) and the primitive `--p-indigo-night-800`. This deviates from issue #33 §4.1 on purpose: the avatar (initials
+  on the participant's hue, or the AI's mark on its slate) and the name (「あなた」 for mine) already say who speaks,
+  own and other backgrounds were nearly the same, and boxing every human message made the unboxed AI turns stand out.
+  Kept: a message mentioning me (`--chat-mention-bg`, the indigo bar, the hidden label), a chosen row
+  (`--selected-bg`, its `--action` edge), the hover tint, the AI turns.
+- **Event Storming: `main`'s soft tone.** The papers and edges are `main`'s again (light pastel papers with a coloured
+  edge; dark muted deep papers with a coloured edge), as primitives `--p-note-<hue>(-night)(-edge)`; the layers, the
+  `-text` tokens, the legend's chips, the selection ring, the group and the timeline tokens stay. Changed from `main`:
+  the light aggregate's edge (`#B8860B`, for 3:1) and the external system (a soft lilac, `#F4D0F8` / `#A632B8`, dark
+  `#44204C` / `#D65FE0`). The group follows the event (a frame of 35% of its paper, its edge and its text). The timeline
+  arrows keep orange-600 / orange-400 (the event's hue, ΔE2000 ≥ 19.9 from the danger red). The primitives only the
+  old storming values used are removed.
+- Checks: every text on its paper 7.76–12.18:1, every edge on the canvas 3.11–11.82:1 (tables above). Side by side
+  (ΔE2000, light): the event's peach is 10.3 from the aggregate's yellow and 12.8 from the actor's cream, so the
+  event's orange was not strengthened; hotspot vs event 23.8 (edges 30.1; dark 20.2 / 39.0), external vs policy 7.4
+  and vs hotspot 8.7 (their edges 12.9 and 21.3, and the external's is dashed). Colour-vision simulation (CDP
+  `Emulation.setEmulatedVisionDeficiency`) on the storming diagram and legend: as in W4, the warm kinds (event,
+  aggregate, actor, read model) merge into yellows in protanopia and deuteranopia and into pinks in tritanopia (the
+  event and the hotspot closest); the stereotype text and the legend's names carry the kind.
+
 ## Open for a human decision
 
-- The dark sticky notes use deep papers with pale text; the alternative is mid-tone papers with dark text (closer to
-  paper notes, but brighter on a dark canvas). The `-text` tokens let the diagrams task switch either way.
-- Message backgrounds by role (W2, as issue #33 §4.1 asks) make every participant's message a faint box, where #32
-  had plain text; own (`#EEF2FF`) and other (`#F1F5F9`) are close, told apart by the name (「あなた」).
+- The dark sticky notes use `main`'s muted deep papers with pale text and coloured edges (W5); the alternative is
+  mid-tone papers with dark text (closer to paper notes, but brighter on a dark canvas). The `-text` tokens allow
+  either.
+- (W5) The aggregate's and the actor's papers stay close, as on `main` (ΔE2000 6.1 light, 4.6 dark; edges 6.1 / 7.2):
+  they are told apart by the actor's rounded, smaller note and the stereotype. Making the aggregate a stronger yellow
+  would part them but leave `main`'s tone.
 - The AI's avatar moved from the accent to a neutral slate (`--agent-avatar`), so that indigo beside a turn means it is
   running; keeping indigo would only need `--agent-avatar: var(--brand-ink)`.
-- Same-value tokens across roles (`--es-actor-border` = `--diff-changed`; `--model-command-tint` = the dark info
+- Same-value tokens across roles (`--model-command-tint` = the dark info
   background; participant ochre vs the warning): accepted as the issue allows; the overlay rules (§5) keep them apart
   by channel.
 - (W3) The selection is drawn twice: our indigo ring outside the node and tldraw's own thin blue outline on its edge.
