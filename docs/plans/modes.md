@@ -626,6 +626,22 @@ Round 3 (maintainer, 2026-11-03) decided the questions this plan left open:
 | Q11 | A generic classifier provider interface | Later |
 | Q12 | The triage process | **Configurable** (`agent.triage.warm`); the default is a fresh `claude -p` call per triage. M7 measures whether warm pays |
 
-Still open: what the agents are given about the session so far (the changes since it started, the decisions taken,
-the chat around an addressed message) — proposed to the maintainer as a "session context" built from the session's
-events; to be decided before M2.
+## The session so far (decided, round 3)
+
+What the agents are given about the session so far, besides the current files (which they read themselves):
+
+- **The timeline, as the page's chat shows it**, written as text and built mechanically from the session's records (no
+  AI summary, so it is stable and survives restarts): people's messages (who, body, what they reply to, targets);
+  each AI turn in a few lines (which requests, the outcome — completed, unchanged, answered, failed, declined,
+  reverted —, its summary, the elements it changed, without the diff; its assumptions and how they were decided);
+  events (proposals approved or rejected with the reason, reverts, restores, external edits seen); and what is open
+  now (questions awaiting an answer, proposals awaiting approval, the queue). The chat alone is not enough: it does
+  not say what a run actually changed, whether it failed, or what was decided through the page (approvals, picks,
+  reverts, restores).
+- **Limits**: the newest 30 entries in full, the next 100 one line each, older ones only counted; configurable later.
+- **Details**: the runs a request replies to keep their diff (`previousRuns`, as today). A read-only tool to fetch
+  any run's diff comes later, if M7 shows the summaries are not enough.
+- **Every role, every mode**: given to the answerer and the runner in `dt open` and `dt collab`, cold or warm. A cold
+  process gets the whole timeline each time (it remembers nothing); a warm one gets it in full when it starts and then
+  only what was added since its previous turn, so the conversation does not grow twice. The triage stage gets a short
+  window around the addressed message.
