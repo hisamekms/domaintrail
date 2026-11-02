@@ -575,7 +575,7 @@ const MARK_GLYPH: Record<MarkState, string> = {
 
 /**
  * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓`;
- * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, how it reads and the tools to send it to the AI.
+ * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, the tools to send it to the AI.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
@@ -586,8 +586,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     const facilitator = isFacilitator(session.state, r.author);
     const statuses = session.targets?.statuses[r.id];
     const mark = marks.get(r.id);
-    const classification = classifications?.[r.id];
-    const talk = classification?.kind === 'chat';
+    // read as talk: no AI に送る button in the row (still in the … menu)
+    const talk = classifications?.[r.id]?.kind === 'chat';
     const selected = selection.ids.has(r.id);
     const [note, setNote] = useState<string | undefined>();
     const choose = (e: React.MouseEvent): void => {
@@ -600,14 +600,6 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     };
     const side = (
         <div className="chat-message-side">
-            {control && classification && classification.kind !== 'unknown' && (
-                <span
-                    className={`chat-class class-${classification.kind}`}
-                    data-tooltip={tx.chat.classificationHint(tx.chat.classification[classification.kind], classification.probability)}
-                >
-                    {tx.chat.classification[classification.kind]}
-                </span>
-            )}
             {mark && (
                 <button
                     className={`chat-mark mark-${mark.state}`}
@@ -642,7 +634,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     );
     return (
         <div
-            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${talk ? ' talk' : ''}${toMe ? ' mentions-me' : ''}`}
+            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${toMe ? ' mentions-me' : ''}`}
             onClickCapture={choose}
             // Shift / ⌘ chooses the message: no text selection
             onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}

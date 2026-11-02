@@ -2736,8 +2736,8 @@ asking for it; the agent is given the run it assumed in, and the card shows the 
 
 **Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
 Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
-message appears at once; its classification follows, shown to the facilitator only (a small 依頼 / 会話 mark).
-The AI に送る button is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
+message appears at once; its classification follows, for the facilitator only, and shows only as whether the row has
+the AI に送る button: it is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
 probability near `threshold` leaves a message sendable — while a message read as talk can still be sent from its …
 menu. Results are kept in memory: after a restart, earlier messages are all sendable. **The text of each message is sent to
 Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from

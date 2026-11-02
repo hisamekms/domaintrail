@@ -535,9 +535,6 @@ const ja = {
             appliedAs: 'AI に送りました',
             undo: '取り消す',
             cancelRun: '実行を取り消す',
-            classification: { request: '依頼', chat: '会話', unknown: '' },
-            classificationHint: (kind: string, p: number | undefined) =>
-                `自動の分類: ${kind}${p === undefined ? '' : `（依頼らしさ ${Math.round(p * 100)}%）`}。ファシリテーターにだけ見えます`,
             marks: {
                 queued: '実行待ち',
                 running: '実行中',
@@ -1235,9 +1232,6 @@ const en: Messages = {
             appliedAs: 'Sent to the AI',
             undo: 'Undo',
             cancelRun: 'Cancel the run',
-            classification: { request: 'request', chat: 'chat', unknown: '' },
-            classificationHint: (kind, p) =>
-                `Classified automatically: ${kind}${p === undefined ? '' : ` (${Math.round(p * 100)}% a request)`}. Only the facilitator sees it`,
             marks: {
                 queued: 'queued',
                 running: 'running',

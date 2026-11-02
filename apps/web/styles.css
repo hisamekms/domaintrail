@@ -5044,9 +5044,6 @@ button.add-to-request.added:hover {
 .chat-row.selected {
     background: var(--violet-tint);
 }
-.chat-row.talk .chat-bubble {
-    opacity: 0.85;
-}
 .chat-select {
     margin-top: calc((var(--chat-avatar) - 13px) / 2);
 }
@@ -5113,12 +5110,6 @@ button.add-to-request.added:hover {
 }
 .session-chat .chat-apply-button {
     color: var(--accent);
-}
-/* how a message reads (the facilitator's): small muted text */
-.chat-class {
-    color: var(--muted);
-    font-size: var(--fs-small);
-    line-height: var(--lh-small);
 }
 .chat-apply-note {
     flex-basis: 100%;

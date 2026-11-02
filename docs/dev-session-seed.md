@@ -24,7 +24,7 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 | `--reset` | Wipes `--dir` first, when an earlier seed made it (it has a `.dt-session-seed` file) and no session server runs on it. |
 | `--workspace <dir>` | The workspace copied (default `examples/shop`; the scenarios name its elements). |
 | `--port <port>` | The Live View's port (default 4321). |
-| `--no-classifier` | Leaves the message classifier off: no 依頼 / 会話 tags. |
+| `--no-classifier` | Leaves the message classifier off: every message has the AI に送る button. |
 | `--leave-queued` | Leaves one run queued at the end; the next subscriber takes it. |
 | `--leave-running` | Leaves one run running at the end, held by the seed's agent, and two queued behind it (AI の作業's 実行中 and 待ち). Not with `--leave-queued`. |
 | `--exit` | Stops the session server once seeded instead of leaving it running. |
@@ -44,7 +44,7 @@ tags, see below).
 
 - **As the facilitator**: open the Live View, join with any name, then open the printed facilitator link (single use,
   10 minutes; `node dist/dt.js -r <dir> session link` prints another). You then hold the role `ooyama_F` held: the
-  facilitator's messages and reactions show as 「あなた」, and the 依頼 / 会話 tags, the AI に送る buttons and the menus are yours.
+  facilitator's messages and reactions show as 「あなた」, and the AI に送る buttons and the menus are yours.
 - **As a participant**: a private window, the same URL, another name. Your browser is a new participant, so none of the
   seeded messages are yours; the seeded people's cookies (`dt_session`) are in `<dir>/.domaintrail/seed.json`, for a
   browser (or a test) that should be one of them.
@@ -57,7 +57,7 @@ tags, see below).
   state, a command, a storming element, an occurrence) and the whole workspace (no target chips), `#name[n]` mentions
   (and one `@name[n]`, as bodies were written before), people mentioned (`@name[pN]`: two in one message, the
   facilitator in the long one, an element and two people together — sign in as 田中 or 鈴木 to see them marked), a long message
-  (clamped), 依頼 / 会話 / no tag, applied marks, and two targets a run then renames and removes (stale).
+  (clamped), messages read as a request, as talk (no AI に送る button) and not classified, applied marks, and two targets a run then renames and removes (stale).
 Every scripted reply gives a title (the card's name), as Claude Code's does, except the first card of `runs`, whose
 two replies have none, like replies from before titles: it shows the fallback (its first message). A run continuing a
 card gives a title of its own that the card does not take.
@@ -88,7 +88,8 @@ show in AI の作業 as 答え待ち.
 
 ## The classifier
 
-The 依頼 / 会話 tags need the message classifier (`session.classifier`). The seed enables it in the scratch config
+Telling talk from requests (a message read as talk has no AI に送る button in its row, only in its … menu) needs
+the message classifier (`session.classifier`). The seed enables it in the scratch config
 with a placeholder account and serves a stand-in for Cloudflare's API itself (`DOMAINTRAIL_CLASSIFIER_URL`): each
 seeded message reads as the scenario says, and a message typed later reads as a request when it asks for a change
 (して, 追加, 削除, …). No message leaves the machine. The stand-in lives in the seed's process, so a session server
