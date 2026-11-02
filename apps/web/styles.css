@@ -4,7 +4,7 @@
  *   2. theme: surfaces, text, borders, action, focus, selected, disabled (and the hovers and shadows around them)
  *   3. meaning: what a model element is, the Event Storming kinds (--es-*) and the modeling concepts (--model-*)
  *   4. status and diff: how something went (--status-*) and what changed from the baseline (--diff-*)
- *   5. collaboration: chat roles (--chat-*), the agent's activity (--agent-*), participants (--participant-*)
+ *   5. collaboration: the chat's mention and unread (--chat-*), the agent's activity (--agent-*), participants (--participant-*)
  * The dark theme (below) re-points layers 2–5 to other primitives; each layer has its own names, so one meaning never
  * borrows another's token (the brand's amber is not the warning, nor the event; indigo is the brand, actions and the
  * local selection). The older names (--panel, --accent, --error, …) stay as aliases of the new ones.
@@ -58,7 +58,6 @@
     --p-indigo-night-600: #373c67;
     --p-indigo-night-700: #30345a;
     --p-indigo-night-750: #2a2e52;
-    --p-indigo-night-800: #292d4c;
     /* the concept and status hues (Tailwind-like steps; -night: the dark theme's tinted backgrounds) */
     --p-orange-100: #ffedd5;
     --p-orange-300: #fdba74;
@@ -295,10 +294,8 @@
     --removed: var(--diff-removed);
 
     /* ---------- 5. collaboration ---------- */
-    /* chat roles (issue #33 §4.1): the message's background; the sender's name and avatar say who, not the colour */
-    --chat-own-bg: var(--p-indigo-50);
-    --chat-other-bg: var(--p-slate-100);
-    --chat-agent-bg: var(--p-white);
+    /* chat (issue #33 §4.1): a mention of me and the unread marker; messages have no background by role (the sender's
+       avatar and name say who) */
     --chat-mention-bg: var(--p-indigo-100);
     --chat-unread: var(--p-indigo-700);
     /* the agent's activity (§4.2): one hue for every running phase (reading, editing, checking, finishing), the phase
@@ -467,9 +464,6 @@
     --diff-removed-bg: var(--p-rose-night);
 
     /* 5. collaboration */
-    --chat-own-bg: var(--p-indigo-night-800);
-    --chat-other-bg: var(--p-night-800);
-    --chat-agent-bg: var(--p-night-900);
     --chat-mention-bg: var(--p-indigo-night-600);
     --chat-unread: var(--p-indigo-300);
     --agent-avatar: var(--p-slate-300);
@@ -5453,24 +5447,8 @@ button.add-to-request.added:hover {
     flex: 1;
     min-width: 0;
 }
-/* a message's box in its role's colour (the sender's name and avatar say who): mine, another participant's; an AI
-   turn stays on the chat's own surface (--chat-agent-bg), its avatar and name saying AI. One speaker's consecutive
-   messages join into one block */
-.chat-row.own {
-    background-color: var(--chat-own-bg);
-}
-.chat-row.other {
-    background-color: var(--chat-other-bg);
-}
-.chat-item:has(+ .chat-item.continued) > .chat-row {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-.chat-item.continued > .chat-row {
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-}
-/* hovered: a tint over the role's colour */
+/* no background by role: the avatar (initials, or the AI's mark) and the name say who speaks, mine, another
+   participant's or the AI's. Hovered: a tint over whatever the row has (chosen, mentioning me) */
 .chat-row:hover {
     background-image: linear-gradient(var(--row-hover), var(--row-hover));
 }
