@@ -17,13 +17,18 @@ describe('turnState', () => {
 });
 
 describe('slotLabels', () => {
-    test("has every state's word and a running turn's with its time", () => {
+    test("has the word of each state a turn shows and a running turn's with its time", () => {
         const labels = slotLabels(ja.marks);
         expect(labels).toContain('実行待ち');
-        expect(labels).toContain('確認待ち');
+        expect(labels).toContain('失敗');
         expect(labels).toContain(runningLabel(ja.marks, '00:00'));
         expect(runningLabel(ja.marks, '12:34')).toBe('実行中 12:34');
-        expect(slotLabels(en.marks)).toContain('awaiting an answer');
+        expect(slotLabels(en.marks)).toContain('cancelled');
+    });
+    test('leaves out what the slot never shows (a question, done), so that it is no wider than it needs', () => {
+        expect(slotLabels(ja.marks)).not.toContain('確認待ち');
+        expect(slotLabels(en.marks)).not.toContain('awaiting an answer');
+        expect(slotLabels(en.marks)).not.toContain('done');
     });
 });
 
