@@ -66,10 +66,14 @@ export function participantColor(id: string): string {
     return `hsl(${h % 360} 70% 45%)`;
 }
 
-/** Up to two initials of a name (when there is no avatar). */
+/** A character of a script whose one character already makes a name's mark: kanji, kana, hangul. */
+const CJK = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/** The initials of a name (when there is no avatar): its first character in CJK (`高橋` → `高`), else up to two letters. */
 export function initials(name: string): string {
     const words = name.trim().split(/\s+/).filter(Boolean);
     if (!words.length) return '?';
+    if (CJK.test(words[0])) return Array.from(words[0])[0];
     const chars = words.length > 1 ? [words[0][0], words[words.length - 1][0]] : Array.from(words[0]).slice(0, 2);
     return chars.join('').toUpperCase();
 }
