@@ -1,7 +1,7 @@
 // The warm runner of the runs (plan modes, the warm agent) and the warm process under it, against a fake `claude`
 // speaking stream-json (`test-fixtures/warm-claude.mjs`): one process across runs, the structured reply of each turn,
 // the prompt that says what changed since the last run, the interrupt on cancel, the restart triggers, a crash, the
-// fall-back to cold runs, and the notifications of the user's hooks.
+// fall-back to cold runs, the notifications of the user's hooks, and the idle timeout.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -288,5 +288,52 @@ describe('the warm runner', () => {
         await runner.run(invocation(2));
         await runner.close?.();
         expect(alive(logged()[0].pid)).toBe(false);
+    });
+});
+
+describe('the idle timeout of the warm process', () => {
+    test('a process with no turn for the timeout ends, said once; the next run starts a fresh one, no failure', async () => {
+        // one failure would turn every run cold: the idle stop must not count as one
+        const { runner, log, logged } = await setup([{}, {}], { idleTimeoutMs: 300, maxFailures: 1 });
+        await runner.run(invocation(1));
+        await waitFor('the idle process to end', () => !alive(logged()[0].pid));
+        expect(log.filter((l) => l.includes('ends (no turn for 0.3 s)'))).toHaveLength(1);
+        expect((await runner.run(invocation(2))).exitCode).toBe(0);
+        const [a, b] = logged();
+        expect(b.pid).not.toBe(a.pid);
+        // a fresh process: warm, with the plain prompt
+        expect(b.args).toContain('--input-format');
+        expect(b.prompt).toBe('prompt 2');
+        expect(log.some((l) => l.includes('failed'))).toBe(false);
+    });
+
+    test('no stop while a turn runs, however long', async () => {
+        const { runner, log, logged } = await setup([{ delay: 700 }, {}], { idleTimeoutMs: 200 });
+        expect((await runner.run(invocation(1))).exitCode).toBe(0);
+        expect((await runner.run(invocation(2))).exitCode).toBe(0);
+        const [a, b] = logged();
+        expect(b).toMatchObject({ pid: a.pid, prompt: 'continued 2' });
+        expect(log.some((l) => l.includes('no turn for'))).toBe(false);
+    });
+
+    test('each turn starts the timer again', async () => {
+        const { runner, log, logged } = await setup([{}], { idleTimeoutMs: 600 });
+        await runner.run(invocation(1));
+        await Bun.sleep(350);
+        await runner.run(invocation(2));
+        await Bun.sleep(350);
+        await runner.run(invocation(3));
+        // 700 ms since the first turn, 350 since each other
+        expect(new Set(logged().map((l) => l.pid)).size).toBe(1);
+        expect(log.some((l) => l.includes('no turn for'))).toBe(false);
+    });
+
+    test('0: the process is never ended for being idle', async () => {
+        const { runner, logged } = await setup([{}], { idleTimeoutMs: 0 });
+        await runner.run(invocation(1));
+        await Bun.sleep(300);
+        expect(alive(logged()[0].pid)).toBe(true);
+        await runner.run(invocation(2));
+        expect(logged()[1].pid).toBe(logged()[0].pid);
     });
 });

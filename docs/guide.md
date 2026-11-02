@@ -2813,7 +2813,8 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
       // how Claude Code carries out the runs
       "run": {
         "warm": true,          // one Claude Code process across runs (each run a turn); false: one process per run
-        "restartAfter": 20     // runs of one warm process before a fresh one replaces it
+        "restartAfter": 20,    // runs of one warm process before a fresh one replaces it
+        "idleTimeout": 30      // minutes without a run before the warm process ends (its memory freed); 0 = never
         // "model": "sonnet",  // claude --model; default: your Claude Code settings' model
         // "effort": "medium"  // claude --effort (low, medium, high, xhigh, max); default: your settings'
       }

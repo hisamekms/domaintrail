@@ -216,6 +216,12 @@
                   "minimum": 1,
                   "default": 20
                 },
+                "idleTimeout": {
+                  "description": "Minutes a warm Claude Code process may go without a run before it is ended to free its memory (the next run starts a fresh one); 0 = never.",
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 30
+                },
                 "model": {
                   "description": "The model Claude Code runs with (claude --model, e.g. \"sonnet\"). Default: the model of your Claude Code settings.",
                   "type": "string",

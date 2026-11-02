@@ -19,6 +19,7 @@ export {
     AGENT_EFFORTS,
     type AgentEffort,
     DEFAULT_AGENT_TOOLS,
+    DEFAULT_IDLE_TIMEOUT,
     DEFAULT_RESTART_AFTER,
     type RunConfig,
     resolveAgentConfig,

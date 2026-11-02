@@ -20,7 +20,10 @@ export const SCHEMA_REQUESTS = 20;
 export interface WarmRunnerOptions
     extends
         ClaudeCodeOptions,
-        Pick<WarmClaudeOptions, 'restartAfter' | 'contextLimit' | 'maxFailures' | 'startTimeoutMs' | 'interruptGraceMs' | 'closeGraceMs' | 'log'> {}
+        Pick<
+            WarmClaudeOptions,
+            'restartAfter' | 'idleTimeoutMs' | 'contextLimit' | 'maxFailures' | 'startTimeoutMs' | 'interruptGraceMs' | 'closeGraceMs' | 'log'
+        > {}
 
 export async function createWarmClaudeRunner(options: WarmRunnerOptions): Promise<AgentRunner> {
     const roots = [...new Set([options.root, realpathOr(options.root)])];

@@ -7,14 +7,16 @@
 // Lifecycle: no process until the first turn; replaced (no context carried) after `restartAfter` turns, when a turn's
 // context passes `contextLimit` tokens, when the profile changes, after `reset` (the role's reasons: a restored
 // revision, a declined run…; at once between turns, after the turn during one), and after anything unexpected of the
-// protocol (a control request of the CLI's, which is refused). A cancel sends the `interrupt` control request: the
+// protocol (a control request of the CLI's, which is refused). A process that takes no turn for `idleTimeoutMs` after
+// its last one ends (its memory freed; the timer runs only between turns), and the next turn starts a fresh one, which
+// is no failure. A cancel sends the `interrupt` control request: the
 // turn ends with an error result and the process stays; when no result comes within `interruptGraceMs`, the process
 // group is killed. A process that fails (does not answer a turn, exits in one) is replaced too; after `maxFailures`
 // in a row `coldOnly` turns true for good (logged once) and the role runs its turns cold. Notifications of the
 // user's own Claude Code settings (a Stop hook's `stop-hook-error`, one a turn) are logged once and otherwise
 // ignored. Neither a prompt nor the agent's output is logged.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { DEFAULT_RESTART_AFTER } from './config.js';
+import { DEFAULT_IDLE_TIMEOUT, DEFAULT_RESTART_AFTER } from './config.js';
 import { type ClaudeResult, createStreamReader, isObject, resultEvent } from './claude-stream.js';
 import { type AgentCommand, CLAUDE, KILL_GRACE_MS, killTree } from './claude-code.js';
 
@@ -47,6 +49,11 @@ export interface WarmClaudeOptions {
     readonly restartAfter?: number;
     /** Context tokens of a turn past which the process is replaced (default `CONTEXT_LIMIT`). */
     readonly contextLimit?: number;
+    /**
+     * How long a process may go without a turn after its last one before it is ended (default `DEFAULT_IDLE_TIMEOUT`
+     * minutes); `0`: never.
+     */
+    readonly idleTimeoutMs?: number;
     /** Failures in a row after which `coldOnly` turns true (default `MAX_FAILURES`). */
     readonly maxFailures?: number;
     /** How long a turn may show no sign of life after its message was written (default 60 s). */
@@ -126,6 +133,12 @@ function contextOf(event: Readonly<Record<string, unknown>>): number {
 /** A notification key fit for a log line. */
 const shownKey = (key: unknown): string => (typeof key === 'string' && /^[\w.:-]{1,64}$/.test(key) ? key : '<unnamed>');
 
+/** The longest delay `setTimeout` takes (a longer one fires at once). */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/** A duration fit for a log line: minutes when whole, else seconds. */
+const shownDuration = (ms: number): string => (ms % 60_000 === 0 ? `${ms / 60_000} minute${ms === 60_000 ? '' : 's'}` : `${Math.round(ms / 100) / 10} s`);
+
 export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
     const command = options.command ?? CLAUDE;
     const name = options.name ?? 'agent';
@@ -136,6 +149,7 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
     const startTimeoutMs = options.startTimeoutMs ?? 60_000;
     const interruptGraceMs = options.interruptGraceMs ?? 5_000;
     const closeGraceMs = options.closeGraceMs ?? 1_000;
+    const idleTimeoutMs = options.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT * 60_000;
 
     let current: WarmProcess | undefined;
     let failures = 0;
@@ -159,6 +173,27 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
             clearTimeout(kill);
         });
         return proc.exited;
+    };
+
+    /** Ends the current process once it has been idle for `idleTimeoutMs` (armed between turns only). */
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const stopIdleTimer = (): void => {
+        clearTimeout(idle);
+        idle = undefined;
+    };
+    /** Arms the idle timer for a process that just ended a turn and stays. */
+    const startIdleTimer = (proc: WarmProcess): void => {
+        stopIdleTimer();
+        if (idleTimeoutMs <= 0 || current !== proc || proc.retired || proc.turn) return;
+        idle = setTimeout(
+            () => {
+                idle = undefined;
+                if (current === proc && !proc.turn) void retire(proc, `no turn for ${shownDuration(idleTimeoutMs)}`);
+            },
+            Math.min(idleTimeoutMs, MAX_TIMER_MS),
+        );
+        // an idle process never keeps the program alive
+        idle.unref();
     };
 
     /** Kills a process's group at once (it may be mid-turn); its exit ends the turn. */
@@ -311,6 +346,7 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
             return coldOnly;
         },
         async turn(w: WarmTurn): Promise<WarmTurnEnd> {
+            stopIdleTimer();
             if (current && current.key !== w.profile.key) await retire(current, 'its tools or reply schema changed');
             if (w.signal.aborted) return { kind: 'cancelled' };
             const continuing = current !== undefined && current.turns > 0;
@@ -331,14 +367,19 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
             } else if (end.kind === 'cancelled' && proc.replaceAfterTurn) {
                 void retire(proc, proc.replaceAfterTurn);
             }
+            startIdleTimer(proc);
             return end;
         },
         reset(reason: string): void {
             if (!current) return;
             if (current.turn) current.replaceAfterTurn ??= reason;
-            else void retire(current, reason);
+            else {
+                stopIdleTimer();
+                void retire(current, reason);
+            }
         },
         async close(): Promise<void> {
+            stopIdleTimer();
             if (current) await retire(current, undefined);
         },
     };

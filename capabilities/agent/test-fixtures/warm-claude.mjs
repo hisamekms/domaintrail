@@ -12,6 +12,7 @@
 //     "mute": true,             says nothing at all for this turn
 //     "die": 4,                 exits with this code at once, before any event of the turn
 //     "ask": true,              sends a control request of its own before the result
+//     "delay": 500,             works this many ms (after the assistant message) before the result
 //     "scribble": "late.txt" }  says nothing and keeps appending to this file (in its working directory) every 10 ms
 //
 // Every turn prints `system/init`, a hook's `notification` (as a user's Stop hook does) and an assistant message
@@ -80,6 +81,7 @@ async function turn(prompt) {
     });
     if (step.crash !== undefined) process.exit(step.crash);
     if (step.ask) print({ type: 'control_request', request_id: 'q1', request: { subtype: 'can_use_tool', tool_name: 'Bash' } });
+    if (step.delay) await new Promise((resolve) => setTimeout(resolve, step.delay));
     if (step.hang) {
         await new Promise((resolve) => (interrupt = step.deaf ? () => {} : resolve));
         print(result(step, true));

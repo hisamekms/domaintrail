@@ -114,7 +114,15 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             ...(run?.model !== undefined && { model: run.model }),
             ...(run?.effort !== undefined && { effort: run.effort }),
         };
-        runner = (run?.warm ?? true) ? await createWarmClaudeRunner({ ...claude, restartAfter: run?.restartAfter, log }) : await createClaudeCodeRunner(claude);
+        runner =
+            (run?.warm ?? true)
+                ? await createWarmClaudeRunner({
+                      ...claude,
+                      restartAfter: run?.restartAfter,
+                      ...(run?.idleTimeout !== undefined && { idleTimeoutMs: run.idleTimeout * 60_000 }),
+                      log,
+                  })
+                : await createClaudeCodeRunner(claude);
     } catch (e) {
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }

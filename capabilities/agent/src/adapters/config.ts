@@ -1,6 +1,6 @@
 // The agent's settings in the `session.agent` section of domaintrail.jsonc (ADR 0026; ADR 0027, Project analysis and
 // configuration: the agent owns the allowed tools): `allowedTools` and `dt`, and how Claude Code carries out runs
-// (`run`: `warm`, `restartAfter`, `model`, `effort`; plan modes, the warm agent; the run role's keys, grouped so that
+// (`run`: `warm`, `restartAfter`, `idleTimeout`, `model`, `effort`; plan modes, the warm agent; the run role's keys, grouped so that
 // they move together when the section is renamed), their defaults and their validation. The
 // settings of its adapters (ADR 0027, Authorization: the agent's tools are enforced by its adapter): the Claude Code
 // runner's tools and the `dt` of the shim, whose paths are resolved against the config file's directory. The app
@@ -21,12 +21,15 @@ export const DT_RUNTIMES = ['node', 'bun', 'deno'] as const;
 /** Runs of one warm Claude Code process before it is replaced by a fresh one, unless configured. */
 export const DEFAULT_RESTART_AFTER = 20;
 
+/** Minutes a warm Claude Code process may go without a run before it is ended (its memory freed), unless configured. */
+export const DEFAULT_IDLE_TIMEOUT = 30;
+
 /** The effort levels Claude Code takes (`claude --effort`). */
 export const AGENT_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 
 /** How Claude Code carries out runs (the run role), the keys of `session.agent.run`. */
-export const RUN_CONFIG_KEYS = ['warm', 'restartAfter', 'model', 'effort'] as const;
+export const RUN_CONFIG_KEYS = ['warm', 'restartAfter', 'idleTimeout', 'model', 'effort'] as const;
 
 /** The agent's keys, by where they sit in the file. */
 export const AGENT_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
@@ -40,6 +43,8 @@ export interface RunConfigFile {
     warm?: boolean;
     /** Runs of one warm process before a fresh one replaces it. Default: `DEFAULT_RESTART_AFTER`. */
     restartAfter?: number;
+    /** Minutes without a run after which the warm process is ended; `0`: never. Default: `DEFAULT_IDLE_TIMEOUT`. */
+    idleTimeout?: number;
     /** `claude --model`; unset: the model of the user's Claude Code settings. */
     model?: string;
     /** `claude --effort`; unset: the effort of the user's Claude Code settings. */
@@ -50,6 +55,8 @@ export interface RunConfigFile {
 export interface RunConfig {
     warm: boolean;
     restartAfter: number;
+    /** Minutes; `0`: never. */
+    idleTimeout: number;
     model?: string;
     effort?: AgentEffort;
 }
@@ -107,6 +114,8 @@ function validateRunConfig(run: unknown, fail: (msg: string) => never): void {
     if (r.warm !== undefined && typeof r.warm !== 'boolean') fail(`'${at}.warm' must be true or false`);
     if (r.restartAfter !== undefined && !(typeof r.restartAfter === 'number' && Number.isInteger(r.restartAfter) && r.restartAfter >= 1))
         fail(`'${at}.restartAfter' must be a positive integer (runs)`);
+    if (r.idleTimeout !== undefined && !(typeof r.idleTimeout === 'number' && Number.isFinite(r.idleTimeout) && r.idleTimeout >= 0))
+        fail(`'${at}.idleTimeout' must be a number of minutes, 0 or more (0: never)`);
     if (r.model !== undefined && !(typeof r.model === 'string' && /^[A-Za-z0-9][\w.:@[\]/-]*$/.test(r.model)))
         fail(`'${at}.model' must be a Claude Code model name or alias (e.g. "sonnet")`);
     if (r.effort !== undefined && !(AGENT_EFFORTS as readonly unknown[]).includes(r.effort))
@@ -122,11 +131,15 @@ export function resolveAgentConfig(agent: AgentConfigFile = {}, dir?: string): R
     };
 }
 
-/** `session.agent.run` with its defaults: warm, replaced after `DEFAULT_RESTART_AFTER` runs, the user's model and effort. */
+/**
+ * `session.agent.run` with its defaults: warm, replaced after `DEFAULT_RESTART_AFTER` runs, ended after
+ * `DEFAULT_IDLE_TIMEOUT` minutes without a run, the user's model and effort.
+ */
 export function resolveRunConfig(run: RunConfigFile = {}): RunConfig {
     return {
         warm: run.warm ?? true,
         restartAfter: run.restartAfter ?? DEFAULT_RESTART_AFTER,
+        idleTimeout: run.idleTimeout ?? DEFAULT_IDLE_TIMEOUT,
         ...(run.model !== undefined && { model: run.model }),
         ...(run.effort !== undefined && { effort: run.effort }),
     };

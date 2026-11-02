@@ -90,7 +90,7 @@ const sessionConfig = (): ResolvedSessionConfig => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
-    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], run: { warm: true, restartAfter: 20 }, maxPreviousRunDiff: 20 * 1024 },
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], run: { warm: true, restartAfter: 20, idleTimeout: 30 }, maxPreviousRunDiff: 20 * 1024 },
     maxParticipants: 50,
     quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -233,7 +233,7 @@ async function subscribe(ctx: Context, planFile: string, extra: Partial<Subscrib
         agent: 'claude',
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
-        run: { warm: false, restartAfter: 20 },
+        run: { warm: false, restartAfter: 20, idleTimeout: 30 },
         log: (l) => log.push(l),
         reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },
         ...extra,
@@ -689,7 +689,7 @@ describe('the pipeline', () => {
 });
 
 describe('the warm agent', () => {
-    const WARM = { run: { warm: true, restartAfter: 20 } };
+    const WARM = { run: { warm: true, restartAfter: 20, idleTimeout: 30 } };
 
     integration('one process takes the runs one turn each; the next prompt names what changed since; a restore starts a fresh one', async () => {
         const ctx = await setup();

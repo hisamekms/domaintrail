@@ -43,7 +43,7 @@ const SESSION_DEFAULTS: ResolvedSessionConfig = {
     agent: {
         port: 0,
         allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'],
-        run: { warm: true, restartAfter: 20 },
+        run: { warm: true, restartAfter: 20, idleTimeout: 30 },
         maxPreviousRunDiff: 20480,
     },
     maxParticipants: 50,
@@ -124,7 +124,7 @@ describe('config file', () => {
                     port: 9000,
                     allowedTools: ['Read'],
                     dt: ['bun', path.resolve(ROOT, '../clone/bin/dt.ts')],
-                    run: { warm: false, restartAfter: 20, model: 'sonnet', effort: 'low' },
+                    run: { warm: false, restartAfter: 20, idleTimeout: 30, model: 'sonnet', effort: 'low' },
                     maxPreviousRunDiff: 4096,
                 },
                 maxParticipants: 5,
