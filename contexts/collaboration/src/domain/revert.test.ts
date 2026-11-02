@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { linesWithEnds, merge3, reverseChanges, undoableChanges, undoChanges, undoStatus, type UndoRun } from './undo.js';
+import { linesWithEnds, merge3, reverseChanges, revertableChanges, revertChanges, revertStatus, type RevertRun } from './revert.js';
 
 const texts = (o: Record<string, string>): Map<string, string> => new Map(Object.entries(o));
 
@@ -73,42 +73,42 @@ describe('reverseChanges', () => {
     });
 });
 
-describe('undo status', () => {
-    const run = (id: string, state: string, undoes?: string, revisions: { base?: string; result?: string } = {}): UndoRun => ({
+describe('revert status', () => {
+    const run = (id: string, state: string, reverts?: string, revisions: { base?: string; result?: string } = {}): RevertRun => ({
         id,
         state,
         ...(revisions.base && { baseRevision: revisions.base }),
         ...(revisions.result && { resultRevision: revisions.result }),
-        input: { requests: [{ ...(undoes && { undoes }) }] },
+        input: { requests: [{ ...(reverts && { reverts }) }] },
     });
 
-    test('a run can be undone when it ended with a result other than its base', () => {
-        expect(undoableChanges(run('r', 'Completed', undefined, { base: 'b', result: 'c' }))).toEqual({ base: 'b', result: 'c' });
-        expect(undoableChanges(run('r', 'Failed', undefined, { base: 'b', result: 'c' }))).toEqual({ base: 'b', result: 'c' });
-        expect(undoableChanges(run('r', 'Completed', undefined, { base: 'b', result: 'b' }))).toBeUndefined();
-        expect(undoableChanges(run('r', 'Cancelled', undefined, { base: 'b' }))).toBeUndefined();
-        expect(undoableChanges(run('r', 'Running', undefined, { base: 'b' }))).toBeUndefined();
+    test('a run can be reverted when it ended with a result other than its base', () => {
+        expect(revertableChanges(run('r', 'Completed', undefined, { base: 'b', result: 'c' }))).toEqual({ base: 'b', result: 'c' });
+        expect(revertableChanges(run('r', 'Failed', undefined, { base: 'b', result: 'c' }))).toEqual({ base: 'b', result: 'c' });
+        expect(revertableChanges(run('r', 'Completed', undefined, { base: 'b', result: 'b' }))).toBeUndefined();
+        expect(revertableChanges(run('r', 'Cancelled', undefined, { base: 'b' }))).toBeUndefined();
+        expect(revertableChanges(run('r', 'Running', undefined, { base: 'b' }))).toBeUndefined();
     });
 
-    test('undone by a mechanical undo or a completed AI undo; pending while one waits; none once it failed', () => {
+    test('reverted by a mechanical revert or a completed AI revert; pending while one waits; none once it failed', () => {
         const target = run('r', 'Completed', undefined, { base: 'b', result: 'c' });
-        expect(undoStatus(target, [target]).kind).toBe('none');
-        expect(undoStatus(target, [target, run('u', 'Queued', 'r')]).kind).toBe('pending');
-        expect(undoStatus(target, [target, run('u', 'Failed', 'r')]).kind).toBe('none');
-        expect(undoStatus(target, [target, run('u', 'Reverted', 'r')])).toEqual({ kind: 'undone', by: run('u', 'Reverted', 'r') });
-        expect(undoStatus(target, [target, run('u', 'Completed', 'r')]).kind).toBe('undone');
+        expect(revertStatus(target, [target]).kind).toBe('none');
+        expect(revertStatus(target, [target, run('u', 'Queued', 'r')]).kind).toBe('pending');
+        expect(revertStatus(target, [target, run('u', 'Failed', 'r')]).kind).toBe('none');
+        expect(revertStatus(target, [target, run('u', 'Reverted', 'r')])).toEqual({ kind: 'reverted', by: run('u', 'Reverted', 'r') });
+        expect(revertStatus(target, [target, run('u', 'Completed', 'r')]).kind).toBe('reverted');
     });
 
-    test('an undo undone in turn gives the run its changes back', () => {
+    test('a revert reverted in turn gives the run its changes back', () => {
         const target = run('r', 'Completed', undefined, { base: 'b', result: 'c' });
-        expect(undoStatus(target, [target, run('u', 'Reverted', 'r'), run('v', 'Reverted', 'u')]).kind).toBe('none');
+        expect(revertStatus(target, [target, run('u', 'Reverted', 'r'), run('v', 'Reverted', 'u')]).kind).toBe('none');
     });
 });
 
-describe('undoChanges', () => {
+describe('revertChanges', () => {
     test("gives each file's diff while the budget lasts, then its line counts", () => {
         const diff = (unified: string) => ({ kind: 'diff' as const, unified, added: 1, removed: 1, truncated: false });
-        const changes = undoChanges(
+        const changes = revertChanges(
             [
                 { path: 'a.dt', status: 'changed', diff: diff('@@ -1,1 +1,1 @@\n-a\n+b') },
                 { path: 'b.dt', status: 'changed', diff: diff(`@@ -1,1 +1,1 @@\n-${'x'.repeat(100)}\n+y`) },

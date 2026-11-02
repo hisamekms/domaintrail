@@ -212,7 +212,7 @@ export function CollabMenu(props: {
 }
 
 /**
- * 以前の状態に戻す… (the facilitator's last resort): the states the workspace can go back to, newest first, each named by
+ * 以前の状態に復元… (the facilitator's last resort): the states the workspace can go back to, newest first, each named by
  * what it was — the collab's start, before or after a unit of work, a record by someone, before or after a restore —
  * with its time (its revision's number in the tooltip). Choosing one closes the dialog; the chat asks before it
  * restores, and walks through external changes and a run in progress as any restore does.
@@ -231,13 +231,17 @@ function RestoreDialog(props: { session: SessionData; units: readonly ChangeUnit
         const unit = props.units.find((u) => u.runs.some((r) => r.run.id === run));
         return unit ? unitName(unit).text : '';
     };
+    // a revert is named by the work it reverts (「〈作業名〉の打ち消しの前」), not by its own request's text
+    const revertedBy = (run: string | undefined): string | undefined =>
+        props.session.state.runs.find((r) => r.id === run)?.input.requests.find((q) => q.reverts !== undefined)?.reverts;
     const label = (p: RestorePointEntry): string => {
         const r = c.restorePoints;
+        const reverted = revertedBy(p.run);
         switch (p.kind) {
             case 'RunBase':
-                return r.RunBase(unitOf(p.run));
+                return reverted ? r.RevertBase(unitOf(reverted)) : r.RunBase(unitOf(p.run));
             case 'RunResult':
-                return r.RunResult(unitOf(p.run));
+                return reverted ? r.RevertResult(unitOf(reverted)) : r.RunResult(unitOf(p.run));
             case 'Manual':
                 return r.Manual(nameOf(p.by ?? ''));
             default:

@@ -1,6 +1,6 @@
 // The model validator of the snapshots, Collaboration's `ModelValidator` port: the analysis `dt check` makes (`analyze`,
 // both DSLs). The app implements it, since a context does not depend on the project analysis (ADR 0027, Project
-// analysis and configuration). And its `SourceFormatter`: the printers of `dt fmt`, for what a mechanical undo writes.
+// analysis and configuration). And its `SourceFormatter`: the printers of `dt fmt`, for what a mechanical revert writes.
 import type { ModelValidator, SourceFormatter } from '@domaintrail/collaboration';
 import { analyze } from '@domaintrail/analysis';
 import { formatDomain } from '@domaintrail/modeling';

@@ -4,12 +4,12 @@
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
-// cancels a run (asked first), and through the card's menu undoes what it changed (asked first: mechanically, or by
-// the AI) or shows what it changed. A mechanical undo is a card of its own, 取り消し, without the AI. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
+// cancels a run (asked first), and through the card's menu reverts what it changed (asked first: mechanically, or by
+// the AI) or shows what it changed. A mechanical revert is a card of its own, 打ち消し, without the AI. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
 // AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck, Undo2 } from 'lucide-react';
-import { undoableChanges, undoStatus } from '@domaintrail/collaboration';
+import { revertableChanges, revertStatus } from '@domaintrail/collaboration';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { useClipped } from '../view/toolbar';
@@ -48,7 +48,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
     const about = useUnitAbout(unit);
-    // a mechanical undo: no AI took part, the card says what it is
+    // a mechanical revert: no AI took part, the card says what it is
     const reverted = first.run.state === 'Reverted';
     // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); at the
     // right end, in the status slot, the state only where nothing else shows it (queued, running with its time, declined,
@@ -164,8 +164,8 @@ export function useUnitAbout(unit: ChangeUnit): string {
 }
 
 /**
- * The card's menu (the facilitator's), worded by the unit of work: its changes undone (asked first; only while it has
- * changes not undone yet, nor being undone), its changes shown. Only for a unit whose latest run changed files. The
+ * The card's menu (the facilitator's), worded by the unit of work: its changes reverted (asked first; only while it has
+ * changes not reverted yet, nor being reverted), its changes shown. Only for a unit whose latest run changed files. The
  * revisions behind each are in the tooltips. Restoring an earlier state of the whole workspace is the collab menu's.
  */
 function CardMenu({ last, about, name }: { last: RunJson; about: string; name: string }) {
@@ -175,9 +175,9 @@ function CardMenu({ last, about, name }: { last: RunJson; about: string; name: s
     useDismiss(open, root, () => setOpen(false));
     const live = session.status === 'live' && session.state.session.state === 'Open';
     const items = cardMenuItems(last, session.state.runs, live);
-    const changes = undoableChanges(last);
+    const changes = revertableChanges(last);
     if (!changes || items.length === 0) return null;
-    const undoable = items.includes('undo');
+    const revertable = items.includes('revert');
     const { base, result } = changes;
     const pick = (f: () => void) => (): void => {
         f();
@@ -197,15 +197,15 @@ function CardMenu({ last, about, name }: { last: RunJson; about: string; name: s
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
-                    {undoable && (
+                    {revertable && (
                         <>
                             <button
                                 role="menuitem"
-                                data-item="undo"
-                                onClick={pick(() => revisions.undo({ run: last.id, name }))}
-                                data-tooltip={tx.chat.undoWorkHint}
+                                data-item="revert"
+                                onClick={pick(() => revisions.revert({ run: last.id, name }))}
+                                data-tooltip={tx.chat.revertWorkHint}
                             >
-                                {tx.chat.undoWork}
+                                {tx.chat.revertWork}
                             </button>
                             <div className="pane-menu-separator" role="separator" />
                         </>
@@ -254,8 +254,8 @@ function RunSection({
     const asked = run.answer && runs.find((r) => r.id === run.answer?.answerTo);
     const answerShown = asked !== undefined && answeredBy(asked, runs) === run.run.id;
     const done = run.message.kind === 'completed' ? run.message.reply : undefined;
-    // its changes undone since: by which undo, who asked and when (the time a link to that undo's card)
-    const undo = undoStatus(run.run, runs);
+    // its changes reverted since: by which revert, who asked and when (the time a link to that revert's card)
+    const revert = revertStatus(run.run, runs);
     return (
         <div className={`run-section${first ? '' : ' chained'}`} data-item={`run:${run.run.id}`}>
             {/* a run that continues the card: its time, quietly (its number, for precision, in the tooltip) */}
@@ -285,8 +285,8 @@ function RunSection({
                 <AgentBody message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists what it changed */}
                 {!compact && <RunFiles run={run.run} about={about} />}
-                {undo.kind === 'undone' && (
-                    <DecidedLine label={tx.chat.undone} by={undo.by.queuedBy} at={undo.by.queuedAt} run={undo.by.id} hint={tx.chat.undoneHint} />
+                {revert.kind === 'reverted' && (
+                    <DecidedLine label={tx.chat.reverted} by={revert.by.queuedBy} at={revert.by.queuedAt} run={revert.by.id} hint={tx.chat.revertedHint} />
                 )}
                 {(asking || voting || decided) && reply && questions && (
                     <ReplySection kind="ask">
@@ -698,8 +698,8 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const votes = !compact || decision.kind !== 'open';
                 const approved = decision.kind === 'approved';
                 const picked = decision.kind === 'picked' ? decision.alternative : undefined;
-                // closed as undone: muted, nothing chosen, who undid the run under it
-                const undone = decision.kind === 'undone';
+                // closed as reverted: muted, nothing chosen, who reverted the run under it
+                const reverted = decision.kind === 'reverted';
                 const keptVote = votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />;
                 // not decided yet: 承認待ち at the start of its row (a human decision, apart from the run's state), for
                 // those who cannot decide it; the facilitator sees the 承認 button there instead
@@ -712,7 +712,7 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const chosen = approved ? 'chosen' : picked !== undefined ? 'unchosen' : undefined;
                 // the text takes the whole width, ◉ / ○ at its start once decided; ♡ on a row of its own under it
                 const text = (
-                    <p className={`reply-assumption-text${chosen ? ` ${chosen}` : ''}${undone ? ' undone' : ''}`}>
+                    <p className={`reply-assumption-text${chosen ? ` ${chosen}` : ''}${reverted ? ' reverted' : ''}`}>
                         {chosen && <ChoiceMark state={chosen} />}
                         <ReplyText text={a.text} onNavigate={onNavigate} />
                     </p>
@@ -750,7 +750,7 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                                 <ul className="reply-cards">
                                     {a.alternatives.map((alt) => {
                                         const state =
-                                            approved || undone ? 'unchosen' : picked === undefined ? undefined : picked === alt.id ? 'chosen' : 'unchosen';
+                                            approved || reverted ? 'unchosen' : picked === undefined ? undefined : picked === alt.id ? 'chosen' : 'unchosen';
                                         const vote = votes && (
                                             <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i, alternative: alt.id }} />
                                         );
@@ -788,8 +788,8 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                         )}
                         {decision.kind === 'approved' && <DecidedLine label={tx.chat.approved} by={decision.by} at={decision.at} />}
                         {decision.kind === 'picked' && <DecidedLine label={tx.chat.picked} by={decision.by.by} at={decision.by.at} run={decision.by.run} />}
-                        {decision.kind === 'undone' && (
-                            <DecidedLine label={tx.chat.undone} by={decision.by.by} at={decision.by.at} run={decision.by.run} hint={tx.chat.undoneHint} />
+                        {decision.kind === 'reverted' && (
+                            <DecidedLine label={tx.chat.reverted} by={decision.by.by} at={decision.by.at} run={decision.by.run} hint={tx.chat.revertedHint} />
                         )}
                     </div>
                 );

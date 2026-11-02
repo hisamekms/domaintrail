@@ -1,6 +1,6 @@
 // The prompt of an agent run (ADR 0026, S6), built from the run's frozen input and the runs it continues (the runs its
 // messages reply to, the run its answer answers and the run it picked an alternative of, with what they changed, as
-// the server gives them when the run starts; for an undo, the run it undoes with its changes file by file), and the agent's reply: a JSON object of the shape and limits of `domain/reply.ts` (Claude Code's structured
+// the server gives them when the run starts; for a revert, the run it reverts with its changes file by file), and the agent's reply: a JSON object of the shape and limits of `domain/reply.ts` (Claude Code's structured
 // output), read back here. The requests, the facilitator's note, answer and pick, and the previous runs (people's requests,
 // the agent's earlier reply, the diff of the files) are data: they go into the prompt as JSON inside a delimited block,
 // as data the rules tell the agent not to obey, and nothing of them reaches a command line.
@@ -16,7 +16,7 @@ import {
     type ReplyOutcome,
     requestNumber,
 } from '@domaintrail/collaboration';
-import type { AgentPreviousRun, AgentUndoneRun, Json } from '@domaintrail/collaboration/protocol';
+import type { AgentPreviousRun, AgentRevertedRun, Json } from '@domaintrail/collaboration/protocol';
 
 /**
  * The marker of the former outcome line, `DT-OUTCOME: {…}` as the reply's last line: still read when the agent gives no
@@ -38,8 +38,8 @@ interface PromptRequest {
     readonly inReplyToPreviousRun?: number;
     /** The message the request replies to, as it was sent: its author's display name and its body. */
     readonly inReplyToMessage?: { readonly author: string; readonly body: string };
-    /** The number of the run (in `undo`, from 1) whose changes the request asks to undo. */
-    readonly undoesRun?: number;
+    /** The number of the run (in `revert`, from 1) whose changes the request asks to revert. */
+    readonly revertsRun?: number;
 }
 
 /** What a request is about, in words a person and the agent read the same way. */
@@ -116,7 +116,7 @@ const OUTCOMES: Record<RunJson['state'], string> = {
     Declined: 'declined',
     Failed: 'failed',
     Cancelled: 'cancelled',
-    Reverted: 'undone mechanically',
+    Reverted: 'reverted mechanically',
 };
 
 /** A request as the prompt shows it, numbered `number`, with the message it replies to quoted. */
@@ -192,16 +192,16 @@ function previousRunOf(previous: AgentPreviousRun, number: number, names: Readon
 }
 
 /**
- * A run an undo request undoes, as the prompt shows it: what it was asked and replied (as a previous run is shown), and
+ * A run a revert request reverts, as the prompt shows it: what it was asked and replied (as a previous run is shown), and
  * what it changed file by file — each file's unified diff from before (`-`) to after (`+`) the run, or, past the limit,
  * its line counts.
  */
-function undoneRunOf(undone: AgentUndoneRun, number: number, names: ReadonlyMap<string, string>): Record<string, unknown> {
-    const { changes: _, number: __, ...shown } = previousRunOf({ run: undone.run, changes: { kind: 'unrecorded' } }, number, names);
+function revertedRunOf(reverted: AgentRevertedRun, number: number, names: ReadonlyMap<string, string>): Record<string, unknown> {
+    const { changes: _, number: __, ...shown } = previousRunOf({ run: reverted.run, changes: { kind: 'unrecorded' } }, number, names);
     return {
         number,
         ...shown,
-        changes: undone.changes.files.map((f) => ({
+        changes: reverted.changes.files.map((f) => ({
             file: f.path,
             status: f.status,
             ...(f.diff !== undefined
@@ -247,17 +247,17 @@ export function buildPrompt(
     names: ReadonlyMap<string, string>,
     nonce: string,
     previousRuns: readonly AgentPreviousRun[] = [],
-    undo: readonly AgentUndoneRun[] = [],
+    revert: readonly AgentRevertedRun[] = [],
 ): string {
     const previousNumber = new Map(previousRuns.map((p, i) => [p.run.id, i + 1]));
-    const undoNumber = new Map(undo.map((u, i) => [u.run.id, i + 1]));
+    const revertNumber = new Map(revert.map((u, i) => [u.run.id, i + 1]));
     const requests: PromptRequest[] = input.requests.map((r, i) => {
         const replied = r.replyTo?.kind === 'Run' ? previousNumber.get(r.replyTo.run) : undefined;
-        const undoes = r.undoes === undefined ? undefined : undoNumber.get(r.undoes);
+        const reverts = r.reverts === undefined ? undefined : revertNumber.get(r.reverts);
         return {
             ...promptRequest(r, i + 1, names),
             ...(replied !== undefined && { inReplyToPreviousRun: replied }),
-            ...(undoes !== undefined && { undoesRun: undoes }),
+            ...(reverts !== undefined && { revertsRun: reverts }),
         };
     });
     const answered = input.answer === undefined ? undefined : previousNumber.get(input.answer.answerTo);
@@ -275,7 +275,7 @@ export function buildPrompt(
             },
         }),
         ...(previousRuns.length > 0 && { previousRuns: previousRuns.map((p, i) => previousRunOf(p, i + 1, names)) }),
-        ...(undo.length > 0 && { undo: undo.map((u, i) => undoneRunOf(u, i + 1, names)) }),
+        ...(revert.length > 0 && { revert: revert.map((u, i) => revertedRunOf(u, i + 1, names)) }),
     };
     const { dt, dtes } = languagesOf(input);
     const scope =
@@ -318,12 +318,12 @@ Rules:
    changes they made (a unified diff, or only the files when it was too large). They are context for the replies.
    The current files are the truth: other runs may have happened after a previous run, so read the files before
    editing and never re-apply an old diff.
-10. A request with \`undoesRun\` asks you to undo the changes of an earlier run of this session, given in \`undo\`
+10. A request with \`revertsRun\` asks you to revert the changes of an earlier run of this session, given in \`revert\`
    (what it was asked, your reply then, and its changes file by file: a unified diff from before, \`-\`, to after, \`+\`,
-   that run). Undo only those changes, in the files as they are now: other runs and people changed the files since,
-   and every later change stays, even next to or inside what you undo. Never restore a whole file from the diff. Where
-   a change cannot be undone without undoing or breaking a later change, leave it, and say in the request's note what
-   you could not undo and why (status "partial", or "skipped" when nothing could be undone). Assumptions of that run
+   that run). Revert only those changes, in the files as they are now: other runs and people changed the files since,
+   and every later change stays, even next to or inside what you revert. Never restore a whole file from the diff. Where
+   a change cannot be reverted without reverting or breaking a later change, leave it, and say in the request's note what
+   you could not revert and why (status "partial", or "skipped" when nothing could be reverted). Assumptions of that run
    go with its changes; ask nothing about them.
 
 ${replyDescription()}

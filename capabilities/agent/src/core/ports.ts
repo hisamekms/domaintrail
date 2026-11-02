@@ -8,7 +8,7 @@ import type {
     AgentLease,
     AgentPreviousRun,
     AgentParticipantsBody,
-    AgentUndoneRun,
+    AgentRevertedRun,
     AgentSessionBody,
     EventMessage,
     Json,
@@ -42,14 +42,14 @@ export type StreamItem =
     { readonly kind: 'open' } | { readonly kind: 'event'; readonly id: string; readonly type: string; readonly message: EventMessage };
 
 /**
- * `POST /agent/runs/:id/start` → 200 (`AgentStartedBody`): `previousRuns` may be absent from an older server, `undo`
- * is there only for an undo.
+ * `POST /agent/runs/:id/start` → 200 (`AgentStartedBody`): `previousRuns` may be absent from an older server, `revert`
+ * is there only for a revert.
  */
 export interface Started {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns?: readonly AgentPreviousRun[];
-    readonly undo?: readonly AgentUndoneRun[];
+    readonly revert?: readonly AgentRevertedRun[];
 }
 
 /** The agent API of the session server (loopback, bearer token). */

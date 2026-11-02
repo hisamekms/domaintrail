@@ -47,8 +47,17 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { approvalOf, assumptionStatus, type ApprovalFacts } from './domain/approvals.js';
-// undoing a run: which runs can be undone, whether one was undone (its assumptions closed), what the agent is told
-export { isUndo, MAX_UNDO_DIFF, undoableChanges, undoStatus, type UndoChanges, type UndoFile, type UndoRun, type UndoStatus } from './domain/undo.js';
+// reverting a run: which runs can be reverted, whether one was reverted (its assumptions closed), what the agent is told
+export {
+    isRevert,
+    MAX_REVERT_DIFF,
+    revertableChanges,
+    revertStatus,
+    type RevertChanges,
+    type RevertFile,
+    type RevertRun,
+    type RevertStatus,
+} from './domain/revert.js';
 // what a running run is doing: the phases any agent maps its own events onto, and the check of an activity
 export {
     isActivityPhase,
@@ -69,11 +78,11 @@ export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/em
 // ---- application: the use cases, the actor, access and identity, the classifier, the ports ----------------------
 export {
     createCollaboration,
-    UNDO_CAPABILITY,
+    REVERT_CAPABILITY,
     type CollaborationUseCases,
     type SessionState,
-    type Undone,
-    type UndoObstacle,
+    type Reverted,
+    type RevertObstacle,
 } from './application/use-cases.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';

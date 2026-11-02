@@ -229,7 +229,7 @@ export function lineDiff(before: string, after: string, budget = Number.POSITIVE
 /**
  * Each line of `a` matched to its line in `b` by a shortest edit script (`-1`: removed), in increasing order; `undefined`
  * when either side is longer than `MAX_DIFF_LINES` lines or they differ by more than `MAX_EDITS` edits. The lines are
- * compared as they are (with their line ends, when the caller keeps them): what a three-way merge reads (`undo.ts`).
+ * compared as they are (with their line ends, when the caller keeps them): what a three-way merge reads (`revert.ts`).
  */
 export function matchLines(a: readonly string[], b: readonly string[]): Int32Array | undefined {
     if (a.length > MAX_DIFF_LINES || b.length > MAX_DIFF_LINES) return undefined;

@@ -68,17 +68,17 @@ describe('the session seed', () => {
         }
         expect(await refusal(dir)).toContain('already has a session');
     }, 90_000);
-    test("undo: a unit undone mechanically, a later one's change kept; another undone by the agent after a conflict", async () => {
+    test("revert: a unit reverted mechanically, a later one's change kept; another reverted by the agent after a conflict", async () => {
         const dir = path.join(await mkdtemp(path.join(tmpdir(), 'dt-seed-test-')), 'ws');
         dirs.push(path.dirname(dir));
-        const seeded = await seed({ ...seededOptions(dir), scenarios: ['undo'], port: await freePort(), classifier: true });
+        const seeded = await seed({ ...seededOptions(dir), scenarios: ['revert'], port: await freePort(), classifier: true });
         try {
             const { state } = seeded;
             expect(state.runs.map((r) => r.state)).toEqual(['Completed', 'Completed', 'Reverted', 'Completed', 'Completed', 'Completed']);
-            const undoes = state.requests.flatMap((r) => (r.undoes ? [[r.undoes, r.body]] : []));
-            expect(undoes).toEqual([
-                [state.runs[0].id, '「再請求のイベント」の変更を取り消す'],
-                [state.runs[3].id, '「支払の督促」の変更を取り消す'],
+            const reverts = state.requests.flatMap((r) => (r.reverts ? [[r.reverts, r.body]] : []));
+            expect(reverts).toEqual([
+                [state.runs[0].id, '再請求のイベントの変更を打ち消す'],
+                [state.runs[3].id, '支払の督促の変更を打ち消す'],
             ]);
             const file = await readFile(path.join(dir, 'stormings', 'order-to-cash.dtes'), 'utf8');
             expect(file).toContain('readmodel Favorites');

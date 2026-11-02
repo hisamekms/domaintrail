@@ -16,7 +16,7 @@ export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'en
 
 /**
  * The actions of the collab menu for a role. Everyone can copy the invite link. The facilitator records the workspace,
- * restores an earlier state of it (the last resort: a unit of work is undone from its card), hands the role over and
+ * restores an earlier state of it (the last resort: a unit of work is reverted from its card), hands the role over and
  * ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
  * participant), or end it. `live` false (ended, or signed out): only the list.

@@ -4085,11 +4085,11 @@ del.was.block {
     padding: 1px 6px;
 }
 .session-restore p,
-.session-undo p {
+.session-revert p {
     margin: 0 0 6px;
 }
 .session-restore .session-buttons button.primary,
-.session-undo .session-buttons button.primary {
+.session-revert .session-buttons button.primary {
     margin-top: 0;
 }
 /* the collab menu's 以前の状態に戻す…: the earlier states, newest first, each a row to choose */
@@ -5665,7 +5665,7 @@ button.add-to-request.added:hover {
     background: var(--status-danger-bg);
     color: var(--status-danger-ink);
 }
-/* the dialog before a cancel: what it asks, the unit's name, and for a running run what is lost; やめる and 取り消す */
+/* the dialog before a cancel: what it asks, the unit's name, and for a running run what is lost; やめる and 実行を中止 */
 .session-dialog.cancel-dialog {
     width: min(22rem, calc(100vw - 32px));
     padding: var(--space-5);
@@ -6182,8 +6182,8 @@ button.add-to-request.added:hover {
 .reply-assumption-text.unchosen {
     color: var(--muted);
 }
-/* an assumption of a run whose changes were undone: closed, nothing chosen, struck through */
-.reply-assumption-text.undone {
+/* an assumption of a run whose changes were reverted: closed, nothing chosen, struck through */
+.reply-assumption-text.reverted {
     color: var(--muted);
     text-decoration: line-through;
 }

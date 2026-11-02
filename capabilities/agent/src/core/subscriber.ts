@@ -1,8 +1,8 @@
 // The subscriber of a session (`dt session subscribe`, ADR 0026, S6): follows the agent API's SSE stream, claims the
 // next queued run, and runs it through the pipeline, one run at a time:
 //
-//   claim (naming what it can run: an undo) → start (the server takes the base revision, and gives the runs it continues
-//   and the runs it undoes) → prompt → the agent, with heartbeats → the changed files are
+//   claim (naming what it can run: a revert) → start (the server takes the base revision, and gives the runs it continues
+//   and the runs it reverts) → prompt → the agent, with heartbeats → the changed files are
 //   only DSL sources? → `dt fmt`, `dt check` → finish {exitCode, formatted, checked, reply} (the server decides the rest)
 //
 // or, instead of finish, a clarification (the agent asked questions), a decline (the agent will not do the requests,
@@ -12,7 +12,7 @@
 // queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
 // reported on change, at most once a second, never holding it up. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration';
-import { AGENT_CAPABILITIES, type AgentClaimed, type AgentPreviousRun, type AgentUndoneRun } from '@domaintrail/collaboration/protocol';
+import { AGENT_CAPABILITIES, type AgentClaimed, type AgentPreviousRun, type AgentRevertedRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
 import { createActivityReporter } from './activity.js';
 import { buildPrompt } from './prompt.js';
@@ -194,7 +194,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 );
             });
             try {
-                await runPipeline(id, token, run.input, started.value.previousRuns ?? [], started.value.undo ?? [], cancel.signal);
+                await runPipeline(id, token, run.input, started.value.previousRuns ?? [], started.value.revert ?? [], cancel.signal);
             } catch (e) {
                 // the workspace could not be scanned, the participants not read…: the run fails, the next one is taken
                 log(`run ${id}: ${message(e)}`);
@@ -212,13 +212,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         token: string,
         input: AgentClaimed['run']['input'],
         previousRuns: readonly AgentPreviousRun[],
-        undo: readonly AgentUndoneRun[],
+        revert: readonly AgentRevertedRun[],
         cancelled: AbortSignal,
     ): Promise<void> => {
-        // an undo is never run without the changes it undoes: the agent would take it for a request of its own
-        const undoes = input.requests.flatMap((r) => (r.undoes === undefined ? [] : [r.undoes]));
-        if (undoes.some((u) => !undo.some((d) => d.run.id === u))) {
-            log(`run ${id}: the server gave not the changes of the run it undoes`);
+        // a revert is never run without the changes it reverts: the agent would take it for a request of its own
+        const reverts = input.requests.flatMap((r) => (r.reverts === undefined ? [] : [r.reverts]));
+        if (reverts.some((u) => !revert.some((d) => d.run.id === u))) {
+            log(`run ${id}: the server gave not the changes of the run it reverts`);
             return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
         }
         const names = await api.participants().then(
@@ -270,7 +270,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
             let outcome: AgentOutcome;
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, deps.nonce(), previousRuns, undo),
+                    prompt: buildPrompt(input, names, deps.nonce(), previousRuns, revert),
                     allowedTools: options.allowedTools,
                     requests: input.requests.length,
                     signal,

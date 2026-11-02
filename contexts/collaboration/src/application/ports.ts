@@ -80,7 +80,7 @@ export interface StoredRun {
  */
 export interface RunQueue {
     /**
-     * Adds a run at the end of its session's queue, with the requests it bundles: a queued run, or a mechanical undo,
+     * Adds a run at the end of its session's queue, with the requests it bundles: a queued run, or a mechanical revert,
      * recorded done (it is never claimed).
      */
     enqueue(run: Collaboration.QueuedAgentRun | Collaboration.RevertedAgentRun): void;
@@ -272,7 +272,7 @@ export interface ModelValidator {
 }
 
 /**
- * Formats a source as `dt fmt` does (a `.dt` or a `.dtes` by its path), given that it parses: what a mechanical undo
+ * Formats a source as `dt fmt` does (a `.dt` or a `.dtes` by its path), given that it parses: what a mechanical revert
  * writes is formatted as a run's edits are.
  */
 export interface SourceFormatter {
@@ -285,7 +285,7 @@ export interface CollaborationDeps {
     readonly workspace: WorkspaceSnapshot;
     readonly blobs: SnapshotBlobs;
     readonly validator: ModelValidator;
-    /** Formats what a mechanical undo writes; without one it is written as merged. */
+    /** Formats what a mechanical revert writes; without one it is written as merged. */
     readonly formatter?: SourceFormatter;
     readonly clock: Clock;
     readonly ids: IdGenerator;

@@ -2,7 +2,7 @@
 // join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
 // requests, react to messages and AI turns and vote on a question's options or an assumption's choices; only the
-// facilitator queues, cancels and undoes runs, takes and restores revisions, hands the role over and closes the session. Who
+// facilitator queues, cancels and reverts runs, takes and restores revisions, hands the role over and closes the session. Who
 // may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its commands
 // refuse what the role does not allow; the role of each route below is a hint that answers first, with the same
 // status and body as the refusal of the domain.
@@ -470,10 +470,10 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
         },
         {
             method: 'POST',
-            path: /^\/api\/session\/runs\/([^/]+)\/undo$/,
+            path: /^\/api\/session\/runs\/([^/]+)\/revert$/,
             role: 'facilitator',
             handle: async ({ req, res, auth, params }) => {
-                // the run's changes undone: mechanically when they reverse cleanly and check, else by the AI (ADR 0026, amendment)
+                // the run's changes reverted: mechanically when they reverse cleanly and check, else by the AI (ADR 0026, amendment)
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;
                 const raw = await input(req, res, ['body']);
@@ -481,18 +481,18 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const message = checked(res, text(raw.body, 'body', MAX_NOTE));
                 if (!message) return;
                 const me = who(auth);
-                const undone = await deps.holdWatcher(
-                    () => use.undoRun({ session, actor: me.actor, run: knownAgentRunId(id), body: message }),
+                const reverted = await deps.holdWatcher(
+                    () => use.revertRun({ session, actor: me.actor, run: knownAgentRunId(id), body: message }),
                     (r) => r.ok && r.value.way === 'mechanical',
                 );
-                if (undone.ok)
+                if (reverted.ok)
                     deps.log(
-                        undone.value.way === 'mechanical'
-                            ? `undid run ${id} mechanically (by ${me.participant.id})`
-                            : `queued the undo of run ${id} for the agent (${undone.value.obstacle.kind})`,
+                        reverted.value.way === 'mechanical'
+                            ? `reverted run ${id} mechanically (by ${me.participant.id})`
+                            : `queued the revert of run ${id} for the agent (${reverted.value.obstacle.kind})`,
                     );
-                else deps.log(`undo of run ${id} refused: ${undone.error.type}`);
-                await answer(res, undone, 201, (u) => u);
+                else deps.log(`revert of run ${id} refused: ${reverted.error.type}`);
+                await answer(res, reverted, 201, (u) => u);
             },
         },
         {

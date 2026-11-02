@@ -1,13 +1,13 @@
 // The revisions as the chat's menus reach them (ADR 0026, S7 and the amendments "messages and apply" and "changes in the
 // model's words"): what a unit of work changed, in a dialog — the model's elements added, changed and removed, then,
 // folded, the comparison of its two revisions (each changed file's status and line diff, `.dt` and `.dtes` together,
-// and the validations when either has a finding); and, for the facilitator, recording the current state, undoing a unit
+// and the validations when either has a finding); and, for the facilitator, recording the current state, reverting a unit
 // of work (from its card: mechanically, or by the AI) and restoring an earlier state (from the collab menu, the last
 // resort), with the two-step for external changes and the way through a run in progress. The words are the unit's: a
 // revision and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import type { ComparedFileBody, ComparisonBody, SessionStateBody, UndoneBody } from '@domaintrail/collaboration/protocol';
+import type { ComparedFileBody, ComparisonBody, SessionStateBody, RevertedBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
 import { ChangeChip } from './card';
@@ -28,17 +28,17 @@ const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hou
 /** What a restore goes back to: an earlier state chosen in the collab menu, or the one kept before a restore that failed midway. */
 export type RestorePoint = 'revision' | 'preRestore';
 
-/** Where an undo of a unit of work stands: asked first, then how it went. */
-type UndoFlow = { readonly run: string; readonly name: string } & (
+/** Where a revert of a unit of work stands: asked first, then how it went. */
+type RevertFlow = { readonly run: string; readonly name: string } & (
     | { readonly step: 'confirm' }
-    | { readonly step: 'done'; readonly undone: UndoneBody }
+    | { readonly step: 'done'; readonly reverted: RevertedBody }
     | { readonly step: 'run' }
     | { readonly step: 'nothing' }
     | { readonly step: 'failed'; readonly message: string }
 );
 
-/** A unit of work to undo: its latest run, and its name as the chat shows it. */
-export interface UndoSubject {
+/** A unit of work to revert: its latest run, and its name as the chat shows it. */
+export interface RevertSubject {
     readonly run: string;
     readonly name: string;
 }
@@ -70,8 +70,8 @@ export interface RevisionTools {
     showChanges(subject: ChangesSubject): void;
     /** Restores an earlier state of the workspace (asked first): the collab menu's last resort. */
     restore(revision: string): void;
-    /** Undoes a unit of work (asked first): its changes only, mechanically or by the AI. */
-    undo(subject: UndoSubject): void;
+    /** Reverts a unit of work (asked first): its changes only, mechanically or by the AI. */
+    revert(subject: RevertSubject): void;
     take(): void;
     /** A revision's number in the session (`#3`), for tooltips. */
     number(id: string): string;
@@ -86,7 +86,7 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
     const numberOf = new Map(entries.map((e) => [e.revision.id, e.number]));
     const [showing, setShowing] = useState<ChangesSubject | undefined>();
     const [flow, setFlow] = useState<RestoreFlow | undefined>();
-    const [undoing, setUndoing] = useState<UndoFlow | undefined>();
+    const [reverting, setReverting] = useState<RevertFlow | undefined>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const n = (id: string): string => String(numberOf.get(id) ?? '?');
@@ -119,16 +119,16 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
             setBusy(false);
         }
     };
-    const undo = async (subject: UndoSubject): Promise<void> => {
+    const revert = async (subject: RevertSubject): Promise<void> => {
         setBusy(true);
         try {
-            const undone = await sessionApi.undoRun(subject.run, tx.chat.undoBody(subject.name));
-            setUndoing({ ...subject, step: 'done', undone });
+            const reverted = await sessionApi.revertRun(subject.run, tx.chat.revertBody(subject.name));
+            setReverting({ ...subject, step: 'done', reverted });
         } catch (e) {
             const type = e instanceof SessionApiError ? e.type : undefined;
-            if (type === 'RunInProgress') setUndoing({ ...subject, step: 'run' });
-            else if (type === 'NothingToUndo') setUndoing({ ...subject, step: 'nothing' });
-            else setUndoing({ ...subject, step: 'failed', message: failure(e) });
+            if (type === 'RunInProgress') setReverting({ ...subject, step: 'run' });
+            else if (type === 'NothingToRevert') setReverting({ ...subject, step: 'nothing' });
+            else setReverting({ ...subject, step: 'failed', message: failure(e) });
         } finally {
             setBusy(false);
         }
@@ -139,7 +139,7 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
 
     const node = (
         <>
-            {undoing && <UndoBox flow={undoing} busy={busy} onUndo={() => void undo(undoing)} onClose={() => setUndoing(undefined)} tx={tx} />}
+            {reverting && <RevertBox flow={reverting} busy={busy} onRevert={() => void revert(reverting)} onClose={() => setReverting(undefined)} tx={tx} />}
             {flow && (
                 <RestoreBox
                     flow={flow}
@@ -163,28 +163,28 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
         dialog: showing && <ChangesDialog subject={showing} n={n} entries={entries} onClose={() => setShowing(undefined)} />,
         showChanges: setShowing,
         restore: (revision) => {
-            setUndoing(undefined);
+            setReverting(undefined);
             setFlow({ what: 'revision', step: 'confirm', revision });
         },
-        undo: (subject) => {
+        revert: (subject) => {
             setFlow(undefined);
-            setUndoing({ ...subject, step: 'confirm' });
+            setReverting({ ...subject, step: 'confirm' });
         },
         take: () => void act(() => sessionApi.takeRevision()),
         number: n,
     };
 }
 
-/** The undo of a unit of work in the chat: asked first, then whether it was undone mechanically or sent to the AI, and why. */
-function UndoBox(props: { flow: UndoFlow; busy: boolean; onUndo: () => void; onClose: () => void; tx: Tx }) {
+/** The revert of a unit of work in the chat: asked first, then whether it was reverted mechanically or sent to the AI, and why. */
+function RevertBox(props: { flow: RevertFlow; busy: boolean; onRevert: () => void; onClose: () => void; tx: Tx }) {
     const { flow, busy, tx } = props;
-    const u = tx.undoFlow;
+    const u = tx.revertFlow;
     const body = ((): { text: string; error?: boolean } => {
         switch (flow.step) {
             case 'confirm':
                 return { text: u.confirm(flow.name) };
             case 'done': {
-                const d = flow.undone;
+                const d = flow.reverted;
                 if (d.way === 'mechanical') return { text: u.mechanical(flow.name) };
                 const o = d.obstacle;
                 return { text: o.kind === 'conflict' ? u.conflict(o.paths.join(', ')) : o.kind === 'check' ? u.check : u.unreadable };
@@ -198,12 +198,12 @@ function UndoBox(props: { flow: UndoFlow; busy: boolean; onUndo: () => void; onC
         }
     })();
     return (
-        <div className={`session-note session-undo step-${flow.step}${body.error ? ' session-error' : ''}`} role="status">
+        <div className={`session-note session-revert step-${flow.step}${body.error ? ' session-error' : ''}`} role="status">
             <p>{body.text}</p>
             <div className="session-buttons">
                 {flow.step === 'confirm' && (
-                    <button className="primary session-undo-confirm" disabled={busy} onClick={props.onUndo}>
-                        {u.undo}
+                    <button className="primary session-revert-confirm" disabled={busy} onClick={props.onRevert}>
+                        {u.revert}
                     </button>
                 )}
                 <button className="small" onClick={props.onClose}>

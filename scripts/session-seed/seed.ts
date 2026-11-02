@@ -27,8 +27,8 @@ export type Person = keyof typeof PEOPLE;
 export const alternativeNote = (assumption: string, alternative: string): string =>
     `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`;
 
-/** The facilitator's message of an undo, as the page writes it (`undoBody` of apps/web/i18n.tsx, ja). */
-export const undoBody = (name: string): string => `「${name}」の変更を取り消す`;
+/** The facilitator's message of a revert, as the page writes it (`revertBody` of apps/web/i18n.tsx, ja). */
+export const revertBody = (name: string): string => `${name}の変更を打ち消す`;
 
 /** The run states a run does not leave. */
 const ENDED = new Set(['Completed', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled']);
@@ -60,10 +60,10 @@ export interface Ctx {
     /** The facilitator picks another alternative of an assumption of a completed run, played as `step`. */
     pickAlternative(run: RunJson, assumption: number, alternative: string, step: Step): Promise<RunJson>;
     /**
-     * The facilitator undoes the unit of work of `run`, named `name` (the chat's 「〈name〉の変更を取り消す」): done
-     * mechanically, or — when `step` is given, which the undo must then need — played by the agent as `step`.
+     * The facilitator reverts the unit of work of `run`, named `name` (the chat's 「〈name〉の変更を打ち消す」): done
+     * mechanically, or — when `step` is given, which the revert must then need — played by the agent as `step`.
      */
-    undo(run: RunJson, name: string, step?: Step): Promise<RunJson>;
+    revert(run: RunJson, name: string, step?: Step): Promise<RunJson>;
     /** The facilitator approves an assumption of a completed run as it is: recorded, nothing queued. */
     approveAssumption(run: RunJson, assumption: number): Promise<void>;
     /** The facilitator applies messages as a run the agent works on until the facilitator cancels it. */
@@ -363,17 +363,17 @@ function makeCtx(deps: {
                 step,
             );
         },
-        async undo(run, name, step) {
+        async revert(run, name, step) {
             if (step) agent.expect(step);
-            const undone = await api.undo(f, run.id, undoBody(name));
-            if (undone.way === 'mechanical') {
-                if (step) throw new Error(`The undo of run ${run.id} was mechanical, not the agent's`);
-                deps.log(`  run ${undone.run.id.slice(0, 8)}: ${undone.run.state} (undone mechanically)`);
-                return undone.run;
+            const reverted = await api.revert(f, run.id, revertBody(name));
+            if (reverted.way === 'mechanical') {
+                if (step) throw new Error(`The revert of run ${run.id} was mechanical, not the agent's`);
+                deps.log(`  run ${reverted.run.id.slice(0, 8)}: ${reverted.run.state} (reverted mechanically)`);
+                return reverted.run;
             }
-            if (!step) throw new Error(`The undo of run ${run.id} went to the agent (${undone.obstacle.kind}), not mechanical`);
-            deps.log(`  the undo of run ${run.id.slice(0, 8)} went to the agent (${undone.obstacle.kind})`);
-            return played(undone.run, step);
+            if (!step) throw new Error(`The revert of run ${run.id} went to the agent (${reverted.obstacle.kind}), not mechanical`);
+            deps.log(`  the revert of run ${run.id.slice(0, 8)} went to the agent (${reverted.obstacle.kind})`);
+            return played(reverted.run, step);
         },
         async approveAssumption(run, assumption) {
             await api.approve(f, { run: run.id, assumption });

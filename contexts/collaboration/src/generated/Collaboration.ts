@@ -102,8 +102,8 @@ export interface FrozenRequest {
     readonly body: Text;
     /** 返信先 — 依頼が返信した相手。実行なら、エージェントにその実行の依頼・返答・変更を前の実行として渡す。 メッセージなら、その依頼者と本文を引いて渡す。 */
     readonly replyTo?: FrozenReplyTarget;
-    /** 取り消す実行 — 取り消しの依頼なら、変更を取り消す実行。エージェントには、その実行の依頼・返答・ファイルごとの差分を渡す。 */
-    readonly undoes?: AgentRunId;
+    /** 打ち消す実行 — 打ち消しの依頼なら、変更を打ち消す実行。エージェントには、その実行の依頼・返答・ファイルごとの差分を渡す。 */
+    readonly reverts?: AgentRunId;
 }
 
 /**
@@ -111,7 +111,7 @@ export interface FrozenRequest {
  * @see contexts/collaboration/model/agent-run.dt:23
  */
 export function equalFrozenRequest(a: FrozenRequest, b: FrozenRequest): boolean {
-    return a.request === b.request && a.author === b.author && sameList(a.targets, b.targets, equalTargetSnapshot) && a.body === b.body && sameOptional(a.replyTo, b.replyTo, equalFrozenReplyTarget) && sameOptional(a.undoes, b.undoes, ($0: AgentRunId, $1: AgentRunId) => $0 === $1);
+    return a.request === b.request && a.author === b.author && sameList(a.targets, b.targets, equalTargetSnapshot) && a.body === b.body && sameOptional(a.replyTo, b.replyTo, equalFrozenReplyTarget) && sameOptional(a.reverts, b.reverts, ($0: AgentRunId, $1: AgentRunId) => $0 === $1);
 }
 
 /**
@@ -663,26 +663,26 @@ export interface FailedAgentRun extends AgentRunCommon {
 }
 
 /**
- * 取消
+ * 中止
  * @see contexts/collaboration/model/agent-run.dt:240
  */
 export interface CancelledAgentRun extends AgentRunCommon {
     readonly state: 'Cancelled';
     /** 基準リビジョン */
     readonly baseRevision?: RevisionId;
-    /** 取り消した人 */
+    /** 中止した人 */
     readonly cancelledBy: ParticipantId;
-    /** 取消日時 */
+    /** 中止日時 */
     readonly cancelledAt: Timestamp;
 }
 
 /**
- * 機械的な取り消し
- * エージェントを使わずに、ある実行の変更を機械的に取り消した記録。その実行の基準と結果の差を、いまのワークスペースに
- * 逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。取り消しの依頼を束ね、取り消す前のワークスペース
- * が基準リビジョン、取り消した後が結果リビジョン。
- * @invariant revertChanges (取り消しで変わる): resultRevision != baseRevision
- * @invariant revertsUndoRequests (取り消しの依頼を束ねる): all(input.requests, r => exists(r.undoes))
+ * 打ち消し
+ * エージェントを使わずに、ある実行の変更を機械的に打ち消した記録。その実行の基準と結果の差を、いまのワークスペースに
+ * 逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。打ち消しの依頼を束ね、打ち消す前のワークスペース
+ * が基準リビジョン、打ち消した後が結果リビジョン。
+ * @invariant revertChanges (打ち消しで変わる): resultRevision != baseRevision
+ * @invariant revertsRevertRequests (打ち消しの依頼を束ねる): all(input.requests, r => exists(r.reverts))
  * @see contexts/collaboration/model/agent-run.dt:248
  */
 export interface RevertedAgentRun extends AgentRunCommon {
@@ -698,7 +698,7 @@ export interface RevertedAgentRun extends AgentRunCommon {
 /**
  * エージェント実行
  * ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
- * 作業の取り消しを機械的にできたときは、エージェントを使わずに、その記録（機械的な取り消し）も実行として残す。
+ * 作業の打ち消しを機械的にできたときは、エージェントを使わずに、その記録（機械的な打ち消し）も実行として残す。
  * チャットでは、どちらも作業のひとまとまり（カード）になる。
  * @see contexts/collaboration/model/agent-run.dt:161
  */
@@ -818,11 +818,11 @@ export function checkCancelledAgentRunWith(checks: AgentRunDeclaredChecks): (age
  * The invariants of AgentRun in state Reverted (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
  * @see contexts/collaboration/model/agent-run.dt:248
  */
-export function checkRevertedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RevertedAgentRun) => readonly ('serial' | 'revertChanges' | 'revertsUndoRequests')[] {
+export function checkRevertedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RevertedAgentRun) => readonly ('serial' | 'revertChanges' | 'revertsRevertRequests')[] {
     return (agentRun) => {
-        const violated: ('serial' | 'revertChanges' | 'revertsUndoRequests')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
+        const violated: ('serial' | 'revertChanges' | 'revertsRevertRequests')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
         if (!(!(agentRun.resultRevision === agentRun.baseRevision))) violated.push('revertChanges');
-        if (!(agentRun.input.requests.every((r) => r.undoes !== undefined))) violated.push('revertsUndoRequests');
+        if (!(agentRun.input.requests.every((r) => r.reverts !== undefined))) violated.push('revertsRevertRequests');
         return violated;
     };
 }
@@ -831,7 +831,7 @@ export function checkRevertedAgentRunWith(checks: AgentRunDeclaredChecks): (agen
  * The invariants of AgentRun in the state it is in that an aggregate violates (see the check of each state).
  * @see contexts/collaboration/model/agent-run.dt:161
  */
-export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput' | 'clarificationAsks' | 'clarificationReplyAboutInput' | 'declinedAsksNothing' | 'declinedReplyAboutInput' | 'ruleNotMetReported' | 'revertChanges' | 'revertsUndoRequests')[] {
+export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput' | 'clarificationAsks' | 'clarificationReplyAboutInput' | 'declinedAsksNothing' | 'declinedReplyAboutInput' | 'ruleNotMetReported' | 'revertChanges' | 'revertsRevertRequests')[] {
     return (agentRun) => {
         switch (agentRun.state) {
             case 'Queued': return checkQueuedAgentRunWith(checks)(agentRun);
@@ -941,13 +941,13 @@ export interface RevertAgentRunParams {
 
 /**
  * AgentRun.revert (new -> Reverted) — factory
- * 機械的に取り消す
- * 取り消しの依頼を、エージェントを使わずに機械的に取り消した記録として残す。取り消すのはファシリテーター。
- * @requires facilitatorReverts (ファシリテーターが取り消す) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
+ * 機械的に打ち消す
+ * 打ち消しの依頼を、エージェントを使わずに機械的に打ち消した記録として残す。打ち消すのはファシリテーター。
+ * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
- * @requires inputUndoes (入力は取り消しの依頼) else InputMismatch: all(input.requests, r => exists(r.undoes))
- * @requires revertChanges (取り消しで変わる) else ChangedMismatch: resultRevision != baseRevision
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @requires revertChanges (打ち消しで変わる) else ChangedMismatch: resultRevision != baseRevision
  * @emits RunReverted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:272
  */
@@ -963,11 +963,11 @@ export type RevertAgentRun = (
 /**
  * AgentRun.revert, decided by one function; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires facilitatorReverts (ファシリテーターが取り消す) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
+ * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
- * @requires inputUndoes (入力は取り消しの依頼) else InputMismatch: all(input.requests, r => exists(r.undoes))
- * @requires revertChanges (取り消しで変わる) else ChangedMismatch: resultRevision != baseRevision
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @requires revertChanges (打ち消しで変わる) else ChangedMismatch: resultRevision != baseRevision
  * new -> Reverted — set: every field
  * @emits RunReverted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:272
@@ -985,11 +985,11 @@ export type RevertAgentRunDecision = (
  * The first requirement of AgentRun.revert that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/agent-run.dt:272
  */
-export function checkRevertAgentRunRequires(params: RevertAgentRunParams): 'facilitatorReverts' | 'distinctRequests' | 'inputCoversRequests' | 'inputUndoes' | 'revertChanges' | undefined {
+export function checkRevertAgentRunRequires(params: RevertAgentRunParams): 'facilitatorReverts' | 'distinctRequests' | 'inputCoversRequests' | 'inputReverts' | 'revertChanges' | undefined {
     if (!(params.queuedByRole === 'Facilitator')) return 'facilitatorReverts';
     if (!(distinct(params.requests, ($18: RequestId, $19: RequestId) => $18 === $19))) return 'distinctRequests';
     if (!((params.input.requests.length === params.requests.length) && params.requests.every((r) => params.input.requests.some((i) => i.request === r)))) return 'inputCoversRequests';
-    if (!(params.input.requests.every((r) => r.undoes !== undefined))) return 'inputUndoes';
+    if (!(params.input.requests.every((r) => r.reverts !== undefined))) return 'inputReverts';
     if (!(!(params.resultRevision === params.baseRevision))) return 'revertChanges';
     return undefined;
 }
@@ -1327,9 +1327,9 @@ export interface CancelAgentRunParams {
 
 /**
  * AgentRun.cancel (Queued | Running -> Cancelled)
- * 実行を取り消す
- * 取り消すのはファシリテーター。
- * @requires facilitatorCancels (ファシリテーターが取り消す) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
+ * 実行を中止する
+ * 中止するのはファシリテーター。
+ * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits RunCancelled — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:332
@@ -1347,7 +1347,7 @@ export type CancelAgentRun = (
 /**
  * AgentRun.cancel, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires facilitatorCancels (ファシリテーターが取り消す) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
+ * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt
  * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
@@ -1387,7 +1387,7 @@ export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningA
 export interface AgentRunCommands {
     /** 実行を登録する */
     readonly queue: QueueAgentRun;
-    /** 機械的に取り消す */
+    /** 機械的に打ち消す */
     readonly revert: RevertAgentRun;
     /** 実行を始める */
     readonly start: StartAgentRun;
@@ -1399,7 +1399,7 @@ export interface AgentRunCommands {
     readonly decline: DeclineAgentRun;
     /** 実行を失敗にする */
     readonly fail: FailAgentRun;
-    /** 実行を取り消す */
+    /** 実行を中止する */
     readonly cancel: CancelAgentRun;
 }
 
@@ -1428,7 +1428,7 @@ export interface RunQueued {
 }
 
 /**
- * 機械的な取り消し
+ * 打ち消し
  * @persistent Persisted: storing this event is part of its contract.
  * @see contexts/collaboration/model/agent-run.dt:348
  */
@@ -1524,7 +1524,7 @@ export interface RunFailed {
 }
 
 /**
- * 実行取消
+ * 実行中止
  * @persistent Persisted: storing this event is part of its contract.
  * @see contexts/collaboration/model/agent-run.dt:391
  */
@@ -1687,8 +1687,8 @@ export function equalAssumptionRef(a: AssumptionRef, b: AssumptionRef): boolean 
 /**
  * 決められる前提
  * いま決められると、承認のときに確かめた前提: そのセッションの完了した実行の返答にあり、まだ決まっていない（承認も
- * 別案の選択もなく、あとの実行がその実行の依頼を引き継いでおらず、その実行が取り消されていない）。取り消された実行の前提は
- * 「取り消し済み」で閉じる（取り消しの記録か、取り消しを終えた AI の実行から決まり、承認は残さない）。
+ * 別案の選択もなく、あとの実行がその実行の依頼を引き継いでおらず、その実行が打ち消されていない）。打ち消された実行の前提は
+ * 「打ち消し済み」で閉じる（機械的な打ち消しか、打ち消しを終えた AI の実行から決まり、承認は残さない）。
  * A value of AssumptionRef for which MakeDecidableAssumption made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
  * Make it with your `MakeDecidableAssumption` factory; never `as DecidableAssumption` outside it (see dt guide lint).
  * @see contexts/collaboration/model/approval.dt:14
@@ -1874,7 +1874,7 @@ export interface AssumptionNotFound {
 
 /**
  * 決まった前提
- * 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ・その実行を取り消した）。
+ * 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ・その実行を打ち消した）。
  * @see contexts/collaboration/model/approval.dt:55
  */
 export interface AssumptionClosed {
@@ -2822,7 +2822,7 @@ export function equalReplyTarget(a: ReplyTarget, b: ReplyTarget): boolean {
 
 /**
  * 返信できる相手
- * 返信できると、依頼を送るときに確かめた相手。実行なら、そのセッションの終わった実行（完了・失敗・辞退・取消）。
+ * 返信できると、依頼を送るときに確かめた相手。実行なら、そのセッションの終わった実行（完了・失敗・辞退・中止・打ち消し）。
  * 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
  * メッセージなら、そのセッションのメッセージ（自分のものも、見送られたものも）。
  * A value of ReplyTarget for which MakeReplyableTarget made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
@@ -2839,21 +2839,21 @@ export type ReplyableTarget = ReplyTarget & { readonly 'verified:Collaboration.R
 export type MakeReplyableTarget = (value: ReplyTarget, context: SessionId) => Promise<Result<ReplyableTarget, RunNotFound | RunOfAnotherSession | RunNotReplyable | RequestNotFound | RequestOfAnotherSession>>;
 
 /**
- * 取り消せる実行
- * 取り消せると、取り消しの依頼を送るときに確かめた実行: そのセッションの、ファイルの変更を記録した実行（基準と結果の
- * リビジョンが違う）で、まだ取り消されておらず、取り消しの最中でもない。
- * A value of AgentRunId for which MakeUndoableRun made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
- * Make it with your `MakeUndoableRun` factory; never `as UndoableRun` outside it (see dt guide lint).
+ * 打ち消せる実行
+ * 打ち消せると、打ち消しの依頼を送るときに確かめた実行: そのセッションの、ファイルの変更を記録した実行（基準と結果の
+ * リビジョンが違う）で、まだ打ち消されておらず、打ち消しの最中でもない。
+ * A value of AgentRunId for which MakeRevertableRun made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your `MakeRevertableRun` factory; never `as RevertableRun` outside it (see dt guide lint).
  * @see contexts/collaboration/model/request.dt:27
  */
-export type UndoableRun = AgentRunId & { readonly 'verified:Collaboration.UndoableRun': true };
+export type RevertableRun = AgentRunId & { readonly 'verified:Collaboration.RevertableRun': true };
 
 /**
- * Checks a value of AgentRunId, given the SessionId the check needs, and returns it as UndoableRun when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
- * The errors of the `Result` are the domain's answers: RunNotFound, RunOfAnotherSession or RunNotUndoable. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
+ * Checks a value of AgentRunId, given the SessionId the check needs, and returns it as RevertableRun when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: RunNotFound, RunOfAnotherSession or RunNotRevertable. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
  * @see contexts/collaboration/model/request.dt:27
  */
-export type MakeUndoableRun = (value: AgentRunId, context: SessionId) => Promise<Result<UndoableRun, RunNotFound | RunOfAnotherSession | RunNotUndoable>>;
+export type MakeRevertableRun = (value: AgentRunId, context: SessionId) => Promise<Result<RevertableRun, RunNotFound | RunOfAnotherSession | RunNotRevertable>>;
 
 /**
  * 言及できる参加者
@@ -2901,10 +2901,10 @@ export interface RequestCommon {
     /** 言及した人 — 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。 */
     readonly mentions: readonly ParticipantId[];
     /**
-     * 取り消す実行 — 作業の取り消しの依頼なら、変更を取り消す実行。ファシリテーターだけが送る（`requestUndo`）。本文は何を取り消すかを 皆に伝える（「〈作業名〉の変更を取り消す」）。機械的に取り消せれば機械的な取り消しの記録が、できなければ AI の実行が束ねる。
+     * 打ち消す実行 — 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを 皆に伝える（「〈作業名〉の変更を打ち消す」）。機械的に打ち消せれば機械的な打ち消しの記録が、できなければ AI の実行が束ねる。
      * @see {@link AgentRun}
      */
-    readonly undoes?: AgentRunId;
+    readonly reverts?: AgentRunId;
 }
 
 /**
@@ -2943,7 +2943,7 @@ export type Request = SentRequest | DismissedRequest;
  * @see contexts/collaboration/model/request.dt:35
  */
 export const RequestShape: Shape = {
-    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo', 'mentions', 'undoes'],
+    fields: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'replyTo', 'mentions', 'reverts'],
     states: { Sent: [], Dismissed: ['dismissedBy', 'dismissedAt'] },
 };
 
@@ -3046,7 +3046,7 @@ export type SendRequestDecision = (
     params: SendRequestParams,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly undoes: AgentRunId | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, TooManyTargets | DuplicateTarget | WorkspaceTarget | TooManyMentions | DuplicateMention>;
@@ -3065,10 +3065,10 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
 }
 
 /**
- * The parameters of Request.requestUndo, by name.
+ * The parameters of Request.requestRevert, by name.
  * @see contexts/collaboration/model/request.dt:79
  */
-export interface RequestUndoRequestParams {
+export interface RequestRevertRequestParams {
     /** 依頼ID */
     readonly id: RequestId;
     /** セッション */
@@ -3080,20 +3080,20 @@ export interface RequestUndoRequestParams {
     /** 文章 */
     readonly body: Text;
     readonly sentAt: Timestamp;
-    /** 取り消せる実行 */
-    readonly undoes: UndoableRun;
+    /** 打ち消せる実行 */
+    readonly reverts: RevertableRun;
 }
 
 /**
- * Request.requestUndo (new -> Sent) — factory
- * 取り消しを頼む
- * ファシリテーターが、ある作業（実行）の変更の取り消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
- * @requires facilitatorUndoes (ファシリテーターが取り消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
+ * Request.requestRevert (new -> Sent) — factory
+ * 打ち消しを頼む
+ * ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
+ * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:79
  */
-export type RequestUndoRequest = (
-    params: RequestUndoRequestParams,
+export type RequestRevertRequest = (
+    params: RequestRevertRequestParams,
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
@@ -3102,28 +3102,28 @@ export type RequestUndoRequest = (
 }, FacilitatorOnly>;
 
 /**
- * Request.requestUndo, decided by one function; implement it with `decide(RequestShape, …)` from the runtime.
+ * Request.requestRevert, decided by one function; implement it with `decide(RequestShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires facilitatorUndoes (ファシリテーターが取り消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
+ * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:79
  */
-export type RequestUndoRequestDecision = (
-    params: RequestUndoRequestParams,
+export type RequestRevertRequestDecision = (
+    params: RequestRevertRequestParams,
 ) => Result<{
     readonly Sent: {
-        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly undoes: AgentRunId | undefined };
+        readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined };
         readonly events: { readonly RequestSent: RequestSent };
     };
 }, FacilitatorOnly>;
 
 /**
- * The first requirement of Request.requestUndo that does not hold, in declaration order; `undefined` when all hold.
+ * The first requirement of Request.requestRevert that does not hold, in declaration order; `undefined` when all hold.
  * @see contexts/collaboration/model/request.dt:79
  */
-export function checkRequestUndoRequestRequires(params: RequestUndoRequestParams): 'facilitatorUndoes' | undefined {
-    if (!(params.authorRole === 'Facilitator')) return 'facilitatorUndoes';
+export function checkRequestRevertRequestRequires(params: RequestRevertRequestParams): 'facilitatorReverts' | undefined {
+    if (!(params.authorRole === 'Facilitator')) return 'facilitatorReverts';
     return undefined;
 }
 
@@ -3135,8 +3135,8 @@ export function checkRequestUndoRequestRequires(params: RequestUndoRequestParams
 export interface RequestCommands {
     /** 依頼を送る */
     readonly send: SendRequest;
-    /** 取り消しを頼む */
-    readonly requestUndo: RequestUndoRequest;
+    /** 打ち消しを頼む */
+    readonly requestRevert: RequestRevertRequest;
 }
 
 /**
@@ -3167,8 +3167,8 @@ export interface RequestSent {
     readonly replyTo?: ReplyTarget;
     /** 言及した人 */
     readonly mentions: readonly ParticipantId[];
-    /** 取り消す実行 — 取り消しの依頼なら、取り消す実行。 */
-    readonly undoes?: AgentRunId;
+    /** 打ち消す実行 — 打ち消しの依頼なら、打ち消す実行。 */
+    readonly reverts?: AgentRunId;
 }
 
 /**
@@ -3254,7 +3254,7 @@ export interface RunOfAnotherSession {
 
 /**
  * 返信できない実行
- * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・取消の実行）。
+ * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・中止・打ち消しの実行）。
  * @see contexts/collaboration/model/request.dt:138
  */
 export interface RunNotReplyable {
@@ -3264,12 +3264,12 @@ export interface RunNotReplyable {
 }
 
 /**
- * 取り消せない実行
- * 取り消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう取り消された・取り消しの最中。
+ * 打ち消せない実行
+ * 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの最中。
  * @see contexts/collaboration/model/request.dt:143
  */
-export interface RunNotUndoable {
-    readonly type: 'RunNotUndoable';
+export interface RunNotRevertable {
+    readonly type: 'RunNotRevertable';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -4412,7 +4412,7 @@ export interface AlreadyJoined {
 
 /**
  * ファシリテーターだけの操作
- * ファシリテーターだけができる操作（実行の登録と取消、スナップショット、リビジョンの確認と復元、セッションの終了）を、参加者が求めた。
+ * ファシリテーターだけができる操作（実行の登録と中止・打ち消し、スナップショット、リビジョンの確認と復元、セッションの終了）を、参加者が求めた。
  * @see contexts/collaboration/model/session.dt:89
  */
 export interface FacilitatorOnly {

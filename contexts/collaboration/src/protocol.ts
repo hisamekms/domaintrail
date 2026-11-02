@@ -5,12 +5,12 @@
 import type { ElementChange, ElementChanges } from './domain/changes.js';
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
-import type { UndoChanges, UndoFile } from './domain/undo.js';
+import type { RevertChanges, RevertFile } from './domain/revert.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 
-export type { Classification, RunActivity, RunActivityPhase, UndoChanges, UndoFile };
+export type { Classification, RunActivity, RunActivityPhase, RevertChanges, RevertFile };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -268,32 +268,32 @@ export interface ManualRecoveryNeededBody {
 }
 
 /**
- * `POST /api/session/runs/:id/undo` (the facilitator): undo the changes of the run `:id` of the session (one that
- * changed files, not undone yet nor being undone). `body` is the message everyone sees in the chat, sent as the undo
+ * `POST /api/session/runs/:id/revert` (the facilitator): revert the changes of the run `:id` of the session (one that
+ * changed files, not reverted yet nor being reverted). `body` is the message everyone sees in the chat, sent as the revert
  * request (「〈作業名〉の変更を取り消す」). Done mechanically when the run's changes reverse cleanly onto the workspace
- * and the result checks, else queued for the AI (`UndoneBody`). Refused with `FacilitatorOnly` (403), `RunNotFound` /
- * `RunOfAnotherSession` (404), `RunNotUndoable` (409: it changed no file, or it is undone or being undone),
- * `RunInProgress` (409: a run is running or claimed), `NothingToUndo` (409: the workspace has none of its changes),
- * `ExternalChangesSinceSnapshot` (409: the workspace changed while it was undone; nothing was written).
+ * and the result checks, else queued for the AI (`RevertedBody`). Refused with `FacilitatorOnly` (403), `RunNotFound` /
+ * `RunOfAnotherSession` (404), `RunNotRevertable` (409: it changed no file, or it is reverted or being reverted),
+ * `RunInProgress` (409: a run is running or claimed), `NothingToRevert` (409: the workspace has none of its changes),
+ * `ExternalChangesSinceSnapshot` (409: the workspace changed while it was reverted; nothing was written).
  */
-export interface UndoRunBody {
+export interface RevertRunBody {
     readonly body: string;
 }
 
-/** Why an undo went to the AI: later changes conflict (the paths), the undone sources do not check, or the run's sources are gone. */
-export type UndoObstacleBody =
+/** Why a revert went to the AI: later changes conflict (the paths), the reverted sources do not check, or the run's sources are gone. */
+export type RevertObstacleBody =
     | { readonly kind: 'conflict'; readonly paths: readonly string[] }
     | { readonly kind: 'check'; readonly newDtErrors: number; readonly unparsedDtes: readonly string[] }
     | { readonly kind: 'unreadable' };
 
-/** `POST /api/session/runs/:id/undo` → 201: the undo request, and the mechanical undo recorded or the AI's run queued. */
-export type UndoneBody =
+/** `POST /api/session/runs/:id/revert` → 201: the revert request, and the mechanical revert recorded or the AI's run queued. */
+export type RevertedBody =
     | { readonly way: 'mechanical'; readonly request: Json<Collaboration.SentRequest>; readonly run: Json<Collaboration.RevertedAgentRun> }
     | {
           readonly way: 'agent';
           readonly request: Json<Collaboration.SentRequest>;
           readonly run: Json<Collaboration.QueuedAgentRun>;
-          readonly obstacle: UndoObstacleBody;
+          readonly obstacle: RevertObstacleBody;
       };
 
 /** A file of a comparison: its status by path and DSL, and the line diff of its texts unless it is unchanged. */
@@ -354,11 +354,11 @@ export interface AgentParticipantsBody {
 }
 
 /**
- * What a subscriber of this version can run, named when it claims: `undo`, a run whose request undoes another run
- * (it gets that run's changes when it starts, `AgentStartedBody.undo`). A subscriber that does not name it is never
+ * What a subscriber of this version can run, named when it claims: `revert`, a run whose request reverts another run
+ * (it gets that run's changes when it starts, `AgentStartedBody.revert`). A subscriber that does not name it is never
  * given such a run: its claim is refused with `SubscriberOutdated` (409) and the run stays queued.
  */
-export const AGENT_CAPABILITIES = ['undo'] as const;
+export const AGENT_CAPABILITIES = ['revert'] as const;
 
 /** `POST /agent/runs/claim`. */
 export interface AgentClaimBody {
@@ -396,23 +396,23 @@ export interface AgentPreviousRun {
 }
 
 /**
- * A run the started run undoes (an undo request of its input names it), with what it changed from its base to its
- * result revision, file by file: each file's unified diff while they fit `MAX_UNDO_DIFF` characters, else its line counts.
+ * A run the started run reverts (a revert request of its input names it), with what it changed from its base to its
+ * result revision, file by file: each file's unified diff while they fit `MAX_REVERT_DIFF` characters, else its line counts.
  */
-export interface AgentUndoneRun {
+export interface AgentRevertedRun {
     readonly run: Json<Collaboration.AgentRun>;
-    readonly changes: UndoChanges;
+    readonly changes: RevertChanges;
 }
 
 /**
  * `POST /agent/runs/:id/start` → 200: the running run, its base revision, the runs it continues, in its input's order,
- * and the runs it undoes (`undo`, for an undo: absent from a server before undoing runs).
+ * and the runs it reverts (`revert`, for a revert: absent from a server before reverting runs).
  */
 export interface AgentStartedBody {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns: readonly AgentPreviousRun[];
-    readonly undo?: readonly AgentUndoneRun[];
+    readonly revert?: readonly AgentRevertedRun[];
 }
 
 /**

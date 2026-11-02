@@ -5,7 +5,7 @@ import { Collaboration, err, ok } from '../generated/index.js';
 import { assumptionStatus } from '../domain/approvals.js';
 import { markTargetStatus } from '../domain/marks.js';
 import { changedPaths, workspacePath } from '../domain/snapshot.js';
-import { undoableChanges, undoStatus } from '../domain/undo.js';
+import { revertableChanges, revertStatus } from '../domain/revert.js';
 import type { Stores, UnitOfWork, WorkspaceSnapshot } from './ports.js';
 
 export interface StoreVerifications {
@@ -15,7 +15,7 @@ export interface StoreVerifications {
     readonly makeReplyableTarget: Collaboration.MakeReplyableTarget;
     readonly makeMentionableParticipant: Collaboration.MakeMentionableParticipant;
     readonly makeDecidableAssumption: Collaboration.MakeDecidableAssumption;
-    readonly makeUndoableRun: Collaboration.MakeUndoableRun;
+    readonly makeRevertableRun: Collaboration.MakeRevertableRun;
 }
 
 /** The states of a run that a message may reply to: it ended, and it does not wait for an answer (a clarification has its form). */
@@ -89,14 +89,15 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(ref as Collaboration.DecidableAssumption);
         },
-        async makeUndoableRun(id, session) {
+        async makeRevertableRun(id, session) {
             const run = stores.runs.load(id)?.run;
             if (!run) return err({ type: 'RunNotFound', run: id });
             if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: id });
-            // it changed files, and no undo of it is done or under way
-            if (!undoableChanges(run) || undoStatus(run, stores.runs.listBySession(session)).kind !== 'none') return err({ type: 'RunNotUndoable', run: id });
+            // it changed files, and no revert of it is done or under way
+            if (!revertableChanges(run) || revertStatus(run, stores.runs.listBySession(session)).kind !== 'none')
+                return err({ type: 'RunNotRevertable', run: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
-            return ok(id as Collaboration.UndoableRun);
+            return ok(id as Collaboration.RevertableRun);
         },
     };
 }

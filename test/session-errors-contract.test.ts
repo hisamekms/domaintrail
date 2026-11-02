@@ -55,7 +55,7 @@ const ROUTE_ERRORS = [
     'LinkInvalid',
     'BlobMissing',
     'ManualRecoveryNeeded',
-    'NothingToUndo',
+    'NothingToRevert',
     'RunInProgress',
     'SubscriberOutdated',
 ];

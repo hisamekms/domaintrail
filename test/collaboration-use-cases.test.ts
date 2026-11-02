@@ -1048,12 +1048,12 @@ describe('revisions', () => {
     });
 });
 
-describe('undoing a run', () => {
+describe('reverting a run', () => {
     const CANCEL = '    command cancel() Draft -> Draft\n\n';
     const withCancel = (t: string): string => t.replace('    command confirm()', `${CANCEL}    command confirm()`);
     const withShipped = (t: string): string => t.replace('    state Confirmed\n', '    state Confirmed\n    state Shipped\n');
-    const undoBody = text('「取り消しの付け足し」の変更を取り消す');
-    /** The model as `dt fmt` formats it: what a mechanical undo writes is formatted, as a run's edits are. */
+    const revertBody = text('「取り消しの付け足し」の変更を取り消す');
+    /** The model as `dt fmt` formats it: what a mechanical revert writes is formatted, as a run's edits are. */
     const SALES_F = createSourceFormatter().format('sales/sales.dt', SALES);
     /** A session on the formatted model. */
     const formattedSession = async (): Promise<Session> => session(await workspace({ 'sales/sales.dt': SALES_F, 'stormings/returns.dtes': RETURNS }));
@@ -1068,7 +1068,7 @@ describe('undoing a run', () => {
         const latest = value(await s.use.sessionState({ session: id })).revisions.at(-1);
         if (!latest) throw new Error('no revision');
         const run = await queuedRun(s, id, latest);
-        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['undo'] }));
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
         value(await s.use.startRun({ run: run.id, token: lease.token }));
         await edit();
         const request = run.input.requests[0].request;
@@ -1094,17 +1094,17 @@ describe('undoing a run', () => {
         const before = value(await s.use.sessionState({ session: id }));
 
         // the facilitator's only: nothing is read, written or recorded for anyone else
-        expect(error(await s.use.undoRun({ session: id, actor: actor(guest), run: first.id, body: undoBody }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await s.use.revertRun({ session: id, actor: actor(guest), run: first.id, body: revertBody }))).toEqual({ type: 'FacilitatorOnly' });
         expect(value(await s.use.sessionState({ session: id }))).toEqual(before);
 
-        const undone = value(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }));
-        expect(undone.way).toBe('mechanical');
+        const reverted = value(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }));
+        expect(reverted.way).toBe('mechanical');
         // the later run's state stays, the first run's command is gone
         expect(await s.read('sales/sales.dt')).toBe(withShipped(SALES_F));
-        expect(undone.request).toMatchObject({ state: 'Sent', author: facilitator, body: undoBody, undoes: first.id, targets: [], mentions: [] });
-        const run = undone.run;
-        if (run.state !== 'Reverted') throw new Error('not a mechanical undo');
-        expect(run).toMatchObject({ queuedBy: facilitator, input: { requests: [{ request: undone.request.id, undoes: first.id, body: undoBody }] } });
+        expect(reverted.request).toMatchObject({ state: 'Sent', author: facilitator, body: revertBody, reverts: first.id, targets: [], mentions: [] });
+        const run = reverted.run;
+        if (run.state !== 'Reverted') throw new Error('not a mechanical revert');
+        expect(run).toMatchObject({ queuedBy: facilitator, input: { requests: [{ request: reverted.request.id, reverts: first.id, body: revertBody }] } });
         const after = value(await s.use.sessionState({ session: id }));
         const revision = (rid: C.RevisionId) => after.revisions.find((r) => r.id === rid);
         expect(revision(run.baseRevision)?.origin).toEqual({ kind: 'RunBase', run: run.id });
@@ -1116,7 +1116,7 @@ describe('undoing a run', () => {
         const compared = value(await s.use.compareRevisions({ session: id, before: run.baseRevision, after: run.resultRevision }));
         expect(compared.files.find((f) => f.path === 'sales/sales.dt')?.diff).toMatchObject({ kind: 'diff', added: 0, removed: 2 });
 
-        // undone once: the assumptions of the run are closed, its votes too, and it is not undone again
+        // reverted once: the assumptions of the run are closed, its votes too, and it is not reverted again
         const tally = (n: number): C.Tally => value(C.makeTally(n));
         expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption: { run: first.id, assumption: tally(0) } }))).toEqual({
             type: 'AssumptionClosed',
@@ -1133,12 +1133,12 @@ describe('undoing a run', () => {
                 }),
             ),
         ).toEqual({ type: 'MarkTargetClosed' });
-        expect(error(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }))).toEqual({
-            type: 'RunNotUndoable',
+        expect(error(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
             run: first.id,
         });
-        // the undo is a unit of work of its own: undone in turn, the run's changes are back
-        value(await s.use.undoRun({ session: id, actor: actor(facilitator), run: run.id, body: text('取り消しを取り消す') }));
+        // the revert is a unit of work of its own: reverted in turn, the run's changes are back
+        value(await s.use.revertRun({ session: id, actor: actor(facilitator), run: run.id, body: text('取り消しを取り消す') }));
         expect(await s.read('sales/sales.dt')).toBe(withShipped(withCancel(SALES_F)));
     });
 
@@ -1149,7 +1149,7 @@ describe('undoing a run', () => {
             await s.write('sales/billing.dt', 'context Billing {\n  id InvoiceId: UUID\n}\n');
             await rm(path.join(s.root, 'stormings/returns.dtes'));
         });
-        expect(value(await s.use.undoRun({ session: id, actor: actor(facilitator), run: run.id, body: undoBody })).way).toBe('mechanical');
+        expect(value(await s.use.revertRun({ session: id, actor: actor(facilitator), run: run.id, body: revertBody })).way).toBe('mechanical');
         expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
         expect(await s.read('sales/billing.dt').catch(() => 'gone')).toBe('gone');
     });
@@ -1161,44 +1161,44 @@ describe('undoing a run', () => {
         const renamed = withCancel(SALES_F).replace('command cancel()', 'command cancelOrder()');
         await completed(s, id, () => s.write('sales/sales.dt', renamed));
 
-        const undone = value(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }));
-        expect(undone).toMatchObject({ way: 'agent', obstacle: { kind: 'conflict', paths: ['sales/sales.dt'] } });
+        const reverted = value(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }));
+        expect(reverted).toMatchObject({ way: 'agent', obstacle: { kind: 'conflict', paths: ['sales/sales.dt'] } });
         expect(await s.read('sales/sales.dt')).toBe(renamed);
-        expect(undone.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: undone.request.id, undoes: first.id }] } });
+        expect(reverted.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: reverted.request.id, reverts: first.id }] } });
         // under way: not asked twice
-        expect(error(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }))).toEqual({
-            type: 'RunNotUndoable',
+        expect(error(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
             run: first.id,
         });
 
-        // a subscriber that cannot run an undo is not given it: the run stays queued
+        // a subscriber that cannot run a revert is not given it: the run stays queued
         expect(error(await s.use.claimNextRun({ session: id, owner: 'old', leaseMs: 30_000 }))).toMatchObject({
             type: 'SubscriberOutdated',
-            run: undone.run.id,
-            needs: 'undo',
+            run: reverted.run.id,
+            needs: 'revert',
         });
-        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['undo'] }));
-        value(await s.use.startRun({ run: undone.run.id, token: lease.token }));
-        // the agent is told the run it undoes, with its diff file by file
-        const told = value(await s.use.undoneRuns({ run: undone.run.id }));
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
+        value(await s.use.startRun({ run: reverted.run.id, token: lease.token }));
+        // the agent is told the run it reverts, with its diff file by file
+        const told = value(await s.use.revertedRuns({ run: reverted.run.id }));
         expect(told).toHaveLength(1);
         expect(told[0].run.id).toBe(first.id);
         expect(told[0].changes.diffsOmitted).toBe(false);
         expect(told[0].changes.files[0]).toMatchObject({ path: 'sales/sales.dt', status: 'changed' });
         expect(told[0].changes.files[0].diff).toContain('+    command cancel()');
 
-        // the AI undid it: the run counts as undone once its undo completed
+        // the AI reverted it: the run counts as reverted once its revert completed
         await s.write('sales/sales.dt', SALES_F);
-        const request = undone.request.id;
-        const reply = toAgentReply({ outcome: 'done', summary: 'Undone.', requests: [{ request, status: 'done' }], questions: [], assumptions: [] });
-        expect(value(await s.use.finishRun({ run: undone.run.id, token: lease.token, facts, reply })).run.state).toBe('Completed');
-        expect(error(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }))).toEqual({
-            type: 'RunNotUndoable',
+        const request = reverted.request.id;
+        const reply = toAgentReply({ outcome: 'done', summary: 'Reverted.', requests: [{ request, status: 'done' }], questions: [], assumptions: [] });
+        expect(value(await s.use.finishRun({ run: reverted.run.id, token: lease.token, facts, reply })).run.state).toBe('Completed');
+        expect(error(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
             run: first.id,
         });
     });
 
-    test('an undo that would not check (a later change needs what the run added) goes to the AI; nothing is written', async () => {
+    test('a revert that would not check (a later change needs what the run added) goes to the AI; nothing is written', async () => {
         const s = await formattedSession();
         const { id } = await started(s);
         const first = await completed(s, id, () =>
@@ -1206,9 +1206,9 @@ describe('undoing a run', () => {
         );
         const later = (await s.read('sales/sales.dt')).replace('    command confirm()', '    command cancel() Draft -> Cancelled\n\n    command confirm()');
         await completed(s, id, () => s.write('sales/sales.dt', later));
-        const undone = value(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }));
-        expect(undone).toMatchObject({ way: 'agent', obstacle: { kind: 'check', unparsedDtes: [] } });
-        if (undone.way === 'agent' && undone.obstacle.kind === 'check') expect(undone.obstacle.newDtErrors).toBeGreaterThan(0);
+        const reverted = value(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }));
+        expect(reverted).toMatchObject({ way: 'agent', obstacle: { kind: 'check', unparsedDtes: [] } });
+        if (reverted.way === 'agent' && reverted.obstacle.kind === 'check') expect(reverted.obstacle.newDtErrors).toBeGreaterThan(0);
         expect(await s.read('sales/sales.dt')).toBe(later);
     });
 
@@ -1217,22 +1217,22 @@ describe('undoing a run', () => {
         const { id, start } = await started(s);
         const first = await completed(s, id, () => s.write('sales/sales.dt', withCancel(SALES_F)));
         const busy = await queuedRun(s, id, start);
-        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['undo'] }));
-        expect(error(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }))).toEqual({
+        const { lease } = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000, capabilities: ['revert'] }));
+        expect(error(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
             type: 'RunInProgress',
             run: busy.id,
         });
         value(await s.use.releaseRun({ run: busy.id, token: lease.token }));
         value(await s.use.cancelRun({ run: busy.id, actor: actor(facilitator) }));
         await s.write('sales/sales.dt', SALES_F);
-        expect(error(await s.use.undoRun({ session: id, actor: actor(facilitator), run: first.id, body: undoBody }))).toEqual({
-            type: 'NothingToUndo',
+        expect(error(await s.use.revertRun({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
+            type: 'NothingToRevert',
             run: first.id,
         });
-        // a run without changes is not undone
+        // a run without changes is not reverted
         const unchanged = await completed(s, id, async () => {});
-        expect(error(await s.use.undoRun({ session: id, actor: actor(facilitator), run: unchanged.id, body: undoBody }))).toEqual({
-            type: 'RunNotUndoable',
+        expect(error(await s.use.revertRun({ session: id, actor: actor(facilitator), run: unchanged.id, body: revertBody }))).toEqual({
+            type: 'RunNotRevertable',
             run: unchanged.id,
         });
     });

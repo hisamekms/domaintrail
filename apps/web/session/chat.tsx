@@ -907,7 +907,7 @@ function SelectionBar() {
     );
 }
 
-/** Right after sending to the AI: 取り消す, while the run is still queued. */
+/** Right after sending to the AI: 実行を中止, while the run is still queued. */
 function UndoBar() {
     const { tx, actions, session } = useChat();
     const run = session.state.runs.find((r) => r.id === actions.undo?.run);

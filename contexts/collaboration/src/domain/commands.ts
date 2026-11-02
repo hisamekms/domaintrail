@@ -1,6 +1,6 @@
 // The commands of the collaboration aggregates, checked against the generated contracts (ADR 0026). Each is a pure
 // decision made with the runtime's `decide`: IDs, times, snapshots and the verified types (ActiveSession,
-// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision, UndoableRun) are parameters that the application makes. The requirements are checked with the
+// PendingRequest, ReplyableRun, MentionableParticipant, RestorableRevision, RevertableRun) are parameters that the application makes. The requirements are checked with the
 // generated `check…Requires`, so their expressions are the DSL's; what is written here is which error each returns and
 // what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator take
 // the role of who acts as a parameter, from the use case's `Actor`. A command takes its parameters as one object
@@ -60,22 +60,22 @@ export const requestCommands: Collaboration.RequestCommands = {
         return ok({
             Sent: {
                 // a reply names the run it answers; whether it runs is the facilitator's to decide, as for any message
-                set: { id, session, author, targets, body, sentAt, replyTo, mentions, undoes: undefined },
+                set: { id, session, author, targets, body, sentAt, replyTo, mentions, reverts: undefined },
                 events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets, body, sentAt, ...(replyTo && { replyTo }), mentions } },
             },
         });
     }),
 
-    // an undo of a run's changes: about the workspace as a whole (no target, no mention), the facilitator's
-    requestUndo: decide<Collaboration.RequestUndoRequestDecision>(Collaboration.RequestShape, (params) => {
-        if (Collaboration.checkRequestUndoRequestRequires(params) === 'facilitatorUndoes') return err({ type: 'FacilitatorOnly' });
+    // a revert of a run's changes: about the workspace as a whole (no target, no mention), the facilitator's
+    requestRevert: decide<Collaboration.RequestRevertRequestDecision>(Collaboration.RequestShape, (params) => {
+        if (Collaboration.checkRequestRevertRequestRequires(params) === 'facilitatorReverts') return err({ type: 'FacilitatorOnly' });
         const { id, session, author, body, sentAt } = params;
         // the run without its evidence: the aggregate stores the base type
-        const undoes: Collaboration.AgentRunId = params.undoes;
+        const reverts: Collaboration.AgentRunId = params.reverts;
         return ok({
             Sent: {
-                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], undoes },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], undoes } },
+                set: { id, session, author, targets: [], body, sentAt, replyTo: undefined, mentions: [], reverts },
+                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
             },
         });
     }),
@@ -100,7 +100,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         });
     }),
 
-    // the record of a mechanical undo: no agent, done when it is recorded
+    // the record of a mechanical revert: no agent, done when it is recorded
     revert: decide<Collaboration.RevertAgentRunDecision>(Collaboration.AgentRunShape, (params) => {
         switch (Collaboration.checkRevertAgentRunRequires(params)) {
             case 'facilitatorReverts':
@@ -108,7 +108,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             case 'distinctRequests':
                 return err({ type: 'DuplicateRequest' });
             case 'inputCoversRequests':
-            case 'inputUndoes':
+            case 'inputReverts':
                 return err({ type: 'InputMismatch' });
             case 'revertChanges':
                 return err({ type: 'ChangedMismatch' });

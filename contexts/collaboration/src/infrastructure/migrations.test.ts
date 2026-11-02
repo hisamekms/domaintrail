@@ -1,6 +1,6 @@
 // Databases written by earlier versions, upgraded in place: before marks and emoji reactions (migration 4), before
 // replies (migration 5), before replies to messages (migration 7), before approvals (migration 8), with confirmed
-// revisions (migration 9), before undoing runs (migration 10). The store itself: sqlite.test.ts.
+// revisions (migration 9), before reverting runs (migration 10). The store itself: sqlite.test.ts.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -482,11 +482,11 @@ describe('no confirmed revisions (migration 9)', () => {
     });
 });
 
-describe('the undoes column (migration 10)', () => {
-    test('a database of the schema before undoing runs is upgraded in place: its requests load as they were; an undo keeps its run, and the database refuses an unknown one', async () => {
+describe('the reverts column (migration 10)', () => {
+    test('a database of the schema before reverting runs is upgraded in place: its requests load as they were; a revert keeps its run, and the database refuses an unknown one', async () => {
         const dir = await workspace({});
         const file = path.join(dir, 'session.db');
-        // the schema before undoing runs (9 migrations), with a request and the completed run that bundled it
+        // the schema before reverting runs (9 migrations), with a request and the completed run that bundled it
         const old = new DatabaseSync(file);
         for (const m of MIGRATIONS.slice(0, 9)) old.exec(m);
         old.exec('PRAGMA user_version = 9');
@@ -520,26 +520,26 @@ describe('the undoes column (migration 10)', () => {
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
-        expect(loaded?.undoes).toBeUndefined();
+        expect(loaded?.reverts).toBeUndefined();
         expect(loaded?.body).toBe(text('Add cancel.'));
 
-        const undo = (id: string, undoes: string): C.Request => ({
+        const revert = (id: string, reverts: string): C.Request => ({
             state: 'Sent',
             id: knownRequestId(id),
             session: knownSessionId(sid),
             author: value(C.makeParticipantId(who)),
             targets: [],
-            body: text('Undo the changes of Add cancel.'),
+            body: text('Revert the changes of Add cancel.'),
             sentAt: new Date('2026-11-03T09:00:00Z'),
             mentions: [],
-            undoes: knownAgentRunId(undoes),
+            reverts: knownAgentRunId(reverts),
         });
-        const kept = undo('00000000-0000-4000-8000-000000000004', runId);
+        const kept = revert('00000000-0000-4000-8000-000000000004', runId);
         await uow.transaction((s) => s.requests.save(kept));
         expect(await uow.transaction((s) => s.requests.load(kept.id))).toEqual(kept);
-        expect(db.prepare('SELECT undoes FROM requests WHERE id = ?').get(kept.id)).toEqual({ undoes: runId });
+        expect(db.prepare('SELECT reverts FROM requests WHERE id = ?').get(kept.id)).toEqual({ reverts: runId });
         const unknown = await uow
-            .transaction((s) => s.requests.save(undo('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-0000000000ff')))
+            .transaction((s) => s.requests.save(revert('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-0000000000ff')))
             .then(
                 () => 'saved',
                 () => 'refused',

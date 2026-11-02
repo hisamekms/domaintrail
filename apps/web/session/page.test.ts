@@ -299,7 +299,7 @@ describe('the session state from the socket', () => {
         expect(failed).toMatchObject({ refetch: false, state: { runs: [{ state: 'Failed', reason: 'AgentError' }] } });
         const cancelled = applyEvent(started.state, message(5, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'local:facilitator', cancelledAt: at }));
         expect(cancelled.state.runs[0]).toMatchObject({ state: 'Cancelled', baseRevision: 'r1' });
-        // a mechanical undo is recorded done: its input is not in the event
+        // a mechanical revert is recorded done: its input is not in the event
         const reverted = { type: 'RunReverted', runId: 'run2', session: 's1', requests: ['q2'], queuedBy: 'local:facilitator', queuedAt: at };
         expect(applyEvent(held, message(5, { ...reverted, baseRevision: 'r1', resultRevision: 'r2', finishedAt: at })).refetch).toBe(true);
         // a cancel after the run ended changes nothing

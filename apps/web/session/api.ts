@@ -13,7 +13,7 @@ import type {
     SendRequestBody,
     SessionStateBody,
     SetMarkBody,
-    UndoneBody,
+    RevertedBody,
 } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
 
@@ -88,8 +88,8 @@ export const sessionApi = {
     /** Approves an assumption of a completed run as it is (the facilitator): recorded, nothing sent to the AI. */
     approve: (body: ApproveBody): Promise<ApprovedBody> => call('approvals', { method: 'POST', body }),
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
-    /** Undoes the changes of a run (the facilitator), with the message everyone sees: mechanically, or queued for the AI. */
-    undoRun: (id: string, body: string): Promise<UndoneBody> => call(`runs/${encodeURIComponent(id)}/undo`, { method: 'POST', body: { body } }),
+    /** Reverts the changes of a run (the facilitator), with the message everyone sees: mechanically, or queued for the AI. */
+    revertRun: (id: string, body: string): Promise<RevertedBody> => call(`runs/${encodeURIComponent(id)}/revert`, { method: 'POST', body: { body } }),
     /** Records the workspace as it is now (the facilitator). */
     takeRevision: (): Promise<unknown> => call('revisions', { method: 'POST', body: {} }),
     /** Restores a revision (the facilitator); `recordExternalChanges` records the workspace's external changes first. */

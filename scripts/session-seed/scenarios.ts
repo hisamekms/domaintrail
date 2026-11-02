@@ -5,7 +5,7 @@
 import type { Ctx, RunJson } from './seed.js';
 import { editFile, writeSource } from './workspace.js';
 
-export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references', 'undo'] as const;
+export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references', 'revert'] as const;
 export type ScenarioName = (typeof SCENARIO_NAMES)[number];
 
 /** A text longer than the stream shows at once (clamped, with "more"). */
@@ -714,10 +714,10 @@ const references = async (s: Ctx): Promise<void> => {
     });
 };
 
-const undo = async (s: Ctx): Promise<void> => {
+const revert = async (s: Ctx): Promise<void> => {
     // the storming of order to cash (no other scenario edits it): two units of work, each followed by a later one
     const file = 'stormings/order-to-cash.dtes';
-    // mechanical: a later unit changes another part of the same file; undoing the first leaves the later one's change
+    // mechanical: a later unit changes another part of the same file; reverting the first leaves the later one's change
     const retry = await s.say('sato', '#支払に失敗した[1] のあとに、再請求のイベントを足してください', {
         targets: [s.es('OrderToCash', 'PaymentFailed', '支払に失敗した')],
         reads: 'request',
@@ -749,9 +749,9 @@ const undo = async (s: Ctx): Promise<void> => {
         },
     });
     await s.say('takahashi', '再請求は今回の範囲から外すことになりました。取り消してもらえますか？', { replyTo: retried, reads: 'chat' });
-    await s.undo(retried, '再請求のイベント');
+    await s.revert(retried, '再請求のイベント');
 
-    // by the AI: a later unit renamed what the first one added, so the undo conflicts and goes to the agent
+    // by the AI: a later unit renamed what the first one added, so the revert conflicts and goes to the agent
     const remind = await s.say('takahashi', '#請求書が発行された[1] のあとに、支払の督促のイベントを足してください', {
         targets: [s.es('OrderToCash', 'InvoiceIssued', '請求書が発行された')],
         reads: 'request',
@@ -781,7 +781,7 @@ const undo = async (s: Ctx): Promise<void> => {
             requests: [{ request: 1, status: 'done' }],
         },
     });
-    await s.undo(reminded, '支払の督促', {
+    await s.revert(reminded, '支払の督促', {
         kind: 'reply',
         edit: (root) => editFile(root, file, /^ {2}event InvoiceReminded .*\n/m, ''),
         reply: {
@@ -793,7 +793,7 @@ const undo = async (s: Ctx): Promise<void> => {
     });
 };
 
-export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references, undo };
+export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references, revert };
 
 const isScenario = (name: string): name is ScenarioName => (SCENARIO_NAMES as readonly string[]).includes(name);
 
