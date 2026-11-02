@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { paneMotion, parseDuration } from './motion';
+import { createHold, paneMotion, parseDuration, type HoldClock } from './motion';
 import { centeredCamera, isLaidOut } from '../view/center';
 
 const styles = readFileSync(join(import.meta.dir, '..', 'styles.css'), 'utf8');
@@ -36,6 +36,123 @@ describe('the pace of the panes', () => {
         expect(paneMotion([true, true, true], [true, false, true], 'enter')).toBe('exit');
         expect(paneMotion([true, false], [true, false], 'exit')).toBe('exit');
         expect(paneMotion([true, false], [true, false], 'enter')).toBe('enter');
+    });
+});
+
+/** A clock whose time only moves with `advance`, running the timers that are due on the way. */
+function fakeClock(): HoldClock & { advance(ms: number): void; pending(): number } {
+    let now = 0;
+    let next = 0;
+    const timers = new Map<number, { at: number; run: () => void }>();
+    return {
+        now: () => now,
+        after(ms, run) {
+            const id = ++next;
+            timers.set(id, { at: now + ms, run });
+            return () => void timers.delete(id);
+        },
+        advance(ms) {
+            const end = now + ms;
+            for (;;) {
+                const due = [...timers].filter(([, t]) => t.at <= end).sort(([, a], [, b]) => a.at - b.at)[0];
+                if (!due) break;
+                timers.delete(due[0]);
+                now = due[1].at;
+                due[1].run();
+            }
+            now = end;
+        },
+        pending: () => timers.size,
+    };
+}
+
+describe('a value held on screen', () => {
+    const setup = (initial?: string) => {
+        const clock = fakeClock();
+        const shown: (string | undefined)[] = [];
+        const hold = createHold<string>(initial, 1200, (v) => shown.push(v), Object.is, clock);
+        return { clock, shown, hold };
+    };
+
+    test('the first value is shown at once, and so is a change after the hold', () => {
+        const { clock, shown, hold } = setup();
+        hold.set('a');
+        expect(shown).toEqual(['a']);
+        clock.advance(1500);
+        hold.set('b');
+        expect(shown).toEqual(['a', 'b']);
+    });
+
+    test('a change during the hold waits for its end', () => {
+        const { clock, shown, hold } = setup('a');
+        clock.advance(400);
+        hold.set('b');
+        expect(shown).toEqual([]);
+        clock.advance(799);
+        expect(shown).toEqual([]);
+        clock.advance(1);
+        expect(shown).toEqual(['b']);
+        // and b is held in its turn, from when it was shown
+        hold.set('c');
+        clock.advance(1199);
+        expect(shown).toEqual(['b']);
+        clock.advance(1);
+        expect(shown).toEqual(['b', 'c']);
+    });
+
+    test('the changes during a hold come down to the latest one, nothing replayed', () => {
+        const { clock, shown, hold } = setup('a');
+        hold.set('b');
+        clock.advance(300);
+        hold.set('c');
+        clock.advance(300);
+        hold.set('d');
+        clock.advance(600);
+        expect(shown).toEqual(['d']);
+        clock.advance(5000);
+        expect(shown).toEqual(['d']);
+    });
+
+    test('back to the value shown before the hold ends: nothing changes', () => {
+        const { clock, shown, hold } = setup('a');
+        hold.set('b');
+        hold.set('a');
+        clock.advance(2000);
+        expect(shown).toEqual([]);
+    });
+
+    test('the same value again (by `same`) changes nothing', () => {
+        const clock = fakeClock();
+        const shown: ({ id: number } | undefined)[] = [];
+        const hold = createHold<{ id: number }>(
+            { id: 1 },
+            1200,
+            (v) => shown.push(v),
+            (a, b) => a.id === b.id,
+            clock,
+        );
+        hold.set({ id: 1 });
+        clock.advance(2000);
+        expect(shown).toEqual([]);
+    });
+
+    test('nothing to show, or something after nothing, is shown at once', () => {
+        const { clock, shown, hold } = setup('a');
+        hold.set('b');
+        hold.set(undefined);
+        expect(shown).toEqual([undefined]);
+        expect(clock.pending()).toBe(0);
+        hold.set('c');
+        expect(shown).toEqual([undefined, 'c']);
+    });
+
+    test('cancelling drops what waits (the line leaving the page)', () => {
+        const { clock, shown, hold } = setup('a');
+        hold.set('b');
+        hold.cancel();
+        expect(clock.pending()).toBe(0);
+        clock.advance(2000);
+        expect(shown).toEqual([]);
     });
 });
 
