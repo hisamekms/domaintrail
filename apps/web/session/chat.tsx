@@ -5,7 +5,7 @@
 // start to end (awaiting an answer, running, queued, finished), with the same cards. The facilitator's controls are in the stream itself: send a message to the AI (the Bot button; … for sending
 // it again, with a comment, or several together, also chosen with Shift/⌘), answer or pick an alternative on a card,
 // cancel, and the menus of the cards and of the head.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
 import {
     ArrowDown,
     Bot,
@@ -172,6 +172,28 @@ export function SessionChat(props: {
         }
     };
     const [view, setView] = useState<'chat' | 'history'>('chat');
+    // the stream's scroll while チャット shows, put back as it shows again, with the browser's scroll anchoring off for
+    // that frame: it would move the stream a little each time the panel comes back (at the bottom, the stream follows
+    // the newest itself)
+    const chatPanel = useRef<HTMLDivElement | null>(null);
+    const streamTop = useRef<number | undefined>(undefined);
+    const keepStreamTop = (e: UIEvent<HTMLDivElement>): void => {
+        const el = e.target;
+        if (el instanceof HTMLElement && el.classList.contains('chat-stream') && el.clientHeight > 0)
+            streamTop.current = atBottomOf(el) ? undefined : el.scrollTop;
+    };
+    useLayoutEffect(() => {
+        const el = chatPanel.current?.querySelector<HTMLElement>('.chat-stream');
+        const top = streamTop.current;
+        if (view !== 'chat' || !el || top === undefined) return;
+        el.style.overflowAnchor = 'none';
+        el.scrollTop = top;
+        const frame = requestAnimationFrame(() => el.style.removeProperty('overflow-anchor'));
+        return () => {
+            cancelAnimationFrame(frame);
+            el.style.removeProperty('overflow-anchor');
+        };
+    }, [view]);
     // the collab ended: its summary, shown once to everyone (and again from the notice)
     const ended = session.status === 'closed' || state.session.state === 'Closed';
     const summary = useCollabSummary(session, ended);
@@ -358,7 +380,7 @@ export function SessionChat(props: {
                 {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
                 {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
                 {/* both stay mounted, so that switching keeps the stream's scroll and the open units of AI の作業 */}
-                <div className="chat-view" role="tabpanel" hidden={view !== 'chat'}>
+                <div className="chat-view" role="tabpanel" hidden={view !== 'chat'} ref={chatPanel} onScrollCapture={keepStreamTop}>
                     <Stream items={items} />
                     <div className="chat-tray">
                         {revisions.node}
