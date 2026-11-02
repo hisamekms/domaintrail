@@ -176,9 +176,12 @@ The chat has two views:
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
   background in your stream, and the closed chat's button shows `@ n` for the new ones. A card is named by the title
   the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
-  it show their time only. A message sent to the AI shows its latest run's mark (`✓`, the card's name in the tooltip). The
+  it show their time only. A message sent to the AI shows its latest run's state (`✓ 対応`, the card's name in the
+  tooltip, a click going to the card) in the status slot before its actions; an AI turn shows its state there too
+  (queued, running with its time, declined, failed, cancelled), so the states of all rows line up in one column. The
   facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
-  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
+  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ among a running or queued
+  turn's actions, after a dialog asks), and reaches confirm,
   restore and comparison from a card's ⋯ and recording, the hand-over and コラボを終える… from the collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
@@ -203,7 +206,8 @@ The chat has two views:
   答え待ち (the AI asked a question), 実行中 (a pulsing dot, and how long it has run), 待ち n (numbered in the order they
   will run) and 終わったもの (newest first). A row reads its mark and name (the title, else the first message), then,
   small, whose messages its first run applied, how many runs and its time span; and the files it changed, a link that
-  compares the revisions before and after the whole card. The facilitator cancels a running or queued card with ✕.
+  compares the revisions before and after the whole card. The facilitator cancels a running or queued card with ✕,
+  after a dialog asks.
   A row is one block between lines: a click anywhere on it but the files link and ✕ opens it, and under the same left
   edge it shows the run's card, compact — a waiting one with the AI's question, answered (or voted on with ♡) as in the
   chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards

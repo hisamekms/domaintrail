@@ -2588,11 +2588,13 @@ on a message read as talk (where the button is not shown), コメントをつけ
 run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
 is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. A message that was
 sent shows the
-mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for everyone; the tooltip names the card and the
-state, and a click goes to the card.
+state of its latest run (`✓ 対応`, `◐ 一部`, `– 未対応`, `● 実行中`, …) in the status slot of its name row, for everyone;
+the tooltip names the card, and a click goes to the card. Every message and AI turn has that slot, right before its
+actions and as wide on every row (the longest state of the language), so the states line up in one column down the
+chat; the right end holds only actions.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
-failed or cancelled; its name row shows the state where nothing else does (queued, running with the time and ✕,
+failed or cancelled; its status slot shows the state where nothing else does (queued, running with the time,
 declined, failed, cancelled; a question shows itself). A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
 (about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
 runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
@@ -2618,8 +2620,10 @@ words, キャンセル (Esc) leaves it as it was, and 決定 on an emptied text 
 answer is one option or the own words, never both; choosing an option deselects その他 but keeps its words, so choosing
 it again brings them back. In a multiple-choice question it is a checkbox, sent together with the options chosen. Words
 under an unselected その他 are not sent. On a
-done card, an alternative of an assumption queues them again with that pick and a note asking for it; ✕ on a queued or running card
-(or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
+done card, an alternative of an assumption queues them again with that pick and a note asking for it; the facilitator's ✕ (a bordered
+button first among a queued or running card's actions, and at the end of its row in AI の作業) cancels it after a
+dialog asks: 実行を取り消しますか？ for a running run (its work so far is not applied), 依頼を取り消しますか？ for a queued
+one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks its result as confirmed, restores the workspace as
 it was before the run (asked first) or compares the two.
 
 **Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a

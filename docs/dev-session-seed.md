@@ -81,7 +81,7 @@ card gives a title of its own that the card does not take.
 
 Not produced by default: a run left **running** and runs **queued**. `--leave-running` leaves both: once the scenarios
 are done, 田中's message runs and the seed's agent keeps working on it (holding its lease) while the seed runs, and two
-runs wait behind it — 佐藤's message, then 鈴木's and 高橋's together. Cancelling the running one (✕) starts the next,
+runs wait behind it — 佐藤's message, then 鈴木's and 高橋's together. Cancelling the running one (✕, then 取り消す in the dialog) starts the next,
 which the agent holds the same way. Without it the agent is stopped (stopped, a lease expires and the run fails);
 `--leave-queued` leaves one run queued for a real subscriber started later. The questions left open by `questions`
 show in AI の作業 as 答え待ち.
