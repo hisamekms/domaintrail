@@ -1,8 +1,8 @@
-// The agent's reply as the chat and the facilitator's panel show it (ADR 0026, appendix "Structured replies"): the
-// measured facts small after what the AI says (the files the run changed), and what the AI says — its summary, a line per request
-// with its status, the assumptions it made with their alternatives, its questions with their options — as plain
-// text, never markup; element references in it (`references.ts`) are named in the display setting and link to the
-// element. Nothing here can be chosen yet: the options are shown as they will be offered, disabled.
+// The agent's reply as the chat and the facilitator's panel show it (ADR 0026, appendix "Structured replies"): what
+// the AI says — its summary, a line per request with its status, the assumptions it made with their alternatives, its
+// questions with their options — as plain text, never markup; element references in it (`references.ts`) are named in
+// the display setting and link to the element. Nothing here can be chosen yet: the options are shown as they will be
+// offered, disabled.
 import { Fragment } from 'react';
 import type { Messages } from '../i18n';
 import { bodyText } from './mentions';
@@ -44,19 +44,8 @@ const MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Ski
 
 /** The first characters of a request's body on one line. */
 function head(r: ReplyRequest, max = 48): string {
-    const text = oneLine(bodyText(r.request.body, r.request.targets.length));
+    const text = oneLine(bodyText(r.request.body, r.request.targets));
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-/** The measured facts of a run, small after what the AI says: how many files it changed (from its revisions); nothing for none. */
-export function ReplyFacts({ files, changed, tx }: { files: number | undefined; changed: boolean; tx: Tx }) {
-    const r = tx.chat.reply;
-    if (!changed) return null;
-    return (
-        <span className="reply-facts" data-tooltip={r.appliedHint}>
-            {r.applied(files)}
-        </span>
-    );
 }
 
 /** Which requests something is about: each as its author and the head of its body. */

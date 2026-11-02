@@ -8,12 +8,12 @@
 // elements has `@name[n]`: still read as a target. The body mentions a person as `@name[pN]`, the N-th of the people
 // it mentions (`people`, sent as `mentions`): picking one after `@` adds them, deleting their mentions removes them.
 // The body stays plain text: the stream reads the tokens back with `parseBody` (`domain/body.ts`) and renders them as
-// text and links, never as HTML.
+// text and links, never as HTML. The composer's editor shows the tokens as chips (`composer-text.ts`).
 import { commandsOf, contextOf, statesOf } from '@domaintrail/modeling';
 import { declarations, firstDeclarations } from '@domaintrail/storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, plainBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
-import { nameIn } from '../model-utils';
+import { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS, parseBody, renumberTokens, tokenName, tokensIn } from '@domaintrail/collaboration';
+import { labelOrName, nameIn, shownLabel } from '../model-utils';
 import { targetKey, targetName, targetOfSelection, type NamingContext, type TargetDraft } from './targets';
 
 export { MAX_REQUEST_MENTIONS, MAX_REQUEST_TARGETS };
@@ -34,12 +34,35 @@ export interface ComposerValue {
 
 export const EMPTY_COMPOSER: ComposerValue = { text: '', chips: [], people: [] };
 
+/** A request's target as a body's token reads it: only what tells a state or a command from an element. */
+export interface TokenTarget {
+    readonly target: { readonly kind: string; readonly element?: string };
+}
+
 /**
- * A body as one reads it on one line: each element as `#name`, each person as `@name`, without their numbers. Only
- * the targets the request has are elements; people are read whatever their number (a run's frozen request does not
- * keep whom it mentioned).
+ * A token's name for its target on one line: the target's own name, as the chips show it — a state or a command
+ * (`Agg#State`, `Agg:cmd`), written with its aggregate (`請求書.支払済み`), without it; anything else as written.
  */
-export const bodyText = (text: string, targets: number, people = MAX_REQUEST_MENTIONS): string => plainBody(text, { targets, people });
+export function ownTokenName(name: string, target: TokenTarget | undefined): string {
+    const member = target?.target.kind === 'DtElement' && /[#:]/.test(target.target.element ?? '');
+    const dot = name.indexOf('.');
+    return member && dot > 0 && dot < name.length - 1 ? name.slice(dot + 1) : name;
+}
+
+/**
+ * A body as one reads it on one line: each element as `#name` (its own name, `ownTokenName`), each person as `@name`,
+ * without their numbers (`bare`: the names alone). Only the targets the request has are elements; people are read
+ * whatever their number (a run's frozen request does not keep whom it mentioned).
+ */
+export function bodyText(text: string, targets: readonly TokenTarget[], people = MAX_REQUEST_MENTIONS, bare = false): string {
+    return parseBody(text, { targets: targets.length, people })
+        .map((seg) => {
+            if (seg.kind === 'text') return seg.text;
+            const name = seg.kind === 'element' ? ownTokenName(seg.name, targets[seg.index]) : seg.name;
+            return bare ? name : `${seg.kind === 'element' ? '#' : '@'}${name}`;
+        })
+        .join('');
+}
 
 /** The numbers (0-based) of the targets, and of the people, a text mentions. */
 function mentionedIn(text: string): { readonly targets: Set<number>; readonly people: Set<number> } {
@@ -112,55 +135,6 @@ const indexOf = (chips: readonly ComposerChip[], target: TargetDraft): number =>
     const key = targetKey(target.target);
     return chips.findIndex((c) => targetKey(c.target.target) === key);
 };
-
-/** Writes `token` over the query from `start` to `end`, the caret after it. */
-function write(value: ComposerValue, at: { readonly start: number; readonly end: number }, token: string): { readonly text: string; readonly caret: number } {
-    return { text: value.text.slice(0, at.start) + token + value.text.slice(at.end), caret: at.start + token.length };
-}
-
-/**
- * Picks a candidate for the `#query` from `start` to `end`: writes `#name[n] ` there and makes the target chip n (the
- * chip it already is, or a new one). Undefined when a new chip would pass the limit.
- */
-export function insertMention(
-    value: ComposerValue,
-    at: { readonly start: number; readonly end: number },
-    target: TargetDraft,
-    name: string,
-): { readonly value: ComposerValue; readonly caret: number } | undefined {
-    let index = indexOf(value.chips, target);
-    let chips = value.chips;
-    if (index < 0) {
-        if (chips.length >= MAX_REQUEST_TARGETS) return undefined;
-        index = chips.length;
-        chips = [...chips, { target, mentioned: true }];
-    } else if (!chips[index].mentioned) {
-        chips = chips.map((c, i) => (i === index ? { ...c, mentioned: true } : c));
-    }
-    const { text, caret } = write(value, at, `#${mentionName(name)}[${index + 1}] `);
-    return { value: { ...value, text, chips }, caret };
-}
-
-/**
- * Picks a person for the `@query` from `start` to `end`: writes `@name[pN] ` there, N their number among the people
- * mentioned (the one they have, or the next). Undefined when one more would pass the limit.
- */
-export function insertPerson(
-    value: ComposerValue,
-    at: { readonly start: number; readonly end: number },
-    person: string,
-    name: string,
-): { readonly value: ComposerValue; readonly caret: number } | undefined {
-    let index = value.people.indexOf(person);
-    let people = value.people;
-    if (index < 0) {
-        if (people.length >= MAX_REQUEST_MENTIONS) return undefined;
-        index = people.length;
-        people = [...people, person];
-    }
-    const { text, caret } = write(value, at, `@${mentionName(name)}[p${index + 1}] `);
-    return { value: { ...value, text, people }, caret };
-}
 
 /** Adds targets as chips (the selection's `+`): each once, up to the limit. `skipped`: how many did not fit. */
 export function addChips(value: ComposerValue, targets: readonly TargetDraft[]): { readonly value: ComposerValue; readonly skipped: number } {
@@ -253,7 +227,7 @@ export function mentionCandidates(
             qualified,
             kind: { language, kind },
             where,
-            search: [label ?? '', short, qualified].filter(Boolean),
+            search: [shownLabel(label) ?? '', short, qualified].filter(Boolean),
         });
     };
     if (model) {
@@ -261,9 +235,9 @@ export function mentionCandidates(
         for (const el of model.elements) {
             add(el.id, 'dt', el.kind, contextName(el.context), el.name, el.label);
             for (const s of statesOf(el))
-                add(s.id, 'dt', 'state', contextName(el.context), `${el.name}.${s.name}`, s.label && `${el.label ?? el.name}.${s.label}`);
+                add(s.id, 'dt', 'state', contextName(el.context), `${el.name}.${s.name}`, shownLabel(s.label) && `${labelOrName(el)}.${s.label}`);
             for (const c of commandsOf(el))
-                add(c.id, 'dt', 'command', contextName(el.context), `${el.name}.${c.name}`, c.label && `${el.label ?? el.name}.${c.label}`);
+                add(c.id, 'dt', 'command', contextName(el.context), `${el.name}.${c.name}`, shownLabel(c.label) && `${labelOrName(el)}.${c.label}`);
         }
     }
     for (const view of ctx.stormings) {

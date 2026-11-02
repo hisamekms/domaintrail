@@ -5,7 +5,7 @@
 import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { changeUnits, shownUnits, unitName, type ChangeUnit } from './history';
 import { listedParticipants, type Peers } from './presence';
-import { participantNames } from './stream';
+import { participantAvatars, participantNames } from './stream';
 
 type RevisionJson = SessionStateBody['revisions'][number];
 
@@ -92,7 +92,7 @@ export interface CollabSummary {
     /** The units that changed nothing (no change, declined, failed, cancelled, …). */
     readonly others: number;
     /** Everyone who took part, the facilitator first, then by name. */
-    readonly participants: readonly { readonly id: string; readonly name: string; readonly facilitator: boolean }[];
+    readonly participants: readonly { readonly id: string; readonly name: string; readonly facilitator: boolean; readonly avatarUrl?: string }[];
     /** From the start to the end, in milliseconds; undefined when the end is not known. */
     readonly duration: number | undefined;
 }
@@ -108,11 +108,15 @@ export function collabSummary(
     endedAt?: string,
 ): CollabSummary {
     const names = participantNames(state, peers, me);
+    const avatars = participantAvatars(peers, me);
     const units = changeUnits(state);
     const changed = shownUnits(units, false).sort((a, b) => a.start.localeCompare(b.start));
     const end = state.session.state === 'Closed' ? state.session.closedAt : endedAt;
     const participants = listedParticipants(state)
-        .map((p) => ({ id: p.id, name: names.get(p.id) ?? p.name, facilitator: p.role === 'facilitator' }))
+        .map((p) => {
+            const avatarUrl = avatars.get(p.id);
+            return { id: p.id, name: names.get(p.id) ?? p.name, facilitator: p.role === 'facilitator', ...(avatarUrl && { avatarUrl }) };
+        })
         .sort((a, b) => Number(b.facilitator) - Number(a.facilitator) || a.name.localeCompare(b.name));
     return {
         units: changed.map((u) => ({ key: u.key, title: unitTitle(u), files: u.files ?? 0, requesters: u.requesters.map((id) => names.get(id) ?? id) })),

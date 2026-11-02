@@ -322,6 +322,19 @@ describe('agent runs', () => {
         expect(error(await s.use.startRun({ run: run.id, token: a.lease.token }))).toEqual({ type: 'LeaseLost', run: run.id });
     });
 
+    test("a run's activity is taken from its lease's holder while it runs, without extending the lease", async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const a = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+        expect(error(await s.use.heldRunningRun({ run: run.id, token: a.lease.token }))).toEqual({ type: 'NotAllowed', command: 'report', state: 'Queued' });
+        value(await s.use.startRun({ run: run.id, token: a.lease.token }));
+        expect(value(await s.use.heldRunningRun({ run: run.id, token: a.lease.token }))).toMatchObject({ id: run.id, state: 'Running' });
+        expect(error(await s.use.heldRunningRun({ run: run.id, token: 'another-token' }))).toEqual({ type: 'LeaseLost', run: run.id });
+        value(await s.use.failRun({ run: run.id, token: a.lease.token, reason: 'AgentError' }));
+        expect(error(await s.use.heldRunningRun({ run: run.id, token: a.lease.token }))).toEqual({ type: 'LeaseLost', run: run.id });
+    });
+
     test('recovery: an expired lease fails a running run (LeaseExpired) and frees a claimed one, across a restart', async () => {
         const root = await workspace();
         const clock = { t: Date.parse('2026-10-31T09:00:00Z') };
@@ -558,6 +571,75 @@ describe('agent replies', () => {
             type: 'RunOfAnotherSession',
             run: run.id,
         });
+    });
+
+    test("the facilitator's approval of an assumption is recorded once, sends nothing, and excludes a pick of it", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const tally = (n: number): C.Tally => value(C.makeTally(n));
+        const approve = (of: C.AgentRunId, assumption: number, who = facilitator) =>
+            s.use.approveAssumption({ session: id, actor: actor(who), assumption: { run: of, assumption: tally(assumption) } });
+        const pickOf = (assumption: number, alternative: string) =>
+            s.use.queueRun({
+                session: id,
+                requests: [request],
+                actor: actor(facilitator),
+                pick: { pickOf: run.id, assumption: tally(assumption), alternative: value(C.makeReplyKey(alternative)) },
+            });
+        // not completed yet: nothing to approve
+        expect(error(await approve(run.id, 0))).toEqual({ type: 'RunNotApprovable', run: run.id });
+        const assumptions = [
+            { text: 'Only drafts.', requests: [request], alternatives: [{ id: 'any', label: 'Any state' }] },
+            { text: 'Cancel keeps the order.', requests: [request], alternatives: [{ id: 'delete', label: 'Delete it' }] },
+        ];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+
+        const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        expect(error(await approve(unknown, 0))).toEqual({ type: 'RunNotFound', run: unknown });
+        expect(error(await approve(run.id, 2))).toEqual({ type: 'AssumptionNotFound', run: run.id });
+        expect(error(await approve(run.id, 0, guest))).toEqual({ type: 'FacilitatorOnly' });
+
+        const before = value(await s.use.sessionState({ session: id }));
+        const approval = value(await approve(run.id, 0));
+        expect(approval).toMatchObject({ state: 'Approved', session: id, assumption: { run: run.id, assumption: 0 }, approvedBy: facilitator });
+        const after = value(await s.use.sessionState({ session: id }));
+        expect(after.approvals).toEqual([approval]);
+        // nothing is queued for the agent; the pages get the event
+        expect(after.runs).toHaveLength(before.runs.length);
+        const events = await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 });
+        expect(events.at(-1)?.event).toMatchObject({ type: 'AssumptionApproved', approvalId: approval.id, assumption: { run: run.id, assumption: 0 } });
+
+        // one decision per assumption: approved once, and not sent again with an alternative
+        expect(error(await approve(run.id, 0))).toEqual({ type: 'AssumptionClosed', run: run.id });
+        expect(error(await pickOf(0, 'any'))).toEqual({ type: 'AssumptionClosed', run: run.id });
+        // the votes of the approved assumption close; those of the other stay open
+        const vote = (assumption: number) =>
+            s.use.setMark({
+                session: id,
+                actor: actor(guest),
+                target: { kind: 'AssumptionChoice', run: run.id, assumption: tally(assumption) },
+                sign: { kind: 'Vote' },
+                placed: true,
+            });
+        expect(error(await vote(0))).toEqual({ type: 'MarkTargetClosed' });
+        value(await vote(1));
+        // the other assumption picked: a later run took over the run's requests, so nothing of it can be approved now
+        value(await pickOf(1, 'delete'));
+        expect(error(await approve(run.id, 1))).toEqual({ type: 'AssumptionClosed', run: run.id });
+    });
+
+    test("an approval of another session's run is refused", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const assumptions = [{ text: 'Only drafts.', requests: [request], alternatives: [] }];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+        value(await s.use.closeSession({ session: id, actor: actor(facilitator) }));
+        const { id: second } = await started(s);
+        const assumption = { run: run.id, assumption: value(C.makeTally(0)) };
+        expect(error(await s.use.approveAssumption({ session: second, actor: actor(facilitator), assumption }))).toEqual({
+            type: 'RunOfAnotherSession',
+            run: run.id,
+        });
+        // nor in a closed session
+        expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption }))).toEqual({ type: 'SessionAlreadyClosed' });
     });
 });
 
@@ -875,6 +957,36 @@ describe('revisions', () => {
 
         const other = value(await s.use.startSession({ facilitator, name })).revision;
         expect(error(await s.use.compareRevisions({ session: id, before: start.id, after: other.id }))).toEqual({
+            type: 'RevisionOfAnotherSession',
+            revision: other.id,
+        });
+    });
+
+    test('model changes: the elements two revisions differ by, kept per pair of revisions', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
+        await s.write('stormings/more.dtes', 'storming More {\n  event Happened\n}\n');
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
+        let validated = 0;
+        const counting = createCollaboration({ ...s.deps, validator: { validate: (sources) => (validated++, s.deps.validator.validate(sources)) } });
+        const m = value(await counting.modelChanges({ session: id, before: start.id, after: manual.id }));
+        expect(m.complete).toBe(true);
+        expect(m.changes.map((c) => [c.change, c.language, c.kind, c.name, c.owner?.name])).toEqual([
+            ['added', 'Dt', 'state', 'Cancelled', 'Order'],
+            ['added', 'Dtes', 'event', 'Happened', 'More'],
+        ]);
+        expect(validated).toBe(2);
+        expect(value(await counting.modelChanges({ session: id, before: start.id, after: manual.id }))).toEqual(m);
+        // the pair is kept, and the revisions' analyses for the next pair
+        expect(validated).toBe(2);
+        expect(value(await counting.modelChanges({ session: id, before: manual.id, after: start.id })).changes.map((c) => c.change)).toEqual([
+            'removed',
+            'removed',
+        ]);
+        expect(validated).toBe(2);
+        const other = value(await s.use.startSession({ facilitator, name })).revision;
+        expect(error(await counting.modelChanges({ session: id, before: start.id, after: other.id }))).toEqual({
             type: 'RevisionOfAnotherSession',
             revision: other.id,
         });

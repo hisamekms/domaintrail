@@ -1,8 +1,7 @@
-// The chat's collab menu (ADR 0026): one button in the chat's head — the avatars, how many are online and 「コラボ中」 —
-// opening who is in the collab (`participants.tsx`) and what one can do with it: copy the invite link; the facilitator
-// records the workspace, hands the role over and ends the collab (asked first, with what is unfinished); a participant
-// leaves. Once it ended, everyone sees its summary (`CollabSummaryDialog`). What the menu offers to whom is in
-// `collab.ts`.
+// The chat's collab menu (ADR 0026): one button in the chat's head — the avatars and how many are online — opening
+// who is in the collab (`participants.tsx`) and what one can do with it: copy the invite link; the facilitator records
+// the workspace, hands the role over and ends the collab (asked first, with what is unfinished); a participant leaves.
+// Once it ended, everyone sees its summary (`CollabSummaryDialog`). What the menu offers to whom is in `collab.ts`.
 //
 // Only the collab state exists today (`dt session start`). A solo state — 「👤 1 人 ▾」 with 「コラボを始める」 under
 // `dt view` — would be another button and list here, chosen by the page's state, with the same popover.
@@ -142,18 +141,18 @@ export function CollabMenu(props: {
             >
                 <span className="chat-avatars">
                     {rows.slice(0, AVATARS).map((r) => (
-                        <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}${r.role === 'facilitator' ? ' facilitator' : ''}`}>
-                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} />
+                        <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
+                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
                         </span>
                     ))}
                 </span>
                 <span className="chat-online">{tx.chat.onlineCount(online, rows.length)}</span>
-                {live && <span className="collab-menu-state">{tx.collab.state}</span>}
                 <ChevronDown size={13} aria-hidden className="collab-menu-chevron" />
             </button>
             {open && (
                 <div ref={popover} className="collab-menu-popover motion-pop" role="dialog" aria-label={tx.collab.menu} onKeyDown={onKeyDown}>
-                    <p className="collab-menu-heading" id="collab-menu-people">
+                    {/* the people need no heading: the actions are set apart by a rule */}
+                    <p className="visually-hidden" id="collab-menu-people">
                         {tx.collab.people}
                     </p>
                     <ParticipantsList
@@ -324,7 +323,7 @@ export function CollabSummaryDialog(props: { summary: CollabSummary; onClose: ()
                     <ul className="collab-summary-people">
                         {summary.participants.map((p) => (
                             <li key={p.id}>
-                                <Avatar id={p.id} name={p.name} />
+                                <Avatar id={p.id} name={p.name} {...(p.avatarUrl && { url: p.avatarUrl })} facilitator={p.facilitator} />
                                 {p.name}
                                 {p.facilitator && <span className="chat-role"> {tx.roles.facilitator}</span>}
                             </li>

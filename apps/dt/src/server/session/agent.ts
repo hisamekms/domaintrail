@@ -4,9 +4,19 @@
 // with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
 // starts it (and gets the runs it continues, with what they changed), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
 // fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
+// While a run runs, its holder also reports what it is doing (an activity, ADR 0026, amendment): held in memory and
+// sent to the pages, never stored.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { Collaboration, type CollaborationUseCases, knownAgentRunId, type OutboxEntry } from '@domaintrail/collaboration';
+import {
+    Collaboration,
+    type CollaborationUseCases,
+    isActivityPhase,
+    knownAgentRunId,
+    type OutboxEntry,
+    readActivity,
+    type RunActivity,
+} from '@domaintrail/collaboration';
 import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
@@ -35,6 +45,8 @@ export interface AgentApiDeps {
     readonly maxStreams: number;
     /** Sends what the outbox got to the pages (and wakes the streams); called after every change. */
     readonly pump: () => Promise<void>;
+    /** What a running run is doing now, reported by its lease's holder: kept as its latest and sent to the pages. */
+    readonly activity: (run: Collaboration.AgentRunId, activity: RunActivity) => void;
 }
 
 export interface AgentApi {
@@ -197,6 +209,28 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 const r = await use.heartbeat({ run, token: String(b.token), leaseMs: deps.leaseMs });
                 if (!r.ok) return sendError(res, statusOf(r.error.type), r.error.type, undefined, { run: r.error.run });
                 return sendJson(res, 200, { lease: { token: r.value.token, expiresAt: r.value.expiresAt.toISOString() } });
+            }
+            case 'activity': {
+                const b = await input(req, res, ['token', 'phase', 'subject']);
+                if (!b) return;
+                const activity = readActivity(b.phase, b.subject);
+                if (!activity) {
+                    const phase = isActivityPhase(b.phase);
+                    return sendError(
+                        res,
+                        400,
+                        'InvalidInput',
+                        phase ? 'Expected a short subject on one line.' : 'Expected reading, editing, checking or finishing.',
+                        {
+                            field: phase ? 'subject' : 'phase',
+                        },
+                    );
+                }
+                // only from the lease's holder, while the run runs; the lease is not extended (the heartbeat does that)
+                const held = await use.heldRunningRun({ run, token: String(b.token) });
+                if (!held.ok) return sendError(res, statusOf(held.error.type), held.error.type, undefined, held.error);
+                deps.activity(run, activity);
+                return sendJson(res, 200, {});
             }
             case 'finish': {
                 const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply']);

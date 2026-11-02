@@ -2,12 +2,14 @@
 // (REST under `/api/session/`, and the WebSocket next to the Live View's `type: 'update'`) and the agent subscriber
 // (the agent API on its own loopback listener: REST and an SSE stream). Types only, shared by the app (apps/dt), the page
 // (S5) and the subscriber (S6); what goes over the wire is JSON, so a `Date` arrives as an ISO string (`Json<T>`).
+import type { ElementChange, ElementChanges } from './domain/changes.js';
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
+import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 
-export type { Classification };
+export type { Classification, RunActivity, RunActivityPhase };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -40,6 +42,8 @@ export interface SessionStateBody {
     readonly revisions: Json<readonly Collaboration.Revision[]>;
     /** The marks still placed (votes and reactions), in the order they were placed: a page that joins late sees them. */
     readonly marks: Json<readonly Collaboration.PlacedMark[]>;
+    /** The assumptions the facilitator approved, in the order they were approved. */
+    readonly approvals: Json<readonly Collaboration.AssumptionApproval[]>;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), in the form reactions are kept. */
     readonly quickReactions: readonly string[];
     /** The outbox position the state includes: event messages with a `seq` up to it are already in it. */
@@ -104,6 +108,7 @@ export const EVENT_MESSAGE_TYPES = {
     RevisionConfirmed: 'revision.confirmed',
     MarkPlaced: 'mark.placed',
     MarkRemoved: 'mark.removed',
+    AssumptionApproved: 'assumption.approved',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -126,9 +131,13 @@ export type SessionServerMessage =
     | { readonly type: 'presence.leave'; readonly connection: string }
     // the facilitator's only (ADR 0026, amendment): how the chat's messages read, when a classifier is configured
     | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
-    | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification };
+    | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification }
+    // what the running runs are doing (ADR 0026, amendment): transient, never an event; every activity held on connect,
+    // then each change. A page shows a run's only while the run is `Running`
+    | { readonly type: 'session.activities'; readonly activities: Readonly<Record<string, RunActivity>> }
+    | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity };
 
-/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `presence.*`). */
+/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];
 
 /** An error of the session APIs: `{ "error": { "type": …, … } }` with an HTTP status. */
@@ -152,14 +161,15 @@ export interface ClaimBody {
  * `POST /api/session/requests`: 0 to 20 targets, each once, none of them the whole workspace (no target: the whole
  * workspace); `#name[n]` in the body mentions target n (`@name[n]`, as bodies were written before, too), `@name[pN]`
  * the N-th of `mentions`: 0 to 20 participants of the session, each once (`MentionedNotAParticipant`,
- * `TooManyMentions`, `DuplicateMention` 400 otherwise). The former body with one `target` is still taken. `replyTo`: the
- * run of the session the message replies to — completed, failed, declined or cancelled (`RunNotFound` 404,
- * `RunOfAnotherSession` 404, `RunNotReplyable` 409 otherwise).
+ * `TooManyMentions`, `DuplicateMention` 400 otherwise). The former body with one `target` is still taken. `replyTo`:
+ * what the message replies to — `{ kind: 'Run', run }`, a run of the session that is completed, failed, declined or
+ * cancelled (`RunNotFound` 404, `RunOfAnotherSession` 404, `RunNotReplyable` 409 otherwise), or `{ kind: 'Message',
+ * request }`, a message of the session, one's own too (`RequestNotFound` 404, `RequestOfAnotherSession` 404).
  */
 export interface SendRequestBody {
     readonly targets: readonly Json<Collaboration.TargetSnapshot>[];
     readonly body: string;
-    readonly replyTo?: string;
+    readonly replyTo?: Json<Collaboration.ReplyTarget>;
     readonly mentions?: readonly string[];
 }
 
@@ -183,6 +193,23 @@ export interface SetMarkBody {
 export interface MarkSetBody {
     readonly placed?: Json<Collaboration.PlacedMark>;
     readonly removed: Json<readonly Collaboration.RemovedMark[]>;
+}
+
+/**
+ * `POST /api/session/approvals` (the facilitator): approves an assumption of a completed run of the session — `run`, and
+ * `assumption`, its index in the run's reply. It stands as the AI made it; nothing is sent to the agent. Refused with
+ * `RunNotFound` / `RunOfAnotherSession` (404), `RunNotApprovable` (409: the run is not completed, or its reply has no
+ * assumptions), `AssumptionNotFound` (400), `AssumptionClosed` (409: approved already, an alternative of it picked, or a
+ * later run took over the run's requests). → 201 `ApprovedBody`; every page gets `assumption.approved`.
+ */
+export interface ApproveBody {
+    readonly run: string;
+    readonly assumption: number;
+}
+
+/** `POST /api/session/approvals` → 201: the approval made. */
+export interface ApprovedBody {
+    readonly approval: Json<Collaboration.AssumptionApproval>;
 }
 
 /**
@@ -254,6 +281,14 @@ export interface ComparisonBody {
     readonly counts: Readonly<Record<Collaboration.SourceLanguage, Readonly<Record<FileStatus, number>>>>;
     readonly diffsOmitted: boolean;
 }
+
+/**
+ * `GET /api/session/revisions/:before/changes/:after` (any participant): what a unit of work changed in the model's
+ * words — the `.dt` and `.dtes` elements added, changed and removed. `complete` is false when a side's sources did not
+ * all parse (that DSL's changes are then left out).
+ */
+export type ModelChangesBody = ElementChanges;
+export type { ElementChange };
 
 // ---- Agent API (loopback listener, `Authorization: Bearer <agent.json token>`) ----
 
@@ -371,6 +406,17 @@ export interface AgentClarificationBody extends AgentLeaseBody {
 /** `POST /agent/runs/:id/decline`: the agent will not do the requests; the reply's summary is why (outcome `declined`). */
 export interface AgentDeclineBody extends AgentLeaseBody {
     readonly reply: AgentReplyBody;
+}
+
+/**
+ * `POST /agent/runs/:id/activity` → 200 `{}`: what the running run is doing now (`RunActivity`), from its lease's holder.
+ * Kept in memory as the run's latest and sent to the pages; it does not extend the lease. Refused with `LeaseLost` or
+ * `NotAllowed` (409) unless the token is the live lease of a running run, `InvalidInput` (400) for a phase or a
+ * subject that is not one.
+ */
+export interface AgentActivityBody extends AgentLeaseBody {
+    readonly phase: RunActivityPhase;
+    readonly subject?: string;
 }
 
 /** `POST /agent/runs/:id/fail`. */

@@ -24,8 +24,9 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 | `--reset` | Wipes `--dir` first, when an earlier seed made it (it has a `.dt-session-seed` file) and no session server runs on it. |
 | `--workspace <dir>` | The workspace copied (default `examples/shop`; the scenarios name its elements). |
 | `--port <port>` | The Live View's port (default 4321). |
-| `--no-classifier` | Leaves the message classifier off: no 依頼 / 会話 tags. |
+| `--no-classifier` | Leaves the message classifier off: every message has the AI に送る button. |
 | `--leave-queued` | Leaves one run queued at the end; the next subscriber takes it. |
+| `--leave-running` | Leaves one run running at the end, held by the seed's agent, and two queued behind it (AI の作業's 実行中 and 待ち). Not with `--leave-queued`. |
 | `--exit` | Stops the session server once seeded instead of leaving it running. |
 
 The seed copies the workspace (without `.domaintrail/` and `generated/`), commits it to a git repository of its own
@@ -43,7 +44,7 @@ tags, see below).
 
 - **As the facilitator**: open the Live View, join with any name, then open the printed facilitator link (single use,
   10 minutes; `node dist/dt.js -r <dir> session link` prints another). You then hold the role `ooyama_F` held: the
-  facilitator's messages and reactions show as 「あなた」, and the 依頼 / 会話 tags, the ⤓ and the menus are yours.
+  facilitator's messages and reactions show as 「あなた」, and the AI に送る buttons and the menus are yours.
 - **As a participant**: a private window, the same URL, another name. Your browser is a new participant, so none of the
   seeded messages are yours; the seeded people's cookies (`dt_session`) are in `<dir>/.domaintrail/seed.json`, for a
   browser (or a test) that should be one of them.
@@ -53,10 +54,10 @@ tags, see below).
 ## What the scenarios show
 
 - `chat`: consecutive messages by one person, the facilitator's own messages, targets of each kind (a `.dt` element, a
-  state, a command, a storming element, an occurrence) and the whole workspace (no target line), `#name[n]` mentions
+  state, a command, a storming element, an occurrence) and the whole workspace (no target chips), `#name[n]` mentions
   (and one `@name[n]`, as bodies were written before), people mentioned (`@name[pN]`: two in one message, the
   facilitator in the long one, an element and two people together — sign in as 田中 or 鈴木 to see them marked), a long message
-  (clamped), 依頼 / 会話 / no tag, applied marks, and two targets a run then renames and removes (stale).
+  (clamped), messages read as a request, as talk (no AI に送る button) and not classified, applied marks, and two targets a run then renames and removes (stale).
 Every scripted reply gives a title (the card's name), as Claude Code's does, except the first card of `runs`, whose
 two replies have none, like replies from before titles: it shows the fallback (its first message). A run continuing a
 card gives a title of its own that the card does not take.
@@ -67,20 +68,30 @@ card gives a title of its own that the card does not take.
 - `questions`: a single-choice and a multiple-choice question with votes open, two questions (one without options), an
   answered one (an option, and その他 in the facilitator's words) whose run completes the card, and one taken over by a
   run with a note (its votes frozen).
-- `assumptions`: assumptions with alternatives and votes open (for an alternative and for keeping it), an alternative
-  picked (`選択 name · time`, the time a link to the run that redoes it), and assumptions left as they were (the message applied again).
-- `replies`: two replies to a completed run applied together (their run continues the card), and a reply to that run.
+- `assumptions`: an assumption with alternatives and votes open (for an alternative and for keeping it) beside one the
+  facilitator approved (`承認 name · time`, nothing sent to the AI), an alternative picked (`送り直し name · time`, the
+  time a link to the run that redoes it), and assumptions left as they were (the message applied again).
+- `replies`: two replies to a completed run applied together (their run continues the card), a reply to that run, and
+  replies to people's messages: one to 田中's message (sign in as 田中 to see it marked) and a reply to that reply, with a
+  target.
 - `reactions`: one emoji by many (the facilitator's among them), reactions on an AI turn, and 19 different emoji on one
   message (the limit is 20).
 - `references`: `@{…}` in a summary, a note, an assumption, a question and its options — `.dt` elements, states,
   commands, storming elements, ones that do not resolve, and `\@{` written as text.
 
-Not produced: a run left **running** (the seed's agent would have to hold its lease; stopped, the lease expires and
-the run fails), and a run **queued** unless `--leave-queued` (a real subscriber started later would take it).
+Not produced by default: a run left **running** and runs **queued**. `--leave-running` leaves both: once the scenarios
+are done, 田中's message runs and the seed's agent keeps working on it (holding its lease) while the seed runs — telling
+what it is doing every 3 seconds, round and round (reading `stormings/returns.dtes`, editing it, `dt check`, …), so the
+running turn's activity line changes — and two
+runs wait behind it — 佐藤's message, then 鈴木's and 高橋's together. Cancelling the running one (✕, then 取り消す in the dialog) starts the next,
+which the agent holds the same way. Without it the agent is stopped (stopped, a lease expires and the run fails);
+`--leave-queued` leaves one run queued for a real subscriber started later. The questions left open by `questions`
+show in AI の作業 as 答え待ち.
 
 ## The classifier
 
-The 依頼 / 会話 tags need the message classifier (`session.classifier`). The seed enables it in the scratch config
+Telling talk from requests (a message read as talk has no AI に送る button in its row, only in its … menu) needs
+the message classifier (`session.classifier`). The seed enables it in the scratch config
 with a placeholder account and serves a stand-in for Cloudflare's API itself (`DOMAINTRAIL_CLASSIFIER_URL`): each
 seeded message reads as the scenario says, and a message typed later reads as a request when it asks for a change
 (して, 追加, 削除, …). No message leaves the machine. The stand-in lives in the seed's process, so a session server

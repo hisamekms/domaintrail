@@ -149,58 +149,87 @@ neither baseline: their views are not marked.
   original size). The diagrams' own text is not affected; it follows the canvas's zoom. Until you drag them, the left
   pane, the inspector and the chat open wider (and the narrow-window thresholds below grow) in proportion, so that
   larger text does not wrap everywhere; a width you dragged is kept.
-- Names follow the 名前の表示 setting: ラベル (the string after a declaration's name, falling back to the
-  name), 名前 or 両方. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
+- Names follow the 名前の表示 setting: ラベル (the default; the string after a declaration's name, falling back to
+  the name when there is none or it is blank), 名前 or 両方 (the label and the name; the name alone without a label).
+  Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
 
 ## In a session
 
 Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
-the same for everyone and open when the page joins. Its head shows the collab menu (the avatars, the participants online and コラボ中 ▾: who is where, the invite link,
+the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
-the agent's status at a glance, with ✕ to close it; while it is closed, a round 💬 button at the bottom right of the
+the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing when idle), with ✕ to
+close it. A click on the status (AI の作業を見る) switches to AI の作業 and opens the card it stands for — the running one,
+else the next to run, else the one waiting longest for an answer — scrolled to and marked for a moment, besides those
+already open; the chat keeps its scroll, so チャット brings the reader back where they were. While the chat is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
-messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection and `C`
-open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
+messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection (on the canvas,
+or next to the element's name in the inspector) and `C` add the selection as targets and open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
 its activity bar while the chat is open, and below about 1024px the inspector moves below the canvas (your own choices
 come back when the window is wide again).
 
 The chat has two views:
 
 - **チャット**: one stream of every message posted, one card per run — updated in place, with the runs that continue it
-  (an answer, an alternative) one under the other and a quote of each message it applied (with the reply's mark when
-  it applied several) — the
-  revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target line),
+  (an answer, an alternative) one under the other and a quote of each message it applied (followed, once the run
+  replied, by what it did of it: `✓ 対応`, `◐ 一部`, `– 未対応`; none when it asks about it) — the
+  revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target chips),
   picked with `#` or added from the selection, whose unsent text and targets stay in the browser; `@` mentions a
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
   background in your stream, and the closed chat's button shows `@ n` for the new ones. A card is named by the title
   the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
-  it show their time only. An applied message shows its latest run's mark (`✓`, the card's name in the tooltip). The
-  facilitator applies messages from the stream (⤓, ▾ with a note, several
-  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
-  restore and comparison from a card's ⋯ and recording, the hand-over and コラボを終える… from the collab menu. Once the
+  it show their time only (the title takes the row's width, cut with … only when it is too narrow, whole in its
+  tooltip). An AI turn shows its state in the status slot at the right end of its name row (queued, running with its
+  time, declined, failed, cancelled), so the states line up in one column; a row without a status leaves no gap. The
+  state is the work's, so a message sent to the AI shows none, only a small link to its turn in the same slot (the AI's mark and ↓; its state in the tooltip,
+  `AI の作業へ（実行待ち）`, a click going to the turn). While
+  a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
+  `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
+  facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
+  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ right after a running or
+  queued turn's state, always shown, after a dialog asks), and reaches confirm,
+  restore and the changes from a card's ⋯ (この作業の結果を確認済みにする, この作業の前に戻す…, 変更を見る; the revisions are
+  in the tooltips only) and recording, the hand-over and コラボを終える… from the collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
   run waits; the facilitator sees the counts and decides. Options start with ○ (single choice) or ☐ (multiple), and
   an assumption's 前提 and 別案 stand one under the other, each with ○. An answered question keeps its options, with
   the filled mark (◉, ☑) on what was chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked
   alternative has ◉ and `選択 name · time`, the time a link to the run the pick queued. Anyone reacts to a message or an AI turn with any one emoji
-  (☺+ on hover: the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
+  (☺+ on hover: a row's actions — the facilitator's tools, ↩ and ☺+ — float in a small bar over its top right while
+  it is hovered or focused, always on touch; the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
   meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
   who marked is in the tooltip and, for a vote, in a list on a click.
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ 「請求書の税区分」への返信 ✕`), the targets of its
   messages to start with; the posted reply shows `↩ <the card's name>: …` on top, a click going to the card. Replies are applied
   like any message, and the run made from them continues the replied run's card; the agent gets that run's messages,
-  reply and diff as context.
+  reply and diff as context. ↩ on any message replies to it the same way (`↩ 田中への返信 ✕`, its targets to start
+  with); the reply shows `↩ 田中: …` on top, a click going to the message, and a reply to my message is marked in my
+  stream as a mention of me is. The agent gets the replied message's author and text.
   The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
   rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
-- **履歴**: the history of changes, newest first. Each row is one card — a run with the runs that continue it — that
-  changed files: its outcome and name (the title, else the first message) with its time span; whose messages its first
-  run applied, how many runs, how many files it changed (measured from the revisions); and the files themselves, a link
-  that compares the revisions before and after the whole card. Opened, it shows the run's card, and
-  チャットで見る scrolls the chat to it. すべて also lists the runs
-  that changed nothing, and those declined, failed or cancelled.
+- **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
+  queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
+  答え待ち (the AI asked a question), 実行中 (a pulsing dot, how long it has run, and the line of what the AI is doing), 待ち n (numbered in the order they
+  will run) and 終わったもの (newest first). A row reads its mark and name (the title, else the first message), then,
+  small, whose messages its first run applied, how many runs and its time span; and what the whole card changed, in
+  the model's words: up to three elements as chips (`＋ #受付期限切れ` added, `✎ #返品を受け付ける` changed, `− #返品メモ`
+  removed, in green, amber and red; the element's own name, its whole name in the tooltip; a click goes to it, a removed
+  one is struck through and goes nowhere), `ほか n` and 変更を見る. The same line is under each run's text in the chat.
+  変更を見る opens この作業の変更: the card's name, requesters and time, then 追加, 変更 and 削除 with each element and what it is
+  (`返品 の状態`, `集約`, `返品 のイベント`), a click closing it and going to the element; at the bottom, folded,
+  ソースの差分: the files changed between the revisions before and after, with their line diffs, and both validations
+  when either has an error or a warning. When the model could not be compared (a side does not parse), it says so and
+  the source diff is open. The dialog keeps one width and its top in place whether the source diff is open or not; its
+  body scrolls under the header. The facilitator cancels a running or
+  queued card with ✕, after a dialog asks.
+  A row is one block between lines: a click anywhere on it but a chip, 変更を見る and ✕ opens it, and under the same left
+  edge it shows the run's card, compact — a waiting one with the AI's question, answered (or voted on with ♡) as in the
+  chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
+  that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
+  other groups always show.
 
 The others' cursors are drawn on the same view. `dt view` serves the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).

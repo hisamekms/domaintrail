@@ -11,6 +11,7 @@ import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, se
 import { hashBytes, snapshotFile, snapshotHash } from './domain/snapshot.js';
 import { tally } from './domain/validation.js';
 import { makeEmoji, markCommands } from './domain/marks.js';
+import { approvalCommands } from './domain/approvals.js';
 import { isNormalEmoji } from './domain/emoji.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
 
@@ -137,12 +138,14 @@ register(
                 ReplyKey: C.makeReplyKey,
                 MarkId: C.makeMarkId,
                 Emoji: makeEmoji,
+                AssumptionApprovalId: C.makeAssumptionApprovalId,
             },
             Session: sessionCommands,
             Request: requestCommands,
             AgentRun: agentRunCommands,
             Revision: revisionCommands,
             Mark: markCommands,
+            AssumptionApproval: approvalCommands,
         },
         {
             // `serial` is the run queue's (one running run per session, a unique index of the store): not a property of one run

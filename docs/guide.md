@@ -2560,8 +2560,8 @@ page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). 
   the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
-right end of the page — チャット: every message posted, one card per run, and the composer; 履歴: the runs that changed
-files — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
+right end of the page — チャット: every message posted, one card per run, and the composer; AI の作業: everything sent to the AI,
+awaiting an answer, running, queued and finished — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
 collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
@@ -2569,8 +2569,8 @@ facilitator applies messages, answers the agent, cancels runs, records, confirms
 shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
 only hides what is not yours.
 
-**The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars, how
-many are online and コラボ中 ▾ — that opens the participants (where each is, and → to open the view another is on) and
+**The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars and how
+many are online ▾ — that opens the participants (where each is, and → to open the view another is on) and
 the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
 behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
 ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
@@ -2579,31 +2579,52 @@ the last revision confirmed — then 終える. Every page then shows コラボ�
 files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
 when it ended; the session's record stays in the workspace's `.domaintrail`.
 
-**Messages and apply.** Everything posted in the chat is a **message**, shown in the stream as it is sent; nothing
-runs until the facilitator **applies** it. On each message the facilitator has ⤓ (apply: a run of that message,
-queued at once; runs are serial, so it waits as 実行待ち while another runs) and ▾ (補足を付けてアプライ: a note for the
-agent first; 選択: choose several). Shift- or ⌘-click chooses messages too; a bar then offers a note and まとめてアプライ,
-one run of all of them, and Esc leaves it. Right after applying, 取り消す cancels the run while it is still queued.
-Participants see a run only once it is in the stream: there is no queue to watch. A message that was applied shows the
-mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for everyone; the tooltip names the card and the
-state, and a click goes to the card.
+**Messages and sending to the AI.** Everything posted in the chat is a **message**, shown in the stream as it is
+sent; nothing runs until the facilitator **sends** it to the AI (*applies* it, in the ADR's terms: queues a run with it
+as the input). On each message the facilitator has the robot button, AI に送る (a run of that message, queued at once;
+runs are serial, so it waits as 実行待ち while another runs), and … (その他の操作): もう一度送る once it was sent, AI に送る
+on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
+まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
+run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
+is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. Every message and
+AI turn has a status slot at the right end of its name row, there only when the row has a status and then as wide on
+every row (the longest state of the language), so what is there lines up in one column down the chat. The row's
+actions (AI に送る and …, ↩, ☺+) take no room in it: they float in a small bar over the row's top right while it is
+hovered or focused (or one of their menus is open), always on touch. The state is the work's, so
+only the AI turn shows it (below); a message that was sent shows, in its slot, a small link to the AI turn of its
+latest run (the AI's mark and ↓), its state in the tooltip (`AI の作業へ（実行待ち）`), and a click goes to the turn —
+several messages sent in one run read as one queued run, not one per message. What the run did of each message
+(`✓ 対応`, `◐ 一部`, `– 未対応`) is on the message's quote in the AI turn.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
-failed or cancelled. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
+failed or cancelled; its status slot shows the state where nothing else does (queued, running with the time,
+declined, failed, cancelled; a question shows itself), and the facilitator's ✕ that cancels a queued or running run
+stands right after it, always shown. While it runs, one small line under its quotes (and under its
+row in AI の作業) tells what the AI is doing now — `読んでいます`, `書き換えています`, `確かめています` or `まとめています`, with
+the file (its last segment; the path in the tooltip) or the command (`dt check`). It changes as the agent goes, is
+not kept once the run ends, and appears only after the agent first tells it. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
 (about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
 runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
 time's tooltip); before the AI gave a title (still running, or a run from before titles) it reads `AI · 19:21`, the
-quotes under it saying what it is about. Where a card must be named without any title (履歴, a reply, a mark's tooltip), the head of its first
-message stands for it, on one line. In 履歴, each card's heading is its name with its time span (`19:21–22:32`), then,
-small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how many runs and how many files it changed, then
-the files it changed (`→ billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
-card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
-the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
-hovering either one marks the other. A
+quotes under it saying what it is about. Where a card must be named without any title (AI の作業, a reply, a mark's tooltip), the head of its first
+message stands for it, on one line. In AI の作業, the cards are grouped — 答え待ち, 実行中, 待ち (in the order they will
+run, numbered), 終わったもの (newest first; すべて filters only these) — and the tab's badge counts the running and
+queued ones. Each card's row is its name, then, small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how
+many runs when more than one and its time span (`19:21–22:32`; the running one's elapsed time), then
+what the whole card changed in the model's words: up to three elements as chips — `＋` added, `✎` changed, `−` removed,
+then `#` and the element's own name (its whole name in the tooltip; a click goes to it, a removed one is struck
+through) — `ほか n` and 変更を見る; the same line is under each run's text. 変更を見る lists the elements added, changed
+and removed, each with what it is (`返品 の状態`), and keeps the source diff of `.dt` and `.dtes` files folded at the
+bottom. A field, a parameter or an invariant counts as a change of the element it is in. The chat speaks
+of the work, not of revisions: their numbers are only in tooltips and in the source diff. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
+what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`; none for a message it asks about, whose question follows; the quote is cut with … first, never that), and,
+when it applied several, the reply's short note on each; a click goes to the message (hovering one does not mark the
+other). A run of the same messages as the one before on the card quotes them only when its reply says what it did
+of them. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
 card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
 tooltip); a run of the same messages after a completed one too. The card stays where its first run was queued; when it
-changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」) goes to it. For the facilitator, a question's options can be chosen in the card (one, or several
+changes out of sight, a pill at the bottom of the stream (「「請求書の税区分」が更新されました」) goes to it. Scrolled up, the stream stops following the newest; a round ↓ button at its bottom right (最新へ) goes back to the bottom and follows again, marked with how many messages and AI turns arrived below since (`@ n` when some mention you or reply to you, as on 💬). For the facilitator, a question's options can be chosen in the card (one, or several
 when it says so) and 答えて再実行 queues the run's messages again with that answer at once. その他 is the last row, a
 radio or checkbox like the options: its own words are written in a dialog — ✎ at the row's end, or choosing その他
 while it has none (Space or Enter on it too) — with the question at its top; 決定 (⌘/Ctrl+Enter) chooses その他 with the
@@ -2612,17 +2633,19 @@ words, キャンセル (Esc) leaves it as it was, and 決定 on an emptied text 
 answer is one option or the own words, never both; choosing an option deselects その他 but keeps its words, so choosing
 it again brings them back. In a multiple-choice question it is a checkbox, sent together with the options chosen. Words
 under an unselected その他 are not sent. On a
-done card, an alternative of an assumption queues them again with that pick and a note asking for it; ✕ on a queued or running card
-(or on the status in the chat's head) cancels it; the card's ⋯ marks its result as confirmed, restores the workspace as
-it was before the run (asked first) or compares the two.
+done card, an alternative of an assumption queues them again with that pick and a note asking for it; the facilitator's ✕ (a bordered
+button first among a queued or running card's actions, and at the end of its row in AI の作業) cancels it after a
+dialog asks: 実行を取り消しますか？ for a running run (its work so far is not applied), 依頼を取り消しますか？ for a queued
+one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks the work's result as confirmed (この作業の結果を確認済みにする),
+restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
 
-**Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a
+**Replies to an AI turn.** Hover an AI turn (on touch it is always there) and ↩ 返信 in its actions starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
 a queued or running run is not replied to yet). Anyone can reply. A chip `↩ 「請求書の税区分」への返信 ✕` (the card's
 name) sits above the composer,
 whose targets start with those of the run's messages (change them as usual); ✕, or Esc on an empty text, stops the
-reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), applied or not by the
-facilitator (⤓ runs it at once, or choose several replies to apply as one run; in collab mode the facilitator's own reply
+reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), sent to the AI or not
+by the facilitator (AI に送る runs it at once, or まとめて送る several replies as one run; in collab mode the facilitator's own reply
 too) — and shows `↩ 請求書の税区分: <what the AI said>` on one muted line at its top, a click going to the card. The run
 made from replies continues the replied run's card in place, quoting the replies like any applied message, and a reply to
 that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
@@ -2630,6 +2653,14 @@ that run extends the same card. The agent is given the replied run as context: i
 its base and result revisions, or only the list of the changed files when the diffs of all the replied runs together
 exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
 that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
+
+**Replies to a message.** People answer each other too: ↩ just before ☺+ on any message (on hover, always on touch),
+one's own included, starts a reply to it. The chip reads `↩ 田中への返信 ✕` (the author by their current name), the
+composer's targets start with those of the message, and the posted reply shows `↩ 田中: <the head of its text>` on one
+muted line at its top, a click scrolling to the message and flashing it (nothing shows when the message is not there).
+A reply to your message is marked in your stream as a message that mentions you is; nothing else notifies, and the
+stream stays one list (no threads). Applied, such a reply continues no card, and the agent is given the message it
+replies to — its author and text as they were sent — as context for the request.
 
 **Votes and reactions.** Participants signal a preference; the facilitator decides. On a question's options, everyone
 but the facilitator sees ♡ at the right of each option: a click votes for it (again to take it back). In a
@@ -2651,7 +2682,7 @@ was picked shows ◉ on it, the others muted, and `選択 name · time` under it
 the same card); one
 left as it was (a later run without a pick) has nothing filled and keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
 every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
-there, faint) and ☺+ at its right end offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
+there) and ☺+ at the end of its actions offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
 and ＋, a small field where any one emoji can be typed or pasted (the OS emoji picker works there; Enter adds it, Escape
 closes the field), with who reacted under them. The app gives no emoji a meaning. A reaction is exactly one emoji — a
 ZWJ sequence (👨‍👩‍👧‍👦), a skin tone (👍🏽), a flag (🇯🇵) or a keycap (1️⃣) counts as one; text and two emoji are refused —
@@ -2662,35 +2693,42 @@ always possible). No closing, and neither votes nor reactions count as unread or
 gets every vote and reaction with the session's state.
 
 **Requests and targets.** A request is a text (up to 10,000 characters) about **0 to 20 targets** — none means the
-whole workspace, and such a message shows no target line (nor the composer any chip). A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
+whole workspace, and such a message shows no target chips (nor the composer any chip). A target is a `.dt` element (a context's element, a state or a command, by its model ID), a `.dtes`
 element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `#`
 to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
 Enter or Tab, Esc; Japanese input works, `＃` too: a candidate is never picked while the IME converts): it becomes a
-chip under the text and `#name[n]` in the text, n its number. (Messages written before `#` named elements have
+chip under the text and a small chip in the text (`#支払済み`), which the caret steps over as one character and one
+Backspace deletes. (The text is stored with tokens, `#name[n]` for target n, which the composer never shows.) Wherever a target is shown on its own — a chip, being
+written or sent, a mention in a sent text, a card named after its first message — it reads as its own name, without
+what it is in (`#支払済み`, not `#請求書.支払済み`), its whole name in the tooltip; only the `#` list keeps the kind and
+where beside each name, to tell the candidates apart. (Messages written before `#` named elements have
 `@name[n]`: they still read as elements.) The chips are the request's targets: delete every mention of one to
-drop it, or remove it with ×, which leaves its mentions as plain text. What you select (on the canvas or in the
-explorer) is suggested as dashed chips: sending makes them targets, × drops a suggestion until the selection changes;
-the 💬 button next to the selection on the canvas, or `C`, makes them chips and puts the caret in the text. Selecting a
+drop it, or remove it with ×, which leaves its mentions as plain text. Selecting changes nothing in the composer: to
+make the selection targets, press the 💬 button next to it on the canvas (or next to the element's name in the
+inspector, for something selected in the explorer or by a search), or `C`; that adds it as chips, opens the chat and
+puts the caret in the text. Once everything selected is a chip, the 💬 shows a ✓. The chips take two rows at most:
+`+n` shows the others, and they fold again when you send. Selecting a
 note in one timeline's view of a storming targets that occurrence (the timeline and the step), the integrated canvas,
 which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
 text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
 sent message never changes. (Sessions from before kept a *dismissed* mark on some requests; they load and show as
-messages, and the page no longer dismisses.) Each target shows whether it is still in the sources
+messages, and the page no longer dismisses.) A sent message shows its targets above its text as read-only chips, each
+by its own name (`#支払済み`, its whole name in the tooltip), and its mentions the same way, a link to each; each target shows whether it is still in the sources
 (`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
 would be in does not parse. The agent sees each request's targets numbered from 1, so `#注文[1]` in one request never
 means another request's target.
 
 **Mentioning people.** Type `@` in the composer to mention someone in the session: the list offers the others —
 online first, then those away, the facilitator among them, never you — with their avatar and name; it does not open
-when no one else is in the session. Picking writes `@name[pN]` (shown as `@佐藤`, by the name they have now) and the
-message names them (up to 20 people; the server checks each is a participant of the session). In the stream a
+when no one else is in the session. Picking puts `@佐藤` in the text, as one piece (stored as `@name[pN]`; a sent
+message shows the name they have now), and the message names them (up to 20 people; the server checks each is a participant of the session). In the stream a
 mentioned person is a link that opens the participants at them. The person mentioned sees that message with a faint
 blue background in their own stream, and while their chat is closed its floating button shows `@ 2` for the new
 messages that mention them instead of the count of new items. Nothing else notifies: no sound, no e-mail. The agent
 reads a person mentioned as a plain `@name`, never as a target.
 
-**Runs.** A run is up to 100 applied messages (requests) with the facilitator's note if any (up to 4,000
-characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.
+**Runs.** A run is up to 100 messages sent to the AI (requests) with the facilitator's comment if any (its `note`, up
+to 4,000 characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.
 A run is `Queued`, `Running`, then `Completed`, `NeedsClarification` (the agent asked questions, answered in its card), `Declined` (the agent would not do the requests: they break its rules or are not
 about the model; the chat shows why, and no `dt fmt`/`dt check` runs), `Failed` or `Cancelled`; the facilitator can
 cancel a queued or running one. A run **succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new
@@ -2701,8 +2739,9 @@ base revision as its result.
 **The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
-options (the page always adds "other"). The chat shows what the AI says, as plain text, then the measured facts,
-small — `2 ファイル変更`, counted from the revisions before and after the run; nothing when no file changed. The AI names
+options (the page always adds "other"). The chat shows what the AI says, as plain text, then the files the run
+changed on a small line of their own (a file-diff icon, `billing.dt、tax.dt`: a link comparing the revisions before and
+after the run); nothing when no file changed. The AI names
 elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
 name display setting (a state or a command without its aggregate, a storming element without its storming; the whole
 name in its tooltip), as a link to the element. Whether a run succeeded is
@@ -2714,14 +2753,14 @@ asking for it; the agent is given the run it assumed in, and the card shows the 
 
 **Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
 Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
-message appears at once; its classification follows, shown to the facilitator only (a small 依頼 / 会話 mark).
-⤓ is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a probability near
-`threshold` leaves a message applicable — while a message read as talk can still be applied from its ▾. Results are
-kept in memory: after a restart, earlier messages are all applicable. **The text of each message is sent to
+message appears at once; its classification follows, for the facilitator only, and shows only as whether the row has
+the AI に送る button: it is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
+probability near `threshold` leaves a message sendable — while a message read as talk can still be sent from its …
+menu. Results are kept in memory: after a restart, earlier messages are all sendable. **The text of each message is sent to
 Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
 the file); Cloudflare states that it does not use customer content processed by Workers AI to train models
 ([Workers AI data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)). Disabled (the default),
-nothing is sent and every message can be applied.
+nothing is sent and every message can be sent to the AI.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
@@ -2794,7 +2833,9 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
 ```
 
 **Identity modes.** `dev` is for a session on one machine: the first visit gets a join form asking for a name, and an
-HttpOnly cookie keeps the sign-in (the collab menu's 退出 signs out). `access` puts the session behind Cloudflare Access
+HttpOnly cookie keeps the sign-in (the collab menu's 退出 signs out). Another cookie, `dt_name`, remembers the name for
+a year, so the next join form (of any session on that host) starts with it. The join form and the server's other pages
+are in Japanese when the browser prefers Japanese, else in English. `access` puts the session behind Cloudflare Access
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
@@ -2806,11 +2847,15 @@ hand. `--port` and `--host` win over the file.
 A **revision** is every `.dt` and `.dtes` source of the workspace at one moment, with the validation per DSL (`.dt`
 errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One is taken when the session starts,
 before and after each run, when the facilitator records the current state (*Record the current state*), and around a
-restore; saves while a run is in progress make none. They are numbered in the order taken; the chat shows those
-confirmed or restored, and a run's card reaches the two around it (its ⋯).
+restore; saves while a run is in progress make none. They are numbered in the order taken; the chat words them by the
+work (a card's result, the state before it) and keeps their numbers in tooltips, and a run's card reaches the two
+around it (its ⋯).
 
-- **Compare**: a run's card (⋯ → 比較) shows its revisions compared, every file of either, `.dt` and `.dtes` together, as added,
-  removed, changed or unchanged, with a line diff, and both validations side by side. The work is bounded: a file over
+- **Changes**: a card (⋯ → 変更を見る, or 変更を見る on its line) lists the model's elements its revisions differ by —
+  `.dt` elements, states and commands by their IDs, storming elements by their storming and local IDs — as added,
+  changed or removed. Under it, folded, the source diff: the files added, removed or changed, `.dt` and `.dtes`
+  together, each with a line diff, and both validations side by side when either has an error or a warning. When a side
+  does not parse, the model is not compared and the source diff is open. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
 - **Mark as confirmed**: the facilitator's mark on a revision. It blocks nothing.
@@ -2865,3 +2910,7 @@ stormings; then `dt fmt` and `dt check` run, and the server records the result.
 - **One run at a time.** Each run is claimed with a lease kept alive by heartbeats. If the subscriber dies, the run's
   lease expires and a running run fails (`LeaseExpired`) rather than run twice; a run only claimed goes back to the
   queue. Ctrl+C fails the running run as `Interrupted`.
+- **What the agent is doing** reaches the pages as it goes: the subscriber runs `claude` with `--output-format
+  stream-json --verbose` and maps its tool calls onto four phases (reading, editing, checking, finishing) with the file
+  or the `dt` command; a path outside the workspace is never sent. Nothing of the agent's output itself reaches the
+  pages, and the activity is not stored.

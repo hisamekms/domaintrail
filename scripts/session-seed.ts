@@ -19,6 +19,7 @@ const USAGE = `Usage: bun run session:seed [options]
   --port <port>        the Live View's port (default: 4321)
   --no-classifier      leave the message classifier off (no 依頼 / 会話 tags)
   --leave-queued       leave one run queued at the end, for the next subscriber
+  --leave-running      leave one run running (the seed's agent holds it) and two queued behind it
   --exit               stop the session server once seeded instead of leaving it running`;
 
 async function main(): Promise<number> {
@@ -31,6 +32,7 @@ async function main(): Promise<number> {
             port: { type: 'string' },
             'no-classifier': { type: 'boolean' },
             'leave-queued': { type: 'boolean' },
+            'leave-running': { type: 'boolean' },
             exit: { type: 'boolean' },
             help: { type: 'boolean', short: 'h' },
         },
@@ -54,6 +56,7 @@ async function main(): Promise<number> {
         port,
         classifier: !values['no-classifier'],
         leaveQueued: values['leave-queued'] ?? false,
+        leaveRunning: values['leave-running'] ?? false,
         dt: { command: 'node', args: [cli] },
         log: (line) => console.log(`[seed] ${line}`),
         serverLog: (line) => console.log(`[dt] ${line}`),
@@ -71,7 +74,7 @@ Seeded ${scenarios.join(', ')}: ${state.requests.length} messages, ${state.runs.
                Another link: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} session link
   Participant: a private window, the same URL, any name (a new participant). The seeded ones
                (${seeded.participants.map((p) => p.name).join(', ')}) and their cookies are in ${seeded.seedFile}.
-  Agent:       the seed's agent is stopped. For real runs: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} session subscribe --agent claude
+  Agent:       ${values['leave-running'] ? "the seed's agent holds the run left running and the queued ones (cancel them to move on)" : "the seed's agent is stopped"}. For real runs: node ${path.relative(process.cwd(), path.join(ROOT, 'dist', 'dt.js'))} -r ${seeded.dir} session subscribe --agent claude
 `);
     if (values.exit) {
         await seeded.stop();

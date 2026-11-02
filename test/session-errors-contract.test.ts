@@ -154,8 +154,9 @@ describe('refused requests of a session in dev mode', () => {
                 sign: { kind: 'Reaction', emoji: '👍' },
                 placed: true,
             }),
-            'POST requests replyTo an unknown run': await call(bob, 'requests', { targets: [], body: 'x', replyTo: unknown }),
-            'POST requests replyTo a queued run': await call(bob, 'requests', { targets: [], body: 'x', replyTo: run }),
+            'POST requests replyTo an unknown run': await call(bob, 'requests', { targets: [], body: 'x', replyTo: { kind: 'Run', run: unknown } }),
+            'POST requests replyTo a queued run': await call(bob, 'requests', { targets: [], body: 'x', replyTo: { kind: 'Run', run } }),
+            'POST requests replyTo an unknown message': await call(bob, 'requests', { targets: [], body: 'x', replyTo: { kind: 'Message', request: unknown } }),
             'POST requests mentioning a stranger': await call(bob, 'requests', { targets: [], body: 'x', mentions: [unknown] }),
             'POST runs of an unknown request': await call(ada, 'runs', { requests: [unknown] }),
             'POST runs/:id/cancel of a cancelled run': await (async (): Promise<[number, unknown]> => {

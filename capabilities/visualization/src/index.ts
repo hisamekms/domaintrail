@@ -13,6 +13,7 @@ export {
     TRANSITION_SUB_LINE_HEIGHT,
     TRANSITION_SUB_SIZE,
     transitionText,
+    shownLabel,
     type DisplayMode,
     type EdgeKind,
     type GraphEdge,

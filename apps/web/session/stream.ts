@@ -7,7 +7,7 @@ import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
 import type { PersonCandidate } from './mentions';
-import { targetKey, targetName, type NamingContext, type TargetDraft } from './targets';
+import { targetKey, targetName, targetShortName, type NamingContext, type TargetDraft } from './targets';
 
 type RequestJson = SessionStateBody['requests'][number];
 type RunJson = SessionStateBody['runs'][number];
@@ -106,7 +106,15 @@ export type StreamItem =
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
     | { readonly kind: 'confirmed'; readonly key: string; readonly at: string; readonly revision: number; readonly by: string }
-    | { readonly kind: 'restored'; readonly key: string; readonly at: string; readonly revision: number; readonly from: number | undefined };
+    | {
+          readonly kind: 'restored';
+          readonly key: string;
+          readonly at: string;
+          readonly revision: number;
+          readonly from: number | undefined;
+          /** It went back to the state before a unit of work (else to one kept before a restore). */
+          readonly work: boolean;
+      };
 
 /** The numbers of the session's revisions, and the revisions by ID, for the agent's messages. */
 export function revisionLookup(state: Pick<SessionStateBody, 'revisions' | 'runs'>): {
@@ -173,12 +181,16 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
  */
 export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
+    const byId = new Map(state.revisions.map((r) => [r.id, r]));
     const items: StreamItem[] = [];
     for (const r of state.revisions) {
         const revision = numbers.get(r.id) ?? 0;
         if (r.origin.kind === 'SessionStart') items.push({ kind: 'session-start', key: `start:${r.id}`, at: r.takenAt, revision });
-        if (r.origin.kind === 'Restored')
-            items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(r.origin.restoredFrom) });
+        if (r.origin.kind === 'Restored') {
+            const from = r.origin.restoredFrom;
+            const work = byId.get(from)?.origin.kind !== 'PreRestore';
+            items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
+        }
         if (r.state === 'Confirmed') items.push({ kind: 'confirmed', key: `confirmed:${r.id}`, at: r.confirmedAt, revision, by: r.confirmedBy });
     }
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
@@ -234,11 +246,21 @@ export function targetText(target: Pick<TargetDraft, 'target' | 'label'>, worksp
     return (naming && targetName(target.target, naming)) ?? target.label ?? targetKey(target.target);
 }
 
-/** A request's targets on one line: the first one's name and how many more (`注文 +2`); none: the whole workspace. */
+/**
+ * What a target is shown as where it stands alone (a chip, a mention, a one-line summary): its own name, without what it
+ * is in (`targetShortName`: `支払済み`, not `請求書.支払済み`), else its whole name as `targetText` gives it. The whole
+ * name goes in the tooltip.
+ */
+export function targetShortText(target: Pick<TargetDraft, 'target' | 'label'>, workspace: string, naming?: NamingContext): string {
+    if (target.target.kind === 'Workspace') return workspace;
+    return (naming && targetShortName(target.target, naming)) ?? targetText(target, workspace, naming);
+}
+
+/** A request's targets on one line: the first one's own name and how many more (`注文 +2`); none: the whole workspace. */
 export function targetsSummary(targets: readonly Pick<TargetDraft, 'target' | 'label'>[], workspace: string, naming?: NamingContext): string {
     const [first, ...rest] = targets;
     if (!first) return workspace;
-    const name = targetText(first, workspace, naming);
+    const name = targetShortText(first, workspace, naming);
     return rest.length ? `${name} +${rest.length}` : name;
 }
 
@@ -271,13 +293,19 @@ export interface HeaderParticipant {
     readonly avatarUrl?: string;
 }
 
+/** Each participant's avatar URL, by ID, as their pages tell it (mine, and those online). */
+export function participantAvatars(peers: Peers, me: Me): Map<string, string> {
+    const avatars = new Map<string, string>();
+    for (const p of peers.values()) if (p.participant.avatarUrl) avatars.set(p.participant.id, p.participant.avatarUrl);
+    if (me.participant.avatarUrl) avatars.set(me.participant.id, me.participant.avatarUrl);
+    return avatars;
+}
+
 /** The participants for the header: me first, then the others online, then those away, by name within each. */
 export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): HeaderParticipant[] {
     const names = participantNames(state, peers, me);
     const online = new Set<string>([...peers.values()].map((p) => p.participant.id));
-    const avatars = new Map<string, string>();
-    for (const p of peers.values()) if (p.participant.avatarUrl) avatars.set(p.participant.id, p.participant.avatarUrl);
-    if (me.participant.avatarUrl) avatars.set(me.participant.id, me.participant.avatarUrl);
+    const avatars = participantAvatars(peers, me);
     const rank = (p: HeaderParticipant): number => (p.me ? 0 : p.online ? 1 : 2);
     return listedParticipants(state)
         .map((p): HeaderParticipant => {
@@ -326,6 +354,29 @@ export function unreadMentions(
 ): number {
     if (seen === undefined) return 0;
     return items.filter((i) => i.kind === 'message' && i.at > seen && mentionsMe(i.request, state, me)).length;
+}
+
+/**
+ * What arrived in the stream while the reader was away from its bottom: the messages and the AI turns (cards) whose keys
+ * are not among `known` (the items there when they scrolled up) — a card moving on is not one, nor a message of mine —
+ * and how many of those messages are for me (`toMe`: they mention me or reply to me).
+ */
+export function arrivedBelow(
+    items: readonly StreamItem[],
+    known: ReadonlySet<string>,
+    me: string,
+    toMe: (request: RequestJson) => boolean,
+): { readonly count: number; readonly forMe: number } {
+    let count = 0;
+    let forMe = 0;
+    for (const i of items) {
+        if (known.has(i.key)) continue;
+        if (i.kind === 'card') count++;
+        if (i.kind !== 'message' || i.request.author === me) continue;
+        count++;
+        if (toMe(i.request)) forMe++;
+    }
+    return { count, forMe };
 }
 
 /**

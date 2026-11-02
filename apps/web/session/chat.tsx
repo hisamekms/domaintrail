@@ -1,13 +1,14 @@
 // The session's chat in the conversation pillar (ADR 0026, amendment: messages and apply), the same for everyone: who
 // is here and what the agent is doing at a glance, then two views. チャット: one stream of every message (each is chat;
 // the facilitator applies some: a run), one card per run with the runs that continue it (`card.tsx`), the revisions
-// confirmed or restored, and the composer of a message about the selection. 履歴: the history of changes, the same
-// cards. The facilitator's controls are in the stream itself: apply on a message (⤓, ▾ with a note, several selected
-// with Shift/⌘), answer or pick an alternative on a card, cancel, and the menus of the cards and of the head.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+// confirmed or restored, and the composer of a message about the selection. AI の作業: everything sent to the AI, from
+// start to end (awaiting an answer, running, queued, finished), with the same cards. The facilitator's controls are in the stream itself: send a message to the AI (the Bot button; … for sending
+// it again, with a comment, or several together, also chosen with Shift/⌘), answer or pick an alternative on a card,
+// cancel, and the menus of the cards and of the head.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
 import {
-    ArrowDownToLine,
-    ChevronDown,
+    ArrowDown,
+    Bot,
     ChevronRight,
     CircleCheck,
     CircleHelp,
@@ -15,6 +16,7 @@ import {
     CircleSlash,
     CircleX,
     Clock,
+    Ellipsis,
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
@@ -24,26 +26,25 @@ import {
 } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
+import { motionMs } from '../shared/motion';
 import { useT } from '../i18n';
-import { useChatActions } from './actions';
+import { useChatActions, type QuestionChoice } from './actions';
+import { ActivityLine } from './activity';
 import { sessionApi } from './api';
-import { RunCard } from './card';
+import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
-import { messageMarks, updatedCards, type MarkState } from './cards';
+import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
-import { changeUnits, cutList, requestersOf, shownUnits, unitName, type ChangeUnit, type UnitOutcome } from './history';
+import { changeUnits, requestersOf, shownUnits, statusUnit, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
     composerKey,
-    editText,
-    insertMention,
-    insertPerson,
     matchCandidates,
     matchPeople,
     MAX_REQUEST_MENTIONS,
     MAX_REQUEST_TARGETS,
-    mentionQuery,
+    ownTokenName,
     removeChip,
     type MentionCandidate,
     type PersonCandidate,
@@ -52,29 +53,40 @@ import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { parseReplyText, referenceText } from './references';
-import { isReplyable, replyReference, replyTargets, type ReplyDraft } from './replies';
+import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
+import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
 import { latestRevision } from './state';
 import {
     agentStatus,
+    arrivedBelow,
     elapsed,
     isFacilitator,
     mentionablePeople,
     mentionsMe,
+    participantAvatars,
     participantNames,
     speakerName,
     streamItems,
+    targetShortText,
     targetText,
     type AgentStatus,
     type StreamItem,
 } from './stream';
-import { dismiss, NO_DISMISSALS, suggestions, targetsToSend, type Dismissals } from './suggestions';
-import { targetKey, type ModelTarget, type TargetDraft } from './targets';
+import { ComposerChips } from './composer-chips';
+import { ComposerEditor, type ComposerEditorApi, type EditorQuery, type MentionLook } from './composer-editor';
+import { mentionFits, type ComposerMention } from './composer-text';
+import type { ModelTarget, TargetDraft } from './targets';
 import { continued, isMac } from './views';
 import type { ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
 
 type RequestJson = SessionData['state']['requests'][number];
+/** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
+type Peek = { readonly key: string; readonly n: number };
+
+/** A run's answer before anything was chosen. */
+const NO_CHOICES: Readonly<Record<string, QuestionChoice>> = {};
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -116,11 +128,9 @@ function useNow(active: boolean): number {
 export function SessionChat(props: {
     session: SessionData;
     composer: ComposerDraft;
-    /** What the selection can be a request about: one target, or several for a selection of several shapes. */
-    selectionTargets: readonly TargetDraft[];
     /** What `#` offers. */
     candidates: readonly MentionCandidate[];
-    /** The composer is asked to take the focus (the selection was just confirmed with 💬 or `C`). */
+    /** The composer is asked to take the focus (the selection was just added with 💬 or `C`). */
     focusPending: boolean;
     onFocused: () => void;
     onNavigate: (target: ModelTarget) => void;
@@ -138,12 +148,15 @@ export function SessionChat(props: {
     const tx = t.session;
     const names = participantNames(state, session.peers, me);
     const nameOf = (id: string): string => names.get(id) ?? id;
+    const avatars = participantAvatars(session.peers, me);
+    const avatarOf = (id: string): string | undefined => avatars.get(id);
     const live = session.status === 'live' && state.session.state === 'Open';
     const control = live && me.participant.role === 'facilitator';
     const status = agentStatus(state.runs);
     const items = useMemo(() => streamItems(state), [state]);
     const units = useMemo(() => changeUnits(state), [state]);
     const marks = useMemo(() => messageMarks(units), [units]);
+    const unfinished = unfinishedCount(units);
     const running = state.runs.some((r) => r.state === 'Running');
     const now = useNow(running);
     const actions = useChatActions();
@@ -160,6 +173,28 @@ export function SessionChat(props: {
         }
     };
     const [view, setView] = useState<'chat' | 'history'>('chat');
+    // the stream's scroll while チャット shows, put back as it shows again, with the browser's scroll anchoring off for
+    // that frame: it would move the stream a little each time the panel comes back (at the bottom, the stream follows
+    // the newest itself)
+    const chatPanel = useRef<HTMLDivElement | null>(null);
+    const streamTop = useRef<number | undefined>(undefined);
+    const keepStreamTop = (e: UIEvent<HTMLDivElement>): void => {
+        const el = e.target;
+        if (el instanceof HTMLElement && el.classList.contains('chat-stream') && el.clientHeight > 0)
+            streamTop.current = atBottomOf(el) ? undefined : el.scrollTop;
+    };
+    useLayoutEffect(() => {
+        const el = chatPanel.current?.querySelector<HTMLElement>('.chat-stream');
+        const top = streamTop.current;
+        if (view !== 'chat' || !el || top === undefined) return;
+        el.style.overflowAnchor = 'none';
+        el.scrollTop = top;
+        const frame = requestAnimationFrame(() => el.style.removeProperty('overflow-anchor'));
+        return () => {
+            cancelAnimationFrame(frame);
+            el.style.removeProperty('overflow-anchor');
+        };
+    }, [view]);
     // the collab ended: its summary, shown once to everyone (and again from the notice)
     const ended = session.status === 'closed' || state.session.state === 'Closed';
     const summary = useCollabSummary(session, ended);
@@ -170,7 +205,7 @@ export function SessionChat(props: {
         setSummaryShown(true);
         setSummaryOpen(true);
     }, [summary, summaryShown]);
-    // the reply being written (to an AI turn): its chip above the composer; the composer takes the focus when it starts
+    // the reply being written (to an AI turn or a message): its chip above the composer; the composer takes the focus when it starts
     const [replyDraft, setReplyDraft] = useState<ReplyDraft | undefined>();
     const [replyFocus, setReplyFocus] = useState(0);
     const replies = useMemo(
@@ -180,14 +215,24 @@ export function SessionChat(props: {
                 const run = state.runs.find((r) => r.id === id);
                 const ref = replyReference(units, id);
                 if (!run || !ref || !isReplyable(run)) return;
-                setReplyDraft({ run: id, name: ref.name });
+                setReplyDraft({ kind: 'Run', run: id, name: ref.name });
                 // the targets start with the replied run's requests' (editable as usual)
                 composer.setValue(addChips(composer.value, replyTargets(run)).value);
                 setView('chat');
                 setReplyFocus((n) => n + 1);
             },
+            startMessage: (id: string): void => {
+                const request = state.requests.find((r) => r.id === id);
+                if (!request) return;
+                setReplyDraft({ kind: 'Message', request: id, author: request.author });
+                // the targets start with the replied message's (editable as usual)
+                composer.setValue(addChips(composer.value, messageReplyTargets(request)).value);
+                setView('chat');
+                setReplyFocus((n) => n + 1);
+            },
             cancel: (): void => setReplyDraft(undefined),
             referenceOf: (run: string) => replyReference(units, run),
+            messageReferenceOf: (request: string) => messageReference(state.requests, request),
         }),
         [replyDraft, state, composer, units],
     );
@@ -230,9 +275,17 @@ export function SessionChat(props: {
         return () => document.removeEventListener('keydown', onKey);
     }, [selecting, selection]);
 
-    const [hovered, hover] = useState<string | undefined>();
+    // the answers being chosen, per run: one draft for the chat's form and AI の作業's of the same run
+    const [answerDrafts, setAnswerDrafts] = useState<Readonly<Record<string, Readonly<Record<string, QuestionChoice>>>>>({});
+    const answers = useMemo(
+        (): ChatContextValue['answers'] => ({
+            of: (run) => answerDrafts[run] ?? NO_CHOICES,
+            update: (run, f) => setAnswerDrafts((all) => ({ ...all, [run]: f(all[run] ?? NO_CHOICES) })),
+        }),
+        [answerDrafts],
+    );
     const root = useRef<HTMLDivElement | null>(null);
-    // an item of the stream, scrolled to the middle and marked for a moment (from 履歴, a quote or a mark)
+    // an item of the stream, scrolled to the middle and marked for a moment (from AI の作業, a quote or a mark)
     const jump = useCallback((key: string): void => {
         setView('chat');
         requestAnimationFrame(() => {
@@ -244,24 +297,37 @@ export function SessionChat(props: {
         });
     }, []);
 
+    // the header status clicked: AI の作業, at the unit it stands for (opened and revealed); the chat keeps its scroll
+    const [peek, setPeek] = useState<Peek | undefined>();
+    const peekStatus = (): void => {
+        setView('history');
+        const unit = statusUnit(status.kind, units);
+        if (unit) setPeek((p) => ({ key: unit.key, n: (p?.n ?? 0) + 1 }));
+    };
+
     // a person shown among the participants (a mention of them clicked): the collab menu opens at them
     const showPerson = useCallback((id: string): void => openPeople(id), []);
+    // the unit whose run is being cancelled: the dialog asking first
+    const [cancelling, setCancelling] = useState<string | undefined>();
+    const closeCancel = useCallback((): void => setCancelling(undefined), []);
+    const cancellingUnit = cancelling === undefined ? undefined : units.find((u) => u.key === cancelling);
 
     const context: ChatContextValue = {
         session,
         tx,
         now,
         nameOf,
+        avatarOf,
         onNavigate: props.onNavigate,
         control,
         actions,
+        confirmCancel: setCancelling,
+        answers,
         revisions,
         marks,
         marking,
         classifications: me.participant.role === 'facilitator' ? session.classifications : undefined,
         selection,
-        hovered,
-        hover,
         jump,
         showPerson,
         replies,
@@ -274,7 +340,6 @@ export function SessionChat(props: {
                     session={session}
                     status={status}
                     now={now}
-                    control={control}
                     live={live}
                     units={units}
                     location={props.location}
@@ -282,12 +347,19 @@ export function SessionChat(props: {
                     onOpenView={props.onOpenView}
                     onLeave={() => void leave()}
                     onClose={props.onClose}
+                    onPeek={peekStatus}
                     tx={tx}
                 />
                 <div className="segmented chat-views" role="tablist" aria-label={tx.chat.tabsLabel}>
                     {(['chat', 'history'] as const).map((v) => (
                         <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
                             {tx.chat.tabs[v]}
+                            {/* AI の作業: how many units are not finished (running and queued), whichever tab is shown */}
+                            {v === 'history' && unfinished > 0 && (
+                                <span className="chat-views-badge" role="img" aria-label={tx.chat.history.unfinished(unfinished)}>
+                                    {unfinished}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </div>
@@ -305,8 +377,8 @@ export function SessionChat(props: {
                 {summary && summaryOpen && <CollabSummaryDialog summary={summary} tx={tx} onClose={() => setSummaryOpen(false)} />}
                 {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
                 {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
-                {/* both stay mounted, so that switching keeps the stream's scroll and the history's open units */}
-                <div className="chat-view" role="tabpanel" hidden={view !== 'chat'}>
+                {/* both stay mounted, so that switching keeps the stream's scroll and the open units of AI の作業 */}
+                <div className="chat-view" role="tabpanel" hidden={view !== 'chat'} ref={chatPanel} onScrollCapture={keepStreamTop}>
                     <Stream items={items} />
                     <div className="chat-tray">
                         {revisions.node}
@@ -319,7 +391,6 @@ export function SessionChat(props: {
                         <Composer
                             session={session}
                             composer={composer}
-                            selectionTargets={props.selectionTargets}
                             candidates={props.candidates}
                             focusPending={focusPending}
                             onFocused={props.onFocused}
@@ -331,9 +402,11 @@ export function SessionChat(props: {
                     )}
                 </div>
                 <div className="chat-view" role="tabpanel" hidden={view !== 'history'}>
-                    <History units={units} />
+                    <History units={units} reveal={peek} />
                 </div>
                 {revisions.dialog}
+                {control && cancellingUnit && <CancelDialog unit={cancellingUnit} onClose={closeCancel} />}
+                <StatusSizer root={root} />
             </div>
         </ChatProvider>
     );
@@ -343,7 +416,6 @@ function ChatHeader(props: {
     session: SessionData;
     status: AgentStatus;
     now: number;
-    control: boolean;
     live: boolean;
     units: readonly ChangeUnit[];
     location: ViewLocation;
@@ -351,12 +423,12 @@ function ChatHeader(props: {
     onOpenView: (target: ViewTarget) => void;
     onLeave: () => void;
     onClose: () => void;
+    onPeek: () => void;
     tx: Tx;
 }) {
     const { session, status, tx } = props;
     const label =
         status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
-    const runningRun = session.state.runs.find((r) => r.state === 'Running');
     return (
         <div className="chat-header">
             <CollabMenu
@@ -368,31 +440,26 @@ function ChatHeader(props: {
                 onOpenView={props.onOpenView}
                 onLeave={props.onLeave}
             />
-            {/* idle says nothing: only running, a question or a queued run shows */}
+            {/* idle says nothing: only running, a question or a queued run shows; a click opens it in AI の作業 */}
             <span className="chat-status-slot" aria-live="polite">
                 {status.kind !== 'idle' && (
-                    <span className={`chat-status status-${status.kind}`} data-tooltip={tx.chat.statusHint[status.kind]}>
+                    <button
+                        className={`chat-status status-${status.kind}`}
+                        data-tooltip={tx.chat.peek}
+                        aria-label={`${label} — ${tx.chat.peek}`}
+                        onClick={props.onPeek}
+                    >
                         <span className="chat-status-mark" aria-hidden>
                             {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
                         </span>
                         {label}
-                        {props.control && runningRun && <CancelButton run={runningRun.id} />}
-                    </span>
+                    </button>
                 )}
             </span>
             <button className="icon-button" onClick={props.onClose} data-tooltip={tx.chat.close} aria-label={tx.chat.close}>
                 <X size={16} aria-hidden />
             </button>
         </div>
-    );
-}
-
-function CancelButton({ run }: { run: string }) {
-    const { tx, actions } = useChat();
-    return (
-        <button className="run-card-cancel" onClick={() => void actions.cancel(run)} aria-label={tx.chat.cancelRun} data-tooltip={tx.chat.cancelRun}>
-            <X size={11} aria-hidden />
-        </button>
     );
 }
 
@@ -406,14 +473,40 @@ const inViewOf = (list: HTMLElement, item: HTMLElement): boolean => {
 };
 
 function Stream({ items }: { items: StreamItem[] }) {
-    const { tx, jump } = useChat();
+    const { tx, jump, session } = useChat();
     const ref = useRef<HTMLDivElement | null>(null);
     // follows the newest item only while the reader is at the bottom (true until they scroll up)
     const atBottom = useRef(true);
+    // the keys of the items there when the reader left the bottom, while they are away from it: 最新へ shows meanwhile,
+    // with how many arrived since
+    const [away, setAway] = useState<ReadonlySet<string> | undefined>();
+    // on the way back to the bottom (最新へ): the smooth scroll does not count as leaving it, unless the reader scrolls
+    const returning = useRef(false);
+    const follow = (el: HTMLElement): void => {
+        const bottom = atBottomOf(el);
+        if (bottom) returning.current = false;
+        if (returning.current) return;
+        atBottom.current = bottom;
+        setAway((known) => (bottom ? undefined : (known ?? new Set(items.map((i) => i.key)))));
+    };
     const toBottom = (): void => {
         const el = ref.current;
-        if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+        if (!el) return;
+        if (atBottom.current) el.scrollTop = el.scrollHeight;
+        // the bottom came into view without a scroll (the pane grew)
+        else follow(el);
     };
+    const toLatest = (): void => {
+        const el = ref.current;
+        if (!el) return;
+        atBottom.current = true;
+        returning.current = true;
+        setAway(undefined);
+        el.scrollTo({ top: el.scrollHeight, behavior: motionMs('--motion-enter') === 0 ? 'auto' : 'smooth' });
+    };
+    const me = session.me.participant.id;
+    const arrived = away && arrivedBelow(items, away, me, (r) => mentionsMe(r, session.state, me) || repliesToMe(r, session.state.requests, session.state, me));
+    const latestLabel = tx.chat.latest(arrived?.count ?? 0, arrived?.forMe ?? 0);
     const signature = items.map((i) => `${i.key}@${i.kind === 'card' ? i.updatedAt : i.at}`).join('|');
     useLayoutEffect(toBottom, [signature]);
     // the pane shown again, resized, or a bubble grown: still at the bottom
@@ -444,7 +537,7 @@ function Stream({ items }: { items: StreamItem[] }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature]);
     const onScroll = (el: HTMLElement): void => {
-        atBottom.current = atBottomOf(el);
+        follow(el);
         if (!pill) return;
         const item = el.querySelector<HTMLElement>(`[data-item="${CSS.escape(pill.key)}"]`);
         if (item && inViewOf(el, item)) setPill(undefined);
@@ -456,10 +549,19 @@ function Stream({ items }: { items: StreamItem[] }) {
     // only those posted after come in with motion
     const [initial] = useState(() => new Set<string>());
     if (initial.size === 0) for (const row of rows) initial.add(row.key);
-    const substantive = items.some((i) => i.kind !== 'session-start');
     return (
         <div className="chat-stream-wrap">
-            <div className="chat-stream" ref={ref} onScroll={(e) => onScroll(e.currentTarget)}>
+            <div
+                className="chat-stream"
+                ref={ref}
+                onScroll={(e) => onScroll(e.currentTarget)}
+                onWheel={() => {
+                    returning.current = false;
+                }}
+                onTouchStart={() => {
+                    returning.current = false;
+                }}
+            >
                 <ol className="chat-items">
                     {rows.map((row, i) => (
                         <li
@@ -477,7 +579,6 @@ function Stream({ items }: { items: StreamItem[] }) {
                         </li>
                     ))}
                 </ol>
-                {!substantive && <p className="chat-empty muted small">{tx.chat.empty}</p>}
             </div>
             {pill && (
                 <button
@@ -488,6 +589,24 @@ function Stream({ items }: { items: StreamItem[] }) {
                     }}
                 >
                     <span className="chat-updated-pill-text">{tx.chat.cardUpdated(pill.name)}</span>
+                </button>
+            )}
+            {/* away from the bottom: back to the newest, with how many arrived below (`@ n` when some are for me, as 💬) */}
+            {arrived && (
+                <button className="chat-latest motion-pop motion-pop-up" onClick={toLatest} aria-label={latestLabel} data-tooltip={latestLabel}>
+                    <ArrowDown size={16} aria-hidden />
+                    {arrived.forMe > 0 ? (
+                        <span className="chat-launcher-count mentions" aria-hidden>
+                            <span className="chat-launcher-at">@</span>
+                            {arrived.forMe}
+                        </span>
+                    ) : (
+                        arrived.count > 0 && (
+                            <span className="chat-launcher-count" aria-hidden>
+                                {arrived.count}
+                            </span>
+                        )
+                    )}
                 </button>
             )}
         </div>
@@ -514,7 +633,11 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
                     key: item.key,
                     kind: item.kind,
                     author: undefined,
-                    render: () => <Divider at={item.at}>{tx.chat.restored(item.from, item.revision)}</Divider>,
+                    render: () => (
+                        <Divider at={item.at} hint={tx.chat.restoredHint(item.from, item.revision)}>
+                            {tx.chat.restored(item.work)}
+                        </Divider>
+                    ),
                 };
             case 'message':
                 return {
@@ -531,37 +654,31 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
 
 function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirmed' }> }) {
     const { tx, nameOf } = useChat();
-    return <Divider at={item.at}>{tx.chat.confirmed(nameOf(item.by), item.revision)}</Divider>;
+    return (
+        <Divider at={item.at} hint={tx.chat.revisionHint(String(item.revision))}>
+            {tx.chat.confirmed(nameOf(item.by))}
+        </Divider>
+    );
 }
 
-const MARK_GLYPH: Record<MarkState, string> = {
-    queued: '…',
-    running: '●',
-    clarification: '?',
-    question: '?',
-    done: '✓',
-    partial: '◐',
-    skipped: '–',
-    declined: '⊘',
-    failed: '✕',
-    cancelled: '⊘',
-};
-
 /**
- * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓`;
- * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, how it reads and the tools to apply it.
+ * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at
+ * the right end of its name line, in the status slot, a link to the AI turn of its latest run once it was sent (the
+ * state is the turn's, so only its tooltip says it). Its actions float over its top right: for the facilitator, the
+ * tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
-    const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
+    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, actions, showPerson } = useChat();
     const author = nameOf(r.author);
-    // it mentions me: a faint background in my stream only (it asks for my attention)
-    const toMe = mentionsMe(r, session.state, session.me.participant.id);
+    const avatarUrl = avatarOf(r.author);
+    // it mentions me, or replies to my message: a faint background in my stream only (it asks for my attention)
+    const toMe = mentionsMe(r, session.state, session.me.participant.id) || repliesToMe(r, session.state.requests, session.state, session.me.participant.id);
     const mine = r.author === session.me.participant.id;
     const facilitator = isFacilitator(session.state, r.author);
     const statuses = session.targets?.statuses[r.id];
     const mark = marks.get(r.id);
-    const classification = classifications?.[r.id];
-    const talk = classification?.kind === 'chat';
+    // read as talk: no AI に送る button in the row (still in the … menu)
+    const talk = classifications?.[r.id]?.kind === 'chat';
     const selected = selection.ids.has(r.id);
     const [note, setNote] = useState<string | undefined>();
     const choose = (e: React.MouseEvent): void => {
@@ -572,27 +689,18 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             else selection.start(r.id);
         } else if (selection.active && !(e.target instanceof Element && e.target.closest('a, button, input'))) selection.toggle(r.id);
     };
-    const side = (
+    // at the right of the name line, the status slot (a link to its AI turn), only once it was sent
+    const side = mark && (
         <div className="chat-message-side">
-            {control && classification && classification.kind !== 'unknown' && (
-                <span
-                    className={`chat-class class-${classification.kind}`}
-                    data-tooltip={tx.chat.classificationHint(tx.chat.classification[classification.kind], classification.probability)}
-                >
-                    {tx.chat.classification[classification.kind]}
-                </span>
-            )}
-            {mark && (
-                <button
-                    className={`chat-mark mark-${mark.state}`}
-                    onClick={() => jump(`card:${mark.card}`)}
-                    aria-label={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
-                    data-tooltip={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
-                >
-                    {MARK_GLYPH[mark.state]}
-                </button>
-            )}
-            {control && !selection.active && (
+            <StatusSlot>
+                <TurnLink mark={mark} />
+            </StatusSlot>
+        </div>
+    );
+    // the actions, floating over the row's top right: none while messages are being chosen
+    const tools = !selection.active && (
+        <RowActions>
+            {control && (
                 <span className="chat-apply">
                     {!mark && !talk && (
                         <button
@@ -602,30 +710,30 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                             aria-label={tx.chat.apply}
                             data-tooltip={tx.chat.apply}
                         >
-                            <ArrowDownToLine size={14} aria-hidden />
+                            <Bot size={14} aria-hidden />
                         </button>
                     )}
                     <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
                 </span>
             )}
+            {/* ↩ just before ☺+, as on an AI turn */}
+            <ReplyButton to={{ kind: 'Message', request: r.id }} />
             {/* last: ☺+ at the right end of every row, messages and turns alike */}
-            {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
-        </div>
+            <AddReaction target={{ kind: 'Message', request: r.id }} />
+        </RowActions>
     );
     return (
         <div
-            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${talk ? ' talk' : ''}${toMe ? ' mentions-me' : ''}`}
+            className={`chat-row${selected ? ' selected' : ''}${toMe ? ' mentions-me' : ''}`}
             onClickCapture={choose}
             // Shift / ⌘ chooses the message: no text selection
             onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}
-            onMouseEnter={() => hover(r.id)}
-            onMouseLeave={() => hover(undefined)}
         >
             {control && selection.active && (
                 <input type="checkbox" className="chat-select" checked={selected} onChange={() => selection.toggle(r.id)} aria-label={tx.chat.select} />
             )}
             <Bubble
-                avatar={<Avatar id={r.author} name={author} />}
+                avatar={<Avatar id={r.author} name={author} {...(avatarUrl && { url: avatarUrl })} facilitator={facilitator} />}
                 who={speakerName(r.author, session.me.participant.id, nameOf, tx.chat.you)}
                 badge={facilitator && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
                 at={r.sentAt}
@@ -633,7 +741,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 className={`chat-bubble-request${mine ? ' mine' : ''}`}
                 side={side}
             >
-                {r.replyTo !== undefined && <ReplyReferenceLine run={r.replyTo} />}
+                {r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
+                {r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
                 <Clamped tx={tx}>
                     <MentionedText
@@ -649,6 +758,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 </Clamped>
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
+            {tools}
             {note !== undefined && (
                 <form
                     className="chat-apply-note"
@@ -667,7 +777,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                         onChange={(e) => setNote(e.target.value)}
                     />
                     <button type="submit" className="chat-small primary" disabled={actions.busy}>
-                        <ArrowDownToLine size={12} aria-hidden /> {tx.chat.applyNow}
+                        <Bot size={12} aria-hidden /> {tx.chat.applyNow}
                     </button>
                     <button type="button" className="icon-button" onClick={() => setNote(undefined)} aria-label={tx.restoreFlow.cancel}>
                         <X size={13} aria-hidden />
@@ -702,7 +812,26 @@ function ReplyReferenceLine({ run }: { run: string }) {
     );
 }
 
-/** A message's menu (the facilitator's): apply with a note (▾), choose it among several, apply it anyway. */
+/**
+ * The message a reply replies to, on one muted line at the top of the reply: `↩ <its author>: the head of its body`;
+ * a click goes to the message (scrolled to and flashed). Nothing when the session does not hold it.
+ */
+function MessageReferenceLine({ request }: { request: string }) {
+    const { session, tx, nameOf, jump, replies } = useChat();
+    const ref = replies.messageReferenceOf(request);
+    if (!ref) return null;
+    const who = speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
+    return (
+        <button className="chat-reply-ref" onClick={() => jump(`message:${ref.request}`)} data-tooltip={tx.chat.replies.messageReferenceHint(who)}>
+            <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{ref.head}</span>
+        </button>
+    );
+}
+
+/**
+ * A message's menu (the facilitator's, …): send it again (once sent) or anyway (classified as chat, where the button is
+ * not shown), send it with a comment, choose it among several to send together.
+ */
 function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boolean; talk: boolean; onNote: () => void }) {
     const { tx, actions, selection } = useChat();
     const [open, setOpen] = useState(false);
@@ -722,28 +851,28 @@ function MessageMenu({ id, applied, talk, onNote }: { id: string; applied: boole
                 data-tooltip={tx.chat.messageMenu}
                 onClick={() => setOpen(!open)}
             >
-                <ChevronDown size={13} aria-hidden />
+                <Ellipsis size={13} aria-hidden />
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
+                    {(applied || talk) && (
+                        <button role="menuitem" onClick={pick(() => void actions.apply([id]))}>
+                            {applied ? tx.chat.applyAgain : tx.chat.applyAnyway}
+                        </button>
+                    )}
                     <button role="menuitem" onClick={pick(onNote)}>
                         {tx.chat.applyWithNote}
                     </button>
                     <button role="menuitem" onClick={pick(() => selection.start(id))}>
                         {tx.chat.selectMany}
                     </button>
-                    {(applied || talk) && (
-                        <button role="menuitem" onClick={pick(() => void actions.apply([id]))}>
-                            {applied ? tx.chat.applyAgain : tx.chat.applyAnyway}
-                        </button>
-                    )}
                 </div>
             )}
         </div>
     );
 }
 
-/** The bar of the messages chosen to apply together, as one run. */
+/** The bar of the messages chosen to send to the AI together, as one run. */
 function SelectionBar() {
     const { tx, selection, actions } = useChat();
     const [note, setNote] = useState('');
@@ -779,7 +908,7 @@ function SelectionBar() {
                 </button>
             )}
             <button className="chat-small primary" disabled={n === 0 || actions.busy} onClick={() => void apply()}>
-                <ArrowDownToLine size={12} aria-hidden /> {tx.chat.applySelected}
+                <Bot size={12} aria-hidden /> {tx.chat.applySelected}
             </button>
             <button className="icon-button" onClick={() => selection.clear()} aria-label={tx.chat.clearSelection} data-tooltip={tx.chat.clearSelection}>
                 <X size={14} aria-hidden />
@@ -788,7 +917,7 @@ function SelectionBar() {
     );
 }
 
-/** Right after applying: 取り消す, while the run is still queued. */
+/** Right after sending to the AI: 取り消す, while the run is still queued. */
 function UndoBar() {
     const { tx, actions, session } = useChat();
     const run = session.state.runs.find((r) => r.id === actions.undo?.run);
@@ -820,92 +949,166 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
 };
 
 /**
- * 履歴: the change units, newest first — the runs that changed files, or all of them (すべて). A unit's heading names
- * the chunk (its title, else its first message) with its time span, whose requests they were, how many runs and files,
- * and the files it changed (a link to compare them); opened, it shows the unit's card (compact) and a link to it in the chat. The card's own menu is the
- * place of the facilitator's actions on a unit.
+ * AI の作業: everything sent to the AI, from start to end, in groups — 答え待ち (the AI asked), 実行中, 待ち (in the
+ * order they will run, numbered) and 終わったもの (newest first). すべて filters only the finished ones: by default those
+ * that changed files. A unit is one block between lines: its head names the chunk (its title, else its first message)
+ * with whose requests they were, how many runs and its time (the running one's elapsed time), then the files it changed
+ * (a link to compare them); the facilitator cancels a running or queued unit with ✕ (a dialog asks first). A click on the block opens it:
+ * under the same left edge, the unit's card (compact, with the AI's question to answer or vote on, as in the chat) and
+ * a link to it in the chat. The card's own menu is the place of the facilitator's other actions on a unit.
  */
-function History({ units: all }: { units: readonly ChangeUnit[] }) {
+function History({ units: all, reveal }: { units: readonly ChangeUnit[]; reveal: Peek | undefined }) {
     const { tx } = useChat();
     const h = tx.chat.history;
     const [everything, setEverything] = useState(false);
     const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-    const units = shownUnits(all, everything);
+    const ref = useRef<HTMLDivElement | null>(null);
+    // the unit the header status stands for: opened (the others stay as they are), scrolled to and marked for a moment
+    useEffect(() => {
+        if (!reveal) return;
+        setOpen((o) => (o.has(reveal.key) ? o : new Set([...o, reveal.key])));
+        requestAnimationFrame(() => {
+            const el = ref.current?.querySelector<HTMLElement>(`[data-unit="${CSS.escape(reveal.key)}"]`);
+            if (!el) return;
+            el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            el.classList.add('chat-flash');
+            setTimeout(() => el.classList.remove('chat-flash'), 1600);
+        });
+    }, [reveal]);
+    const groups = workGroups(all);
+    const finished = shownUnits(groups.finished, everything);
     const toggle = (key: string): void => {
         const next = new Set(open);
         if (next.has(key)) next.delete(key);
         else next.add(key);
         setOpen(next);
     };
+    const rows = (units: readonly ChangeUnit[], mark?: (i: number) => ReactNode): ReactNode => (
+        <ol className="chat-units">
+            {units.map((unit, i) => (
+                <HistoryUnit key={unit.key} unit={unit} mark={mark?.(i)} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
+            ))}
+        </ol>
+    );
     return (
-        <div className="chat-history">
-            <div className="chat-history-bar">
-                <label className="check small" data-tooltip={h.allHint}>
-                    <input type="checkbox" checked={everything} onChange={(e) => setEverything(e.target.checked)} />
-                    {h.all}
-                </label>
-            </div>
-            {units.length === 0 && <p className="chat-empty muted small">{everything ? h.emptyAll : h.empty}</p>}
-            <ol className="chat-units">
-                {units.map((unit) => (
-                    <HistoryUnit key={unit.key} unit={unit} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
-                ))}
-            </ol>
+        <div className="chat-history" ref={ref}>
+            {groups.awaiting.length > 0 && (
+                <section className="chat-work-group awaiting">
+                    <h3 className="chat-work-label">{h.groups.awaiting}</h3>
+                    {rows(groups.awaiting)}
+                </section>
+            )}
+            {groups.running.length > 0 && (
+                <section className="chat-work-group running">
+                    <h3 className="chat-work-label">{h.groups.running}</h3>
+                    {rows(groups.running, () => (
+                        <span className="chat-pulse chat-unit-pulse" aria-label={h.outcomes.running} role="img" />
+                    ))}
+                </section>
+            )}
+            {groups.queued.length > 0 && (
+                <section className="chat-work-group queued">
+                    <h3 className="chat-work-label">{h.groups.queued(groups.queued.length)}</h3>
+                    {rows(groups.queued, (i) => (
+                        <span className="chat-unit-order" role="img" aria-label={h.order(i + 1)}>
+                            {i + 1}
+                        </span>
+                    ))}
+                </section>
+            )}
+            {/* the filter is of the finished ones only: what is still going on always shows */}
+            {groups.finished.length > 0 && (
+                <section className="chat-work-group finished">
+                    <div className="chat-work-label-row">
+                        <h3 className="chat-work-label">{h.groups.finished}</h3>
+                        <label className="check small" data-tooltip={h.allHint}>
+                            <input type="checkbox" checked={everything} onChange={(e) => setEverything(e.target.checked)} />
+                            {h.all}
+                        </label>
+                    </div>
+                    {rows(finished)}
+                </section>
+            )}
         </div>
     );
 }
 
-function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean; onToggle: () => void }) {
-    const { tx, nameOf, jump, revisions } = useChat();
+function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: ReactNode; open: boolean; onToggle: () => void }) {
+    const { tx, nameOf, control, now, jump } = useChat();
     const h = tx.chat.history;
     const Icon = OUTCOME_ICONS[unit.outcome];
     const name = unitName(unit);
     const asked = requestersOf(unit.requesters.map(nameOf));
     const who =
         asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
-    const facts = [who, h.runs(unit.runs.length), unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined].filter((x) => x !== undefined);
-    const changed = cutList(unit.paths ?? [], 3);
     const span = unit.span;
+    const paths = unit.paths ?? [];
+    const about = useUnitAbout(unit);
+    const last = unit.runs[unit.runs.length - 1].run;
+    // the changes line stands for the files (and how many); one run is the rule, said only when there were more
+    const listed = paths.length > 0 && span !== undefined;
+    const facts = [
+        who,
+        unit.runs.length > 1 ? h.runs(unit.runs.length) : undefined,
+        !listed && unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined,
+    ].filter((x) => x !== undefined);
+    // the facilitator's ✕ on what has not finished (asking first); at the right end, before ›
+    const cancellable = control && (last.state === 'Queued' || last.state === 'Running');
     // the card is mounted the first time the unit opens, and stays so that it folds away as it closes
     const [mounted, setMounted] = useState(open);
     if (open && !mounted) setMounted(true);
     return (
-        <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}`} data-unit={unit.key}>
+        <li
+            className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}${cancellable ? ' cancellable' : ''}${listed ? ' has-files' : ''}`}
+            data-unit={unit.key}
+        >
             <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={onToggle}>
-                <span className="chat-unit-line">
-                    <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />
+                <span className="chat-unit-mark">{mark ?? <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />}</span>
+                <span className="chat-unit-text">
                     <span
                         className={`chat-unit-title${name.kind === 'request' ? ' untitled' : ''}`}
                         {...(name.kind === 'request' && { 'data-tooltip': h.untitledHint })}
                     >
                         {name.text}
                     </span>
-                    <span className="chat-time">
-                        <time dateTime={unit.start}>{time(unit.start)}</time>
-                        {time(unit.at) !== time(unit.start) && (
+                    {/* small, under the title: whose requests, how many runs, and when (the running one: for how long) */}
+                    <span className="chat-unit-facts">
+                        {facts.map((f) => `${f} · `).join('')}
+                        {last.state === 'Running' ? (
+                            <span data-tooltip={h.elapsedHint}>{elapsed(last.startedAt, now)}</span>
+                        ) : (
                             <>
-                                –<time dateTime={unit.at}>{time(unit.at)}</time>
+                                <time dateTime={unit.start}>{time(unit.start)}</time>
+                                {time(unit.at) !== time(unit.start) && (
+                                    <>
+                                        –<time dateTime={unit.at}>{time(unit.at)}</time>
+                                    </>
+                                )}
                             </>
                         )}
                     </span>
-                    <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
+                    {last.state === 'Running' && <ActivityLine run={last.id} />}
                 </span>
-                <span className="chat-unit-facts">{facts.join(' · ')}</span>
+                {cancellable && <span className="chat-unit-cancel-space" aria-hidden />}
+                <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
             </button>
-            {/* what the chunk changed: its files (the page knows them, not the elements), a link to compare the whole chunk */}
-            {changed.shown.length > 0 && span && (
-                <p className="chat-unit-changes">
-                    →{' '}
-                    <button
-                        type="button"
-                        className="chat-unit-changes-link"
-                        onClick={() => revisions.compare(span.base, span.result)}
-                        data-tooltip={`${h.changedFilesHint}: ${(unit.paths ?? []).join(', ')}`}
-                    >
-                        {changed.shown.map(baseName).join(h.separator)}
-                    </button>
-                    {changed.more > 0 && <span className="chat-unit-more"> {h.more(changed.more)}</span>}
-                </p>
+            {cancellable && (
+                <span className="chat-unit-cancel">
+                    <CancelButton unit={unit} />
+                </span>
+            )}
+            {/* what the whole chunk changed: its elements as chips, then 変更を見る. The line is part of the row: a click on
+                it, but on a chip or the button, opens or closes the unit as the head does (a pointer's convenience; the
+                head stays the one toggle for the keyboard) */}
+            {listed && span && (
+                <div
+                    className="chat-unit-files"
+                    onClick={(e) => {
+                        if (!(e.target instanceof Element && e.target.closest('button'))) onToggle();
+                    }}
+                >
+                    <ChangedElements kind="unit" base={span.base} result={span.result} about={about} />
+                </div>
             )}
             {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}
             <div className="chat-unit-fold" inert={!open}>
@@ -928,9 +1131,6 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
         </li>
     );
 }
-
-/** A path's last segment (`billing.dt` of `src/billing.dt`). */
-const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
 /**
  * The floating button opening the conversation while it is closed, with the agent's state as a mark (a spinner while
@@ -967,10 +1167,13 @@ export function ChatLauncher(props: { status: AgentStatus; unread: number; menti
     );
 }
 
-function Divider({ at, children }: { at: string; children: ReactNode }) {
+/** A line of the stream about the session (its start, a result confirmed, a restore); `hint`: its tooltip. */
+function Divider({ at, hint, children }: { at: string; hint?: string; children: ReactNode }) {
     return (
         <div className="chat-system">
-            <span className="chat-system-text">{children}</span>
+            <span className="chat-system-text" {...(hint !== undefined && { 'data-tooltip': hint })}>
+                {children}
+            </span>
             <time className="chat-time" dateTime={at}>
                 {time(at)}
             </time>
@@ -987,7 +1190,7 @@ function Bubble(props: {
     /** It continues the bubble before, of the same author: no avatar nor name; the time on hover. */
     continues?: boolean;
     className?: string;
-    /** At the right end of the name line (of a continued message, its first line): its mark, the facilitator's tools, ☺+. */
+    /** At the right end of the name line (of a continued message, a line of its own above the body): its status slot. */
     side?: ReactNode;
     children: ReactNode;
 }) {
@@ -1055,7 +1258,7 @@ function PersonOption({ person, tx }: { person: PersonCandidate; tx: Tx }) {
     return (
         <>
             <span className="chat-mention-person">
-                <Avatar id={person.id} name={person.name} {...(person.avatarUrl && { url: person.avatarUrl })} />
+                <Avatar id={person.id} name={person.name} {...(person.avatarUrl && { url: person.avatarUrl })} facilitator={person.role === 'facilitator'} />
                 <span className="chat-mention-name">{person.name}</span>
                 {person.role === 'facilitator' && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
             </span>
@@ -1067,36 +1270,41 @@ function PersonOption({ person, tx }: { person: PersonCandidate; tx: Tx }) {
 function Composer(props: {
     session: SessionData;
     composer: ComposerDraft;
-    selectionTargets: readonly TargetDraft[];
     candidates: readonly MentionCandidate[];
     focusPending: boolean;
     onFocused: () => void;
-    /** The run the message replies to, while a reply is written; `replyFocus` changes when one starts. */
+    /** The run or message the message replies to, while a reply is written; `replyFocus` changes when one starts. */
     reply: ReplyDraft | undefined;
     replyFocus: number;
     onReplyDone: () => void;
     tx: Tx;
 }) {
-    const { session, composer, selectionTargets, tx, reply, onReplyDone } = props;
+    const { session, composer, tx, reply, onReplyDone } = props;
+    const personName = useChat().nameOf;
+    const replyingTo =
+        reply?.kind === 'Message'
+            ? tx.chat.replies.replyingToMessage(speakerName(reply.author, session.me.participant.id, personName, tx.chat.you))
+            : reply && tx.chat.replies.replyingTo(reply.name);
     const t = useT();
     const naming = useTargetNaming();
     const value = composer.value;
-    const input = useRef<HTMLTextAreaElement | null>(null);
+    const input = useRef<HTMLElement | null>(null);
+    const editor = useRef<ComposerEditorApi | null>(null);
     const size = useComposerSize(input);
-    const [caret, setCaret] = useState(0);
+    // the `#query` or `@query` at the caret, as the editor reports it
+    const [query, setQuery] = useState<EditorQuery | undefined>();
     const [active, setActive] = useState(0);
     // the `#` or `@` whose candidates were closed with Esc: they stay closed until another one
-    const [dismissed, setDismissed] = useState<number | undefined>();
+    const [dismissed, setDismissed] = useState<string | undefined>();
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [notice, setNotice] = useState<string | undefined>();
-    // the selection as dashed chips: sent as targets unless dismissed (until the selection changes); never stored
-    const [dismissals, setDismissals] = useState<Dismissals>(NO_DISMISSALS);
-    const suggested = suggestions(value, selectionTargets, dismissals);
-    const query = mentionQuery(value.text, caret);
+    // the chips shown whole (`+n` pressed); sending collapses them again
+    const [chipsExpanded, setChipsExpanded] = useState(false);
     // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
     const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
-    const open = query !== undefined && query.start !== dismissed && (query.sign === '#' || people.length > 0);
+    const queryKey = query && `${query.node}:${query.start}`;
+    const open = query !== undefined && queryKey !== dismissed && (query.sign === '#' || people.length > 0);
     const matches: readonly Suggestion[] = !open
         ? []
         : query.sign === '#'
@@ -1104,7 +1312,12 @@ function Composer(props: {
           : matchPeople(people, query.query).map((p) => ({ kind: 'person', key: p.id, person: p }));
     const canSend = !sending && value.text.trim() !== '';
     const mac = isMac(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent);
+    // a chip shows the target's own name; its whole name is in the tooltip and the labels
     const nameOf = (target: TargetDraft): string => targetText(target, tx.workspace, naming);
+    const shortOf = (target: TargetDraft): string => targetShortText(target, tx.workspace, naming);
+    // a mention in the text: an element by its own name (its whole name in the tooltip), a person by their name
+    const look = (m: ComposerMention): MentionLook =>
+        m.kind === 'element' ? { label: `#${ownTokenName(m.name, m.target)}`, title: `#${nameOf(m.target)}` } : { label: `@${m.name}`, title: `@${m.name}` };
     const kindOf = (c: MentionCandidate): string => {
         const names: Readonly<Record<string, string>> = c.kind.language === 'dt' ? t.kinds : t.esKinds;
         return names[c.kind.kind] ?? c.kind.kind;
@@ -1132,50 +1345,30 @@ function Composer(props: {
         window.addEventListener('resize', refit);
         return () => window.removeEventListener('resize', refit);
     }, [open]);
-    const track = (): void => setCaret(input.current?.selectionStart ?? 0);
-    // the caret after a pick: placed as soon as the picked text is rendered, before the next key is handled
-    const pendingCaret = useRef<number | undefined>(undefined);
-    useLayoutEffect(() => {
-        const to = pendingCaret.current;
-        if (to === undefined || !input.current) return;
-        pendingCaret.current = undefined;
-        input.current.focus();
-        input.current.setSelectionRange(to, to);
-        setCaret(to);
-    });
-    const moveCaret = (to: number): void => {
-        pendingCaret.current = to;
-    };
-    // the selection confirmed with 💬 or `C`: the text takes the focus, the caret at its end
+    // the selection added with 💬 or `C`: the text takes the focus, the caret at its end
     const { focusPending, onFocused } = props;
     useEffect(() => {
-        const el = input.current;
-        if (!focusPending || !el) return;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-        setCaret(el.value.length);
+        if (!focusPending || !editor.current) return;
+        editor.current.focusEnd();
         onFocused();
     }, [focusPending, onFocused]);
 
-    // a reply just started (↩ on an AI turn): the text takes the focus, the caret at its end
+    // a reply just started (↩ on an AI turn or a message): the text takes the focus, the caret at its end
     const { replyFocus } = props;
     useEffect(() => {
-        const el = input.current;
-        if (replyFocus === 0 || !el) return;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-        setCaret(el.value.length);
+        if (replyFocus !== 0) editor.current?.focusEnd();
     }, [replyFocus]);
 
     const pick = (c: Suggestion | undefined): void => {
         if (!c || !query) return;
-        const at = { start: query.start, end: caret };
-        const picked =
-            c.kind === 'element' ? insertMention(value, at, c.element.target, c.element.mention) : insertPerson(value, at, c.person.id, c.person.name);
-        if (!picked) return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
+        const mention: ComposerMention =
+            c.kind === 'element'
+                ? { kind: 'element', name: c.element.mention, target: c.element.target }
+                : { kind: 'person', name: c.person.name, person: c.person.id };
+        if (!mentionFits(value, mention))
+            return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
         setNotice(undefined);
-        composer.setValue(picked.value);
-        moveCaret(picked.caret);
+        editor.current?.pick(query, mention);
     };
 
     const send = async (): Promise<void> => {
@@ -1183,17 +1376,15 @@ function Composer(props: {
         if (!revision || !canSend) return;
         setSending(true);
         try {
-            const targets = targetsToSend(value, suggested);
             await sessionApi.sendRequest({
-                targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })),
+                targets: value.chips.map((c) => ({ ...c.target, sourceRevision: revision.id })),
                 body: value.text,
-                ...(reply && { replyTo: reply.run }),
+                ...(reply && { replyTo: replyTargetOf(reply) }),
                 ...(value.people.length > 0 && { mentions: value.people }),
             });
             await composer.clear();
             onReplyDone();
-            // what was just sent is not suggested again for the same selection
-            setDismissals(suggested.targets.reduce((d, t) => dismiss(d, selectionTargets, t), dismissals));
+            setChipsExpanded(false);
             setError(undefined);
             setNotice(undefined);
         } catch (e) {
@@ -1203,14 +1394,12 @@ function Composer(props: {
         }
     };
 
-    const count = value.chips.length + suggested.targets.length;
-
     return (
         <div className="chat-composer">
             <ComposerResizer {...size} label={tx.chat.resizeInput} />
             {reply && (
                 <div className="chat-reply-chip motion-pop motion-pop-up" role="status">
-                    <span className="chat-reply-chip-text">↩ {tx.chat.replies.replyingTo(reply.name)}</span>
+                    <span className="chat-reply-chip-text">↩ {replyingTo}</span>
                     <button className="chat-chip-remove" onClick={onReplyDone} aria-label={tx.chat.replies.cancel} data-tooltip={tx.chat.replies.cancel}>
                         <X size={12} aria-hidden />
                     </button>
@@ -1254,89 +1443,47 @@ function Composer(props: {
                         ))}
                     </ul>
                 )}
-                <textarea
-                    ref={input}
-                    className="session-text chat-input"
-                    rows={size.rows}
-                    maxLength={10_000}
+                <ComposerEditor
+                    value={value}
+                    onChange={(v) => composer.setValue(v)}
+                    look={look}
+                    onQuery={setQuery}
                     placeholder={tx.chat.placeholder}
-                    value={value.text}
-                    onChange={(e) => {
-                        composer.setValue(editText(value, e.target.value));
-                        setCaret(e.target.selectionStart);
-                    }}
-                    onSelect={track}
-                    onClick={track}
-                    onBlur={() => setDismissed(query?.start)}
+                    rows={size.rows}
+                    input={input}
+                    api={editor}
+                    onBlur={() => setDismissed(queryKey)}
                     onFocus={() => setDismissed(undefined)}
                     onKeyDown={(e) => {
-                        const action = composerKey(e.nativeEvent, open && matches.length > 0);
+                        const action = composerKey(e, open && matches.length > 0);
                         if (action === 'none') {
-                            if (e.key === 'Escape' && open) setDismissed(query.start);
+                            if (e.key === 'Escape' && open) setDismissed(queryKey);
                             // Esc on an empty text stops the reply
-                            else if (e.key === 'Escape' && reply && value.text === '' && !e.nativeEvent.isComposing) onReplyDone();
-                            return;
+                            else if (e.key === 'Escape' && reply && value.text === '' && !e.isComposing) onReplyDone();
+                            return false;
                         }
-                        e.preventDefault();
                         hovered.current = false;
                         if (action === 'next') setActive((a) => (a + 1) % matches.length);
                         else if (action === 'previous') setActive((a) => (a - 1 + matches.length) % matches.length);
                         else if (action === 'pick') pick(matches[active]);
-                        else if (action === 'close') setDismissed(query?.start);
+                        else if (action === 'close') setDismissed(queryKey);
                         else void send();
+                        return true;
                     }}
                 />
             </div>
             <div className="chat-composer-bar">
-                <div className="chat-chips" aria-label={tx.chat.target}>
-                    {value.chips.map((c, i) => (
-                        <span
-                            key={targetKey(c.target.target)}
-                            className={`chat-chip kind-${c.target.target.kind}`}
-                            data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
-                        >
-                            <span className="chat-chip-number">{i + 1}</span>
-                            <span className="chat-chip-name">{nameOf(c.target)}</span>
-                            <button
-                                className="chat-chip-remove"
-                                aria-label={tx.chat.removeTarget(nameOf(c.target))}
-                                onClick={() => composer.setValue(removeChip(value, i))}
-                            >
-                                <X size={12} aria-hidden />
-                            </button>
-                        </span>
-                    ))}
-                    {suggested.targets.map((s, i) => (
-                        <span
-                            key={`suggested:${targetKey(s.target)}`}
-                            className={`chat-chip suggested kind-${s.target.kind}`}
-                            role="note"
-                            aria-label={tx.chat.suggested(nameOf(s))}
-                            data-tooltip={tx.chat.suggested(nameOf(s))}
-                        >
-                            <span className="chat-chip-number" aria-hidden>
-                                {value.chips.length + i + 1}
-                            </span>
-                            <span className="chat-chip-name">{nameOf(s)}</span>
-                            <button
-                                className="chat-chip-remove"
-                                aria-label={tx.chat.dismissSuggestion(nameOf(s))}
-                                onClick={() => setDismissals(dismiss(dismissals, selectionTargets, s))}
-                            >
-                                <X size={12} aria-hidden />
-                            </button>
-                        </span>
-                    ))}
-                    {count > 0 && <span className="muted small">{tx.chat.targetCount(count, MAX_REQUEST_TARGETS)}</span>}
-                    {suggested.overLimit > 0 && <span className="muted small">{tx.chat.targetsLimit(MAX_REQUEST_TARGETS)}</span>}
-                </div>
+                <ComposerChips
+                    chips={value.chips}
+                    expanded={chipsExpanded}
+                    onExpanded={setChipsExpanded}
+                    nameOf={nameOf}
+                    shortOf={shortOf}
+                    onRemove={(i) => composer.setValue(removeChip(value, i))}
+                    tx={tx}
+                />
                 <div className="chat-composer-actions">
-                    {/* the shortcut, only while there is something to send */}
-                    {value.text.trim() !== '' && (
-                        <kbd className="chat-shortcut" aria-hidden>
-                            {mac ? '⌘↵' : 'Ctrl↵'}
-                        </kbd>
-                    )}
+                    {/* the shortcut is in the tooltip */}
                     <button
                         className="chat-send"
                         disabled={!canSend}

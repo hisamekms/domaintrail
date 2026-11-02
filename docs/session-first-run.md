@@ -34,7 +34,7 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 1. **Start the session** (terminal 1): `dt -r /tmp/dt-session session start`. It prints `Session: … (started, identity
    dev)`, the Live View's URL (`http://127.0.0.1:4321/`), a facilitator link and the agent API's address.
 2. **Become the facilitator**: open the Live View in your browser, give a name on the join form (*Ada*), then open the
-   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, コラボ中 ▾) list you once, as
+   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, the avatars ▾) list you once, as
    *Facilitator*.
 3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
 4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session session subscribe --agent claude --once`. It prints
@@ -43,7 +43,7 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    an event's note, write a message about the selection (e.g. "Add an event for a return the customer cancels") and
    send it, then a second about the whole workspace. Both appear in everyone's chat, the first with its occurrence
    (the timeline and the step).
-6. **A run** (as Ada): Shift-click both messages and まとめてアプライ (or ⤓ on one). The run's card appears; terminal 2
+6. **A run** (as Ada): Shift-click both messages and まとめて送る (or the AI に送る button on one). The run's card appears; terminal 2
    logs its progress; within a few minutes the card is *done* (or asks questions — choose and 答えて再実行 — or is
    *declined* with its reason, or *failed* with its report). Both pages show the storming as the agent left it, without
    a reload. The agent runs `dt fmt` / `dt check` itself through the `dt` the subscriber puts on its `PATH`.

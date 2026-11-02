@@ -1,13 +1,16 @@
 // The Claude Code adapter of the subscriber (ADR 0026, S6): one headless run of `claude` per agent run, started with an
 // argument array (no shell) in the workspace root, the prompt on stdin, the facilitator's tools as the only ones
 // allowed (`--permission-mode dontAsk` refuses everything else without asking), the reply's JSON schema as the
-// structured output (`--json-schema`), and the result as JSON on stdout (the reply in its `structured_output`). On
-// cancel the whole process group is killed. Neither the prompt nor the agent's output is logged. The agent's `dt` is a
-// shim first on its PATH (`dt-shim.ts`).
+// structured output (`--json-schema`), and its events streamed as JSON lines on stdout (`claude-stream.ts`): what it is
+// doing is told as it goes, and the result (the reply in its `structured_output`) ends the stream. On cancel the whole
+// process group is killed. Neither the prompt nor the agent's output is logged. The agent's `dt` is a shim first on
+// its PATH (`dt-shim.ts`).
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
 import { replyJsonSchema } from '@domaintrail/collaboration';
 import { parseReply } from '../core/prompt.js';
+import { activityOfEvent, createStreamReader } from './claude-stream.js';
 import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */
@@ -18,8 +21,6 @@ export interface AgentCommand {
 
 export const CLAUDE: AgentCommand = { command: 'claude', args: [] };
 
-/** Most of the agent's stdout kept (the JSON result is at its end). */
-const MAX_OUTPUT = 8 * 1024 * 1024;
 /** How long a stopped agent gets between SIGTERM and SIGKILL. */
 const KILL_GRACE_MS = 5_000;
 
@@ -29,7 +30,8 @@ export function toolNames(rules: readonly string[]): string[] {
 }
 
 /**
- * The arguments of `claude` for a run: print mode, JSON output, no saved session, no MCP server, the user's settings
+ * The arguments of `claude` for a run: print mode, the events streamed as JSON lines (`stream-json` needs `--verbose` in
+ * print mode), no saved session, no MCP server, the user's settings
  * only (never the workspace's `.claude/` project or local settings, which an agent could have written), the built-in tools
  * narrowed to the rules' tools, and the rules allowed without asking (anything else is refused); with `requests`, the
  * reply's JSON schema for that many requests as the structured output. A rule that looks like an option is refused: the
@@ -43,7 +45,8 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
     return [
         '--print',
         '--output-format',
-        'json',
+        'stream-json',
+        '--verbose',
         '--no-session-persistence',
         '--strict-mcp-config',
         // the user's settings only: the workspace's project and local settings (`.claude/`) are files the agent can write
@@ -58,32 +61,6 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
     ];
 }
 
-/** What `claude --output-format json` printed: the reply's structured output and the result text. */
-export interface ClaudeResult {
-    /** `structured_output` (with `--json-schema`): the reply as an object, before any validation of ours. */
-    readonly structured?: unknown;
-    /** `result`: the final text (the structured output as JSON with `--json-schema`), else the raw output. */
-    readonly text: string;
-}
-
-/** The result in `claude --output-format json`'s output (`{"type":"result","result":"…","structured_output":{…},…}`), else the raw output. */
-export function resultOf(stdout: string): ClaudeResult {
-    const text = stdout.trim();
-    const candidates = [text, text.split('\n').at(-1) ?? ''];
-    for (const candidate of candidates) {
-        let value: unknown;
-        try {
-            value = JSON.parse(candidate);
-        } catch {
-            // not the JSON result (an older or a fake agent printing text): try the next, then the text itself
-            continue;
-        }
-        if (typeof value === 'object' && value !== null && 'result' in value && typeof value.result === 'string')
-            return { text: value.result, ...('structured_output' in value && value.structured_output != null && { structured: value.structured_output }) };
-    }
-    return { text };
-}
-
 export interface ClaudeCodeOptions {
     /** The workspace root: the agent's working directory. */
     readonly root: string;
@@ -94,6 +71,15 @@ export interface ClaudeCodeOptions {
      * when the runner is made: refused inside the workspace, and its files must not change from one run to the next.
      */
     readonly dt?: PinnedDt;
+}
+
+/** The real path of the workspace (the agent may name files by it), or the path as given when it cannot be resolved. */
+function realpathOr(root: string): string {
+    try {
+        return realpathSync(root);
+    } catch {
+        return root;
+    }
 }
 
 /** Kills the agent's process group (it was started detached, as the group's leader), or the agent alone on Windows. */
@@ -111,6 +97,8 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
 
 export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promise<AgentRunner> {
     const command = options.command ?? CLAUDE;
+    // the workspace as given and its real path: the agent names files by either
+    const roots = [...new Set([options.root, realpathOr(options.root)])];
     const dt = options.dt && pinDt(dtCommandOf(options.dt), options.root);
     const fingerprint = dt && (await fingerprintDt(dt));
     /** The shim of a run, once the command is checked again (a file of it changed: the run fails to start). */
@@ -141,14 +129,13 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
                         stdio: ['pipe', 'pipe', 'pipe'],
                         windowsHide: true,
                     });
-                    let stdout = '';
-                    let kept = 0;
-                    child.stdout.setEncoding('utf8');
-                    child.stdout.on('data', (chunk: string) => {
-                        if (kept >= MAX_OUTPUT) return;
-                        stdout += chunk;
-                        kept += chunk.length;
+                    // what the agent does, as it goes; its result at the end
+                    const stream = createStreamReader((event) => {
+                        const activity = invocation.onActivity && activityOfEvent(event, roots);
+                        if (activity) invocation.onActivity?.(activity);
                     });
+                    child.stdout.setEncoding('utf8');
+                    child.stdout.on('data', (chunk: string) => stream.push(chunk));
                     // stderr is read so that the agent never blocks on it, and dropped: it may echo the prompt
                     child.stderr.resume();
                     child.stdin.on('error', (e: Error & { code?: string }) => {
@@ -171,7 +158,7 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
                         // the agent is gone; anything it left in its group goes with it
                         if (signal.aborted) killTree(child.pid, 'SIGKILL');
                         if (killer) clearTimeout(killer);
-                        const result = resultOf(stdout);
+                        const result = stream.end();
                         resolve({ exitCode: code ?? -1, ...parseReply(result.structured, result.text, invocation.requests) });
                     });
                     child.stdin.end(invocation.prompt);

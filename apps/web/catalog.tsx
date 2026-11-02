@@ -25,10 +25,12 @@ import {
     fieldSetUsers,
     filterCatalog,
     isCatalogFiltered,
+    labelOrName,
     namer,
     orderedContexts,
     policiesReactingTo,
     policyTarget,
+    shownLabel,
     type CatalogFilter,
     type CatalogSection,
     type Namer,
@@ -257,10 +259,10 @@ export function CardHead({ el, tx }: { el: ElementModel; tx: Messages }) {
                 <span className={`kind kind-${el.kind} tiny`}>{tx.kinds[el.kind]}</span>
                 {el.kind === 'event' && <PersistenceBadge persistent={!!el.persistent} tx={tx} />}
             </span>
-            <span className="card-name" title={el.label ?? el.name}>
-                {el.label ?? el.name}
+            <span className="card-name" title={labelOrName(el)}>
+                {labelOrName(el)}
             </span>
-            {el.label && (
+            {shownLabel(el.label) && (
                 <span className="card-subname" title={el.name}>
                     {el.name}
                 </span>

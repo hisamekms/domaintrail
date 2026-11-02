@@ -7,7 +7,9 @@
 // `requires` decide who may do what. The agent's use cases take the token of the lease it claimed.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
+import { approvalCommands, approvalOf } from '../domain/approvals.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
+import { elementChanges, type ElementChanges } from '../domain/changes.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
@@ -15,10 +17,10 @@ import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { Actor } from './actor.js';
-import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
+import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
-import { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
+import { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 type SessionId = Collaboration.SessionId;
 type AgentRunId = Collaboration.AgentRunId;
@@ -142,6 +144,10 @@ export interface Comparison {
 
 /** The most characters of unified diff text a comparison carries; the files after it get no diff. */
 export const MAX_COMPARISON_DIFF = 512 * 1024;
+/** How many pairs of revisions `modelChanges` keeps the changes of, and how many revisions it keeps the analysis of. */
+const CHANGES_KEPT = 256;
+const ANALYSES_KEPT = 8;
+
 /** The least budget a file's diff is started with: below it, the rest of the comparison's diffs are omitted. */
 const MIN_DIFF_ROOM = 2 * 1024;
 
@@ -159,6 +165,8 @@ export interface SessionState {
     readonly revisions: readonly Collaboration.Revision[];
     /** The marks still placed (votes and reactions), in the order they were placed. */
     readonly marks: readonly Collaboration.PlacedMark[];
+    /** The assumptions the facilitator approved, in the order they were approved. */
+    readonly approvals: readonly Collaboration.AssumptionApproval[];
 }
 
 /** What setting a mark changed: the mark placed (none when it was there already or taken off) and the marks removed. */
@@ -213,8 +221,11 @@ export interface CollaborationUseCases {
         /** What the request is about: none for the whole workspace. */
         readonly targets: readonly Collaboration.TargetSnapshot[];
         readonly body: Collaboration.Text;
-        /** The run of the session it replies to: ended (completed, failed, declined or cancelled), not waiting for an answer. */
-        readonly replyTo?: AgentRunId;
+        /**
+         * What it replies to: a run of the session, ended (completed, failed, declined or cancelled), not waiting for an
+         * answer; or a message of the session (one's own too).
+         */
+        readonly replyTo?: Collaboration.ReplyTarget;
         /** The participants of the session the body mentions (`@name[pN]` names the N-th), each once, at most 20. */
         readonly mentions?: readonly ParticipantId[];
     }): Promise<
@@ -226,6 +237,8 @@ export interface CollaborationUseCases {
             | Collaboration.RunNotFound
             | Collaboration.RunOfAnotherSession
             | Collaboration.RunNotReplyable
+            | Collaboration.RequestNotFound
+            | Collaboration.RequestOfAnotherSession
             | Collaboration.MentionedNotAParticipant
             | Collaboration.TooManyMentions
             | Collaboration.DuplicateMention
@@ -294,6 +307,29 @@ export interface CollaborationUseCases {
             | Collaboration.RunNotPickable
             | Collaboration.AlternativeNotFound
             | Collaboration.PickMismatch
+            | Collaboration.AssumptionClosed
+        >
+    >;
+    /**
+     * Approves an assumption of a completed run of the session: it stands as the AI made it. The facilitator's; sends
+     * nothing to the agent. Refused when the assumption was decided already (approved, or a later run took over the
+     * run's requests, a pick among them).
+     */
+    approveAssumption(input: {
+        readonly session: SessionId;
+        readonly actor: Actor;
+        readonly assumption: Collaboration.AssumptionRef;
+    }): Promise<
+        Result<
+            Collaboration.AssumptionApproval,
+            | Collaboration.FacilitatorOnly
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | Collaboration.RunNotFound
+            | Collaboration.RunOfAnotherSession
+            | Collaboration.RunNotApprovable
+            | Collaboration.AssumptionNotFound
+            | Collaboration.AssumptionClosed
         >
     >;
     /** Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. */
@@ -304,6 +340,14 @@ export interface CollaborationUseCases {
     }): Promise<Result<Claimed, NothingQueued | RunInProgress>>;
     /** Extends a live lease by `leaseMs` from now. */
     heartbeat(input: { readonly run: AgentRunId; readonly token: string; readonly leaseMs: number }): Promise<Result<Lease, LeaseLost>>;
+    /**
+     * The running run held under the live lease `token`, read without changing anything (not even the lease): what the
+     * agent reports of a run's activity is taken only from its lease's holder, while the run is running.
+     */
+    heldRunningRun(input: {
+        readonly run: AgentRunId;
+        readonly token: string;
+    }): Promise<Result<Collaboration.RunningAgentRun, NotFound | LeaseLost | NotAllowed>>;
     /** Gives a claimed run back to the queue before it started. */
     releaseRun(input: { readonly run: AgentRunId; readonly token: string }): Promise<Result<Collaboration.QueuedAgentRun, NotFound | LeaseLost | NotAllowed>>;
     /** Starts a claimed run: the workspace now is its base revision (RunBase). */
@@ -390,6 +434,15 @@ export interface CollaborationUseCases {
         readonly after: RevisionId;
     }): Promise<Result<Comparison, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
     /**
+     * What a unit of work changed in the model's words: the `.dt` and `.dtes` elements the analyses of two revisions
+     * differ by. Kept per pair of revisions (they never change), so a page that asks again is answered at once.
+     */
+    modelChanges(input: {
+        readonly session: SessionId;
+        readonly before: RevisionId;
+        readonly after: RevisionId;
+    }): Promise<Result<ElementChanges, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
+    /**
      * The runs a run continues — those its messages reply to, then the one its answer answers, then the one it picked an
      * alternative of, as its frozen input names them — each with what it changed from its base to its result revision:
      * a unified diff while the diffs of all of them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
@@ -434,6 +487,17 @@ function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinceSnapsh
         return p.ok ? { type: 'SymlinkInWorkspace', path: p.value } : p.error;
     }
     return { type: 'PathOutsideRoot', path: e.path };
+}
+
+/**
+ * What a request replies to, as a run's input freezes it: a run by its ID; a message with its author and body as they
+ * are now (a message is never changed, so they are as it was sent). A message the store no longer holds (it never
+ * forgets one) is left out.
+ */
+function frozenReplyTarget(target: Collaboration.ReplyTarget | undefined, stores: Stores): Collaboration.FrozenReplyTarget | undefined {
+    if (target === undefined || target.kind === 'Run') return target;
+    const original = stores.requests.load(target.request);
+    return original && { kind: 'Message', request: original.id, author: original.author, body: original.body };
 }
 
 /** The success value of a command that cannot fail. */
@@ -558,6 +622,22 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         });
     };
 
+    // the element changes per pair of revisions, and the analyses of the latest revisions read (a unit's result is the
+    // next one's base): revisions never change, so neither expires; the oldest goes first
+    const changesKept = new Map<string, Promise<Result<ElementChanges, BlobMissing>>>();
+    const analysesKept = new Map<RevisionId, Promise<Result<ValidationResult, BlobMissing>>>();
+    const kept = <K, V>(map: Map<K, V>, key: K, limit: number, make: () => V): V => {
+        const found = map.get(key);
+        if (found !== undefined) return found;
+        const made = make();
+        map.set(key, made);
+        const oldest = map.keys().next();
+        if (map.size > limit && !oldest.done) map.delete(oldest.value);
+        return made;
+    };
+    const analysisKept = (r: Collaboration.Revision): Promise<Result<ValidationResult, BlobMissing>> =>
+        kept(analysesKept, r.id, ANALYSES_KEPT, () => analysisOf(deps, r));
+
     const useCases: CollaborationUseCases = {
         async startSession({ facilitator, name }) {
             const captured = await capture(deps);
@@ -614,9 +694,9 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === author)) return err({ type: 'NotAParticipant', participant: author });
-                let replyable: Collaboration.ReplyableRun | undefined;
+                let replyable: Collaboration.ReplyableTarget | undefined;
                 if (replyTo !== undefined) {
-                    const r = await storeVerifications(stores).makeReplyableRun(replyTo, session);
+                    const r = await storeVerifications(stores).makeReplyableTarget(replyTo, session);
                     if (!r.ok) return r;
                     replyable = r.value;
                 }
@@ -719,6 +799,8 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     if (of.session !== session) return err({ type: 'RunOfAnotherSession', run: pick.pickOf });
                     const resolved = resolvePick(pick, of, requests);
                     if (!resolved.ok) return resolved;
+                    // one decision per assumption: an approved one is not sent again with an alternative
+                    if (approvalOf(stores.approvals.listBySession(session), of.id, pick.assumption)) return err({ type: 'AssumptionClosed', run: of.id });
                     picked = resolved.value;
                 }
                 const pending: Collaboration.PendingRequest[] = [];
@@ -729,8 +811,10 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     pending.push(p.value);
                     const r = stores.requests.load(id);
                     // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
-                    if (r && !frozen.some((f) => f.request === id))
-                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(r.replyTo && { replyTo: r.replyTo }) });
+                    if (r && !frozen.some((f) => f.request === id)) {
+                        const replyTo = frozenReplyTarget(r.replyTo, stores);
+                        frozen.push({ request: id, author: r.author, targets: r.targets, body: r.body, ...(replyTo && { replyTo }) });
+                    }
                 }
                 const bundled = nonEmpty(pending);
                 const input = nonEmpty(frozen);
@@ -749,6 +833,29 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 stores.runs.enqueue(queued.value.Queued.aggregate);
                 publish(stores, session, queued.value.Queued.events, at);
                 return ok(queued.value.Queued.aggregate);
+            });
+        },
+
+        async approveAssumption({ session, actor, assumption }) {
+            return uow.transaction(async (stores) => {
+                const verify = storeVerifications(stores);
+                const active = await verify.makeActiveSession(session);
+                if (!active.ok) return active;
+                const decidable = await verify.makeDecidableAssumption(assumption, session);
+                if (!decidable.ok) return decidable;
+                const at = clock.now();
+                const approved = approvalCommands.approve({
+                    id: knownAssumptionApprovalId(ids.newId()),
+                    session: active.value,
+                    assumption: decidable.value,
+                    approvedBy: actor.participant,
+                    approvedByRole: actor.role,
+                    approvedAt: at,
+                });
+                if (!approved.ok) return approved;
+                stores.approvals.save(approved.value.Approved.aggregate);
+                publish(stores, session, approved.value.Approved.events, at);
+                return ok(approved.value.Approved.aggregate);
             });
         },
 
@@ -774,6 +881,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const expiresAt = new Date(now.getTime() + leaseMs);
                 if (!stores.runs.extend(run, token, now, expiresAt)) return err({ type: 'LeaseLost', run });
                 return ok({ ...stored.value.lease, expiresAt });
+            });
+        },
+
+        async heldRunningRun({ run, token }) {
+            return uow.transaction((stores) => {
+                const stored = held(stores, run, token, clock.now());
+                if (!stored.ok) return stored;
+                const r = stored.value.run;
+                return r.state === 'Running' ? ok(r) : err(notAllowed('report', r.state));
             });
         },
 
@@ -1112,6 +1228,32 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             return ok({ before: a, after: b, files, counts: statusCounts(files), diffsOmitted });
         },
 
+        async modelChanges({ session, before, after }) {
+            const found = await uow.transaction((stores) => ({ a: stores.revisions.load(before), b: stores.revisions.load(after) }));
+            for (const [id, r] of [
+                [before, found.a],
+                [after, found.b],
+            ] as const) {
+                if (!r) return err(notFound('Revision', id));
+                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+            }
+            const { a, b } = found;
+            if (!a || !b) throw new Error('Both revisions were found above');
+            const changes = await kept(changesKept, `${a.id}>${b.id}`, CHANGES_KEPT, async (): Promise<Result<ElementChanges, BlobMissing>> => {
+                const was = await analysisKept(a);
+                const is = await analysisKept(b);
+                // a blob missing now may be put back later: not kept
+                if (!was.ok) analysesKept.delete(a.id);
+                if (!is.ok) analysesKept.delete(b.id);
+                if (!was.ok) return was;
+                if (!is.ok) return is;
+                return ok(elementChanges(was.value, is.value));
+            });
+            // a blob missing now may be put back later: not kept
+            if (!changes.ok) changesKept.delete(`${a.id}>${b.id}`);
+            return changes;
+        },
+
         async previousRuns({ run, maxDiff }) {
             const found = await uow.transaction((stores) => {
                 const r = stores.runs.load(run)?.run;
@@ -1166,6 +1308,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     runs: stores.runs.listBySession(session),
                     revisions: stores.revisions.listBySession(session),
                     marks: stores.marks.placedBySession(session),
+                    approvals: stores.approvals.listBySession(session),
                 });
             });
         },

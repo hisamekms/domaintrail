@@ -2,7 +2,8 @@
 // start` from the built CLI (a child process: its outbox, WebSocket, classifier and agent API are the real ones),
 // named participants signed in with their own cookies (one of them made the facilitator with the start's link), the
 // seed's agent (the real subscriber with a scripted runner), and the scenarios played through the session API as pages
-// play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over.
+// play them. The agent is stopped once the scenarios are done, so that a real `dt session subscribe` can take over —
+// unless it is to leave a run running, which it then holds until the server stops.
 import { plainBody } from '@domaintrail/collaboration';
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as path from 'node:path';
@@ -43,11 +44,11 @@ export interface Ctx {
     /** An event's occurrence in a timeline (the step path: `0`, `2.1`) as a target. */
     occurrence(storming: string, timeline: string, eventName: string, step: string, label: string): TargetSpec;
     /** `who` sends a message; `reads`: what the mock classifier answers for it (default: guessed from its words). */
-    /** `mentions`: the people `@name[pN]` in the body names, in order (the N-th from 1). */
+    /** `mentions`: the people `@name[pN]` in the body names, in order (the N-th from 1). `replyTo`: a run or a message it replies to. */
     say(
         who: Person,
         body: string,
-        options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson; mentions?: readonly Person[] },
+        options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson | RequestJson; mentions?: readonly Person[] },
     ): Promise<RequestJson>;
     /** The facilitator applies messages as one run that the agent plays as `step`; resolves once the run ended. */
     apply(requests: readonly RequestJson[], step: Step, options?: { note?: string }): Promise<RunJson>;
@@ -55,6 +56,8 @@ export interface Ctx {
     answer(run: RunJson, answer: AnswerBody, step: Step): Promise<RunJson>;
     /** The facilitator picks another alternative of an assumption of a completed run, played as `step`. */
     pickAlternative(run: RunJson, assumption: number, alternative: string, step: Step): Promise<RunJson>;
+    /** The facilitator approves an assumption of a completed run as it is: recorded, nothing queued. */
+    approveAssumption(run: RunJson, assumption: number): Promise<void>;
     /** The facilitator applies messages as a run the agent works on until the facilitator cancels it. */
     cancelWhileRunning(requests: readonly RequestJson[]): Promise<RunJson>;
     /** `who` votes for a question's option. */
@@ -85,6 +88,11 @@ export interface SeedOptions {
     readonly classifier: boolean;
     /** Leave one run queued at the end (a real subscriber started later takes it). */
     readonly leaveQueued: boolean;
+    /**
+     * Leave one run running at the end, held by the seed's agent until the server stops (or the run is cancelled), and
+     * two queued behind it, which the agent then runs the same way, one after the other.
+     */
+    readonly leaveRunning?: boolean;
     /** The built CLI (`node dist/dt.js`): the session server, and `dt fmt` / `dt check` after each run. */
     readonly dt: DtCommand;
     /** Progress of the seed. */
@@ -148,6 +156,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 export async function seed(options: SeedOptions): Promise<Seeded> {
     const dir = path.resolve(options.dir);
+    if (options.leaveQueued && options.leaveRunning) throw new Error('Leave a run queued or running, not both');
     await prepareDir(dir, options.reset);
     options.log(`Copying ${options.source} to ${dir}`);
     await copyWorkspace(options.source, dir, { port: options.port, classifier: options.classifier });
@@ -185,10 +194,13 @@ export async function seed(options: SeedOptions): Promise<Seeded> {
             options.log(`Scenario ${name}`);
             await SCENARIOS[name](ctx);
         }
-        // the seed's agent holds nothing from now on: a real subscriber takes the runs queued later
-        await agent.stop();
         if (agent.pending() > 0) throw new Error(`${agent.pending()} scripted step(s) were not played: a run the scenario expected never ran`);
-        agent = undefined;
+        if (options.leaveRunning) await leaveRunning(ctx, agent);
+        else {
+            // the seed's agent holds nothing from now on: a real subscriber takes the runs queued later
+            await agent.stop();
+            agent = undefined;
+        }
 
         if (options.leaveQueued) {
             const left = await ctx.say('sato', '最後にもう一件: #返品が依頼された[1] に返品の受付期限（注文から30日）を入れてください', {
@@ -219,6 +231,31 @@ export async function seed(options: SeedOptions): Promise<Seeded> {
         await stop();
         throw e;
     }
+}
+
+/**
+ * One run left running (the agent works on it until it is cancelled) and two queued behind it, in AI の作業's groups
+ * 実行中 and 待ち; each queued one runs the same way once the one before is cancelled.
+ */
+async function leaveRunning(ctx: Ctx, agent: FakeAgent): Promise<void> {
+    const f = ctx.people.facilitator;
+    const hang: Step = { kind: 'hang' };
+    const running = await ctx.say('tanaka', '返品の受付期限を注文から 30 日にしたいです', { reads: 'request' });
+    agent.expect(hang);
+    const first = await ctx.api.queue(f, { requests: [running.id] });
+    const deadline = Date.now() + RUN_TIMEOUT_MS;
+    while ((await ctx.api.state(f)).runs.find((r) => r.id === first.id)?.state !== 'Running') {
+        if (Date.now() > deadline) throw new Error(`Run ${first.id} did not start`);
+        await sleep(100);
+    }
+    const address = await ctx.say('sato', '請求書の宛名を後から変えられるようにしてください', { reads: 'request' });
+    agent.expect(hang);
+    await ctx.api.queue(f, { requests: [address.id] });
+    const carrier = await ctx.say('suzuki', '出荷に配送業者を持たせたいです', { reads: 'request' });
+    const tracking = await ctx.say('takahashi', '配送業者ごとに追跡番号も残したいです', { reads: 'request' });
+    agent.expect(hang);
+    await ctx.api.queue(f, { requests: [carrier.id, tracking.id] });
+    ctx.log("Left one run running (the seed's agent holds it) and two queued behind it.");
 }
 
 function makeCtx(deps: {
@@ -293,7 +330,12 @@ function makeCtx(deps: {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the JSON of a target snapshot (the server checks it)
                 targets: targets as Parameters<SessionClient['send']>[1]['targets'],
                 body,
-                ...(options.replyTo && { replyTo: options.replyTo.id }),
+                ...(options.replyTo && {
+                    replyTo:
+                        'input' in options.replyTo
+                            ? { kind: 'Run' as const, run: options.replyTo.id }
+                            : { kind: 'Message' as const, request: options.replyTo.id },
+                }),
                 ...(mentions.length > 0 && { mentions }),
             });
         },
@@ -312,6 +354,9 @@ function makeCtx(deps: {
                 },
                 step,
             );
+        },
+        async approveAssumption(run, assumption) {
+            await api.approve(f, { run: run.id, assumption });
         },
         async cancelWhileRunning(requests) {
             const step: Step = { kind: 'hang' };

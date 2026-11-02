@@ -1,11 +1,13 @@
-// The session's runs grouped into "change units", without React: one card of the chat, and one row of its 履歴. A
+// The session's runs grouped into "change units", without React: one card of the chat, and one row of AI の作業. A
 // unit is one run, or a run followed by the runs that continue it (the answer to its question, the replies to it, an
 // alternative picked, the same messages applied again), and so on. Everything is derived from the session's state on the page.
 //
 // People read a unit as one chunk of change, so it is named, not numbered: its title is the one the AI gave its first
 // run that has one (the runs that continue it never rename it), else the head of the first message it applied.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { MAX_REQUEST_MENTIONS, plainBody } from '@domaintrail/collaboration';
+import { MAX_REQUEST_MENTIONS } from '@domaintrail/collaboration';
+import { bodyText } from './mentions';
+import type { AgentStatus } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
@@ -122,7 +124,7 @@ function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
 
 /**
  * The change units of a session, newest first (by when each last changed). A run joins the unit of the run it answers
- * (`answer.answerTo`) or picked an alternative of (`pick.pickOf`), or else the unit of a run its messages reply to (`replyTo`; the latest such unit when they reply
+ * (`answer.answerTo`) or picked an alternative of (`pick.pickOf`), or else the unit of a run its messages reply to (`replyTo` a run; the latest such unit when they reply
  * to runs of several), or else the latest unit whose latest run asked or completed with the same messages (queued
  * again with a note, an alternative picked, applied again); otherwise it starts a unit. A unit is one card of the chat.
  */
@@ -132,7 +134,8 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
     const groups: UnitRun[][] = [];
     runs.forEach((run, i) => {
         const continued = run.input.answer?.answerTo ?? run.input.pick?.pickOf;
-        const replied = new Set(run.input.requests.flatMap((r) => (r.replyTo === undefined ? [] : [r.replyTo])));
+        // a reply to a message joins no unit by it
+        const replied = new Set(run.input.requests.flatMap((r) => (r.replyTo?.kind === 'Run' ? [r.replyTo.run] : [])));
         const into =
             (continued !== undefined ? groups.find((g) => g.some((u) => u.run.id === continued)) : undefined) ??
             (replied.size > 0 ? groups.findLast((g) => g.some((u) => replied.has(u.run.id))) : undefined) ??
@@ -172,17 +175,63 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
     return units.sort((a, b) => b.at.localeCompare(a.at) || b.runs[0].number - a.runs[0].number);
 }
 
-/** The units the history shows: those that changed files, or all of them. */
+/** The finished units AI の作業 shows: those that changed files, or all of them. */
 export function shownUnits(units: readonly ChangeUnit[], all: boolean): ChangeUnit[] {
     return all ? [...units] : units.filter((u) => (u.files ?? 0) > 0);
 }
 
+/** AI の作業 in its groups, each in the order it is shown; a group may be empty (the page then leaves it out). */
+export interface WorkGroups {
+    /** The units whose latest run asked a question, newest first. */
+    readonly awaiting: readonly ChangeUnit[];
+    /** The units whose latest run is running. */
+    readonly running: readonly ChangeUnit[];
+    /** The units whose latest run waits for its turn, in the order they will run (by when that run was queued). */
+    readonly queued: readonly ChangeUnit[];
+    /** The units that ended (changed or not, declined, failed, cancelled), newest first. */
+    readonly finished: readonly ChangeUnit[];
+}
+
+/** The units (newest first, as `changeUnits` gives them) in the groups of AI の作業. */
+export function workGroups(units: readonly ChangeUnit[]): WorkGroups {
+    const latest = (u: ChangeUnit): UnitRun => u.runs[u.runs.length - 1];
+    return {
+        awaiting: units.filter((u) => u.outcome === 'clarification'),
+        running: units.filter((u) => u.outcome === 'running'),
+        queued: units.filter((u) => u.outcome === 'queued').sort((a, b) => latest(a).number - latest(b).number),
+        finished: units.filter((u) => u.outcome !== 'clarification' && u.outcome !== 'running' && u.outcome !== 'queued'),
+    };
+}
+
+/**
+ * The unit the chat's header status stands for, the one a click on it opens in AI の作業, by the status's own priority
+ * (`agentStatus`): running, the running unit; queued, the next to run; waiting for an answer, the one waiting the
+ * longest (it asked first); idle, none.
+ */
+export function statusUnit(status: AgentStatus['kind'], units: readonly ChangeUnit[]): ChangeUnit | undefined {
+    const groups = workGroups(units);
+    switch (status) {
+        case 'running':
+            return groups.running[0];
+        case 'queued':
+            return groups.queued[0];
+        case 'clarification':
+            return groups.awaiting.reduce<ChangeUnit | undefined>((oldest, u) => (!oldest || u.at < oldest.at ? u : oldest), undefined);
+        case 'idle':
+            return undefined;
+    }
+}
+
+/** How many units are not finished yet, the badge of AI の作業: running and queued (not those awaiting an answer). */
+export const unfinishedCount = (units: readonly ChangeUnit[]): number => units.filter((u) => u.outcome === 'running' || u.outcome === 'queued').length;
+
 /**
  * A request's text on one line, its tokens (elements and people, `body.ts`) as the names they were written with,
- * without sign nor number. A frozen request does not keep whom it mentioned, so every person token is read as one.
+ * without sign nor number; an element by its own name (`ownTokenName`). A frozen request does not keep whom it mentioned,
+ * so every person token is read as one.
  */
 export const requestHead = (r: Pick<FrozenRequest, 'body' | 'targets'>): string =>
-    plainBody(r.body, { targets: r.targets.length, people: MAX_REQUEST_MENTIONS }, true).replace(/\s+/g, ' ').trim();
+    bodyText(r.body, r.targets, MAX_REQUEST_MENTIONS, true).replace(/\s+/g, ' ').trim();
 
 /**
  * What a unit is called: its title, else the head of the first message its first run applied (on one line; the page

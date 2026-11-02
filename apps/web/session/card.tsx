@@ -1,22 +1,32 @@
 // A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
 // a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
-// facilitator's answer or note, the result). At the top of each run, a quote of each message it applied (with what the
-// reply says of each, ✓ ◐ – ?, when there are several); a click goes to the message, a hover marks it. The facilitator
-// answers a question by choosing, picks another alternative of an assumption, cancels a run, and through the card's
-// menu confirms its result, restores the workspace as it was before it or compares the two.
+// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run, a quote of each message it applied (with what the
+// reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
+// and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
+// facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
+// cancels a run (asked first), and through the card's menu confirms its result, restores the workspace as it was before it or
+// shows what it changed. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
+// AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Circle, CircleDot, Reply, CircleX, Ellipsis, Pencil, RotateCcw, Square, SquareCheck, X } from 'lucide-react';
+import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck } from 'lucide-react';
+import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
+import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
+import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
+import { changeFullName, changeKey, changeShortName, changeTarget, useModelChanges } from './changes';
 import { useChat, type Tx } from './chat-context';
-import { pickedAlternative, questionsState, type Decider, type PickedAlternative, type QuestionsState } from './decisions';
-import { unitName, type ChangeUnit } from './history';
+import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
+import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
-import { ReplyFacts, ReplyText } from './reply';
+import { useTargetNaming } from './naming';
+import { ReplyText } from './reply';
+import { runningLabel, turnState } from './status';
+import { CancelButton, RowActions, StateLabel, StatusSlot } from './status-slot';
 import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, type RequestProgress } from './stream';
 
 type RunJson = CardRun['run'];
@@ -25,26 +35,31 @@ const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hou
 /** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
 export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
 
-/** The state a card shows: its latest run's. */
-function statusOf(m: AgentMessage): 'queued' | 'running' | 'clarification' | 'done' | 'declined' | 'failed' | 'cancelled' {
-    return m.kind === 'completed' ? 'done' : m.kind;
-}
-
 export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; compact?: boolean; actions?: ReactNode }) {
     const chat = useChat();
     const { session, tx, nameOf, control } = chat;
     const runs = cardRuns(unit, revisionLookup(session.state));
     const first = runs[0];
     const last = runs[runs.length - 1];
-    const status = statusOf(last.message);
+    const state = turnState(last.message);
     const cancellable = control && (last.run.state === 'Queued' || last.run.state === 'Running');
     const queuedBy = nameOf(first.run.queuedBy);
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
-    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); the
-    // state only when it is not simply done
+    const about = useUnitAbout(unit);
+    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); at the
+    // right end, in the status slot, the state only where nothing else shows it (queued, running with its time, declined,
+    // failed, cancelled), then the facilitator's ✕ on a run not finished
+    const status = state && (
+        <span className={`chat-state state-${state}`}>
+            <StateLabel
+                state={state}
+                label={last.message.kind === 'running' ? runningLabel(tx.chat.marks, elapsed(last.message.since, chat.now)) : tx.chat.marks[state]}
+            />
+        </span>
+    );
     return (
-        <div className={`run-card status-${status}${compact ? ' compact' : ''}`} data-card={unit.key}>
+        <div className={`run-card status-${last.message.kind}${compact ? ' compact' : ''}`} data-card={unit.key}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
                 <Bot size={13} />
             </span>
@@ -52,10 +67,10 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                 <div className="run-card-head">
                     <span className="chat-who">{tx.chat.agent}</span>
                     <span className="run-card-meta">
-                        {/* in 履歴, the heading above already names it */}
+                        {/* in AI の作業, the row above already names it */}
                         {title.kind === 'title' && !compact && (
                             <>
-                                <span className="run-card-title">{title.text}</span>
+                                <RunCardTitle text={title.text} />
                                 {' · '}
                             </>
                         )}
@@ -63,65 +78,93 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                             {time(first.run.queuedAt)}
                         </time>
                     </span>
-                    {status !== 'done' && (
-                        <span className={`run-card-status status-${status}`}>
-                            {status === 'running' && last.message.kind === 'running'
-                                ? tx.chat.status.running(elapsed(last.message.since, chat.now))
-                                : tx.chat.marks[status]}
-                            {cancellable && (
-                                <button
-                                    className="run-card-cancel"
-                                    onClick={() => void chat.actions.cancel(last.run.id)}
-                                    aria-label={tx.chat.cancelRun}
-                                    data-tooltip={tx.chat.cancelRun}
-                                >
-                                    <X size={11} aria-hidden />
-                                </button>
-                            )}
+                    {/* in AI の作業, the row above has the ✕ and the card only its link to the chat */}
+                    {(status || (cancellable && !compact) || (compact && actions)) && (
+                        <span className="run-card-tools">
+                            <StatusSlot>{status}</StatusSlot>
+                            {compact ? actions : cancellable && <CancelButton unit={unit} />}
                         </span>
                     )}
-                    <span className="run-card-tools">
-                        {control && !compact && <CardMenu last={last.run} />}
-                        {actions}
-                        {!compact && <ReplyButton run={last.run} />}
-                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
-                        {!compact && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
-                    </span>
                 </div>
+                {!compact && (
+                    <RowActions>
+                        {control && <CardMenu last={last.run} about={about} />}
+                        <ReplyButton to={{ kind: 'Run', run: last.run }} />
+                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
+                        <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
+                    </RowActions>
+                )}
                 {runs.map((r, i) => (
-                    <RunSection key={r.run.id} run={r} display={quoteDisplay(runs, i)} first={i === 0} last={i === runs.length - 1} compact={compact} />
+                    <RunSection
+                        key={r.run.id}
+                        run={r}
+                        display={quoteDisplay(runs, i)}
+                        first={i === 0}
+                        last={i === runs.length - 1}
+                        compact={compact}
+                        about={about}
+                    />
                 ))}
             </div>
         </div>
     );
 }
 
+/** The chunk's title beside the AI's name: cut with … when the row is too narrow, then whole in its tooltip. */
+function RunCardTitle({ text }: { text: string }): ReactNode {
+    const ref = useRef<HTMLSpanElement>(null);
+    const clipped = useClipped(ref, text);
+    return (
+        <span ref={ref} className="run-card-title" {...(clipped && { 'data-tooltip': text })}>
+            {text}
+        </span>
+    );
+}
+
 /**
- * ↩ at the right end of an AI turn (just before ☺+) whose latest run ended (completed, failed, declined, cancelled; not a question,
- * which has its form): anyone starts a reply to it, shown on hover or focus (always, faint, on touch).
+ * ↩ just before ☺+: at the right end of an AI turn whose latest run ended (completed, failed, declined, cancelled; not a
+ * question, which has its form), and of every message. Anyone starts a reply to it, shown on hover or focus (always,
+ * faint, on touch).
  */
-function ReplyButton({ run }: { run: RunJson }) {
+export function ReplyButton({ to }: { to: { readonly kind: 'Run'; readonly run: RunJson } | { readonly kind: 'Message'; readonly request: string } }) {
     const { tx, session, replies } = useChat();
     const live = session.status === 'live' && session.state.session.state === 'Open';
-    if (!live || !isReplyable(run)) return null;
+    if (!live || (to.kind === 'Run' && !isReplyable(to.run))) return null;
     const r = tx.chat.replies;
-    const active = replies.draft?.run === run.id;
+    const draft = replies.draft;
+    const active = to.kind === 'Run' ? draft?.kind === 'Run' && draft.run === to.run.id : draft?.kind === 'Message' && draft.request === to.request;
     return (
         <button
             type="button"
             className={`icon-button run-card-reply${active ? ' active' : ''}`}
             aria-label={r.reply}
             aria-pressed={active}
-            data-tooltip={r.replyHint}
-            onClick={() => replies.start(run.id)}
+            data-tooltip={to.kind === 'Run' ? r.replyHint : r.messageReplyHint}
+            onClick={() => (to.kind === 'Run' ? replies.start(to.run.id) : replies.startMessage(to.request))}
         >
             <Reply size={14} aria-hidden />
         </button>
     );
 }
 
-/** The card's menu (the facilitator's): the result confirmed, the workspace restored as before the run, the two compared. */
-function CardMenu({ last }: { last: RunJson }) {
+/**
+ * A unit as the changes' dialog names it, small under its title: its name, whose messages and when
+ * (`返品の受付期限 · 田中 の依頼 · 15:09`).
+ */
+export function useUnitAbout(unit: ChangeUnit): string {
+    const { tx, nameOf } = useChat();
+    const h = tx.chat.history;
+    const asked = requestersOf(unit.requesters.map(nameOf));
+    const who =
+        asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
+    return [unitName(unit).text, who, time(unit.start)].filter((x) => x !== undefined && x !== '').join(' · ');
+}
+
+/**
+ * The card's menu (the facilitator's), worded by the unit of work: its result confirmed, the workspace restored as
+ * before it, its changes shown. The revisions behind each are in the tooltips.
+ */
+function CardMenu({ last, about }: { last: RunJson; about: string }) {
     const { tx, revisions } = useChat();
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
@@ -149,17 +192,24 @@ function CardMenu({ last }: { last: RunJson }) {
             {open && (
                 <div className="pane-menu-list" role="menu">
                     {result !== base && (
-                        <button role="menuitem" onClick={pick(() => revisions.confirm(result))}>
-                            {tx.chat.confirmResult(revisions.number(result))}
+                        <button role="menuitem" onClick={pick(() => revisions.confirm(result))} data-tooltip={tx.chat.revisionHint(revisions.number(result))}>
+                            {tx.chat.confirmResult}
                         </button>
                     )}
-                    <button role="menuitem" onClick={pick(() => revisions.restore(base))}>
-                        {tx.chat.restoreBefore(revisions.number(base))}
+                    <button role="menuitem" onClick={pick(() => revisions.restore(base))} data-tooltip={tx.chat.revisionHint(revisions.number(base))}>
+                        {tx.chat.restoreBefore}
                     </button>
                     {result !== base && (
-                        <button role="menuitem" onClick={pick(() => revisions.compare(base, result))}>
-                            {tx.chat.compareRun(revisions.number(base), revisions.number(result))}
-                        </button>
+                        <>
+                            <div className="pane-menu-separator" role="separator" />
+                            <button
+                                role="menuitem"
+                                onClick={pick(() => revisions.showChanges({ base, result, about }))}
+                                data-tooltip={tx.chat.revisionsHint(revisions.number(base), revisions.number(result))}
+                            >
+                                {tx.chat.showChanges}
+                            </button>
+                        </>
                     )}
                 </div>
             )}
@@ -167,22 +217,36 @@ function CardMenu({ last }: { last: RunJson }) {
     );
 }
 
-function RunSection({ run, display, first, last, compact }: { run: CardRun; display: QuoteDisplay; first: boolean; last: boolean; compact: boolean }) {
+function RunSection({
+    run,
+    display,
+    first,
+    last,
+    compact,
+    about,
+}: {
+    run: CardRun;
+    display: QuoteDisplay;
+    first: boolean;
+    last: boolean;
+    compact: boolean;
+    about: string;
+}) {
     const { tx, nameOf, control, session } = useChat();
     const runs = session.state.runs;
     const live = session.status === 'live' && session.state.session.state === 'Open';
     const reply = run.message.kind === 'clarification' ? run.message.reply : undefined;
     const questions = reply !== undefined && reply.questions.length > 0 ? questionsState(run.run, runs) : undefined;
     // open: the facilitator answers them; whoever is not answering sees them with their votes; once a later run took
-    // over the requests, they stay as they were asked, with what was answered (or nothing) and the votes frozen
-    const asking = last && control && live && !compact && questions?.kind === 'open';
-    const voting = !asking && !compact && questions?.kind === 'open';
+    // over the requests, they stay as they were asked, with what was answered (or nothing) and the votes frozen. The
+    // compact card of AI の作業 asks them as the chat does: a waiting unit is answered from there too
+    const asking = last && control && live && questions?.kind === 'open';
+    const voting = !asking && questions?.kind === 'open';
     const decided = questions !== undefined && questions.kind !== 'open';
     // the answer this run gave is shown with the questions it answered; one shown nowhere else keeps its line
     const asked = run.answer && runs.find((r) => r.id === run.answer?.answerTo);
     const answerShown = asked !== undefined && answeredBy(asked, runs) === run.run.id;
     const done = run.message.kind === 'completed' ? run.message.reply : undefined;
-    const picked = done && done.assumptions.length > 0 ? pickedAlternative(run.run, runs) : undefined;
     return (
         <div className={`run-section${first ? '' : ' chained'}`} data-item={`run:${run.run.id}`}>
             {/* a run that continues the card: its time, quietly (its number, for precision, in the tooltip) */}
@@ -206,19 +270,21 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
                     ))}
                 </ul>
             )}
+            {/* what the running run is doing now (in AI の作業, the unit's row above shows it) */}
+            {!compact && run.message.kind === 'running' && <ActivityLine run={run.run.id} />}
             <div className="run-agent-body">
-                <AgentBody message={run.message} asking={asking || voting || decided} />
-                {asking && reply && <AnswerForm run={run.run} reply={reply} />}
-                {voting && reply && <QuestionVotes run={run.run} reply={reply} />}
-                {decided && reply && questions && <AnsweredQuestions run={run.run} reply={reply} state={questions} />}
+                <AgentBody message={run.message} />
+                {/* in AI の作業, the unit's own line above already lists what it changed */}
+                {!compact && <RunFiles run={run.run} about={about} />}
+                {(asking || voting || decided) && reply && questions && (
+                    <ReplySection kind="ask">
+                        {asking && <AnswerForm run={run.run} reply={reply} />}
+                        {voting && <QuestionVotes run={run.run} reply={reply} />}
+                        {decided && <AnsweredQuestions run={run.run} reply={reply} state={questions} />}
+                    </ReplySection>
+                )}
                 {done && done.assumptions.length > 0 && (
-                    <Assumptions
-                        run={run.run}
-                        reply={done}
-                        offer={last && control && live && !compact}
-                        votes={!compact || picked !== undefined}
-                        picked={picked}
-                    />
+                    <Assumptions run={run.run} reply={done} offer={last && control && live && !compact} compact={compact} />
                 )}
                 {!compact && <ReactionRow target={{ kind: 'Turn', run: run.run.id }} />}
             </div>
@@ -227,28 +293,29 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
 }
 
 /**
- * A message the run applied, on one muted line (`↳ name: the head of its body`); with several messages, what the
- * reply says of each too (its mark and note). A click goes to the message, a hover marks it.
+ * A message the run applied, on one muted line (`↳ name: the head of its body`), then what the reply says of it once
+ * there is a reply (`✓ 対応`, in its color: a message shows no state of its own; not for a message the run asks about,
+ * whose question is right below); with several messages, the reply's note on each too. A click goes to the message.
  */
 function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
-    const { tx, nameOf, hovered, hover, jump, onNavigate } = useChat();
+    const { tx, nameOf, jump, onNavigate } = useChat();
     const r = quote.request;
-    const head = oneLine(bodyText(r.body, r.targets.length));
+    const head = oneLine(bodyText(r.body, r.targets));
     return (
-        <li
-            className={`run-quote${hovered === r.request ? ' paired' : ''}${quote.progress ? ` status-${quote.progress}` : ''}`}
-            onMouseEnter={() => hover(r.request)}
-            onMouseLeave={() => hover(undefined)}
-        >
-            <button className="run-quote-main" onClick={() => jump(`message:${r.request}`)} data-tooltip={tx.chat.quoteHint}>
-                <span className="run-quote-who">↳ {nameOf(r.author)}:</span>
-                <span className="run-quote-head">{head}</span>
-            </button>
-            {detailed && quote.progress && (
-                <span className="reply-mark" role="img" aria-label={tx.chat.reply.status[quote.progress]} data-tooltip={tx.chat.reply.status[quote.progress]}>
-                    {PROGRESS_MARK[quote.progress]}
-                </span>
-            )}
+        <li className={`run-quote${quote.progress ? ` status-${quote.progress}` : ''}`}>
+            {/* the quote, cut with an ellipsis, then what the run did of it, never cut */}
+            <span className="run-quote-line">
+                <button className="run-quote-main" onClick={() => jump(`message:${r.request}`)} data-tooltip={tx.chat.quoteHint}>
+                    <span className="run-quote-who">↳ {nameOf(r.author)}:</span>
+                    <span className="run-quote-head">{head}</span>
+                </button>
+                {quote.progress && quote.progress !== 'Question' && (
+                    <span className="run-quote-outcome">
+                        <span aria-hidden>{PROGRESS_MARK[quote.progress]}</span>
+                        {tx.chat.reply.status[quote.progress]}
+                    </span>
+                )}
+            </span>
             {detailed && quote.note && (
                 <span className="run-quote-note">
                     <ReplyText text={quote.note} onNavigate={onNavigate} />
@@ -281,48 +348,38 @@ function AnswerLine({ run }: { run: CardRun }) {
 }
 
 /**
- * What the agent says of a run, as the chat said it, then the files it changed, small; nothing when none changed (the
- * reply's per-request lines are the quotes above). A question it asks has the one amber mark: a bar beside it — on its
- * summary, unless the questions themselves are offered below (`asking`).
+ * What the agent says of a run, as the chat said it; the files it changed are a line of their own below
+ * (`RunFiles`). A question asked without the structured form is shown on the question's surface.
  */
-function AgentBody({ message: m, asking }: { message: AgentMessage; asking: boolean }) {
-    const { tx, nameOf, onNavigate, now } = useChat();
+function AgentBody({ message: m }: { message: AgentMessage }) {
+    const { tx, nameOf, onNavigate } = useChat();
     const says = tx.chat.agentSays;
     switch (m.kind) {
         case 'queued':
-            return <p className="chat-text muted">{says.queued}</p>;
         case 'running':
-            return (
-                <p className="chat-text">
-                    <span className="chat-pulse" aria-hidden />
-                    {says.running(elapsed(m.since, now))}
-                </p>
-            );
+            return null;
         case 'clarification':
             return m.reply ? (
-                <p className={`chat-text reply-summary${asking ? '' : ' run-question'}`}>
+                <p className="chat-text reply-summary">
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    <ReplyFacts files={m.files} changed={m.files !== undefined && m.files > 0} tx={tx} />
                 </p>
             ) : (
-                <p className="chat-text run-question" aria-label={says.clarification}>
-                    {m.question}
-                </p>
+                <ReplySection kind="ask">
+                    <p className="reply-question-text">{m.question}</p>
+                </ReplySection>
             );
         case 'completed':
             return m.reply ? (
                 <p className="chat-text reply-summary">
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    <ReplyFacts files={m.files} changed={m.changed} tx={tx} />
                 </p>
             ) : (
-                <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
+                <p className="chat-text">{m.changed ? says.completedChanged : says.completedUnchanged}</p>
             );
         case 'declined':
             return (
                 <p className="chat-text" aria-label={tx.chat.reply.declined}>
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    <ReplyFacts files={m.files} changed={m.files !== undefined && m.files > 0} tx={tx} />
                 </p>
             );
         case 'failed':
@@ -338,20 +395,127 @@ function AgentBody({ message: m, asking }: { message: AgentMessage; asking: bool
 }
 
 /**
- * The run's questions: for the facilitator, each with its options to choose (one, or several when it says so) and
- * その他 — a row like the options, its own words written in a dialog (✎, or choosing it while it has none) —, then
- * 答えて再実行, which queues the run's requests again with the answer at once. In a single-choice question その他 is one
- * of the group: choosing an option deselects it but keeps its words, which come back when it is chosen again.
+ * What a run changed, on a small line of their own under what the AI says (`ChangedElements`); nothing when it changed no
+ * file, or while it has no result.
+ */
+function RunFiles({ run, about }: { run: RunJson; about: string }) {
+    const { session, tx } = useChat();
+    if (run.state !== 'Completed' && run.state !== 'NeedsClarification' && run.state !== 'Declined') return null;
+    const lookup = revisionLookup(session.state);
+    const paths = changedPaths(lookup.revision(run.baseRevision), lookup.revision(run.resultRevision));
+    // the revisions not known (yet): that it changed files, without which
+    if (paths === undefined)
+        return run.resultRevision === run.baseRevision ? null : (
+            <p className="run-files">
+                <FileDiff size={12} className="run-files-icon" aria-hidden />
+                {tx.chat.reply.applied(undefined)}
+            </p>
+        );
+    if (paths.size === 0) return null;
+    return <ChangedElements kind="run" base={run.baseRevision} result={run.resultRevision} about={about} />;
+}
+
+/** The mark of a change: ＋ added, ✎ changed (as text, never the emoji), − removed. */
+const CHANGE_MARK: Record<ElementChange['change'], string> = { added: '＋', changed: '✎\uFE0E', removed: '−' };
+
+/**
+ * An element a unit changed as a chip: its kind of change (＋ ✎ −, in green, amber, red on a faint wash) and `#` its own
+ * name, its whole name in the tooltip, as the target chips name them. A click goes to it (`onPick` first: the dialog
+ * closes); a removed one is muted, struck through and goes nowhere.
+ */
+export function ChangeChip({ change, onPick }: { change: ElementChange; onPick?: () => void }) {
+    const { tx, onNavigate } = useChat();
+    const naming = useTargetNaming();
+    const mark = (
+        <span className="change-mark" role="img" aria-label={tx.chat.history.changeMarks[change.change]}>
+            {CHANGE_MARK[change.change]}
+        </span>
+    );
+    const name = <span className="change-name">#{changeShortName(change, naming)}</span>;
+    const className = `change-chip change-${change.change}`;
+    const tooltip = changeFullName(change, naming);
+    if (change.change === 'removed')
+        return (
+            <span className={className} data-tooltip={tooltip}>
+                {mark}
+                {name}
+            </span>
+        );
+    return (
+        <button
+            type="button"
+            className={className}
+            data-tooltip={tooltip}
+            onClick={() => {
+                onPick?.();
+                onNavigate(changeTarget(change));
+            }}
+        >
+            {mark}
+            {name}
+        </button>
+    );
+}
+
+/**
+ * What a unit changed, on one small line: the first three elements as chips (`ChangeChip`), 「ほか n」 for the rest, then
+ * 変更を見る, opening the changes' dialog. Under a run's text (`run`), and under a unit's heading in AI の作業 (`unit`).
+ * Until the server answered, and when no element changed (a comment, the layout) or the model could not be compared,
+ * 変更を見る alone.
+ */
+export function ChangedElements({ kind, base, result, about }: { kind: 'run' | 'unit'; base: string; result: string; about: string }) {
+    const { tx, revisions } = useChat();
+    const h = tx.chat.history;
+    const changes = useModelChanges(base, result);
+    const shown = cutList(changes.kind === 'loaded' ? changes.body.changes : [], 3);
+    return (
+        <p className={`changed-elements ${kind}`} aria-label={h.changedElements}>
+            {shown.shown.map((c) => (
+                <ChangeChip key={changeKey(c)} change={c} />
+            ))}
+            {shown.more > 0 && <span className="changed-elements-more">{h.more(shown.more)}</span>}
+            <button type="button" className="changed-elements-see" onClick={() => revisions.showChanges({ base, result, about })}>
+                {tx.chat.showChanges}
+            </button>
+        </p>
+    );
+}
+
+/**
+ * A section of an AI reply on a faint surface, headed small and strong in its colour: the AI's question (amber) or what
+ * it assumed without asking (violet). The question's surface is the one mark that the AI is waiting.
+ */
+function ReplySection({ kind, children }: { kind: 'ask' | 'assumed'; children: ReactNode }) {
+    const { tx } = useChat();
+    const label = kind === 'ask' ? tx.chat.reply.asks : tx.chat.reply.assumed;
+    return (
+        <section className={`reply-section ${kind}`} aria-label={label}>
+            <p className="reply-section-label" aria-hidden>
+                {label}
+            </p>
+            {children}
+        </section>
+    );
+}
+
+/**
+ * The run's questions for the facilitator: each option a card to choose (one, or several when it says so) — the whole
+ * card is the click target, the one chosen in the accent colour — and a last その他 card whose own words are written
+ * in a dialog (✎, or choosing it while it has none); then 回答を送る, which queues the run's requests again with the
+ * answer at once. In a single-choice question その他 is one of the group: choosing an option deselects it but keeps its
+ * words, which come back when it is chosen again.
  */
 function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
-    const { tx, actions, onNavigate } = useChat();
+    const { tx, actions, answers, onNavigate } = useChat();
     const r = tx.chat.reply;
-    const [choices, setChoices] = useState<Record<string, QuestionChoice>>({});
+    // shared with the other form of the run (the chat's, AI の作業's): both show the one answer being chosen
+    const choices = answers.of(run.id);
     // the question whose その他 is being written; kept as the dialog closes, so that it fades out with its question
     const [writing, setWriting] = useState<{ question: string; open: boolean } | undefined>();
     const answer = answerBody(reply.questions, choices);
     type Question = ReplyView['questions'][number];
-    const update = (q: string, f: (c: QuestionChoice) => QuestionChoice): void => setChoices((all) => ({ ...all, [q]: f(all[q] ?? { options: [] }) }));
+    const update = (q: string, f: (c: QuestionChoice) => QuestionChoice): void =>
+        answers.update(run.id, (all) => ({ ...all, [q]: f(all[q] ?? { options: [] }) }));
     const choose = (q: Question, option: string, on: boolean): void =>
         update(q.id, (c) =>
             q.multiple
@@ -387,36 +551,27 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
                         const other = c?.other === true && text !== '';
                         return (
                             <li key={q.id} className="reply-question">
-                                <p className="chat-text run-question">
+                                <p className="reply-question-text">
                                     <ReplyText text={q.text} onNavigate={onNavigate} />
                                 </p>
-                                <ul className="reply-options" {...(q.multiple && { 'aria-label': r.multiple })}>
+                                <ul className="reply-cards" {...(q.multiple && { 'aria-label': r.multiple })}>
                                     {q.options.map((o) => (
-                                        <li key={o.id} className="vote-row">
-                                            <label className="reply-option">
+                                        <li key={o.id} className={`reply-card pickable${chosen.includes(o.id) ? ' chosen' : ''}`}>
+                                            <label className="reply-card-main">
                                                 <input
                                                     type={type}
                                                     name={name}
                                                     checked={chosen.includes(o.id)}
                                                     onChange={(e) => choose(q, o.id, e.target.checked)}
                                                 />
-                                                <span>
-                                                    <span className="reply-option-label">
-                                                        <ReplyText text={o.label} onNavigate={onNavigate} />
-                                                    </span>
-                                                    {o.detail && (
-                                                        <span className="reply-option-detail">
-                                                            <ReplyText text={o.detail} onNavigate={onNavigate} />
-                                                        </span>
-                                                    )}
-                                                </span>
+                                                <OptionText label={o.label} detail={o.detail} />
                                             </label>
                                             <VoteMark target={{ kind: 'QuestionOption', run: run.id, question: q.id, option: o.id }} />
                                         </li>
                                     ))}
                                     {/* その他: 「その他: <the words>」 on one line (all of them on hover), ✎ where the others have ♡ */}
-                                    <li className={`vote-row reply-other-row${other ? ' chosen' : ''}${text ? ' written' : ''}`}>
-                                        <label className="reply-option reply-other" data-tooltip={text || undefined}>
+                                    <li className={`reply-card pickable reply-other-row${other ? ' chosen' : ''}${text ? ' written' : ''}`}>
+                                        <label className="reply-card-main reply-other" data-tooltip={text || undefined}>
                                             <input
                                                 type={type}
                                                 name={name}
@@ -452,14 +607,14 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
                         );
                     })}
                 </ol>
-                <div className="run-answer-actions">
+                <div className="reply-actions">
                     <button
                         type="submit"
                         className="chat-small primary"
                         disabled={!answer || actions.busy}
                         data-tooltip={answer ? undefined : tx.chat.answerNeeded}
                     >
-                        <RotateCcw size={12} aria-hidden /> {tx.chat.answerAndRerun}
+                        <Bot size={12} aria-hidden /> {tx.chat.answerAndRerun}
                     </button>
                 </div>
             </form>
@@ -474,125 +629,163 @@ function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
     );
 }
 
+/** An option's label and, under it, its detail, muted. */
+function OptionText({ label, detail }: { label: string; detail?: string }) {
+    const { onNavigate } = useChat();
+    return (
+        <span className="reply-card-text">
+            <span className="reply-option-label">
+                <ReplyText text={label} onNavigate={onNavigate} />
+            </span>
+            {detail && (
+                <span className="reply-option-detail">
+                    <ReplyText text={detail} onNavigate={onNavigate} />
+                </span>
+            )}
+        </span>
+    );
+}
+
 /**
- * The mark at the start of a row of choices, the shape of what the facilitator answers with: a circle for one of a
- * group (a single-choice question's option, an assumption kept or one of its alternatives), a square for a
- * multiple-choice question's option. Outline while nothing was decided (or nothing in the group was chosen), filled for
- * what was chosen; never violet (it is not clickable). The icon is hidden from screen readers, which hear 選択 / 未選択
- * once something was decided.
+ * The mark at the start of a card or row once something was decided, the shape of what the facilitator decided with: a
+ * circle for one of a group (a single-choice question's option, an assumption or one of its alternatives), a square for
+ * a multiple-choice question's option. Filled and in the accent colour for what was chosen, an outline and muted for
+ * the rest; not clickable. The icon is hidden from screen readers, which hear 選択 / 未選択.
  */
-function ChoiceMark({ multiple = false, state, size = 13 }: { multiple?: boolean; state: 'open' | 'chosen' | 'unchosen'; size?: number }) {
+function ChoiceMark({ multiple = false, state, size = 14 }: { multiple?: boolean; state: 'chosen' | 'unchosen'; size?: number }) {
     const { tx } = useChat();
     const chosen = state === 'chosen';
     const Icon = multiple ? (chosen ? SquareCheck : Square) : chosen ? CircleDot : Circle;
     return (
         <span className="choice-mark">
             <Icon size={size} aria-hidden />
-            {state !== 'open' && <span className="visually-hidden">{chosen ? tx.chat.choice.chosen : tx.chat.choice.unchosen}</span>}
+            <span className="visually-hidden">{chosen ? tx.chat.choice.chosen : tx.chat.choice.unchosen}</span>
         </span>
     );
 }
 
 /**
- * The assumptions of a reply, each as a group of rows one of which is taken — 「前提: …」 (kept as it is) and each
- * 「別案: …」 — with ○ at their start and the votes at their right; the facilitator picks an alternative (a link) to
- * run the requests again with it. Once picked, the alternative has ◉ and the rest are muted.
+ * What the AI assumed without asking, on its surface: each assumption as the AI's text over the whole width, its ♡ on a
+ * row under it, then, under 別の案, each alternative as a card. The facilitator decides each assumption once (while its
+ * run is the latest of its requests): ✓ 承認 under it keeps it as it is (recorded, nothing sent), 送り直す in an
+ * alternative's card sends the requests to the AI again with that alternative. Decided: ◉ on what was chosen (at the
+ * start of an assumption's text), the rest muted, and who decided and when under it. Participants see the same cards
+ * with their ♡, without buttons.
  */
-function Assumptions({
-    run,
-    reply,
-    offer,
-    votes,
-    picked,
-}: {
-    run: RunJson;
-    reply: ReplyView;
-    offer: boolean;
-    votes: boolean;
-    /** The alternative the facilitator picked: ◉ on it, the others muted, and who picked it under the assumption. */
-    picked: PickedAlternative | undefined;
-}) {
-    const { tx, actions, onNavigate } = useChat();
+function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: ReplyView; offer: boolean; compact: boolean }) {
+    const { tx, actions, onNavigate, session } = useChat();
     const r = tx.chat.reply;
     return (
-        <ul className="reply-assumptions">
+        <ReplySection kind="assumed">
             {reply.assumptions.map((a, i) => {
-                const decided = picked?.assumption === i;
-                const state = (alternative: string | undefined): 'open' | 'chosen' | 'unchosen' =>
-                    !decided ? 'open' : picked.alternative === alternative ? 'chosen' : 'unchosen';
-                const kept = state(undefined);
+                const decision = assumptionDecision(run, i, session.state.runs, session.state.approvals);
+                // the facilitator's buttons while the assumption is not decided; the votes, in AI の作業, only once frozen
+                const deciding = offer && decision.kind === 'open';
+                const votes = !compact || decision.kind !== 'open';
+                const approved = decision.kind === 'approved';
+                const picked = decision.kind === 'picked' ? decision.alternative : undefined;
+                const keptVote = votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />;
+                const chosen = approved ? 'chosen' : picked !== undefined ? 'unchosen' : undefined;
+                // the text takes the whole width, ◉ / ○ at its start once decided; ♡ on a row of its own under it
+                const text = (
+                    <p className={`reply-assumption-text${chosen ? ` ${chosen}` : ''}`}>
+                        {chosen && <ChoiceMark state={chosen} />}
+                        <ReplyText text={a.text} onNavigate={onNavigate} />
+                    </p>
+                );
                 return (
-                    <li key={i} className={`reply-assumption${decided ? ' decided' : ''}`}>
-                        <ul className="reply-choices">
-                            {/* ♡ on the assumption itself: keep it as it is */}
-                            <li className={`reply-choice vote-row ${kept}`}>
-                                <ChoiceMark state={kept} size={12} />
-                                <span className="reply-text">
-                                    <span className="reply-label">{r.assumption}: </span>
-                                    <ReplyText text={a.text} onNavigate={onNavigate} />
-                                </span>
-                                {votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />}
-                            </li>
-                            {a.alternatives.map((alt) => {
-                                const s = state(alt.id);
-                                return (
-                                    <li key={alt.id} className={`reply-choice vote-row ${s}`}>
-                                        <ChoiceMark state={s} size={12} />
-                                        <span className="reply-text">
-                                            <span className="reply-label">{r.alternative}: </span>
-                                            {offer ? (
-                                                <button
-                                                    className="reply-alternative pickable"
-                                                    disabled={actions.busy}
-                                                    data-tooltip={tx.chat.pickAlternative}
-                                                    onClick={() => void actions.pick(run, i, alt.id, tx.chat.alternativeNote(a.text, alt.label))}
-                                                >
-                                                    <ReplyText text={alt.label} onNavigate={onNavigate} />
-                                                </button>
-                                            ) : (
-                                                <span className="reply-alternative">
-                                                    <ReplyText text={alt.label} onNavigate={onNavigate} />
-                                                </span>
-                                            )}
-                                        </span>
-                                        {votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i, alternative: alt.id }} />}
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                        {decided && <DecidedLine label={tx.chat.picked} by={picked.by} run />}
-                    </li>
+                    <div key={i} className="reply-assumption">
+                        {deciding ? (
+                            <>
+                                {text}
+                                <div className="reply-row-actions">
+                                    <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.approve(run, i)}>
+                                        <Check size={12} aria-hidden /> {tx.chat.approve}
+                                    </button>
+                                    {keptVote}
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                {text}
+                                {keptVote && <div className="reply-row-actions end">{keptVote}</div>}
+                            </>
+                        )}
+                        {a.alternatives.length > 0 && (
+                            <>
+                                <p className="reply-sublabel">{r.otherOptions}</p>
+                                <ul className="reply-cards">
+                                    {a.alternatives.map((alt) => {
+                                        const state = approved ? 'unchosen' : picked === undefined ? undefined : picked === alt.id ? 'chosen' : 'unchosen';
+                                        const vote = votes && (
+                                            <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i, alternative: alt.id }} />
+                                        );
+                                        const label = (
+                                            <span className="reply-card-text">
+                                                <ReplyText text={alt.label} onNavigate={onNavigate} />
+                                            </span>
+                                        );
+                                        return deciding ? (
+                                            <li key={alt.id} className="reply-card stack">
+                                                {label}
+                                                <div className="reply-row-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="chat-small ghost"
+                                                        disabled={actions.busy}
+                                                        data-tooltip={tx.chat.pickAlternative}
+                                                        onClick={() => void actions.pick(run, i, alt.id, tx.chat.alternativeNote(a.text, alt.label))}
+                                                    >
+                                                        <Bot size={12} aria-hidden /> {tx.chat.resend}
+                                                    </button>
+                                                    {vote}
+                                                </div>
+                                            </li>
+                                        ) : (
+                                            <li key={alt.id} className={`reply-card${state ? ` ${state}` : ''}`}>
+                                                {state && <ChoiceMark state={state} />}
+                                                {label}
+                                                {vote}
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </>
+                        )}
+                        {decision.kind === 'approved' && <DecidedLine label={tx.chat.approved} by={decision.by} at={decision.at} />}
+                        {decision.kind === 'picked' && <DecidedLine label={tx.chat.picked} by={decision.by.by} at={decision.by.at} run={decision.by.run} />}
+                    </div>
                 );
             })}
-        </ul>
+        </ReplySection>
     );
 }
 
 /**
- * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); for a pick, its time is a
- * link to the run it queued (that run continues the same card, so it has no number to show).
+ * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); when the decision queued a
+ * run (a pick), its time is a link to that run (it continues the same card, so it has no number to show).
  */
-function DecidedLine({ label, by, run = false }: { label: string; by: Decider; run?: boolean }) {
+function DecidedLine({ label, by, at, run }: { label: string; by: string; at: string; run?: string }) {
     const { tx, nameOf, jump } = useChat();
     return (
         <p className="decided-line">
-            {label} {nameOf(by.by)} ·{' '}
-            {run ? (
-                <button type="button" className="decided-run" onClick={() => jump(`run:${by.run}`)} data-tooltip={tx.chat.goToRun}>
-                    <time dateTime={by.at}>{time(by.at)}</time>
+            {label} {nameOf(by)} ·{' '}
+            {run !== undefined ? (
+                <button type="button" className="decided-run" onClick={() => jump(`run:${run}`)} data-tooltip={tx.chat.goToRun}>
+                    <time dateTime={at}>{time(at)}</time>
                 </button>
             ) : (
-                <time dateTime={by.at}>{time(by.at)}</time>
+                <time dateTime={at}>{time(at)}</time>
             )}
         </p>
     );
 }
 
 /**
- * A run's questions once a later run took over their requests, as they were asked — the same options in the same
- * order, without anything to choose —: the filled mark (◉ or ☑) on what was answered (and その他 with the own words as a
- * last row), the other options muted with the outline mark, the votes frozen at the right, and who answered and when
- * after the last question. Left unanswered, nothing filled and no line.
+ * A run's questions once a later run took over their requests, as they were asked — the same cards in the same order,
+ * without anything to choose —: the filled mark (◉ or ☑) and the accent on what was answered (and その他 with the own
+ * words as a last card), the other options muted with the outline mark, the votes frozen at the right, and who answered
+ * and when after the last question. Left unanswered, no mark and no line.
  */
 function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyView; state: Exclude<QuestionsState, { kind: 'open' }> }) {
     const { tx, onNavigate } = useChat();
@@ -600,37 +793,28 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
     // the own words being read in full; kept as the dialog closes, so that it fades out with them
     const [reading, setReading] = useState<{ question: string; text: string; open: boolean } | undefined>();
     return (
-        <div className="decided-questions">
+        <>
             <ol className="reply-questions">
                 {reply.questions.map((q) => {
                     const answer = answers?.get(q.id);
                     return (
                         <li key={q.id} className="reply-question">
-                            <p className="chat-text">
+                            <p className="reply-question-text">
                                 <ReplyText text={q.text} onNavigate={onNavigate} />
                             </p>
-                            <ul className="reply-options" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
+                            <ul className="reply-cards" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
                                 {q.options.map((o) => {
-                                    const state = !answers ? 'open' : answer?.chosen.includes(o.id) ? 'chosen' : 'unchosen';
+                                    const mark = !answers ? undefined : answer?.chosen.includes(o.id) ? 'chosen' : 'unchosen';
                                     return (
-                                        <li key={o.id} className={`reply-option vote-row decided-option ${state}`}>
-                                            <ChoiceMark multiple={q.multiple} state={state} />
-                                            <span>
-                                                <span className="reply-option-label">
-                                                    <ReplyText text={o.label} onNavigate={onNavigate} />
-                                                </span>
-                                                {o.detail && (
-                                                    <span className="reply-option-detail">
-                                                        <ReplyText text={o.detail} onNavigate={onNavigate} />
-                                                    </span>
-                                                )}
-                                            </span>
+                                        <li key={o.id} className={`reply-card${mark ? ` ${mark}` : ''}`}>
+                                            {mark && <ChoiceMark multiple={q.multiple} state={mark} />}
+                                            <OptionText label={o.label} detail={o.detail} />
                                             <VoteMark target={{ kind: 'QuestionOption', run: run.id, question: q.id, option: o.id }} />
                                         </li>
                                     );
                                 })}
                                 {answer?.text !== undefined && (
-                                    <li className="reply-option vote-row decided-option chosen">
+                                    <li className="reply-card chosen">
                                         <ChoiceMark multiple={q.multiple} state="chosen" />
                                         {/* on one line, all of it on hover, or in a dialog on a click */}
                                         <button
@@ -649,7 +833,7 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
                     );
                 })}
             </ol>
-            {state.kind === 'answered' && <DecidedLine label={tx.chat.answered} by={state.by} />}
+            {state.kind === 'answered' && <DecidedLine label={tx.chat.answered} by={state.by.by} at={state.by.at} />}
             {reading && (
                 <OtherDialog
                     open={reading.open}
@@ -659,15 +843,14 @@ function AnsweredQuestions({ run, reply, state }: { run: RunJson; reply: ReplyVi
                     onClose={() => setReading((r) => r && { ...r, open: false })}
                 />
             )}
-        </div>
+        </>
     );
 }
 
 /**
  * A run's questions for whoever is not answering them (the participants, and everyone once the session closed): each
- * with its options as rows with the outline mark of their kind (○ one, ☐ several: filled once answered) and the votes
- * at their right — a participant's ♡ while the run waits for the answer.
- * Choosing is the facilitator's (the answer form); "other" is not offered here (participants write in the chat).
+ * option a card with the votes at its right — a participant's ♡ while the run waits for the answer. Choosing is the
+ * facilitator's (the answer form); その他 is not offered here (participants write in the chat).
  */
 function QuestionVotes({ run, reply }: { run: RunJson; reply: ReplyView }) {
     const { tx, onNavigate } = useChat();
@@ -675,28 +858,17 @@ function QuestionVotes({ run, reply }: { run: RunJson; reply: ReplyView }) {
         <ol className="reply-questions">
             {reply.questions.map((q) => (
                 <li key={q.id} className="reply-question">
-                    <p className="chat-text run-question">
+                    <p className="reply-question-text">
                         <ReplyText text={q.text} onNavigate={onNavigate} />
                     </p>
-                    <ul className="reply-options" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
+                    <ul className="reply-cards" {...(q.multiple && { 'aria-label': tx.chat.reply.multiple })}>
                         {q.options.map((o) => (
-                            <li key={o.id} className="reply-option vote-row">
-                                <ChoiceMark multiple={q.multiple} state="open" />
-                                <span>
-                                    <span className="reply-option-label">
-                                        <ReplyText text={o.label} onNavigate={onNavigate} />
-                                    </span>
-                                    {o.detail && (
-                                        <span className="reply-option-detail">
-                                            <ReplyText text={o.detail} onNavigate={onNavigate} />
-                                        </span>
-                                    )}
-                                </span>
+                            <li key={o.id} className="reply-card">
+                                <OptionText label={o.label} detail={o.detail} />
                                 <VoteMark target={{ kind: 'QuestionOption', run: run.id, question: q.id, option: o.id }} />
                             </li>
                         ))}
                     </ul>
-                    {q.multiple && <p className="reply-option-detail vote-hint">{tx.chat.reply.multiple}</p>}
                 </li>
             ))}
         </ol>

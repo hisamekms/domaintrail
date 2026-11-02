@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { answerBody } from './actions';
 import { cardRuns, messageMarks, quoteDisplay, updatedCards } from './cards';
-import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unitName } from './history';
+import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, statusUnit, unfinishedCount, unitName, workGroups } from './history';
 import { latestAt, revisionLookup, streamItems, unreadCount } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -205,6 +205,12 @@ describe('the history of changes', () => {
             // a token past the request's targets stays as written; one written before `#`, with `@`, is an element too
             expect(requestHead({ body: '#x[2] stays', targets: [] })).toBe('#x[2] stays');
             expect(requestHead({ body: '@請求書[1] old', targets: mentioning.targets })).toBe('請求書 old');
+            // a state or a command by its own name, as the chips show it; an element with a dot in its name keeps it
+            const member = (element: string): RequestJson['targets'] =>
+                [{ target: { kind: 'DtElement', element }, sourceRevision: 'r0', label: 'x' }] as unknown as RequestJson['targets'];
+            expect(requestHead({ body: '#請求書.支払済み[1] にする', targets: member('Billing.Invoice#Paid') })).toBe('支払済み にする');
+            expect(requestHead({ body: '#Invoice.issue[1] で', targets: member('Billing.Invoice:issue') })).toBe('issue で');
+            expect(requestHead({ body: '#Billing.Invoice[1] を', targets: member('Billing.Invoice') })).toBe('Billing.Invoice を');
             const queued = run('run2', 2, [qc], { state: 'Queued' });
             expect(unitName(changeUnits({ runs: [queued], revisions })[0])).toEqual({ kind: 'request', text: 'body of qc' });
         });
@@ -214,7 +220,7 @@ describe('the history of changes', () => {
             // a reply by someone else continues the chunk: it is still the first run's requesters' chunk
             const qd = request('qd', 'dev:d');
             const second = run('run2', 3, [qa, qb], completed(3, 'r1', 'r2'));
-            const third = run('run3', 8, [qd], completed(8, 'r2', 'r2'), { requests: [{ ...frozen(qd), replyTo: 'run2' }] });
+            const third = run('run3', 8, [qd], completed(8, 'r2', 'r2'), { requests: [{ ...frozen(qd), replyTo: { kind: 'Run', run: 'run2' } }] });
             const [unit] = changeUnits({ runs: [first, second, third], revisions });
             expect(unit.runs.map((r) => r.run.id)).toEqual(['run1', 'run2', 'run3']);
             expect(unit.requesters).toEqual(['dev:a', 'dev:b']);
@@ -232,6 +238,66 @@ describe('the history of changes', () => {
             expect(cutList(['a', 'b', 'c'], 3)).toEqual({ shown: ['a', 'b', 'c'], more: 0 });
             expect(cutList(['a', 'b', 'c', 'd', 'e'], 3)).toEqual({ shown: ['a', 'b', 'c'], more: 2 });
         });
+    });
+
+    test('AI の作業: awaiting an answer, running, queued in the order they run, finished newest first; the badge counts running and queued', () => {
+        const qd = request('qd', 'dev:b');
+        const qe = request('qe', 'dev:a');
+        const done = run('done', 1, [qa], {
+            state: 'Completed',
+            baseRevision: 'r0',
+            startedAt: at(1),
+            resultRevision: 'r1',
+            changed: true,
+            report: {},
+            finishedAt: at(2),
+            ...reply('Did it.'),
+        });
+        const failed = run('failed', 3, [qb], { state: 'Failed', startedAt: at(3), reason: 'AgentError', finishedAt: at(4) });
+        const asked = run('asked', 5, [qc], {
+            state: 'NeedsClarification',
+            baseRevision: 'r1',
+            startedAt: at(5),
+            question: 'Which one?',
+            resultRevision: 'r1',
+            finishedAt: at(6),
+        });
+        const running = run('running', 7, [qd], { state: 'Running', startedAt: at(8) });
+        // the queued ones in the order they were queued (they run in that order), not newest first
+        const first = run('first', 9, [qe], { state: 'Queued' });
+        const second = run('second', 10, [request('qf', 'dev:b')], { state: 'Queued' });
+        const units = changeUnits({ runs: [done, failed, asked, running, second, first], revisions });
+        const groups = workGroups(units);
+        expect(groups.awaiting.map((u) => u.key)).toEqual(['asked']);
+        expect(groups.running.map((u) => u.key)).toEqual(['running']);
+        expect(groups.queued.map((u) => u.key)).toEqual(['first', 'second']);
+        expect(groups.finished.map((u) => u.key)).toEqual(['failed', 'done']);
+        // すべて filters only the finished ones: a queued unit changed no file, and still shows
+        expect(shownUnits(groups.finished, false).map((u) => u.key)).toEqual(['done']);
+        expect(unfinishedCount(units)).toBe(3);
+        expect(unfinishedCount(changeUnits({ runs: [done, asked], revisions }))).toBe(0);
+    });
+
+    test('the header status opens the unit it stands for: the running one, else the next to run, else the one waiting the longest', () => {
+        const asked = (id: string, minute: number): RunJson =>
+            run(id, minute, [request(`q-${id}`, 'dev:a')], {
+                state: 'NeedsClarification',
+                baseRevision: 'r0',
+                startedAt: at(minute),
+                question: 'Which one?',
+                resultRevision: 'r0',
+                finishedAt: at(minute + 1),
+            });
+        const running = run('running', 7, [qa], { state: 'Running', startedAt: at(8) });
+        const first = run('first', 9, [qb], { state: 'Queued' });
+        const second = run('second', 10, [qc], { state: 'Queued' });
+        const units = changeUnits({ runs: [asked('older', 1), asked('newer', 3), running, second, first], revisions });
+        expect(statusUnit('running', units)?.key).toBe('running');
+        expect(statusUnit('queued', units)?.key).toBe('first');
+        expect(statusUnit('clarification', units)?.key).toBe('older');
+        expect(statusUnit('idle', units)).toBeUndefined();
+        // nothing of that kind (the status moved on meanwhile): none
+        expect(statusUnit('running', changeUnits({ runs: [first], revisions }))).toBeUndefined();
     });
 });
 
@@ -307,17 +373,47 @@ describe('the cards of the chat', () => {
         expect(quoteDisplay(cardRuns(single, revisionLookup({ revisions, runs: [one] })), 0)).toEqual({ quotes: true, perRequest: false });
     });
 
-    test("an applied message shows its latest run's state, and the card it is on with its name; a message never applied none", () => {
+    test('a run of the same messages quotes them again once its reply says what it did of each', () => {
+        const done = run(
+            'run2',
+            4,
+            [qa, qb],
+            {
+                state: 'Completed',
+                baseRevision: 'r1',
+                startedAt: at(5),
+                finishedAt: at(6),
+                changed: false,
+                reply: {
+                    outcome: 'done',
+                    summary: 'Done',
+                    requests: [
+                        { request: 'qa', status: 'Done' },
+                        { request: 'qb', status: 'Skipped' },
+                    ],
+                    questions: [],
+                    assumptions: [],
+                },
+            },
+            { answer },
+        );
+        const [unit] = changeUnits({ runs: [asked, done], revisions });
+        const runs = cardRuns(unit, revisionLookup({ revisions, runs: [asked, done] }));
+        expect(runs[1].quotes.map((q) => q.progress)).toEqual(['Done', 'Skipped']);
+        expect(quoteDisplay(runs, 1)).toEqual({ quotes: true, perRequest: true });
+    });
+
+    test("an applied message has its latest run's state (its link's tooltip) and the card it is on; a message never applied none", () => {
         const units = changeUnits({ runs: [asked], revisions });
         expect(Object.fromEntries(messageMarks(units))).toEqual({
-            qa: { state: 'done', card: 'run1', name: 'body of qa' },
-            qb: { state: 'question', card: 'run1', name: 'body of qa' },
+            qa: { state: 'done', card: 'run1' },
+            qb: { state: 'question', card: 'run1' },
         });
         const later = changeUnits({ runs: [asked, answered], revisions });
-        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run1', name: 'body of qa' });
+        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run1' });
         expect(messageMarks(later).has('qc')).toBe(false);
         const failed = run('run3', 9, [qc], { state: 'Failed', baseRevision: 'r0', startedAt: at(9), reason: 'AgentError', finishedAt: at(10) });
-        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', card: 'run3', name: 'body of qc' });
+        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', card: 'run3' });
     });
 
     test('the cards that moved on since the reader last saw them', () => {

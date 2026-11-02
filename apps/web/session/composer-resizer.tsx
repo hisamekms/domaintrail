@@ -15,22 +15,22 @@ export interface ComposerSize {
     rows: number;
     max: number;
     setRows: (rows: number) => void;
-    input: RefObject<HTMLTextAreaElement | null>;
+    input: RefObject<HTMLElement | null>;
 }
 
-/** A row of the text and the rest of the box (padding, border), in px, as the textarea shows them now. */
-function measure(el: HTMLTextAreaElement): { row: number; extra: number } {
+/** A row of the text (its line height) and the rest of the box (padding, border), in px, as the field shows them now. */
+function measure(el: HTMLElement): { row: number; extra: number } {
     const style = getComputedStyle(el);
     const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-    const row = (el.clientHeight - padding) / Math.max(1, el.rows);
-    return { row, extra: el.offsetHeight - row * Math.max(1, el.rows) };
+    const row = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.6;
+    return { row, extra: el.offsetHeight - el.clientHeight + padding };
 }
 
 /**
  * The height of the composer's text, remembered per browser, at most a share of the chat pillar's height (measured
  * again when the pillar or the text size changes; the saved choice is kept and shown again once there is room).
  */
-export function useComposerSize(input: RefObject<HTMLTextAreaElement | null>): ComposerSize {
+export function useComposerSize(input: RefObject<HTMLElement | null>): ComposerSize {
     const [saved, setSaved] = usePersistentState<number>(COMPOSER_ROWS_KEY, DEFAULT_COMPOSER_ROWS);
     const [max, setMax] = useState(Number.POSITIVE_INFINITY);
     useLayoutEffect(() => {

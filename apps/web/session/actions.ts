@@ -1,7 +1,7 @@
 // The facilitator's actions in the chat (ADR 0026, amendment: messages and apply): applying messages (one, with a
 // note, or several as one run), answering a run's questions by choosing, picking another alternative of an assumption,
-// cancelling a run, and the short undo after applying (a cancel of the run while it is still queued). Every action
-// queues at once: there is no tray. The server checks the role anyway.
+// approving an assumption (recorded, nothing queued), cancelling a run, and the short undo after applying (a cancel of
+// the run while it is still queued). Every action queues at once: there is no tray. The server checks the role anyway.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AnswerBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { sessionApi } from './api';
@@ -59,6 +59,8 @@ export interface ChatActions {
      * and the alternative's key), and the note asking for it (for the agent and the people reading the chat).
      */
     pick(run: RunJson, assumption: number, alternative: string, note: string): Promise<boolean>;
+    /** Approves an assumption of the run (by its number in the reply) as it is: recorded, nothing is sent to the AI. */
+    approve(run: RunJson, assumption: number): Promise<boolean>;
     cancel(run: string): Promise<boolean>;
     /** The run just queued, while its undo is offered. */
     readonly undo: { readonly run: string } | undefined;
@@ -104,6 +106,7 @@ export function useChatActions(): ChatActions {
         apply: (requests, note) => queue({ requests: [...requests], ...(note?.trim() && { note: note.trim() }) }),
         answer: (run, answer) => queue({ requests: requestsOf(run), answerTo: run.id, answer }),
         pick: (run, assumption, alternative, note) => queue({ requests: requestsOf(run), note, pick: { pickOf: run.id, assumption, alternative } }),
+        approve: (run, assumption) => act(() => sessionApi.approve({ run: run.id, assumption })),
         cancel: (run) => act(() => sessionApi.cancelRun(run)),
         undo,
         undoNow: () => {

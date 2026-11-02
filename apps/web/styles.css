@@ -1,7 +1,9 @@
 :root {
     color-scheme: light;
     --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Segoe UI', sans-serif;
+    /* one typeface for Japanese and Latin per OS, all preinstalled: Hiragino (Mac), BIZ UDPGothic (Windows 10 1809+),
+       Meiryo (older Windows), Noto Sans CJK (Linux); not Yu Gothic, which renders thin on Windows */
+    --sans: 'Hiragino Sans', 'BIZ UDPGothic', Meiryo, 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif;
 
     /* surfaces and text */
     --bg: #f7f7f8;
@@ -12,6 +14,9 @@
     --text-soft: #44444f;
     --muted: #6b6b76;
     --hover: #f4f2fd;
+    /* the hover of the session's rows (chat, AI の作業): a colourless tint that only says "this one"; violet is for what
+       is chosen */
+    --row-hover: rgba(29, 29, 34, 0.045);
     /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
     --hover-strong: #e6e6eb;
     --shadow: rgba(0, 0, 0, 0.12);
@@ -106,6 +111,17 @@
     --gutter: #a0a0aa;
     --keyword: #8a2fb5;
     --doc-comment: #3c7a3a;
+    /* type and spacing of the session's views: three text roles, five spacing steps */
+    --fs-body: 0.875rem;
+    --fs-small: 0.75rem;
+    --lh-body: 1.6;
+    --lh-small: 1.5;
+    --fw-strong: 600;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
 }
 
 /* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). */
@@ -120,6 +136,7 @@
     --text-soft: #c4c4cc;
     --muted: #9a9aa6;
     --hover: #26243a;
+    --row-hover: rgba(230, 230, 234, 0.05);
     --hover-strong: #383843;
     --shadow: rgba(0, 0, 0, 0.5);
     --legend-bg: rgba(30, 30, 36, 0.92);
@@ -1948,6 +1965,11 @@ select,
 .pane-menu-list > button:hover {
     background: var(--hover);
 }
+.pane-menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border);
+}
 /* the conversation: the whole height at the right end */
 .conversation {
     flex: none;
@@ -2011,8 +2033,8 @@ svg.chat-launcher-mark {
     place-items: center;
     background: var(--amber-tint);
     color: var(--amber-text);
-    font-size: 0.75rem;
-    font-weight: 700;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
 }
 .chat-launcher-count {
     position: absolute;
@@ -2024,8 +2046,8 @@ svg.chat-launcher-mark {
     border-radius: 9px;
     background: var(--error);
     color: #fff;
-    font-size: 0.6875rem;
-    font-weight: 700;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
     line-height: 1.125rem;
     font-variant-numeric: tabular-nums;
     box-shadow: 0 0 0 2px var(--panel);
@@ -2621,6 +2643,16 @@ svg.chat-launcher-mark {
     margin: 6px 0 0;
     font-size: 1.1875rem;
     word-break: break-all;
+}
+.inspector-title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: 6px;
+}
+.inspector-head .inspector-title h2 {
+    margin: 0;
+    min-width: 0;
 }
 .inspector-head .canonical-name {
     font-size: 0.875rem;
@@ -3499,17 +3531,29 @@ del.was.block {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* a participant's mark: each place sets only --avatar-size (in rem, so it grows with the text size); the initials are a
+   fixed share of it, centred, and clipped should they still not fit */
 .session-avatar {
+    --avatar-size: 1.5rem;
     flex: none;
     display: inline-grid;
-    place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
+    place-content: center;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    overflow: clip;
     border-radius: 50%;
     color: #fff;
-    font-size: 0.6875rem;
-    font-weight: 700;
+    font-size: calc(var(--avatar-size) * 0.42);
+    line-height: 1;
+    font-weight: var(--fw-strong);
+    white-space: nowrap;
     object-fit: cover;
+}
+/* the facilitator's mark wherever an avatar is drawn: a gap of the panel's color, then the accent, scaled to the size */
+.session-avatar.facilitator {
+    box-shadow:
+        0 0 0 calc(var(--avatar-size) * 0.09) var(--panel),
+        0 0 0 calc(var(--avatar-size) * 0.16) var(--accent);
 }
 .session-role {
     font-size: 0.75rem;
@@ -3747,11 +3791,15 @@ del.was.block {
 /* ---------- the session's chat (dt session start only) ---------- */
 
 .session-chat {
+    /* the avatar column: everything in a message starts after it and the gap (one left edge) */
+    --chat-avatar: 1.75rem;
+    --chat-edge: calc(var(--chat-avatar) + var(--space-3));
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    font-size: 0.8125rem;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
 }
 .session-chat button {
     font: inherit;
@@ -3760,12 +3808,14 @@ del.was.block {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 6px 6px 10px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
     border-bottom: 1px solid var(--border);
 }
 .chat-avatars {
-    padding-left: 3px;
+    /* room for the facilitator's ring and the last avatar's overlap, without making the header taller */
+    padding: var(--space-1);
+    margin-block: calc(-1 * var(--space-1));
     min-width: 0;
     display: flex;
     align-items: center;
@@ -3778,15 +3828,13 @@ del.was.block {
     box-shadow: 0 0 0 2px var(--panel);
 }
 .chat-avatar .session-avatar {
-    width: 1.375rem;
-    height: 1.375rem;
-    font-size: 0.625rem;
+    --avatar-size: 1.375rem;
 }
-.chat-avatar.facilitator {
-    box-shadow:
-        0 0 0 2px var(--panel),
-        0 0 0 3.5px var(--accent);
-    margin-right: -2px;
+/* the facilitator's ring is wider than the gap the others leave: drawn over its neighbour, whole */
+.chat-avatar:has(> .facilitator) {
+    position: relative;
+    z-index: 1;
+    margin-right: 0;
 }
 .chat-avatar.away {
     opacity: 0.45;
@@ -3794,20 +3842,21 @@ del.was.block {
 }
 .chat-online {
     flex: none;
-    margin-left: 2px;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
 .chat-status {
     flex: none;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 1px 8px;
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
     border-radius: 10px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1.25rem;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
     background: var(--neutral-tint);
@@ -3824,6 +3873,22 @@ del.was.block {
     background: var(--amber-tint);
     color: var(--amber-text);
 }
+/* the status is a button, a click opening its unit in AI の作業: the pill's own type (not the chat's buttons'), and
+   under the pointer or focused a ring in its color */
+.session-chat button.chat-status {
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    border: none;
+}
+.chat-status:hover {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 50%, transparent);
+}
+.chat-status:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
 @keyframes chat-blink {
     50% {
         opacity: 0.3;
@@ -3831,15 +3896,19 @@ del.was.block {
 }
 .session-chat button.chat-small {
     flex: none;
-    font-size: 0.75rem;
-    padding: 1px 6px;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1.25rem;
+    padding: 0 var(--space-2);
     border: 1px solid var(--border-strong);
     border-radius: 5px;
     background: var(--panel);
 }
 .chat-notice {
     flex: none;
-    margin: 6px 10px;
+    margin: var(--space-1) var(--space-4);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 
 /* the main stream */
@@ -3847,30 +3916,32 @@ del.was.block {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 4px 16px 16px;
+    padding: var(--space-1) var(--space-4) var(--space-5);
 }
 .chat-items {
     list-style: none;
     margin: 0;
     padding: 0;
 }
-/* the stream is separated by space: 1.25rem between turns, none between messages of one speaker (.continued: their rows touch) and
-   0.375rem inside a message; no rules nor boxes */
+/* the stream is separated by space: --space-5 between turns, --space-1 between messages of one speaker (.continued) and
+   --space-2 between the blocks of a message; no rules nor boxes */
 .chat-item {
     /* its own formatting context: the row's negative margins do not fold into the item's */
     display: flow-root;
-    margin-top: 1.25rem;
+    margin-top: var(--space-5);
 }
 .chat-system {
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: var(--space-2);
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .chat-time {
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
 .chat-system .chat-time {
@@ -3879,31 +3950,49 @@ del.was.block {
 .chat-message {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--space-3);
 }
-.chat-message > .session-avatar {
-    margin-top: 2px;
+.chat-message > .session-avatar,
+.run-card > .session-avatar {
+    --avatar-size: var(--chat-avatar);
 }
 .chat-message-main {
     flex: 1;
     min-width: 0;
 }
+/* the name line: as tall as the avatar, centred on it */
 .chat-message-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    column-gap: var(--space-2);
+    min-height: var(--chat-avatar);
 }
 .chat-who {
-    font-weight: 600;
+    font-weight: var(--fw-strong);
 }
 .chat-role {
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
-/* a message's body: plain text under the name, no box */
+/* a message's body: plain text under the name, no box; its blocks (the reply-to line, the chips, the text, the
+   reactions) --space-2 apart, the reply-to line --space-1 under the name */
 .chat-bubble {
-    margin-top: 0.375rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+.chat-bubble > * {
+    max-width: 100%;
+}
+.chat-bubble > .chat-text {
+    align-self: stretch;
+}
+.chat-message:not(.continued) .chat-bubble > .chat-reply-ref:first-child {
+    margin-top: calc(-1 * var(--space-1));
 }
 .chat-message.continued .chat-bubble {
     margin-top: 0;
@@ -3911,15 +4000,16 @@ del.was.block {
 .chat-agent-avatar {
     background: var(--accent);
 }
-/* a sent message's targets: one line of links above its body (`→ 注文、請求書`) */
+/* a sent message's targets: a row of read-only chips above its body (`#注文` `#請求書`), wrapping; the chips are the
+   composer's (`.chat-chip`), without the number and the × */
 .chat-targets {
-    margin: 0 0 2px;
-    color: var(--muted);
-    font-size: 0.75rem;
-    line-height: 1.5;
-    word-break: break-word;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    min-width: 0;
 }
-.chat-target {
+.chat-chip.chat-target {
+    padding: 0 var(--space-2);
     color: var(--muted);
 }
 .pane a.chat-target {
@@ -3928,17 +4018,16 @@ del.was.block {
     cursor: pointer;
 }
 .pane a.chat-target:hover {
-    text-decoration: underline;
+    background: var(--hover);
 }
-.chat-target.stale {
+.chat-target.stale .chat-chip-name {
     text-decoration: line-through;
-    color: var(--muted);
 }
 .chat-text {
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    line-height: 1.6;
+    line-height: var(--lh-body);
 }
 .chat-text.clamped {
     display: -webkit-box;
@@ -3948,32 +4037,25 @@ del.was.block {
     overflow: hidden;
 }
 .chat-more {
-    font-size: 0.75rem;
-}
-/* the AI's question: the one amber mark, a bar beside it */
-.run-question {
-    padding-left: 8px;
-    border-left: 2px solid var(--warning);
+    margin-top: calc(-1 * var(--space-1));
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .chat-pulse {
     display: inline-block;
     width: 7px;
     height: 7px;
-    margin-right: 6px;
+    margin-right: var(--space-1);
     border-radius: 50%;
     background: var(--muted);
     vertical-align: middle;
     animation: chat-blink 1.2s ease-in-out infinite;
 }
-.chat-empty {
-    margin: 16px 4px;
-    text-align: center;
-}
 
 /* the composer, fixed at the bottom */
 .chat-composer {
     flex: none;
-    padding: 8px 10px 10px;
+    padding: var(--space-2) var(--space-4) var(--space-3);
     border-top: 1px solid var(--border);
 }
 .chat-composer-input {
@@ -3991,7 +4073,7 @@ del.was.block {
     overflow-y: auto;
     overscroll-behavior: contain;
     margin: 0;
-    padding: 4px;
+    padding: var(--space-1);
     list-style: none;
     background: var(--panel);
     border: 1px solid var(--border-strong);
@@ -4001,8 +4083,8 @@ del.was.block {
 .chat-mention-option {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 6px;
-    padding: 4px 6px;
+    column-gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
     border-radius: 4px;
     cursor: pointer;
 }
@@ -4013,13 +4095,14 @@ del.was.block {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 600;
+    font-weight: var(--fw-strong);
 }
 .chat-mention-kind {
     align-self: center;
-    padding: 0 5px;
+    padding: 0 var(--space-1);
     border-radius: 4px;
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     background: var(--violet-tint);
     color: var(--violet-text);
 }
@@ -4032,11 +4115,12 @@ del.was.block {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .chat-mention-none {
-    padding: 4px 6px;
-    font-size: 0.75rem;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--fs-small);
 }
 /* a mention in a sent body, and an element the AI's reply names: a link to it (violet, a thin underline), never bold */
 .pane a.chat-mention,
@@ -4059,36 +4143,21 @@ del.was.block {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
-    margin-top: 6px;
+    gap: var(--space-1);
     min-width: 0;
 }
-.chat-chips-label {
-    font-size: 0.75rem;
-}
+/* a target: `#name` in a pill, small; in the composer, × after it */
 .chat-chip {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: var(--space-1);
     max-width: 100%;
     min-width: 0;
-    padding: 0 2px 0 3px;
+    padding: 0 var(--space-1);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    font-size: 0.75rem;
-}
-.chat-chip-number {
-    flex: none;
-    display: inline-grid;
-    place-items: center;
-    min-width: 0.9375rem;
-    height: 0.9375rem;
-    padding: 0 3px;
-    border-radius: 8px;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.625rem;
-    font-weight: 700;
+    border-radius: 999px;
+    font-size: var(--fs-small);
+    line-height: 1.25rem;
 }
 .chat-chip-name {
     overflow: hidden;
@@ -4111,16 +4180,52 @@ del.was.block {
     background: var(--hover);
     color: var(--text);
 }
-.chat-chip.suggested {
-    border-style: dashed;
-    border-color: var(--border-strong);
+/* the chips not shown while collapsed: out of the flow and hidden, still measured */
+.chat-composer-bar .chat-chips {
+    position: relative;
 }
-.chat-chip.suggested .chat-chip-name {
-    color: var(--text-soft);
+.chat-chips > .measured {
+    position: absolute;
+    top: 0;
+    left: 0;
+    visibility: hidden;
+    pointer-events: none;
 }
-.chat-chip.suggested .chat-chip-number {
-    background: transparent;
-    border: 1px dashed var(--border-strong);
+/* `+n`: the last item of the second row; as wide for any n up to 99, so measuring it once holds */
+.session-chat button.chat-chips-more {
+    flex: none;
+    box-sizing: border-box;
+    min-width: calc(3ch + 2 * var(--space-2) + 2px);
+    padding: 0 var(--space-2);
+    border: 1px dashed var(--accent);
+    border-radius: 999px;
+    background: none;
+    color: var(--accent);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25rem;
+    cursor: pointer;
+}
+.session-chat button.chat-chips-more:hover {
+    background: var(--hover);
+}
+.session-chat button.chat-chips-less {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+.session-chat button.chat-chips-less:hover {
+    background: var(--hover);
+    color: var(--text);
 }
 /* the selection's 💬 on the canvas: next to its bounds, above the shapes */
 .selection-action {
@@ -4130,8 +4235,14 @@ del.was.block {
     pointer-events: none;
     z-index: 310;
 }
-.selection-action button {
+.selection-action .add-to-request {
     position: absolute;
+    box-shadow: 0 1px 4px var(--shadow);
+    pointer-events: auto;
+}
+/* the 💬 itself, on the canvas and in the inspector's heading; a muted ✓ once the selection is added */
+button.add-to-request {
+    flex: none;
     display: grid;
     place-items: center;
     width: 28px;
@@ -4141,38 +4252,88 @@ del.was.block {
     border-radius: 14px;
     background: var(--panel);
     color: var(--accent);
-    box-shadow: 0 1px 4px var(--shadow);
-    pointer-events: auto;
     cursor: pointer;
 }
-.selection-action button:hover {
+button.add-to-request:hover {
     background: var(--accent);
     color: #fff;
 }
-.chat-input {
+button.add-to-request.added {
+    border-color: var(--border-strong);
+    color: var(--muted);
+}
+button.add-to-request.added:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+/* the text: as tall as its rows (the resizer's), scrolling within itself */
+.chat-input-box {
+    position: relative;
+}
+.session-chat .session-text.chat-input {
     margin-top: 0;
+    height: calc(var(--composer-rows) * 1lh + 2 * var(--space-2) + 2px);
+    overflow-y: auto;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     resize: none;
 }
 .chat-input:focus {
     outline: none;
     border-color: var(--accent);
 }
+.chat-input-line {
+    margin: 0;
+}
+.chat-input-placeholder {
+    position: absolute;
+    top: calc(var(--space-2) + 1px);
+    left: calc(var(--space-3) + 1px);
+    right: calc(var(--space-3) + 1px);
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+/* a mention in the text: an atomic chip that sits in the line, an element as a violet pill (`#未払い`), a person as
+   violet text (`@田中`) */
+.chat-inline-chip {
+    display: inline-block;
+    padding: 0 var(--space-1);
+    border-radius: 6px;
+    background: var(--violet-tint);
+    color: var(--accent);
+    font-weight: var(--fw-strong);
+    line-height: 1.375rem;
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+}
+.chat-inline-chip.person {
+    padding: 0;
+    background: none;
+}
 .chat-composer-bar {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin-top: 6px;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
 }
 .chat-composer-bar .chat-chips {
     flex: 1;
-    margin-top: 0;
-    min-height: 1.625rem;
+    min-height: 26px;
 }
 .chat-composer-actions {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     margin-left: auto;
 }
 .chat-shortcut {
@@ -4181,7 +4342,7 @@ del.was.block {
     border-radius: 4px;
     color: var(--muted);
     font-family: var(--sans);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
     line-height: 1rem;
 }
 .session-chat button.chat-send {
@@ -4218,8 +4379,8 @@ del.was.block {
 .chat-person {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 4px;
+    gap: var(--space-2);
+    padding: var(--space-1);
     border-radius: 5px;
 }
 .chat-person.where-away {
@@ -4238,10 +4399,14 @@ del.was.block {
     white-space: nowrap;
 }
 .chat-person-name {
-    font-weight: 600;
+    font-weight: var(--fw-strong);
+}
+.chat-person-name > :is(.muted, .chat-role) {
+    font-weight: 400;
 }
 .chat-person-where {
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .chat-person.where-same-view .chat-person-where {
     color: var(--added);
@@ -4258,34 +4423,35 @@ del.was.block {
 .session-chat button.chat-people-offline {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     width: 100%;
-    margin-top: 4px;
-    padding: 4px;
+    margin-top: var(--space-1);
+    padding: var(--space-2) var(--space-1);
     border: none;
     border-top: 1px solid var(--border);
     background: none;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     text-align: left;
 }
 
 /* the stream, with less text */
 .chat-item.continued {
-    margin-top: 0;
+    margin-top: var(--space-1);
 }
 .chat-avatar-space {
     flex: none;
-    width: 1.5rem;
+    width: var(--chat-avatar);
 }
 .chat-with-icon {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
+    gap: var(--space-1);
 }
 .chat-with-icon > .chat-icon {
     flex: none;
-    margin-top: 3px;
+    margin-top: calc((1em * var(--lh-body) - 14px) / 2);
     color: var(--muted);
 }
 .chat-with-icon > p,
@@ -4295,21 +4461,14 @@ del.was.block {
 .chat-with-icon.session-error > .chat-icon {
     color: var(--error);
 }
-/* the agent's reply (reply.tsx): what the AI says, as plain text, then the measured facts, small */
-.reply-facts {
-    margin-left: 0.5em;
-    color: var(--muted);
-    font-size: 0.6875rem;
-    white-space: nowrap;
-}
+/* the agent's reply (reply.tsx): what the AI says, as plain text */
 .reply-summary {
     margin: 0;
 }
 .reply-requests,
 .reply-assumptions,
-.reply-questions,
 .reply-options {
-    margin: 0.375rem 0 0;
+    margin: 0;
     padding: 0;
     list-style: none;
 }
@@ -4318,13 +4477,6 @@ del.was.block {
     align-items: flex-start;
     gap: 6px;
     margin-top: 2px;
-    font-size: 0.75rem;
-    line-height: 1.5;
-}
-/* an assumption as a group of rows: 「前提: …」, then each 「別案: …」 */
-.reply-assumption {
-    margin-top: 2px;
-    color: var(--text-soft);
     font-size: 0.75rem;
     line-height: 1.5;
 }
@@ -4378,11 +4530,7 @@ del.was.block {
 .reply-alternatives {
     display: block;
 }
-.reply-question + .reply-question {
-    margin-top: 0.75rem;
-}
-.reply-question > .reply-refs,
-.reply-options {
+.reply-question > .reply-refs {
     margin-left: 10px;
 }
 .reply-option {
@@ -4408,7 +4556,8 @@ del.was.block {
 .reply-option-detail {
     display: block;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .session-chat button.chat-dismiss {
     flex: none;
@@ -4426,7 +4575,7 @@ del.was.block {
 .session-chat button.collab-menu-button {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
     max-width: 100%;
     padding: 2px 6px 2px 2px;
     border: 1px solid transparent;
@@ -4438,17 +4587,6 @@ del.was.block {
 .session-chat button.collab-menu-button[aria-expanded='true'] {
     border-color: var(--border);
     background: var(--hover);
-}
-.collab-menu-state {
-    flex: none;
-    padding: 0 6px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--added) 16%, transparent);
-    color: var(--added);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    line-height: 1.125rem;
-    white-space: nowrap;
 }
 .collab-menu-chevron {
     flex: none;
@@ -4463,20 +4601,11 @@ del.was.block {
     max-width: calc(100vw - 24px);
     max-height: min(32rem, calc(100vh - 80px));
     overflow: auto;
-    padding: 4px;
+    padding: var(--space-1);
     background: var(--panel);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
-}
-.collab-menu-heading {
-    margin: 4px 6px 2px;
-    color: var(--muted);
-    font-size: 0.6875rem;
-    font-weight: 600;
-}
-.collab-menu-popover .chat-people {
-    padding: 0 2px;
 }
 .chat-person:focus-visible {
     outline: 2px solid var(--accent);
@@ -4485,17 +4614,16 @@ del.was.block {
 .collab-menu-actions {
     display: flex;
     flex-direction: column;
-    margin-top: 4px;
-    padding-top: 4px;
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
     border-top: 1px solid var(--border);
 }
 .session-chat .collab-menu-actions > button {
-    padding: 6px 10px;
+    padding: var(--space-1) var(--space-2);
     border: none;
     border-radius: 5px;
     background: none;
     color: inherit;
-    font-size: 0.8125rem;
     text-align: left;
     white-space: nowrap;
 }
@@ -4515,7 +4643,7 @@ del.was.block {
 .collab-ended {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     flex-wrap: wrap;
 }
 
@@ -4524,8 +4652,9 @@ del.was.block {
     width: min(30rem, calc(100vw - 32px));
 }
 .collab-dialog-body h3 {
-    margin: 0 0 6px;
-    font-size: 0.8125rem;
+    margin: 0 0 var(--space-2);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-strong);
 }
 .collab-dialog-body section + section {
     margin-top: 14px;
@@ -4549,8 +4678,8 @@ del.was.block {
     padding-left: 1.2em;
 }
 .collab-summary-duration {
-    font-weight: normal;
-    font-size: 0.875rem;
+    font-weight: 400;
+    font-size: var(--fs-body);
 }
 .collab-summary-units {
     margin: 0;
@@ -4604,16 +4733,40 @@ del.was.block {
     margin-left: 0;
 }
 
-/* ---------- the conversation: チャット | 履歴 ---------- */
+/* ---------- the conversation: チャット | AI の作業 ---------- */
 
 .chat-views {
     flex: none;
-    margin: 8px 10px 2px;
+    margin: var(--space-2) var(--space-4) var(--space-1);
 }
 .session-chat .chat-views button {
     flex: 1;
-    padding: 3px 10px;
-    font-size: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-3);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+/* AI の作業's badge: how many units are not finished; the accent on the tab, inverted on the selected one */
+.chat-views-badge {
+    display: inline-grid;
+    place-items: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.session-chat .chat-views button.active .chat-views-badge {
+    background: #fff;
+    color: var(--accent);
 }
 .chat-view {
     flex: 1;
@@ -4641,50 +4794,139 @@ del.was.block {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding-bottom: 12px;
-}
-.chat-history-bar {
-    display: flex;
-    justify-content: flex-end;
-    padding: 4px 12px;
-    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--space-3);
 }
 .chat-units {
     list-style: none;
     margin: 0;
     padding: 0;
+    border-top: 1px solid var(--border);
+}
+/* AI の作業's groups (答え待ち, 実行中, 待ち, 終わったもの), each under a small strong label */
+.chat-work-group + .chat-work-group {
+    margin-top: var(--space-3);
+}
+.chat-work-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4) var(--space-1);
+}
+.session-chat .chat-work-label-row > .chat-work-label {
+    padding: 0;
+}
+/* (over the pane's h3) */
+.session-chat .chat-work-label {
+    margin: 0;
+    padding: var(--space-2) var(--space-4) var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: var(--lh-small);
+    font-variant-numeric: tabular-nums;
+}
+.session-chat .chat-work-group.awaiting .chat-work-label {
+    color: var(--warning);
+}
+.chat-work-label-row > .check {
+    font-size: var(--fs-small);
 }
 .chat-unit {
+    position: relative;
     border-bottom: 1px solid var(--border);
 }
+/* a unit is one block between the lines — its head, its files and, open, its body share one background: closed, the
+   whole block is one hover area; open, it sits on a faint surface, where the head and the files line (a click on them
+   closes it) are tinted more under the pointer and the body is not */
+.chat-unit:not(.open):hover {
+    background: var(--row-hover);
+}
+.chat-unit.open {
+    background: var(--bg);
+}
+.session-chat .chat-unit.open > button.chat-unit-head:hover,
+.chat-unit.open:has(> .chat-unit-cancel:hover) > button.chat-unit-head,
+.chat-unit.open > .chat-unit-files:hover {
+    background: var(--row-hover);
+}
+/* a unit's row: its mark, its title and under it, small, whose requests and when; at the right end only actions (✕, ›) */
 .session-chat button.chat-unit-head {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    align-items: flex-start;
+    gap: var(--space-2);
     width: 100%;
-    padding: 8px 12px;
+    padding: var(--space-2) var(--space-4);
     border: none;
     background: none;
     color: inherit;
     text-align: left;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
 }
-.session-chat button.chat-unit-head:hover {
-    background: var(--hover);
+.session-chat .chat-unit.has-files > button.chat-unit-head {
+    padding-bottom: 0;
 }
-.chat-unit-line {
-    display: flex;
+/* the files line, under the title's left edge (after the mark's column) */
+.chat-unit-files {
+    padding: 0 var(--space-4) var(--space-2) calc(var(--space-4) + 16px + var(--space-2));
+    cursor: pointer;
+}
+.chat-unit-mark {
+    flex: none;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    width: 16px;
+    height: calc(var(--fs-body) * var(--lh-body));
+}
+.chat-unit-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 .chat-unit-icon {
     flex: none;
     color: var(--muted);
 }
+/* the running one: a pulsing dot in the accent */
+.chat-pulse.chat-unit-pulse {
+    margin: 0;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+}
+/* a queued one: its place in the line, in a circle */
+.chat-unit-order {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--muted);
+    border-radius: 50%;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+/* ✕ sits over the head, in a space kept for it before › */
+.chat-unit-cancel-space {
+    flex: none;
+    width: 20px;
+}
+.chat-unit-cancel {
+    position: absolute;
+    top: calc(var(--space-2) + (var(--fs-body) * var(--lh-body) - 20px) / 2);
+    right: calc(var(--space-4) + 14px + var(--space-2));
+    display: inline-flex;
+}
 .outcome-changed .chat-unit-icon {
     color: var(--added);
 }
 .outcome-clarification .chat-unit-icon {
-    color: var(--amber-text);
+    color: var(--warning);
 }
 .outcome-failed .chat-unit-icon {
     color: var(--error);
@@ -4693,12 +4935,10 @@ del.was.block {
     color: var(--accent);
     animation: spin 1s linear infinite;
 }
-.chat-unit-line .chat-time {
-    margin-left: auto;
-}
+/* the opened body starts at the same left edge as the title and the files */
 .chat-unit-body {
-    padding: 0 10px 10px;
-    background: var(--bg);
+    padding: var(--space-1) var(--space-4) var(--space-3) calc(var(--space-4) + 16px + var(--space-2));
+    cursor: default;
 }
 /* the body unfolds and folds like the tree's branches; the chevron turns with it */
 .chat-unit-fold {
@@ -4715,19 +4955,18 @@ del.was.block {
 }
 .chat-unit-twisty {
     flex: none;
+    height: calc(var(--fs-body) * var(--lh-body));
+    color: var(--muted);
     transition: transform var(--motion-medium) var(--motion-ease-standard);
 }
 .chat-unit.open .chat-unit-twisty {
     transform: rotate(90deg);
 }
-.chat-items.compact .chat-item {
-    margin-top: 6px;
-}
 .chat-unit-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 6px;
-    padding-top: 8px;
+    gap: var(--space-2);
+    padding-top: var(--space-2);
 }
 .session-chat button.chat-small svg {
     vertical-align: -1px;
@@ -4792,13 +5031,11 @@ del.was.block {
     flex-direction: column;
 }
 /* a row of the stream — a message, or an AI turn with its chained runs — is one box as wide as the stream (its
-   padding and all): its backgrounds (hovered or paired, chosen, mentioning me, flashed) span it whole, the same for
-   every row. Its tools sit at its top-right, ☺+ last, so that ☺+ is at the same x on every row; the body leaves the
-   same room on its right (--chat-tools-room, ☺+'s column) on every row, so that all text wraps at one width and no
-   tool covers it */
+   padding and all): its backgrounds (hovered, chosen, mentioning me, flashed) span it whole, the same for
+   every row. Its actions float over its top right (.chat-actions), so that they take no room from the header or the
+   body */
 .chat-row,
 .chat-item-card > .run-card {
-    --chat-tools-room: 28px;
     position: relative;
     /* within the item's width, so that long chips are cut short instead of widening the bubble */
     min-width: 0;
@@ -4814,11 +5051,7 @@ del.was.block {
     flex-wrap: wrap;
 }
 .chat-item-card > .run-card:hover {
-    background: var(--hover);
-}
-.chat-row .chat-bubble,
-.chat-item-card > .run-card .run-section {
-    margin-right: var(--chat-tools-room);
+    background: var(--row-hover);
 }
 /* jumped to: the row's box flashes, not the item inside the stream's padding */
 .chat-item.chat-flash {
@@ -4832,75 +5065,224 @@ del.was.block {
     flex: 1;
     min-width: 0;
 }
-.chat-row.paired,
-.run-quote.paired {
-    background: var(--hover);
+.chat-row:hover {
+    background: var(--row-hover);
 }
 .chat-row.selected {
     background: var(--violet-tint);
 }
-.chat-row.talk .chat-bubble {
-    opacity: 0.85;
-}
 .chat-select {
-    margin-top: 10px;
+    margin-top: calc((var(--chat-avatar) - 13px) / 2);
 }
 .chat-message-main {
     position: relative;
 }
-/* at the right end of the message's name line: how it reads, its mark, the facilitator's tools, ☺+ (last). A continued
-   message has no name line: ☺+ alone sits in the body's room on the right; with more, they make a line of their own
-   above the body, so that they never cover its text nor narrow it */
+/* at the right end of the message's name line: the status slot (the link to its AI turn). A continued message has no
+   name line: the slot makes a line of its own above the body, so that it never covers its text nor narrows it */
 .chat-message-side {
     margin-left: auto;
     align-self: center;
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 4px;
-    margin-block: -4px;
 }
 .chat-message.continued .chat-message-side {
-    margin-block: 0 2px;
+    margin-bottom: var(--space-1);
 }
-.chat-message.continued .chat-message-side:not(:has(> :not(.reaction-add))) {
-    position: absolute;
-    top: 0;
-    right: 0;
+/* the status slot of a message or a turn, at the right end of its header, only when it has a status: then as wide on
+   every row (the longest state's text, measured into --chat-status-width), its content at the left, so that the
+   glyphs stand in one column down the chat */
+.chat-status-cell {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--chat-status-width, 6.5em);
 }
-.chat-message-side:empty {
-    display: none;
+/* a state: its glyph and word, small, in the state's color (muted by default) */
+.chat-state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
-/* the applied mark (`✓`, the card's name in its tooltip): small muted text, a click goes to the card */
-.session-chat button.chat-mark {
-    padding: 0 2px;
+/* a sent message's slot: a link to its AI turn, the AI's avatar in small (scaled with the text) and ↓; muted, the
+   accent and the row's tint on hover */
+.session-chat button.chat-turn-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: calc(-1 * var(--space-1));
+    padding: 0 var(--space-1);
     border: none;
+    border-radius: 4px;
     background: none;
     color: var(--muted);
-    font-size: 0.6875rem;
-    font-variant-numeric: tabular-nums;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     cursor: pointer;
 }
-.session-chat button.chat-mark:hover {
-    color: var(--text);
-    text-decoration: underline;
+.session-chat button.chat-turn-link:hover {
+    background: var(--row-hover);
+    color: var(--accent);
 }
-.session-chat button.chat-mark.mark-question,
-.session-chat button.chat-mark.mark-clarification {
+.chat-turn-link > .session-avatar {
+    --avatar-size: calc(var(--fs-small) * 4 / 3);
+}
+.chat-turn-link > .session-avatar > svg {
+    width: calc(var(--avatar-size) * 0.62);
+    height: calc(var(--avatar-size) * 0.62);
+}
+.chat-turn-link > svg {
+    width: 1em;
+    height: 1em;
+}
+.chat-state > .chat-pulse {
+    margin-right: 0;
+    background: var(--accent);
+}
+.chat-state.state-running {
+    color: var(--accent);
+}
+.chat-state.state-done {
+    color: var(--green-text);
+}
+.chat-state.state-partial,
+.chat-state.state-question,
+.chat-state.state-clarification {
     color: var(--amber-text);
 }
-.session-chat button.chat-mark.mark-failed {
+.chat-state.state-failed {
     color: var(--error);
+}
+/* the slots' sizer: every text a slot can show, laid over each other, hidden */
+.chat-status-sizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: grid;
+    width: max-content;
+    visibility: hidden;
+    pointer-events: none;
+}
+.chat-status-sizer > * {
+    grid-area: 1 / 1;
+}
+/* a row's actions (the facilitator's tools, ↩, ☺+ last): a small toolbar over the row's top right, above its header
+   (clear of the status and ✕), shown while the row is hovered or holds the focus, or one of its menus is open; always
+   on touch. It takes no room in the row */
+.chat-actions {
+    position: absolute;
+    top: -20px;
+    right: 6px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 2px 8px var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.chat-actions:empty {
+    display: none;
+}
+.chat-row:hover > .chat-actions,
+.chat-row:focus-within > .chat-actions,
+.run-card:hover > .run-card-main > .chat-actions,
+.run-card:focus-within > .run-card-main > .chat-actions,
+.chat-actions:has([aria-expanded='true']) {
+    opacity: 1;
+    pointer-events: auto;
+}
+@media (hover: none) {
+    .chat-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+/* the facilitator's cancel of a run: a small bordered ✕, the danger tint on hover; a dialog asks first */
+.session-chat button.chat-cancel-button {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+}
+.session-chat button.chat-cancel-button:hover,
+.session-chat button.chat-cancel-button:focus-visible {
+    border-color: var(--error);
+    background: var(--error-wash);
+    color: var(--error);
+}
+/* the dialog before a cancel: what it asks, the unit's name, and for a running run what is lost; やめる and 取り消す */
+.session-dialog.cancel-dialog {
+    width: min(22rem, calc(100vw - 32px));
+    padding: var(--space-5);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.cancel-dialog-title {
+    margin: 0 0 var(--space-2);
+    font-size: 0.9375rem;
+    font-weight: var(--fw-strong);
+}
+.cancel-dialog-name {
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: var(--fw-strong);
+}
+.cancel-dialog-lost {
+    margin: var(--space-1) 0 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.cancel-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+}
+.cancel-dialog button.cancel-dialog-button {
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-weight: var(--fw-strong);
+    cursor: pointer;
+}
+.cancel-dialog button.cancel-dialog-button:focus-visible,
+.cancel-dialog button.cancel-dialog-button:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.cancel-dialog button.cancel-dialog-button.danger {
+    border-color: var(--error);
+    background: var(--error);
+    color: #fff;
 }
 .chat-apply {
     display: inline-flex;
     align-items: center;
-    opacity: 0.35;
-    transition: opacity var(--motion-pop) var(--motion-ease-standard);
-}
-.chat-row:hover .chat-apply,
-.chat-row:focus-within .chat-apply {
-    opacity: 1;
+    gap: var(--space-1);
 }
 .session-chat .chat-apply .icon-button {
     width: 22px;
@@ -4909,25 +5291,21 @@ del.was.block {
 .session-chat .chat-apply-button {
     color: var(--accent);
 }
-/* how a message reads (the facilitator's): small muted text */
-.chat-class {
-    color: var(--muted);
-    font-size: 0.625rem;
-}
 .chat-apply-note {
     flex-basis: 100%;
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin: 4px 0 0 34px;
+    gap: var(--space-1);
+    margin: var(--space-2) 0 0 var(--chat-edge);
 }
 .chat-apply-note .session-text,
 .chat-selection-bar .session-text {
     flex: 1;
     min-width: 0;
-    padding: 3px 6px;
+    margin: 0;
+    padding: 2px var(--space-2);
     font: inherit;
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
 }
 .session-chat button.primary {
     background: var(--accent);
@@ -4942,24 +5320,25 @@ del.was.block {
 }
 .chat-tray {
     flex: none;
-    padding: 4px 10px 0;
+    padding: var(--space-1) var(--space-4) 0;
 }
 .chat-selection-bar,
 .chat-undo {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin: 4px 0;
-    padding: 5px 8px;
+    gap: var(--space-2);
+    margin: var(--space-1) 0;
+    padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
     border-radius: 8px;
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .chat-selection-bar {
     background: var(--violet-tint);
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .chat-selection-count {
-    font-weight: 600;
+    font-weight: var(--fw-strong);
     color: var(--accent);
     white-space: nowrap;
 }
@@ -4974,12 +5353,13 @@ del.was.block {
     left: 50%;
     bottom: 10px;
     transform: translateX(-50%);
-    padding: 3px 12px;
+    padding: var(--space-1) var(--space-3);
     border: none;
     border-radius: 12px;
     background: var(--accent);
     color: #fff;
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
     box-shadow: 0 2px 8px var(--shadow);
     cursor: pointer;
 }
@@ -4991,7 +5371,7 @@ del.was.block {
     white-space: normal;
 }
 .session-menu-note p {
-    margin: 4px 6px;
+    margin: var(--space-1) var(--space-2);
     overflow-wrap: anywhere;
 }
 
@@ -4999,118 +5379,92 @@ del.was.block {
 .run-card {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--space-3);
 }
-.run-card > .session-avatar {
-    margin-top: 2px;
-}
+/* the name line, then the runs: their blocks --space-2 apart, as a message's */
 .run-card-main {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
 }
 .run-card-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
-    gap: 6px;
+    column-gap: var(--space-2);
+    min-height: var(--chat-avatar);
 }
 .run-card-meta {
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
-}
-/* the state, only when it is not simply done: muted, amber for a question, red for a failure */
-.run-card-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    color: var(--muted);
-    font-size: 0.6875rem;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-.run-card-status.status-clarification {
-    color: var(--amber-text);
-}
-.run-card-status.status-failed {
-    color: var(--error);
 }
 .run-card-tools {
     margin-left: auto;
     align-self: center;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-}
-.run-card-tools:empty {
-    display: none;
-}
-.session-chat button.run-card-cancel {
-    display: inline-grid;
-    place-items: center;
-    width: 15px;
-    height: 15px;
-    margin-left: 2px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-}
-.session-chat button.run-card-cancel:hover {
-    background: var(--hover);
+    gap: var(--space-1);
 }
 .run-card .pane-menu .icon-button {
     width: 22px;
     height: 20px;
 }
+/* a run: its time (when it continues the card), the lines it quotes, then what the AI says; one under the other,
+   --space-2 apart, the small lines --space-1 apart and --space-1 under the name line */
+.run-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
 .run-section.chained {
-    margin-top: 0.75rem;
+    margin-top: var(--space-1);
 }
 .run-section-number {
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
+}
+.run-card-main > .run-section:first-of-type > :first-child:is(.run-line, .run-quotes),
+:is(.run-section-number, .run-line, .run-quotes) + :is(.run-line, .run-quotes) {
+    margin-top: calc(-1 * var(--space-1));
 }
 /* the facilitator's note or answer, and the messages a run applied: muted lines like a quote (`↳ name: …`) */
 .run-line {
-    margin: 0.375rem 0 0;
+    margin: 0;
     color: var(--muted);
-    font-size: 0.75rem;
-    line-height: 1.5;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     white-space: pre-wrap;
     word-break: break-word;
 }
-.run-section-number + .run-line {
-    margin-top: 2px;
-}
 .run-quotes {
     list-style: none;
-    margin: 0.375rem 0 0;
+    margin: 0;
     padding: 0;
-}
-.run-section-number + .run-quotes {
-    margin-top: 2px;
 }
 .run-quote {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 4px;
-    margin: 0 -4px;
-    padding: 0 4px;
+    gap: var(--space-1);
+    margin: 0 calc(-1 * var(--space-1));
+    padding: 0 var(--space-1);
     border-radius: 4px;
     color: var(--muted);
-    font-size: 0.75rem;
-    line-height: 1.5;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .session-chat button.run-quote-main {
     min-width: 0;
     flex: 1;
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: var(--space-1);
     padding: 0;
     border: none;
     background: none;
@@ -5130,131 +5484,307 @@ del.was.block {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-.run-quote .reply-mark {
-    font-weight: 400;
+/* the quote cut with an ellipsis, then what the run did of it right after, never cut */
+.run-quote-line {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
 }
-.run-quote.status-Question .reply-mark {
+.session-chat .run-quote-line > button.run-quote-main {
+    flex: 0 1 auto;
+}
+.run-quote-outcome {
+    flex: none;
+    display: inline-flex;
+    gap: var(--space-1);
+    white-space: nowrap;
+}
+.run-quote.status-Done .run-quote-outcome {
+    color: var(--green-text);
+}
+.run-quote.status-Partial .run-quote-outcome,
+.run-quote.status-Question .run-quote-outcome {
     color: var(--amber-text);
 }
 .run-quote-note {
     flex-basis: 100%;
-    padding-left: 1em;
     white-space: pre-wrap;
     word-break: break-word;
 }
+/* what the AI says, then its files, its questions or assumptions and the reactions: --space-2 apart */
 .run-agent-body {
-    margin-top: 0.375rem;
-}
-.run-section-number + .run-agent-body {
-    margin-top: 2px;
-}
-.run-answer-form {
-    margin-top: 0.375rem;
-}
-.run-answer-actions {
     display: flex;
-    justify-content: flex-end;
-    margin-top: 0.375rem;
+    flex-direction: column;
+    gap: var(--space-2);
 }
-/* an alternative the facilitator can pick: a link */
-.session-chat button.reply-alternative.pickable {
-    display: inline;
-    padding: 0;
-    border: none;
-    background: none;
+/* the files a run changed: a line of its own under what the AI says (a file-diff icon, the files), small */
+.run-files {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    margin: calc(-1 * var(--space-1)) 0 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: nowrap;
+}
+.run-files-icon {
+    flex: none;
+}
+/* what a running run is doing: one small line — the phase's icon in the accent, the phase (strong), then the file or
+   the command in monospace, muted — close under the quoted messages, and under the facts of the unit in AI の作業 */
+.run-activity {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    color: var(--text);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: nowrap;
+}
+:is(.run-section-number, .run-line, .run-quotes) + .run-activity {
+    margin-top: calc(-1 * var(--space-1));
+}
+.chat-unit-facts + .run-activity {
+    margin-top: var(--space-1);
+}
+.run-activity-icon {
+    flex: none;
     color: var(--accent);
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 2px;
-    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    text-align: left;
-    cursor: pointer;
 }
-.session-chat button.reply-alternative.pickable:hover {
-    text-decoration-color: currentColor;
+.run-activity-phase {
+    flex: none;
+    font-weight: var(--fw-strong);
 }
-.session-chat button.reply-alternative.pickable:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-.run-card.compact {
-    font-size: 0.75rem;
+.run-activity-subject {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-family: var(--mono);
 }
 .chat-unit-body .run-card {
     margin-top: 0;
 }
-/* ---------- answered questions and chosen alternatives ---------- */
+/* ---------- inside an AI reply: the question, the assumptions, and what was decided ---------- */
 
-/* the mark at the start of a row of choices: ○ / ☐ outline and muted, ◉ / ☑ once chosen in the text's colour; centred
-   on the row's first line, where the facilitator's radio or checkbox is */
+/* the AI's question and what it assumed sit on a faint surface, headed small and strong in their colour (amber: the AI
+   waits; violet: the AI assumed); everything in it starts at the body's left edge */
+.reply-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--border) 35%, transparent);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.reply-section-label {
+    margin: 0;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    font-weight: var(--fw-strong);
+}
+.reply-section.ask > .reply-section-label {
+    color: var(--warning);
+}
+.reply-section.assumed > .reply-section-label {
+    color: var(--accent);
+}
+.reply-section .reply-questions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.reply-section .reply-question {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.reply-question-text {
+    margin: 0;
+    font-weight: var(--fw-strong);
+    word-break: break-word;
+}
+/* an option or an alternative: a card of its own, ♡ at its right end */
+.reply-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.reply-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+.reply-card-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+.reply-card-text > .reply-option-label {
+    display: block;
+}
+/* chosen (being chosen, or decided): the accent's border and background; the others, once decided, muted */
+.reply-card.chosen {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.reply-card.unchosen,
+.reply-card.unchosen .reply-option-detail {
+    color: var(--muted);
+}
+/* the facilitator's: the whole card is the click target (its label, all but ♡), the radio or checkbox in the accent */
+.reply-card.pickable {
+    padding: 0 var(--space-3) 0 0;
+    cursor: pointer;
+}
+.reply-card.pickable:hover:not(.chosen) {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.reply-card-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0 var(--space-2) var(--space-3);
+    cursor: pointer;
+}
+.reply-card-main > input {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+/* an alternative the facilitator can send again: its text, then 送り直す and ♡ on a row under it */
+.reply-card.stack {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+}
+.reply-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+}
+/* ♡ alone on the row (nothing to decide): at its right end */
+.reply-row-actions.end {
+    justify-content: flex-end;
+}
+/* an assumption's own row lines its ♡ up with the cards' (their inner padding and border) */
+.reply-assumption > .reply-row-actions {
+    padding-right: calc(var(--space-3) + 1px);
+}
+.reply-assumption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.reply-assumption + .reply-assumption {
+    margin-top: var(--space-1);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+}
+.reply-assumption-text {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.reply-assumption-text.unchosen {
+    color: var(--muted);
+}
+/* ◉ / ○ at the start of a decided assumption's text, in its first line */
+.reply-assumption-text > .choice-mark {
+    display: inline-flex;
+    margin-right: var(--space-2);
+    vertical-align: -2px;
+}
+.reply-sublabel {
+    margin: 0 0 calc(-1 * var(--space-1));
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.run-answer-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+.reply-actions {
+    display: flex;
+}
+/* the buttons of a decision: small and strong; 回答を送る the primary, 承認 and 送り直す ghosts in the accent */
+.session-chat .reply-section button.chat-small {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: var(--lh-small);
+    white-space: nowrap;
+    border-radius: 6px;
+}
+.session-chat .reply-section button.chat-small.primary {
+    padding: var(--space-1) var(--space-3);
+}
+.session-chat .reply-section button.chat-small.ghost {
+    padding: 2px var(--space-2);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent);
+}
+.session-chat .reply-section button.chat-small.ghost:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.session-chat .reply-section button.chat-small:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.session-chat .reply-section button.chat-small svg {
+    vertical-align: 0;
+}
+
+/* the mark at the start of a card or row once decided: ◉ / ☑ in the accent for what was chosen, ○ / ☐ muted */
 .choice-mark {
     flex: none;
     display: inline-flex;
     align-items: center;
-    height: 1.5em;
     color: var(--muted);
 }
 .choice-mark > svg {
     display: block;
 }
 .chosen > .choice-mark {
-    color: var(--text);
+    color: var(--accent);
 }
-.reply-option > .choice-mark + span {
-    flex: 1;
-    min-width: 0;
-}
-/* a question once answered (or left): the same rows as when it was asked, the chosen ones filled, the rest muted */
-.decided-option.chosen {
-    color: var(--text);
-}
-.decided-option.unchosen,
-.decided-option.unchosen .reply-option-detail {
-    color: var(--muted);
-}
-/* an assumption's rows: 前提 and its alternatives one under the other; once one is picked, it in the text's colour and
-   the others muted */
-.reply-choices {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-.reply-choice + .reply-choice {
-    margin-top: 2px;
-}
-.reply-choice > .reply-text {
-    flex: 1;
-    min-width: 0;
-}
-.reply-choice.chosen {
-    color: var(--text);
-}
-.reply-choice.unchosen {
-    color: var(--muted);
-}
-.visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-}
+
 /* who decided and when: small and muted, under what was decided */
 .decided-line {
-    margin: 0.375rem 0 0;
+    margin: 0;
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
     font-variant-numeric: tabular-nums;
-    line-height: 1.5;
+    line-height: var(--lh-small);
 }
-.reply-assumption .decided-line {
-    margin-top: 2px;
-}
-/* the run a pick queued: a link */
+/* the run a decision queued: a link */
 .session-chat button.decided-run {
     display: inline;
     padding: 0;
@@ -5272,43 +5802,39 @@ del.was.block {
     color: var(--muted);
 }
 
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
 /* ---------- votes and reactions (apps/web/session/mark-controls.tsx) ---------- */
 
-/* a row with a vote at its right end: a question's option */
-.vote-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-}
-.vote-row > .reply-option {
-    flex: 1;
-    min-width: 0;
-}
-.reply-option.vote-row {
-    cursor: default;
-}
-.vote-hint {
-    margin: 2px 0 0 10px;
-}
 /* `♡ 2`: small muted text; mine is the clickable violet with a filled heart, never red */
 .vote-mark {
     flex: none;
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    margin-top: 1px;
+    gap: var(--space-1);
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
     font-variant-numeric: tabular-nums;
-    line-height: 1.5;
+    line-height: var(--lh-small);
     vertical-align: baseline;
+}
+/* the count's slot: two digits wide whether or not there is a count, so the hearts of a reply stand in one column */
+.vote-count {
+    width: 2ch;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
 }
 .vote-mark.mine {
     color: var(--accent);
-}
-/* the assumptions apart a little, now that each has its votes */
-.reply-assumption + .reply-assumption {
-    margin-top: 0.375rem;
 }
 .vote-heart {
     display: inline-grid;
@@ -5347,43 +5873,44 @@ del.was.block {
     flex-direction: column;
     gap: 1px;
     min-width: 7rem;
-    padding: 6px 10px;
+    padding: var(--space-1) var(--space-3);
     background: var(--panel);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
     color: var(--text);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     white-space: nowrap;
     text-align: left;
 }
 .mark-who-title {
     color: var(--muted);
-    font-size: 0.6875rem;
 }
 /* the reactions under a message or a turn: each emoji in colour (the one exception to the decoration budget) and a
    small muted count, no pills; mine: the count in violet, with a faint violet outline and background */
 .reaction-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 4px;
-    margin: 0.25rem 0 0 -3px;
+    gap: var(--space-1);
+    margin-left: calc(-1 * var(--space-1));
 }
 .reaction-emoji {
     font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-    font-size: 0.875rem;
+    font-size: var(--fs-body);
     line-height: 1;
 }
 .session-chat button.reaction {
     display: inline-flex;
     align-items: center;
-    gap: 3px;
-    padding: 1px 5px 1px 4px;
+    gap: var(--space-1);
+    padding: 0 var(--space-1);
     border: 1px solid transparent;
     border-radius: 6px;
     background: none;
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: 1.375rem;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
 }
@@ -5401,7 +5928,7 @@ del.was.block {
 .session-chat button.reaction.mine:hover:not(:disabled) {
     background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
-/* ☺+ at the right end of a message or a turn: on hover or focus, always (faint) on touch */
+/* ☺+ at the right end of a row's actions */
 .reaction-add {
     position: relative;
     display: inline-flex;
@@ -5410,20 +5937,6 @@ del.was.block {
     width: 22px;
     height: 20px;
     color: var(--muted);
-    opacity: 0;
-    transition: opacity var(--motion-swap) var(--motion-ease-standard);
-}
-.chat-row:hover .reaction-add-button,
-.chat-row:focus-within .reaction-add-button,
-.run-card:hover .reaction-add-button,
-.run-card:focus-within .reaction-add-button,
-.reaction-add-button[aria-expanded='true'] {
-    opacity: 1;
-}
-@media (hover: none) {
-    .session-chat .reaction-add-button {
-        opacity: 0.6;
-    }
 }
 .reaction-picker {
     position: absolute;
@@ -5483,7 +5996,7 @@ del.was.block {
     background: var(--bg);
     color: var(--text);
     font: inherit;
-    font-size: 0.8125rem;
+    font-size: var(--fs-body);
 }
 .session-chat .reaction-input:focus {
     outline: none;
@@ -5494,7 +6007,8 @@ del.was.block {
 }
 .reaction-hint {
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .reaction-who {
     margin: 4px 2px 0;
@@ -5503,7 +6017,7 @@ del.was.block {
     border-top: 1px solid var(--border);
     min-width: 9rem;
     max-width: 16rem;
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
 }
 .reaction-who li {
     display: flex;
@@ -5675,36 +6189,24 @@ del.was.block {
 }
 
 /* ---------- replies to runs ---------- */
-/* ↩ at the right end of an AI turn, just before ☺+: like ☺+, on hover or focus, always (faint) on touch */
+/* ↩ among an AI turn's or a message's actions, just before ☺+ */
 .session-chat button.run-card-reply {
     width: 22px;
     height: 20px;
     color: var(--muted);
-    opacity: 0;
-    transition: opacity var(--motion-swap) var(--motion-ease-standard);
-}
-.run-card:hover .run-card-reply,
-.run-card:focus-within .run-card-reply,
-.session-chat button.run-card-reply.active {
-    opacity: 1;
 }
 .session-chat button.run-card-reply.active {
     color: var(--accent);
-}
-@media (hover: none) {
-    .session-chat button.run-card-reply {
-        opacity: 0.6;
-    }
 }
 /* the reply being written: one quiet line above the text, its ✕ stops it */
 .chat-reply-chip {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 4px;
+    gap: var(--space-1);
+    margin-bottom: var(--space-1);
     color: var(--muted);
-    font-size: 0.75rem;
-    line-height: 1.5;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .chat-reply-chip-text {
     min-width: 0;
@@ -5716,15 +6218,15 @@ del.was.block {
 .session-chat button.chat-reply-ref {
     display: flex;
     align-items: baseline;
-    gap: 4px;
+    gap: var(--space-1);
     max-width: 100%;
-    margin: 0 0 2px;
+    margin: 0;
     padding: 0;
     border: none;
     background: none;
     color: var(--muted);
-    font-size: 0.75rem;
-    line-height: 1.5;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     text-align: left;
     cursor: pointer;
 }
@@ -5750,16 +6252,14 @@ del.was.block {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
 }
 .chat-mention-person .session-avatar {
-    width: 1.25rem;
-    height: 1.25rem;
-    font-size: 0.625rem;
+    --avatar-size: 1.25rem;
 }
 .chat-mention-away {
     align-self: center;
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
 }
 /* a person mentioned in a message: `@佐藤` kept on one line */
 .chat-mention.person {
@@ -5767,7 +6267,7 @@ del.was.block {
 }
 /* a message that mentions me, in my stream only: a faint blue wash (it asks for my attention). Not violet, which is
    what can be clicked, nor amber, which is a question waiting for an answer */
-.chat-row.mentions-me:not(.paired, .selected) {
+.chat-row.mentions-me:not(:hover, .selected) {
     background: var(--blue-wash);
     box-shadow: inset 2px 0 0 var(--blue-tint);
 }
@@ -5778,7 +6278,7 @@ del.was.block {
     gap: 1px;
 }
 .chat-launcher-at {
-    font-weight: 600;
+    font-weight: var(--fw-strong);
     opacity: 0.85;
 }
 
@@ -5896,8 +6396,8 @@ del.was.block {
 
 /* ---------- chunk titles ---------- */
 
-/* 履歴: a chunk's heading — its title (plain text weight: names of people are the only bold), its time span muted at
-   the right; under it, muted and small, whose requests and how much; then the files it changed as a violet link */
+/* AI の作業: a chunk's row — its title (plain text weight: names of people are the only bold), cut to one line; under it,
+   muted and small, whose requests, how much and when; then the files it changed as a violet link */
 .chat-unit-title {
     flex: 1;
     min-width: 0;
@@ -5906,41 +6406,169 @@ del.was.block {
     text-overflow: ellipsis;
     color: var(--text);
 }
-.chat-unit-line > .chat-time {
-    flex: none;
-    margin-left: auto;
-}
 .chat-unit-facts {
-    padding-left: 20px;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
-.chat-unit-changes {
+/* what a unit changed, in the model's words: up to three elements as chips, 「ほか n」, then 変更を見る — under a run's text
+   (.run) and in AI の作業 (.unit, its place: .chat-unit-files); small, wrapping */
+.changed-elements {
     display: flex;
-    align-items: baseline;
-    gap: 2px;
-    margin: -4px 0 0;
-    padding: 0 12px 8px 32px;
-    color: var(--muted);
-    font-size: 0.75rem;
-    white-space: nowrap;
-}
-.session-chat button.chat-unit-changes-link {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.changed-elements.run {
+    margin-top: calc(-1 * var(--space-1));
+}
+.changed-elements-more {
+    flex: none;
+}
+.session-chat button.changed-elements-see {
+    flex: none;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--muted);
+    font-weight: var(--fw-strong);
+    cursor: pointer;
+}
+.session-chat button.changed-elements-see:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+/* an element changed: its mark (＋ ✎ −, in green, amber, red on a faint wash), then `#` its own name in the accent; a
+   removed one muted and struck through */
+.change-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
+    min-width: 0;
+    color: var(--accent);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.session-chat button.change-chip {
     padding: 0;
     border: none;
     background: none;
-    color: var(--violet-text);
+    color: var(--accent);
     cursor: pointer;
 }
-.session-chat button.chat-unit-changes-link:hover {
+.session-chat button.change-chip:hover .change-name {
     text-decoration: underline;
 }
-.chat-unit-more {
+.change-chip.change-removed {
+    color: var(--muted);
+}
+.change-chip.change-removed .change-name {
+    text-decoration: line-through;
+}
+.change-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.change-mark {
     flex: none;
+    padding: 0 var(--space-1);
+    border-radius: 4px;
+    font-weight: var(--fw-strong);
+}
+.change-added .change-mark {
+    color: var(--green-text);
+    background: var(--green-tint);
+}
+.change-changed .change-mark {
+    color: var(--amber-text);
+    background: var(--amber-tint);
+}
+.change-removed .change-mark {
+    color: var(--red-text);
+    background: var(--red-tint);
+}
+/* この作業の変更: one size and place whether or not the source diff is open — as wide as a diff reads well, its top
+   fixed below the viewport's so that growing only extends it downward, and its body scrolling under the header */
+.session-dialog.session-changes {
+    width: min(44rem, calc(100vw - 32px));
+    max-height: 80vh;
+    margin-top: 10vh;
+    margin-bottom: auto;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.session-changes .settings-dialog-header {
+    align-items: flex-start;
+}
+.session-changes-heading {
+    min-width: 0;
+}
+.session-changes .settings-dialog-header h2 {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-strong);
+}
+.session-changes-about {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.session-changes-group > h3 {
+    margin: var(--space-3) 0 var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+}
+.session-changes-group > ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.session-changes-group li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+}
+.session-changes-group .change-chip,
+.session-changes-group .change-chip.change-removed {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.session-changes-what {
+    flex: none;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    white-space: nowrap;
+}
+.session-changes-note {
+    margin: var(--space-3) 0 0;
+    color: var(--muted);
+}
+.session-changes-source {
+    margin-top: var(--space-4);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+}
+.session-changes-source > summary {
+    cursor: pointer;
+}
+.session-changes-source[open] {
+    color: var(--text);
+}
+.session-changes-source[open] > summary {
+    color: var(--muted);
 }
 /* the chat: an AI turn's title beside its name, muted like the rest of the row and cut to one line */
 .run-card-meta {
@@ -5956,12 +6584,12 @@ del.was.block {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-/* the name row stays one line: the title gives way (cut with …) before the name, the state and the tools at the right */
+/* the name row stays one line: the title takes the room left and gives way (cut with …) before the name, the state and
+   the ✕ at the right */
 .run-card-head {
     flex-wrap: nowrap;
 }
 .run-card-head > .chat-who,
-.run-card-head > .run-card-status,
 .run-card-head > .run-card-tools {
     flex: none;
 }
@@ -5979,10 +6607,36 @@ del.was.block {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-/* the "updated" pill names the card: one line, cut */
+/* the "updated" pill names the card: one line, cut — and, centred, clear of 最新へ on either side (its width, its
+   right offset and a gap), so that the two never overlap, at the chat's narrowest too */
 .chat-updated-pill {
-    max-width: calc(100% - 32px);
+    max-width: calc(100% - 2 * (var(--chat-latest-size) + var(--space-4) + var(--space-2)));
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+/* 最新へ: away from the bottom of the stream, a round button at its bottom right, just above the composer; the count of
+   what arrived below is the launcher's (`.chat-launcher-count`) */
+.chat-stream-wrap {
+    --chat-latest-size: 32px;
+}
+.chat-latest {
+    position: absolute;
+    right: var(--space-4);
+    bottom: var(--space-2);
+    width: var(--chat-latest-size);
+    height: var(--chat-latest-size);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--text-soft);
+    box-shadow: 0 2px 8px var(--shadow);
+    cursor: pointer;
+}
+.chat-latest:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
 }

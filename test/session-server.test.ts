@@ -9,7 +9,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { type AccessClaims, type AccessTokenVerifier, REPLY_LIMITS } from '@domaintrail/collaboration';
-import type { ComparisonBody, Me, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { ComparisonBody, Me, ModelChangesBody, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import {
     cliDeps,
     createWatcherHold,
@@ -638,6 +638,57 @@ describe('the agent API', () => {
         const ended = await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true });
         expect(ended.status).toBe(409);
     });
+
+    test("a running run's activity reaches every page as it changes, a page connecting gets the latest, and it ends with the run", async () => {
+        const state = (await (await api(server, bob, 'state')).json()) as SessionStateBody;
+        const target = { target: { kind: 'Workspace' }, sourceRevision: state.revisions[0].id };
+        const request = ((await (await api(server, bob, 'requests', { target, body: 'Rename.' })).json()) as { request: { id: string } }).request;
+        const run = ((await (await api(server, ada, 'runs', { requests: [request.id] })).json()) as { run: { id: string } }).run;
+        const { lease } = (await (await agent(cred, 'runs/claim', { owner: 'test-agent' })).json()) as { lease: { token: string } };
+        const activity = (body: object): Promise<Response> => agent(cred, `runs/${run.id}/activity`, { token: lease.token, ...body });
+        // only while it runs
+        expect((await activity({ phase: 'reading' })).status).toBe(409);
+        await agent(cred, `runs/${run.id}/start`, { token: lease.token });
+        const b = await socket(server, bob);
+        try {
+            expect(await b.next('session.activities')).toMatchObject({ activities: {} });
+            for (const [bad, field] of [
+                [{ phase: 'thinking' }, 'phase'],
+                [{ phase: 'reading', subject: 'a\nb' }, 'subject'],
+                [{ phase: 'reading', other: 1 }, 'other'],
+            ] as const) {
+                const refused = await activity(bad);
+                expect([refused.status, ((await refused.json()) as { error: { field: string } }).error.field]).toEqual([400, field]);
+            }
+            expect((await agent(cred, `runs/${run.id}/activity`, { token: 'wrong', phase: 'reading' })).status).toBe(409);
+            expect((await activity({ phase: 'reading', subject: 'shop.dt' })).status).toBe(200);
+            expect(await b.next('run.activity')).toEqual({ type: 'run.activity', run: run.id, activity: { phase: 'reading', subject: 'shop.dt' } });
+            // the same again is not sent again
+            expect((await activity({ phase: 'reading', subject: 'shop.dt' })).status).toBe(200);
+            expect((await activity({ phase: 'checking', subject: 'dt check' })).status).toBe(200);
+            expect(await b.next('run.activity')).toMatchObject({ activity: { phase: 'checking', subject: 'dt check' } });
+            expect(b.received.filter((m) => m.type === 'run.activity')).toHaveLength(2);
+        } finally {
+            b.ws.close();
+        }
+        const late = await socket(server, ada);
+        try {
+            expect(await late.next('session.activities')).toEqual({
+                type: 'session.activities',
+                activities: { [run.id]: { phase: 'checking', subject: 'dt check' } },
+            });
+        } finally {
+            late.ws.close();
+        }
+        expect((await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
+        expect((await activity({ phase: 'finishing' })).status).toBe(409);
+        const after = await socket(server, ada);
+        try {
+            expect(await after.next('session.activities')).toEqual({ type: 'session.activities', activities: {} });
+        } finally {
+            after.ws.close();
+        }
+    });
 });
 
 /** Reads the agent's SSE stream (from `lastEventId`) until an event of one of `until` arrives. */
@@ -826,6 +877,18 @@ describe('revisions: comparison and restore (S7)', () => {
             expect(c.files[2].diff?.kind === 'diff' && c.files[2].diff.unified).toContain('+    state Shipped');
             expect(c.files[1].diff).toBeUndefined();
             expect([c.before.validation, c.after.validation].map((v) => v.dtErrors)).toEqual([0, 0]);
+
+            // the same, in the model's words: the elements added, changed and removed
+            const changed = await api(server, bob, `revisions/${first.id}/changes/${second.id}`);
+            expect(changed.status).toBe(200);
+            const m = (await changed.json()) as ModelChangesBody;
+            expect(m.complete).toBe(true);
+            expect(m.changes.map((e) => [e.change, e.kind, e.name, e.owner?.name])).toEqual([
+                ['added', 'state', 'Shipped', 'Order'],
+                ['added', 'event', 'Happened', 'More'],
+            ]);
+            const unknownChanges = await api(server, bob, `revisions/${first.id}/changes/00000000-0000-4000-8000-000000000000`);
+            expect(unknownChanges.status).toBe(404);
 
             const unknown = await api(server, bob, `revisions/${first.id}/compare/00000000-0000-4000-8000-000000000000`);
             expect([unknown.status, (await errorOf(unknown)).type]).toEqual([404, 'NotFound']);
@@ -1139,6 +1202,59 @@ describe('the join form (dev)', () => {
                 redirect: 'manual',
             });
             expect(blank.status).toBe(400);
+        } finally {
+            await server.stop();
+        }
+    });
+
+    test('remembers the name it joined with for the next join form; speaks the browser’s language', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            const first = await fetch(server.url, { headers: { 'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8' } });
+            expect(first.status).toBe(401);
+            expect(first.headers.get('vary')).toBe('Accept-Language');
+            const firstHtml = await first.text();
+            expect(firstHtml).toContain('<html lang="ja">');
+            expect(firstHtml).toContain('DomainTrail のセッションに参加');
+            expect(firstHtml).toMatch(/autocomplete="nickname">/);
+
+            const posted = await fetch(`${server.url}session/join`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ name: ' Ada "the first" ', next: '/' }).toString(),
+                redirect: 'manual',
+            });
+            expect(posted.status).toBe(303);
+            const set = posted.headers.getSetCookie();
+            const remembered = set.find((c) => c.startsWith('dt_name=')) ?? '';
+            expect(remembered).toBe('dt_name=Ada%20%22the%20first%22; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000');
+            expect(set.some((c) => c.startsWith('dt_session='))).toBe(true);
+
+            // signed out (only the name's cookie), the form starts with the name, escaped
+            const again = await fetch(`${server.url}session/join`, { headers: { cookie: remembered.split(';')[0], 'accept-language': 'en-US,ja;q=0.8' } });
+            const html = await again.text();
+            expect(html).toContain('<html lang="en">');
+            expect(html).toContain('value="Ada &quot;the first&quot;"');
+            // a cookie that is no valid name is ignored
+            const broken = await fetch(`${server.url}session/join`, { headers: { cookie: 'dt_name=%0A' } });
+            expect(await broken.text()).toMatch(/autocomplete="nickname">/);
+            // a failed join sets no cookie and keeps the language
+            const blank = await fetch(`${server.url}session/join`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded', 'accept-language': 'ja' },
+                body: 'name=%20',
+                redirect: 'manual',
+            });
+            expect(blank.status).toBe(400);
+            expect(blank.headers.get('set-cookie')).toBeNull();
+            expect(await blank.text()).toContain('名前は1行・60文字以内で入力してください。');
+
+            // the other pages too
+            const missing = await fetch(`${server.url}session/nope`, { headers: { 'accept-language': 'ja' } });
+            expect([missing.status, missing.headers.get('vary')]).toEqual([404, 'Accept-Language']);
+            expect(await missing.text()).toContain('<h1>ページがありません</h1>');
+            expect(await (await fetch(`${server.url}session/nope`, { headers: { 'accept-language': 'fr' } })).text()).toContain('<h1>Not found</h1>');
         } finally {
             await server.stop();
         }

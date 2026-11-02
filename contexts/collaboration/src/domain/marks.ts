@@ -13,6 +13,7 @@
 //   count) bundles any of them or answers it — and the run is still waiting for an answer (a question's option) or
 //   completed (an assumption's choices). Answering, picking an alternative (a run of the same requests with a note)
 //   and applying the same messages again all close it; cancelling that later run before it started opens it again.
+//   The facilitator's approval of an assumption closes that assumption's votes (the run's other assumptions stay open).
 //
 // Pure, and over the plain shapes of the runs and requests, so that the server (the generated types) and the page
 // (their JSON) decide the same way.
@@ -46,7 +47,11 @@ export interface MarkRun {
     readonly id: string;
     readonly state: string;
     readonly input: {
-        readonly requests: readonly { readonly request: string; readonly replyTo?: string }[];
+        /** `replyTo`: the run or the message it replied to (only a run is continued). */
+        readonly requests: readonly {
+            readonly request: string;
+            readonly replyTo?: { readonly kind: 'Run'; readonly run: string } | { readonly kind: 'Message' };
+        }[];
         readonly answer?: { readonly answerTo: string };
         readonly pick?: { readonly pickOf: string };
     };
@@ -58,10 +63,12 @@ export interface MarkRun {
     };
 }
 
-/** What a target is looked up in: the session's requests and its runs, in queue order. */
+/** What a target is looked up in: the session's requests, its runs in queue order, and its approved assumptions. */
 export interface MarkScope {
     readonly requests: readonly { readonly id: string }[];
     readonly runs: readonly MarkRun[];
+    /** The assumptions the facilitator approved (`AssumptionApproval`); none when left out. */
+    readonly approvals?: readonly { readonly assumption: { readonly run: string; readonly assumption: number } }[];
 }
 
 /** One text per target, equal exactly for equal targets: the key of a mark's target (the store's unique index, the page's maps). */
@@ -112,7 +119,7 @@ export function laterRunOf(run: MarkRun, runs: readonly MarkRun[]): MarkRun | un
                 !undone(r) &&
                 (r.input.answer?.answerTo === run.id ||
                     r.input.pick?.pickOf === run.id ||
-                    r.input.requests.some((q) => mine.has(q.request) || q.replyTo === run.id)),
+                    r.input.requests.some((q) => mine.has(q.request) || (q.replyTo?.kind === 'Run' && q.replyTo.run === run.id))),
         );
 }
 
@@ -136,7 +143,8 @@ export function markTargetStatus(target: MarkTargetData, scope: MarkScope): Mark
             const assumption = run.reply?.assumptions[target.assumption];
             if (!assumption) return 'missing';
             if (target.alternative !== undefined && !assumption.alternatives.some((a) => a.id === target.alternative)) return 'missing';
-            return run.state === 'Completed' && !laterRunOf(run, scope.runs) ? 'open' : 'closed';
+            const approved = (scope.approvals ?? []).some((a) => a.assumption.run === run.id && a.assumption.assumption === target.assumption);
+            return run.state === 'Completed' && !approved && !laterRunOf(run, scope.runs) ? 'open' : 'closed';
         }
     }
 }

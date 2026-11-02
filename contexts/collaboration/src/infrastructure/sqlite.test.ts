@@ -95,6 +95,7 @@ describe('schema and transactions', () => {
             .map((r) => r.name);
         expect(tables).toEqual([
             'agent_runs',
+            'approvals',
             'facilitator_links',
             'facilitators',
             'marks',

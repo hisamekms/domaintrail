@@ -2,11 +2,13 @@
 // that took over its requests (`laterRunOf`, the rule that closes its votes) either answered its questions, picked an
 // alternative of one of its assumptions, or neither (they were left as they were). Who decided and when are that run's
 // `queuedBy` and `queuedAt`. Both are recorded in that run's input: an answer as `answer`, a picked alternative as
-// `pick` (the note the page writes with it is for the agent and the people, never read back here).
-import { laterRunOf } from '@domaintrail/collaboration';
+// `pick` (the note the page writes with it is for the agent and the people, never read back here). An assumption can
+// also be approved (amendment "Assumptions approved"): an approval of its own, with who and when, and no run.
+import { approvalOf, laterRunOf } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
+type ApprovalJson = SessionStateBody['approvals'][number];
 
 /** Who decided and when: the run that did it, its number in the session, who queued it and when. */
 export interface Decider {
@@ -80,4 +82,29 @@ export function pickedAlternative(run: RunJson, runs: readonly RunJson[]): Picke
     const pick = later?.input.pick;
     if (!later || pick?.pickOf !== run.id) return undefined;
     return { assumption: pick.assumption, alternative: pick.alternative.id, by: deciderOf(later, runs) };
+}
+
+/**
+ * What became of one assumption of `run` (a completed one, by its index in the reply): `approved` by the facilitator
+ * (who and when), `picked` (one of its alternatives, sent again: who, when and the run it queued), `left` when a later run
+ * took over the run's requests without deciding it (another assumption picked, the messages applied again), `open`
+ * otherwise. One decision per assumption: the server refuses the other once one is made.
+ */
+export type AssumptionDecision =
+    | { readonly kind: 'open' }
+    | { readonly kind: 'approved'; readonly by: string; readonly at: string }
+    | { readonly kind: 'picked'; readonly alternative: string; readonly by: Decider }
+    | { readonly kind: 'left' };
+
+export function assumptionDecision(
+    run: RunJson,
+    assumption: number,
+    runs: readonly RunJson[],
+    approvals: readonly ApprovalJson[] | undefined,
+): AssumptionDecision {
+    const approval = approvalOf(approvals ?? [], run.id, assumption);
+    if (approval) return { kind: 'approved', by: approval.approvedBy, at: approval.approvedAt };
+    const picked = pickedAlternative(run, runs);
+    if (picked?.assumption === assumption) return { kind: 'picked', alternative: picked.alternative, by: picked.by };
+    return takenOverBy(run, runs) ? { kind: 'left' } : { kind: 'open' };
 }

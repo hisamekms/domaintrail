@@ -12,6 +12,7 @@ import type {
     EventOutbox,
     Lease,
     MarkRepository,
+    ApprovalRepository,
     OutboxEntry,
     RequestRepository,
     RevisionStore,
@@ -190,6 +191,30 @@ export const MIGRATIONS: readonly string[] = [
        AND (json_extract(payload, '$.sign') = 'Vote' OR json_extract(payload, '$.sign') IN (SELECT name FROM legacy_signs));
     DROP TABLE legacy_signs;
     `,
+    // ---------- replies to messages ----------
+    // a message that replies to a message (ADR 0026, amendment "replies to messages"): the message it names, kept next
+    // to the JSON so that the database refuses a reply to a message it does not hold; a reply to a run keeps its run in
+    // `reply_to`. Rows written before reply to no message (NULL); their JSON names a run by its ID alone, read as a
+    // reply to that run (`legacy.ts`)
+    `
+    ALTER TABLE requests ADD COLUMN reply_to_request TEXT REFERENCES requests(id);
+    CREATE INDEX requests_by_reply_to_request ON requests(reply_to_request) WHERE reply_to_request IS NOT NULL;
+    `,
+    // ---------- approved assumptions ----------
+    // the facilitator's approval of an assumption of a completed run (ADR 0026, amendment "Assumptions approved"): one
+    // per run and assumption (its index in the reply). Sessions written before have none
+    `
+    CREATE TABLE approvals (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        seq INTEGER NOT NULL,
+        run_id TEXT NOT NULL REFERENCES agent_runs(id),
+        assumption INTEGER NOT NULL CHECK (assumption >= 0),
+        data TEXT NOT NULL,
+        UNIQUE (run_id, assumption)
+    ) STRICT;
+    CREATE INDEX approvals_by_session ON approvals(session_id, seq);
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */
@@ -324,8 +349,8 @@ function sessions(db: DatabaseSync): SessionRepository {
 function requests(db: DatabaseSync): RequestRepository {
     const load = db.prepare('SELECT data FROM requests WHERE id = :id');
     const save = db.prepare(
-        `INSERT INTO requests (id, session_id, seq, state, data, reply_to)
-         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo)
+        `INSERT INTO requests (id, session_id, seq, state, data, reply_to, reply_to_request)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM requests), :state, :data, :replyTo, :replyToRequest)
          ON CONFLICT (id) DO UPDATE SET state = excluded.state, data = excluded.data`,
     );
     const list = db.prepare('SELECT data FROM requests WHERE session_id = :session ORDER BY seq');
@@ -335,7 +360,17 @@ function requests(db: DatabaseSync): RequestRepository {
             return r ? decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest) : undefined;
         },
         save(request) {
-            save.run(params({ id: request.id, session: request.session, state: request.state, data: encodeJson(request), replyTo: request.replyTo ?? null }));
+            const to = request.replyTo;
+            save.run(
+                params({
+                    id: request.id,
+                    session: request.session,
+                    state: request.state,
+                    data: encodeJson(request),
+                    replyTo: to?.kind === 'Run' ? to.run : null,
+                    replyToRequest: to?.kind === 'Message' ? to.request : null,
+                }),
+            );
         },
         listBySession(session) {
             return list.all(params({ session })).map((r) => decoded<Collaboration.Request>(text(r, 'data'), upgradeRequest));
@@ -498,6 +533,30 @@ function marks(db: DatabaseSync): MarkRepository {
     };
 }
 
+function approvals(db: DatabaseSync): ApprovalRepository {
+    const save = db.prepare(
+        `INSERT INTO approvals (id, session_id, seq, run_id, assumption, data)
+         VALUES (:id, :session, (SELECT COALESCE(MAX(seq), 0) + 1 FROM approvals), :run, :assumption, :data)`,
+    );
+    const list = db.prepare('SELECT data FROM approvals WHERE session_id = :session ORDER BY seq');
+    return {
+        save(approval) {
+            save.run(
+                params({
+                    id: approval.id,
+                    session: approval.session,
+                    run: approval.assumption.run,
+                    assumption: approval.assumption.assumption,
+                    data: encodeJson(approval),
+                }),
+            );
+        },
+        listBySession(session) {
+            return list.all(params({ session })).map((r) => decoded<Collaboration.AssumptionApproval>(text(r, 'data')));
+        },
+    };
+}
+
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');
@@ -650,6 +709,7 @@ export function createStores(db: DatabaseSync): Stores {
         runs: runs(db),
         revisions: revisions(db),
         marks: marks(db),
+        approvals: approvals(db),
         outbox: outbox(db),
         access: access(db),
         operations: operations(db),

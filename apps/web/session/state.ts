@@ -10,6 +10,7 @@ type RunJson = SessionStateBody['runs'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 type SessionJson = SessionStateBody['session'];
 type MarkJson = SessionStateBody['marks'][number];
+type ApprovalJson = SessionStateBody['approvals'][number];
 
 export interface SessionModel {
     readonly state: SessionStateBody | undefined;
@@ -182,6 +183,20 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         }
         case 'MarkRemoved':
             return { state: { ...at, marks: (state.marks ?? []).filter((m) => m.id !== e.markId) }, refetch: false };
+        case 'AssumptionApproved': {
+            // a state from before approvals were sent has none
+            const approvals = state.approvals ?? [];
+            if (approvals.some((a) => a.id === e.approvalId)) return { state: at, refetch: false };
+            const approval: ApprovalJson = {
+                id: e.approvalId,
+                session: e.session,
+                assumption: e.assumption,
+                approvedBy: e.approvedBy,
+                approvedAt: e.approvedAt,
+                state: 'Approved',
+            };
+            return { state: { ...at, approvals: [...approvals, approval] }, refetch: false };
+        }
         case 'RevisionConfirmed':
             return {
                 state: {

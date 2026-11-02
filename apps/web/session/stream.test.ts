@@ -16,12 +16,14 @@ import {
     headerParticipants,
     isFacilitator,
     oneLine,
+    participantAvatars,
     participantNames,
     streamItems,
     agentMessage,
     revisionLookup,
     speakerName,
     targetsSummary,
+    targetShortText,
     targetText,
 } from './stream';
 
@@ -97,7 +99,7 @@ describe('the main stream', () => {
         const card = items[4];
         expect(card.kind === 'card' && [card.unit.runs.map((r) => r.number), card.updatedAt]).toEqual([[1, 2], at(12)]);
         expect(items[5]).toMatchObject({ kind: 'confirmed', revision: 3, by: 'local:facilitator' });
-        expect(items[6]).toMatchObject({ kind: 'restored', revision: 5, from: 1 });
+        expect(items[6]).toMatchObject({ kind: 'restored', revision: 5, from: 1, work: true });
         // every message is in the stream, applied or not
         expect(items.filter((i) => i.kind === 'message').map((i) => i.kind === 'message' && i.request.id)).toEqual(['q1', 'q2', 'q3']);
     });
@@ -266,6 +268,13 @@ describe('the participants of the header', () => {
         expect(participantNames(state, NO_PEERS, me).get('local:facilitator')).toBe('Hana');
     });
 
+    test("each one's avatar as their page tells it (the chat's rows draw the same as the header), mine included", () => {
+        expect([...participantAvatars(peers, me)]).toEqual([['dev:c', 'https://x/dev:c']]);
+        const mine = { ...me, participant: { ...me.participant, avatarUrl: 'https://x/me' } } as Me;
+        expect(participantAvatars(peers, mine).get('dev:a')).toBe('https://x/me');
+        expect(participantAvatars(NO_PEERS, me).size).toBe(0);
+    });
+
     test("a message's author: 「あなた」 for my own, else their name; the facilitator and its holder are the facilitator", () => {
         const nameOf = (id: string): string => participantNames(state, NO_PEERS, me).get(id) ?? id;
         expect(speakerName('dev:a', me.participant.id, nameOf, 'あなた')).toBe('あなた');
@@ -326,6 +335,13 @@ describe('targets named in the display setting', () => {
         const customer = { target: { kind: 'DtElement', element: 'Sales.Customer' } } as const;
         expect(targetsSummary([order, customer, customer], 'All', naming('label'))).toBe('注文 +2');
         expect(targetsSummary([order], 'All', naming('name'))).toBe('Order');
+        // a state by its own name, without its aggregate (the whole name is the tooltip's)
+        const draft = { target: { kind: 'DtElement', element: 'Sales.Order#Draft' } } as const;
+        expect(targetsSummary([draft, order], 'All', naming('label'))).toBe('下書き +1');
+        expect(targetShortText(draft, 'All', naming('label'))).toBe('下書き');
+        expect(targetText(draft, 'All', naming('label'))).toBe('注文.下書き');
+        // one no longer in the sources: the label it was taken with
+        expect(targetShortText({ target: { kind: 'DtElement', element: 'Sales.Gone' }, label: 'なくなった' }, 'All', naming('label'))).toBe('なくなった');
         expect(targetsSummary([], 'All', naming('label'))).toBe('All');
     });
 

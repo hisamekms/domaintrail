@@ -1,12 +1,18 @@
-// The revisions as the chat's menus reach them (ADR 0026, S7 and the amendment "messages and apply"): two revisions
-// compared in a dialog (each file's status and line diff, `.dt` and `.dtes` together); and, for the facilitator,
-// confirming (a mark, never a gate), recording the current state and restoring, with the two-step for external changes
-// and the way through a run in progress.
+// The revisions as the chat's menus reach them (ADR 0026, S7 and the amendments "messages and apply" and "changes in the
+// model's words"): what a unit of work changed, in a dialog — the model's elements added, changed and removed, then,
+// folded, the comparison of its two revisions (each changed file's status and line diff, `.dt` and `.dtes` together,
+// and the validations when either has a finding); and, for the facilitator, confirming (a mark, never a gate),
+// recording the current state and restoring, with the two-step for external changes and the way through a run in
+// progress. The words are the unit's: a revision
+// and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import type { ComparedFileBody, ComparisonBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
+import { ChangeChip } from './card';
+import { changeGroups, changeKey, changeWhat, useModelChanges } from './changes';
+import { useTargetNaming } from './naming';
 import { diffLines, restoreProblem, timeline, type TimelineEntry } from './timeline';
 
 type Tx = Messages['session'];
@@ -19,43 +25,50 @@ const LANGUAGES = ['Dt', 'Dtes'] as const;
 const failure = (e: unknown): string => (e instanceof SessionApiError ? (e.message && e.message !== e.type ? `${e.type}: ${e.message}` : e.type) : String(e));
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
+/** What a restore goes back to: the state before a unit of work, or the one kept before a restore that failed midway. */
+export type RestorePoint = 'work' | 'preRestore';
+
 /** Where a restore stands: what the facilitator is asked next. */
-type RestoreFlow =
+type RestoreFlow = { readonly what: RestorePoint } & (
     | { readonly step: 'confirm'; readonly revision: string }
     | { readonly step: 'external'; readonly revision: string; readonly paths: readonly string[] }
     | { readonly step: 'run'; readonly revision: string; readonly run: string; readonly cancelled: boolean }
     | { readonly step: 'manual'; readonly revision: string; readonly preRestore: string; readonly cause: string; readonly message: string }
     | { readonly step: 'done'; readonly revision: string; readonly restored: string }
-    | { readonly step: 'failed'; readonly revision: string; readonly message: string };
+    | { readonly step: 'failed'; readonly revision: string; readonly message: string }
+);
+
+/** The changes of a unit of work: its revisions before and after, and the unit as the dialog names it. */
+export interface ChangesSubject {
+    readonly base: string;
+    readonly result: string;
+    /** Its name, whose messages and when, on one line. */
+    readonly about: string;
+}
 
 /** What the chat's menus do with revisions: compare two, confirm one, restore one (asked first), record the workspace. */
 export interface RevisionTools {
     /** The restore's box, while one is under way: placed in the chat. */
     readonly node: ReactNode;
-    /** The comparison's dialog, while one is open: placed outside the tabs, so that 履歴 opens it too. */
+    /** The changes' dialog, while one is open: placed outside the tabs, so that AI の作業 opens it too. */
     readonly dialog: ReactNode;
-    compare(before: string, after: string): void;
+    showChanges(subject: ChangesSubject): void;
     confirm(revision: string): void;
     restore(revision: string): void;
     take(): void;
-    /** A revision's number in the session (`#3`). */
+    /** A revision's number in the session (`#3`), for tooltips. */
     number(id: string): string;
 }
 
 /**
  * The facilitator's revision actions in the chat (ADR 0026, amendment): confirming (a mark, never a gate), recording
  * the current state and restoring, with the two-step for external changes and the way through a run in progress, and
- * the comparison of two revisions in a dialog (each file's status and line diff, `.dt` and `.dtes` together). The
- * server checks the role anyway.
+ * the changes of a unit in a dialog. The server checks the role anyway.
  */
 export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools {
     const entries = timeline(state);
     const numberOf = new Map(entries.map((e) => [e.revision.id, e.number]));
-    const runNumber = (id: string): number | undefined => {
-        const i = [...state.runs].sort((a, b) => a.queuedAt.localeCompare(b.queuedAt)).findIndex((r) => r.id === id);
-        return i < 0 ? undefined : i + 1;
-    };
-    const [comparing, setComparing] = useState<readonly [string, string] | undefined>();
+    const [showing, setShowing] = useState<ChangesSubject | undefined>();
     const [flow, setFlow] = useState<RestoreFlow | undefined>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
@@ -74,23 +87,23 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
             setBusy(false);
         }
     };
-    const restore = async (revision: string, recordExternalChanges: boolean): Promise<void> => {
+    const restore = async (what: RestorePoint, revision: string, recordExternalChanges: boolean): Promise<void> => {
         setBusy(true);
         try {
             const r = await sessionApi.restoreRevision(revision, recordExternalChanges);
-            setFlow({ step: 'done', revision, restored: r.restored.id });
+            setFlow({ what, step: 'done', revision, restored: r.restored.id });
         } catch (e) {
             const p = restoreProblem(e);
-            if (p.kind === 'external') setFlow({ step: 'external', revision, paths: p.paths });
-            else if (p.kind === 'run') setFlow({ step: 'run', revision, run: p.run, cancelled: false });
-            else if (p.kind === 'manual') setFlow({ step: 'manual', revision, preRestore: p.preRestore, cause: p.cause, message: p.message });
-            else setFlow({ step: 'failed', revision, message: p.message });
+            if (p.kind === 'external') setFlow({ what, step: 'external', revision, paths: p.paths });
+            else if (p.kind === 'run') setFlow({ what, step: 'run', revision, run: p.run, cancelled: false });
+            else if (p.kind === 'manual') setFlow({ what, step: 'manual', revision, preRestore: p.preRestore, cause: p.cause, message: p.message });
+            else setFlow({ what, step: 'failed', revision, message: p.message });
         } finally {
             setBusy(false);
         }
     };
-    const cancelRun = async (revision: string, run: string): Promise<void> => {
-        if (await act(() => sessionApi.cancelRun(run))) setFlow({ step: 'run', revision, run, cancelled: true });
+    const cancelRun = async (what: RestorePoint, revision: string, run: string): Promise<void> => {
+        if (await act(() => sessionApi.cancelRun(run))) setFlow({ what, step: 'run', revision, run, cancelled: true });
     };
 
     const node = (
@@ -99,11 +112,9 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
                 <RestoreBox
                     flow={flow}
                     busy={busy}
-                    n={n}
-                    runNumber={runNumber}
-                    onRestore={(revision, record) => void restore(revision, record)}
-                    onAsk={(revision) => setFlow({ step: 'confirm', revision })}
-                    onCancelRun={(revision, run) => void cancelRun(revision, run)}
+                    onRestore={(revision, record) => void restore(flow.what, revision, record)}
+                    onAsk={(revision) => setFlow({ what: 'preRestore', step: 'confirm', revision })}
+                    onCancelRun={(revision, run) => void cancelRun(flow.what, revision, run)}
                     onClose={() => setFlow(undefined)}
                     tx={tx}
                 />
@@ -117,10 +128,10 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
     );
     return {
         node,
-        dialog: comparing && <ComparisonDialog pair={comparing} n={n} entries={entries} onClose={() => setComparing(undefined)} />,
-        compare: (before, after) => setComparing([before, after]),
+        dialog: showing && <ChangesDialog subject={showing} n={n} entries={entries} onClose={() => setShowing(undefined)} />,
+        showChanges: setShowing,
         confirm: (revision) => void act(() => sessionApi.confirmRevision(revision)),
-        restore: (revision) => setFlow({ step: 'confirm', revision }),
+        restore: (revision) => setFlow({ what: 'work', step: 'confirm', revision }),
         take: () => void act(() => sessionApi.takeRevision()),
         number: n,
     };
@@ -129,15 +140,13 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
 function RestoreBox(props: {
     flow: RestoreFlow;
     busy: boolean;
-    n: (id: string) => string;
-    runNumber: (id: string) => number | undefined;
     onRestore: (revision: string, recordExternalChanges: boolean) => void;
     onAsk: (revision: string) => void;
     onCancelRun: (revision: string, run: string) => void;
     onClose: () => void;
     tx: Tx;
 }) {
-    const { flow, busy, n, tx } = props;
+    const { flow, busy, tx } = props;
     const r = tx.restoreFlow;
     const close = (
         <button className="small" onClick={props.onClose}>
@@ -148,10 +157,10 @@ function RestoreBox(props: {
         switch (flow.step) {
             case 'confirm':
                 return {
-                    text: r.confirm(n(flow.revision)),
+                    text: r.confirm(flow.what),
                     actions: (
                         <button className="primary session-restore-confirm" disabled={busy} onClick={() => props.onRestore(flow.revision, false)}>
-                            {r.restore(n(flow.revision))}
+                            {r.restore(flow.what)}
                         </button>
                     ),
                 };
@@ -175,7 +184,7 @@ function RestoreBox(props: {
                           ),
                       }
                     : {
-                          text: r.run(props.runNumber(flow.run)),
+                          text: r.run,
                           actions: (
                               <button className="primary session-restore-cancel-run" disabled={busy} onClick={() => props.onCancelRun(flow.revision, flow.run)}>
                                   {r.cancelRun}
@@ -184,16 +193,16 @@ function RestoreBox(props: {
                       };
             case 'manual':
                 return {
-                    text: r.manual(`${flow.cause}: ${flow.message}`, n(flow.preRestore)),
+                    text: r.manual(`${flow.cause}: ${flow.message}`),
                     error: true,
                     actions: (
                         <button className="small" disabled={busy} onClick={() => props.onAsk(flow.preRestore)}>
-                            {r.restorePre(n(flow.preRestore))}
+                            {r.restorePre}
                         </button>
                     ),
                 };
             case 'done':
-                return { text: r.done(n(flow.revision), n(flow.restored)), actions: null };
+                return { text: r.done(flow.what), actions: null };
             case 'failed':
                 return { text: r.failed(flow.message), error: true, actions: null };
         }
@@ -209,15 +218,28 @@ function RestoreBox(props: {
     );
 }
 
-function ComparisonDialog(props: { pair: readonly [string, string]; n: (id: string) => string; entries: readonly TimelineEntry[]; onClose: () => void }) {
-    const { pair, n, onClose } = props;
+/**
+ * この作業の変更: the unit's name, whose messages and when; the elements it added, changed and removed (only the groups it
+ * has), each with what it is, a click closing the dialog and going to it; at the bottom, folded, the source diff — the
+ * comparison of the two revisions, asked for when it is first opened. When the model could not be
+ * compared, a line says so and the source diff is open.
+ */
+function ChangesDialog(props: { subject: ChangesSubject; n: (id: string) => string; entries: readonly TimelineEntry[]; onClose: () => void }) {
+    const { subject, n, onClose } = props;
     const t = useT();
     const tx = t.session;
     const c = tx.comparison;
+    const naming = useTargetNaming();
     const dialog = useRef<HTMLDialogElement>(null);
+    const changes = useModelChanges(subject.base, subject.result);
+    // closed, but open by itself when the model could not be compared, until the facilitator toggles it
+    const [sourceOpen, setSourceOpen] = useState<boolean | undefined>();
     const [data, setData] = useState<ComparisonBody | undefined>();
     const [error, setError] = useState<string | undefined>();
-    const [before, after] = pair;
+    const { base: before, result: after } = subject;
+    const compared = changes.kind === 'loaded' && changes.body.complete;
+    const unreadable = (changes.kind === 'loaded' && !changes.body.complete) || changes.kind === 'failed';
+    const showSource = sourceOpen ?? unreadable;
 
     // a modal <dialog>: focus trapped, Escape closes it
     useEffect(() => {
@@ -225,7 +247,9 @@ function ComparisonDialog(props: { pair: readonly [string, string]; n: (id: stri
         if (d && !d.open) d.showModal();
         return () => d?.close();
     }, []);
+    // the source diff is asked for once it is shown
     useEffect(() => {
+        if (!showSource) return;
         let current = true;
         setData(undefined);
         sessionApi.compareRevisions(before, after).then(
@@ -235,7 +259,7 @@ function ComparisonDialog(props: { pair: readonly [string, string]; n: (id: stri
         return () => {
             current = false;
         };
-    }, [before, after]);
+    }, [before, after, showSource]);
 
     const heading = (id: string): string => {
         const e = props.entries.find((x) => x.revision.id === id);
@@ -245,24 +269,51 @@ function ComparisonDialog(props: { pair: readonly [string, string]; n: (id: stri
     return (
         <dialog
             ref={dialog}
-            className="session-dialog session-comparison"
-            aria-labelledby="session-comparison-title"
+            className="session-dialog session-comparison session-changes"
+            aria-labelledby="session-changes-title"
             onClose={onClose}
             onClick={(e) => e.target === e.currentTarget && onClose()}
         >
             <div className="settings-dialog-header">
-                <h2 id="session-comparison-title">{c.title(n(before), n(after))}</h2>
+                <div className="session-changes-heading">
+                    <h2 id="session-changes-title">{c.title}</h2>
+                    <p className="session-changes-about">{subject.about}</p>
+                </div>
                 <button className="icon-button" aria-label={c.close} data-tooltip={c.close} onClick={onClose}>
                     <X size={18} aria-hidden />
                 </button>
             </div>
             <div className="settings-dialog-body session-comparison-body">
-                <p className="muted">
-                    {heading(before)} → {heading(after)}
-                </p>
-                {error && <p className="session-note session-error">{tx.error(error)}</p>}
-                {!data && !error && <p className="muted">{c.loading}</p>}
-                {data && <ComparisonView data={data} n={n} tx={tx} />}
+                {changes.kind === 'loading' && <p className="muted">{c.loading}</p>}
+                {unreadable && <p className="session-changes-note">{c.notCompared}</p>}
+                {changes.kind === 'loaded' &&
+                    changeGroups(changes.body.changes).map((g) => (
+                        <section key={g.change} className="session-changes-group">
+                            <h3>{c.groups[g.change]}</h3>
+                            <ul>
+                                {g.items.map((item) => (
+                                    <li key={changeKey(item)}>
+                                        <ChangeChip change={item} onPick={onClose} />
+                                        <span className="session-changes-what">{changeWhat(item, t, c.of, naming)}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    ))}
+                {compared && changes.body.changes.length === 0 && <p className="session-changes-note">{c.noElementChanges}</p>}
+                <details className="session-changes-source" open={showSource} onToggle={(e) => setSourceOpen(e.currentTarget.open)}>
+                    <summary>{c.sourceDiff}</summary>
+                    {showSource && (
+                        <>
+                            <p className="muted">
+                                {heading(before)} → {heading(after)}
+                            </p>
+                            {error && <p className="session-note session-error">{tx.error(error)}</p>}
+                            {!data && !error && <p className="muted">{c.loading}</p>}
+                            {data && <ComparisonView data={data} n={n} tx={tx} />}
+                        </>
+                    )}
+                </details>
             </div>
         </dialog>
     );
@@ -270,33 +321,36 @@ function ComparisonDialog(props: { pair: readonly [string, string]; n: (id: stri
 
 function ComparisonView({ data, n, tx }: { data: ComparisonBody; n: (id: string) => string; tx: Tx }) {
     const c = tx.comparison;
+    // only the files that changed, by language; the validations only when either side has a finding
+    const changed = data.files.filter((f) => f.status !== 'unchanged');
+    const findings = VALIDATION_ROWS.some((k) => data.before.validation[k] > 0 || data.after.validation[k] > 0);
     return (
         <>
-            <ValidationSides before={data.before.validation} after={data.after.validation} labels={[`#${n(data.before.id)}`, `#${n(data.after.id)}`]} tx={tx} />
+            {findings && (
+                <ValidationSides
+                    before={data.before.validation}
+                    after={data.after.validation}
+                    labels={[`#${n(data.before.id)}`, `#${n(data.after.id)}`]}
+                    tx={tx}
+                />
+            )}
             {data.diffsOmitted && <p className="session-note">{c.omitted}</p>}
+            {changed.length === 0 && <p className="muted small">{c.noChanges}</p>}
             {LANGUAGES.map((lang) => {
-                const files = data.files.filter((f) => f.language === lang);
+                const files = changed.filter((f) => f.language === lang);
                 if (files.length === 0) return null;
                 const counts = data.counts[lang];
-                const changed = files.filter((f) => f.status !== 'unchanged');
-                const unchanged = files.filter((f) => f.status === 'unchanged');
                 return (
                     <section key={lang} className={`session-comparison-language lang-${lang}`}>
                         <h3>
                             {c.languages[lang]}{' '}
                             <span className="muted small">
-                                {(['added', 'removed', 'changed', 'unchanged'] as const).map((s) => `${c.statuses[s]} ${counts[s]}`).join(' · ')}
+                                {(['added', 'removed', 'changed'] as const).map((s) => `${c.statuses[s]} ${counts[s]}`).join(' · ')}
                             </span>
                         </h3>
-                        {changed.length === 0 && <p className="muted small">{c.noChanges}</p>}
-                        {changed.map((f) => (
+                        {files.map((f) => (
                             <FileDiff key={f.path} file={f} tx={tx} />
                         ))}
-                        {unchanged.length > 0 && (
-                            <p className="muted small session-unchanged">
-                                {c.statuses.unchanged}: {unchanged.map((f) => f.path).join(', ')}
-                            </p>
-                        )}
                     </section>
                 );
             })}

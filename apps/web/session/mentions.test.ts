@@ -13,8 +13,6 @@ import {
     composerKey,
     editText,
     EMPTY_COMPOSER,
-    insertMention,
-    insertPerson,
     matchCandidates,
     matchPeople,
     MAX_REQUEST_MENTIONS,
@@ -28,6 +26,7 @@ import {
     type PersonCandidate,
 } from './mentions';
 import type { TargetDraft } from './targets';
+import { composerLines, composerValue, mentionFits, type ComposerMention } from './composer-text';
 import { exampleSources } from '../test-helpers';
 
 const el = (element: string): TargetDraft => ({ target: { kind: 'DtElement', element }, label: element });
@@ -35,25 +34,22 @@ const order = el('Sales.Order');
 const customer = el('Sales.Customer');
 const invoice = el('Billing.Invoice');
 
-/** Types `typed` at the end of the text, then picks `target` for the `#query` before the caret. */
-function pick(value: ComposerValue, typed: string, target: TargetDraft, name: string): ComposerValue {
+/** Types `typed` at the end of the text, then picks `mention` for the query before the caret, as the editor does. */
+function pickAt(value: ComposerValue, typed: string, mention: ComposerMention): ComposerValue {
     const text = value.text + typed;
     const q = mentionQuery(text, text.length);
-    if (q?.sign !== '#') throw new Error(`no #query in ${text}`);
-    const picked = insertMention({ ...value, text }, { start: q.start, end: text.length }, target, name);
-    if (!picked) throw new Error('not picked');
-    return picked.value;
+    if (q?.sign !== (mention.kind === 'element' ? '#' : '@')) throw new Error(`no ${mention.kind} query in ${text}`);
+    if (!mentionFits(value, mention)) throw new Error('not picked');
+    const lines = composerLines({ ...value, text: text.slice(0, q.start) });
+    lines[lines.length - 1].push(mention, { kind: 'text', text: ' ' });
+    return composerValue(value, lines);
 }
 
+/** Types `typed` at the end of the text, then picks `target` for the `#query` before the caret. */
+const pick = (value: ComposerValue, typed: string, target: TargetDraft, name: string): ComposerValue => pickAt(value, typed, { kind: 'element', name, target });
+
 /** Types `typed` at the end of the text, then picks `person` for the `@query` before the caret. */
-function pickPerson(value: ComposerValue, typed: string, person: string, name: string): ComposerValue {
-    const text = value.text + typed;
-    const q = mentionQuery(text, text.length);
-    if (q?.sign !== '@') throw new Error(`no @query in ${text}`);
-    const picked = insertPerson({ ...value, text }, { start: q.start, end: text.length }, person, name);
-    if (!picked) throw new Error('not picked');
-    return picked.value;
-}
+const pickPerson = (value: ComposerValue, typed: string, person: string, name: string): ComposerValue => pickAt(value, typed, { kind: 'person', name, person });
 
 describe('mentions in a body', () => {
     test('#name[n] (and @name[n], as written before) for a target the request has, @name[pN] a person; the rest is text', () => {
@@ -69,7 +65,12 @@ describe('mentions in a body', () => {
         expect(parseBody('＃注文[1]', { targets: 1, people: 0 })).toEqual([{ kind: 'element', name: '注文', index: 0 }]);
         expect(parseBody('no mention', { targets: 0, people: 0 })).toEqual([{ kind: 'text', text: 'no mention' }]);
         // on one line: elements as #name (an old @name[n] too), people as @name
-        expect(bodyText('#注文[1] と @顧客[1] と #謎[3] を @佐藤[p1]', 1)).toBe('#注文 と #顧客 と #謎[3] を @佐藤');
+        const order = { target: { kind: 'DtElement', element: 'Sales.Order' } };
+        expect(bodyText('#注文[1] と @顧客[1] と #謎[3] を @佐藤[p1]', [order])).toBe('#注文 と #顧客 と #謎[3] を @佐藤');
+        // a state or a command by its own name, as the chips show it
+        const paid = { target: { kind: 'DtElement', element: 'Billing.Invoice#Paid' } };
+        expect(bodyText('#請求書.支払済み[1] に @佐藤[p1]', [paid])).toBe('#支払済み に @佐藤');
+        expect(bodyText('#請求書.支払済み[1] に @佐藤[p1]', [paid], 1, true)).toBe('支払済み に 佐藤');
         expect(mentionName('注文 (Order)')).toBe('注文(Order)');
         expect(mentionName('a[b]@c#d')).toBe('abcd');
     });
@@ -148,10 +149,9 @@ describe('chips and mentions in step', () => {
         const many = Array.from({ length: 25 }, (_, i) => el(`Sales.E${i}`));
         const full = addChips(EMPTY_COMPOSER, many);
         expect([full.value.chips.length, full.skipped]).toEqual([MAX_REQUEST_TARGETS, 5]);
-        const text = '#x';
-        expect(insertMention({ ...full.value, text }, { start: 0, end: 2 }, order, '注文')).toBeUndefined();
+        expect(mentionFits(full.value, { kind: 'element', name: '注文', target: order })).toBe(false);
         // a target already a chip can still be mentioned at the limit
-        expect(insertMention({ ...full.value, text }, { start: 0, end: 2 }, many[3], 'E3')?.value.text).toBe('#E3[4] ');
+        expect(pick(full.value, '#x', many[3], 'E3').text).toBe('#E3[4] ');
     });
 });
 
@@ -172,9 +172,9 @@ describe('people and their mentions in step', () => {
 
     test('at most 20 people; someone already mentioned can be mentioned again at the limit', () => {
         const people = Array.from({ length: MAX_REQUEST_MENTIONS }, (_, i) => `p:${i}`);
-        const full: ComposerValue = { ...EMPTY_COMPOSER, text: '@x', people };
-        expect(insertPerson(full, { start: 0, end: 2 }, 'p:new', 'New')).toBeUndefined();
-        expect(insertPerson(full, { start: 0, end: 2 }, 'p:3', 'Three')?.value.text).toBe('@Three[p4] ');
+        const full: ComposerValue = { ...EMPTY_COMPOSER, text: people.map((_, i) => `@n${i}[p${i + 1}] `).join(''), people };
+        expect(mentionFits(full, { kind: 'person', name: 'New', person: 'p:new' })).toBe(false);
+        expect(pickPerson(full, '@x', 'p:3', 'Three').text).toEndWith(' @Three[p4] ');
     });
 
     test('the people offered: by name (start, contains, letters in order), in the order given among equals', () => {
@@ -254,5 +254,18 @@ describe('the # candidates', () => {
         expect(matchCandidates(candidates, 'zzzz')).toEqual([]);
         const byName = mentionCandidates({ mode: 'name', model, stormings, sources }).find((c) => c.qualified === 'Sales.Order');
         expect([byName?.name, byName?.mention]).toEqual(['Order', 'Order']);
+    });
+
+    test('an element without a label (empty or blank) is named and mentioned by its name', async () => {
+        const text =
+            'context S " " {\n  id AId: UUID\n  aggregate A "" {\n    id: AId\n    state Open "  "\n    state Done "完了"\n    command close() "" Open -> Done\n  }\n}\n';
+        const blank = (await analyze([{ path: 's.dt', text }])).model as DomainModel;
+        const found = mentionCandidates({ mode: 'label', model: blank, stormings: [], sources: [{ path: 's.dt', text }] });
+        const of = (q: string) => found.find((c) => c.qualified === q);
+        expect([of('S.A')?.name, of('S.A')?.mention, of('S.A')?.where]).toEqual(['A', 'A', 'S']);
+        expect([of('S.A#Open')?.name, of('S.A#Open')?.mention]).toEqual(['A.Open', 'A.Open']);
+        expect([of('S.A#Done')?.name, of('S.A#Done')?.mention]).toEqual(['A.完了', 'A.完了']);
+        expect([of('S.A:close')?.name, of('S.A:close')?.mention]).toEqual(['A.close', 'A.close']);
+        expect(of('S.A')?.search.every((s) => s.trim() !== '')).toBe(true);
     });
 });

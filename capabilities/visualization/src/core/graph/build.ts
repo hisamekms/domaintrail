@@ -30,6 +30,7 @@ import {
     maxUnits,
     perLang,
     sameText,
+    shownLabel,
     textUnits,
     type Lang,
     type Graph,
@@ -99,10 +100,11 @@ const WORDS: Record<Lang, { shared: string; aggregate: string; state: string; mo
 
 /** `name` / `label` / `label name` depending on the display mode (label falls back to the name). */
 export function named(name: string, label: string | undefined, both = (l: string, n: string) => `${l} (${n})`, suffix = ''): Texts {
-    return anyLang({ name: name + suffix, label: (label ?? name) + suffix, both: (label ? both(label, name) : name) + suffix });
+    const shown = shownLabel(label);
+    return anyLang({ name: name + suffix, label: (shown ?? name) + suffix, both: (shown ? both(shown, name) : name) + suffix });
 }
 
-const lookupLabel = (model: DomainModel, qname: string): string | undefined => elementOf(model, qname)?.label;
+const lookupLabel = (model: DomainModel, qname: string): string | undefined => shownLabel(elementOf(model, qname)?.label);
 
 /** A field row in every display mode: key `◆ 明細` / `◆ items`, value `注文明細[0..*]` / `OrderItem[0..*]`. */
 export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent = ''): GraphLine {
@@ -110,11 +112,12 @@ export function fieldLine(f: FieldModel, ctx: string, model: DomainModel, indent
     const shared = sharedContexts(model);
     const byName = typeText(f.type, ctx, shared);
     const byLabel = f.type.kind === 'ref' ? (lookupLabel(model, f.type.ref) ?? byName) : PRIMITIVE_LABELS[f.type.name];
+    const label = shownLabel(f.label);
     return {
         key: anyLang({
             name: `${marker}${f.name}`,
-            label: `${marker}${f.label ?? f.name}`,
-            both: `${marker}${f.label ? `${f.label} ` : ''}${f.name}`,
+            label: `${marker}${label ?? f.name}`,
+            both: `${marker}${label ? `${label} ` : ''}${f.name}`,
         }),
         value: anyLang({ name: byName + f.multiplicity, label: byLabel + f.multiplicity, both: byName + f.multiplicity }),
         ...(f.fieldSet && {
@@ -225,13 +228,13 @@ export function buildStructureGraph(model: DomainModel, opts: StructureOptions =
         if (!overview && el.kind === 'union') {
             // One row per variant (the discriminator value), followed by its fields.
             for (const v of el.variants) {
-                lines.push({ key: named(`${el.discriminator}: ${v.name}`, v.label && `${v.label}`, (l, n) => `${l} (${n})`) });
+                lines.push({ key: named(`${el.discriminator}: ${v.name}`, v.label, (l, n) => `${l} (${n})`) });
                 lines.push(...v.fields.map((f) => fieldLine(f, el.context, model, VARIANT_INDENT)));
             }
         }
         if (!overview && el.kind === 'aggregate' && el.states.length) {
             const byName = el.states.map((s) => s.name).join(' | ');
-            const byLabel = el.states.map((s) => s.label ?? s.name).join(' | ');
+            const byLabel = el.states.map((s) => shownLabel(s.label) ?? s.name).join(' | ');
             lines.push({ key: perLang({ ja: WORDS.ja.state, en: WORDS.en.state }), value: anyLang({ name: byName, label: byLabel, both: byName }) });
         }
         nodes.push(
@@ -498,7 +501,7 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
                 stereotype: stereotype('状態', 'state'),
                 lines: [
                     ...s.fields.map((f) => fieldLine(f, agg.context, model)),
-                    ...s.invariants.map((i) => ({ key: named(`✓ ${i.name}`, i.label && `✓ ${i.label}`, (l, n) => `${l} (${n.slice(2)})`) })),
+                    ...s.invariants.map((i) => ({ key: named(`✓ ${i.name}`, shownLabel(i.label) && `✓ ${i.label}`, (l, n) => `${l} (${n.slice(2)})`) })),
                 ],
                 elementId: s.id,
             });
@@ -562,7 +565,8 @@ function sizedState(n: Omit<GraphNode, 'width' | 'height'>, labels: TransitionLa
 
 function commandLabel(c: CommandModel): Texts {
     const signature = `${c.name}(${c.params.map((p) => p.name).join(', ')})`;
-    return anyLang({ name: signature, label: c.label ?? signature, both: `${c.label ? `${c.label} ` : ''}${signature}` });
+    const label = shownLabel(c.label);
+    return anyLang({ name: signature, label: label ?? signature, both: `${label ? `${label} ` : ''}${signature}` });
 }
 
 /**

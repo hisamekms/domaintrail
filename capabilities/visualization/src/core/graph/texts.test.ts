@@ -4,7 +4,7 @@ import { analyze } from '@domaintrail/analysis';
 import { elementOf } from '@domaintrail/modeling';
 import { buildStateGraph, buildStructureGraph } from './build.js';
 import { buildContextMapGraph } from './context-map.js';
-import { anyLang, perLang, type Graph } from './ir.js';
+import { anyLang, perLang, shownLabel, type Graph } from './ir.js';
 import { check, exampleSources } from '../../test-helpers.js';
 
 const SALES = `context Sales "販売" {
@@ -98,6 +98,50 @@ describe('labels in views', () => {
             .nodes.find((n) => n.id === 'Sales.Order')!
             .lines.find((l) => l.key.en.name === 'state');
         expect(state?.key).toEqual(perLang({ ja: '状態', en: 'state' }));
+    });
+
+    test('a label missing, empty or only whitespace counts as none', () => {
+        expect(shownLabel(undefined)).toBeUndefined();
+        expect(shownLabel('')).toBeUndefined();
+        expect(shownLabel(' \t\u3000')).toBeUndefined();
+        expect(shownLabel(' 注文 ')).toBe(' 注文 ');
+    });
+
+    test('elements without a label are shown by their names in every display mode', async () => {
+        const m = (
+            await check({
+                'a.dt': `context Sales "" {
+  id OrderId "  ": UUID
+  aggregate Order "" {
+    id: OrderId
+    note: String? " "
+    state Draft ""
+    state Confirmed {
+      invariant hasNote "" { exists(note) }
+    }
+    command confirm() "  " Draft -> Confirmed
+  }
+}`,
+            })
+        ).model!;
+        const structure = buildStructureGraph(m);
+        const order = structure.nodes.find((n) => n.id === 'Sales.Order')!;
+        expect(order.label).toEqual(anyLang({ name: 'Order', label: 'Order', both: 'Order' }));
+        expect(structure.nodes.find((n) => n.id === 'Sales')!.label).toEqual(anyLang({ name: 'Sales', label: 'Sales', both: 'Sales' }));
+        const note = order.lines.find((l) => l.key.en.name === 'note')!;
+        expect(note.key).toEqual(anyLang({ name: 'note', label: 'note', both: 'note' }));
+        const id = order.lines.find((l) => l.key.en.name === 'id')!;
+        expect(id.value).toEqual(anyLang({ name: 'OrderId', label: 'OrderId', both: 'OrderId' }));
+        expect(order.lines.find((l) => l.key.en.name === 'state')!.value).toEqual(
+            anyLang({ name: 'Draft | Confirmed', label: 'Draft | Confirmed', both: 'Draft | Confirmed' }),
+        );
+
+        const states = buildStateGraph(elementOf(m, 'Sales.Order')!, m);
+        expect(states.edges[0].label).toEqual(anyLang({ name: 'confirm()', label: 'confirm()', both: 'confirm()' }));
+        expect(states.nodes.find((n) => n.id === 'Sales.Order#Draft')!.label).toEqual(anyLang({ name: 'Draft', label: 'Draft', both: 'Draft' }));
+        expect(states.nodes.find((n) => n.id === 'Sales.Order#Confirmed')!.lines.at(-1)).toEqual({
+            key: anyLang({ name: '✓ hasNote', label: '✓ hasNote', both: '✓ hasNote' }),
+        });
     });
 
     test('wide characters reserve more width than ASCII', async () => {

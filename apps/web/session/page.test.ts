@@ -381,7 +381,13 @@ describe('presence', () => {
 
     test('initials, and updates throttled to the latest value', () => {
         expect(initials('Ada Lovelace')).toBe('AL');
-        expect(initials('山田')).toBe('山田');
+        expect(initials('ooyama_F')).toBe('OO');
+        // a name starting in CJK: its first character only (two would not fit the circle)
+        expect(initials('高橋')).toBe('高');
+        expect(initials('さくら')).toBe('さ');
+        expect(initials('カトウ 太郎')).toBe('カ');
+        expect(initials('김민준')).toBe('김');
+        expect(initials('  ')).toBe('?');
         let now = 0;
         const sent: number[] = [];
         const timers: (() => void)[] = [];

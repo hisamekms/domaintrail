@@ -11,6 +11,7 @@ import type {
     AgentSessionBody,
     EventMessage,
     Json,
+    RunActivity,
 } from '@domaintrail/collaboration/protocol';
 import type { Collaboration, ReplyData, ReplyOutcome } from '@domaintrail/collaboration';
 
@@ -59,6 +60,8 @@ export interface AgentApi {
     claim(owner: string): Promise<ApiResult<AgentClaimed>>;
     start(run: string, token: string): Promise<ApiResult<Started>>;
     heartbeat(run: string, token: string): Promise<ApiResult<{ readonly lease: AgentLease }>>;
+    /** What the running run is doing now (the server keeps the latest for the pages; the lease is not extended). */
+    activity(run: string, token: string, activity: RunActivity): Promise<ApiResult<unknown>>;
     finish(run: string, token: string, facts: Omit<AgentFinishBody, 'token'>): Promise<ApiResult<unknown>>;
     clarification(run: string, token: string, question: string, reply?: AgentReplyBody): Promise<ApiResult<unknown>>;
     decline(run: string, token: string, reply: AgentReplyBody): Promise<ApiResult<unknown>>;
@@ -76,6 +79,11 @@ export interface AgentInvocation {
     readonly requests: number;
     /** Aborted to stop the agent (a cancel, a lost lease, Ctrl+C): the agent and every process it started are killed. */
     readonly signal: AbortSignal;
+    /**
+     * Told what the agent is doing as it goes, in the protocol's phases (an adapter maps its own events; what it cannot
+     * map it does not tell). Returns at once: the caller reports it without holding up the agent.
+     */
+    readonly onActivity?: (activity: RunActivity) => void;
 }
 
 /** How an invocation ended. */

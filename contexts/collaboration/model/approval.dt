@@ -1,0 +1,57 @@
+context Collaboration {
+  /// 前提の承認の識別子。
+  id AssumptionApprovalId "前提の承認ID": UUID
+
+  /// 完了した実行の返答の前提1つ。前提にはキーがないので、返答の中の番号で指す（返答は保存したら変わらない）。
+  value AssumptionRef "前提の参照" {
+    references run: AgentRunId -> AgentRun "実行"
+    assumption: Tally "前提の番号"
+  }
+
+  /// いま決められると、承認のときに確かめた前提: そのセッションの完了した実行の返答にあり、まだ決まっていない（承認も
+  /// 別案の選択もなく、あとの実行がその実行の依頼を引き継いでいない）。
+  verified DecidableAssumption "決められる前提" of AssumptionRef for SessionId errors RunNotFound, RunOfAnotherSession, RunNotApprovable, AssumptionNotFound, AssumptionClosed
+
+  /// ファシリテーターが、AI が仮に決めた前提をそのままでよいと決めたこと。AI には何も送らない（記録だけ）。前提1つに決定は
+  /// 1つで、承認か別案の選択（`RunInput.pick`）のどちらか。実行は終わったら変わらないので、承認は実行の外に持つ。
+  aggregate AssumptionApproval "前提の承認" {
+    id: AssumptionApprovalId
+    references session: SessionId -> Session
+    assumption: AssumptionRef "前提"
+    approvedBy: ParticipantId "承認した人"
+    approvedAt: Timestamp "承認日時"
+
+    state Approved "承認済み"
+
+    /// 承認するのはファシリテーター。
+    create command approve(id: AssumptionApprovalId, session: ActiveSession, assumption: DecidableAssumption, approvedBy: ParticipantId, approvedByRole: ParticipantRole, approvedAt: Timestamp) "前提を承認する"
+      -> Approved
+      requires facilitatorApproves "ファシリテーターが承認する" {
+        approvedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      emits AssumptionApproved
+  }
+
+  persistent event AssumptionApproved "前提を承認した" {
+    approvalId: AssumptionApprovalId
+    session: SessionId
+    assumption: AssumptionRef
+    approvedBy: ParticipantId
+    approvedAt: Timestamp
+  }
+
+  /// 承認する前提の実行は、完了していないか、返答に前提がない（承認できるのは前提のある完了の実行）。
+  error RunNotApprovable "前提を承認できない実行" {
+    run: AgentRunId
+  }
+
+  /// 前提の番号が、その実行の返答にない。
+  error AssumptionNotFound "返答にない前提" {
+    run: AgentRunId
+  }
+
+  /// 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ）。
+  error AssumptionClosed "決まった前提" {
+    run: AgentRunId
+  }
+}

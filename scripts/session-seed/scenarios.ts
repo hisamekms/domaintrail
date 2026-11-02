@@ -420,7 +420,8 @@ const questions = async (s: Ctx): Promise<void> => {
 };
 
 const assumptions = async (s: Ctx): Promise<void> => {
-    // assumptions with alternatives, votes open (for an alternative, and for keeping it)
+    // assumptions with alternatives: the first undecided, votes open (for an alternative, and for keeping it); the
+    // second approved by the facilitator as it is (承認 name · time, nothing sent to the AI), its votes frozen
     const cancel = await s.say('tanaka', '#注文を取り消す[1] とき、請求書も取り消されるようにしてください', {
         targets: [s.dt('Sales.Order:cancel', '注文を取り消す')],
         reads: 'request',
@@ -469,6 +470,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
     await s.voteAssumption('takahashi', cancelRun, 0, 'paidToo');
     await s.voteAssumption('tanaka', cancelRun, 1, 'own');
     await s.voteAssumption('sato', cancelRun, 1);
+    await s.approveAssumption(cancelRun, 1);
 
     // an alternative picked: the run that redoes it continues the card (the pick's time links to it)
     const amount = await s.say('suzuki', '#請求書を発行する[1] とき、請求金額を注文の合計から計算するようにしてください', {
@@ -604,6 +606,14 @@ const replies = async (s: Ctx): Promise<void> => {
     });
     // a reply to the reply's run
     await s.say('takahashi', '理由が選べるのは良いですね。経理チームにも共有しておきます 👍', { replyTo: second, reads: 'chat' });
+    // replies to people's messages, not to the AI: a reference line names the author (sign in as 田中 to see the reply
+    // to their message marked), and a reply to a reply
+    const addressee = await s.say('suzuki', '宛名の誤りのときは、訂正前の宛名も残しておきたいです', { replyTo: reason, reads: 'request' });
+    await s.say('sato', '賛成です。#請求書再発行[1] に持たせましょう', {
+        replyTo: addressee,
+        targets: [s.dt('Billing.InvoiceReissued', '請求書再発行')],
+        reads: 'chat',
+    });
 };
 
 const reactions = async (s: Ctx): Promise<void> => {

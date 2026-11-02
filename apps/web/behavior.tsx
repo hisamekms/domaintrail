@@ -14,7 +14,7 @@ import {
     statesOf,
 } from '@domaintrail/modeling';
 import type { Messages } from './i18n';
-import type { Namer, Select } from './model-utils';
+import { shownLabel, type Namer, type Select } from './model-utils';
 import { diffRows, rowClass, type RowChange } from './row-diff';
 
 /**
@@ -33,11 +33,12 @@ export function PersistenceBadge({ persistent, tx }: { persistent: boolean; tx: 
 
 /** A card's heading: the kind's colour band, the label in bold and the name small after it (by the display mode). */
 function CardTitle({ kind, x, names, onClick }: { kind: string; x: { name: string; label?: string }; names: Namer; onClick: () => void }) {
-    const both = names.mode === 'both' && !!x.label;
+    const label = shownLabel(x.label);
+    const both = names.mode === 'both' && !!label;
     return (
         <a className="bcard-title" onClick={onClick}>
             <span className={`bcard-band band-${kind}`} aria-hidden />
-            <strong>{both ? x.label : names.of(x)}</strong>
+            <strong>{both ? label : names.of(x)}</strong>
             {both && <span className="bcard-name">{x.name}</span>}
         </a>
     );
@@ -45,9 +46,10 @@ function CardTitle({ kind, x, names, onClick }: { kind: string; x: { name: strin
 
 /** A name in the display mode; in 両方 the label, and the name small after it. */
 function Named({ x, names }: { x: { name: string; label?: string }; names: Namer }) {
-    return names.mode === 'both' && x.label ? (
+    const label = shownLabel(x.label);
+    return names.mode === 'both' && label ? (
         <>
-            {x.label} <span className="bcard-name">{x.name}</span>
+            {label} <span className="bcard-name">{x.name}</span>
         </>
     ) : (
         <>{names.of(x)}</>
@@ -123,10 +125,11 @@ function Transition({ agg, c, base, names, onSelect }: { agg: ElementModel; c: C
     const chips = (states: readonly string[]) =>
         states.map((name) => {
             const s = statesOf(agg).find((x) => x.name === name);
-            const both = names.mode === 'both' && !!s?.label;
+            const label = shownLabel(s?.label);
+            const both = names.mode === 'both' && !!label;
             return (
                 <a key={name} className="state-chip" title={both ? name : undefined} onClick={() => onSelect(s?.id ?? agg.id)}>
-                    {both ? s!.label : names.state(agg, name)}
+                    {both ? label : names.state(agg, name)}
                 </a>
             );
         });

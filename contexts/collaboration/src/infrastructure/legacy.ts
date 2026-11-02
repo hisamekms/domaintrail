@@ -2,7 +2,9 @@
 // request, the frozen copy of a request in a run's input, and the `RequestSent` event held one `target`. They are
 // read as the list of targets they stand for: none when the target was the whole workspace, else that one target.
 // Nothing is rewritten in the database; new rows are written with `targets`. Likewise a request and its `RequestSent`
-// written before people could be mentioned are read as mentioning no one (`mentions: []`).
+// written before people could be mentioned are read as mentioning no one (`mentions: []`), and a reply written
+// before a message could reply to a message names its run by its ID alone (`replyTo: "<id>"`): it is read as
+// `{ kind: 'Run', run }` in a request, the frozen copy of a request in a run's input, and the `RequestSent` event.
 
 type Raw = Record<string, unknown>;
 
@@ -24,16 +26,21 @@ function withMentions(v: unknown): unknown {
     return isObject(v) && !('mentions' in v) ? { ...v, mentions: [] } : v;
 }
 
+/** An object whose `replyTo` is a run's ID (written before a message could reply to a message) as replying to that run. */
+function withReplyTarget(v: unknown): unknown {
+    return isObject(v) && typeof v.replyTo === 'string' ? { ...v, replyTo: { kind: 'Run', run: v.replyTo } } : v;
+}
+
 /** A request as stored. */
-export const upgradeRequest = (v: unknown): unknown => withMentions(withTargets(v));
+export const upgradeRequest = (v: unknown): unknown => withReplyTarget(withMentions(withTargets(v)));
 
 /** A run: the frozen requests of its input. */
 export function upgradeRun(v: unknown): unknown {
     if (!isObject(v) || !isObject(v.input) || !Array.isArray(v.input.requests)) return v;
-    return { ...v, input: { ...v.input, requests: v.input.requests.map(withTargets) } };
+    return { ...v, input: { ...v.input, requests: v.input.requests.map((r) => withReplyTarget(withTargets(r))) } };
 }
 
 /** An event of the outbox: a `RequestSent`. */
 export function upgradeEvent(v: unknown): unknown {
-    return isObject(v) && v.type === 'RequestSent' ? withMentions(withTargets(v)) : v;
+    return isObject(v) && v.type === 'RequestSent' ? withReplyTarget(withMentions(withTargets(v))) : v;
 }

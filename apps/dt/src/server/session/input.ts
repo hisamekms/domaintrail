@@ -225,6 +225,18 @@ export function requestTargets(raw: Raw): Result<Collaboration.TargetSnapshot[],
     return ok(targets);
 }
 
+/** What a message replies to: `{ kind: 'Run', run }` or `{ kind: 'Message', request }` (whether it can be replied to: the use case checks). */
+export function replyTarget(v: unknown, field = 'replyTo'): Result<Collaboration.ReplyTarget, InvalidInput> {
+    if (!isObject(v) || (v.kind !== 'Run' && v.kind !== 'Message'))
+        return invalid(field, 'Expected { "kind": "Run", "run" } or { "kind": "Message", "request" }.');
+    const key = v.kind === 'Run' ? 'run' : 'request';
+    const extra = Object.keys(v).find((k) => k !== 'kind' && k !== key);
+    if (extra !== undefined) return invalid(`${field}.${extra}`, 'Unknown field.');
+    const id = uuid(v[key], `${field}.${key}`);
+    if (!id.ok) return id;
+    return ok(v.kind === 'Run' ? { kind: 'Run', run: knownAgentRunId(id.value) } : { kind: 'Message', request: knownRequestId(id.value) });
+}
+
 /** The people a message mentions: 0 to `MAX_REQUEST_MENTIONS` participant IDs, each once (the session's: the use case checks). */
 export function mentionIds(v: unknown, field = 'mentions'): Result<Collaboration.ParticipantId[], InvalidInput> {
     if (v === undefined) return ok([]);
@@ -298,6 +310,15 @@ export function pick(v: unknown, field = 'pick'): Result<PickData, InvalidInput>
     const alternative = replyKey(v.alternative, `${field}.alternative`);
     if (!alternative.ok) return alternative;
     return ok({ pickOf: knownAgentRunId(of.value), assumption: assumption.value, alternative: alternative.value });
+}
+
+/** The assumption approved, from a body's `run` and `assumption` (its number in the run's reply). */
+export function assumptionRef(raw: Raw): Result<Collaboration.AssumptionRef, InvalidInput> {
+    const run = uuid(raw.run, 'run');
+    if (!run.ok) return run;
+    const assumption = assumptionNumber(raw.assumption, 'assumption');
+    if (!assumption.ok) return assumption;
+    return ok({ run: knownAgentRunId(run.value), assumption: assumption.value });
 }
 
 /** What a mark is on: a message, an AI turn, a question's option, or an assumption's choice (none: kept as it is). */

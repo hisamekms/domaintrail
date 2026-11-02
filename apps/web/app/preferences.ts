@@ -21,13 +21,25 @@ export interface Preferences {
     uiScale: number;
 }
 
-/** The display mode saved under its former key and values (日本語 / English / 両方), if any. */
+/**
+ * The name display with nothing saved under `domaintrail.nameDisplay`: the one saved under the former key (`ja`, `en`,
+ * `both`), else ラベル.
+ */
+export function initialDisplayMode(former: string | null): DisplayMode {
+    try {
+        const old: unknown = JSON.parse(former ?? 'null');
+        return old === 'en' ? 'name' : old === 'both' ? 'both' : 'label';
+    } catch {
+        return 'label';
+    }
+}
+
+/** The display mode saved under its former key and values (日本語 / English / 両方), if any; ラベル otherwise. */
 function savedDisplayMode(): DisplayMode {
     try {
-        const old: unknown = JSON.parse(localStorage.getItem('domaintrail.displayMode') ?? 'null');
-        return old === 'ja' ? 'label' : old === 'en' ? 'name' : 'both';
+        return initialDisplayMode(localStorage.getItem('domaintrail.displayMode'));
     } catch {
-        return 'both';
+        return 'label';
     }
 }
 

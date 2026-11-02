@@ -1,7 +1,7 @@
 // Mentions of people in the page: whom `@` offers, and the messages that mention me.
 import { describe, expect, test } from 'bun:test';
 import type { Me, Presence, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { mentionablePeople, mentionsMe, streamItems, unreadMentions } from './stream';
+import { arrivedBelow, mentionablePeople, mentionsMe, streamItems, unreadMentions, type StreamItem } from './stream';
 
 describe('the page: whom `@` offers, and the messages that mention me', () => {
     const at = (minute: number): string => `2026-11-01T09:${String(minute).padStart(2, '0')}:00.000Z`;
@@ -59,5 +59,20 @@ describe('the page: whom `@` offers, and the messages that mention me', () => {
         expect(unreadMentions(items, at(0), s, 'me')).toBe(2);
         expect(unreadMentions(items, at(1), s, 'me')).toBe(1);
         expect(unreadMentions(items, at(3), s, 'me')).toBe(0);
+    });
+
+    test('what arrived below while scrolled up: new messages and AI turns, not card updates nor mine; and how many are for me', () => {
+        const s = {
+            ...state(),
+            requests: [message('1', 'b', [], 1), message('2', 'a', ['me'], 2), message('3', 'me', ['me'], 3), message('4', 'b', [], 4)],
+        };
+        const card = (key: string, minute: number, updated: number) =>
+            ({ kind: 'card', key, at: at(minute), updatedAt: at(updated), unit: {} }) as unknown as StreamItem;
+        const items = [...streamItems(s), card('card:u1', 1, 5), card('card:u2', 4, 4)];
+        const known = new Set(['message:1', 'card:u1']);
+        // replies to me count like mentions: here message 4 stands for one
+        const toMe = (r: { id: string; mentions: readonly string[] }): boolean => mentionsMe(r as never, s, 'me') || r.id === '4';
+        expect(arrivedBelow(items, known, 'me', toMe)).toEqual({ count: 3, forMe: 2 });
+        expect(arrivedBelow(items, new Set(items.map((i) => i.key)), 'me', toMe)).toEqual({ count: 0, forMe: 0 });
     });
 });

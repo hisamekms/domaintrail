@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { MESSAGES } from '../i18n';
-import { pickedAlternative, questionsState, runNumber } from './decisions';
+import { assumptionDecision, pickedAlternative, questionsState, runNumber } from './decisions';
 
 type RunJson = SessionStateBody['runs'][number];
 
@@ -129,7 +129,7 @@ describe('the alternative picked from a run’s assumptions', () => {
     test('a run of a reply to it takes over without a pick: none', () => {
         const replying = {
             ...run('r', 5, [], { state: 'Queued' }),
-            input: { requests: [{ ...frozen('m7'), replyTo: 'd' }] },
+            input: { requests: [{ ...frozen('m7'), replyTo: { kind: 'Run', run: 'd' } }] },
         } as unknown as RunJson;
         expect(pickedAlternative(done, [done, replying])).toBeUndefined();
     });
@@ -148,5 +148,46 @@ describe('the alternative picked from a run’s assumptions', () => {
         const later = run('z', 9, ['m2'], { state: 'Queued' });
         expect(runNumber([later, done], 'z')).toBe(2);
         expect(runNumber([later, done], 'd')).toBe(1);
+    });
+});
+
+describe('what became of one assumption', () => {
+    const approval = (assumption: number, minute: number): SessionStateBody['approvals'][number] =>
+        ({
+            id: `a${assumption}`,
+            session: 's',
+            assumption: { run: 'd', assumption },
+            approvedBy: 'dev:f',
+            approvedAt: at(minute),
+            state: 'Approved',
+        }) as SessionStateBody['approvals'][number];
+    const pick = run(
+        'p',
+        5,
+        ['m1'],
+        { state: 'Queued' },
+        { pick: { pickOf: 'd', assumption: 1, text: 'The amount is fixed', alternative: { id: 'net', label: 'Without tax' } } },
+    );
+
+    test('open while neither approved nor taken over', () => {
+        expect(assumptionDecision(done, 0, [done], [])).toEqual({ kind: 'open' });
+        expect(assumptionDecision(done, 1, [done], undefined)).toEqual({ kind: 'open' });
+        // another assumption's approval leaves it open
+        expect(assumptionDecision(done, 1, [done], [approval(0, 3)])).toEqual({ kind: 'open' });
+    });
+
+    test('approved: who and when, from the approval', () => {
+        expect(assumptionDecision(done, 0, [done], [approval(0, 3)])).toEqual({ kind: 'approved', by: 'dev:f', at: at(3) });
+    });
+
+    test('picked: the alternative, who, when and the run it queued; the run’s other assumptions are left', () => {
+        expect(assumptionDecision(done, 1, [done, pick], [])).toEqual({
+            kind: 'picked',
+            alternative: 'net',
+            by: { run: 'p', number: 2, by: 'dev:f', at: at(5) },
+        });
+        expect(assumptionDecision(done, 0, [done, pick], [])).toEqual({ kind: 'left' });
+        // an approval made before stays what it was
+        expect(assumptionDecision(done, 0, [done, pick], [approval(0, 3)])).toEqual({ kind: 'approved', by: 'dev:f', at: at(3) });
     });
 });

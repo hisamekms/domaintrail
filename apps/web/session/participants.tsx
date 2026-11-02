@@ -62,7 +62,7 @@ export function ParticipantsList(props: {
         const openable = target !== undefined && canOpen(target, scope);
         return (
             <li key={r.id} className={`chat-person where-${r.where}`} data-participant={r.name} data-participant-id={r.id} tabIndex={-1}>
-                <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} />
+                <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
                 <span className="chat-person-main">
                     <span className="chat-person-name">
                         {r.name}

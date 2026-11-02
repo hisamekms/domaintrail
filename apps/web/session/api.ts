@@ -1,10 +1,13 @@
 // The session's REST API as the page calls it (`/api/session/*`, ADR 0026). Called only once the page knows it is in
 // a session (the socket sent `session.state`): under `dt view` none of these requests is made.
 import type {
+    ApproveBody,
+    ApprovedBody,
     ComparisonBody,
     ErrorBody,
     MarkSetBody,
     Me,
+    ModelChangesBody,
     QueueRunBody,
     RestoredBody,
     SendRequestBody,
@@ -81,6 +84,8 @@ export const sessionApi = {
     leave: (): Promise<{ left: boolean; logout?: string }> => call('leave', { method: 'POST', body: {} }),
     /** Places or takes off one of my marks (a vote or a reaction). */
     setMark: (body: SetMarkBody): Promise<MarkSetBody> => call('marks', { method: 'POST', body }),
+    /** Approves an assumption of a completed run as it is (the facilitator): recorded, nothing sent to the AI. */
+    approve: (body: ApproveBody): Promise<ApprovedBody> => call('approvals', { method: 'POST', body }),
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
     /** Records the workspace as it is now (the facilitator). */
     takeRevision: (): Promise<unknown> => call('revisions', { method: 'POST', body: {} }),
@@ -90,4 +95,7 @@ export const sessionApi = {
         call(`revisions/${encodeURIComponent(id)}/restore`, { method: 'POST', body: recordExternalChanges ? { recordExternalChanges } : {} }),
     compareRevisions: (before: string, after: string): Promise<ComparisonBody> =>
         call(`revisions/${encodeURIComponent(before)}/compare/${encodeURIComponent(after)}`),
+    /** What a unit changed between two revisions, in the model's words: the elements added, changed and removed. */
+    modelChanges: (before: string, after: string): Promise<ModelChangesBody> =>
+        call(`revisions/${encodeURIComponent(before)}/changes/${encodeURIComponent(after)}`),
 };
