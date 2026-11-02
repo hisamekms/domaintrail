@@ -507,7 +507,8 @@ a meeting talk about several things at once ("give 注文 the 顧客's address")
   qualified name, shown with their kind and context or storming; ↑↓, Enter/Tab, Esc; while an IME composes
   (`isComposing` or key code 229) no key picks or sends. Picking writes `@name[n] ` and adds chip n (or reuses it);
   deleting every mention of a chip that came from a mention removes it (a chip added otherwise stays); removing a chip
-  turns its mentions into plain text; numbers follow the chips. (Amended: the selection is no longer suggested as
+  turns its mentions into plain text; numbers follow the chips. (Amended: the text shows each mention as an inline chip and
+  the chips have no numbers — see "the composer's editor" below.) (Amended: the selection is no longer suggested as
   dashed chips — see "the selection added only through 💬" below.) The canvas's 💬 next to the selection, or `C`
   outside text inputs (no tldraw or app binding of a plain `c`), adds the selection as chips and focuses the
   composer. The app has no
@@ -1007,3 +1008,34 @@ with, and the composer had two kinds of chips.
   chips not shown, the latest added), which shows them all, followed by a collapse button; sending collapses them
   again. The rows are measured on the real chips (`collapsedCount`, `web/session/chip-rows.ts`). No count such as
   `1/20` is shown (the chips' aria label keeps it).
+
+## Appendix: the composer's editor (amendment)
+
+*Decided with the maintainer*: the composer was a `<textarea>`, so its text showed the tokens as they are stored
+(`#請求書.未払い[7] のとき … @田中[p1] 確認して`), and the chips under it carried numbers to match `[n]`. People read the
+tokens as noise and had to match numbers by eye.
+
+- **Inline chips.** The text shows each mention as an atomic chip: an element as `#` and its own name (`ownTokenName`,
+  its whole name in the tooltip and as its accessible name), a person as `@name`. The caret steps over a chip as over
+  one character, and one Backspace or Delete removes it. The chips under the text lose their numbers (nothing in the
+  text shows `[n]` any more); everything else about them stays, the two rows behind `+n` included.
+- **The stored text does not change.** `ComposerValue` stays the source of truth and the wire format: the server, the
+  model, the drafts, `parseBody` and `bodyText` are untouched. The editor reads a value into lines of text and
+  mentions and writes them back to the same text (`web/session/composer-text.ts`, pure, tested for the round trip).
+  A mention keeps what it names (the target, or the participant), not its number: the numbers are given when the text
+  is written back, so undo and redo bring a deleted mention back with its chip. Deleting the last mention of a chip
+  that came from a mention still removes the chip (`editText`).
+- **Lexical.** The field is text plus atomic tokens, but a `contenteditable` of our own would have to get IME
+  composition, undo and paste right in every browser. [Lexical](https://lexical.dev) (MIT, Meta) handles those and is
+  used widely; its plain-text mode is exactly this field. Only its core packages are used: `lexical`,
+  `@lexical/plain-text` (which brings `@lexical/clipboard`, `@lexical/selection`, `@lexical/utils`, `@lexical/dragon`,
+  `@lexical/extension`, `@lexical/html`, `@lexical/list` and `@preact/signals-core`, all MIT) and `@lexical/history`.
+  Not `@lexical/react`, which brings tables, yjs, floating-ui and more: the page binds the editor to React itself in a
+  small component (`createEditor`, `setRootElement`, plain text, history, an update listener). Lexical is 0.x, so its
+  versions are pinned exactly (0.53.0) and an upgrade is checked by hand (typing, IME, chips, undo, paste) before it
+  lands. A mention is an inline `DecoratorNode` whose DOM the node draws itself (no React portal).
+- **Kept.** The `#`/`@` candidates and their keys, Enter for a new line and ⌘/Ctrl+Enter to send (`composerKey`),
+  the placeholder, the caret put at the end by 💬, `C` and a reply, the drafts, the resizer (the field's height is in
+  rows of its line height), the limit of 10,000 characters. While an IME composes, no key picks or sends and the
+  candidates do not follow the composing text. Paste inserts plain text only. The field is `role="textbox"`,
+  `aria-multiline`, labelled as the textarea was.
