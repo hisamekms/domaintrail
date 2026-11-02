@@ -661,8 +661,6 @@ const ja = {
             you: 'あなた',
             listSeparator: '、',
             agentSays: {
-                queued: '順番を待っています。',
-                running: (time: string) => `作業中です… ${time}`,
                 clarification: '確認したいこと',
                 completedChanged: (n: number | undefined) => `完了しました。モデルを変更しました${n === undefined ? '' : `（リビジョン #${n}）`}。`,
                 completedUnchanged: '完了しました。変更はありません。',
@@ -672,7 +670,7 @@ const ja = {
             reply: {
                 applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
                 unchanged: '変更なし',
-                appliedHint: '変わったファイルの数は、実行の前後のリビジョンから数えたものです',
+                appliedHint: 'この実行の変更を比較する',
                 declined: '辞退しました',
                 status: { Done: '対応', Partial: '一部', Skipped: '未対応', Question: '確認' } as Record<RequestProgress, string>,
                 request: (n: number) => `依頼 ${n}`,
@@ -1353,8 +1351,6 @@ const en: Messages = {
             you: 'You',
             listSeparator: ', ',
             agentSays: {
-                queued: 'Waiting for my turn.',
-                running: (time) => `Working on it… ${time}`,
                 clarification: 'A question',
                 completedChanged: (n) => `Done. I changed the model${n === undefined ? '' : ` (revision #${n})`}.`,
                 completedUnchanged: 'Done. Nothing changed.',
@@ -1364,7 +1360,7 @@ const en: Messages = {
             reply: {
                 applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),
                 unchanged: 'No changes',
-                appliedHint: 'The files changed are counted from the revisions before and after the run',
+                appliedHint: 'Compare what this run changed',
                 declined: 'Declined',
                 status: { Done: 'Done', Partial: 'Partly', Skipped: 'Not done', Question: 'Question' },
                 request: (n) => `Request ${n}`,

@@ -2592,13 +2592,14 @@ mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for eve
 state, and a click goes to the card.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
-failed or cancelled. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
+failed or cancelled; its name row shows the state where nothing else does (queued, running with the time and ✕,
+declined, failed, cancelled; a question shows itself). A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
 (about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
 runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
 time's tooltip); before the AI gave a title (still running, or a run from before titles) it reads `AI · 19:21`, the
 quotes under it saying what it is about. Where a card must be named without any title (履歴, a reply, a mark's tooltip), the head of its first
 message stands for it, on one line. In 履歴, each card's heading is its name with its time span (`19:21–22:32`), then,
-small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how many runs and how many files it changed, then
+small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`) and how many runs when more than one, then
 the files it changed after a file-diff icon (`billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
 card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
 the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
@@ -2713,8 +2714,9 @@ base revision as its result.
 **The agent's reply** is structured (Claude Code's structured output, `--json-schema`): a short summary, a line per
 request (✓ done, ◐ partly, – not done, ? a question, with a note for the last ones), the assumptions it made where a
 request left a choice open (with the alternatives it saw), and for a question up to 3 questions, each with up to 5
-options (the page always adds "other"). The chat shows what the AI says, as plain text, then the measured facts,
-small — `2 ファイル変更`, counted from the revisions before and after the run; nothing when no file changed. The AI names
+options (the page always adds "other"). The chat shows what the AI says, as plain text, then the files the run
+changed on a small line of their own (a file-diff icon, `billing.dt、tax.dt`: a link comparing the revisions before and
+after the run); nothing when no file changed. The AI names
 elements by identifier (`@{Sales.Order}`, `@{es:Returns/ReturnRequested}`); the page shows each by its own name in the
 name display setting (a state or a command without its aggregate, a storming element without its storming; the whole
 name in its tooltip), as a link to the element. Whether a run succeeded is

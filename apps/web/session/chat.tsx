@@ -16,7 +16,6 @@ import {
     CircleX,
     Clock,
     Ellipsis,
-    FileDiff,
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
@@ -29,12 +28,12 @@ import { useDismiss } from '../shared/layout';
 import { useT } from '../i18n';
 import { useChatActions } from './actions';
 import { sessionApi } from './api';
-import { ReplyButton, RunCard } from './card';
+import { ChangedFiles, ReplyButton, RunCard } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
-import { changeUnits, cutList, requestersOf, shownUnits, unitName, type ChangeUnit, type UnitOutcome } from './history';
+import { changeUnits, requestersOf, shownUnits, unitName, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
     composerKey,
@@ -890,16 +889,22 @@ function History({ units: all }: { units: readonly ChangeUnit[] }) {
 }
 
 function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean; onToggle: () => void }) {
-    const { tx, nameOf, jump, revisions } = useChat();
+    const { tx, nameOf, jump } = useChat();
     const h = tx.chat.history;
     const Icon = OUTCOME_ICONS[unit.outcome];
     const name = unitName(unit);
     const asked = requestersOf(unit.requesters.map(nameOf));
     const who =
         asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
-    const facts = [who, h.runs(unit.runs.length), unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined].filter((x) => x !== undefined);
-    const changed = cutList(unit.paths ?? [], 3);
     const span = unit.span;
+    const paths = unit.paths ?? [];
+    // the files line says which files (and how many); one run is the rule, said only when there were more
+    const listed = paths.length > 0 && span !== undefined;
+    const facts = [
+        who,
+        unit.runs.length > 1 ? h.runs(unit.runs.length) : undefined,
+        !listed && unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined,
+    ].filter((x) => x !== undefined);
     // the card is mounted the first time the unit opens, and stays so that it folds away as it closes
     const [mounted, setMounted] = useState(open);
     if (open && !mounted) setMounted(true);
@@ -924,24 +929,11 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
                     </span>
                     <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
                 </span>
-                <span className="chat-unit-facts">{facts.join(' · ')}</span>
+                {facts.length > 0 && <span className="chat-unit-facts">{facts.join(' · ')}</span>}
             </button>
             {/* what the chunk changed: its files (the page knows them, not the elements) after a file-diff icon, a link to
                 compare the whole chunk */}
-            {changed.shown.length > 0 && span && (
-                <p className="chat-unit-changes" aria-label={h.changedFiles}>
-                    <FileDiff size={13} className="chat-unit-changes-icon" aria-hidden />
-                    <button
-                        type="button"
-                        className="chat-unit-changes-link"
-                        onClick={() => revisions.compare(span.base, span.result)}
-                        data-tooltip={`${h.changedFilesHint}: ${(unit.paths ?? []).join(', ')}`}
-                    >
-                        {changed.shown.map(baseName).join(h.separator)}
-                    </button>
-                    {changed.more > 0 && <span className="chat-unit-more"> {h.more(changed.more)}</span>}
-                </p>
-            )}
+            {listed && span && <ChangedFiles kind="unit" paths={paths} base={span.base} result={span.result} />}
             {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}
             <div className="chat-unit-fold" inert={!open}>
                 <div className="chat-unit-fold-inner">
@@ -963,9 +955,6 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
         </li>
     );
 }
-
-/** A path's last segment (`billing.dt` of `src/billing.dt`). */
-const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
 /**
  * The floating button opening the conversation while it is closed, with the agent's state as a mark (a spinner while

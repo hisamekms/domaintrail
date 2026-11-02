@@ -5,18 +5,18 @@
 // answers a question by choosing, picks another alternative of an assumption, cancels a run, and through the card's
 // menu confirms its result, restores the workspace as it was before it or compares the two.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Circle, CircleDot, Reply, CircleX, Ellipsis, Pencil, RotateCcw, Square, SquareCheck, X } from 'lucide-react';
+import { Bot, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, RotateCcw, Square, SquareCheck, X } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
 import { OtherDialog } from './answer-other';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { useChat, type Tx } from './chat-context';
 import { pickedAlternative, questionsState, type Decider, type PickedAlternative, type QuestionsState } from './decisions';
-import { unitName, type ChangeUnit } from './history';
+import { changedPaths, cutList, unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
-import { ReplyFacts, ReplyText } from './reply';
+import { ReplyText } from './reply';
 import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, type RequestProgress } from './stream';
 
 type RunJson = CardRun['run'];
@@ -30,6 +30,9 @@ function statusOf(m: AgentMessage): 'queued' | 'running' | 'clarification' | 'do
     return m.kind === 'completed' ? 'done' : m.kind;
 }
 
+/** Whether the card's name line shows its state: only where nothing else does (a question says so itself, done is the rule). */
+const statusShown = (status: ReturnType<typeof statusOf>): boolean => status !== 'done' && status !== 'clarification';
+
 export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; compact?: boolean; actions?: ReactNode }) {
     const chat = useChat();
     const { session, tx, nameOf, control } = chat;
@@ -42,7 +45,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
     // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); the
-    // state only when it is not simply done
+    // state only where nothing else shows it (queued, running with its time, declined, failed, cancelled)
     return (
         <div className={`run-card status-${status}${compact ? ' compact' : ''}`} data-card={unit.key}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
@@ -63,8 +66,9 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                             {time(first.run.queuedAt)}
                         </time>
                     </span>
-                    {status !== 'done' && (
+                    {statusShown(status) && (
                         <span className={`run-card-status status-${status}`}>
+                            {status === 'running' && <span className="chat-pulse" aria-hidden />}
                             {status === 'running' && last.message.kind === 'running'
                                 ? tx.chat.status.running(elapsed(last.message.since, chat.now))
                                 : tx.chat.marks[status]}
@@ -210,6 +214,7 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
             )}
             <div className="run-agent-body">
                 <AgentBody message={run.message} asking={asking || voting || decided} />
+                <RunFiles run={run.run} />
                 {asking && reply && <AnswerForm run={run.run} reply={reply} />}
                 {voting && reply && <QuestionVotes run={run.run} reply={reply} />}
                 {decided && reply && questions && <AnsweredQuestions run={run.run} reply={reply} state={questions} />}
@@ -283,28 +288,21 @@ function AnswerLine({ run }: { run: CardRun }) {
 }
 
 /**
- * What the agent says of a run, as the chat said it, then the files it changed, small; nothing when none changed (the
- * reply's per-request lines are the quotes above). A question it asks has the one amber mark: a bar beside it — on its
+ * What the agent says of a run, as the chat said it (the reply's per-request lines are the quotes above); nothing while
+ * it waits or runs, which the name line says. A question it asks has the one amber mark: a bar beside it — on its
  * summary, unless the questions themselves are offered below (`asking`).
  */
 function AgentBody({ message: m, asking }: { message: AgentMessage; asking: boolean }) {
-    const { tx, nameOf, onNavigate, now } = useChat();
+    const { tx, nameOf, onNavigate } = useChat();
     const says = tx.chat.agentSays;
     switch (m.kind) {
         case 'queued':
-            return <p className="chat-text muted">{says.queued}</p>;
         case 'running':
-            return (
-                <p className="chat-text">
-                    <span className="chat-pulse" aria-hidden />
-                    {says.running(elapsed(m.since, now))}
-                </p>
-            );
+            return null;
         case 'clarification':
             return m.reply ? (
                 <p className={`chat-text reply-summary${asking ? '' : ' run-question'}`}>
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    <ReplyFacts files={m.files} changed={m.files !== undefined && m.files > 0} tx={tx} />
                 </p>
             ) : (
                 <p className="chat-text run-question" aria-label={says.clarification}>
@@ -315,7 +313,6 @@ function AgentBody({ message: m, asking }: { message: AgentMessage; asking: bool
             return m.reply ? (
                 <p className="chat-text reply-summary">
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    <ReplyFacts files={m.files} changed={m.changed} tx={tx} />
                 </p>
             ) : (
                 <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
@@ -324,7 +321,6 @@ function AgentBody({ message: m, asking }: { message: AgentMessage; asking: bool
             return (
                 <p className="chat-text" aria-label={tx.chat.reply.declined}>
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
-                    <ReplyFacts files={m.files} changed={m.files !== undefined && m.files > 0} tx={tx} />
                 </p>
             );
         case 'failed':
@@ -337,6 +333,52 @@ function AgentBody({ message: m, asking }: { message: AgentMessage; asking: bool
         case 'cancelled':
             return <p className="chat-text muted">{says.cancelled(nameOf(m.by))}</p>;
     }
+}
+
+/**
+ * The files a run changed, on a small line of their own under what the AI says; nothing when none changed, or while
+ * it has no result.
+ */
+function RunFiles({ run }: { run: RunJson }) {
+    const { session, tx } = useChat();
+    if (run.state !== 'Completed' && run.state !== 'NeedsClarification' && run.state !== 'Declined') return null;
+    const lookup = revisionLookup(session.state);
+    const paths = changedPaths(lookup.revision(run.baseRevision), lookup.revision(run.resultRevision));
+    // the revisions not known (yet): that it changed files, without which
+    if (paths === undefined)
+        return run.resultRevision === run.baseRevision ? null : (
+            <p className="run-files">
+                <FileDiff size={12} className="run-files-icon" aria-hidden />
+                {tx.chat.reply.applied(undefined)}
+            </p>
+        );
+    if (paths.size === 0) return null;
+    return <ChangedFiles kind="run" paths={[...paths].sort()} base={run.baseRevision} result={run.resultRevision} />;
+}
+
+/** A path's last segment (`billing.dt` of `src/billing.dt`). */
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+
+/**
+ * Changed files, on one small line: a file-diff icon, then the first files (their last segments; all of them in the
+ * tooltip) as one link comparing the revisions before and after. Under a run's text (`run`), and under a unit's heading
+ * in 履歴 (`unit`).
+ */
+export function ChangedFiles({ kind, paths, base, result }: { kind: 'run' | 'unit'; paths: readonly string[]; base: string; result: string }) {
+    const { tx, revisions } = useChat();
+    const h = tx.chat.history;
+    const changed = cutList(paths, 3);
+    const c = kind === 'run' ? 'run-files' : 'chat-unit-changes';
+    const hint = kind === 'run' ? tx.chat.reply.appliedHint : h.changedFilesHint;
+    return (
+        <p className={c} aria-label={h.changedFiles}>
+            <FileDiff size={kind === 'run' ? 12 : 13} className={`${c}-icon`} aria-hidden />
+            <button type="button" className={`${c}-link`} onClick={() => revisions.compare(base, result)} data-tooltip={`${hint}: ${paths.join(', ')}`}>
+                {changed.shown.map(baseName).join(h.separator)}
+            </button>
+            {changed.more > 0 && <span className={`${c}-more`}> {h.more(changed.more)}</span>}
+        </p>
+    );
 }
 
 /**
