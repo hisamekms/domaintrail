@@ -2595,7 +2595,10 @@ chat; the right end holds only actions.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
 failed or cancelled; its status slot shows the state where nothing else does (queued, running with the time,
-declined, failed, cancelled; a question shows itself). A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
+declined, failed, cancelled; a question shows itself). While it runs, one small line under its quotes (and under its
+row in AI の作業) tells what the AI is doing now — `読んでいます`, `書き換えています`, `確かめています` or `まとめています`, with
+the file (its last segment; the path in the tooltip) or the command (`dt check`). It changes as the agent goes, is
+not kept once the run ends, and appears only after the agent first tells it. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
 (about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
 runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
 time's tooltip); before the AI gave a title (still running, or a run from before titles) it reads `AI · 19:21`, the
@@ -2891,3 +2894,7 @@ stormings; then `dt fmt` and `dt check` run, and the server records the result.
 - **One run at a time.** Each run is claimed with a lease kept alive by heartbeats. If the subscriber dies, the run's
   lease expires and a running run fails (`LeaseExpired`) rather than run twice; a run only claimed goes back to the
   queue. Ctrl+C fails the running run as `Interrupted`.
+- **What the agent is doing** reaches the pages as it goes: the subscriber runs `claude` with `--output-format
+  stream-json --verbose` and maps its tool calls onto four phases (reading, editing, checking, finishing) with the file
+  or the `dt` command; a path outside the workspace is never sent. Nothing of the agent's output itself reaches the
+  pages, and the activity is not stored.

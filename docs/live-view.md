@@ -181,7 +181,9 @@ The chat has two views:
   the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
   it show their time only. A message sent to the AI shows its latest run's state (`✓ 対応`, the card's name in the
   tooltip, a click going to the card) in the status slot before its actions; an AI turn shows its state there too
-  (queued, running with its time, declined, failed, cancelled), so the states of all rows line up in one column. The
+  (queued, running with its time, declined, failed, cancelled), so the states of all rows line up in one column. While
+  a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
+  `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
   facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ among a running or queued
   turn's actions, after a dialog asks), and reaches confirm,
@@ -206,7 +208,7 @@ The chat has two views:
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
 - **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
   queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
-  答え待ち (the AI asked a question), 実行中 (a pulsing dot, and how long it has run), 待ち n (numbered in the order they
+  答え待ち (the AI asked a question), 実行中 (a pulsing dot, how long it has run, and the line of what the AI is doing), 待ち n (numbered in the order they
   will run) and 終わったもの (newest first). A row reads its mark and name (the title, else the first message), then,
   small, whose messages its first run applied, how many runs and its time span; and the files it changed, a link that
   compares the revisions before and after the whole card. The facilitator cancels a running or queued card with ✕,
