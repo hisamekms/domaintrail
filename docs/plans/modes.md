@@ -1,4 +1,4 @@
-# Plan: open / collab / agent modes, consultation and a warm agent
+# Plan: open / collab / agent modes, messages addressed to the AI, triage and a warm agent
 
 Today the Live View (`dt view`) and the collaboration session (`dt session start`) are two separate commands, and the AI
 runs only in a session, started by hand in another terminal (`dt session subscribe --agent claude`). One person who
@@ -6,43 +6,67 @@ wants to talk to the AI about their own model has to run a session for one, join
 message and then send it again with 「AI に送る」. Every run starts Claude Code anew. This plan:
 
 - splits the product into two modes, **non-collab** (`dt open`) and **collab** (`dt collab`), with the AI runner as
-  its own command (`dt agent`), started in the same process by default;
-- lets a message be a **consultation** (a question answered in the chat, no file changed) as well as a change request,
-  with **no** marking by the person: the AI decides inside the run;
+  its own command (`dt agent`), started in the same process by default; the old commands go;
+- makes the AI a participant one **addresses** (`@AI`, or a reply to the AI); in `dt open` every message is addressed
+  to it;
+- **triages** each addressed message, without the person saying which it is, into a **consultation** (相談: answered
+  at once by a read-only agent), a **change request** (依頼: queued, or first proposed to the facilitator when it comes
+  from a participant) or neither;
 - keeps one Claude Code conversation alive per agent (a **warm agent**), after measuring where a run's time goes.
 
-It records the decisions taken by the maintainer on 2026-11-03, the measurements, the design, the collisions with the
-work in flight (`feat/react-flow`, `feat/collab-card`), a task breakdown, and the open questions with recommendations.
+It was written in two rounds. The first (M0) recorded the maintainer's first decisions, the measurements, a first design
+and open questions. The second round (2026-11-03, the maintainer's answers and a new design for who talks to the AI)
+supersedes parts of the first; those parts are marked *Superseded* and kept short so that the reasons stay readable.
+The decisions are recorded in [ADR 0030](../adr/0030-modes-triage-and-the-warm-agent.md).
 
 ## Landing
 
-- Starts on `main` after `feat/collab-card` and `feat/react-flow` are merged (see [Collisions](#collisions)); the CLI
-  and agent tasks (M3, M4) may start earlier, as they touch neither.
+- Starts on `main` after `feat/collab-card` and `feat/react-flow` are merged (see [Collisions](#collisions)); the
+  agent task M3 may start earlier, as it touches neither.
 - As for the earlier plans: one integration branch (`feat/modes`) from `main`, one worktree and branch per task, each
   done by a worker and merged into the integration branch after review, one pull request to `main`, squash merged.
-- The decisions that change ADR 0026 (collaboration sessions) are written down in a new ADR first (M1): **ADR 0030,
-  modes and the warm agent** (0029 is taken by `feat/react-flow`).
-- The old commands stay one version as deprecated aliases (the package is published on npm); the release that adds
-  `dt open` / `dt collab` / `dt agent` lists them as deprecated in the changelog, the next one removes them.
+- The decisions that change ADR 0026 (collaboration sessions) are written down first (M1): **ADR 0030** (0029 is taken
+  by `feat/react-flow`).
+- **Breaking, without aliases**: `dt view`, `dt session start`, `dt session link` and `dt session subscribe` are removed,
+  and the config sections `session` and `view` are errors. The release says so in the changelog (en/ja) with what to
+  run and write instead.
 - Every task leaves typecheck, lint, fmt, tests and build passing.
 
-## Decisions (maintainer, 2026-11-03)
+## Decisions
+
+### Round 1 (maintainer, 2026-11-03, morning)
+
+| # | Point | Decision | Status |
+|---|---|---|---|
+| 1 | Modes | Two: **non-collab** and **collab**. Commands from zero (plan A): `dt open`, `dt collab` (+ `dt collab link`), `dt agent` | Kept |
+| 2 | `dt open` | The Live View with the chat, for one person: loopback only, dev identity, no invite, hand-over or leave. Absorbs `dt view` | Kept |
+| 3 | `dt collab` | Today's `dt session start`, Access mode included; `dt collab link` is today's `dt session link` | Kept |
+| 4 | `dt agent` | The AI runner alone (today's `dt session subscribe`): on another machine or terminal, or added later | Kept |
+| 5 | Agent in process | `dt open` and `dt collab` start the agent **in the same process by default** when Claude Code is usable; `--no-agent` does not start it. With no agent connected the page says so (AI: 接続なし / n 件待ち) | Kept |
+| 6 | Old commands | ~~Deprecated aliases for one version~~ | *Superseded* by round 2: removed outright |
+| 7 | Non-collab send | ~~One step with an agent, a memo without one~~ | *Superseded*: every message is addressed to the AI and triaged; with no agent it waits (no memos) |
+| 8 | Collab send | ~~Unchanged (the facilitator's 「AI に送る」)~~ | *Superseded*: `@AI` and replies to the AI address it; 「AI に送る」 stays as the facilitator's rescue |
+| 9 | Consultation | ~~Every message through the same run; the agent decides; no read-only guarantee~~ | *Superseded*: a triage cascade decides before any agent runs; consultations go to a **read-only** agent. Kept from it: the person gives no instruction, and the run agent may still answer instead of editing |
+| 10 | Latency | Receiving runs is already push (the agent API's SSE `/agent/events`). Plan a **warm agent**: one long-lived Claude Code conversation per agent, each run one turn | Kept |
+
+### Round 2 (maintainer, 2026-11-03)
 
 | # | Point | Decision |
 |---|---|---|
-| 1 | Modes | Two: **non-collab** and **collab**. Commands from zero (plan A): `dt open`, `dt collab` (+ `dt collab link`), `dt agent` |
-| 2 | `dt open` | The Live View with the chat, for one person: loopback only, dev identity, no invite, hand-over or leave. Absorbs `dt view` |
-| 3 | `dt collab` | Today's `dt session start`, Access mode included; `dt collab link` is today's `dt session link` |
-| 4 | `dt agent` | The AI runner alone (today's `dt session subscribe`): on another machine or terminal, or added later |
-| 5 | Agent in process | `dt open` and `dt collab` start the agent **in the same process by default** when Claude Code is usable; `--no-agent` does not start it. With no agent connected the page says so (AI: 接続なし / n 件待ち) |
-| 6 | Old commands | `dt view`, `dt session start\|link\|subscribe` stay one version as deprecated aliases with a warning, removed in the next |
-| 7 | Non-collab send | A sent message goes straight to the AI (one step) when an agent is connected; with no agent it is a memo (no answer); a memo can be sent later with 「AI に送る」 once an agent is connected |
-| 8 | Collab send | Unchanged (the facilitator's 「AI に送る」); with no agent the runs queue and the chat header shows 「AI 接続なし（n 件待ち）」 |
-| 9 | Consultation | Both modes. A message can be a 相談 (a question; no file change) besides a 依頼 (a change request). **The person gives no special instruction** — no choice at send time, no prefix: every message goes through the same run, the prompt tells the agent a message may be either, and when unsure to ask or answer rather than edit. A run that changed nothing completes as an answer (result = base, no new revision), shown as a reply, not as a 変更なし work item. `dt fmt` / `dt check` are skipped when no file changed |
-| 10 | Latency | Receiving runs is already push (the agent API's SSE `/agent/events`): polling vs WebSocket is not the issue. Plan a **warm agent**: one long-lived Claude Code conversation per agent, each run one turn |
+| 11 | Removed commands | `dt view`, `dt session start`, `dt session link`, `dt session subscribe` are removed, **no deprecated aliases** |
+| 12 | Config | The section `session` is renamed `collab`; the old `session` key is **an error at once**, with a message saying what to rename. Where `dt open`'s and the agent's settings live is left to this plan: see [Config](#config-domaintrailjsonc) |
+| 13 | Q2 | `dt open` refuses on a workspace with an open collab session; `dt collab` continues a solo session with its person as facilitator |
+| 14 | Q5 | The agent gets optional model and effort settings; no default of ours (unset, Claude Code's settings apply) |
+| 15 | Q6 | The warm agent is on by default, with a switch to turn it off |
+| 16 | Who talks to the AI | In **collab** only messages **addressed to the AI** are handled: a message mentioning `@AI` (offered first among the composer's `@` candidates, as a person), or a reply to a message of the AI. Other messages are talk between people; the AI does not react. The facilitator can still send any message to the AI (「AI に送る」), the rescue for a forgotten `@AI`. In **`dt open`** every message is addressed to the AI |
+| 17 | Triage | The person never says whether a message is a 相談 or a 依頼. An addressed message goes through a cascade of stages, each answering 相談 / 依頼 / neither / unknown; "unknown" goes on to the next stage; a stage ends the cascade with "neither" only when confident. 1 mechanical (sure "neither" only), 2 Clef (when configured), 3 a light model, then 4 相談 → a read-only agent answers, 5 依頼 → a change proposal (a participant's) or the queue (the facilitator's, or in `dt open`). See [Triage](#triage) |
+| 18 | Overrides | The final agents may correct the triage: the read-only answerer can say "this is a request" and propose a change; the run agent can say "this is a question" and answer without editing |
+| 19 | Clef | Serves stage 2 only; its former role (showing the facilitator which rows offer 「AI に送る」) disappears. Clef only for now; a generic classifier provider interface is a later possibility |
+| 20 | Models | Separate model settings for stage 3 (triage), stage 4 (answers) and runs |
+| 21 | Two roles (maintainer and supervisor, later the same day) | The Claude Code execution of 相談 (answers) and 依頼 (runs) is **separate**: two roles in the agent — the **answerer** (read-only, no lease, no revisions) and the **runner** (today's pipeline) — with separate settings (`agent.answer.*`, `agent.run.*`), separate entry points on the agent API, a warm process each with its own restart policy, and `dt agent --role answer\|run` to run one only. See [Two roles](#two-roles-the-answerer-and-the-runner) |
 
-Decision 9 replaced an earlier idea of read-only tools for a consultation chosen at send time: since the person does
-not say which a message is, a run cannot be given read-only tools up front. See [The trade-off](#the-trade-off-no-hard-read-only-guarantee).
+So `dt open` is a collab session whose only person is the facilitator: every message addressed, a 依頼 queued in one
+step, no proposals.
 
 ## Measurements
 
@@ -138,16 +162,18 @@ twice each. Times from writing the prompt to `result` (warm) or to process exit 
   2 of 4 runs). The protocol around a run (claim, start, finish, the page's update) is under 0.2 s.
 - **A warm agent saved 25 % (round 1) and 25 % (round 2)** over four runs: the fixed ~1.3 s per run, plus fewer tool
   rounds in later turns. The first warm turn is no faster than a cold run.
-- Not touched by this plan but the biggest lever: the model and effort the user's settings choose (see
-  [Open questions](#open-questions)).
+- The biggest lever is the model and effort the user's settings choose; round 2 adds our own optional settings for
+  them, per role (decisions 14 and 20).
+- For the triage (round 2), not measured yet: a cold `claude -p` costs ~2.8 s before any model work, which is why the
+  triage model runs in a warm process too (see [Stage 3](#stage-3-a-light-model)). M7 measures the cascade.
 
 ## Commands, flags and config
 
 ### Commands
 
-| Command | What it does | Replaces |
+| Command | What it does | Replaces (removed) |
 |---|---|---|
-| `dt open [--port] [--base <ref>] [--no-agent] [--agent claude]` | Live View with the chat, one person, loopback, dev identity; starts the agent in process | `dt view` |
+| `dt open [--port] [--host] [--base <ref>] [--no-agent] [--agent claude]` | Live View with the chat, one person, loopback, dev identity, the person is the facilitator; starts the agent in process | `dt view` |
 | `dt collab [--port] [--host] [--base <ref>] [--no-agent] [--agent claude]` | Collaboration session (dev or Access identity), agent in process | `dt session start` |
 | `dt collab link` | Another one-time facilitator link | `dt session link` |
 | `dt agent [--agent claude] [--once]` | The AI runner alone, against the server running on the workspace (`agent.json`) | `dt session subscribe` |
@@ -155,38 +181,68 @@ twice each. Times from writing the prompt to `result` (warm) or to process exit 
 - `--agent claude` stays the only agent and the default; it is accepted so that later agents fit.
 - "Claude Code is usable" (decision 5): `claude` is on the `PATH`, `claude --version` answers within 5 s, and
   `claude --help` lists the flags the adapter needs (`--setting-sources`, `--strict-mcp-config`, `--tools`,
-  `--allowedTools`, `--input-format`, `dontAsk`). Otherwise `dt open` / `dt collab` start without the agent and print one
-  line why (`AI: not started (claude not found on PATH); start it later with dt agent`). `--agent claude` given
-  explicitly turns that into an error.
+  `--allowedTools`, `--input-format`, `--model`, `dontAsk`). Otherwise `dt open` / `dt collab` start without the agent
+  and print one line why (`AI: not started (claude not found on PATH); start it later with dt agent`). `--agent claude`
+  given explicitly turns that into an error.
 - The agent in process is the same subscriber as `dt agent`, talking to the agent API over loopback HTTP with the
   credential of `agent.json` (one code path; the measured protocol cost is ~30 ms a run). It stops with the server
   (Ctrl+C fails its run as `Interrupted`, as today).
-- A second agent (`dt agent` while the in-process one runs) is allowed: claims are leases, one run at a time per
-  agent. The page shows how many are connected.
-- `dt open --host <non-loopback>` serves the Live View **read-only** (no chat, no agent), as `dt view --host` does
-  today, with a line saying so: the chat and the agent are loopback-only in non-collab mode.
+- **Two roles** (decision 21), both in one `dt agent` (and in the in-process agent) by default: the **answerer** (stage
+  3's triage, answers, proposals: read-only, no revisions) and the **runner** (today's run pipeline). `dt agent --role
+  answer` or `--role run` starts one only, so that they can live on different machines or be restarted apart;
+  `dt open --no-agent` / `dt collab --no-agent` start neither. See [Two roles](#two-roles-the-answerer-and-the-runner).
+- A second agent (`dt agent` while the in-process one runs) is allowed: runs are claimed with leases; answer jobs are
+  handed to one connected answerer each. The page shows how many of each role are connected.
+- `dt open --host <non-loopback>` serves the Live View **read-only** (no chat, no agent, nothing written to
+  `.domaintrail/session/`), as `dt view --host` does today, with a line saying so: the chat and the agent are
+  loopback-only in non-collab mode. It is what remains of `dt view`'s read-only use (open question Q8).
+- Running a removed command prints an error naming its replacement (`'dt session start' was removed; use 'dt collab'`)
+  and exits 2; there is no alias that runs it. The help does not list them.
 
-### Deprecated aliases
+### ~~Deprecated aliases~~ (superseded)
 
-`dt view …` runs `dt open --no-agent …` without the chat being forced on (see open question Q3), `dt session start` runs
-`dt collab`, `dt session link` runs `dt collab link`, `dt session subscribe` runs `dt agent`; each prints
-`warning: 'dt session start' is deprecated and will be removed in the next release; use 'dt collab'` on stderr first.
-The help lists them under "Deprecated". `dt session start` keeps **not** starting an agent in process (`--no-agent`
-implied), so that a user who runs `dt session subscribe` beside it does not get two agents.
+Round 1 kept the old commands one version as aliases with a warning. Round 2 (decision 11) removes them outright; Q3
+(what the `dt view` alias shows) no longer arises.
 
 ### Config (`domaintrail.jsonc`)
 
-| Key | Used by | Note |
-|---|---|---|
-| `view.port`, `view.host` | `dt open` (and `dt view`) | Kept as is: it is the Live View's address in non-collab mode. A non-loopback `view.host` makes `dt open` read-only, as above |
-| `session.port`, `session.host`, `session.identity`, `session.access.*`, `session.maxParticipants`, `session.quickReactions`, `session.classifier` | `dt collab` | Kept as is |
-| `session.agent.allowedTools`, `session.agent.dt`, `session.agent.port`, `session.agent.maxPreviousRunDiff` | both modes, `dt agent` | Kept; they configure the agent whichever mode runs it |
-| `session.agent.warm` (new) | the agent | `true` (default) / `false`: one long-lived Claude Code process, or one per run (today's) |
-| `session.agent.restartAfter` (new) | the agent | Runs before the warm process is replaced by a fresh one (default 20; see [Context growth](#context-growth)) |
-| `session.agent.model`, `session.agent.effort` (new, optional) | the agent | Passed as `--model` / `--effort` when given; unset keeps the user's settings (Q5) |
+Four top-level sections, by what they configure rather than by the command that reads them:
 
-Renaming `session` to `collab` in the file is not part of this plan (it would break every config file for a name);
-open question Q4.
+| Section | Keys | Used by | Was |
+|---|---|---|---|
+| `open` | `port`, `host` | `dt open` | `view.port`, `view.host` |
+| `collab` | `port`, `host`, `identity`, `access.*`, `maxParticipants`, `quickReactions` | `dt collab`, `dt collab link` | `session.*` (the same keys) |
+| `agent` | `port` (the agent API, both modes) | the server | `session.agent.port` |
+| `agent.run` | `allowedTools`, `dt`, `maxPreviousRunDiff`, `model`, `effort`, `warm`, `restartAfter` | the runner | `session.agent.allowedTools`, `.dt`, `.maxPreviousRunDiff`; the rest new |
+| `agent.answer` | `model`, `effort`, `warm`, `restartAfter`, `timeout` (all new) | the answerer | — |
+| `agent.triage` | `model` (new) | the answerer's stage 3 | — |
+| `classifier` | `enabled`, `provider`, `model`, `accountId`, `apiTokenEnv`, `threshold` (Clef) | the server's stage 2, both modes | `session.classifier.*` |
+
+- **Why `agent.*` holds every Claude Code setting.** It is what `dt agent` reads, whichever machine it runs on, and
+  `agent.run` / `agent.answer` / `agent.triage` say which role's process each key configures (decision 21: separate
+  settings per role). The old single `agent` keys of round 1 (`model`, `effort`, `warm`, `restartAfter`) and the old
+  `session.agent.*` keys map into `agent.run`.
+- **Why `classifier` is top-level and not `collab.classifier` or `agent.triage.classifier`.** It is called by the server
+  (not the agent) and serves `dt open` as much as `dt collab`; under `collab` it would read as collab-only, which round
+  1's Q4 already found misleading for `session`. Moving it now costs nothing more: every file breaks once anyway
+  (decision 12).
+- **Why `open` and not `view`.** `dt view` is gone; the section is named after the command that reads it, as `collab`
+  is. `view` becomes an error like `session`.
+- **Old keys are errors**, at load, with a message saying where each key goes: `'session' was renamed: move
+  session.agent.port to agent.port, session.agent.{allowedTools,dt,maxPreviousRunDiff} to agent.run,
+  session.classifier to classifier, the rest to collab`; `'view' was renamed to 'open'`. An unknown key in a new
+  section that was valid in its old place (`collab.agent`, `collab.classifier`, `agent.allowedTools`, …) gets the same
+  hint.
+- **Models** (decisions 14 and 20). `agent.run.model` / `effort` are the runs' (`--model` / `--effort` when given);
+  `agent.answer.model` / `effort` the answerer's; `agent.triage.model` stage 3's. Each unset falls back to Claude
+  Code's settings — never to another role's, so that a role's cost is what its own keys say. No default of ours for
+  the runs and the answers; for stage 3 a light model is the point of the stage: its default is the alias `haiku`
+  (open question Q4).
+- **Warm** (decision 15), per role: `agent.run.warm`, `agent.answer.warm` (`true` by default; `false`: one process per
+  job, today's) and `restartAfter` (jobs before a warm process is replaced; default 20 for runs, 50 for answers).
+  `agent.answer.timeout`: the most an answer may take (default 120 s; a run has no such limit beyond today's).
+- The answerer's tools are **not** configurable (`Read`, `Grep`, `Glob`): that is the guarantee. The facilitator's
+  `agent.run.allowedTools` are the runner's only.
 
 ### State in `.domaintrail/` per mode
 
@@ -194,80 +250,243 @@ open question Q4.
   session per workspace, as today. **`dt open` keeps the chat history and the revisions across restarts**: the person
   sees yesterday's answers and can still restore the workspace before a run. A session records the mode it was started
   in (`Solo` / `Collab`; a new field on the session, default `Collab` for the existing ones).
-- `dt open` on a workspace with an open **Collab** session refuses with a line naming both ways out (`dt collab` to
-  resume it, or end it from its collab menu); `dt collab` on an open **Solo** session continues it as a collab session
-  (the solo person is its facilitator; its history stays). Q2 asks the maintainer.
+- Decision 13: `dt open` on a workspace with an open **Collab** session refuses with a line naming both ways out
+  (`dt collab` to resume it, or end it from its collab menu); `dt collab` on an open **Solo** session continues it as a
+  collab session (the solo person is its facilitator; its history stays; the mode becomes `Collab`).
 - `dt open` signs the local person in without a form: one participant, the facilitator, named from `git config
   user.name` or the OS user (changeable in the page). No facilitator link is printed.
-- `dt view`'s users get a `.domaintrail/session/` directory they did not have (it ignores itself through its own
+- Users of `dt view` get a `.domaintrail/session/` directory they did not have (it ignores itself through its own
   `.gitignore`, as today).
+
+## Who talks to the AI
+
+### Addressed messages
+
+A message is **addressed to the AI** when, at send time:
+
+- it **mentions `@AI`**: the AI is a mentionable participant; the composer's `@` list offers it first (before the
+  people, also when no one else is in the session), and picking it writes `@AI[pN] ` like a person;
+- it **replies to the AI**: to one of the AI's answers (a message whose author is the AI) or to a run (the existing
+  `replyTo` of kind run);
+- the session is **solo** (`dt open`): every message.
+
+Later, the facilitator can address any message, their own or a participant's, with 「AI に送る」 (one, or several
+selected: まとめて送る) — the rescue for a forgotten `@AI`. It does what the mention would have done (the message goes
+through the triage), recorded as addressed by the facilitator. A message that is not addressed is talk between people:
+no triage, no Clef call, nothing sent to any model.
+
+### The AI as a participant
+
+- A reserved participant ID (`ai`), with the display name `AI` (not translated: it is what one types) and an avatar of
+  its own. It is part of every session without joining (no `ParticipantJoined`, not stored in `Session.participants`,
+  not counted in `maxParticipants`); the verified `MentionableParticipant` accepts it; its presence on the page is the
+  agent's (connected or not). Open question Q9 weighs storing it instead.
+- The AI's answers are messages (`Request`s) whose author is `ai` and whose `replyTo` is the message answered; so a
+  reply to an answer is addressed by the existing `replyTo`. Only the server writes them (no route lets a person send
+  as `ai`).
+- Runs stay runs: their replies (summary, clarification, assumptions) are drawn on the run's card as today; a reply
+  to a run is addressed.
+
+## Triage
+
+### The cascade
+
+For each addressed message, a **triage** record is opened and the stages run in order. Each stage answers one of
+**相談** (a consultation: a question, an opinion, an explanation), **依頼** (a change request), **neither** (nothing
+for the AI to do: thanks, an acknowledgement) or **unknown**. A stage ends the cascade when it is confident of its
+answer; "unknown" (or an answer below the stage's confidence) passes the message to the next stage.
+
+| Stage | Where | What | May end with |
+|---|---|---|---|
+| 1 Mechanical | server | Empty body, emoji only, a short fixed acknowledgement from a closed list (ありがとう, ありがとうございます, 了解, 了解です, 承知しました, OK, おk, 👍 …, normalised: width, case, trailing punctuation) | neither only; never decides 相談 vs 依頼 by keywords |
+| 2 Clef | server | `classifier` (Cloudflare Clef) when enabled; skipped otherwise | 相談, 依頼, neither — each only above its confidence |
+| 3 A light model | agent (answerer role) | `agent.triage.model` (default `haiku`) with the message, the recent chat and the open change proposals | 相談, 依頼, neither |
+| — | — | Still unknown after stage 3 | treated as **相談** (the safe side: nothing is written; the answerer can turn it into a proposal) |
+
+Then:
+
+- **相談** (stage 4) → the **read-only answerer** answers it at once, in parallel with the change queue; the answer is
+  the AI's reply bubble under the message. No revision.
+- **依頼** (stage 5) → from a **participant**: the answerer writes a **change proposal** that the facilitator approves,
+  edits or rejects; approved, it is queued as a normal run. From the **facilitator**, or in **`dt open`**: straight
+  into the queue as a run (today's apply).
+- **neither** → nothing; the triage record says which stage decided it and why. The facilitator can still use
+  「AI に送る」 again, which then skips the cascade's "neither" (open question Q6).
+
+### Stage 1: mechanical
+
+Pure and in the domain (`domain/triage.ts`), unit-tested on a table. Narrow on purpose: it only catches what is sure to
+need no answer, so that a common "ありがとう" costs nothing. It never reads keywords such as 「？」 or 「してください」 to
+tell 相談 from 依頼.
+
+### Stage 2: Clef
+
+The existing `MessageClassifier` port and Clef adapter (`infrastructure/clef.ts`), asked new questions: three `noul`
+questions in one call (is it a question about the model, is it a request to change it, does it need no answer at all),
+on the body with its mentions as names. A probability at or above `classifier.threshold` (default raised to a
+confident value, open question Q5) on exactly one question decides; anything else is unknown. Failures and timeouts are
+unknown. In `dt open` too, when enabled (the text leaves the machine only when the user configured it). Its former role
+— the `session.classifications` sent to the facilitator's pages, the 「AI に送る」 button shown on requests only — goes.
+A generic provider interface (other "JEV-compatible" classifier APIs) is a later possibility; today Clef is the only
+provider, as `CLASSIFIER_PROVIDERS` already says.
+
+### Stage 3: a light model
+
+A job of the agent's answerer role (the server has no model): the answers entry point sends a `triage` job with the message (its body with
+mentions as names, its targets' labels), the last messages of the chat (up to 20, or 4000 characters), and the open
+change proposals (so that 「それでお願いします」 after a proposal reads as a 依頼, and 「やっぱりやめて」 as one too). The
+model answers with a JSON schema: `{ kind: 相談 | 依頼 | neither | unknown, confidence: 0..1, reason: short text }`.
+
+It runs in a **small warm process of its own** inside the answerer role: `claude --print --input-format stream-json
+--output-format stream-json --model <agent.triage.model> --tools ""` (no tools: it reads only what it is given),
+restarted with the answerer's `restartAfter`. Each
+triage job is self-contained; the carried context is not wanted, only the saved start (~2.8 s cold, measured for
+`claude -p 'say ok'`). Through Claude Code, not an API key: the user's sign-in is the only credential, as for runs.
+
+### Stage 4: the read-only answerer
+
+- A Claude Code process with **`--tools Read,Grep,Glob`** and `--allowedTools Read,Grep,Glob` (and the existing
+  `--setting-sources user --strict-mcp-config`): no edit, write or shell tool exists in it, whatever the prompt or the
+  message says. The answerer role's warm process (separate from the runner's), `agent.answer.model` / `effort`,
+  `agent.answer.timeout`. No `dt fmt` / `dt check`, no lease, no revision: an answer changes nothing to record.
+- Its own prompt (not the runs' `buildPrompt`): answer about the model as it is in the files; never claim to have
+  changed anything; when the message asks for a change, say so (the override) instead of describing the edit as done.
+- An `answer` job carries the message, its targets, the recent chat and the runs it replies to (as `previousRuns`
+  today). The reply schema: `{ kind: 'answer', answer }` or `{ kind: 'proposal', proposal: { what, where, how } }`
+  (override: it was a request after all) or `{ kind: 'neither' }`. Its data has `changedSinceYourLastAnswer: [paths]`
+  (the files changed since the answerer's previous job ended, the runner's `changedSinceYourLastRun` for answers).
+- In parallel with the change queue: an answer never waits for a run, nor a run for an answer. It reads the workspace
+  as it is; the answer records the latest revision at its start, and the bubble says when a run was running meanwhile
+  (open question Q10).
+- The same process writes the **proposals**: a `propose` job (a participant's 依頼) answers
+  `{ what, where, how }` grounded in the files it read (open question Q1).
+
+### Stage 5: change proposals and the queue
+
+- A **change proposal** (変更案) is a card in the chat, under the message it came from, shown to everyone: what to
+  change, where (elements as `#name` links) and how, as text. No diff preview yet (decision; a later possibility).
+- The **facilitator** approves it (as is or after editing the text), or rejects it (with an optional note to the
+  author). Several open proposals can be approved together; approved together they are one run (as まとめて送る), open
+  question Q2. An approved proposal is queued as a run whose input carries the message and the approved text; the run
+  agent follows the approved text.
+- A participant sees their proposal's state (承認待ち, 承認済み → the run's card, 却下 with the note). They may withdraw
+  it while it waits.
+- The **run agent** may still decide a queued 依頼 was a question (decision 18): it answers (`answer`, status
+  `answered`) and changes nothing; the run completes as an answer (result = base, no revision), drawn as a reply bubble.
+  The prompt's rules from round 1 stay for that: never edit on a guess; when unsure, answer or ask.
+
+### The triage record (for debugging)
+
+One record per addressed message, written as the stages go, kept in `session.db`:
+
+- how it was addressed (`mention` | `reply` | `solo` | `facilitator`), and by whom;
+- each stage that ran: the stage, its answer, its confidence (Clef's probabilities, the model's confidence), its reason
+  (stage 1: the rule; stage 3: the model's reason; the answerer's or the run agent's override: their reason), the
+  model, the time taken, and errors;
+- the final kind, the stage that decided it, and the outcome (answer message, proposal, run).
+
+The facilitator sees it from a message's ⋯ (「仕分けの記録」); the server's log prints one line per triage at the
+debug level, without the message text. Participants see only the outcome.
+
+### With no agent connected
+
+Stages 1–2 run on the server; a message that needs stage 3 waits (the triage is `Pending`), and the chat header shows
+「AI 接続なし（n 件待ち）」 counting waiting triages, answers and runs. When an agent connects it claims them in order.
+Round 1's memos are gone: a message in `dt open` without an agent is simply waiting.
+
+## Two roles: the answerer and the runner
+
+Decision 21: the Claude Code execution for 相談 and for 依頼 is separate. One `dt agent` (or the in-process agent) holds
+both roles by default; `--role answer` or `--role run` starts one only.
+
+| | Answerer | Runner |
+|---|---|---|
+| Does | stage 3 (triage), answers (stage 4), proposals | runs (today's pipeline): approved proposals, the facilitator's and `dt open`'s requests |
+| Tools | `Read`, `Grep`, `Glob` (fixed, enforced by `--tools` and `--allowedTools`); stage 3: none | `agent.run.allowedTools` (the facilitator's; default edit tools plus `dt fmt` / `dt check`) |
+| Entry point | `/agent/answers/events` + `POST /agent/answers/:job`; handed out, no lease | `/agent/events`; claim, lease, heartbeat, start, finish |
+| Workspace | reads it as it is | base revision, scan, outside-sources guard, `dt fmt` / `dt check` when files changed, result revision, success rule |
+| Concurrency | in parallel with runs; one job at a time per answerer | serial per session |
+| Prompt and output | its own prompt; `{ answer }` \| `{ proposal }` \| `{ neither }` | `buildPrompt`; today's reply plus `answer` / `answered` (the override) |
+| Settings | `agent.answer.{model, effort, warm, restartAfter, timeout}`, `agent.triage.model` | `agent.run.{model, effort, warm, restartAfter, allowedTools, dt, maxPreviousRunDiff}` |
+| Warm processes | the answerer (and the small triage process) | the runner |
+| Memory hint | `changedSinceYourLastAnswer` | `changedSinceYourLastRun` |
+| Restart | after `restartAfter` jobs, past 150k tokens, after a revert / restore, after a model change | as for answers, plus after a declined run and a change of tools or `dt` |
+
+- **Why separate** (the alternative was one process for both): a process cannot be both read-only and writable —
+  `--tools` is fixed per process, and the read-only guarantee is the process's tools; answers would queue behind runs
+  in one process (one turn at a time); and the roles want different models, effort and timeouts.
+- **On different machines**: each role works on the workspace's files, so a role on another machine needs the same
+  workspace (a shared checkout or file system), as `dt session subscribe` did; `agent.json` gives the API's address and
+  credential. Running the answerer on a laptop next to the session and the runner beside the workspace is the main use.
+
+## Protocol and model changes
+
+In `contexts/collaboration` (the `.dt` model, its generated code, use cases, persistence) and `protocol.ts`:
+
+- **Session**: `mode: Solo | Collab` (migration: existing rows `Collab`); a command to turn a Solo session into a
+  Collab one (decision 13).
+- **The AI participant**: the reserved `ParticipantId` `ai`; `MentionableParticipant` accepts it; `Request.author` may be
+  `ai` only through the server's `answer` use case.
+- **Request (message)**: unchanged and immutable; *addressed* is not a state of the message but the existence of a
+  triage for it (as *applied* is the existence of a run that holds it, ADR 0026). The model's Japanese label 依頼 for
+  `Request` now clashes with the triage's 依頼: the triage's kinds are named `Consultation` (相談), `ChangeRequest`
+  (変更依頼) and `NotForAi` (AI 宛てでない) in the model; renaming `Request`'s label to メッセージ is left to M2.
+- **Triage** (new aggregate, 仕分け): `request`, `addressedBy` (`Mention` | `Reply` | `Solo` | `Facilitator`) and
+  `addressedByParticipant`, `steps: TriageStep[]` (`stage`: `Mechanical` | `Clef` | `Model` | `Answerer` | `Runner`;
+  `verdict`; `confidence?`; `reason`; `model?`; `durationMs`; `error?`); states `Pending` → `Decided { kind, by stage,
+  at }`; `override` adds a step from the answerer or the run agent and changes the kind (`Consultation` ↔
+  `ChangeRequest`).
+- **ChangeProposal** (new aggregate, 変更案): `request(s)`, `triage`, `what`, `where`, `how` (text, `REPLY_LIMITS`-like
+  limits), states `Open` (承認待ち) → `Approved { by, at, editedText?, run }` | `Rejected { by, at, note? }` |
+  `Withdrawn { at }`. `approve` takes several proposals at once and queues one run (use case).
+- **Run**: the input gains `proposals` (the approved texts) beside `requests`; the reply gains `answer` (up to
+  `REPLY_LIMITS.answer` = 2000 characters) and the request status `answered` (round 1, kept for the override); the
+  success rule: exit 0, no new `.dt` error, every `.dtes` parses, and — **when the run changed files** — `dt fmt` and
+  `dt check` ran (`formatted` / `checked` become `'ran' | 'failed' | 'skipped'`; `agent-run.dt`, `validation.ts`,
+  regenerated). Revert runs from `feat/collab-card` stay in the same queue.
+- **Answer**: a use case `answer(triage, text, readRevision)` that writes the AI's message and decides the triage.
+- **Agent API: two entry points** (decision 21). The **runs** keep today's: `/agent/events` (SSE, resumable from the
+  outbox), claim with a lease, heartbeat, start, finish; runs (and `feat/collab-card`'s reverts) stay serial for the
+  session. The **answers** get their own: `GET /agent/answers/events` (SSE) hands each `triage`, `answer` or `propose`
+  job to one connected answerer (no claim, no lease, no workspace lock), and `POST /agent/answers/:job` returns its
+  result; a job not answered within its timeout, or whose answerer disconnects, is handed to another answerer or, with
+  none, waits (the triage stays `Pending`). Answer jobs never wait for the run queue and never hold it. `GET
+  /agent/session` gives each role its settings (the runner its tools and `dt`, the answerer nothing to configure). A
+  connection says its role, so the page counts answerers and runners apart.
+- **State and WebSocket**: the state body gains `mode`, `agent: { connected, waiting }`, the open proposals, and per
+  message the triage's outcome (to everyone) and its record (to the facilitator); messages `triage.*`, `proposal.*`,
+  `agent.presence`. `session.classifications` / `session.classification` go.
+- **Routes**: `POST /api/session/requests` addresses by its mentions and `replyTo`; `POST
+  /api/session/requests/:id/address` (the facilitator's 「AI に送る」, several ids allowed); `POST
+  /api/session/proposals/approve` (ids, optional edited text per id), `…/:id/reject`, `…/:id/withdraw`. Addressing is
+  the one path to the AI for every message, the facilitator's own included: the route's `apply` is removed (the model
+  keeps what older sessions need to load).
 
 ## The page
 
-- **Mode**: the state body carries `mode: 'solo' | 'collab'`. In solo the collab menu, invite, hand-over, leave,
-  participants and reactions-of-others are hidden; the chat is the person and the AI.
-- **Agent status**: the server counts the open `/agent/events` streams (an agent connected) and the queued runs; the
-  state body carries `agent: { connected: number; queued: number }` and a WebSocket message updates it. The chat header
-  shows 「AI: 接続済み」, 「AI: 接続なし」 or 「AI 接続なし（n 件待ち）」; in collab the facilitator's 「AI に送る」 stays
-  enabled without an agent (the run queues).
-- **One-step send (solo)**: with an agent connected, the composer's send creates the message and queues its run in
-  one call (`POST /api/session/requests` with `run: true`, allowed in solo only, for the facilitator); with none, the
-  message is sent as a **memo** (no run; the row shows 「メモ」 and an 「AI に送る」 button that is enabled once an agent
-  connects). Several memos can be sent together (まとめて送る), as today.
-- **Answers**: a completed run that changed no file and carries an `answer` (or whose requests are all `answered`) is
-  drawn as the AI's reply bubble under the message — the answer as text, no revision card, no 比較 / 実行前に戻す, no
-  「変更なし」. A run that both answered and changed files is drawn as today's work card with the answer in it.
-- **Collab**: unchanged otherwise; the classifier's tags (if enabled) keep deciding only whether a row offers the
-  facilitator 「AI に送る」.
+- **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat
+  is the person and the AI.
+- **AI status**: the chat header shows 「AI: 接続済み」, 「AI: 接続なし」 or 「AI 接続なし（n 件待ち）」.
+- **Composer**: `@` offers `AI` first; a message that will be addressed (it mentions `@AI`, replies to the AI, or solo)
+  shows a small AI mark before sending, so the person knows whether the AI will read it.
+- **Messages**: an addressed message shows its triage's progress (仕分け中 → 回答中 / 承認待ち / 待機中 / —); the
+  facilitator has 「AI に送る」 on every message not yet addressed, and 「仕分けの記録」 on addressed ones.
+- **Answers**: the AI's reply bubble under the message, its text with element links; replying to it addresses the AI.
+- **Proposals**: a card under the message (what / where / how); for the facilitator 承認, 編集して承認, 却下, and
+  selection for 「まとめて承認」; for the author 取り下げ.
+- **Runs**: the cards of `feat/collab-card` (its names 中止 / 打ち消し / 復元); a run that answered instead of editing
+  is a reply bubble; a run whose request is `answered` but which changed files is flagged
+  (「質問への回答ですが、ファイルを変更しました」).
 
-## Consultation
+## ~~Consultation~~ (superseded)
 
-### The run
-
-Every message goes through the same run, with the same tools (`session.agent.allowedTools`) and the same success rule.
-What changes:
-
-- **Prompt.** The intro says the participants' messages are change requests **or questions about the model**. New
-  rules: a request that asks a question, asks for an opinion or an explanation, or does not clearly ask for a change is
-  a consultation: read what it needs, answer it in `answer`, change no file, and mark it `answered`. When unsure whether
-  a message asks for a change, answer it (and say what you would change) or ask (`clarification`) — never edit on a
-  guess. A run may carry both kinds; each request is handled as what it is. Rule 5's "optional: they are run after you
-  finish anyway" becomes "do not run them unless you need their output to fix your edit" (the measured runs ran them
-  0.6–0.9 s each for nothing).
-- **Reply.** A new optional `answer` (plain text with the reply's `@{…}` element references, up to
-  `REPLY_LIMITS.answer` = 2000 characters, line breaks kept) and a request status `answered`. `summary` stays the 1–2
-  sentence summary (it is what `previousRuns` show later). The JSON schema follows `REPLY_LIMITS` as today.
-- **Subscriber.** When the scan after the agent finds **no changed file**, `dt fmt` and `dt check` are not run (today
-  they are: measured, run 3), and the finish says so: `formatted` / `checked` become `'ran' | 'failed' | 'skipped'`
-  (old servers' booleans read as `ran` / `failed`). Saves ~0.45 s on an answer.
-- **Server and model.** The success rule becomes: exit 0, no new `.dt` error, every `.dtes` parses, and — **when the
-  run changed files** — `dt fmt` and `dt check` ran. A run that changed nothing completes with result = base and no
-  revision, as it already does today. `contexts/collaboration/model/agent-run.dt` (`formatted: Bool`, the invariant
-  `succeeded`, the `RuleNotMet` invariant) and `domain/validation.ts`'s `succeeded` change together; the generated code
-  is regenerated.
-- **Model choice.** The same as a change run (one warm process). A cheaper model for consultations would need the
-  run's kind up front, which decision 9 rules out.
-
-### The trade-off: no hard read-only guarantee
-
-A question is answered by an agent that could edit files. The mitigations, in order:
-
-1. **The prompt**: rules that make answering, not editing, the default when a message is not clearly a change request.
-2. **The changes are visible**: every run that changed a file shows the change (its card, 比較, the files), whichever
-   way the agent read the message, and a run whose request is `answered` but which changed files is flagged on its
-   card (「質問への回答ですが、ファイルを変更しました」).
-3. **Undo**: 実行前に戻す restores the base revision (the base is taken before every run).
-4. **The subscriber's existing guard**: any change outside `.dt` / `.dtes` sources fails the run and stops the agent.
-
-A hard guarantee is possible only where the run's kind is known before it starts, e.g. a participant's question in
-collab (Q1, option C): such a run gets `Read, Glob, Grep` only.
-
-### The classifier (Cloudflare Clef, optional)
-
-It no longer decides anything about consultation: the AI does. It keeps its one role in collab, the facilitator's
-hint of which chat rows read as requests (the 「AI に送る」 button on requests and unknowns, as now). In solo it is
-not called (every message goes to the AI anyway; a sent text would leave the machine for nothing). Its config stays
-under `session.classifier`.
+Round 1 sent every message through the same run with the same (writing) tools and let the agent decide whether it was
+a question; it had no hard read-only guarantee, and the classifier kept only its 「AI に送る」 hint. Round 2 replaces
+it with the triage above: the kind is known before the agent that acts starts, so a consultation runs with read-only
+tools enforced by Claude Code, and writes happen only after a 依頼 is queued (by the facilitator, or approved by them).
+Kept from round 1: the person gives no instruction; the run agent's `answer` / `answered` for a misread request; no
+`dt fmt` / `dt check` when nothing changed; the prompt's rule that the agent does not run `dt` itself unless it needs
+the output to fix its edit.
 
 ## The warm agent
 
@@ -296,88 +515,115 @@ platform binary to an npm package that has few, a second Claude Code (the bundle
 that replaces rather than merges. What it adds that we need — interrupt — works over the CLI's control request. The
 risk of the CLI route is that the stdin protocol is documented through the SDK only: the runner checks the `init`
 event and falls back to cold runs (today's adapter) when the warm process does not answer as expected, and the fake
-agent of the tests speaks the same protocol. If a later Claude Code breaks it, `session.agent.warm: false` is the
-switch. Revisit the SDK if per-run permission changes become wanted (Q1 option C could use `setPermissionMode`/
-`canUseTool` instead of a second process).
+agent of the tests speaks the same protocol. If a later Claude Code breaks it, `agent.run.warm: false` / `agent.answer.warm: false` are the switches. With
+round 2 the read-only guarantee does not need per-turn permissions either: the answerer is its own process with its
+own `--tools`.
 
 ### Design
 
 - **`AgentRunner` is unchanged**; a new adapter `createWarmClaudeRunner` implements it. The subscriber's pipeline does
   not change: base revision at start, scan before and after, outside-sources guard, the success rule, the finish.
-- **One process per agent**, started on the first run (not at subscribe time: no idle process with no work), with the
-  arguments of today's `claudeArguments` plus `--input-format stream-json`. `--json-schema` is fixed per process: it
-  uses `replyJsonSchema(MAX_REQUESTS)` (the session's limit of requests per run), and `parseReply` keeps checking the
-  numbers against the run's real count, as it does now. `--allowedTools` is fixed too: a change of the facilitator's
-  tools (`GET /agent/session`) replaces the process.
-- **A run is one turn**: the prompt (`buildPrompt`, unchanged but for the consultation rules and the note below) as one
-  user message; the turn's `result` event is the run's result. The run's `onActivity` reads the turn's events as now.
+- **One warm process per role and agent** — the runner's and the answerer's (decision 21), plus the answerer role's small triage process — each started on its first job (not at subscribe time:
+  no idle process with no work), with the arguments of today's `claudeArguments` for its role plus `--input-format
+  stream-json`. `--json-schema` is fixed per process: the runs' uses `replyJsonSchema(MAX_REQUESTS)` (the session's
+  limit of requests per run), and `parseReply` keeps checking the numbers against the run's real count, as it does now.
+  `--allowedTools` is fixed too: a change of the facilitator's tools (`GET /agent/session`) replaces the runs' process.
+- **A job is one turn**: the prompt as one user message; the turn's `result` event is the job's result. The run's
+  `onActivity` reads the turn's events as now.
 - **What changed since the last turn**: the warm agent remembers file contents (measured: it skipped reading). Each
-  turn's data gains `changedSinceYourLastRun: [paths]` — the subscriber compares the scan at this run's start with the
-  scan at the previous run's end (files edited by a person, another agent, or a restore) — and rule 9 says to re-read
-  them. The prompt already says "the current files are the truth".
-- **Cancellation mid-turn**: the interrupt control request; if no `result` comes within 5 s, the process group is
-  killed (today's path) and the next run starts a fresh process. A cancelled run's edits stay on disk as today; the
+  run's and answer's data gains `changedSinceYourLastRun: [paths]` — the subscriber compares the scan at this job's
+  start with the scan at the previous job's end of that process (files edited by a person, another agent, a run, or a
+  revert/restore) — and rule 9 says to re-read them. The prompt already says "the current files are the truth".
+- **Cancellation mid-turn** (中止): the interrupt control request; if no `result` comes within 5 s, the process group
+  is killed (today's path) and the next job starts a fresh process. A cancelled run's edits stay on disk as today; the
   server has already ended the run.
-- **Crash**: the process exiting during a turn fails the run (`AgentError`, the exit code in the report); between
-  runs it is noted and the next run starts a fresh one. No retry of the run.
-- **Restart (a fresh process, no carried context)**: after `restartAfter` runs (default 20); when a turn's context
-  (`usage` of the result: input + cache read + cache creation) passes 150k tokens; after a restore of a revision;
-  after a run is declined (rule 7: the turn may have carried an attempt to break the rules, and it should not stay in
-  the context); after the agent's `dt` or tools change; and after `session.closed`.
+- **Crash**: the process exiting during a turn fails the job (`AgentError`, the exit code in the report); between
+  jobs it is noted and the next job starts a fresh one. No retry.
+- **Restart (a fresh process, no carried context)**: after the role's `restartAfter` jobs (default 20 for runs, 50 for answers); when a turn's context
+  (`usage` of the result: input + cache read + cache creation) passes 150k tokens; after a revert (打ち消し) or restore
+  (復元) of a revision; after a run is declined (rule 7: the turn may have carried an attempt to break the rules, and it
+  should not stay in the context); after the agent's `dt`, tools or models change; and after `session.closed`.
 - **Context growth**: measured +10–15k tokens a run. Restarting is cheap (~1.3 s plus the files read again), so the
   plan restarts instead of compacting; `/compact` (measured to work) is kept as a later option.
-- **Cross-run influence**: wanted for consultation — a follow-up question ("なぜ？", "それならどう変える？") reads in
-  the context of the earlier answer even when the person did not reply to the run. In collab the context mixes
-  several people's runs; the prompt's per-run data still says who asked what. `previousRuns` (the runs a message
-  replies to) stay in the prompt: they are the record, the memory is a bonus and is lost on restart.
+- **Cross-job influence**: the answerer's memory helps a follow-up question ("なぜ？", "それならどう変える？"). In collab
+  the context mixes several people's messages; each job's data still says who asked what. `previousRuns` stay in the
+  prompt: they are the record, the memory is a bonus and is lost on restart.
 - **User settings**: `--setting-sources user` stays; the user's `Stop` and `PostToolUse` hooks now run once per turn
   instead of once per process (measured: the user's `Stop` hook reports an error notification on every turn here).
   `--bare` would skip them but also ignores OAuth sign-in, so it is not an option for signed-in users. The first-run
   page keeps its warning about `~/.claude/settings.json`.
 - **What it saves**: ~1.3 s of process start and exit per run (~8 %), plus the files the agent need not read again:
-  25 % over four runs measured. Plus ~0.45 s on an answer (no `dt fmt`/`dt check`), and 0.6–0.9 s on runs where the
-  agent no longer runs `dt` itself.
+  25 % over four runs measured. Plus ~0.45 s on an answer given by a run (no `dt fmt`/`dt check`), and 0.6–0.9 s on runs
+  where the agent no longer runs `dt` itself. For triage, ~2.8 s of start per message.
+
+## Cost per addressed message
+
+Every addressed message costs at least a stage-3 call unless stage 1 or 2 decides, and a 相談 costs an answer (the
+measured question run: 0.108 USD and 14 s on Opus with effort medium; less on `agent.answer.model` if set lighter). A
+participant's 依頼 costs a proposal before any run. Messages that are not addressed cost nothing. M7 measures the
+cascade (time and cost per stage, how often stages 1 and 2 decide) on a sample of real messages.
+
+## Related branches
+
+- **`feat/collab-card`** removes confirming a revision and reworks the run card's undo: a **revert** (打ち消し) is queued
+  like a change and runs in the same serial queue as runs; a queued or running run is **中止** (cancelled); a revision
+  is **復元** (restored). This plan uses those names (round 1 said 取り消す / 実行前に戻す). Consequences here: the
+  change lane holds runs and reverts; an approved proposal waits behind a revert like any run; answers and triages do
+  not wait for either; a revert or a restore restarts the warm processes (they may remember the old files) and enters
+  `changedSinceYourLastRun`. Its amendments to ADR 0026 (revert and restore; no revision confirmation) are the base ADR
+  0030 amends.
+- **`feat/react-flow`** replaces tldraw with React Flow and adds ADR 0029. This plan does not touch the canvas; M6
+  shares `styles.css` and maybe `app/App.tsx` (the chat's place). Element links in answers and proposals (`#name`) use
+  the existing navigation, whatever draws the canvas.
 
 ## Collisions
 
-- **`feat/collab-card`** (removes confirming a revision; the run card's undo): touches
-  `contexts/collaboration/src/domain/commands.ts`, `application/use-cases.ts`, `model/revision.dt`, the generated
-  `Collaboration.ts`, `protocol.ts`, `infrastructure/sqlite.ts` (a migration), `apps/dt/src/server/session/routes.ts`,
-  and `apps/web/session/{card,chat,collab,collab-menu,revisions,state,stream,api}.ts(x)`, `apps/web/i18n.tsx`, ADR 0026,
-  `docs/guide.md`, `docs/live-view.md`, `docs/session-first-run.md`. This plan's M2 (success rule, reply `answer`,
-  session mode, agent presence, one-step send: the same domain, use-case, generated, migration and route files) and
-  M5 (the chat and card) collide with it: **start M2 and M5 after it is merged**; the session migration number is
-  taken after its migration.
-- **`feat/react-flow`** (tldraw → React Flow): touches `apps/web/view/*`, `shapes.tsx`, `states-canvas.tsx`,
-  `styles.css`, `theme.ts`, `bun.lock`, one comment in `protocol.ts`, ADRs 0001/0024/0026 and adds ADR 0029. M5 shares
-  `styles.css` and maybe `app/App.tsx` (the chat's place): small; **start M5 after it is merged** too. The ADR of this
-  plan is 0030.
-- `scripts/session-seed` parses `dt session start`'s output and starts it: M4 keeps that output and moves the seed to
-  `dt collab` (the alias would print a warning into the seed's log).
+- **`feat/collab-card`** touches `contexts/collaboration/src/domain/commands.ts`, `application/use-cases.ts`,
+  `model/revision.dt`, the generated `Collaboration.ts`, `protocol.ts`, `infrastructure/sqlite.ts` (a migration),
+  `apps/dt/src/server/session/routes.ts`, and `apps/web/session/{card,chat,collab,collab-menu,revisions,state,stream,api}.ts(x)`,
+  `apps/web/i18n.tsx`, ADR 0026, `docs/guide.md`, `docs/live-view.md`, `docs/session-first-run.md`. This plan's M2
+  (model, use cases, migration), M4 (routes, agent API) and M6 (the chat and cards) collide with it: **start M2, M4 and
+  M6 after it is merged**; the session migration number is taken after its migration.
+- **`feat/react-flow`** touches `apps/web/view/*`, `shapes.tsx`, `states-canvas.tsx`, `styles.css`, `theme.ts`,
+  `bun.lock`, one comment in `protocol.ts`, ADRs 0001/0024/0026 and adds ADR 0029. M6 shares `styles.css` and maybe
+  `app/App.tsx`: small; **start M6 after it is merged** too.
+- M5 (CLI and config) touches `apps/dt/src/config/*`, `contexts/collaboration/src/application/config.ts`, the CLI and
+  composition: not the files of either branch except the config's tests; it may start after M2's model lands.
+- `scripts/session-seed` parses `dt session start`'s output and starts it: M5 moves it to `dt collab` (same output),
+  and its requests to `@AI` messages or the facilitator's addressing.
+- Within this plan, M2 renames nothing that M3 uses: M3 touches only `capabilities/agent`.
 
 ## Tasks
 
 | Task | What | Depends on | Parallel with |
 |---|---|---|---|
-| M1 | ADR 0030 (modes, consultation, warm agent; amends ADR 0026's success rule and S6); `docs/guide.md` outline only | — | M3 |
-| M2 | Collaboration: session `mode` (Solo/Collab, migration), reply `answer` + status `answered` (`REPLY_LIMITS.answer`, schema), success rule with `formatted`/`checked` as ran/failed/skipped (model `agent-run.dt`, `validation.ts`, regenerate), agent presence (count of `/agent/events` streams, `agent` in the state body, a WebSocket message), `POST /requests` with `run: true` in solo, protocol types | M1, `feat/collab-card` merged | M3 |
-| M3 | Agent: the warm runner (`createWarmClaudeRunner`: stream-json input, interrupt, crash, restart rules, `changedSinceYourLastRun`), `session.agent.warm` / `restartAfter` / `model` / `effort`, the fake agent speaking stream-json input, the usability check of `claude` | M1 | M1, M2 |
-| M4 | Agent + CLI: the consultation prompt rules and `dt`-in-the-agent rule; skip `dt fmt`/`dt check` when nothing changed; `dt open` / `dt collab` / `dt collab link` / `dt agent`, the in-process agent and `--no-agent`, the solo sign-in, the deprecated aliases with warnings, `dt open --host` read-only, the seed moved to `dt collab`; CLI and server tests | M2, M3 | M5 |
-| M5 | Web: mode (solo hides the collab parts), the chat header's AI status, one-step send and memos, 「AI に送る」 on memos, answers as reply bubbles, the "answered but changed files" flag; i18n | M2, `feat/react-flow` and `feat/collab-card` merged | M4 |
-| M6 | Docs: README, `docs/guide.md` (open/collab/agent, consultation), `docs/live-view.md`, `docs/session-first-run.md` (with `dt open`, the warm agent, the measured times), `docs/session-access.md`, changelogs (en/ja: the new commands, the deprecations) | M4, M5 | — |
-| M7 | A real run again (`docs/session-first-run.md` with `dt open` and `dt collab`), with the measurement repeated warm: record the times next to this plan's | M6 | — |
+| M1 | ADR 0030 (modes, addressing, triage, proposals, warm agent, config; amends ADR 0026); this plan updated | — | M3 |
+| M2 | Collaboration model and use cases: session `mode` (migration) and Solo → Collab; the AI participant `ai` (mentionable, author of answers); the `Triage` aggregate (steps, decided, override); the `ChangeProposal` aggregate (open, approve several/edited → one run, reject, withdraw); run input `proposals`; reply `answer` + status `answered`; the success rule with ran/failed/skipped (`agent-run.dt`, `validation.ts`, regenerate); stage 1 (`domain/triage.ts`); persistence and migration; `protocol.ts` types | M1, `feat/collab-card` merged | M3 |
+| M3 | Agent, warm processes: `createWarmClaudeRunner` (stream-json input, interrupt, crash, restart rules, `changedSinceYourLastRun`), reusable by both roles with their own tools, model/effort, `warm` / `restartAfter` as options (wired to config in M5), the fake agent speaking stream-json input, the usability check of `claude` | M1 | M1, M2 |
+| M4 | Triage and answers end to end: the server's cascade (stage 1, stage 2 Clef with the new questions and threshold, dispatch), the agent API's answers entry point (`/agent/answers/events`, `POST /agent/answers/:job`, hand-out and timeout, no lease) beside the runs' `/agent/events`, the answerer role (stage 3 with no tools, the read-only answerer with `Read,Grep,Glob`, its own prompt and schema, `changedSinceYourLastAnswer`, `agent.answer.timeout`), overrides both ways, the run prompt's rules (answer instead of editing; no `dt` unless needed), skipping `dt fmt`/`dt check` when nothing changed, the routes (address, proposals) and WebSocket messages, presence and waiting counts; server and subscriber tests with the fake agent | M2, M3 | M5 |
+| M5 | CLI and config: `dt open` / `dt collab` / `dt collab link` / `dt agent` (with `--role answer|run`); removal of `dt view` and `dt session *` (errors naming the replacement); the in-process agent and `--no-agent`; the solo sign-in; decision 13's rules; `dt open --host` read-only; config sections `open` / `collab` / `agent` (`port`, `run.*`, `answer.*`, `triage.model`) / `classifier` with `session` and `view` as errors and hints; the seed moved to `dt collab`; CLI and config tests | M2, M3 | M4, M6 |
+| M6 | Web: mode (solo hides the collab parts), AI status, `@AI` first in the composer and the addressed mark, the facilitator's 「AI に送る」 on any message (and several), triage progress and 「仕分けの記録」, answers as reply bubbles, proposal cards (approve / edit / reject / select several; withdraw), the "answered but changed files" flag; i18n | M4's API, `feat/react-flow` and `feat/collab-card` merged | M5 |
+| M7 | Docs and a real run: README, `docs/guide.md` (open / collab / agent, addressing, triage, proposals, config), `docs/live-view.md`, `docs/session-first-run.md` and `docs/session-access.md` with the new commands, the changelogs (en/ja: the breaking changes — removed commands, renamed sections — and what to do); then a real run with `dt open` and `dt collab`, the warm measurement repeated and the cascade measured (time and cost per stage, a sample of messages to set the thresholds) | M5, M6 | — |
 
-M3 can start at once (it touches only `capabilities/agent`); M2 waits for `feat/collab-card`. The removal of the
-deprecated aliases is a task of the following release, not of this plan.
+M3 can start at once (it touches only `capabilities/agent`); M2 waits for `feat/collab-card`.
 
 ## Open questions
 
+Round 1's Q1 (participants' consultations), Q3 (the `dt view` alias) and Q4 (renaming `session`) are superseded by
+round 2; Q2, Q5 and Q6 are decided (decisions 13–15); Q7 (a toast for answers while the chat is closed) stays out of
+this plan. What remains:
+
 | # | Question | Options | Recommendation |
 |---|---|---|---|
-| Q1 | In collab, do participants' consultations go to the AI without the facilitator? | **A** No: only the facilitator sends to the AI, as today. **B** Yes: any participant can send their own message to the AI (the same run, the same tools) — but the AI may then edit files without the facilitator, since the AI decides what a message is. **C** Yes, read-only: a participant's 「AI に聞く」 starts a run with `Read, Glob, Grep` only (a hard guarantee, as its starter is known); the answer is shown to all, and a change it suggests is a message the facilitator can send. Needs a second warm process (or the SDK's per-turn permissions) and a per-participant limit | **A** now; **C** as a follow-up if facilitators ask for it. B undoes the facilitator's role |
-| Q2 | `dt open` on a workspace whose session was started by `dt collab` (and the reverse)? | Refuse / continue / start a second store | `dt open` refuses on an open Collab session (end it or use `dt collab`); `dt collab` continues a Solo session, the solo person becoming the facilitator |
-| Q3 | Does the `dt view` alias show the chat? | **a** `dt open --no-agent` (chat with memos) **b** the read-only Live View exactly as today | **b** for the deprecation release (no surprise for scripts, nothing written to `.domaintrail/session/`), with the warning pointing at `dt open` |
-| Q4 | Rename the config section `session` to `collab`? | Keep / rename with the old name read for a version | Keep: it configures the agent in both modes too; the name is not wrong enough to break every file |
-| Q5 | The agent runs on the model and effort of the user's `~/.claude/settings.json` (here Opus with effort medium): the model is 70–85 % of a run | Leave it / `session.agent.model` and `effort` optional / a default (e.g. Sonnet) | Add the optional keys (M3) and say in the first-run page that they are the biggest lever; no default of our own |
-| Q6 | Warm by default? | Default on / opt-in | On, with `session.agent.warm: false` as the switch and the fall-back to cold runs when the warm process misbehaves |
-| Q7 | Show the AI's answer to a consultation in solo also as a toast/notification when the chat pane is closed? | — | Not in this plan |
+| Q1 | Who writes a participant's change proposal? | **a** the read-only answerer (a `propose` job: it reads the files, so where/how are grounded) **b** the stage-3 model (cheap, but blind to the files) **c** no text: the message itself is the proposal | **a**; it is also what the answerer's override produces |
+| Q2 | Proposals approved together: one run or one each? | One run (as まとめて送る) / one run each | One run; the facilitator can approve one at a time to get separate runs |
+| Q3 | The facilitator's 「AI に送る」 on a participant's message that triages as 依頼: proposal or queue? | Proposal (approved by the facilitator next) / straight to the queue (the sending is the approval) | Straight to the queue: the facilitator chose to send it |
+| Q4 | Stage 3's model and how it is called | **a** default `haiku` through Claude Code (warm, no tools) **b** no default (skip stage 3 unless set) **c** the Anthropic API with a key | **a**: the stage exists to be light; no second credential |
+| Q5 | Confidence thresholds (Clef's and the model's) | Fixed now / set from M7's measured sample | Start strict (Clef 0.9, model 0.8 for "neither") and set them from M7's sample |
+| Q6 | The facilitator addresses again a message the cascade judged "neither" | Re-run the cascade / skip "neither" and go on as 相談 | Skip: the facilitator says it needs an answer; the answerer can still answer briefly |
+| Q7 | Limits per person in collab (cost per addressed message) | None / at most n waiting addressed messages per participant / a session budget | At most 3 waiting per participant (a 429 with a message); a budget later if asked |
+| Q8 | `dt open --host <non-loopback>` as the read-only Live View that replaces `dt view --host` | Keep / drop (loopback only) | Keep: it is the only way left to show the model to others without a session |
+| Q9 | The AI participant: virtual (reserved ID, not stored) or stored in `Session.participants` with a role `Ai` | Virtual / stored | Virtual: no migration of older sessions, no effect on `maxParticipants` or the facilitator invariants |
+| Q10 | An answer while a run edits the same files | Answer in parallel on the files as they are / wait for the run | Parallel (decision); the answer records the revision it read and says when a run was running |
+| Q11 | A generic classifier provider interface (other JEV-compatible APIs) for stage 2 | Now / later | Later; `classifier.provider` already leaves room |
+| Q12 | The triage process: a third warm process in the answerer role, or cold `claude -p` calls (~2.8 s each) | Warm / cold / the answerer's process with its model | Warm (small: no tools, no carried context needed); measure in M7 whether it pays |
