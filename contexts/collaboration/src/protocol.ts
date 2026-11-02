@@ -6,8 +6,9 @@ import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
 import type { Collaboration } from './generated/index.js';
 import type { Classification } from './application/classifier.js';
+import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 
-export type { Classification };
+export type { Classification, RunActivity, RunActivityPhase };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -129,7 +130,11 @@ export type SessionServerMessage =
     | { readonly type: 'presence.leave'; readonly connection: string }
     // the facilitator's only (ADR 0026, amendment): how the chat's messages read, when a classifier is configured
     | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
-    | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification };
+    | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification }
+    // what the running runs are doing (ADR 0026, amendment): transient, never an event; every activity held on connect,
+    // then each change. A page shows a run's only while the run is `Running`
+    | { readonly type: 'session.activities'; readonly activities: Readonly<Record<string, RunActivity>> }
+    | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity };
 
 /** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];
@@ -392,6 +397,17 @@ export interface AgentClarificationBody extends AgentLeaseBody {
 /** `POST /agent/runs/:id/decline`: the agent will not do the requests; the reply's summary is why (outcome `declined`). */
 export interface AgentDeclineBody extends AgentLeaseBody {
     readonly reply: AgentReplyBody;
+}
+
+/**
+ * `POST /agent/runs/:id/activity` → 200 `{}`: what the running run is doing now (`RunActivity`), from its lease's holder.
+ * Kept in memory as the run's latest and sent to the pages; it does not extend the lease. Refused with `LeaseLost` or
+ * `NotAllowed` (409) unless the token is the live lease of a running run, `InvalidInput` (400) for a phase or a
+ * subject that is not one.
+ */
+export interface AgentActivityBody extends AgentLeaseBody {
+    readonly phase: RunActivityPhase;
+    readonly subject?: string;
 }
 
 /** `POST /agent/runs/:id/fail`. */

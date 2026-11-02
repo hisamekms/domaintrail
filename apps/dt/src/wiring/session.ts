@@ -12,6 +12,7 @@ import {
     createClefClassifier,
     createCloudflareAccess,
     createCollaboration,
+    createRunActivities,
     createSessionAccess,
     createUnitOfWork,
     FACILITATOR_NAME,
@@ -26,6 +27,7 @@ import {
     randomSecrets,
     readServerAddress,
     removeSessionFiles,
+    RUN_ENDING_EVENTS,
     sameIdentity,
     type SessionAccess,
     systemClock,
@@ -283,6 +285,8 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     // the facilitator's: whether messages are classified, and how those so far were
                     if (classifications && connection.data.role === 'facilitator')
                         connection.send({ type: 'session.classifications', classifications: classifications.all() });
+                    // what the running runs are doing now (a page that reloads gets the latest)
+                    connection.send({ type: 'session.activities', activities: activities.all() });
                     presence.connected(connection);
                 }, stateFailed);
             },
@@ -324,6 +328,10 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                     hub.publishWhere((c) => c.data.role === 'facilitator', { type: 'session.classification', request, classification }),
             });
 
+        // what the running runs are doing (ADR 0026, amendment): in memory, never stored; dropped once a run ends
+        const activities = createRunActivities();
+        const ending: ReadonlySet<string> = new Set(RUN_ENDING_EVENTS);
+
         const agentToken = randomSecrets.newSecret();
         const relay = createEventRelay({
             collaboration,
@@ -339,6 +347,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                             e.event.requestId,
                             plainBody(e.event.body, { targets: e.event.targets.length, people: e.event.mentions.length }, true),
                         );
+                for (const e of entries) if (ending.has(e.event.type) && 'runId' in e.event) activities.end(e.event.runId);
                 if (entries.some((e) => e.event.type === 'SessionClosed')) void onClosed();
             },
         });
@@ -353,6 +362,9 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             maxPreviousRunDiff: config.agent.maxPreviousRunDiff,
             maxStreams: MAX_AGENT_STREAMS,
             pump,
+            activity: (run, activity) => {
+                if (activities.set(run, activity)) hub.publish({ type: 'run.activity', run, activity });
+            },
         });
 
         // a restore writes the sources: the watcher holds, then refreshes once

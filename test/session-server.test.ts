@@ -638,6 +638,57 @@ describe('the agent API', () => {
         const ended = await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true });
         expect(ended.status).toBe(409);
     });
+
+    test("a running run's activity reaches every page as it changes, a page connecting gets the latest, and it ends with the run", async () => {
+        const state = (await (await api(server, bob, 'state')).json()) as SessionStateBody;
+        const target = { target: { kind: 'Workspace' }, sourceRevision: state.revisions[0].id };
+        const request = ((await (await api(server, bob, 'requests', { target, body: 'Rename.' })).json()) as { request: { id: string } }).request;
+        const run = ((await (await api(server, ada, 'runs', { requests: [request.id] })).json()) as { run: { id: string } }).run;
+        const { lease } = (await (await agent(cred, 'runs/claim', { owner: 'test-agent' })).json()) as { lease: { token: string } };
+        const activity = (body: object): Promise<Response> => agent(cred, `runs/${run.id}/activity`, { token: lease.token, ...body });
+        // only while it runs
+        expect((await activity({ phase: 'reading' })).status).toBe(409);
+        await agent(cred, `runs/${run.id}/start`, { token: lease.token });
+        const b = await socket(server, bob);
+        try {
+            expect(await b.next('session.activities')).toMatchObject({ activities: {} });
+            for (const [bad, field] of [
+                [{ phase: 'thinking' }, 'phase'],
+                [{ phase: 'reading', subject: 'a\nb' }, 'subject'],
+                [{ phase: 'reading', other: 1 }, 'other'],
+            ] as const) {
+                const refused = await activity(bad);
+                expect([refused.status, ((await refused.json()) as { error: { field: string } }).error.field]).toEqual([400, field]);
+            }
+            expect((await agent(cred, `runs/${run.id}/activity`, { token: 'wrong', phase: 'reading' })).status).toBe(409);
+            expect((await activity({ phase: 'reading', subject: 'shop.dt' })).status).toBe(200);
+            expect(await b.next('run.activity')).toEqual({ type: 'run.activity', run: run.id, activity: { phase: 'reading', subject: 'shop.dt' } });
+            // the same again is not sent again
+            expect((await activity({ phase: 'reading', subject: 'shop.dt' })).status).toBe(200);
+            expect((await activity({ phase: 'checking', subject: 'dt check' })).status).toBe(200);
+            expect(await b.next('run.activity')).toMatchObject({ activity: { phase: 'checking', subject: 'dt check' } });
+            expect(b.received.filter((m) => m.type === 'run.activity')).toHaveLength(2);
+        } finally {
+            b.ws.close();
+        }
+        const late = await socket(server, ada);
+        try {
+            expect(await late.next('session.activities')).toEqual({
+                type: 'session.activities',
+                activities: { [run.id]: { phase: 'checking', subject: 'dt check' } },
+            });
+        } finally {
+            late.ws.close();
+        }
+        expect((await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
+        expect((await activity({ phase: 'finishing' })).status).toBe(409);
+        const after = await socket(server, ada);
+        try {
+            expect(await after.next('session.activities')).toEqual({ type: 'session.activities', activities: {} });
+        } finally {
+            after.ws.close();
+        }
+    });
 });
 
 /** Reads the agent's SSE stream (from `lastEventId`) until an event of one of `until` arrives. */

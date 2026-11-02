@@ -335,6 +335,14 @@ export interface CollaborationUseCases {
     }): Promise<Result<Claimed, NothingQueued | RunInProgress>>;
     /** Extends a live lease by `leaseMs` from now. */
     heartbeat(input: { readonly run: AgentRunId; readonly token: string; readonly leaseMs: number }): Promise<Result<Lease, LeaseLost>>;
+    /**
+     * The running run held under the live lease `token`, read without changing anything (not even the lease): what the
+     * agent reports of a run's activity is taken only from its lease's holder, while the run is running.
+     */
+    heldRunningRun(input: {
+        readonly run: AgentRunId;
+        readonly token: string;
+    }): Promise<Result<Collaboration.RunningAgentRun, NotFound | LeaseLost | NotAllowed>>;
     /** Gives a claimed run back to the queue before it started. */
     releaseRun(input: { readonly run: AgentRunId; readonly token: string }): Promise<Result<Collaboration.QueuedAgentRun, NotFound | LeaseLost | NotAllowed>>;
     /** Starts a claimed run: the workspace now is its base revision (RunBase). */
@@ -843,6 +851,15 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 const expiresAt = new Date(now.getTime() + leaseMs);
                 if (!stores.runs.extend(run, token, now, expiresAt)) return err({ type: 'LeaseLost', run });
                 return ok({ ...stored.value.lease, expiresAt });
+            });
+        },
+
+        async heldRunningRun({ run, token }) {
+            return uow.transaction((stores) => {
+                const stored = held(stores, run, token, clock.now());
+                if (!stored.ok) return stored;
+                const r = stored.value.run;
+                return r.state === 'Running' ? ok(r) : err(notAllowed('report', r.state));
             });
         },
 

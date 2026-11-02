@@ -47,6 +47,17 @@ export {
     type MarkTargetData,
 } from './domain/marks.js';
 export { approvalOf, assumptionStatus, type ApprovalFacts } from './domain/approvals.js';
+// what a running run is doing: the phases any agent maps its own events onto, and the check of an activity
+export {
+    isActivityPhase,
+    isActivitySubject,
+    MAX_ACTIVITY_SUBJECT,
+    readActivity,
+    RUN_ACTIVITY_PHASES,
+    sameActivity,
+    type RunActivity,
+    type RunActivityPhase,
+} from './domain/activity.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
 export { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
@@ -68,6 +79,7 @@ export {
     type IdentityProvider,
 } from './application/identity.js';
 export { createClassifications, type Classifications, type MessageClassifier } from './application/classifier.js';
+export { createRunActivities, RUN_ENDING_EVENTS, type RunActivities } from './application/activities.js';
 // its settings in the `session` section of domaintrail.jsonc (T6), composed by the app
 export {
     ACCESS_CHECKS,

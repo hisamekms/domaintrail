@@ -322,6 +322,19 @@ describe('agent runs', () => {
         expect(error(await s.use.startRun({ run: run.id, token: a.lease.token }))).toEqual({ type: 'LeaseLost', run: run.id });
     });
 
+    test("a run's activity is taken from its lease's holder while it runs, without extending the lease", async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        const run = await queuedRun(s, id, start);
+        const a = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
+        expect(error(await s.use.heldRunningRun({ run: run.id, token: a.lease.token }))).toEqual({ type: 'NotAllowed', command: 'report', state: 'Queued' });
+        value(await s.use.startRun({ run: run.id, token: a.lease.token }));
+        expect(value(await s.use.heldRunningRun({ run: run.id, token: a.lease.token }))).toMatchObject({ id: run.id, state: 'Running' });
+        expect(error(await s.use.heldRunningRun({ run: run.id, token: 'another-token' }))).toEqual({ type: 'LeaseLost', run: run.id });
+        value(await s.use.failRun({ run: run.id, token: a.lease.token, reason: 'AgentError' }));
+        expect(error(await s.use.heldRunningRun({ run: run.id, token: a.lease.token }))).toEqual({ type: 'LeaseLost', run: run.id });
+    });
+
     test('recovery: an expired lease fails a running run (LeaseExpired) and frees a claimed one, across a restart', async () => {
         const root = await workspace();
         const clock = { t: Date.parse('2026-10-31T09:00:00Z') };
