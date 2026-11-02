@@ -73,6 +73,12 @@ export interface AgentApi {
 export interface AgentInvocation {
     /** The whole prompt (`buildPrompt`); passed to the agent as data, never through a shell. */
     readonly prompt: string;
+    /**
+     * The prompt for an agent that continues the conversation of its previous run (a warm agent, which remembers the
+     * files it read): the same, with the files changed since that run (`changedSinceYourLastRun`). Absent for the first
+     * run; an agent that starts afresh takes `prompt`.
+     */
+    readonly continuedPrompt?: string;
     /** The tools the facilitator allows (`GET /agent/session`). */
     readonly allowedTools: readonly string[];
     /** How many requests the prompt numbers (the reply names them by number, 1 to this). */
@@ -103,6 +109,13 @@ export interface AgentOutcome {
 /** Runs the agent (Claude Code) in the workspace root, one invocation at a time. */
 export interface AgentRunner {
     run(invocation: AgentInvocation): Promise<AgentOutcome>;
+    /**
+     * Forget the conversation (a warm agent): the next run starts afresh, e.g. after a revision was restored. Says
+     * why, for the log. A runner that keeps nothing between runs has none.
+     */
+    reset?(reason: string): void;
+    /** Ends what the runner keeps running between runs (a warm agent's process); resolves once it is gone. */
+    close?(): Promise<void>;
 }
 
 /** `dt fmt` and `dt check` on the workspace: each resolves whether it ran (exit 0 or 1), not whether it found nothing. */

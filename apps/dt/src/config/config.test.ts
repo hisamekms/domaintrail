@@ -40,7 +40,12 @@ const SESSION_DEFAULTS: ResolvedSessionConfig = {
     port: 4321,
     host: '127.0.0.1',
     identity: 'dev',
-    agent: { port: 0, allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'], maxPreviousRunDiff: 20480 },
+    agent: {
+        port: 0,
+        allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'],
+        run: { warm: true, restartAfter: 20 },
+        maxPreviousRunDiff: 20480,
+    },
     maxParticipants: 50,
     quickReactions: ['👍', '👀', '🤔', '🎉', '❤️', '🙏'],
     classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
@@ -80,7 +85,13 @@ describe('config file', () => {
                 port: 5000,
                 identity: 'access',
                 access: { teamDomain: 'team.cloudflareaccess.com', audience: 'aud', allowedOrigins: ['https://s.example.com'] },
-                agent: { port: 9000, allowedTools: ['Read'], dt: ['bun', '../clone/bin/dt.ts'], maxPreviousRunDiff: 4096 },
+                agent: {
+                    port: 9000,
+                    allowedTools: ['Read'],
+                    dt: ['bun', '../clone/bin/dt.ts'],
+                    run: { warm: false, model: 'sonnet', effort: 'low' },
+                    maxPreviousRunDiff: 4096,
+                },
                 maxParticipants: 5,
                 quickReactions: ['❤'],
             },
@@ -109,13 +120,19 @@ describe('config file', () => {
                     acceptCookie: false,
                     avatarHosts: [],
                 },
-                agent: { port: 9000, allowedTools: ['Read'], dt: ['bun', path.resolve(ROOT, '../clone/bin/dt.ts')], maxPreviousRunDiff: 4096 },
+                agent: {
+                    port: 9000,
+                    allowedTools: ['Read'],
+                    dt: ['bun', path.resolve(ROOT, '../clone/bin/dt.ts')],
+                    run: { warm: false, restartAfter: 20, model: 'sonnet', effort: 'low' },
+                    maxPreviousRunDiff: 4096,
+                },
                 maxParticipants: 5,
                 quickReactions: ['❤️'],
             },
         });
         expect(Object.keys(c.session)).toEqual(['port', 'host', 'identity', 'access', 'agent', 'maxParticipants', 'quickReactions', 'classifier']);
-        expect(Object.keys(c.session.agent)).toEqual(['port', 'allowedTools', 'dt', 'maxPreviousRunDiff']);
+        expect(Object.keys(c.session.agent)).toEqual(['port', 'allowedTools', 'dt', 'run', 'maxPreviousRunDiff']);
     });
 
     test.each([
@@ -152,6 +169,7 @@ describe('config file', () => {
         ['{ "session": { "identity": "basic" } }', "'session.identity' must be one of 'dev', 'access'"],
         ['{ "session": { "agent": { "allowedTools": [""] } } }', "'session.agent.allowedTools' must be an array of tool rules"],
         ['{ "session": { "agent": { "maxPreviousRunDiff": -1 } } }', "'session.agent.maxPreviousRunDiff' must be a non-negative integer"],
+        ['{ "session": { "agent": { "run": { "warm": "yes" } } } }', "'session.agent.run.warm' must be true or false"],
         ['{ "session": { "quickReactions": ["ok"] } }', "'session.quickReactions' must hold one emoji per entry: 'ok'"],
     ])('%s is refused with the file name', (text, expected) => {
         const msg = message(text);

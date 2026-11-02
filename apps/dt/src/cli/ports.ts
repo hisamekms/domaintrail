@@ -82,6 +82,8 @@ export interface SubscribeOptions {
     dt?: readonly string[];
     /** Handle one run (waiting for one if none is queued), then end. */
     once: boolean;
+    /** `session.agent.run`: how Claude Code carries out the runs (warm or one process per run, model, effort). */
+    run?: ResolvedSessionConfig['agent']['run'];
     log: (line: string) => void;
 }
 

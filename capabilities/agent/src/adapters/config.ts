@@ -1,5 +1,7 @@
 // The agent's settings in the `session.agent` section of domaintrail.jsonc (ADR 0026; ADR 0027, Project analysis and
-// configuration: the agent owns the allowed tools): `allowedTools` and `dt`, their defaults and their validation. The
+// configuration: the agent owns the allowed tools): `allowedTools` and `dt`, and how Claude Code carries out runs
+// (`run`: `warm`, `restartAfter`, `model`, `effort`; plan modes, the warm agent; the run role's keys, grouped so that
+// they move together when the section is renamed), their defaults and their validation. The
 // settings of its adapters (ADR 0027, Authorization: the agent's tools are enforced by its adapter): the Claude Code
 // runner's tools and the `dt` of the shim, whose paths are resolved against the config file's directory. The app
 // composes them with the other sections and reports the first error (`fail` throws). That `dt` lies outside the
@@ -16,11 +18,46 @@ export const DEFAULT_AGENT_TOOLS: readonly string[] = ['Read', 'Edit', 'Write', 
 /** The runtimes the agent's `dt` may be started with, as `[<runtime>, <script>]`. */
 export const DT_RUNTIMES = ['node', 'bun', 'deno'] as const;
 
+/** Runs of one warm Claude Code process before it is replaced by a fresh one, unless configured. */
+export const DEFAULT_RESTART_AFTER = 20;
+
+/** The effort levels Claude Code takes (`claude --effort`). */
+export const AGENT_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type AgentEffort = (typeof AGENT_EFFORTS)[number];
+
+/** How Claude Code carries out runs (the run role), the keys of `session.agent.run`. */
+export const RUN_CONFIG_KEYS = ['warm', 'restartAfter', 'model', 'effort'] as const;
+
 /** The agent's keys, by where they sit in the file. */
-export const AGENT_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = { 'session.agent': ['allowedTools', 'dt'] };
+export const AGENT_CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = {
+    'session.agent': ['allowedTools', 'dt', 'run'],
+    'session.agent.run': [...RUN_CONFIG_KEYS],
+};
+
+/** How Claude Code carries out runs (`session.agent.run`), as the file gives it. */
+export interface RunConfigFile {
+    /** One long-lived Claude Code process across runs (`true`), or one per run (`false`). Default: true. */
+    warm?: boolean;
+    /** Runs of one warm process before a fresh one replaces it. Default: `DEFAULT_RESTART_AFTER`. */
+    restartAfter?: number;
+    /** `claude --model`; unset: the model of the user's Claude Code settings. */
+    model?: string;
+    /** `claude --effort`; unset: the effort of the user's Claude Code settings. */
+    effort?: AgentEffort;
+}
+
+/** How Claude Code carries out runs, resolved. */
+export interface RunConfig {
+    warm: boolean;
+    restartAfter: number;
+    model?: string;
+    effort?: AgentEffort;
+}
 
 /** The agent's part of the `session.agent` section of the config file. */
 export interface AgentConfigFile {
+    /** How Claude Code carries out runs. */
+    run?: RunConfigFile;
     /** The tools the agent may use, as Claude Code permission rules. Default: `DEFAULT_AGENT_TOOLS`. */
     allowedTools?: string[];
     /**
@@ -32,6 +69,7 @@ export interface AgentConfigFile {
 
 /** The agent's part resolved. */
 export interface ResolvedAgentConfig {
+    run: RunConfig;
     allowedTools: string[];
     /** The command (absolute paths) the agent's `dt` runs, when configured. */
     dt?: string[];
@@ -44,10 +82,11 @@ const isRuntime = (word: string): boolean =>
             .toLowerCase()
             .replace(/\.exe$/, ''),
     );
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const hasSeparator = (word: string): boolean => /[\\/]/.test(word);
 const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === 'string' && s.trim() !== '');
 
-/** Checks `session.agent.allowedTools` and `session.agent.dt` (`agent`: an object). */
+/** Checks `session.agent.allowedTools`, `dt` and `run` (`agent`: an object). */
 export function validateAgentConfig(agent: Record<string, unknown>, fail: (msg: string) => never): void {
     if (agent.allowedTools !== undefined && !isStringList(agent.allowedTools)) fail("'session.agent.allowedTools' must be an array of tool rules");
     if (agent.dt !== undefined) {
@@ -56,6 +95,22 @@ export function validateAgentConfig(agent: Record<string, unknown>, fail: (msg: 
         const wrong = dtShapeError(agent.dt);
         if (wrong) fail(`'session.agent.dt' ${wrong}`);
     }
+    if (agent.run !== undefined) validateRunConfig(agent.run, fail);
+}
+
+/** Checks `session.agent.run`. */
+function validateRunConfig(run: unknown, fail: (msg: string) => never): void {
+    const at = 'session.agent.run';
+    if (!isRecord(run)) return fail(`'${at}' must be an object`);
+    const r = run;
+    for (const key of Object.keys(r)) if (!(RUN_CONFIG_KEYS as readonly string[]).includes(key)) fail(`unknown key '${at}.${key}'`);
+    if (r.warm !== undefined && typeof r.warm !== 'boolean') fail(`'${at}.warm' must be true or false`);
+    if (r.restartAfter !== undefined && !(typeof r.restartAfter === 'number' && Number.isInteger(r.restartAfter) && r.restartAfter >= 1))
+        fail(`'${at}.restartAfter' must be a positive integer (runs)`);
+    if (r.model !== undefined && !(typeof r.model === 'string' && /^[A-Za-z0-9][\w.:@[\]/-]*$/.test(r.model)))
+        fail(`'${at}.model' must be a Claude Code model name or alias (e.g. "sonnet")`);
+    if (r.effort !== undefined && !(AGENT_EFFORTS as readonly unknown[]).includes(r.effort))
+        fail(`'${at}.effort' must be one of ${AGENT_EFFORTS.map((e) => `"${e}"`).join(', ')}`);
 }
 
 /** The agent's settings with their defaults (validated); `dt`'s paths resolved against `dir` when given. */
@@ -63,6 +118,17 @@ export function resolveAgentConfig(agent: AgentConfigFile = {}, dir?: string): R
     return {
         allowedTools: agent.allowedTools ?? [...DEFAULT_AGENT_TOOLS],
         ...(agent.dt && { dt: dir === undefined ? [...agent.dt] : resolveCommand(agent.dt, dir) }),
+        run: resolveRunConfig(agent.run),
+    };
+}
+
+/** `session.agent.run` with its defaults: warm, replaced after `DEFAULT_RESTART_AFTER` runs, the user's model and effort. */
+export function resolveRunConfig(run: RunConfigFile = {}): RunConfig {
+    return {
+        warm: run.warm ?? true,
+        restartAfter: run.restartAfter ?? DEFAULT_RESTART_AFTER,
+        ...(run.model !== undefined && { model: run.model }),
+        ...(run.effort !== undefined && { effort: run.effort }),
     };
 }
 

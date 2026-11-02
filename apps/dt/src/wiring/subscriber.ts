@@ -1,6 +1,7 @@
 // `dt session subscribe --agent claude` (ADR 0026, S6): the subscriber of the session server running on the
-// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code, `dt fmt`/`dt check` (this CLI,
-// or `session.agent.dt`, for the agent too) and the workspace's files.
+// workspace, wired to its agent API (`.domaintrail/session/agent.json`), Claude Code (a warm process across runs, or
+// one per run: `session.agent.run`), `dt fmt`/`dt check` (this CLI, or `session.agent.dt`, for the agent too) and the
+// workspace's files.
 import { lstat } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -9,12 +10,14 @@ import {
     type AgentRunner,
     createClaudeCodeRunner,
     createDtTools,
+    createWarmClaudeRunner,
     createHttpAgentApi,
     type DtCommand,
     dtCommandOf,
     pinDt,
     type PinnedDt,
     randomNonce,
+    type RunConfig,
     scanWorkspace,
     startSubscriber as subscribe,
     type Subscriber,
@@ -47,6 +50,8 @@ export interface SubscriberOptions {
      * `session.agent.dt` when configured, else its own runtime and entry.
      */
     dt: DtCommand;
+    /** How Claude Code carries out the runs (`session.agent.run`); default: warm, with its default restart. */
+    run?: RunConfig;
     log?: (line: string) => void;
     /** The agent's program instead of `claude` on the PATH: for the tests only, not a CLI option. */
     agentCommand?: AgentCommand;
@@ -101,7 +106,15 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     let runner: AgentRunner;
     try {
         dt = pinDt(options.dt, root);
-        runner = await createClaudeCodeRunner({ root, command: options.agentCommand, dt });
+        const run = options.run;
+        const claude = {
+            root,
+            command: options.agentCommand,
+            dt,
+            ...(run?.model !== undefined && { model: run.model }),
+            ...(run?.effort !== undefined && { effort: run.effort }),
+        };
+        runner = (run?.warm ?? true) ? await createWarmClaudeRunner({ ...claude, restartAfter: run?.restartAfter, log }) : await createClaudeCodeRunner(claude);
     } catch (e) {
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }

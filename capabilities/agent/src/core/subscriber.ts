@@ -9,7 +9,10 @@
 // run or changed other files; `Interrupted`: the subscriber was stopped). A cancel of the run (`run.cancel_requested`)
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
 // queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
-// reported on change, at most once a second, never holding it up. Functions over the ports only: no I/O of its own.
+// reported on change, at most once a second, never holding it up. An agent that keeps its conversation across runs
+// (a warm one) is also given the prompt that says which files changed since its previous run (the scan after it
+// against the scan before this one), is told to forget when a revision is restored, and is closed when the
+// subscriber ends. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration';
 import type { AgentClaimed, AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
@@ -122,6 +125,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
      * claims no more runs (a person reviews them and restarts it).
      */
     let halted: string | undefined;
+    /** The workspace as the agent left it at the end of its previous run (scanned after it): what it last saw. */
+    let lastAgentScan: ReadonlyMap<string, string> | undefined;
 
     /** Stops claiming because of what the run `id` left (`shown`: escaped paths, or why they are unknown). */
     const halt = (id: string, shown: string): void => {
@@ -231,7 +236,9 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
         const inspect = async (): Promise<{ changed: number; outside: boolean }> => {
             if (inspected) return inspected;
             try {
-                const changed = changedPaths(before, await deps.workspace.scan());
+                const after = await deps.workspace.scan();
+                lastAgentScan = after;
+                const changed = changedPaths(before, after);
                 const sources = new Set([...sourcesBefore, ...(await deps.workspace.sources())]);
                 const outside = changesOutsideSources(changed, sources);
                 if (outside.length) {
@@ -260,9 +267,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                 ...(options.activityGapMs !== undefined && { gapMs: options.activityGapMs }),
             });
             let outcome: AgentOutcome;
+            const nonce = deps.nonce();
+            // for an agent that remembers its previous run: what changed since (people, another agent, dt fmt, a restore)
+            const sinceLast = lastAgentScan && changedPaths(lastAgentScan, before);
             try {
                 outcome = await deps.runner.run({
-                    prompt: buildPrompt(input, names, deps.nonce(), previousRuns),
+                    prompt: buildPrompt(input, names, nonce, previousRuns),
+                    ...(sinceLast && { continuedPrompt: buildPrompt(input, names, nonce, previousRuns, { changedSinceYourLastRun: sinceLast }) }),
                     allowedTools: options.allowedTools,
                     requests: input.requests.length,
                     signal,
@@ -358,6 +369,7 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                     lastEventId = item.id;
                     if (item.type === 'run.queued') wake();
                     else if (item.type === 'session.closed') finish('closed');
+                    else if (item.type === 'revision.restored') deps.runner.reset?.('a revision was restored');
                     else if (item.type === 'run.cancel_requested' && item.message.type === 'run.cancelled' && item.message.event.runId === current?.run) {
                         log(`run ${current.run}: cancel requested`);
                         current.cancel.abort();
@@ -390,7 +402,10 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
     };
     const worker = work().catch(fail('the subscriber'));
     const stream = follow().catch(fail('the event stream'));
-    void Promise.all([worker, stream]).then(() => resolveDone(end ?? 'stopped'));
+    void Promise.all([worker, stream])
+        .then(() => deps.runner.close?.())
+        .catch((e: unknown) => log(`the agent could not be closed: ${message(e)}`))
+        .then(() => resolveDone(end ?? 'stopped'));
 
     return {
         done,

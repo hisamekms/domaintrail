@@ -1,9 +1,9 @@
 // The `session` section of domaintrail.jsonc (ADR 0026) composed from its owners (ADR 0027, Project analysis and
 // configuration): the app's ports, host and connection guards (./server.ts), Collaboration's identity mode and its
 // Access settings, participant limit, quick
-// reactions, classifier and `agent.maxPreviousRunDiff`, the agent's `agent.allowedTools` and `agent.dt`. The checks run
+// reactions, classifier and `agent.maxPreviousRunDiff`, the agent's `agent.allowedTools`, `agent.dt` and `agent.run`. The checks run
 // in the order they always had, so that the first error of a file is the one it always was.
-import { AGENT_CONFIG_KEYS, type AgentConfigFile, checkDtOutsideWorkspace, resolveAgentConfig, validateAgentConfig } from '@domaintrail/agent';
+import { AGENT_CONFIG_KEYS, type AgentConfigFile, checkDtOutsideWorkspace, resolveAgentConfig, type RunConfig, validateAgentConfig } from '@domaintrail/agent';
 import {
     ACCESS_CHECKS,
     COLLABORATION_CONFIG_KEYS,
@@ -49,7 +49,7 @@ export interface ResolvedSessionConfig {
     identity: ResolvedCollaborationConfig['identity'];
     access?: NonNullable<ResolvedCollaborationConfig['access']> & { allowedHosts: string[]; allowedOrigins: string[] };
     /** `dt`: the command (absolute paths) the agent's `dt` runs, when configured. */
-    agent: { port: number; allowedTools: string[]; dt?: string[]; maxPreviousRunDiff: number };
+    agent: { port: number; allowedTools: string[]; dt?: string[]; run: RunConfig; maxPreviousRunDiff: number };
     maxParticipants: number;
     /** In the form reactions are kept (`normalizeEmoji`). */
     quickReactions: string[];

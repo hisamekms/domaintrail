@@ -209,6 +209,20 @@ In any of its text, name an element by its identifier, never its label: a \`.dt\
 \`@{es:Returns/ReturnRequested}\` (storming / element). The page shows them by name and links them.`;
 }
 
+/** Most paths `changedSinceYourLastRun` names; past them, how many more. */
+export const MAX_CHANGED_SHOWN = 100;
+
+/** What the prompt knows besides the run: for an agent that continues its conversation, what changed since its last run. */
+export interface PromptContext {
+    /** The workspace's paths changed since the agent's previous run in this conversation (an empty list: none). */
+    readonly changedSinceYourLastRun?: readonly string[];
+}
+
+/** The changed paths as the prompt shows them: at most `MAX_CHANGED_SHOWN`, then how many more (read the files then). */
+function changedList(paths: readonly string[]): readonly string[] | { readonly files: readonly string[]; readonly andMore: number } {
+    return paths.length <= MAX_CHANGED_SHOWN ? paths : { files: paths.slice(0, MAX_CHANGED_SHOWN), andMore: paths.length - MAX_CHANGED_SHOWN };
+}
+
 /**
  * The prompt of a run: the rules, the reply's description, then the requests (numbered from 1; author's display name,
  * targets numbered from 1 with their label and source range at the time of the request, or the whole workspace; body,
@@ -221,6 +235,7 @@ export function buildPrompt(
     names: ReadonlyMap<string, string>,
     nonce: string,
     previousRuns: readonly AgentPreviousRun[] = [],
+    context: PromptContext = {},
 ): string {
     const previousNumber = new Map(previousRuns.map((p, i) => [p.run.id, i + 1]));
     const requests: PromptRequest[] = input.requests.map((r, i) => {
@@ -242,6 +257,7 @@ export function buildPrompt(
             },
         }),
         ...(previousRuns.length > 0 && { previousRuns: previousRuns.map((p, i) => previousRunOf(p, i + 1, names)) }),
+        ...(context.changedSinceYourLastRun && { changedSinceYourLastRun: changedList(context.changedSinceYourLastRun) }),
     };
     const { dt, dtes } = languagesOf(input);
     const scope =
@@ -265,8 +281,8 @@ Rules:
 3. \`.dtes\` stormings are exploratory: keep them so (open questions, hotspots and events without a model counterpart
    are fine). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
 4. ${scope}
-5. Run no command except \`dt fmt\` and \`dt check\` (optional: they are run after you finish anyway). No network, no
-   package installs, no git.
+5. Run no command except \`dt check\`, and that only when you need its diagnostics to fix your edit: \`dt fmt\` and
+   \`dt check\` are run on the workspace after your turn anyway. No network, no package installs, no git.
 6. When a request is ambiguous, contradicts another or the model, or cannot be done without guessing, do not guess:
    reply "clarification" with your questions (offer the likely answers as options) and leave the files as they are.
    \`answersToYourQuestions\`, when present, answers your questions of an earlier run: follow it.
@@ -284,6 +300,9 @@ Rules:
    changes they made (a unified diff, or only the files when it was too large). They are context for the replies.
    The current files are the truth: other runs may have happened after a previous run, so read the files before
    editing and never re-apply an old diff.
+10. \`changedSinceYourLastRun\`, when present: this conversation continues your earlier runs of this session, and
+   these files changed since your last run (edited by people or another agent, formatted by \`dt fmt\`, or restored):
+   what you remember of them is out of date, so read them again before relying on them or editing them.
 
 ${replyDescription()}
 

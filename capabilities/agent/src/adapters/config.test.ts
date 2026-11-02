@@ -17,9 +17,18 @@ const refusal = (agent: Record<string, unknown>): string | undefined => {
 
 describe("the agent's settings", () => {
     test('defaults: reading, editing and writing files, dt fmt and dt check; the running dt', () => {
-        expect(resolveAgentConfig()).toEqual({ allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'] });
+        expect(resolveAgentConfig()).toEqual({
+            allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(dt fmt:*)', 'Bash(dt check:*)'],
+            run: { warm: true, restartAfter: 20 },
+        });
         expect(resolveAgentConfig().allowedTools).not.toBe(DEFAULT_AGENT_TOOLS);
-        expect(resolveAgentConfig({ allowedTools: ['Read'] })).toEqual({ allowedTools: ['Read'] });
+        expect(resolveAgentConfig({ allowedTools: ['Read'] }).allowedTools).toEqual(['Read']);
+    });
+
+    test('the runs: a warm Claude Code by default, replaced after 20 runs; the model and effort only when given', () => {
+        expect(refusal({ run: { warm: false, restartAfter: 5, model: 'opus[1m]', effort: 'xhigh' } })).toBeUndefined();
+        expect(resolveAgentConfig({ run: { warm: false, model: 'sonnet' } }).run).toEqual({ warm: false, restartAfter: 20, model: 'sonnet' });
+        expect(resolveAgentConfig({ run: { restartAfter: 3, effort: 'low' } }).run).toEqual({ warm: true, restartAfter: 3, effort: 'low' });
     });
 
     test("the agent's dt: a runtime and a script relative to the config file, or one executable", () => {
@@ -43,6 +52,14 @@ describe("the agent's settings", () => {
         ],
         [{ dt: ['node', '-r'] }, '-r is an option'],
         [{ dt: ['dt'] }, 'a dt executable is given by its path'],
+        [{ run: true }, "'session.agent.run' must be an object"],
+        [{ run: { hot: true } }, "unknown key 'session.agent.run.hot'"],
+        [{ run: { warm: 1 } }, "'session.agent.run.warm' must be true or false"],
+        [{ run: { restartAfter: 0 } }, "'session.agent.run.restartAfter' must be a positive integer (runs)"],
+        [{ run: { restartAfter: 2.5 } }, "'session.agent.run.restartAfter' must be a positive integer"],
+        [{ run: { model: '--dangerously-skip-permissions' } }, "'session.agent.run.model' must be a Claude Code model name or alias"],
+        [{ run: { model: 'a b' } }, "'session.agent.run.model'"],
+        [{ run: { effort: 'huge' } }, '\'session.agent.run.effort\' must be one of "low", "medium", "high", "xhigh", "max"'],
         [{ dt: ['bun', 'x', 'dt'] }, '\'session.agent.dt\' must be ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], with no other word'],
     ])('%j is refused', (agent, message) => {
         expect(refusal(agent)).toContain(message);
