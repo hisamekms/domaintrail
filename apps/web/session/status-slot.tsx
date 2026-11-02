@@ -1,10 +1,11 @@
 // The status slot of a chat row (ADR 0026, amendment): one fixed-width slot right before the row's actions, the same on
 // messages and AI turns, so that what is active can be read down one column. The slot is as wide as the longest text
 // it can show in the current language (measured once, set on the chat as `--chat-status-width`); a row without a
-// status keeps it empty. Also the facilitator's cancel of a run: a bordered ✕ that asks first, in a modal dialog.
+// status keeps it empty. A message's slot holds a link to its AI turn, not a state: the state is the work's, shown once
+// on the turn. Also the facilitator's cancel of a run: a bordered ✕ that asks first, in a modal dialog.
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
-import { X } from 'lucide-react';
-import type { MarkState } from './cards';
+import { ArrowDown, Bot, X } from 'lucide-react';
+import type { MarkState, MessageMark } from './cards';
 import { useChat } from './chat-context';
 import { unitName, type ChangeUnit } from './history';
 import { cancelPrompt, slotLabels, STATE_GLYPH } from './status';
@@ -16,6 +17,23 @@ export function StateLabel({ state, label }: { state: MarkState; label: string }
             {state === 'running' ? <span className="chat-pulse" aria-hidden /> : <span aria-hidden>{STATE_GLYPH[state]}</span>}
             {label}
         </>
+    );
+}
+
+/**
+ * A sent message's slot: a small link to the AI turn of its latest run, the AI's avatar in small and ↓, muted (its
+ * state, and that it goes there, in the tooltip); a click goes to the turn.
+ */
+export function TurnLink({ mark }: { mark: MessageMark }) {
+    const { tx, jump } = useChat();
+    const hint = tx.chat.toTurn(tx.chat.marks[mark.state]);
+    return (
+        <button className="chat-turn-link" onClick={() => jump(`card:${mark.card}`)} aria-label={hint} data-tooltip={hint}>
+            <span className="session-avatar chat-agent-avatar" aria-hidden>
+                <Bot />
+            </span>
+            <ArrowDown aria-hidden />
+        </button>
     );
 }
 

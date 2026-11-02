@@ -1,9 +1,9 @@
 // A card of the chat, without React (ADR 0026, amendment: messages and apply): one change unit (`history.ts`), its
 // runs one under the other — what each run was asked (a quote of each message applied, with what the reply says of
-// it), the facilitator's note or answer, and the agent's message — and the mark an applied message shows of its latest
-// run (`✓`, the card's name in its tooltip). Everything is derived from the session's state on the page.
+// it), the facilitator's note or answer, and the agent's message — and the latest run of each applied message, which
+// its link to the AI turn goes to (its state in the link's tooltip). Everything is derived from the session's state on the page.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { unitName, type ChangeUnit } from './history';
+import type { ChangeUnit } from './history';
 import { agentMessage, type AgentMessage, type RequestProgress, type revisionLookup } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -54,9 +54,12 @@ export function cardRuns(unit: ChangeUnit, lookup: ReturnType<typeof revisionLoo
 
 /** What a run of a card shows of the messages it applied. */
 export interface QuoteDisplay {
-    /** Their quotes: not when the run before on the card applied the same messages (its quotes say it). */
+    /**
+     * Their quotes: not when the run before on the card applied the same messages (its quotes say it), unless this run
+     * says what it did of them (the quotes carry that).
+     */
     readonly quotes: boolean;
-    /** A line per message with the reply's mark and note: only for several; one message's is what the summary says. */
+    /** The reply's note on each message: only for several; one message's is what the summary says. */
     readonly perRequest: boolean;
 }
 
@@ -68,7 +71,8 @@ export function quoteDisplay(runs: readonly CardRun[], i: number): QuoteDisplay 
     const run = runs[i];
     const before = i > 0 ? runs[i - 1] : undefined;
     if (!run) return { quotes: false, perRequest: false };
-    return { quotes: !before || !sameRequests(before, run), perRequest: run.quotes.length > 1 };
+    const outcomes = run.quotes.some((q) => q.progress !== undefined);
+    return { quotes: !before || !sameRequests(before, run) || outcomes, perRequest: run.quotes.length > 1 };
 }
 
 /** What an applied message shows of its latest run. */
@@ -76,9 +80,8 @@ export type MarkState = 'queued' | 'running' | 'clarification' | 'done' | 'parti
 
 export interface MessageMark {
     readonly state: MarkState;
-    /** The card it is on (`ChangeUnit.key`), and what that card is called (`unitName`). */
+    /** The card it is on (`ChangeUnit.key`). */
     readonly card: string;
-    readonly name: string;
 }
 
 const PROGRESS: Record<RequestProgress, MarkState> = { Done: 'done', Partial: 'partial', Skipped: 'skipped', Question: 'question' };
@@ -104,7 +107,7 @@ function markState(run: RunJson, request: string): MarkState {
     }
 }
 
-/** The mark of every applied message, by its ID: its latest run's state (the last queued), and that run's card and its name. */
+/** The mark of every applied message, by its ID: its latest run's state (the last queued), and that run's card. */
 export function messageMarks(units: readonly ChangeUnit[]): Map<string, MessageMark> {
     const latest = new Map<string, { run: RunJson; unit: ChangeUnit }>();
     for (const unit of units)
@@ -113,7 +116,7 @@ export function messageMarks(units: readonly ChangeUnit[]): Map<string, MessageM
                 const seen = latest.get(r.request);
                 if (!seen || run.queuedAt >= seen.run.queuedAt) latest.set(r.request, { run, unit });
             }
-    return new Map([...latest].map(([request, { run, unit }]) => [request, { state: markState(run, request), card: unit.key, name: unitName(unit).text }]));
+    return new Map([...latest].map(([request, { run, unit }]) => [request, { state: markState(run, request), card: unit.key }]));
 }
 
 /** The cards whose runs moved on since the reader last saw them (`seen`: each card's `updatedAt` then). */

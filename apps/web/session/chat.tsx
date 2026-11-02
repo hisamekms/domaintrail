@@ -55,7 +55,7 @@ import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { parseReplyText, referenceText } from './references';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
-import { CancelButton, CancelDialog, RowActions, StateLabel, StatusSizer, StatusSlot } from './status-slot';
+import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
 import { latestRevision } from './state';
 import {
     agentStatus,
@@ -658,11 +658,11 @@ function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirm
 
 /**
  * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at
- * the right of its name line, in the status slot, the mark of its latest run (`✓ 対応`; the card's name in its tooltip, a
- * click goes to the card), then the actions: for the facilitator, the tools to send it to the AI; ↩ and ☺+.
+ * the right of its name line, in the status slot, a link to the AI turn of its latest run once it was sent (the state
+ * is the turn's, so only its tooltip says it), then the actions: for the facilitator, the tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
-    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
+    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, showPerson } = useChat();
     const author = nameOf(r.author);
     const avatarUrl = avatarOf(r.author);
     // it mentions me, or replies to my message: a faint background in my stream only (it asks for my attention)
@@ -683,21 +683,10 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             else selection.start(r.id);
         } else if (selection.active && !(e.target instanceof Element && e.target.closest('a, button, input'))) selection.toggle(r.id);
     };
-    // the status slot (its mark, a link to the card), then the actions, in a group as wide on every row
+    // the status slot (a link to its AI turn), then the actions, in a group as wide on every row
     const side = (
         <div className="chat-message-side">
-            <StatusSlot>
-                {mark && (
-                    <button
-                        className={`chat-state state-${mark.state}`}
-                        onClick={() => jump(`card:${mark.card}`)}
-                        aria-label={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
-                        data-tooltip={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
-                    >
-                        <StateLabel state={mark.state} label={tx.chat.marks[mark.state]} />
-                    </button>
-                )}
-            </StatusSlot>
+            <StatusSlot>{mark && <TurnLink mark={mark} />}</StatusSlot>
             <RowActions>
                 {control && !selection.active && (
                     <span className="chat-apply">

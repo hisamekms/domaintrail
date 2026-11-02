@@ -5115,7 +5115,7 @@ button.add-to-request.added:hover {
     min-width: var(--chat-status-width, 6.5em);
     margin-right: var(--space-1);
 }
-/* a state: its glyph and word, small, in the state's color (muted by default); a message's is a link to its turn */
+/* a state: its glyph and word, small, in the state's color (muted by default) */
 .chat-state {
     display: inline-flex;
     align-items: center;
@@ -5126,16 +5126,36 @@ button.add-to-request.added:hover {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
-.session-chat button.chat-state {
-    padding: 0;
+/* a sent message's slot: a link to its AI turn, the AI's avatar in small (scaled with the text) and ↓; muted, the
+   accent and the row's tint on hover */
+.session-chat button.chat-turn-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: calc(-1 * var(--space-1));
+    padding: 0 var(--space-1);
     border: none;
+    border-radius: 4px;
     background: none;
+    color: var(--muted);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
     cursor: pointer;
 }
-.session-chat button.chat-state:hover {
-    text-decoration: underline;
+.session-chat button.chat-turn-link:hover {
+    background: var(--row-hover);
+    color: var(--accent);
+}
+.chat-turn-link > .session-avatar {
+    --avatar-size: calc(var(--fs-small) * 4 / 3);
+}
+.chat-turn-link > .session-avatar > svg {
+    width: calc(var(--avatar-size) * 0.62);
+    height: calc(var(--avatar-size) * 0.62);
+}
+.chat-turn-link > svg {
+    width: 1em;
+    height: 1em;
 }
 .chat-state > .chat-pulse {
     margin-right: 0;
@@ -5461,10 +5481,28 @@ button.add-to-request.added:hover {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-.run-quote .reply-mark {
-    font-weight: 400;
+/* the quote cut with an ellipsis, then what the run did of it right after, never cut */
+.run-quote-line {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
 }
-.run-quote.status-Question .reply-mark {
+.session-chat .run-quote-line > button.run-quote-main {
+    flex: 0 1 auto;
+}
+.run-quote-outcome {
+    flex: none;
+    display: inline-flex;
+    gap: var(--space-1);
+    white-space: nowrap;
+}
+.run-quote.status-Done .run-quote-outcome {
+    color: var(--green-text);
+}
+.run-quote.status-Partial .run-quote-outcome,
+.run-quote.status-Question .run-quote-outcome {
     color: var(--amber-text);
 }
 .run-quote-note {

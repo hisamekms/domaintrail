@@ -1,6 +1,6 @@
-// The status column of the chat (ADR 0026, amendment): every message row and AI turn row shows its state in one slot
-// before its actions — a message its mark, a turn its latest run's state — as a glyph and a word, at the same x on
-// every row; and the confirmation asked before a run is cancelled.
+// The status column of the chat (ADR 0026, amendment): every message row and AI turn row has one slot before its
+// actions, at the same x on every row — a turn shows its latest run's state there as a glyph and a word, a sent message
+// only a link to that turn (the state is the work's, shown once); and the confirmation asked before a run is cancelled.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { MarkState } from './cards';
 import type { Tx } from './chat-context';

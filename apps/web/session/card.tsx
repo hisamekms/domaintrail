@@ -1,7 +1,7 @@
 // A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
 // a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
 // facilitator's answer or note, the result). Its state sits in the chat's status slot, before the actions. At the top of each run, a quote of each message it applied (with what the
-// reply says of each, ✓ ◐ – ?, when there are several); a click goes to the message, a hover marks it. The AI's question
+// reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
 // cancels a run (asked first), and through the card's menu confirms its result, restores the workspace as it was before it or
@@ -237,8 +237,9 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
 }
 
 /**
- * A message the run applied, on one muted line (`↳ name: the head of its body`); with several messages, what the
- * reply says of each too (its mark and note). A click goes to the message, a hover marks it.
+ * A message the run applied, on one muted line (`↳ name: the head of its body`), then what the reply says of it once
+ * there is a reply (`✓ 対応`, in its color: a message shows no state of its own); with several messages, the reply's
+ * note on each too. A click goes to the message, a hover marks it.
  */
 function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
     const { tx, nameOf, hovered, hover, jump, onNavigate } = useChat();
@@ -250,15 +251,19 @@ function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
             onMouseEnter={() => hover(r.request)}
             onMouseLeave={() => hover(undefined)}
         >
-            <button className="run-quote-main" onClick={() => jump(`message:${r.request}`)} data-tooltip={tx.chat.quoteHint}>
-                <span className="run-quote-who">↳ {nameOf(r.author)}:</span>
-                <span className="run-quote-head">{head}</span>
-            </button>
-            {detailed && quote.progress && (
-                <span className="reply-mark" role="img" aria-label={tx.chat.reply.status[quote.progress]} data-tooltip={tx.chat.reply.status[quote.progress]}>
-                    {PROGRESS_MARK[quote.progress]}
-                </span>
-            )}
+            {/* the quote, cut with an ellipsis, then what the run did of it, never cut */}
+            <span className="run-quote-line">
+                <button className="run-quote-main" onClick={() => jump(`message:${r.request}`)} data-tooltip={tx.chat.quoteHint}>
+                    <span className="run-quote-who">↳ {nameOf(r.author)}:</span>
+                    <span className="run-quote-head">{head}</span>
+                </button>
+                {quote.progress && (
+                    <span className="run-quote-outcome">
+                        <span aria-hidden>{PROGRESS_MARK[quote.progress]}</span>
+                        {tx.chat.reply.status[quote.progress]}
+                    </span>
+                )}
+            </span>
             {detailed && quote.note && (
                 <span className="run-quote-note">
                     <ReplyText text={quote.note} onNavigate={onNavigate} />

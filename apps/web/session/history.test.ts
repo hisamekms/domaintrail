@@ -373,17 +373,47 @@ describe('the cards of the chat', () => {
         expect(quoteDisplay(cardRuns(single, revisionLookup({ revisions, runs: [one] })), 0)).toEqual({ quotes: true, perRequest: false });
     });
 
-    test("an applied message shows its latest run's state, and the card it is on with its name; a message never applied none", () => {
+    test('a run of the same messages quotes them again once its reply says what it did of each', () => {
+        const done = run(
+            'run2',
+            4,
+            [qa, qb],
+            {
+                state: 'Completed',
+                baseRevision: 'r1',
+                startedAt: at(5),
+                finishedAt: at(6),
+                changed: false,
+                reply: {
+                    outcome: 'done',
+                    summary: 'Done',
+                    requests: [
+                        { request: 'qa', status: 'Done' },
+                        { request: 'qb', status: 'Skipped' },
+                    ],
+                    questions: [],
+                    assumptions: [],
+                },
+            },
+            { answer },
+        );
+        const [unit] = changeUnits({ runs: [asked, done], revisions });
+        const runs = cardRuns(unit, revisionLookup({ revisions, runs: [asked, done] }));
+        expect(runs[1].quotes.map((q) => q.progress)).toEqual(['Done', 'Skipped']);
+        expect(quoteDisplay(runs, 1)).toEqual({ quotes: true, perRequest: true });
+    });
+
+    test("an applied message has its latest run's state (its link's tooltip) and the card it is on; a message never applied none", () => {
         const units = changeUnits({ runs: [asked], revisions });
         expect(Object.fromEntries(messageMarks(units))).toEqual({
-            qa: { state: 'done', card: 'run1', name: 'body of qa' },
-            qb: { state: 'question', card: 'run1', name: 'body of qa' },
+            qa: { state: 'done', card: 'run1' },
+            qb: { state: 'question', card: 'run1' },
         });
         const later = changeUnits({ runs: [asked, answered], revisions });
-        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run1', name: 'body of qa' });
+        expect(messageMarks(later).get('qb')).toEqual({ state: 'running', card: 'run1' });
         expect(messageMarks(later).has('qc')).toBe(false);
         const failed = run('run3', 9, [qc], { state: 'Failed', baseRevision: 'r0', startedAt: at(9), reason: 'AgentError', finishedAt: at(10) });
-        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', card: 'run3', name: 'body of qc' });
+        expect(messageMarks(changeUnits({ runs: [failed], revisions })).get('qc')).toEqual({ state: 'failed', card: 'run3' });
     });
 
     test('the cards that moved on since the reader last saw them', () => {
