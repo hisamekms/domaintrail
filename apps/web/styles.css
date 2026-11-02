@@ -4627,6 +4627,8 @@ del.was.block {
 }
 /* AI の作業's badge: how many units are not finished; the accent on the tab, inverted on the selected one */
 .chat-views-badge {
+    display: inline-grid;
+    place-items: center;
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
@@ -4635,9 +4637,8 @@ del.was.block {
     color: #fff;
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
-    line-height: 18px;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
-    text-align: center;
 }
 .session-chat .chat-views button.active .chat-views-badge {
     background: #fff;
@@ -4688,10 +4689,11 @@ del.was.block {
     gap: var(--space-2);
     padding: var(--space-2) var(--space-4) var(--space-1);
 }
-.chat-work-label-row > .chat-work-label {
+.session-chat .chat-work-label-row > .chat-work-label {
     padding: 0;
 }
-.chat-work-label {
+/* (over the pane's h3) */
+.session-chat .chat-work-label {
     margin: 0;
     padding: var(--space-2) var(--space-4) var(--space-1);
     color: var(--muted);
@@ -4700,7 +4702,7 @@ del.was.block {
     line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
-.chat-work-group.awaiting .chat-work-label {
+.session-chat .chat-work-group.awaiting .chat-work-label {
     color: var(--warning);
 }
 .chat-work-label-row > .check {
