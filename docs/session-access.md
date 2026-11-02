@@ -125,8 +125,9 @@ Tick each line; for a failure, record what is listed under [When something fails
       model's update live, without reloading.
 - [ ] The facilitator restores the revision before the run; both participants see the model as it was, and
       `git diff` in the workspace shows the sources back as they were.
-- [ ] The facilitator closes the session: every page closes (code 4000), and a reload gets 401 from the origin even
-      with a valid Access session.
+- [ ] The facilitator closes the session: every page closes (code 4000), and `dt session start` exits. A reload,
+      even with a valid Access session, reaches no server: Cloudflare answers with its error page (502, the tunnel's
+      origin is gone), and nothing of the model or the chat is served.
 
 ## When something fails
 
