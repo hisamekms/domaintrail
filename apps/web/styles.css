@@ -5031,7 +5031,7 @@ button.add-to-request.added:hover {
     flex-direction: column;
 }
 /* a row of the stream — a message, or an AI turn with its chained runs — is one box as wide as the stream (its
-   padding and all): its backgrounds (hovered or paired, chosen, mentioning me, flashed) span it whole, the same for
+   padding and all): its backgrounds (hovered, chosen, mentioning me, flashed) span it whole, the same for
    every row. Its tools sit at its top-right, ☺+ last, so that ☺+ is at the same x on every row; the body leaves the
    same room on its right (--chat-tools-room, ☺+'s column) on every row, so that all text wraps at one width and no
    tool covers it */
@@ -5071,8 +5071,7 @@ button.add-to-request.added:hover {
     flex: 1;
     min-width: 0;
 }
-.chat-row.paired,
-.run-quote.paired {
+.chat-row:hover {
     background: var(--row-hover);
 }
 .chat-row.selected {
@@ -6297,7 +6296,7 @@ button.add-to-request.added:hover {
 }
 /* a message that mentions me, in my stream only: a faint blue wash (it asks for my attention). Not violet, which is
    what can be clicked, nor amber, which is a question waiting for an answer */
-.chat-row.mentions-me:not(.paired, .selected) {
+.chat-row.mentions-me:not(:hover, .selected) {
     background: var(--blue-wash);
     box-shadow: inset 2px 0 0 var(--blue-tint);
 }

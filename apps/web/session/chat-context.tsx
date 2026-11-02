@@ -1,6 +1,6 @@
 // What the parts of the chat share (ADR 0026, amendment: messages and apply): the session, who is who, the facilitator's
-// actions and revision tools, the selection of messages to apply together, and the pairing of a message with its quote
-// (hovered on either side, both are marked; no line is drawn between them).
+// actions and revision tools, and the selection of messages to apply together. A message and its quote are not marked
+// together on hover: each row reacts only to itself, and a link leads from one to the other.
 import { createContext, useContext } from 'react';
 import type { Classification } from '@domaintrail/collaboration/protocol';
 import type { Messages } from '../i18n';
@@ -48,9 +48,6 @@ export interface ChatContextValue {
     readonly classifications: Readonly<Record<string, Classification>> | undefined;
     /** The messages chosen to apply together (selection mode while any is chosen or the mode was entered). */
     readonly selection: { readonly active: boolean; readonly ids: ReadonlySet<string>; toggle(id: string): void; start(id: string): void; clear(): void };
-    /** The message hovered on either side (its ID), for the pairing of a quote with its message. */
-    readonly hovered: string | undefined;
-    readonly hover: (id: string | undefined) => void;
     /** Scrolls the stream to an item (`message:<id>`, `card:<key>`) and marks it for a moment. */
     readonly jump: (key: string) => void;
     /** Opens the participants at a person (a mention of them was clicked), their row marked for a moment. */

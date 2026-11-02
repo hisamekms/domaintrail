@@ -289,18 +289,14 @@ function RunSection({
 /**
  * A message the run applied, on one muted line (`↳ name: the head of its body`), then what the reply says of it once
  * there is a reply (`✓ 対応`, in its color: a message shows no state of its own); with several messages, the reply's
- * note on each too. A click goes to the message, a hover marks it.
+ * note on each too. A click goes to the message.
  */
 function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
-    const { tx, nameOf, hovered, hover, jump, onNavigate } = useChat();
+    const { tx, nameOf, jump, onNavigate } = useChat();
     const r = quote.request;
     const head = oneLine(bodyText(r.body, r.targets));
     return (
-        <li
-            className={`run-quote${hovered === r.request ? ' paired' : ''}${quote.progress ? ` status-${quote.progress}` : ''}`}
-            onMouseEnter={() => hover(r.request)}
-            onMouseLeave={() => hover(undefined)}
-        >
+        <li className={`run-quote${quote.progress ? ` status-${quote.progress}` : ''}`}>
             {/* the quote, cut with an ellipsis, then what the run did of it, never cut */}
             <span className="run-quote-line">
                 <button className="run-quote-main" onClick={() => jump(`message:${r.request}`)} data-tooltip={tx.chat.quoteHint}>

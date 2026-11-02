@@ -275,7 +275,6 @@ export function SessionChat(props: {
         return () => document.removeEventListener('keydown', onKey);
     }, [selecting, selection]);
 
-    const [hovered, hover] = useState<string | undefined>();
     // the answers being chosen, per run: one draft for the chat's form and AI の作業's of the same run
     const [answerDrafts, setAnswerDrafts] = useState<Readonly<Record<string, Readonly<Record<string, QuestionChoice>>>>>({});
     const answers = useMemo(
@@ -329,8 +328,6 @@ export function SessionChat(props: {
         marking,
         classifications: me.participant.role === 'facilitator' ? session.classifications : undefined,
         selection,
-        hovered,
-        hover,
         jump,
         showPerson,
         replies,
@@ -670,7 +667,7 @@ function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirm
  * is the turn's, so only its tooltip says it), then the actions: for the facilitator, the tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
-    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, showPerson } = useChat();
+    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, actions, showPerson } = useChat();
     const author = nameOf(r.author);
     const avatarUrl = avatarOf(r.author);
     // it mentions me, or replies to my message: a faint background in my stream only (it asks for my attention)
@@ -721,12 +718,10 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     );
     return (
         <div
-            className={`chat-row${selected ? ' selected' : ''}${hovered === r.id ? ' paired' : ''}${toMe ? ' mentions-me' : ''}`}
+            className={`chat-row${selected ? ' selected' : ''}${toMe ? ' mentions-me' : ''}`}
             onClickCapture={choose}
             // Shift / ⌘ chooses the message: no text selection
             onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}
-            onMouseEnter={() => hover(r.id)}
-            onMouseLeave={() => hover(undefined)}
         >
             {control && selection.active && (
                 <input type="checkbox" className="chat-select" checked={selected} onChange={() => selection.toggle(r.id)} aria-label={tx.chat.select} />

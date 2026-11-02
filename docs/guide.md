@@ -2615,8 +2615,8 @@ and removed, each with what it is (`返品 の状態`), and keeps the source dif
 folded at the bottom. A field, a parameter or an invariant counts as a change of the element it is in. The chat speaks
 of the work, not of revisions: their numbers are only in tooltips and in the source diff. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
 what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`; the quote is cut with … first, never that), and,
-when it applied several, the reply's short note on each; a click goes to the message, and hovering either one marks
-the other. A run of the same messages as the one before on the card quotes them only when its reply says what it did
+when it applied several, the reply's short note on each; a click goes to the message (hovering one does not mark the
+other). A run of the same messages as the one before on the card quotes them only when its reply says what it did
 of them. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
 card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
