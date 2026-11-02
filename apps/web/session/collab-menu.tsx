@@ -141,8 +141,8 @@ export function CollabMenu(props: {
             >
                 <span className="chat-avatars">
                     {rows.slice(0, AVATARS).map((r) => (
-                        <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}${r.role === 'facilitator' ? ' facilitator' : ''}`}>
-                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} />
+                        <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
+                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
                         </span>
                     ))}
                 </span>
@@ -323,7 +323,7 @@ export function CollabSummaryDialog(props: { summary: CollabSummary; onClose: ()
                     <ul className="collab-summary-people">
                         {summary.participants.map((p) => (
                             <li key={p.id}>
-                                <Avatar id={p.id} name={p.name} />
+                                <Avatar id={p.id} name={p.name} {...(p.avatarUrl && { url: p.avatarUrl })} facilitator={p.facilitator} />
                                 {p.name}
                                 {p.facilitator && <span className="chat-role"> {tx.roles.facilitator}</span>}
                             </li>

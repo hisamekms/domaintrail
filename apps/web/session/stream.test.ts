@@ -16,6 +16,7 @@ import {
     headerParticipants,
     isFacilitator,
     oneLine,
+    participantAvatars,
     participantNames,
     streamItems,
     agentMessage,
@@ -265,6 +266,13 @@ describe('the participants of the header', () => {
             ['Hana', 'facilitator', false, false, undefined],
         ]);
         expect(participantNames(state, NO_PEERS, me).get('local:facilitator')).toBe('Hana');
+    });
+
+    test("each one's avatar as their page tells it (the chat's rows draw the same as the header), mine included", () => {
+        expect([...participantAvatars(peers, me)]).toEqual([['dev:c', 'https://x/dev:c']]);
+        const mine = { ...me, participant: { ...me.participant, avatarUrl: 'https://x/me' } } as Me;
+        expect(participantAvatars(peers, mine).get('dev:a')).toBe('https://x/me');
+        expect(participantAvatars(NO_PEERS, me).size).toBe(0);
     });
 
     test("a message's author: 「あなた」 for my own, else their name; the facilitator and its holder are the facilitator", () => {

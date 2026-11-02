@@ -281,13 +281,19 @@ export interface HeaderParticipant {
     readonly avatarUrl?: string;
 }
 
+/** Each participant's avatar URL, by ID, as their pages tell it (mine, and those online). */
+export function participantAvatars(peers: Peers, me: Me): Map<string, string> {
+    const avatars = new Map<string, string>();
+    for (const p of peers.values()) if (p.participant.avatarUrl) avatars.set(p.participant.id, p.participant.avatarUrl);
+    if (me.participant.avatarUrl) avatars.set(me.participant.id, me.participant.avatarUrl);
+    return avatars;
+}
+
 /** The participants for the header: me first, then the others online, then those away, by name within each. */
 export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): HeaderParticipant[] {
     const names = participantNames(state, peers, me);
     const online = new Set<string>([...peers.values()].map((p) => p.participant.id));
-    const avatars = new Map<string, string>();
-    for (const p of peers.values()) if (p.participant.avatarUrl) avatars.set(p.participant.id, p.participant.avatarUrl);
-    if (me.participant.avatarUrl) avatars.set(me.participant.id, me.participant.avatarUrl);
+    const avatars = participantAvatars(peers, me);
     const rank = (p: HeaderParticipant): number => (p.me ? 0 : p.online ? 1 : 2);
     return listedParticipants(state)
         .map((p): HeaderParticipant => {

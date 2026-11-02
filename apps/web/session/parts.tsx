@@ -18,11 +18,16 @@ type FrozenRequest = SessionStateBody['runs'][number]['input']['requests'][numbe
 export const failure = (e: unknown): string =>
     e instanceof SessionApiError ? (e.message && e.message !== e.type ? `${e.type}: ${e.message}` : e.type) : String(e);
 
-export function Avatar({ id, name, url }: { id: string; name: string; url?: string }) {
+/**
+ * A participant's mark, the same wherever it is drawn: their photo, else their initials on their color; the facilitator's
+ * ringed. Each place sets only its size (`--avatar-size`); the initials scale with it.
+ */
+export function Avatar({ id, name, url, facilitator }: { id: string; name: string; url?: string; facilitator?: boolean }): React.JSX.Element {
+    const className = `session-avatar${facilitator ? ' facilitator' : ''}`;
     // only an https avatar is shown; anything else gets the initials
-    if (url?.startsWith('https://')) return <img className="session-avatar" src={url} alt="" referrerPolicy="no-referrer" />;
+    if (url?.startsWith('https://')) return <img className={className} src={url} alt="" referrerPolicy="no-referrer" />;
     return (
-        <span className="session-avatar" style={{ background: participantColor(id) }} aria-hidden>
+        <span className={className} style={{ background: participantColor(id) }} aria-hidden>
             {initials(name)}
         </span>
     );

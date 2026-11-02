@@ -19,6 +19,8 @@ export interface ChatContextValue {
     readonly tx: Tx;
     readonly now: number;
     readonly nameOf: (id: string) => string;
+    /** A participant's avatar URL, when their page tells one. */
+    readonly avatarOf: (id: string) => string | undefined;
     readonly onNavigate: (target: ModelTarget) => void;
     /** The facilitator, in an open session: the actions are offered. */
     readonly control: boolean;

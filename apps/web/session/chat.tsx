@@ -60,6 +60,7 @@ import {
     isFacilitator,
     mentionablePeople,
     mentionsMe,
+    participantAvatars,
     participantNames,
     speakerName,
     streamItems,
@@ -141,6 +142,8 @@ export function SessionChat(props: {
     const tx = t.session;
     const names = participantNames(state, session.peers, me);
     const nameOf = (id: string): string => names.get(id) ?? id;
+    const avatars = participantAvatars(session.peers, me);
+    const avatarOf = (id: string): string | undefined => avatars.get(id);
     const live = session.status === 'live' && state.session.state === 'Open';
     const control = live && me.participant.role === 'facilitator';
     const status = agentStatus(state.runs);
@@ -279,6 +282,7 @@ export function SessionChat(props: {
         tx,
         now,
         nameOf,
+        avatarOf,
         onNavigate: props.onNavigate,
         control,
         actions,
@@ -561,8 +565,9 @@ function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirm
  * click goes to the card), then the actions: for the facilitator, the tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
-    const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
+    const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
     const author = nameOf(r.author);
+    const avatarUrl = avatarOf(r.author);
     // it mentions me, or replies to my message: a faint background in my stream only (it asks for my attention)
     const toMe = mentionsMe(r, session.state, session.me.participant.id) || repliesToMe(r, session.state.requests, session.state, session.me.participant.id);
     const mine = r.author === session.me.participant.id;
@@ -633,7 +638,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 <input type="checkbox" className="chat-select" checked={selected} onChange={() => selection.toggle(r.id)} aria-label={tx.chat.select} />
             )}
             <Bubble
-                avatar={<Avatar id={r.author} name={author} />}
+                avatar={<Avatar id={r.author} name={author} {...(avatarUrl && { url: avatarUrl })} facilitator={facilitator} />}
                 who={speakerName(r.author, session.me.participant.id, nameOf, tx.chat.you)}
                 badge={facilitator && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
                 at={r.sentAt}
@@ -1139,7 +1144,7 @@ function PersonOption({ person, tx }: { person: PersonCandidate; tx: Tx }) {
     return (
         <>
             <span className="chat-mention-person">
-                <Avatar id={person.id} name={person.name} {...(person.avatarUrl && { url: person.avatarUrl })} />
+                <Avatar id={person.id} name={person.name} {...(person.avatarUrl && { url: person.avatarUrl })} facilitator={person.role === 'facilitator'} />
                 <span className="chat-mention-name">{person.name}</span>
                 {person.role === 'facilitator' && <span className="chat-role">{tx.chat.facilitatorShort}</span>}
             </span>

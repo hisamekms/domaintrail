@@ -157,6 +157,9 @@ describe('the summary of a collab', () => {
             ['Hana', false],
         ]);
         expect(summary.duration).toBe(95 * 60_000);
+        // the avatar of whoever's page tells one, as in the header
+        const mine = { ...me, participant: { ...me.participant, avatarUrl: 'https://x/me' } } as Me;
+        expect(collabSummary(state('Closed'), mine, NO_PEERS).participants.find((p) => p.id === mine.participant.id)?.avatarUrl).toBe('https://x/me');
         expect(hoursMinutes(summary.duration ?? 0)).toEqual({ hours: 1, minutes: 35 });
     });
 

@@ -3522,17 +3522,29 @@ del.was.block {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* a participant's mark: each place sets only --avatar-size (in rem, so it grows with the text size); the initials are a
+   fixed share of it, centred, and clipped should they still not fit */
 .session-avatar {
+    --avatar-size: 1.5rem;
     flex: none;
     display: inline-grid;
-    place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
+    place-content: center;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    overflow: clip;
     border-radius: 50%;
     color: #fff;
-    font-size: 0.6875rem;
+    font-size: calc(var(--avatar-size) * 0.42);
+    line-height: 1;
     font-weight: var(--fw-strong);
+    white-space: nowrap;
     object-fit: cover;
+}
+/* the facilitator's mark wherever an avatar is drawn: a gap of the panel's color, then the accent, scaled to the size */
+.session-avatar.facilitator {
+    box-shadow:
+        0 0 0 calc(var(--avatar-size) * 0.09) var(--panel),
+        0 0 0 calc(var(--avatar-size) * 0.16) var(--accent);
 }
 .session-role {
     font-size: 0.75rem;
@@ -3771,7 +3783,7 @@ del.was.block {
 
 .session-chat {
     /* the avatar column: everything in a message starts after it and the gap (one left edge) */
-    --chat-avatar: 28px;
+    --chat-avatar: 1.75rem;
     --chat-edge: calc(var(--chat-avatar) + var(--space-3));
     flex: 1;
     min-height: 0;
@@ -3805,14 +3817,10 @@ del.was.block {
     box-shadow: 0 0 0 2px var(--panel);
 }
 .chat-avatar .session-avatar {
-    width: 1.375rem;
-    height: 1.375rem;
-    font-size: 0.625rem;
+    --avatar-size: 1.375rem;
 }
-.chat-avatar.facilitator {
-    box-shadow:
-        0 0 0 2px var(--panel),
-        0 0 0 3.5px var(--accent);
+/* the facilitator's ring is wider than the gap the others leave */
+.chat-avatar:has(> .facilitator) {
     margin-right: -2px;
 }
 .chat-avatar.away {
@@ -3917,8 +3925,7 @@ del.was.block {
 }
 .chat-message > .session-avatar,
 .run-card > .session-avatar {
-    width: var(--chat-avatar);
-    height: var(--chat-avatar);
+    --avatar-size: var(--chat-avatar);
 }
 .chat-message-main {
     flex: 1;
@@ -6178,9 +6185,7 @@ button.add-to-request.added:hover {
     gap: var(--space-2);
 }
 .chat-mention-person .session-avatar {
-    width: 1.25rem;
-    height: 1.25rem;
-    font-size: 0.625rem;
+    --avatar-size: 1.25rem;
 }
 .chat-mention-away {
     align-self: center;
