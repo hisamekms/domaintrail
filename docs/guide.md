@@ -2809,7 +2809,14 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
     "agent": {
       "port": 0,               // the agent API, on 127.0.0.1 only; 0 = any free port (written to agent.json)
       // Claude Code permission rules; this is the default
-      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"]
+      "allowedTools": ["Read", "Edit", "Write", "Glob", "Grep", "Bash(dt fmt:*)", "Bash(dt check:*)"],
+      // how Claude Code carries out the runs
+      "run": {
+        "warm": true,          // one Claude Code process across runs (each run a turn); false: one process per run
+        "restartAfter": 20     // runs of one warm process before a fresh one replaces it
+        // "model": "sonnet",  // claude --model; default: your Claude Code settings' model
+        // "effort": "medium"  // claude --effort (low, medium, high, xhigh, max); default: your settings'
+      }
       // the dt the agent runs (and dt fmt / dt check after it); default: the running dt itself.
       // ["node" | "bun" | "deno", "<script>"] or ["<dt executable>"], relative to this file, outside the workspace:
       // "dt": ["node", "../domaintrail/dist/dt.js"]

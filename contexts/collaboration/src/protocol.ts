@@ -305,6 +305,8 @@ export const AGENT_EVENT_TYPES = {
     RunDeclined: 'run.declined',
     RunFailed: 'run.failed',
     RunCancelled: 'run.cancel_requested',
+    // a warm agent forgets its conversation: the files it remembers were replaced
+    RevisionRestored: 'revision.restored',
     SessionClosed: 'session.closed',
 } as const satisfies Partial<Record<EventType, string>>;
 

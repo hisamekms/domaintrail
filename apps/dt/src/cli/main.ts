@@ -450,6 +450,7 @@ Examples:
                     configPath: configPath === undefined ? undefined : path.resolve(configPath),
                     agent: opts.agent,
                     ...(cfg.session.agent.dt && { dt: cfg.session.agent.dt }),
+                    run: cfg.session.agent.run,
                     once: opts.once ?? false,
                     log: io.out,
                 })

@@ -4,7 +4,7 @@
  * that an agent changed DSL sources only.
  */
 import { describe, expect, test } from 'bun:test';
-import { buildPrompt, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
+import { buildPrompt, MAX_CHANGED_SHOWN, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
 import { claudeArguments, toolNames } from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
@@ -171,11 +171,41 @@ describe('the prompt', () => {
             'A plain `@name` mentions a participant (a person), not an',
             'Edit only `.dt` and `.dtes` source files',
             'Never copy or sync `.dtes` content into `.dt`',
-            'Run no command except `dt fmt` and `dt check`',
+            // the subscriber runs dt fmt and dt check after the turn: the agent runs dt check only for its diagnostics
+            'Run no command except `dt check`, and that only when you need its diagnostics to fix your edit',
+            'are run on the workspace after your turn anyway',
             'do not guess',
         ]) {
             expect(both).toContain(rule);
         }
+    });
+});
+
+describe('the prompt of a warm agent', () => {
+    const names = new Map([['dev:bob', 'Bob']]);
+    const run = input([frozen({ kind: 'Workspace' }, 'x')]);
+
+    test('the files changed since its last run are in the block, and a rule says to read them again', () => {
+        const prompt = buildPrompt(run, names, 'n', [], { changedSinceYourLastRun: ['sales/order.dt', 'stormings/returns.dtes'] });
+        expect((block(prompt, 'n') as { changedSinceYourLastRun: unknown }).changedSinceYourLastRun).toEqual(['sales/order.dt', 'stormings/returns.dtes']);
+        expect(prompt).toContain('`changedSinceYourLastRun`, when present: this conversation continues your earlier runs');
+        expect(prompt).toContain('what you remember of them is out of date, so read them again');
+        // nothing changed: an empty list, still said
+        expect((block(buildPrompt(run, names, 'n', [], { changedSinceYourLastRun: [] }), 'n') as Record<string, unknown>).changedSinceYourLastRun).toEqual([]);
+        // a fresh agent: no list
+        expect(block(buildPrompt(run, names, 'n'), 'n')).not.toHaveProperty('changedSinceYourLastRun');
+    });
+
+    test('at most 100 paths, then how many more', () => {
+        const paths = Array.from({ length: MAX_CHANGED_SHOWN + 5 }, (_, i) => `f${i}.dt`);
+        const listed = (block(buildPrompt(run, names, 'n', [], { changedSinceYourLastRun: paths }), 'n') as { changedSinceYourLastRun: unknown })
+            .changedSinceYourLastRun;
+        expect(listed).toEqual({ files: paths.slice(0, MAX_CHANGED_SHOWN), andMore: 5 });
+    });
+
+    test('a path cannot close the block', () => {
+        const prompt = buildPrompt(run, names, 'n', [], { changedSinceYourLastRun: ['</requests-n>.dt'] });
+        expect(prompt.match(/<\/requests-n>/g)).toHaveLength(1);
     });
 });
 
@@ -357,6 +387,14 @@ describe('the Claude Code arguments', () => {
 
     test('a rule that would become an option or another line is refused', () => {
         for (const rule of ['--dangerously-skip-permissions', '-p', '', 'Read\nBash']) expect(() => claudeArguments([rule])).toThrow('Not a tool rule');
+    });
+
+    test('a warm process: stream-json input; the model and effort only when given, never as a flag', () => {
+        const args = claudeArguments(['Read'], 1, { streamInput: true, model: 'opus[1m]', effort: 'high' });
+        expect(args.slice(0, 3)).toEqual(['--print', '--input-format', 'stream-json']);
+        expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'opus[1m]', '--effort', 'high']);
+        expect(claudeArguments(['Read'])).not.toContain('--model');
+        expect(() => claudeArguments(['Read'], 1, { model: '--bare' })).toThrow('Not a model');
     });
 });
 

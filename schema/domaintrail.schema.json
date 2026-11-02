@@ -200,6 +200,33 @@
               "minItems": 1,
               "items": { "type": "string", "minLength": 1 }
             },
+            "run": {
+              "description": "How Claude Code carries out the runs.",
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "warm": {
+                  "description": "Keep one Claude Code process across runs (each run one turn of its conversation; it is replaced now and then), or start one per run (false).",
+                  "type": "boolean",
+                  "default": true
+                },
+                "restartAfter": {
+                  "description": "Runs of one warm Claude Code process before a fresh one replaces it.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 20
+                },
+                "model": {
+                  "description": "The model Claude Code runs with (claude --model, e.g. \"sonnet\"). Default: the model of your Claude Code settings.",
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][\\w.:@\\[\\]/-]*$"
+                },
+                "effort": {
+                  "description": "The effort Claude Code runs with (claude --effort). Default: the effort of your Claude Code settings.",
+                  "enum": ["low", "medium", "high", "xhigh", "max"]
+                }
+              }
+            },
             "maxPreviousRunDiff": {
               "description": "The most characters of unified diff the agent is given of the runs a run continues (the runs its messages reply to, the run it answers), all together; past it, only the files each changed.",
               "type": "integer",

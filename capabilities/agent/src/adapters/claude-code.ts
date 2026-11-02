@@ -22,7 +22,23 @@ export interface AgentCommand {
 export const CLAUDE: AgentCommand = { command: 'claude', args: [] };
 
 /** How long a stopped agent gets between SIGTERM and SIGKILL. */
-const KILL_GRACE_MS = 5_000;
+export const KILL_GRACE_MS = 5_000;
+
+/** What `claude` is asked besides the tools and the reply's schema. */
+export interface ClaudeRunOptions {
+    /** `--model`: unset, the user's Claude Code settings choose. */
+    readonly model?: string;
+    /** `--effort`: unset, the user's Claude Code settings choose. */
+    readonly effort?: string;
+    /** The user messages come as stream-json lines on stdin (a warm process: one turn each), not as one prompt. */
+    readonly streamInput?: boolean;
+}
+
+/** A value that must not become a flag of `claude`. */
+function checkValue(what: string, value: string): string {
+    if (!value.trim() || value.startsWith('-') || /[\0\r\n]/.test(value)) throw new Error(`Not ${what}: ${JSON.stringify(value)}`);
+    return value;
+}
 
 /** The tool names of permission rules: `Bash(dt fmt:*)` → `Bash`. */
 export function toolNames(rules: readonly string[]): string[] {
@@ -34,16 +50,16 @@ export function toolNames(rules: readonly string[]): string[] {
  * print mode), no saved session, no MCP server, the user's settings
  * only (never the workspace's `.claude/` project or local settings, which an agent could have written), the built-in tools
  * narrowed to the rules' tools, and the rules allowed without asking (anything else is refused); with `requests`, the
- * reply's JSON schema for that many requests as the structured output. A rule that looks like an option is refused: the
- * configuration comes from the facilitator, but no value may become a flag.
+ * reply's JSON schema for that many requests as the structured output; the model and effort when given, and stream-json
+ * input for a warm process. A rule (or a model) that looks like an option is refused: the configuration comes from
+ * the facilitator, but no value may become a flag.
  */
-export function claudeArguments(allowedTools: readonly string[], requests?: number): string[] {
-    for (const rule of allowedTools) {
-        if (!rule.trim() || rule.startsWith('-') || /[\0\r\n]/.test(rule)) throw new Error(`Not a tool rule: ${JSON.stringify(rule)}`);
-    }
+export function claudeArguments(allowedTools: readonly string[], requests?: number, options: ClaudeRunOptions = {}): string[] {
+    for (const rule of allowedTools) checkValue('a tool rule', rule);
     const tools = toolNames(allowedTools);
     return [
         '--print',
+        ...(options.streamInput ? ['--input-format', 'stream-json'] : []),
         '--output-format',
         'stream-json',
         '--verbose',
@@ -56,6 +72,8 @@ export function claudeArguments(allowedTools: readonly string[], requests?: numb
         'dontAsk',
         '--tools',
         tools.length ? tools.join(',') : '',
+        ...(options.model === undefined ? [] : ['--model', checkValue('a model', options.model)]),
+        ...(options.effort === undefined ? [] : ['--effort', checkValue('an effort', options.effort)]),
         ...(requests === undefined ? [] : ['--json-schema', JSON.stringify(replyJsonSchema(requests))]),
         ...(allowedTools.length ? ['--allowedTools', ...allowedTools] : []),
     ];
@@ -71,10 +89,13 @@ export interface ClaudeCodeOptions {
      * when the runner is made: refused inside the workspace, and its files must not change from one run to the next.
      */
     readonly dt?: PinnedDt;
+    /** `--model` and `--effort` (unset: the user's Claude Code settings). */
+    readonly model?: string;
+    readonly effort?: string;
 }
 
 /** The real path of the workspace (the agent may name files by it), or the path as given when it cannot be resolved. */
-function realpathOr(root: string): string {
+export function realpathOr(root: string): string {
     try {
         return realpathSync(root);
     } catch {
@@ -83,7 +104,7 @@ function realpathOr(root: string): string {
 }
 
 /** Kills the agent's process group (it was started detached, as the group's leader), or the agent alone on Windows. */
-function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
+export function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
     if (pid === undefined) return;
     try {
         process.kill(process.platform === 'win32' ? pid : -pid, signal);
@@ -95,24 +116,44 @@ function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
     }
 }
 
+/** A `dt` shim on disk, removed by `dispose`. */
+export type DtShim = Awaited<ReturnType<typeof writeDtShim>>;
+
+/**
+ * The agent's `dt`, pinned when the runner is made: `check` refuses when a file of it changed since (the run fails to
+ * start), `shim` writes a shim for it after that check (none without a `dt`).
+ */
+export async function pinAgentDt(options: ClaudeCodeOptions): Promise<{ check(): Promise<PinnedDt | undefined>; shim(): Promise<DtShim | undefined> }> {
+    const dt = options.dt && pinDt(dtCommandOf(options.dt), options.root);
+    const fingerprint = dt && (await fingerprintDt(dt));
+    const check = async (): Promise<PinnedDt | undefined> => {
+        if (!dt) return undefined;
+        const now = pinDt(dtCommandOf(dt), options.root);
+        if ((await fingerprintDt(now)) !== fingerprint) throw new Error("A file of the agent's dt changed since the subscriber started: refusing to run it.");
+        return now;
+    };
+    return {
+        check,
+        async shim() {
+            const now = await check();
+            return now && writeDtShim(now, options.root);
+        },
+    };
+}
+
 export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promise<AgentRunner> {
     const command = options.command ?? CLAUDE;
     // the workspace as given and its real path: the agent names files by either
     const roots = [...new Set([options.root, realpathOr(options.root)])];
-    const dt = options.dt && pinDt(dtCommandOf(options.dt), options.root);
-    const fingerprint = dt && (await fingerprintDt(dt));
+    const agentDt = await pinAgentDt(options);
     /** The shim of a run, once the command is checked again (a file of it changed: the run fails to start). */
-    const shimFor = async (): Promise<Awaited<ReturnType<typeof writeDtShim>> | undefined> => {
-        if (!dt) return undefined;
-        const now = pinDt(dtCommandOf(dt), options.root);
-        if ((await fingerprintDt(now)) !== fingerprint) throw new Error("A file of the agent's dt changed since the subscriber started: refusing to run it.");
-        return writeDtShim(now, options.root);
-    };
+    const shimFor = (): Promise<DtShim | undefined> => agentDt.shim();
+    const flags = { ...(options.model !== undefined && { model: options.model }), ...(options.effort !== undefined && { effort: options.effort }) };
     return {
         run(invocation: AgentInvocation): Promise<AgentOutcome> {
             const { signal } = invocation;
             if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
-            const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests)];
+            const args = [...command.args, ...claudeArguments(invocation.allowedTools, invocation.requests, flags)];
             return shimFor().then((shim) => {
                 const ran = spawnAgent(shim && withPathFirst(process.env, shim.dir));
                 return shim ? ran.finally(() => shim.dispose()) : ran;

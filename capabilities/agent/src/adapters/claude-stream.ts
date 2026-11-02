@@ -18,10 +18,10 @@ export interface ClaudeResult {
 /** Most characters kept of what is not a stream event (the fallback result), and of one line. */
 export const MAX_OUTPUT = 8 * 1024 * 1024;
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+export const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** A `result` event (or the JSON of `--output-format json`) as the result, if it is one. */
-function resultEvent(value: unknown): ClaudeResult | undefined {
+export function resultEvent(value: unknown): ClaudeResult | undefined {
     if (!isObject(value) || typeof value.result !== 'string') return undefined;
     return { text: value.result, ...(value.structured_output != null && { structured: value.structured_output }) };
 }

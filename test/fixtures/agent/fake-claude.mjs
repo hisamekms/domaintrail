@@ -9,46 +9,92 @@
 // child it started when hanging, the arguments, the working directory and the prompt). It prints the last line of what
 // `claude --print --output-format stream-json` prints: one JSON result event, with `reply` as its structured output (as
 // `--json-schema` gives it), else with the former outcome line at the end of its `result`.
+//
+// With `--input-format stream-json` (a warm agent) it stays: each `user` message on stdin is one invocation (a turn,
+// logged as above with the same pid), answered with `system/init`, a hook's notification and the result event (an
+// `exitCode` other than 0 gives an error result); a hanging turn ends on the `interrupt` control request (its child
+// killed); the process exits at the end of its input.
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { createInterface } from 'node:readline';
 
 const [planFile, ...args] = process.argv.slice(2);
 const plan = JSON.parse(readFileSync(planFile, 'utf8'));
 const logFile = `${planFile}.log`;
-const n = existsSync(logFile) ? readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length : 0;
-const step = plan.runs[n] ?? plan.runs.at(-1) ?? {};
+const nextStep = () => {
+    const n = existsSync(logFile) ? readFileSync(logFile, 'utf8').split('\n').filter(Boolean).length : 0;
+    return plan.runs[n] ?? plan.runs.at(-1) ?? {};
+};
+const print = (event) => process.stdout.write(`${JSON.stringify(event)}\n`);
 
-let prompt = '';
-process.stdin.setEncoding('utf8');
-for await (const chunk of process.stdin) prompt += chunk;
-
-const child = step.hang ? spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }) : undefined;
-appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt })}\n`);
-
-for (const edit of step.edits ?? []) {
-    const file = path.join(process.cwd(), edit.path);
-    if (edit.write !== undefined) writeFileSync(file, edit.write);
-    else if (edit.append !== undefined) appendFileSync(file, edit.append);
-    else {
-        const text = readFileSync(file, 'utf8');
-        if (!text.includes(edit.replace[0])) throw new Error(`${edit.path} has no ${edit.replace[0]}`);
-        writeFileSync(file, text.replace(edit.replace[0], edit.replace[1]));
+function edit(step) {
+    for (const edit of step.edits ?? []) {
+        const file = path.join(process.cwd(), edit.path);
+        if (edit.write !== undefined) writeFileSync(file, edit.write);
+        else if (edit.append !== undefined) appendFileSync(file, edit.append);
+        else {
+            const text = readFileSync(file, 'utf8');
+            if (!text.includes(edit.replace[0])) throw new Error(`${edit.path} has no ${edit.replace[0]}`);
+            writeFileSync(file, text.replace(edit.replace[0], edit.replace[1]));
+        }
     }
 }
-if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));
-if (step.hang) await new Promise(() => setInterval(() => {}, 1000));
 
-const exitCode = step.exitCode ?? 0;
-const subtype = exitCode ? 'error_during_execution' : 'success';
-if (step.reply !== undefined) {
-    // what `--json-schema` gives: the reply as `structured_output`, and as JSON in `result`
-    process.stdout.write(
-        `${JSON.stringify({ type: 'result', subtype, is_error: exitCode !== 0, result: JSON.stringify(step.reply), structured_output: step.reply })}\n`,
-    );
-} else {
+function resultOf(step, subtype) {
+    const isError = subtype !== 'success';
+    if (step.reply !== undefined) {
+        // what `--json-schema` gives: the reply as `structured_output`, and as JSON in `result`
+        return { type: 'result', subtype, is_error: isError, result: JSON.stringify(step.reply), structured_output: step.reply };
+    }
     const outcome = step.outcome ?? { outcome: 'done', summary: 'Done.' };
-    const result = `I read the files and made the changes.\nDT-OUTCOME: ${JSON.stringify(outcome)}`;
-    process.stdout.write(`${JSON.stringify({ type: 'result', subtype, is_error: exitCode !== 0, result })}\n`);
+    return { type: 'result', subtype, is_error: isError, result: `I read the files and made the changes.\nDT-OUTCOME: ${JSON.stringify(outcome)}` };
 }
-process.exit(exitCode);
+
+if (args.includes('--input-format')) {
+    // warm: one turn per user message
+    let interrupt = () => {};
+    let busy = Promise.resolve();
+    const lines = createInterface({ input: process.stdin });
+    lines.on('line', (line) => {
+        const message = JSON.parse(line);
+        if (message.type === 'control_request' && message.request?.subtype === 'interrupt') {
+            print({ type: 'control_response', response: { subtype: 'success', request_id: message.request_id, response: {} } });
+            interrupt();
+            return;
+        }
+        if (message.type === 'user') busy = busy.then(() => turn(message.message.content));
+    });
+    lines.on('close', () => void busy.then(() => process.exit(0)));
+    async function turn(prompt) {
+        const step = nextStep();
+        print({ type: 'system', subtype: 'init', session_id: 'fake' });
+        const child = step.hang ? spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }) : undefined;
+        appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt })}\n`);
+        edit(step);
+        if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));
+        if (step.hang) {
+            await new Promise((resolve) => (interrupt = resolve));
+            child.kill('SIGKILL');
+            print({ type: 'result', subtype: 'error_during_execution', is_error: true, result: '' });
+            return;
+        }
+        print({ type: 'system', subtype: 'notification', key: 'stop-hook-error', text: 'Stop hook error occurred' });
+        print(resultOf(step, (step.exitCode ?? 0) ? 'error_during_execution' : 'success'));
+    }
+} else {
+    const step = nextStep();
+    let prompt = '';
+    process.stdin.setEncoding('utf8');
+    for await (const chunk of process.stdin) prompt += chunk;
+
+    const child = step.hang ? spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }) : undefined;
+    appendFileSync(logFile, `${JSON.stringify({ pid: process.pid, childPid: child?.pid, args, cwd: process.cwd(), prompt })}\n`);
+    edit(step);
+    if (step.delayMs) await new Promise((resolve) => setTimeout(resolve, step.delayMs));
+    if (step.hang) await new Promise(() => setInterval(() => {}, 1000));
+
+    const exitCode = step.exitCode ?? 0;
+    print(resultOf(step, exitCode ? 'error_during_execution' : 'success'));
+    process.exit(exitCode);
+}
