@@ -2596,7 +2596,7 @@ time's tooltip); before the AI gave a title (still running, or a run from before
 quotes under it saying what it is about. Where a card must be named without any title (履歴, a reply, a mark's tooltip), the head of its first
 message stands for it, on one line. In 履歴, each card's heading is its name with its time span (`19:21–22:32`), then,
 small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how many runs and how many files it changed, then
-the files it changed (`→ billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
+the files it changed after a file-diff icon (`billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
 card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
 the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
 hovering either one marks the other. A

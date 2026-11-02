@@ -15,6 +15,7 @@ import {
     CircleSlash,
     CircleX,
     Clock,
+    FileDiff,
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
@@ -892,10 +893,11 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
                 </span>
                 <span className="chat-unit-facts">{facts.join(' · ')}</span>
             </button>
-            {/* what the chunk changed: its files (the page knows them, not the elements), a link to compare the whole chunk */}
+            {/* what the chunk changed: its files (the page knows them, not the elements) after a file-diff icon, a link to
+                compare the whole chunk */}
             {changed.shown.length > 0 && span && (
-                <p className="chat-unit-changes">
-                    →{' '}
+                <p className="chat-unit-changes" aria-label={h.changedFiles}>
+                    <FileDiff size={13} className="chat-unit-changes-icon" aria-hidden />
                     <button
                         type="button"
                         className="chat-unit-changes-link"

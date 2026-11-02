@@ -5918,10 +5918,11 @@ del.was.block {
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
 }
+/* a card's changed files in 履歴: a file-diff icon, then the files as one link */
 .chat-unit-changes {
     display: flex;
-    align-items: baseline;
-    gap: 2px;
+    align-items: center;
+    gap: 4px;
     margin: -4px 0 0;
     padding: 0 12px 8px 32px;
     color: var(--muted);
@@ -5941,6 +5942,7 @@ del.was.block {
 .session-chat button.chat-unit-changes-link:hover {
     text-decoration: underline;
 }
+.chat-unit-changes-icon,
 .chat-unit-more {
     flex: none;
 }
