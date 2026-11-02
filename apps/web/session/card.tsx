@@ -10,6 +10,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
+import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { useChat, type Tx } from './chat-context';
@@ -213,6 +214,8 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
                     ))}
                 </ul>
             )}
+            {/* what the running run is doing now (in AI の作業, the unit's row above shows it) */}
+            {!compact && run.message.kind === 'running' && <ActivityLine run={run.run.id} />}
             <div className="run-agent-body">
                 <AgentBody message={run.message} />
                 {/* in AI の作業, the unit's own line above already lists the files */}

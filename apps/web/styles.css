@@ -5493,6 +5493,39 @@ button.add-to-request.added:hover {
 .run-files-icon {
     flex: none;
 }
+/* what a running run is doing: one small line — the phase's icon in the accent, the phase (strong), then the file or
+   the command in monospace, muted — close under the quoted messages, and under the facts of the unit in AI の作業 */
+.run-activity {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    color: var(--text);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: nowrap;
+}
+:is(.run-section-number, .run-line, .run-quotes) + .run-activity {
+    margin-top: calc(-1 * var(--space-1));
+}
+.chat-unit-facts + .run-activity {
+    margin-top: var(--space-1);
+}
+.run-activity-icon {
+    flex: none;
+    color: var(--accent);
+}
+.run-activity-phase {
+    flex: none;
+    font-weight: var(--fw-strong);
+}
+.run-activity-subject {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-family: var(--mono);
+}
 .chat-unit-body .run-card {
     margin-top: 0;
 }

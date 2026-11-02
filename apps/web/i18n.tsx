@@ -663,6 +663,13 @@ const ja = {
             queued: (name: string) => `${name} が AI に送りました`,
             run: (n: number) => `実行 ${n}`,
             agent: 'AI',
+            // what a running run is doing, in one line under its quoted messages (and its row in AI の作業)
+            activity: {
+                reading: '読んでいます',
+                editing: '書き換えています',
+                checking: '確かめています',
+                finishing: 'まとめています',
+            },
             note: 'コメント',
             facilitator: 'ファシリテーター',
             facilitatorShort: 'ファシリ',
@@ -1363,6 +1370,12 @@ const en: Messages = {
             queued: (name) => `${name} sent it to the AI`,
             run: (n) => `Run ${n}`,
             agent: 'AI',
+            activity: {
+                reading: 'Reading',
+                editing: 'Editing',
+                checking: 'Checking',
+                finishing: 'Finishing',
+            },
             note: 'Comment',
             facilitator: 'Facilitator',
             facilitatorShort: 'facilitator',

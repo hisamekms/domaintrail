@@ -29,6 +29,7 @@ import { useDismiss } from '../shared/layout';
 import { motionMs } from '../shared/motion';
 import { useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
+import { ActivityLine } from './activity';
 import { sessionApi } from './api';
 import { ChangedFiles, ReplyButton, RunCard } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
@@ -1086,6 +1087,7 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                             </>
                         )}
                     </span>
+                    {last.state === 'Running' && <ActivityLine run={last.id} />}
                 </span>
                 {cancellable && <span className="chat-unit-cancel-space" aria-hidden />}
                 <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
