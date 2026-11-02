@@ -8,7 +8,7 @@
 // shows what it changed. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
 // AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck } from 'lucide-react';
+import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck } from 'lucide-react';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { useClipped } from '../view/toolbar';
@@ -685,6 +685,13 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const approved = decision.kind === 'approved';
                 const picked = decision.kind === 'picked' ? decision.alternative : undefined;
                 const keptVote = votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />;
+                // not decided yet: 承認待ち at the start of its row (a human decision, apart from the run's state)
+                const awaiting = decision.kind === 'open' && (
+                    <span className="reply-awaiting">
+                        <Hourglass size={12} aria-hidden />
+                        {r.awaitingApproval}
+                    </span>
+                );
                 const chosen = approved ? 'chosen' : picked !== undefined ? 'unchosen' : undefined;
                 // the text takes the whole width, ◉ / ○ at its start once decided; ♡ on a row of its own under it
                 const text = (
@@ -699,16 +706,26 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                             <>
                                 {text}
                                 <div className="reply-row-actions">
-                                    <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.approve(run, i)}>
-                                        <Check size={12} aria-hidden /> {tx.chat.approve}
-                                    </button>
+                                    <span className="reply-row-start">
+                                        {awaiting}
+                                        <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.approve(run, i)}>
+                                            <Check size={12} aria-hidden /> {tx.chat.approve}
+                                        </button>
+                                    </span>
                                     {keptVote}
                                 </div>
                             </>
                         ) : (
                             <>
                                 {text}
-                                {keptVote && <div className="reply-row-actions end">{keptVote}</div>}
+                                {awaiting ? (
+                                    <div className="reply-row-actions">
+                                        {awaiting}
+                                        {keptVote}
+                                    </div>
+                                ) : (
+                                    keptVote && <div className="reply-row-actions end">{keptVote}</div>
+                                )}
                             </>
                         )}
                         {a.alternatives.length > 0 && (

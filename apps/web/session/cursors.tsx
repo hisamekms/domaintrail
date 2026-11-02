@@ -1,5 +1,7 @@
 // The other participants' cursors over the canvas: only those on the same view as this page (equal `ViewLocation`),
-// each with its participant's name and color, placed from tldraw world coordinates with the camera of this page.
+// each with its participant's name and color (an identity token, `--participant-*`, with its name in
+// `--on-participant` and a halo of the surface around both), placed from tldraw world coordinates with the camera of
+// this page.
 import { useValue, type Editor } from 'tldraw';
 import type { PeerCursor } from './presence';
 
@@ -24,7 +26,7 @@ export function PeerCursors({ editor, cursors }: { editor: Editor | null; cursor
                 return (
                     <div key={c.connection} className="peer-cursor" style={{ transform: `translate(${p.x}px, ${p.y}px)`, color: c.color }} data-peer={c.name}>
                         <svg width="14" height="18" viewBox="0 0 14 18">
-                            <path d="M1 1 L1 15 L5 11 L8 17 L10 16 L7 10 L13 10 Z" fill="currentColor" stroke="white" strokeWidth="1" />
+                            <path className="peer-cursor-arrow" d="M1 1 L1 15 L5 11 L8 17 L10 16 L7 10 L13 10 Z" fill="currentColor" strokeWidth="1" />
                         </svg>
                         <span className="peer-cursor-name" style={{ background: c.color }}>
                             {c.name}

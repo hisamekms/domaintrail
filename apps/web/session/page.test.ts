@@ -8,7 +8,7 @@ import type { LaidOutGraph, ViewOptions } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { createMemoryDrafts, editDraft, newDraft, sendable, sortDrafts } from './drafts';
 import { layoutKeyOf, NO_LAYOUT, sameLocation, shortHash, viewLocation } from './location';
-import { cursorsOn, initials, listedParticipants, NO_PEERS, receivePresence, throttle, whereabouts } from './presence';
+import { cursorsOn, initials, listedParticipants, NO_PEERS, PARTICIPANT_HUES, participantColor, receivePresence, throttle, whereabouts } from './presence';
 import { adopt, applyEvent, disconnected, INITIAL_SESSION, latestRevision, receive } from './state';
 import { SessionApiError } from './api';
 import { chooseForComparison, comparisonPair, diffLines, restoreProblem, timeline } from './timeline';
@@ -377,6 +377,21 @@ describe('presence', () => {
         // a holder that is not a listed participant changes nothing
         expect(rows('dev:nobody')).toEqual(rows());
         expect(rows('local:facilitator')).toEqual(rows());
+    });
+
+    test("a participant's color: one of the identity tokens, the same for an ID every time", () => {
+        const ids = ['local:facilitator', 'dev:ada', 'dev:bob', 'dev:carol', 'dev:dave', 'dev:eve', 'dev:frank', '佐藤', ''];
+        const tokens = new Set(Array.from({ length: PARTICIPANT_HUES }, (_, i) => `var(--participant-${i + 1})`));
+        for (const id of ids) {
+            expect(tokens.has(participantColor(id))).toBe(true);
+            expect(participantColor(id)).toBe(participantColor(id));
+        }
+        // the hash spreads IDs over the hues: these nine take more than one
+        expect(new Set(ids.map(participantColor)).size).toBeGreaterThan(1);
+        expect(participantColor('')).toBe('var(--participant-1)');
+        // the cursor of a peer has its participant's color
+        const peers = new Map([['c1', peer('c1', 'dev:ada', where('T'))]]);
+        expect(cursorsOn(peers, where('T'))[0]?.color).toBe(participantColor('dev:ada'));
     });
 
     test('initials, and updates throttled to the latest value', () => {

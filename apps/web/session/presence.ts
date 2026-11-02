@@ -59,11 +59,17 @@ export function whereabouts(peers: Peers, mine: ViewLocation | undefined): Map<s
     return out;
 }
 
-/** A stable color per participant (a hue from the hash of the ID). */
+/** How many identity hues there are (`--participant-1` … `--participant-6` in styles.css, issue #33 §4.3). */
+export const PARTICIPANT_HUES = 6;
+
+/**
+ * A stable color per participant: one of the identity hues, picked by the hash of the ID (the same on every page), as
+ * a CSS value (`var(--participant-3)`), so that it follows the theme's tokens. Never a status's or a model kind's hue.
+ */
 export function participantColor(id: string): string {
     let h = 0;
     for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-    return `hsl(${h % 360} 70% 45%)`;
+    return `var(--participant-${1 + (h % PARTICIPANT_HUES)})`;
 }
 
 /** A character of a script whose one character already makes a name's mark: kanji, kana, hangul. */
