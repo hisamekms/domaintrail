@@ -1,6 +1,8 @@
 // Replies to runs (ADR 0026, amendment "replies to runs"): a message may name an ended run of its session (completed,
 // failed, declined, cancelled — not one queued, running or waiting for an answer); a run of replies freezes which runs
 // they reply to, and the agent is given each of them (and the run an answer answers) with what it changed, bounded.
+// Replies to messages (amendment "replies to messages"): a message may name any message of its session; a run freezes
+// the original's author and body.
 // The rules and the use cases over node:sqlite and a real workspace, the migration of a database written before
 // replies, the prompt, and the session server's route and agent API.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -15,6 +17,7 @@ import {
     createCollaboration,
     createUnitOfWork,
     knownAgentRunId,
+    knownRequestId,
     openSessionBlobs,
     openSessionDatabase,
     toAgentReply,
@@ -79,7 +82,8 @@ interface Fixture {
     readonly use: CollaborationUseCases;
     readonly deps: CollaborationDeps;
     readonly id: C.SessionId;
-    send(body: string, replyTo?: C.AgentRunId): Promise<C.SentRequest>;
+    /** Sends Ann's message, replying to a run (its ID) or to what `replyTo` names. */
+    send(body: string, replyTo?: C.AgentRunId | C.ReplyTarget): Promise<C.SentRequest>;
 }
 
 async function fixture(): Promise<Fixture> {
@@ -101,8 +105,10 @@ async function fixture(): Promise<Fixture> {
         use,
         deps,
         id: session.id,
-        send: async (body, replyTo) =>
-            value(await use.sendRequest({ session: session.id, actor: actor(ann), targets: [], body: text(body), ...(replyTo && { replyTo }) })),
+        send: async (body, to) => {
+            const replyTo: C.ReplyTarget | undefined = typeof to === 'string' ? { kind: 'Run', run: to } : to;
+            return value(await use.sendRequest({ session: session.id, actor: actor(ann), targets: [], body: text(body), ...(replyTo && { replyTo }) }));
+        },
     };
 }
 
@@ -182,9 +188,9 @@ describe('replying to a run', () => {
         for (const how of ['completed', 'failed', 'declined', 'cancelled'] as const) {
             const run = await runTo(f, [(await f.send(`for ${how}`)).id], how);
             const reply = await f.send('Thanks', run);
-            expect(reply.replyTo).toBe(run);
+            expect(reply.replyTo).toEqual({ kind: 'Run', run });
             const event = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 1000, f.id))).at(-1)?.event;
-            expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: run });
+            expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: { kind: 'Run', run } });
         }
         // a message that replies to nothing has no replyTo, in the request and its event
         const plain = await f.send('Hello');
@@ -194,7 +200,8 @@ describe('replying to a run', () => {
 
     test('not to a run that is queued, running or waits for an answer, nor one that is not of the session', async () => {
         const f = await fixture();
-        const reply = (to: C.AgentRunId) => f.use.sendRequest({ session: f.id, actor: actor(ann), targets: [], body: text('And?'), replyTo: to });
+        const reply = (to: C.AgentRunId) =>
+            f.use.sendRequest({ session: f.id, actor: actor(ann), targets: [], body: text('And?'), replyTo: { kind: 'Run', run: to } });
         const asked = await runTo(f, [(await f.send('a')).id], 'clarification');
         expect(error(await reply(asked))).toEqual({ type: 'RunNotReplyable', run: asked });
         const queued = await runTo(f, [(await f.send('b')).id], 'queued');
@@ -225,7 +232,8 @@ describe('replying to a run', () => {
         const r3 = await f.send('Thanks', y);
         const replies = await runTo(f, [r1.id, r2.id, r3.id], 'running');
         const run = value(await f.use.sessionState({ session: f.id })).runs.find((r) => r.id === replies);
-        expect(run?.input.requests.map((r) => r.replyTo)).toEqual([x, x, y]);
+        const toRun = (run: C.AgentRunId): C.FrozenReplyTarget => ({ kind: 'Run', run });
+        expect(run?.input.requests.map((r) => r.replyTo)).toEqual([toRun(x), toRun(x), toRun(y)]);
 
         const previous = value(await f.use.previousRuns({ run: replies, maxDiff: 20 * 1024 }));
         expect(previous.map((p) => p.run.id)).toEqual([x, y]);
@@ -258,6 +266,40 @@ describe('replying to a run', () => {
         const cancelled = await runTo(f2, [(await f2.send('x')).id], 'cancelled');
         const reply = await runTo(f2, [(await f2.send('Why cancelled?', cancelled)).id], 'queued');
         expect(value(await f2.use.previousRuns({ run: reply, maxDiff: 100 })).map((p) => p.changes)).toEqual([{ kind: 'unrecorded' }]);
+    });
+});
+
+describe('replying to a message', () => {
+    test('a message replies to any message of its session, its own too; not to one unknown or of another session', async () => {
+        const f = await fixture();
+        const bob = value(C.makeParticipantId('bob'));
+        value(await f.use.joinSession({ session: f.id, participant: bob, name }));
+        const original = value(await f.use.sendRequest({ session: f.id, actor: actor(bob), targets: [], body: text('Orders need a state.') }));
+        const to: C.ReplyTarget = { kind: 'Message', request: original.id };
+        const reply = await f.send('Same here.', to);
+        expect(reply.replyTo).toEqual(to);
+        const event = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 1000, f.id))).at(-1)?.event;
+        expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: to });
+        // one's own, and a reply to a reply
+        expect((await f.send('And I mean it.', { kind: 'Message', request: reply.id })).replyTo).toEqual({ kind: 'Message', request: reply.id });
+
+        const send = (request: C.RequestId) =>
+            f.use.sendRequest({ session: f.id, actor: actor(ann), targets: [], body: text('?'), replyTo: { kind: 'Message', request } });
+        const unknown = knownRequestId('00000000-0000-4000-8000-0000000000ff');
+        expect(error(await send(unknown))).toEqual({ type: 'RequestNotFound', request: unknown });
+        const other = value(await f.use.startSession({ facilitator, name })).session;
+        const elsewhere = value(await f.use.sendRequest({ session: other.id, actor: actor(facilitator), targets: [], body: text('x') }));
+        expect(error(await send(elsewhere.id))).toEqual({ type: 'RequestOfAnotherSession', request: elsewhere.id });
+    });
+
+    test("a run freezes the original's author and body; it continues no run", async () => {
+        const f = await fixture();
+        const original = await f.send('Add a cancel command.');
+        const reply = await f.send('Only for drafts.', { kind: 'Message', request: original.id });
+        const run = await runTo(f, [reply.id], 'running');
+        const queued = value(await f.use.sessionState({ session: f.id })).runs.find((r) => r.id === run);
+        expect(queued?.input.requests[0].replyTo).toEqual({ kind: 'Message', request: original.id, author: ann, body: text('Add a cancel command.') });
+        expect(value(await f.use.previousRuns({ run, maxDiff: 1024 }))).toEqual([]);
     });
 });
 
@@ -339,23 +381,29 @@ describe('the requests route and the agent API with replies', () => {
             const e = ((await res.json()) as { error: { type: string; field?: string } }).error;
             return [res.status, e.field ?? e.type];
         };
+        const toRun = { kind: 'Run', run };
         // running: not yet
-        expect(await bad({ targets: [], body: 'And?', replyTo: run })).toEqual([409, 'RunNotReplyable']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: toRun })).toEqual([409, 'RunNotReplyable']);
         expect((await agent(`runs/${run}/finish`, { token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
 
         expect(await bad({ targets: [], body: 'And?', replyTo: 'nope' })).toEqual([400, 'replyTo']);
-        expect(await bad({ targets: [], body: 'And?', replyTo: crypto.randomUUID() })).toEqual([404, 'RunNotFound']);
-        const sent = await api(bob, 'requests', { targets: [], body: 'Only drafts.', replyTo: run });
+        // a run's ID alone, as the body was before replies to messages, is no longer taken
+        expect(await bad({ targets: [], body: 'And?', replyTo: run })).toEqual([400, 'replyTo']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Turn', run } })).toEqual([400, 'replyTo']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run: 'nope' } })).toEqual([400, 'replyTo.run']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run, request } })).toEqual([400, 'replyTo.request']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run: crypto.randomUUID() } })).toEqual([404, 'RunNotFound']);
+        const sent = await api(bob, 'requests', { targets: [], body: 'Only drafts.', replyTo: toRun });
         expect(sent.status).toBe(201);
-        const reply = ((await sent.json()) as { request: { id: string; replyTo: string } }).request;
-        expect(reply.replyTo).toBe(run);
+        const reply = ((await sent.json()) as { request: { id: string; replyTo: unknown } }).request;
+        expect(reply.replyTo).toEqual(toRun);
         // the facilitator's own reply, applied at once, is a run like any other
-        const own = (await (await api(ada, 'requests', { targets: [], body: 'And confirmed ones.', replyTo: run, apply: true })).json()) as {
-            request: { id: string; replyTo: string };
-            run: { id: string; input: { requests: { replyTo?: string }[] } };
+        const own = (await (await api(ada, 'requests', { targets: [], body: 'And confirmed ones.', replyTo: toRun, apply: true })).json()) as {
+            request: { id: string; replyTo: unknown };
+            run: { id: string; input: { requests: { replyTo?: unknown }[] } };
         };
-        expect(own.request.replyTo).toBe(run);
-        expect(own.run.input.requests.map((r) => r.replyTo)).toEqual([run]);
+        expect(own.request.replyTo).toEqual(toRun);
+        expect(own.run.input.requests.map((r) => r.replyTo)).toEqual([toRun]);
         const next = await start(own.run.id);
         expect(next.started.previousRuns.map((p) => [p.run.id, p.run.state, p.changes.kind])).toEqual([[run, 'Completed', 'diff']]);
         expect((await agent(`runs/${own.run.id}/finish`, { token: next.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
@@ -364,10 +412,36 @@ describe('the requests route and the agent API with replies', () => {
         const both = ((await (await api(ada, 'runs', { requests: [reply.id, own.request.id] })).json()) as { run: { id: string } }).run.id;
         const last = await start(both);
         expect(last.started.previousRuns.map((p) => p.run.id)).toEqual([run]);
-        const state = (await (await api(bob, 'state')).json()) as { requests: { id: string; replyTo?: string }[] };
-        expect(state.requests.find((r) => r.id === reply.id)?.replyTo).toBe(run);
+        const state = (await (await api(bob, 'state')).json()) as { requests: { id: string; replyTo?: unknown }[] };
+        expect(state.requests.find((r) => r.id === reply.id)?.replyTo).toEqual(toRun);
         // runs are serial: end it for the next test
         expect((await agent(`runs/${both}/finish`, { token: last.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
+    });
+
+    test("anyone replies to a message of the session; the run of the reply carries the original's author and body", async () => {
+        const original = ((await (await api(bob, 'requests', { targets: [], body: 'Orders need a state.' })).json()) as { request: { id: string } }).request.id;
+        const bad = async (body: unknown): Promise<[number, string]> => {
+            const res = await api(ada, 'requests', body);
+            const e = ((await res.json()) as { error: { type: string; field?: string } }).error;
+            return [res.status, e.field ?? e.type];
+        };
+        expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: 'nope' } })).toEqual([400, 'replyTo.request']);
+        expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: original, run: original } })).toEqual([400, 'replyTo.run']);
+        expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: crypto.randomUUID() } })).toEqual([404, 'RequestNotFound']);
+        const toMessage = { kind: 'Message', request: original };
+        const sent = (await (await api(ada, 'requests', { targets: [], body: 'Draft and confirmed.', replyTo: toMessage, apply: true })).json()) as {
+            request: { id: string; replyTo: unknown };
+            run: { id: string; input: { requests: { replyTo?: unknown }[] } };
+        };
+        expect(sent.request.replyTo).toEqual(toMessage);
+        const bobId = ((await (await api(bob, 'me')).json()) as { participant: { id: string } }).participant.id;
+        expect(sent.run.input.requests.map((r) => r.replyTo)).toEqual([{ ...toMessage, author: bobId, body: 'Orders need a state.' }]);
+        // the agent gets the input as stored, and no previous run
+        const { token, started } = await start(sent.run.id);
+        expect(started.previousRuns).toEqual([]);
+        expect((await agent(`runs/${sent.run.id}/finish`, { token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
+        const state = (await (await api(bob, 'state')).json()) as { requests: { id: string; replyTo?: unknown }[] };
+        expect(state.requests.find((r) => r.id === sent.request.id)?.replyTo).toEqual(toMessage);
     });
 
     test('only the facilitator picks an alternative; the pick is checked, frozen, and gives the agent the run picked from', async () => {

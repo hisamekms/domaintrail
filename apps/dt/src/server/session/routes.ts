@@ -32,6 +32,7 @@ import {
     MAX_REQUEST_TEXT,
     requestIds,
     mentionIds,
+    replyTarget,
     requestTargets,
     text,
     uuid,
@@ -344,12 +345,11 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 if (!targets) return;
                 const t = checked(res, text(raw.body, 'body', MAX_REQUEST_TEXT));
                 if (!t) return;
-                // a reply to a run of the session (ended, not waiting for an answer): the use case checks the run
-                let replyTo: Collaboration.AgentRunId | undefined;
+                // a reply to a run of the session (ended, not waiting for an answer) or to a message of it: the use case checks it
+                let replyTo: Collaboration.ReplyTarget | undefined;
                 if (raw.replyTo !== undefined) {
-                    const id = checked(res, uuid(raw.replyTo, 'replyTo'));
-                    if (!id) return;
-                    replyTo = knownAgentRunId(id);
+                    replyTo = checked(res, replyTarget(raw.replyTo));
+                    if (!replyTo) return;
                 }
                 // the people `@name[pN]` mentions: participants of the session, each once (the use case checks who)
                 const mentions = checked(res, mentionIds(raw.mentions));

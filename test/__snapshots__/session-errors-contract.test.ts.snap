@@ -153,6 +153,15 @@ exports[`refused requests of a session in dev mode status and body of each refus
       },
     },
   ],
+  "POST requests replyTo an unknown message": [
+    404,
+    {
+      "error": {
+        "request": "<uuid>",
+        "type": "RequestNotFound",
+      },
+    },
+  ],
   "POST requests replyTo an unknown run": [
     404,
     {
