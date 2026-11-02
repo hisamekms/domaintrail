@@ -5968,6 +5968,7 @@ button.add-to-request.added:hover {
     margin-top: var(--space-1);
 }
 .run-activity-icon {
+    display: flex;
     flex: none;
     color: var(--agent-active);
 }
@@ -5981,6 +5982,14 @@ button.add-to-request.added:hover {
     text-overflow: ellipsis;
     color: var(--muted);
     font-family: var(--mono);
+}
+/* a change of activity cross-fades in place (session/activity.tsx): the part that changed fades out, then the new one
+   in, without moving; the rest stays */
+.run-activity > * {
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.run-activity > .swapping {
+    opacity: 0;
 }
 .chat-unit-body .run-card {
     margin-top: 0;
