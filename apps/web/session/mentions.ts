@@ -8,7 +8,7 @@
 // elements has `@name[n]`: still read as a target. The body mentions a person as `@name[pN]`, the N-th of the people
 // it mentions (`people`, sent as `mentions`): picking one after `@` adds them, deleting their mentions removes them.
 // The body stays plain text: the stream reads the tokens back with `parseBody` (`domain/body.ts`) and renders them as
-// text and links, never as HTML.
+// text and links, never as HTML. The composer's editor shows the tokens as chips (`composer-text.ts`).
 import { commandsOf, contextOf, statesOf } from '@domaintrail/modeling';
 import { declarations, firstDeclarations } from '@domaintrail/storming';
 import type { StormingView } from '@domaintrail/visualization/protocol';
@@ -135,55 +135,6 @@ const indexOf = (chips: readonly ComposerChip[], target: TargetDraft): number =>
     const key = targetKey(target.target);
     return chips.findIndex((c) => targetKey(c.target.target) === key);
 };
-
-/** Writes `token` over the query from `start` to `end`, the caret after it. */
-function write(value: ComposerValue, at: { readonly start: number; readonly end: number }, token: string): { readonly text: string; readonly caret: number } {
-    return { text: value.text.slice(0, at.start) + token + value.text.slice(at.end), caret: at.start + token.length };
-}
-
-/**
- * Picks a candidate for the `#query` from `start` to `end`: writes `#name[n] ` there and makes the target chip n (the
- * chip it already is, or a new one). Undefined when a new chip would pass the limit.
- */
-export function insertMention(
-    value: ComposerValue,
-    at: { readonly start: number; readonly end: number },
-    target: TargetDraft,
-    name: string,
-): { readonly value: ComposerValue; readonly caret: number } | undefined {
-    let index = indexOf(value.chips, target);
-    let chips = value.chips;
-    if (index < 0) {
-        if (chips.length >= MAX_REQUEST_TARGETS) return undefined;
-        index = chips.length;
-        chips = [...chips, { target, mentioned: true }];
-    } else if (!chips[index].mentioned) {
-        chips = chips.map((c, i) => (i === index ? { ...c, mentioned: true } : c));
-    }
-    const { text, caret } = write(value, at, `#${mentionName(name)}[${index + 1}] `);
-    return { value: { ...value, text, chips }, caret };
-}
-
-/**
- * Picks a person for the `@query` from `start` to `end`: writes `@name[pN] ` there, N their number among the people
- * mentioned (the one they have, or the next). Undefined when one more would pass the limit.
- */
-export function insertPerson(
-    value: ComposerValue,
-    at: { readonly start: number; readonly end: number },
-    person: string,
-    name: string,
-): { readonly value: ComposerValue; readonly caret: number } | undefined {
-    let index = value.people.indexOf(person);
-    let people = value.people;
-    if (index < 0) {
-        if (people.length >= MAX_REQUEST_MENTIONS) return undefined;
-        index = people.length;
-        people = [...people, person];
-    }
-    const { text, caret } = write(value, at, `@${mentionName(name)}[p${index + 1}] `);
-    return { value: { ...value, text, people }, caret };
-}
 
 /** Adds targets as chips (the selection's `+`): each once, up to the limit. `skipped`: how many did not fit. */
 export function addChips(value: ComposerValue, targets: readonly TargetDraft[]): { readonly value: ComposerValue; readonly skipped: number } {

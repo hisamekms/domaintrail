@@ -4108,7 +4108,7 @@ del.was.block {
     gap: var(--space-1);
     min-width: 0;
 }
-/* a target: `#name` in a pill, small; in the composer, its number before and × after */
+/* a target: `#name` in a pill, small; in the composer, × after it */
 .chat-chip {
     display: inline-flex;
     align-items: center;
@@ -4120,20 +4120,6 @@ del.was.block {
     border-radius: 999px;
     font-size: var(--fs-small);
     line-height: 1.25rem;
-}
-.chat-chip-number {
-    flex: none;
-    display: inline-grid;
-    place-items: center;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 var(--space-1);
-    border-radius: 8px;
-    background: var(--accent);
-    color: #fff;
-    font-size: var(--fs-small);
-    font-weight: var(--fw-strong);
-    line-height: 1;
 }
 .chat-chip-name {
     overflow: hidden;
@@ -4242,16 +4228,58 @@ button.add-to-request.added:hover {
     background: var(--hover);
     color: var(--text);
 }
+/* the text: as tall as its rows (the resizer's), scrolling within itself */
+.chat-input-box {
+    position: relative;
+}
 .session-chat .session-text.chat-input {
     margin-top: 0;
+    height: calc(var(--composer-rows) * 1lh + 2 * var(--space-2) + 2px);
+    overflow-y: auto;
     padding: var(--space-2) var(--space-3);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     resize: none;
 }
 .chat-input:focus {
     outline: none;
     border-color: var(--accent);
+}
+.chat-input-line {
+    margin: 0;
+}
+.chat-input-placeholder {
+    position: absolute;
+    top: calc(var(--space-2) + 1px);
+    left: calc(var(--space-3) + 1px);
+    right: calc(var(--space-3) + 1px);
+    overflow: hidden;
+    color: var(--muted);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+/* a mention in the text: an atomic chip that sits in the line, an element as a violet pill (`#未払い`), a person as
+   violet text (`@田中`) */
+.chat-inline-chip {
+    display: inline-block;
+    padding: 0 var(--space-1);
+    border-radius: 6px;
+    background: var(--violet-tint);
+    color: var(--accent);
+    font-weight: var(--fw-strong);
+    line-height: 1.375rem;
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+}
+.chat-inline-chip.person {
+    padding: 0;
+    background: none;
 }
 .chat-composer-bar {
     display: flex;

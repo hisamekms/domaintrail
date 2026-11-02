@@ -58,7 +58,6 @@ export function ComposerChips(props: {
                         data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
                         {...(out && { 'aria-hidden': true, inert: true })}
                     >
-                        <span className="chat-chip-number">{i + 1}</span>
                         <span className="chat-chip-name">{shortOf(c.target)}</span>
                         <button className="chat-chip-remove" aria-label={tx.chat.removeTarget(nameOf(c.target))} onClick={() => props.onRemove(i)}>
                             <X size={12} aria-hidden />

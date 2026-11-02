@@ -37,14 +37,11 @@ import { changeUnits, requestersOf, shownUnits, unfinishedCount, unitName, workG
 import {
     addChips,
     composerKey,
-    editText,
-    insertMention,
-    insertPerson,
     matchCandidates,
     matchPeople,
     MAX_REQUEST_MENTIONS,
     MAX_REQUEST_TARGETS,
-    mentionQuery,
+    ownTokenName,
     removeChip,
     type MentionCandidate,
     type PersonCandidate,
@@ -71,6 +68,8 @@ import {
     type StreamItem,
 } from './stream';
 import { ComposerChips } from './composer-chips';
+import { ComposerEditor, type ComposerEditorApi, type EditorQuery, type MentionLook } from './composer-editor';
+import { mentionFits, type ComposerMention } from './composer-text';
 import type { ModelTarget, TargetDraft } from './targets';
 import { continued, isMac } from './views';
 import type { ViewScope, ViewTarget } from './views';
@@ -1168,21 +1167,23 @@ function Composer(props: {
     const t = useT();
     const naming = useTargetNaming();
     const value = composer.value;
-    const input = useRef<HTMLTextAreaElement | null>(null);
+    const input = useRef<HTMLElement | null>(null);
+    const editor = useRef<ComposerEditorApi | null>(null);
     const size = useComposerSize(input);
-    const [caret, setCaret] = useState(0);
+    // the `#query` or `@query` at the caret, as the editor reports it
+    const [query, setQuery] = useState<EditorQuery | undefined>();
     const [active, setActive] = useState(0);
     // the `#` or `@` whose candidates were closed with Esc: they stay closed until another one
-    const [dismissed, setDismissed] = useState<number | undefined>();
+    const [dismissed, setDismissed] = useState<string | undefined>();
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [notice, setNotice] = useState<string | undefined>();
     // the chips shown whole (`+n` pressed); sending collapses them again
     const [chipsExpanded, setChipsExpanded] = useState(false);
-    const query = mentionQuery(value.text, caret);
     // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
     const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
-    const open = query !== undefined && query.start !== dismissed && (query.sign === '#' || people.length > 0);
+    const queryKey = query && `${query.node}:${query.start}`;
+    const open = query !== undefined && queryKey !== dismissed && (query.sign === '#' || people.length > 0);
     const matches: readonly Suggestion[] = !open
         ? []
         : query.sign === '#'
@@ -1193,6 +1194,9 @@ function Composer(props: {
     // a chip shows the target's own name; its whole name is in the tooltip and the labels
     const nameOf = (target: TargetDraft): string => targetText(target, tx.workspace, naming);
     const shortOf = (target: TargetDraft): string => targetShortText(target, tx.workspace, naming);
+    // a mention in the text: an element by its own name (its whole name in the tooltip), a person by their name
+    const look = (m: ComposerMention): MentionLook =>
+        m.kind === 'element' ? { label: `#${ownTokenName(m.name, m.target)}`, title: `#${nameOf(m.target)}` } : { label: `@${m.name}`, title: `@${m.name}` };
     const kindOf = (c: MentionCandidate): string => {
         const names: Readonly<Record<string, string>> = c.kind.language === 'dt' ? t.kinds : t.esKinds;
         return names[c.kind.kind] ?? c.kind.kind;
@@ -1220,50 +1224,30 @@ function Composer(props: {
         window.addEventListener('resize', refit);
         return () => window.removeEventListener('resize', refit);
     }, [open]);
-    const track = (): void => setCaret(input.current?.selectionStart ?? 0);
-    // the caret after a pick: placed as soon as the picked text is rendered, before the next key is handled
-    const pendingCaret = useRef<number | undefined>(undefined);
-    useLayoutEffect(() => {
-        const to = pendingCaret.current;
-        if (to === undefined || !input.current) return;
-        pendingCaret.current = undefined;
-        input.current.focus();
-        input.current.setSelectionRange(to, to);
-        setCaret(to);
-    });
-    const moveCaret = (to: number): void => {
-        pendingCaret.current = to;
-    };
     // the selection added with 💬 or `C`: the text takes the focus, the caret at its end
     const { focusPending, onFocused } = props;
     useEffect(() => {
-        const el = input.current;
-        if (!focusPending || !el) return;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-        setCaret(el.value.length);
+        if (!focusPending || !editor.current) return;
+        editor.current.focusEnd();
         onFocused();
     }, [focusPending, onFocused]);
 
     // a reply just started (↩ on an AI turn or a message): the text takes the focus, the caret at its end
     const { replyFocus } = props;
     useEffect(() => {
-        const el = input.current;
-        if (replyFocus === 0 || !el) return;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-        setCaret(el.value.length);
+        if (replyFocus !== 0) editor.current?.focusEnd();
     }, [replyFocus]);
 
     const pick = (c: Suggestion | undefined): void => {
         if (!c || !query) return;
-        const at = { start: query.start, end: caret };
-        const picked =
-            c.kind === 'element' ? insertMention(value, at, c.element.target, c.element.mention) : insertPerson(value, at, c.person.id, c.person.name);
-        if (!picked) return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
+        const mention: ComposerMention =
+            c.kind === 'element'
+                ? { kind: 'element', name: c.element.mention, target: c.element.target }
+                : { kind: 'person', name: c.person.name, person: c.person.id };
+        if (!mentionFits(value, mention))
+            return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
         setNotice(undefined);
-        composer.setValue(picked.value);
-        moveCaret(picked.caret);
+        editor.current?.pick(query, mention);
     };
 
     const send = async (): Promise<void> => {
@@ -1338,36 +1322,32 @@ function Composer(props: {
                         ))}
                     </ul>
                 )}
-                <textarea
-                    ref={input}
-                    className="session-text chat-input"
-                    rows={size.rows}
-                    maxLength={10_000}
+                <ComposerEditor
+                    value={value}
+                    onChange={(v) => composer.setValue(v)}
+                    look={look}
+                    onQuery={setQuery}
                     placeholder={tx.chat.placeholder}
-                    value={value.text}
-                    onChange={(e) => {
-                        composer.setValue(editText(value, e.target.value));
-                        setCaret(e.target.selectionStart);
-                    }}
-                    onSelect={track}
-                    onClick={track}
-                    onBlur={() => setDismissed(query?.start)}
+                    rows={size.rows}
+                    input={input}
+                    api={editor}
+                    onBlur={() => setDismissed(queryKey)}
                     onFocus={() => setDismissed(undefined)}
                     onKeyDown={(e) => {
-                        const action = composerKey(e.nativeEvent, open && matches.length > 0);
+                        const action = composerKey(e, open && matches.length > 0);
                         if (action === 'none') {
-                            if (e.key === 'Escape' && open) setDismissed(query.start);
+                            if (e.key === 'Escape' && open) setDismissed(queryKey);
                             // Esc on an empty text stops the reply
-                            else if (e.key === 'Escape' && reply && value.text === '' && !e.nativeEvent.isComposing) onReplyDone();
-                            return;
+                            else if (e.key === 'Escape' && reply && value.text === '' && !e.isComposing) onReplyDone();
+                            return false;
                         }
-                        e.preventDefault();
                         hovered.current = false;
                         if (action === 'next') setActive((a) => (a + 1) % matches.length);
                         else if (action === 'previous') setActive((a) => (a - 1 + matches.length) % matches.length);
                         else if (action === 'pick') pick(matches[active]);
-                        else if (action === 'close') setDismissed(query?.start);
+                        else if (action === 'close') setDismissed(queryKey);
                         else void send();
+                        return true;
                     }}
                 />
             </div>
