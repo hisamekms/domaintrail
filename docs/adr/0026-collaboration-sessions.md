@@ -1085,3 +1085,39 @@ is doing, and the page shows it in one line.
   `確かめています`, `まとめています`) at strong weight, then the subject in monospace, muted — a file by its last segment,
   its whole path in the tooltip. A change replaces the line with the page's small fade (none with reduced motion).
   There is no line before the first activity, and the status stays `実行中 m:ss`.
+
+## Appendix: changes in the model's words (amendment)
+
+*Decided with the maintainer*: the main users are domain experts. They think in the model and the event storming, not
+in files, and `リビジョン #3 → #5` or a line diff of `.dt` files is for engineers. This amends S7's comparison and "cards
+named, not numbered".
+
+- **Revisions stay internal words.** The chat and AI の作業 word what they do by the unit of work: a card's ⋯ reads
+  この作業の結果を確認済みにする, この作業の前に戻す… and 変更を見る; the restore box, the stream's notices (`… がこの作業の
+  結果を確認済みにしました`, `作業の前に戻しました`) and the AI's done line (`完了しました。モデルを変更しました。`) carry no
+  revision and no number. A revision's number stays in tooltips and in the engineers' source diff. The revisions, their
+  numbers and the API are unchanged.
+- **The changes are model elements first.** What a unit changed is listed as the elements it added, changed and
+  removed: under a run's text and under a unit in AI の作業, up to three chips (`＋` added, `✎` changed, `−` removed, in
+  green, amber and red on a faint wash, then `#` and the element's own name, its whole name in the tooltip; a removed one
+  muted and struck through, not a link), `ほか n` for the rest and 変更を見る. A chip goes to the element. 変更を見る opens
+  この作業の変更: the unit's name, requesters and time, then 追加 / 変更 / 削除 with each element and what it is
+  (`返品 の状態`, `集約`, `返品 のイベント`), a click closing the dialog and going to it; at the bottom, collapsed, ソースの差分
+  （技術者向け）, S7's comparison unchanged (validations, files, line diffs). When a side's sources do not parse, the dialog
+  says the model could not be compared and opens the source diff.
+- **Where they come from.** `GET /api/session/revisions/:before/changes/:after` (any participant) → `ModelChangesBody`:
+  each change with its DSL, its target (a `.dt` model ID, or a storming and local ID), its kind, its own name and label,
+  its whole name and its owner (the aggregate of a state or a command, the storming of a storming element), and whether
+  the comparison is complete. A sibling of the comparison rather than a part of it: every card's line needs the element
+  changes, and the comparison carries up to 512 KiB of line diffs. The use case `modelChanges` validates both revisions
+  from their blobs (the validator of `dt check`) and keeps the results per revision pair (revisions never change), so a
+  card asks once; the page keeps them per pair too.
+  - `.dt`: Modeling's `diffModels` on the two models — elements, states and commands by stable ID. A field, a
+    parameter, an invariant, a label or a description is not addressable: its change is a change of the element (the
+    state, the command) it is in. An aggregate whose own parts did not change is not listed as changed when only its
+    states or commands did (those are listed).
+  - `.dtes`: every declaration of a storming (events, commands, policies, actors, external systems, aggregates, read
+    models, hotspots, timelines, groups) by its storming and local ID, which are stable as `.dt` IDs are; it changed when
+    anything but its source ranges did (a timeline not because of its groups' own changes).
+  - A side whose `.dt` sources do not parse gives no `.dt` changes, and one where a `.dtes` file does not parse no
+    storming changes; the list is then marked incomplete.
