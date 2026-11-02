@@ -70,16 +70,16 @@ aggregate root (`--model-aggregate`); each has its own name so that one can chan
 
 | Token | Light | Dark | Role | Used by |
 | --- | --- | --- | --- | --- |
-| `--brand-ink` | `#4338CA` | `#A5B4FC` | the logo's ink on this theme | `.brand-mark` |
+| `--brand-ink` | `#4338CA` | `#A5B4FC` | the logo's ink on this theme | `.brand-mark` (the logo files carry their own ink; the token stays for anything drawn in CSS around them) |
 | `--brand-amber` | `#FBBF24` | `#FBBF24` | the logo's discovery dot (never a status) | the logo only |
 | `--bg` | `#F8FAFC` | `#10131D` | application background | `body`, blocks on panels |
 | `--surface` | `#FFFFFF` | `#191D2B` | panels, chat, inspector | via `--panel` (45 rules) |
-| `--surface-raised` | `#FFFFFF` | `#242A3B` | popovers, menus, dialogs | settings dialog, health popover, pane menu, toolbar menu, baseline menu (chat popovers: to do in the chat task) |
-| `--surface-muted` | `#F1F5F9` | `#252B3B` | subtle blocks | new; for the chat and diagram tasks |
+| `--surface-raised` | `#FFFFFF` | `#242A3B` | popovers, menus, dialogs | settings dialog, health popover, pane menu, toolbar menu, baseline menu; the chat's `.chat-mentions`, `.collab-menu-popover`, `.mark-who-list`, `.reaction-picker`, `.chat-actions`, `.session-dialog` (and `.cancel-dialog`) |
+| `--surface-muted` | `#F1F5F9` | `#252B3B` | subtle blocks | the AI's question and assumptions (`.reply-section`) |
 | `--text` | `#0F172A` | `#F1F5F9` | primary text | |
 | `--text-secondary` | `#475569` | `#CBD5E1` | descriptions | via `--text-soft` |
 | `--muted` | `#5E6B7F` | `#94A3B8` | the quietest text: hints, counts, group labels | 117 rules (kept name) |
-| `--border` | `#CBD5E1` | `#465066` | separators | 61 rules |
+| `--border` | `#E2E8F0` | `#2E3547` | separators (a light hairline: the human's choice, see below) | 61 rules |
 | `--border-strong` | `#8492A6` | `#64708A` | edges of controls and menus (3:1) | 20 rules |
 | `--action` | `#4338CA` | `#A5B4FC` | primary controls, links | via `--accent` (92 rules) |
 | `--on-action` | `#FFFFFF` | `#10131D` | text and icons on an action fill | every accent-filled badge or button (was `#fff`) |
@@ -95,6 +95,7 @@ aggregate root (`--model-aggregate`); each has its own name so that one can chan
 | `--row-hover` | slate-900 at 4.5% | slate-100 at 5% | hover of the session's rows | |
 | `--neutral-tint` | `#E2E8F0` | `#2E3547` | neutral chips and badges | |
 | `--shadow`, `--legend-bg`, `--resizer` | slate-based | | | |
+| `--backdrop` | slate-900 at 35% | same | behind a modal dialog | `.settings-dialog::backdrop`, `.session-dialog::backdrop` (was `rgba(0, 0, 0, 0.35)`) |
 
 ### 3. Meaning
 
@@ -164,6 +165,7 @@ red) but has its own tokens: added (green-700) is not success (emerald-700), rem
 | `--chat-unread` | `#4338CA` | `#A5B4FC` | the unread marker (with a count or text) |
 | `--agent-active` | = `--action` | | every running phase: reading, editing, checking, finishing (told apart by icon and text) |
 | `--agent-active-bg` | = `--selected-bg` | | the running chip's background |
+| `--agent-avatar` / `--on-agent-avatar` | `#475569` / `#FFFFFF` | `#CBD5E1` / `#10131D` | the AI's avatar on every turn (its icon says AI): a stable neutral mark, not the activity hue (issue #33 §4.1) |
 | `--participant-1` … `-6` | `#0F766E` teal, `#7C3AED` violet, `#B45309` ochre, `#BE185D` pink, `#0369A1` sky, `#4D7C0F` green | same | a participant's avatar, cursor, remote selection |
 | `--on-participant` | `#FFFFFF` | `#FFFFFF` | name and initials on the participant's hue |
 | `--participant-halo` | = `--surface` | | the ring around an avatar or cursor label |
@@ -193,7 +195,7 @@ Connection states use the status tokens too, never a participant's hue. `partici
 | --- | --- | --- |
 | `--panel` | alias of `--surface` | |
 | `--text-soft` | alias of `--text-secondary` | |
-| `--accent` | alias of `--action` | the chat and agent tasks move the AI avatar and running state to `--agent-active` |
+| `--accent` | alias of `--action` | the running state, its pulses and phase icons use `--agent-active`; the AI avatar `--agent-avatar` |
 | `--muted` | kept, re-valued (slate) | |
 | `--border`, `--border-strong` | kept, re-valued | |
 | `--hover`, `--hover-strong`, `--row-hover`, `--neutral-tint`, `--shadow`, `--legend-bg` | kept, slate-based | |
@@ -203,7 +205,7 @@ Connection states use the status tokens too, never a participant's hue. `partici
 | `--violet`, `--violet-text`, `--violet-soft`, `--violet-wash`, `--violet-border`, `--boundary-border`, `--boundary-bg` | indigo values | the old accent's family follows the brand; aggregates and boundaries become indigo, as §3.3 asks for the aggregate root |
 | `--error`, `--error-wash` | aliases of `--status-danger-ink` / `-bg` | |
 | `--warning`, `--warning-wash`, `--banner-bg`, `--banner-border` | aliases of `--status-warning-*` | |
-| `--added`, `--changed`, `--removed` | aliases of `--diff-*` | `.session-status.run-state-Completed` still uses `--added`: the chat task moves it to `--status-success-*` |
+| `--added`, `--changed`, `--removed` | aliases of `--diff-*` | used for diffs only: run states, the health and the connection moved to `--status-*` (W2) |
 | `--amber` | alias of `--model-event` | it was only the event's dot and band, never the brand's amber |
 | `--es-*`, `--es-*-border`, `--es-sequence` | kept, re-valued (conventional); `--es-*-text` added | |
 | `--grey*`, `--node-*`, `--ink-strong`, `--stub-bg`, `--context-*`, `--edge*`, `--gutter` | kept, slate-based | |
@@ -244,6 +246,65 @@ imported URL is relative (`./logo-light-<hash>.svg`); the page is served at `/`,
 The mono and white variants have no slot in the page today (they are for print and dark photos); the 16/24/32/64px
 renders on both themes belong with the logo task's screenshots.
 
+**Done (W2).** The favicon and the activity bar's mark are in place as planned. The mark is 24px tall
+(`.brand-logo`, `aspect-ratio: 144 / 128`, about 27×24px) in the 43px cell; `:root[data-theme]` hides the other
+theme's file. Its `alt` is empty while the left pane is open (the text "DomainTrail" beside it names it) and
+"DomainTrail" while it is collapsed, because the text is then `inert` and the image is all that is left (before, the
+collapsed bar had no name for it). The bundled logo files are byte-identical to `assets/brand/`.
+
+## What W2 changed (chat, agent, presence)
+
+**The agent's states.** The page shows a run's state in three places: the status slot of an AI turn
+(`.chat-state.state-<MarkState>`, glyph and word), the chat header's pill (`.chat-status.status-<AgentStatus>`) and
+AI の作業's unit icons (`.outcome-<UnitOutcome>`, a lucide icon with its word as the label). The domain has seven
+`AgentRun` states (`Queued`, `Running`, `Completed`, `NeedsClarification`, `Declined`, `Failed`, `Cancelled`),
+`FailureReason` (`RuleNotMet`, `AgentError`, `LeaseExpired`, `Interrupted`) on `Failed`, and the transient
+`RunActivityPhase` (`reading`, `editing`, `checking`, `finishing`) of a running run. Mapped, without new states:
+
+| Domain | Page's state (slot / header / AI の作業) | Visual | Cue beside the colour |
+| --- | --- | --- | --- |
+| `Queued` | `queued` / `queued` / `queued` | `--status-idle-*` (neutral) | `…` 実行待ち; a numbered circle in 待ち |
+| `Running`, any `RunActivityPhase` | `running` / `running` / `running` | `--agent-active` (indigo), `--agent-active-bg` for the header pill | pulsing dot, 実行中 and the time; the activity line's phase icon (BookOpen, Pencil, ListChecks, MessageSquareText) and word (読んでいます, 書き換えています, 確かめています, …) |
+| `Completed` (with changes) | — (done is the rule) / — / `changed` | `--status-success-ink` | ✓ 対応 on the quotes; CircleCheck 変更あり |
+| `Completed` (without) | — / — / `unchanged` | neutral | CircleMinus 変更なし |
+| a request done partly, skipped | `partial`, `skipped` | `--status-warning-ink`, neutral | ◐ 一部, – 未対応 |
+| `NeedsClarification` | `clarification`, `question` / `clarification` / `clarification` | `--status-warning-*` | ? 確認待ち, the 答え待ち group, the question's section headed AI からの質問 |
+| an assumption not decided (`AssumptionDecision` `open`) | — | `--status-warning-*`, per assumption | Hourglass 承認待ち badge on the assumption (new), then 承認 / 送り直す; decided: ◉ and 承認 name · time |
+| `Declined` | `declined` | `--status-info-ink` (not a failure) | ⊘ 辞退; Ban icon |
+| `Failed` (`RuleNotMet`, `AgentError`, `LeaseExpired`) | `failed` | `--status-danger-ink` | ✕ 失敗, the reason as the turn's text |
+| `Failed` (`Interrupted`) | `failed` | `--status-danger-ink` | ✕ 失敗, the turn's text 中断 |
+| `Cancelled` | `cancelled` | neutral | ⊘ 取消; CircleSlash |
+
+Activity (the run's state, the header pill) and a human decision (a question to answer, an assumption to approve)
+stay apart: the decision is marked on the question or the assumption itself, never by the run's colour.
+
+**Chat (issue #33 §4.1).**
+
+- Message rows take their role's background: mine `--chat-own-bg` (`.chat-row.own`), another participant's
+  `--chat-other-bg` (`.chat-row.other`); an AI turn stays on `--chat-agent-bg` (the surface). One speaker's
+  consecutive messages join into one block. Hover is a tint over the role's colour (a `background-image`), so the role
+  stays.
+- The AI's avatar is `--agent-avatar` (neutral slate) on every turn; the running hue is only beside it.
+- A message mentioning me: `--chat-mention-bg`, a 3px `--chat-unread` bar, a hidden label (あなた宛て / For you);
+  inside it `--muted` is `--text-secondary`, since the quietest text is 4.39:1 on that background.
+- Unread: the counts on the launcher and on the jump-to-latest button, and the 「…が更新されました」 pill, are
+  `--chat-unread` with `--on-action` (the count was the danger red).
+- Chosen rows (to send to the AI) are `--selected-bg` with a 1px `--action` inset edge (and their checkbox); options
+  and alternatives chosen are `--selected-bg` with an `--action` border and ◉ / ☑; my reactions an `--action` outline
+  on `--selected-bg` (`aria-pressed`); my vote the filled ♥ in the accent.
+- Approval is a decision: the assumption gets ◉ and 承認 name · time, never a green message.
+- Target chips stay neutral (the frozen target carries no model kind to colour by); a stale one is struck through
+  with an Unlink2 icon, an unknown one (sources that do not parse) a CircleAlert in `--status-warning-ink`, both
+  labelled with `targetStatusHint`. The composer's kind label consumes the meaning tokens: a `.dt` element
+  `--model-aggregate(-tint)`, a storming element `--model-event(-tint)`.
+- Changed elements under a run (`.change-mark`) use `--diff-*` and `--diff-*-bg`.
+
+**Presence (§4.3).** `participantColor` returns `var(--participant-<1 + hash % 6>)` (the same hash as before);
+avatars and cursor names write in `--on-participant`; the header's avatars, the facilitator's ring gap, the cursor's
+arrow edge and name are haloed with `--participant-halo`. Connection and health (`.conn-*`, `.health-*`, `.pill-*`)
+use the status tokens with their words (接続中, 接続済み, 切断). The page draws no remote selection (presence carries
+`selectedTarget`, but nothing renders it), so there is nothing to colour there yet.
+
 ## Contrast
 
 WCAG 2 ratios of the token pairs, computed from the values above (a small script, not in the repository: relative
@@ -255,8 +316,12 @@ Notes on values that differ from issue #33:
 
 - `--muted` (light `#5E6B7F` instead of slate-500 `#64748B`): the issue has no third text tier; slate-500 gives 4.34:1
   on `--surface-muted` and on the hover, so the quietest text is one step darker.
-- `--border-strong` (`#8492A6` / `#64708A`): not in the issue; the edges of inputs and buttons need 3:1, which the
-  issue's `border` (`#CBD5E1`, 1.48:1) does not reach; `--border` keeps the issue's value for separators.
+- `--border-strong` (`#8492A6` / `#64708A`): not in the issue; the edges of inputs and buttons need 3:1, which a
+  separator does not reach.
+- `--border` (`#E2E8F0` / `#2E3547` instead of the issue's `#CBD5E1` / `#465066`): the issue's value read visibly
+  heavier than the old hairlines in both themes; the human chose the lighter separator (slate-200 and its dark
+  counterpart, the values of `--neutral-tint`). Separators are not held to a ratio (1.23:1 / 1.37:1 on the surface);
+  every control edge that must reach 3:1 uses `--border-strong`.
 - `--status-idle-bg` (light `#F8FAFC`): the issue gives no idle background; on `#F1F5F9` the idle ink is 4.34:1.
 - `--model-context-tint` (`#F8FAFC`) and `--model-command-tint` (`#EFF6FF` instead of `#DBEAFE`): the accent on its
   tint reaches 4.5:1 only with the lighter tint.
@@ -294,7 +359,7 @@ The tables (light, then dark):
 | focus ring / selected-bg | `#6366F1` | `#EEF2FF` | 3.99 | 3 | pass |
 | disabled text / surface (informative; exempt) | `#94A3B8` | `#FFFFFF` | 2.56 | 1 | pass |
 | border-strong (control edge) / surface | `#8492A6` | `#FFFFFF` | 3.16 | 3 | pass |
-| border (separator) / surface | `#CBD5E1` | `#FFFFFF` | 1.48 | 1 | pass |
+| border (separator) / surface | `#E2E8F0` | `#FFFFFF` | 1.23 | 1 | pass |
 
 #### Status (light)
 
@@ -429,7 +494,7 @@ The tables (light, then dark):
 | focus ring / selected-bg | `#A5B4FC` | `#30345A` | 5.97 | 3 | pass |
 | disabled text / surface (informative; exempt) | `#64708A` | `#191D2B` | 3.38 | 1 | pass |
 | border-strong (control edge) / surface | `#64708A` | `#191D2B` | 3.38 | 3 | pass |
-| border (separator) / surface | `#465066` | `#191D2B` | 2.08 | 1 | pass |
+| border (separator) / surface | `#2E3547` | `#191D2B` | 1.37 | 1 | pass |
 
 #### Status (dark)
 
@@ -538,13 +603,47 @@ The tables (light, then dark):
 | #fff / participant-6 | `#FFFFFF` | `#4D7C0F` | 4.99 | 4.5 | pass |
 | participant-6 / bg | `#4D7C0F` | `#10131D` | 3.71 | 3 | pass |
 
+#### Chat, agent and presence (W2)
+
+The pairs W2 added (both themes; `bun contrast.ts` over the values). All pass.
+
+| Pair | Light | Ratio | Dark | Ratio | Needs |
+| --- | --- | --- | --- | --- | --- |
+| muted / chat-own-bg | `#5E6B7F` / `#EEF2FF` | 4.83 | `#94A3B8` / `#292D4C` | 5.20 | 4.5 |
+| muted / chat-other-bg | `#5E6B7F` / `#F1F5F9` | 4.93 | `#94A3B8` / `#252B3B` | 5.51 | 4.5 |
+| muted (= text-secondary there) / chat-mention-bg | `#475569` / `#E0E7FF` | 6.15 | `#CBD5E1` / `#373C67` | 7.06 | 4.5 |
+| action (links) / chat-own-bg | `#4338CA` / `#EEF2FF` | 7.07 | `#A5B4FC` / `#292D4C` | 6.69 | 4.5 |
+| action (links) / chat-other-bg | `#4338CA` / `#F1F5F9` | 7.21 | `#A5B4FC` / `#252B3B` | 7.08 | 4.5 |
+| action (links, inline chip) / chat-mention-bg | `#4338CA` / `#E0E7FF` | 6.41 | `#A5B4FC` / `#373C67` | 5.25 | 4.5 |
+| unread bar / chat-mention-bg | `#4338CA` / `#E0E7FF` | 6.41 | `#A5B4FC` / `#373C67` | 5.25 | 3 |
+| on-agent-avatar / agent-avatar | `#FFFFFF` / `#475569` | 7.58 | `#10131D` / `#CBD5E1` | 12.48 | 4.5 |
+| agent-avatar / surface | `#475569` / `#FFFFFF` | 7.58 | `#CBD5E1` / `#191D2B` | 11.30 | 3 |
+| agent-active / agent-active-bg | `#4338CA` / `#EEF2FF` | 7.07 | `#A5B4FC` / `#30345A` | 5.97 | 4.5 |
+| idle ink / idle bg (header pill) | `#64748B` / `#F8FAFC` | 4.55 | `#CBD5E1` / `#252B3B` | 9.51 | 4.5 |
+| warning ink / surface-muted (question label) | `#92400E` / `#F1F5F9` | 6.47 | `#FCD34D` / `#252B3B` | 9.79 | 4.5 |
+| text-secondary / surface-muted (assumed label) | `#475569` / `#F1F5F9` | 6.92 | `#CBD5E1` / `#252B3B` | 9.51 | 4.5 |
+| warning ink / warning bg (承認待ち) | `#92400E` / `#FEF3C7` | 6.37 | `#FCD34D` / `#47361F` | 8.02 | 4.5 |
+| diff-added / diff-added-bg | `#15803D` / `#DCFCE7` | 4.57 | `#86EFAC` / `#14321F` | 9.93 | 4.5 |
+| diff-changed / diff-changed-bg | `#A16207` / `#FEF9C3` | 4.58 | `#FDE047` / `#3A3214` | 9.68 | 4.5 |
+| diff-removed / diff-removed-bg | `#BE123C` / `#FFE4E6` | 5.24 | `#FDA4AF` / `#4A1D2A` | 7.40 | 4.5 |
+| model-event / its tint (storming kind label) | `#C2410C` / `#FFEDD5` | 4.52 | `#FDBA74` / `#43291A` | 7.93 | 4.5 |
+| chat-own-bg / surface (row edge, informative) | `#EEF2FF` / `#FFFFFF` | 1.12 | `#292D4C` / `#191D2B` | 1.26 | — |
+| chat-other-bg / surface (row edge, informative) | `#F1F5F9` / `#FFFFFF` | 1.10 | `#252B3B` / `#191D2B` | 1.19 | — |
+
+Participants over the sticky notes (informative): in light the hues are 2.4–4.0:1 on the papers; in dark the deep
+papers and the hues are close (1.1–1.3:1), so a cursor over a note is told apart by its halo (the dark surface, 1.9–3.2:1
+on the papers) and its name label (`--on-participant` on the hue, ≥ 4.99:1).
+
 ## Open for a human decision
 
-- `--border` follows the issue (`#CBD5E1` / `#465066`) and is visibly heavier than the old hairlines (`#E2E2E6` /
-  `#33333D`), in both themes. If it reads too heavy, a lighter separator (slate-200 `#E2E8F0` / `#2E3547`) is the
-  alternative; the 3:1 edges of controls are `--border-strong` either way.
 - The dark sticky notes use deep papers with pale text; the alternative is mid-tone papers with dark text (closer to
   paper notes, but brighter on a dark canvas). The `-text` tokens let the diagrams task switch either way.
+- Message backgrounds by role (W2, as issue #33 §4.1 asks) make every participant's message a faint box, where #32
+  had plain text; own (`#EEF2FF`) and other (`#F1F5F9`) are close, told apart by the name (「あなた」).
+- The AI's avatar moved from the accent to a neutral slate (`--agent-avatar`), so that indigo beside a turn means it is
+  running; keeping indigo would only need `--agent-avatar: var(--brand-ink)`.
+- In the dark theme a participant's cursor over a deep sticky note relies on its halo (`--participant-halo` = the
+  surface); a light halo there would read better over notes but heavier around the header's avatars.
 - Same-value tokens across roles (`--es-actor-border` = `--diff-changed`; `--model-command-tint` = the dark info
   background; participant ochre vs the warning): accepted as the issue allows; the overlay rules (§5) keep them apart
   by channel.
