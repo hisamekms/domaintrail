@@ -2680,7 +2680,8 @@ whole workspace, and such a message shows no target chips (nor the composer any 
 element (by storming and local ID), or one **occurrence** of an event in a timeline. In the chat's composer, type `#`
 to pick an element or a storming's note by its label or name (the list shows its kind and context or storming; ↑↓,
 Enter or Tab, Esc; Japanese input works, `＃` too: a candidate is never picked while the IME converts): it becomes a
-chip under the text and `#name[n]` in the text, n its number. Wherever a target is shown on its own — a chip, being
+chip under the text and a small chip in the text (`#支払済み`), which the caret steps over as one character and one
+Backspace deletes. (The text is stored with tokens, `#name[n]` for target n, which the composer never shows.) Wherever a target is shown on its own — a chip, being
 written or sent, a mention in a sent text, a card named after its first message — it reads as its own name, without
 what it is in (`#支払済み`, not `#請求書.支払済み`), its whole name in the tooltip; only the `#` list keeps the kind and
 where beside each name, to tell the candidates apart. (Messages written before `#` named elements have
@@ -2702,8 +2703,8 @@ means another request's target.
 
 **Mentioning people.** Type `@` in the composer to mention someone in the session: the list offers the others —
 online first, then those away, the facilitator among them, never you — with their avatar and name; it does not open
-when no one else is in the session. Picking writes `@name[pN]` (shown as `@佐藤`, by the name they have now) and the
-message names them (up to 20 people; the server checks each is a participant of the session). In the stream a
+when no one else is in the session. Picking puts `@佐藤` in the text, as one piece (stored as `@name[pN]`; a sent
+message shows the name they have now), and the message names them (up to 20 people; the server checks each is a participant of the session). In the stream a
 mentioned person is a link that opens the participants at them. The person mentioned sees that message with a faint
 blue background in their own stream, and while their chat is closed its floating button shows `@ 2` for the new
 messages that mention them instead of the count of new items. Nothing else notifies: no sound, no e-mail. The agent
