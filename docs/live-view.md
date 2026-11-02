@@ -149,8 +149,9 @@ neither baseline: their views are not marked.
   original size). The diagrams' own text is not affected; it follows the canvas's zoom. Until you drag them, the left
   pane, the inspector and the chat open wider (and the narrow-window thresholds below grow) in proportion, so that
   larger text does not wrap everywhere; a width you dragged is kept.
-- Names follow the 名前の表示 setting: ラベル (the string after a declaration's name, falling back to the
-  name), 名前 or 両方. Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
+- Names follow the 名前の表示 setting: ラベル (the default; the string after a declaration's name, falling back to
+  the name when there is none or it is blank), 名前 or 両方 (the label and the name; the name alone without a label).
+  Layouts are cached in `<root>/.domaintrail/layout.json`. The canvas is read-only.
 
 See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decisions.
 
