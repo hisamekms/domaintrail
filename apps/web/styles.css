@@ -14,6 +14,9 @@
     --text-soft: #44444f;
     --muted: #6b6b76;
     --hover: #f4f2fd;
+    /* the hover of the session's rows (chat, AI の作業): a colourless tint that only says "this one"; violet is for what
+       is chosen */
+    --row-hover: rgba(29, 29, 34, 0.045);
     /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
     --hover-strong: #e6e6eb;
     --shadow: rgba(0, 0, 0, 0.12);
@@ -133,6 +136,7 @@
     --text-soft: #c4c4cc;
     --muted: #9a9aa6;
     --hover: #26243a;
+    --row-hover: rgba(230, 230, 234, 0.05);
     --hover-strong: #383843;
     --shadow: rgba(0, 0, 0, 0.5);
     --legend-bg: rgba(30, 30, 36, 0.92);
@@ -4815,7 +4819,7 @@ button.add-to-request.added:hover {
    whole block is one hover area; open, it sits on a faint surface, where the head and the files line (a click on them
    closes it) are tinted more under the pointer and the body is not */
 .chat-unit:not(.open):hover {
-    background: var(--hover);
+    background: var(--row-hover);
 }
 .chat-unit.open {
     background: var(--bg);
@@ -4823,7 +4827,7 @@ button.add-to-request.added:hover {
 .session-chat .chat-unit.open > button.chat-unit-head:hover,
 .chat-unit.open:has(> .chat-unit-cancel:hover) > button.chat-unit-head,
 .chat-unit.open > .chat-unit-files:hover {
-    background: var(--hover);
+    background: var(--row-hover);
 }
 /* a unit's row: its mark, its title and under it, small, whose requests and when; at the right end only actions (✕, ›) */
 .session-chat button.chat-unit-head {
@@ -5028,7 +5032,7 @@ button.add-to-request.added:hover {
     flex-wrap: wrap;
 }
 .chat-item-card > .run-card:hover {
-    background: var(--hover);
+    background: var(--row-hover);
 }
 .chat-row .chat-bubble,
 .chat-item-card > .run-card .run-section {
@@ -5048,7 +5052,7 @@ button.add-to-request.added:hover {
 }
 .chat-row.paired,
 .run-quote.paired {
-    background: var(--hover);
+    background: var(--row-hover);
 }
 .chat-row.selected {
     background: var(--violet-tint);
