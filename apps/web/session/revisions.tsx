@@ -32,7 +32,7 @@ type RestoreFlow =
 export interface RevisionTools {
     /** The restore's box, while one is under way: placed in the chat. */
     readonly node: ReactNode;
-    /** The comparison's dialog, while one is open: placed outside the tabs, so that 履歴 opens it too. */
+    /** The comparison's dialog, while one is open: placed outside the tabs, so that AI の作業 opens it too. */
     readonly dialog: ReactNode;
     compare(before: string, after: string): void;
     confirm(revision: string): void;

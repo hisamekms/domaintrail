@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { answerBody } from './actions';
 import { cardRuns, messageMarks, quoteDisplay, updatedCards } from './cards';
-import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unitName } from './history';
+import { changedPaths, changeUnits, cutList, requestersOf, requestHead, shownUnits, unfinishedCount, unitName, workGroups } from './history';
 import { latestAt, revisionLookup, streamItems, unreadCount } from './stream';
 
 type RunJson = SessionStateBody['runs'][number];
@@ -232,6 +232,44 @@ describe('the history of changes', () => {
             expect(cutList(['a', 'b', 'c'], 3)).toEqual({ shown: ['a', 'b', 'c'], more: 0 });
             expect(cutList(['a', 'b', 'c', 'd', 'e'], 3)).toEqual({ shown: ['a', 'b', 'c'], more: 2 });
         });
+    });
+
+    test('AI の作業: awaiting an answer, running, queued in the order they run, finished newest first; the badge counts running and queued', () => {
+        const qd = request('qd', 'dev:b');
+        const qe = request('qe', 'dev:a');
+        const done = run('done', 1, [qa], {
+            state: 'Completed',
+            baseRevision: 'r0',
+            startedAt: at(1),
+            resultRevision: 'r1',
+            changed: true,
+            report: {},
+            finishedAt: at(2),
+            ...reply('Did it.'),
+        });
+        const failed = run('failed', 3, [qb], { state: 'Failed', startedAt: at(3), reason: 'AgentError', finishedAt: at(4) });
+        const asked = run('asked', 5, [qc], {
+            state: 'NeedsClarification',
+            baseRevision: 'r1',
+            startedAt: at(5),
+            question: 'Which one?',
+            resultRevision: 'r1',
+            finishedAt: at(6),
+        });
+        const running = run('running', 7, [qd], { state: 'Running', startedAt: at(8) });
+        // the queued ones in the order they were queued (they run in that order), not newest first
+        const first = run('first', 9, [qe], { state: 'Queued' });
+        const second = run('second', 10, [request('qf', 'dev:b')], { state: 'Queued' });
+        const units = changeUnits({ runs: [done, failed, asked, running, second, first], revisions });
+        const groups = workGroups(units);
+        expect(groups.awaiting.map((u) => u.key)).toEqual(['asked']);
+        expect(groups.running.map((u) => u.key)).toEqual(['running']);
+        expect(groups.queued.map((u) => u.key)).toEqual(['first', 'second']);
+        expect(groups.finished.map((u) => u.key)).toEqual(['failed', 'done']);
+        // すべて filters only the finished ones: a queued unit changed no file, and still shows
+        expect(shownUnits(groups.finished, false).map((u) => u.key)).toEqual(['done']);
+        expect(unfinishedCount(units)).toBe(3);
+        expect(unfinishedCount(changeUnits({ runs: [done, asked], revisions }))).toBe(0);
     });
 });
 

@@ -198,11 +198,14 @@ The chat has two views:
   The composer's text is 6 rows high to start. The handle on its top edge makes it taller (drag up) or shorter, from 2
   rows up to 60% of the chat's height — focused, ↑↓ change it by a row and Home/End go to the ends; a double click
   brings the default back. The height is in rows, so it follows the text size, and is remembered per browser.
-- **履歴**: the history of changes, newest first. Each row is one card — a run with the runs that continue it — that
-  changed files: its outcome and name (the title, else the first message) with its time span; whose messages its first
-  run applied, how many runs, how many files it changed (measured from the revisions); and the files themselves, a link
-  that compares the revisions before and after the whole card. Opened, it shows the run's card, and
-  チャットで見る scrolls the chat to it. すべて also lists the runs
-  that changed nothing, and those declined, failed or cancelled.
+- **AI の作業**: everything sent to the AI, from start to end; the tab's badge counts what is not finished (running and
+  queued; not what awaits an answer). Each row is one card — a run with the runs that continue it — in groups:
+  答え待ち (the AI asked a question), 実行中 (a pulsing dot, and how long it has run), 待ち n (numbered in the order they
+  will run) and 終わったもの (newest first). A row reads its mark and name (the title, else the first message), then,
+  small, whose messages its first run applied, how many runs and its time span; and the files it changed, a link that
+  compares the revisions before and after the whole card. The facilitator cancels a running or queued card with ✕.
+  Opened, a row shows the run's card, and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
+  that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
+  other groups always show.
 
 The others' cursors are drawn on the same view. `dt view` serves the same page without any of it. See [`dt guide session`](guide.md#collaboration-sessions).

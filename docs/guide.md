@@ -2560,8 +2560,8 @@ page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). 
   the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
-right end of the page — チャット: every message posted, one card per run, and the composer; 履歴: the runs that changed
-files — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
+right end of the page — チャット: every message posted, one card per run, and the composer; AI の作業: everything sent to the AI,
+awaiting an answer, running, queued and finished — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
 collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
@@ -2586,7 +2586,7 @@ runs are serial, so it waits as 実行待ち while another runs), and … (そ�
 on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
 まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
 run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
-is still queued. Participants see a run only once it is in the stream: there is no queue to watch. A message that was
+is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. A message that was
 sent shows the
 mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for everyone; the tooltip names the card and the
 state, and a click goes to the card.
@@ -2597,9 +2597,11 @@ declined, failed, cancelled; a question shows itself). A card is one chunk of ch
 (about 20 characters, in the requests' language), and the card's title is the one of its first run that has one — the
 runs that continue it never rename it. The AI turn's name row reads `AI · 請求書の税区分 · 19:21` (who queued it in the
 time's tooltip); before the AI gave a title (still running, or a run from before titles) it reads `AI · 19:21`, the
-quotes under it saying what it is about. Where a card must be named without any title (履歴, a reply, a mark's tooltip), the head of its first
-message stands for it, on one line. In 履歴, each card's heading is its name with its time span (`19:21–22:32`), then,
-small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`) and how many runs when more than one, then
+quotes under it saying what it is about. Where a card must be named without any title (AI の作業, a reply, a mark's tooltip), the head of its first
+message stands for it, on one line. In AI の作業, the cards are grouped — 答え待ち, 実行中, 待ち (in the order they will
+run, numbered), 終わったもの (newest first; すべて filters only these) — and the tab's badge counts the running and
+queued ones. Each card's row is its name, then, small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how
+many runs when more than one and its time span (`19:21–22:32`; the running one's elapsed time), then
 the files it changed after a file-diff icon (`billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
 card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
 the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and

@@ -4609,7 +4609,7 @@ del.was.block {
     margin-left: 0;
 }
 
-/* ---------- the conversation: チャット | 履歴 ---------- */
+/* ---------- the conversation: チャット | AI の作業 ---------- */
 
 .chat-views {
     flex: none;
@@ -4617,9 +4617,31 @@ del.was.block {
 }
 .session-chat .chat-views button {
     flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
     padding: 2px var(--space-3);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
+}
+/* AI の作業's badge: how many units are not finished; the accent on the tab, inverted on the selected one */
+.chat-views-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+.session-chat .chat-views button.active .chat-views-badge {
+    background: #fff;
+    color: var(--accent);
 }
 .chat-view {
     flex: 1;
@@ -4649,51 +4671,121 @@ del.was.block {
     overflow: auto;
     padding-bottom: var(--space-3);
 }
-.chat-history-bar {
-    display: flex;
-    justify-content: flex-end;
-    padding: var(--space-1) var(--space-4);
-    border-bottom: 1px solid var(--border);
-    font-size: var(--fs-small);
-}
 .chat-units {
     list-style: none;
     margin: 0;
     padding: 0;
+    border-top: 1px solid var(--border);
+}
+/* AI の作業's groups (答え待ち, 実行中, 待ち, 終わったもの), each under a small strong label */
+.chat-work-group + .chat-work-group {
+    margin-top: var(--space-3);
+}
+.chat-work-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4) var(--space-1);
+}
+.chat-work-label-row > .chat-work-label {
+    padding: 0;
+}
+.chat-work-label {
+    margin: 0;
+    padding: var(--space-2) var(--space-4) var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: var(--lh-small);
+    font-variant-numeric: tabular-nums;
+}
+.chat-work-group.awaiting .chat-work-label {
+    color: var(--warning);
+}
+.chat-work-label-row > .check {
+    font-size: var(--fs-small);
 }
 .chat-unit {
+    position: relative;
     border-bottom: 1px solid var(--border);
 }
-/* a unit's heading: the outcome's icon, its title and time; under the title, small, whose requests (and its files) */
+/* a unit's row: its mark, its title and under it, small, whose requests and when; at the right end only actions (✕, ›) */
 .session-chat button.chat-unit-head {
-    --unit-text: calc(14px + var(--space-2));
     display: flex;
-    flex-direction: column;
-    gap: 0;
+    align-items: flex-start;
+    gap: var(--space-2);
     width: 100%;
     padding: var(--space-2) var(--space-4);
     border: none;
     background: none;
     color: inherit;
     text-align: left;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
 }
 .session-chat button.chat-unit-head:hover {
     background: var(--hover);
 }
-.chat-unit-line {
-    display: flex;
+.chat-unit-mark {
+    flex: none;
+    display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
+    justify-content: center;
+    width: 16px;
+    height: calc(var(--fs-body) * var(--lh-body));
+}
+.chat-unit-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 .chat-unit-icon {
     flex: none;
     color: var(--muted);
 }
+/* the running one: a pulsing dot in the accent */
+.chat-pulse.chat-unit-pulse {
+    margin: 0;
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+}
+/* a queued one: its place in the line, in a circle */
+.chat-unit-order {
+    display: inline-grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--muted);
+    border-radius: 50%;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+/* ✕ sits over the head, in a space kept for it before › */
+.chat-unit-cancel-space {
+    flex: none;
+    width: 20px;
+}
+.session-chat .chat-unit-cancel {
+    position: absolute;
+    top: calc(var(--space-2) + (var(--fs-body) * var(--lh-body) - 20px) / 2);
+    right: calc(var(--space-4) + 14px + var(--space-2));
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+}
 .outcome-changed .chat-unit-icon {
     color: var(--added);
 }
 .outcome-clarification .chat-unit-icon {
-    color: var(--amber-text);
+    color: var(--warning);
 }
 .outcome-failed .chat-unit-icon {
     color: var(--error);
@@ -4701,9 +4793,6 @@ del.was.block {
 .outcome-running .chat-unit-icon {
     color: var(--accent);
     animation: spin 1s linear infinite;
-}
-.chat-unit-line .chat-time {
-    margin-left: auto;
 }
 .chat-unit-body {
     padding: var(--space-2) var(--space-4) var(--space-3);
@@ -4724,6 +4813,8 @@ del.was.block {
 }
 .chat-unit-twisty {
     flex: none;
+    height: calc(var(--fs-body) * var(--lh-body));
+    color: var(--muted);
     transition: transform var(--motion-medium) var(--motion-ease-standard);
 }
 .chat-unit.open .chat-unit-twisty {
@@ -6044,8 +6135,8 @@ del.was.block {
 
 /* ---------- chunk titles ---------- */
 
-/* 履歴: a chunk's heading — its title (plain text weight: names of people are the only bold), its time span muted at
-   the right; under it, muted and small, whose requests and how much; then the files it changed as a violet link */
+/* AI の作業: a chunk's row — its title (plain text weight: names of people are the only bold), cut to one line; under it,
+   muted and small, whose requests, how much and when; then the files it changed as a violet link */
 .chat-unit-title {
     flex: 1;
     min-width: 0;
@@ -6054,24 +6145,19 @@ del.was.block {
     text-overflow: ellipsis;
     color: var(--text);
 }
-.chat-unit-line > .chat-time {
-    flex: none;
-    margin-left: auto;
-}
 .chat-unit-facts {
-    padding-left: var(--unit-text);
     color: var(--muted);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
-/* a card's changed files in 履歴: a file-diff icon, then the files as one link, under the title's left edge */
+/* a card's changed files in AI の作業: a file-diff icon, then the files as one link, under the title's left edge */
 .chat-unit-changes {
     display: flex;
     align-items: center;
     gap: var(--space-1);
     margin: calc(-1 * var(--space-2)) 0 0;
-    padding: 0 var(--space-4) var(--space-2) calc(var(--space-4) + 14px + var(--space-2));
+    padding: 0 var(--space-4) var(--space-2) calc(var(--space-4) + 16px + var(--space-2));
     color: var(--muted);
     font-size: var(--fs-small);
     line-height: var(--lh-small);

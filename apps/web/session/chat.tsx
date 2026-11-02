@@ -1,8 +1,8 @@
 // The session's chat in the conversation pillar (ADR 0026, amendment: messages and apply), the same for everyone: who
 // is here and what the agent is doing at a glance, then two views. チャット: one stream of every message (each is chat;
 // the facilitator applies some: a run), one card per run with the runs that continue it (`card.tsx`), the revisions
-// confirmed or restored, and the composer of a message about the selection. 履歴: the history of changes, the same
-// cards. The facilitator's controls are in the stream itself: send a message to the AI (the Bot button; … for sending
+// confirmed or restored, and the composer of a message about the selection. AI の作業: everything sent to the AI, from
+// start to end (awaiting an answer, running, queued, finished), with the same cards. The facilitator's controls are in the stream itself: send a message to the AI (the Bot button; … for sending
 // it again, with a comment, or several together, also chosen with Shift/⌘), answer or pick an alternative on a card,
 // cancel, and the menus of the cards and of the head.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -33,7 +33,7 @@ import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
-import { changeUnits, requestersOf, shownUnits, unitName, type ChangeUnit, type UnitOutcome } from './history';
+import { changeUnits, requestersOf, shownUnits, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
 import {
     addChips,
     composerKey,
@@ -145,6 +145,7 @@ export function SessionChat(props: {
     const items = useMemo(() => streamItems(state), [state]);
     const units = useMemo(() => changeUnits(state), [state]);
     const marks = useMemo(() => messageMarks(units), [units]);
+    const unfinished = unfinishedCount(units);
     const running = state.runs.some((r) => r.state === 'Running');
     const now = useNow(running);
     const actions = useChatActions();
@@ -243,7 +244,7 @@ export function SessionChat(props: {
 
     const [hovered, hover] = useState<string | undefined>();
     const root = useRef<HTMLDivElement | null>(null);
-    // an item of the stream, scrolled to the middle and marked for a moment (from 履歴, a quote or a mark)
+    // an item of the stream, scrolled to the middle and marked for a moment (from AI の作業, a quote or a mark)
     const jump = useCallback((key: string): void => {
         setView('chat');
         requestAnimationFrame(() => {
@@ -299,6 +300,12 @@ export function SessionChat(props: {
                     {(['chat', 'history'] as const).map((v) => (
                         <button key={v} role="tab" aria-selected={view === v} className={view === v ? 'active' : ''} onClick={() => setView(v)}>
                             {tx.chat.tabs[v]}
+                            {/* AI の作業: how many units are not finished (running and queued), whichever tab is shown */}
+                            {v === 'history' && unfinished > 0 && (
+                                <span className="chat-views-badge" role="img" aria-label={tx.chat.history.unfinished(unfinished)}>
+                                    {unfinished}
+                                </span>
+                            )}
                         </button>
                     ))}
                 </div>
@@ -316,7 +323,7 @@ export function SessionChat(props: {
                 {summary && summaryOpen && <CollabSummaryDialog summary={summary} tx={tx} onClose={() => setSummaryOpen(false)} />}
                 {session.error && <p className="session-note chat-notice session-error">{tx.error(session.error)}</p>}
                 {leaveError && <p className="session-note chat-notice session-error">{tx.error(leaveError)}</p>}
-                {/* both stay mounted, so that switching keeps the stream's scroll and the history's open units */}
+                {/* both stay mounted, so that switching keeps the stream's scroll and the open units of AI の作業 */}
                 <div className="chat-view" role="tabpanel" hidden={view !== 'chat'}>
                     <Stream items={items} />
                     <div className="chat-tray">
@@ -851,42 +858,78 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
 };
 
 /**
- * 履歴: the change units, newest first — the runs that changed files, or all of them (すべて). A unit's heading names
- * the chunk (its title, else its first message) with its time span, whose requests they were, how many runs and files,
- * and the files it changed (a link to compare them); opened, it shows the unit's card (compact) and a link to it in the chat. The card's own menu is the
- * place of the facilitator's actions on a unit.
+ * AI の作業: everything sent to the AI, from start to end, in groups — 答え待ち (the AI asked), 実行中, 待ち (in the
+ * order they will run, numbered) and 終わったもの (newest first). すべて filters only the finished ones: by default those
+ * that changed files. A unit's row names the chunk (its title, else its first message) with whose requests they were,
+ * how many runs and its time (the running one's elapsed time), then the files it changed (a link to compare them); the
+ * facilitator cancels a running or queued unit with ✕. Opened, it shows the unit's card (compact) and a link to it in
+ * the chat. The card's own menu is the place of the facilitator's other actions on a unit.
  */
 function History({ units: all }: { units: readonly ChangeUnit[] }) {
     const { tx } = useChat();
     const h = tx.chat.history;
     const [everything, setEverything] = useState(false);
     const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-    const units = shownUnits(all, everything);
+    const groups = workGroups(all);
+    const finished = shownUnits(groups.finished, everything);
     const toggle = (key: string): void => {
         const next = new Set(open);
         if (next.has(key)) next.delete(key);
         else next.add(key);
         setOpen(next);
     };
+    const rows = (units: readonly ChangeUnit[], mark?: (i: number) => ReactNode): ReactNode => (
+        <ol className="chat-units">
+            {units.map((unit, i) => (
+                <HistoryUnit key={unit.key} unit={unit} mark={mark?.(i)} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
+            ))}
+        </ol>
+    );
     return (
         <div className="chat-history">
-            <div className="chat-history-bar">
-                <label className="check small" data-tooltip={h.allHint}>
-                    <input type="checkbox" checked={everything} onChange={(e) => setEverything(e.target.checked)} />
-                    {h.all}
-                </label>
-            </div>
-            <ol className="chat-units">
-                {units.map((unit) => (
-                    <HistoryUnit key={unit.key} unit={unit} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
-                ))}
-            </ol>
+            {groups.awaiting.length > 0 && (
+                <section className="chat-work-group awaiting">
+                    <h3 className="chat-work-label">{h.groups.awaiting}</h3>
+                    {rows(groups.awaiting)}
+                </section>
+            )}
+            {groups.running.length > 0 && (
+                <section className="chat-work-group running">
+                    <h3 className="chat-work-label">{h.groups.running}</h3>
+                    {rows(groups.running, () => (
+                        <span className="chat-pulse chat-unit-pulse" aria-label={h.outcomes.running} role="img" />
+                    ))}
+                </section>
+            )}
+            {groups.queued.length > 0 && (
+                <section className="chat-work-group queued">
+                    <h3 className="chat-work-label">{h.groups.queued(groups.queued.length)}</h3>
+                    {rows(groups.queued, (i) => (
+                        <span className="chat-unit-order" role="img" aria-label={h.order(i + 1)}>
+                            {i + 1}
+                        </span>
+                    ))}
+                </section>
+            )}
+            {/* the filter is of the finished ones only: what is still going on always shows */}
+            {groups.finished.length > 0 && (
+                <section className="chat-work-group finished">
+                    <div className="chat-work-label-row">
+                        <h3 className="chat-work-label">{h.groups.finished}</h3>
+                        <label className="check small" data-tooltip={h.allHint}>
+                            <input type="checkbox" checked={everything} onChange={(e) => setEverything(e.target.checked)} />
+                            {h.all}
+                        </label>
+                    </div>
+                    {rows(finished)}
+                </section>
+            )}
         </div>
     );
 }
 
-function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean; onToggle: () => void }) {
-    const { tx, nameOf, jump } = useChat();
+function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: ReactNode; open: boolean; onToggle: () => void }) {
+    const { tx, nameOf, control, actions, now, jump } = useChat();
     const h = tx.chat.history;
     const Icon = OUTCOME_ICONS[unit.outcome];
     const name = unitName(unit);
@@ -895,6 +938,7 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
         asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
     const span = unit.span;
     const paths = unit.paths ?? [];
+    const last = unit.runs[unit.runs.length - 1].run;
     // the files line says which files (and how many); one run is the rule, said only when there were more
     const listed = paths.length > 0 && span !== undefined;
     const facts = [
@@ -902,32 +946,52 @@ function HistoryUnit({ unit, open, onToggle }: { unit: ChangeUnit; open: boolean
         unit.runs.length > 1 ? h.runs(unit.runs.length) : undefined,
         !listed && unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined,
     ].filter((x) => x !== undefined);
+    // the facilitator's ✕ on what has not finished; at the right end, before ›
+    const cancellable = control && (last.state === 'Queued' || last.state === 'Running');
     // the card is mounted the first time the unit opens, and stays so that it folds away as it closes
     const [mounted, setMounted] = useState(open);
     if (open && !mounted) setMounted(true);
     return (
-        <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}`} data-unit={unit.key}>
+        <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}${cancellable ? ' cancellable' : ''}`} data-unit={unit.key}>
             <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={onToggle}>
-                <span className="chat-unit-line">
-                    <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />
+                <span className="chat-unit-mark">{mark ?? <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />}</span>
+                <span className="chat-unit-text">
                     <span
                         className={`chat-unit-title${name.kind === 'request' ? ' untitled' : ''}`}
                         {...(name.kind === 'request' && { 'data-tooltip': h.untitledHint })}
                     >
                         {name.text}
                     </span>
-                    <span className="chat-time">
-                        <time dateTime={unit.start}>{time(unit.start)}</time>
-                        {time(unit.at) !== time(unit.start) && (
+                    {/* small, under the title: whose requests, how many runs, and when (the running one: for how long) */}
+                    <span className="chat-unit-facts">
+                        {facts.map((f) => `${f} · `).join('')}
+                        {last.state === 'Running' ? (
+                            <span data-tooltip={h.elapsedHint}>{elapsed(last.startedAt, now)}</span>
+                        ) : (
                             <>
-                                –<time dateTime={unit.at}>{time(unit.at)}</time>
+                                <time dateTime={unit.start}>{time(unit.start)}</time>
+                                {time(unit.at) !== time(unit.start) && (
+                                    <>
+                                        –<time dateTime={unit.at}>{time(unit.at)}</time>
+                                    </>
+                                )}
                             </>
                         )}
                     </span>
-                    <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
                 </span>
-                {facts.length > 0 && <span className="chat-unit-facts">{facts.join(' · ')}</span>}
+                {cancellable && <span className="chat-unit-cancel-space" aria-hidden />}
+                <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
             </button>
+            {cancellable && (
+                <button
+                    className="icon-button chat-unit-cancel"
+                    onClick={() => void actions.cancel(last.id)}
+                    aria-label={tx.chat.cancelRun}
+                    data-tooltip={tx.chat.cancelRun}
+                >
+                    <X size={13} aria-hidden />
+                </button>
+            )}
             {/* what the chunk changed: its files (the page knows them, not the elements) after a file-diff icon, a link to
                 compare the whole chunk */}
             {listed && span && <ChangedFiles kind="unit" paths={paths} base={span.base} result={span.result} />}

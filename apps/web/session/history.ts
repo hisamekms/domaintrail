@@ -1,4 +1,4 @@
-// The session's runs grouped into "change units", without React: one card of the chat, and one row of its 履歴. A
+// The session's runs grouped into "change units", without React: one card of the chat, and one row of AI の作業. A
 // unit is one run, or a run followed by the runs that continue it (the answer to its question, the replies to it, an
 // alternative picked, the same messages applied again), and so on. Everything is derived from the session's state on the page.
 //
@@ -173,10 +173,36 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
     return units.sort((a, b) => b.at.localeCompare(a.at) || b.runs[0].number - a.runs[0].number);
 }
 
-/** The units the history shows: those that changed files, or all of them. */
+/** The finished units AI の作業 shows: those that changed files, or all of them. */
 export function shownUnits(units: readonly ChangeUnit[], all: boolean): ChangeUnit[] {
     return all ? [...units] : units.filter((u) => (u.files ?? 0) > 0);
 }
+
+/** AI の作業 in its groups, each in the order it is shown; a group may be empty (the page then leaves it out). */
+export interface WorkGroups {
+    /** The units whose latest run asked a question, newest first. */
+    readonly awaiting: readonly ChangeUnit[];
+    /** The units whose latest run is running. */
+    readonly running: readonly ChangeUnit[];
+    /** The units whose latest run waits for its turn, in the order they will run (by when that run was queued). */
+    readonly queued: readonly ChangeUnit[];
+    /** The units that ended (changed or not, declined, failed, cancelled), newest first. */
+    readonly finished: readonly ChangeUnit[];
+}
+
+/** The units (newest first, as `changeUnits` gives them) in the groups of AI の作業. */
+export function workGroups(units: readonly ChangeUnit[]): WorkGroups {
+    const latest = (u: ChangeUnit): UnitRun => u.runs[u.runs.length - 1];
+    return {
+        awaiting: units.filter((u) => u.outcome === 'clarification'),
+        running: units.filter((u) => u.outcome === 'running'),
+        queued: units.filter((u) => u.outcome === 'queued').sort((a, b) => latest(a).number - latest(b).number),
+        finished: units.filter((u) => u.outcome !== 'clarification' && u.outcome !== 'running' && u.outcome !== 'queued'),
+    };
+}
+
+/** How many units are not finished yet, the badge of AI の作業: running and queued (not those awaiting an answer). */
+export const unfinishedCount = (units: readonly ChangeUnit[]): number => units.filter((u) => u.outcome === 'running' || u.outcome === 'queued').length;
 
 /**
  * A request's text on one line, its tokens (elements and people, `body.ts`) as the names they were written with,

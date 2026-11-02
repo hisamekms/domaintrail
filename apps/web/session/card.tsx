@@ -57,7 +57,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                 <div className="run-card-head">
                     <span className="chat-who">{tx.chat.agent}</span>
                     <span className="run-card-meta">
-                        {/* in 履歴, the heading above already names it */}
+                        {/* in AI の作業, the row above already names it */}
                         {title.kind === 'title' && !compact && (
                             <>
                                 <span className="run-card-title">{title.text}</span>
@@ -360,7 +360,7 @@ const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1)
 /**
  * Changed files, on one small line: a file-diff icon, then the first files (their last segments; all of them in the
  * tooltip) as one link comparing the revisions before and after. Under a run's text (`run`), and under a unit's heading
- * in 履歴 (`unit`).
+ * in AI の作業 (`unit`).
  */
 export function ChangedFiles({ kind, paths, base, result }: { kind: 'run' | 'unit'; paths: readonly string[]; base: string; result: string }) {
     const { tx, revisions } = useChat();
@@ -574,7 +574,7 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
         <ReplySection kind="assumed">
             {reply.assumptions.map((a, i) => {
                 const decision = assumptionDecision(run, i, session.state.runs, session.state.approvals);
-                // the facilitator's buttons while the assumption is not decided; the votes, in 履歴, only once frozen
+                // the facilitator's buttons while the assumption is not decided; the votes, in AI の作業, only once frozen
                 const deciding = offer && decision.kind === 'open';
                 const votes = !compact || decision.kind !== 'open';
                 const approved = decision.kind === 'approved';
