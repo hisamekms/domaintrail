@@ -1083,8 +1083,12 @@ is doing, and the page shows it in one line.
 - **The page.** One small line under the quoted messages of the running AI turn in the chat, and under the facts line
   of the running unit in AI の作業: an icon of the phase in the accent color, the phase (`読んでいます`, `書き換えています`,
   `確かめています`, `まとめています`) at strong weight, then the subject in monospace, muted — a file by its last segment,
-  its whole path in the tooltip. A change replaces the line with the page's small fade (none with reduced motion).
-  There is no line before the first activity, and the status stays `実行中 m:ss`.
+  its whole path in the tooltip. There is no line before the first activity (the first one is shown at once), and
+  the status stays `実行中 m:ss`. Each activity stays 1.2 s at least; the ones reported meanwhile come down to the
+  latest, shown when it ends (nothing is replayed) — the agent can report several a second, faster than one reads. A
+  change cross-fades in place, without moving: the part that changed fades out, then the new one in (`--motion-swap`)
+  — only the subject when the phase stays, the icon and the phase with it when the phase changes. With reduced motion
+  the swap is instant; the 1.2 s pace stays (it is not a motion).
 
 ## Appendix: changes in the model's words (amendment)
 

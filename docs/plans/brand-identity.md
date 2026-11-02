@@ -814,6 +814,17 @@ AI の作業 stay legible with nothing clipped.
   aggregate, actor, read model) merge into yellows in protanopia and deuteranopia and into pinks in tritanopia (the
   event and the hotspot closest); the stereotype text and the legend's names carry the kind.
 
+## What W6 changed (the human's review: the activity line flickering)
+
+- **The running agent's activity line** (`session/activity.tsx`, the same `ActivityLine` under the running turn in the
+  chat and in the running unit's row in AI の作業) no longer remounts on each change (a new key, 4px pop from below,
+  `motion-pop`): it cross-fades in place with `useSwap` (`--motion-swap`, 120 ms; `.run-activity > .swapping` at
+  opacity 0). Only what changed fades: the subject alone when the phase stays, the icon and the phase word too when it
+  changes. The first activity is shown at once.
+- **A minimum hold**: each activity stays `ACTIVITY_HOLD_MS` (1.2 s) at least; the ones reported meanwhile come down
+  to the latest, shown when the hold ends (`createHold` / `useHeld` in `shared/motion.ts`, unit-tested with a fake
+  clock). With reduced motion the swap is instant, the hold stays (a pace, not a motion).
+
 ## Open for a human decision
 
 - The dark sticky notes use `main`'s muted deep papers with pale text and coloured edges (W5); the alternative is
