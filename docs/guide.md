@@ -2833,7 +2833,9 @@ The `session` section of `domaintrail.jsonc`; every key is optional, and the def
 ```
 
 **Identity modes.** `dev` is for a session on one machine: the first visit gets a join form asking for a name, and an
-HttpOnly cookie keeps the sign-in (the collab menu's 退出 signs out). `access` puts the session behind Cloudflare Access
+HttpOnly cookie keeps the sign-in (the collab menu's 退出 signs out). Another cookie, `dt_name`, remembers the name for
+a year, so the next join form (of any session on that host) starts with it. The join form and the server's other pages
+are in Japanese when the browser prefers Japanese, else in English. `access` puts the session behind Cloudflare Access
 and a Cloudflare Tunnel: each request's Access token is verified (signature with the team's keys, issuer, audience,
 expiry), the name comes from Access's Identity API, a page's WebSocket closes when its token expires, and only the
 configured hosts and origins are answered; `docs/session-access.md` in the repository sets it up and checks it by
