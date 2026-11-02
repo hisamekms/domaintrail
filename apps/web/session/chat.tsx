@@ -70,7 +70,8 @@ import {
     type AgentStatus,
     type StreamItem,
 } from './stream';
-import { targetKey, type ModelTarget, type TargetDraft } from './targets';
+import { ComposerChips } from './composer-chips';
+import type { ModelTarget, TargetDraft } from './targets';
 import { continued, isMac } from './views';
 import type { ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
@@ -1176,6 +1177,8 @@ function Composer(props: {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const [notice, setNotice] = useState<string | undefined>();
+    // the chips shown whole (`+n` pressed); sending collapses them again
+    const [chipsExpanded, setChipsExpanded] = useState(false);
     const query = mentionQuery(value.text, caret);
     // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
     const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
@@ -1276,6 +1279,7 @@ function Composer(props: {
             });
             await composer.clear();
             onReplyDone();
+            setChipsExpanded(false);
             setError(undefined);
             setNotice(undefined);
         } catch (e) {
@@ -1368,28 +1372,15 @@ function Composer(props: {
                 />
             </div>
             <div className="chat-composer-bar">
-                <div
-                    className="chat-chips"
-                    aria-label={value.chips.length > 0 ? `${tx.chat.target} ${tx.chat.targetCount(value.chips.length, MAX_REQUEST_TARGETS)}` : tx.chat.target}
-                >
-                    {value.chips.map((c, i) => (
-                        <span
-                            key={targetKey(c.target.target)}
-                            className={`chat-chip kind-${c.target.target.kind}`}
-                            data-tooltip={`${nameOf(c.target)}\n${targetKey(c.target.target)}`}
-                        >
-                            <span className="chat-chip-number">{i + 1}</span>
-                            <span className="chat-chip-name">{shortOf(c.target)}</span>
-                            <button
-                                className="chat-chip-remove"
-                                aria-label={tx.chat.removeTarget(nameOf(c.target))}
-                                onClick={() => composer.setValue(removeChip(value, i))}
-                            >
-                                <X size={12} aria-hidden />
-                            </button>
-                        </span>
-                    ))}
-                </div>
+                <ComposerChips
+                    chips={value.chips}
+                    expanded={chipsExpanded}
+                    onExpanded={setChipsExpanded}
+                    nameOf={nameOf}
+                    shortOf={shortOf}
+                    onRemove={(i) => composer.setValue(removeChip(value, i))}
+                    tx={tx}
+                />
                 <div className="chat-composer-actions">
                     {/* the shortcut is in the tooltip */}
                     <button

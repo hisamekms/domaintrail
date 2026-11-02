@@ -4156,6 +4156,53 @@ del.was.block {
     background: var(--hover);
     color: var(--text);
 }
+/* the chips not shown while collapsed: out of the flow and hidden, still measured */
+.chat-composer-bar .chat-chips {
+    position: relative;
+}
+.chat-chips > .measured {
+    position: absolute;
+    top: 0;
+    left: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+/* `+n`: the last item of the second row; as wide for any n up to 99, so measuring it once holds */
+.session-chat button.chat-chips-more {
+    flex: none;
+    box-sizing: border-box;
+    min-width: calc(3ch + 2 * var(--space-2) + 2px);
+    padding: 0 var(--space-2);
+    border: 1px dashed var(--accent);
+    border-radius: 999px;
+    background: none;
+    color: var(--accent);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25rem;
+    cursor: pointer;
+}
+.session-chat button.chat-chips-more:hover {
+    background: var(--hover);
+}
+.session-chat button.chat-chips-less {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+.session-chat button.chat-chips-less:hover {
+    background: var(--hover);
+    color: var(--text);
+}
 /* the selection's 💬 on the canvas: next to its bounds, above the shapes */
 .selection-action {
     position: absolute;
