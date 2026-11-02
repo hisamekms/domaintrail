@@ -1,13 +1,15 @@
 // The canvas port (docs/plans/react-flow.md): everything the Live View asks of the library that draws its diagrams,
-// so that the app (`view/*`, `session/*`, `states-canvas.tsx`, `theme.ts`) does not know which library it is. Today's
-// implementation is tldraw's (`view/tldraw-canvas.tsx`); apps/web/canvas-boundary.test.ts keeps tldraw out of the rest.
+// so that the app (`view/*`, `session/*`, `states-canvas.tsx`, `theme.ts`) does not know which library it is. Its
+// implementation is React Flow's (`view/flow-canvas.tsx`); apps/web/canvas-boundary.test.ts keeps React Flow out of the
+// rest.
 import { useEffect, useState, type DependencyList } from 'react';
 import type { Point, Rect, Scene, SceneId, SceneItemType } from '../scene';
 import type { Theme } from '../theme';
 
 /**
  * Where the canvas looks: a point of the page is on the canvas (relative to its top-left corner) at
- * `(page + (x, y)) * z`. `z` is the zoom level (1 = 100%).
+ * `(page + (x, y)) * z`. `z` is the zoom level (1 = 100%). (tldraw's convention, kept so that the cameras saved per
+ * view and `centeredCamera` stay as they were; `viewport.ts` converts it.)
  */
 export interface Camera {
     readonly x: number;
@@ -109,22 +111,28 @@ export interface DiagramCanvas {
     watch(effect: () => void): () => void;
 }
 
+/** Whether two values are the same, or plain objects with the same values (one level deep). */
+export function sameValue(a: unknown, b: unknown): boolean {
+    if (Object.is(a, b)) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) || Array.isArray(b)) return false;
+    const ka = Object.keys(a);
+    return ka.length === Object.keys(b).length && ka.every((k) => Object.is(Reflect.get(a, k), Reflect.get(b, k)));
+}
+
 /**
  * A value computed from the canvas, kept up to date (`DiagramCanvas.watch`); `compute` gets no canvas before it is
- * mounted. `deps` are what `compute` reads besides the canvas.
+ * mounted. `deps` are what `compute` reads besides the canvas. A value equal to the previous one (`sameValue`) does
+ * not render again.
  */
 export function useCanvasValue<T>(canvas: DiagramCanvas | null, compute: (canvas: DiagramCanvas | null) => T, deps: DependencyList): T {
     const [value, setValue] = useState<T>(() => compute(canvas));
     useEffect(() => {
+        const update = (v: T): void => setValue((old) => (sameValue(old, v) ? old : v));
         if (!canvas) {
-            const v = compute(null);
-            setValue(() => v);
+            update(compute(null));
             return;
         }
-        return canvas.watch(() => {
-            const v = compute(canvas);
-            setValue(() => v);
-        });
+        return canvas.watch(() => update(compute(canvas)));
         // the deps stand for what compute reads
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, ...deps]);
