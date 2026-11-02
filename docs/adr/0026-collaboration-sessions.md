@@ -507,10 +507,10 @@ a meeting talk about several things at once ("give 注文 the 顧客's address")
   qualified name, shown with their kind and context or storming; ↑↓, Enter/Tab, Esc; while an IME composes
   (`isComposing` or key code 229) no key picks or sends. Picking writes `@name[n] ` and adds chip n (or reuses it);
   deleting every mention of a chip that came from a mention removes it (a chip added otherwise stays); removing a chip
-  turns its mentions into plain text; numbers follow the chips. The selection (canvas or explorer) is suggested as
-  dashed chips after the confirmed ones (sent as targets unless dismissed with ×, until the selection changes; never
-  stored in the draft; confirmed + suggested within the 20); the canvas's 💬 next to the selection, or `C` outside
-  text inputs (no tldraw or app binding of a plain `c`), confirms them and focuses the composer. The app has no
+  turns its mentions into plain text; numbers follow the chips. (Amended: the selection is no longer suggested as
+  dashed chips — see "the selection added only through 💬" below.) The canvas's 💬 next to the selection, or `C`
+  outside text inputs (no tldraw or app binding of a plain `c`), adds the selection as chips and focuses the
+  composer. The app has no
   context menus (tldraw's UI is hidden), so none was added. Formerly `選択中: … [+]`. A selection
   of several shapes adds each targetable element, and an occurrence is added from a timeline's view. The unsent text
   and chips stay in the browser (the composer's draft, IndexedDB).
@@ -985,3 +985,25 @@ about, and the AI, when such a reply is sent to it, gets the original's words.
   highlighted in my stream only, as a message that mentions me is (`mentions-me`). Nothing else notifies: the
   launcher's `@ n` counts mentions only.
 - **No threads.** The stream stays one flat list; a reply is linked to its original only by the reference line.
+
+## Appendix: the selection added only through 💬 (amendment)
+
+*Decided with the maintainer*: selecting an element did two things at once. The 💬 next to it (or `C`) added it as
+chips, and, without any click, the composer showed it as dashed "suggested" chips that sending made targets (dismissed
+with × until the selection changed). People found it confusing: merely selecting changed what a message was sent
+with, and the composer had two kinds of chips.
+
+- **One way in.** Selecting changes nothing in the composer. The 💬 (`対象に追加（C）`) or `C` adds the selection as
+  chips, opens the chat and puts the caret in the text; a request is sent with the chips alone. One mental model —
+  the chips are the targets — is worth the one more step. The suggestions, their ×, their texts and their over-limit
+  note are gone (`web/session/suggestions.ts` became `web/session/selection.ts`).
+- **Added.** When every selected element already is a chip, the 💬 shows a muted ✓ (`対象に追加済み`): it adds
+  nothing, and a click only opens the chat and puts the caret in.
+- **The inspector.** The same 💬 sits next to the selected element's name in the inspector's heading while a session
+  is live, for a selection made outside the canvas (the explorer, search, or an element whose shape is not on
+  screen). It adds the element the inspector shows. The inspector takes it as a node to place (`headingAction`), so it
+  does not depend on the session.
+- **Many chips.** The composer shows its chips in two rows at most: the last item of the second row is `+n` (the
+  chips not shown, the latest added), which shows them all, followed by a collapse button; sending collapses them
+  again. The rows are measured on the real chips (`collapsedCount`, `web/session/chip-rows.ts`). No count such as
+  `1/20` is shown (the chips' aria label keeps it).
