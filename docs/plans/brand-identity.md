@@ -87,6 +87,7 @@ aggregate root (`--model-aggregate`); each has its own name so that one can chan
 | `--focus-ring` | 30% of `--focus` | same | soft halo (selection of a card) | `.card-selected` |
 | `--selected-bg` | `#EEF2FF` | `#30345A` | the local selection | `.activity.active`, `.tree-item.selected`, pressed toggles; via `--violet-tint` the chat's selected rows |
 | `--selected-text` | `#312E81` | `#E0E7FF` | text on the selection | `.tree-item.selected` |
+| `--selected-ring` | = `--action` | | the local selection on the canvas: a ring outside the node (W3) | `.dn-selected` |
 | `--disabled-bg` | `#F1F5F9` | `#252B3B` | a disabled filled control | new |
 | `--disabled-text` | `#94A3B8` | `#64708A` | a disabled control's text and icon | view tabs, `.filter-clear`, icon buttons, canvas controls (was `opacity`) |
 | `--disabled-border` | `#E2E8F0` | `#343B4F` | a disabled control's edge | new |
@@ -95,6 +96,13 @@ aggregate root (`--model-aggregate`); each has its own name so that one can chan
 | `--row-hover` | slate-900 at 4.5% | slate-100 at 5% | hover of the session's rows | |
 | `--neutral-tint` | `#E2E8F0` | `#2E3547` | neutral chips and badges | |
 | `--shadow`, `--legend-bg`, `--resizer` | slate-based | | | |
+| `--syntax-keyword` | `#6D28D9` | `#C4B5FD` | the source view's keywords (W3) | `.tok-keyword` (was `--keyword`) |
+| `--syntax-type` | `#1D4ED8` | `#93C5FD` | type names | `.tok-type` (was `--blue-text`) |
+| `--syntax-primitive` | `#115E59` | `#5EEAD4` | the built-in types | `.tok-primitive` (was `--teal-text`) |
+| `--syntax-literal` | `#9A3412` | `#FDBA74` | strings and numbers | `.tok-string`, `.tok-number` (was `--orange-text`) |
+| `--syntax-comment` | `#475569` | `#94A3B8` | comments | `.tok-comment` (was `--grey-text`) |
+| `--syntax-doc` | `#166534` | `#86EFAC` | `///` descriptions | `.tok-doc` (was `--doc-comment`) |
+| `--gutter` | `#94A3B8` | `#64708A` | the source's line numbers | moved here from the canvas block |
 
 ### 3. Meaning
 
@@ -112,14 +120,21 @@ legible until the diagrams task wires `-text`.
 | Hotspot (`hotspot`) | `#FCA5A5` | `#7F1D1D` | `#DC2626` | `#9D174D` | `#FCE7F3` | `#FCA5A5` |
 | Actor (`actor`) | `#FEF9C3` | `#713F12` | `#A16207` | `#713F12` | `#FEF9C3` | `#FACC15` |
 | External system (`external`) | `#F5D0FE` | `#4A044E` | `#C026D3` | `#86198F` | `#FAE8FF` | `#F0ABFC` |
-| Timeline arrows (`--es-sequence`) | `#C2410C` | | | `#FB923C` | | |
+| Group of a timeline (`--es-group-*`) | 35% of the event's paper | = event | = event | 35% of the event's paper | = event | = event |
+| Timeline arrows (`--es-sequence`, `-text` for their labels) | `#EA580C` | `#9A3412` | | `#FB923C` | `#FDBA74` | |
 
 Actor and external system are not in the issue's table: the actor takes the convention's small pale-yellow note (told
 from the aggregate by its rounded shape and lighter paper), the external system fuchsia (the convention's pink/lilac,
-kept apart from the hotspot's red and the policy's lavender, with its dashed edge). Groups and timelines keep the
-event's dashed edge (`.kind-es-group`, `.dg-esGroup`). The timeline arrows are the event's hue (an order of events),
-not a warning. The legend's note that the colours carry no meaning (`stormingColorNote`) is now wrong; the diagrams
-task replaces it and documents the mapping in `docs/live-view.md`.
+kept apart from the hotspot's red and the policy's lavender, with its dashed edge). A timeline's group is a dashed
+frame of the event's hue, its caption in the event's text (`.kind-es-group`, `.dg-esGroup`); a timeline itself has no
+note (it is drawn as its arrows; its kind chip in the inspector has a dashed edge of the arrows' orange). The timeline
+arrows are the event's hue (an order of events), not a warning: W3 moved them from orange-700 (`#C2410C`, close to the
+error's red-700 side by side) to orange-600 (`#EA580C`, 3.41:1 on the canvas, dashed), with their labels in
+orange-800 (`--es-sequence-text`, 6.99:1). Every note names its kind above its label («イベント»), in the note's own
+text (W3: `.dn-es* .dn-stereo { color: inherit }`; the theme's muted grey did not read on every paper). The legend's
+note that the colours carry no meaning (`stormingColorNote`) is gone: the legend shows every kind as a chip of its
+paper with its name (`STORMING_LEGEND_KINDS` in `legend.tsx`), and `docs/live-view.md` and `docs/dtes-v0.1.md` state
+the mapping.
 
 **Domain Modeling** (issue #33 §3.3): neutral cards, the concept's hue on a stripe, label or border (`--model-<x>`),
 and a faint chip background (`--model-<x>-tint`).
@@ -133,6 +148,29 @@ and a faint chip background (`--model-<x>-tint`).
 | Command (`command`) | `#2563EB` | `#EFF6FF` | `#93C5FD` | `#1D3552` |
 | Domain event (`event`) | `#C2410C` | `#FFEDD5` | `#FDBA74` | `#43291A` |
 | Policy (`policy`) | `#7C3AED` | `#EDE9FE` | `#C4B5FD` | `#2E2550` |
+| State (`state`, W3) | `#475569` | `#F1F5F9` | `#CBD5E1` | `#252B3B` |
+| Domain error (`error`, W3) | `#991B1B` | `#FEF2F2` | `#FCA5A5` | `#4B222A` |
+
+W3 added the diagrams' lines to this layer: `--model-edge` (`#475569` / `#94A3B8`: owns and the default),
+`--model-edge-quiet` (`#8492A6` / `#64708A`: the dotted value and storming relations), `--model-edge-label` (`#334155`
+/ `#CBD5E1`), `--model-ink` (`#1E293B` / `#E2E8F0`: field names, the composition's diamond, the initial state, the
+context map's borrowed types). A state is neutral on purpose (issue #33 §3.3: colour helps trace transitions but gives
+the states no meaning of their own). A domain error (a declared `error`) is a kind of the model, not a diagnostic: it
+has its own token of the red family, a step deeper than `--status-danger-ink` in light.
+
+How the diagrams apply them (W3):
+
+| Element | Cue |
+| --- | --- |
+| Bounded context (structure frame; context map node) | `--model-context` edge (1.5px frame, 2px node), caption in `--text-secondary`, a faint `--surface-muted` wash; a shared context the same, dashed |
+| Aggregate boundary | `--model-aggregate` dashes, 50% of its tint, caption in `--model-aggregate` |
+| Aggregate root | 2px `--model-aggregate` edge, header on `--model-aggregate-tint`, «集約ルート» |
+| Entity | `--model-entity` edge, neutral paper |
+| Value object / union | `--model-value` edge, rounded (a union dashed), neutral paper |
+| State | `--model-state` edge, rounded, neutral paper; internal transitions in `--model-edge-label` |
+| Fields | names `--model-ink`, types `--text-secondary` (no concept hue: a type may be of any kind) |
+| Edges | owns `--model-edge` + diamond; references (by ID, to an aggregate root) `--model-aggregate` dashes; value `--model-edge-quiet` dots; context map's borrowed types `--model-ink` 2px; transitions `--model-command` |
+| Kind chips, explorer dots, 振る舞い stripes, `.dep-*` | `--model-<kind>` on `--model-<kind>-tint`; the dots also differ by shape (squares for elements, circles for values and states, rings for the values without fields, dashes for policies, unions, shared contexts and field sets) |
 
 ### 4. Status and diff (issue #33 §3.4)
 
@@ -207,7 +245,9 @@ Connection states use the status tokens too, never a participant's hue. `partici
 | `--amber` | alias of `--model-event` | it was only the event's dot and band, never the brand's amber |
 | `--es-*`, `--es-*-border`, `--es-sequence` | kept, re-valued (conventional); `--es-*-text` added | |
 | `--grey*`, `--node-*`, `--ink-strong`, `--stub-bg`, `--context-*`, `--edge*`, `--gutter` | kept, slate-based | |
-| `--purple-*`, `--blue-*`, `--green-*`, `--teal-*`, `--amber-text`, `--amber-tint`, `--red-*`, `--orange-text`, `--ref-*`, `--keyword`, `--doc-comment` | unchanged | the diagrams task replaces their uses with `--model-*` / `--es-*` and removes them |
+| `--purple-*`, `--teal-*`, `--blue`, `--blue-text`, `--green`, `--green-wash`, `--orange-text`, `--amber`, `--violet`, `--violet-wash`, `--grey-text` | removed (W3) | their diagram uses moved to `--model-*`, `--syntax-*`, `--model-edge*` |
+| `--ref-edge`, `--ref-label`, `--edge`, `--edge-label`, `--ink-strong`, `--context-label`, `--boundary-border`, `--boundary-bg`, `--shared-bg`, `--keyword`, `--doc-comment` | removed (W3) | `--model-aggregate`, `--model-edge`, `--model-edge-label`, `--model-ink`, `--text-secondary`, `--syntax-*` |
+| `--blue-tint`, `--blue-wash`, `--green-text`, `--green-tint`, `--amber-text`, `--amber-tint`, `--red-text`, `--red-tint`, `--violet-text`, `--violet-soft`, `--violet-border` | kept, unchanged | used only by the chat (`.chat-*`, `.run-quote`, `.change-chip`'s marks, `.reply-*`, mentions), the health popover's warning text and the `.reveal` / card hover chrome: the chat task moves them |
 
 ### Owners of the next steps
 
@@ -216,10 +256,34 @@ Connection states use the status tokens too, never a participant's hue. `partici
   (`.chat-mentions`, `.collab-menu-popover`, `.mark-who-list`, `.reaction-picker`, `.session-dialog`,
   `.cancel-dialog`); `participantColor` to `--participant-*`, `#fff` on avatars and cursor names to
   `--on-participant`, a `--participant-halo` ring.
-- **Diagrams and legend**: `color: var(--es-<kind>-text)` on `.dn-es*` and `.kind-es-*`; `--model-*` for the
-  modeling kinds (`.kind-*`, `.dn-*`, `.dot-*`, `.band-*`); the legend's storming note and a colour key; diagnostics
-  as icon + text over the kind's colour; `docs/live-view.md`.
+- **Diagrams and legend**: done (W3, below).
 - **Logo**: the plan below.
+
+### What W3 changed (diagrams, legend, docs)
+
+- Event Storming: `.dn-es*` and `.kind-es-*` take `color: var(--es-<kind>-text)`, the notes' stereotypes their text;
+  the group and timeline tokens above; the timeline arrows orange-600 with orange-800 labels.
+- Legend: the storming's legend shows every kind as a chip (paper, edge, text, name) instead of the note that the
+  colours carry no meaning; the i18n key `stormingColorNote` is removed in both languages.
+- Domain Modeling: the cards are neutral, the kind on the edge, the header and the shape (the table above); the
+  explorer's dots, the kind chips, the 振る舞い stripes, the factory badge and state chips, the dependencies' badges
+  and the persistence badge (neutral: a property of an event, not a concept) moved to the meaning tokens.
+- Local selection (§5): `.dn-selected`, an indigo ring 5px outside the node (`--selected-ring`), from a `useSelected`
+  hook in `shapes.tsx`. tldraw's own thin outline is still drawn on the node's edge, where it was lost against an edge
+  of the same hue (an aggregate root's indigo, a command note's blue); its colour is not overridden (no `--tl-*`
+  override).
+- Diffs (§3.4): added and changed keep their 3px rings and 追加 / 変更 badges; a removed element's ghost keeps its
+  kind (edge and paper) and is told by its dashes, 70% opacity (was 55%), its struck-through name and its 削除 badge,
+  no longer by the error's wash. The 削除 label of a removed row (`.change.change-removed`) had no background and was
+  invisible; it is now on `--removed`, and `.change` is an inline block so that the row's strike-through does not
+  cross it.
+- Diagnostics (§5): the ✕ / ! mark on the node's corner, its text in the inspector and the problems list; the node's
+  edge is no longer recoloured red (`.dn-diag-error`), nor an internal transition's text (`.di-diag-error .di-main`).
+  Left as they were: a catalog card's red edge (`.card-error`: the cards carry no kind on their edge) and, in a state
+  view, the red tone of an erroneous element's transitions (`de-tone-error`, set in `render.ts`).
+- Source view: the `--syntax-*` tokens (AA on the surface and on the error, warning and focused rows).
+- Docs: `docs/live-view.md` (the storming's colours, the modeling's cues, the overlays) and `docs/dtes-v0.1.md` (the
+  notes' colours now carry the kind; still not part of the DSL).
 
 ## The logo's slots
 
@@ -538,6 +602,80 @@ The tables (light, then dark):
 | #fff / participant-6 | `#FFFFFF` | `#4D7C0F` | 4.99 | 4.5 | pass |
 | participant-6 / bg | `#4D7C0F` | `#10131D` | 3.71 | 3 | pass |
 
+#### Diagrams (W3)
+
+Composites are computed over tldraw's canvas (`#F9FAFB` / `#101011`); a frame's tint is mixed over it.
+
+##### Diagrams, W3 (light)
+
+| Pair | Fg | Bg | Ratio | Needs | |
+| --- | --- | --- | --- | --- | --- |
+| es-sequence (timeline arrow) / canvas | `#EA580C` | `#F9FAFB` | 3.41 | 3 | pass |
+| es-sequence-text (its label) / canvas | `#9A3412` | `#F9FAFB` | 6.99 | 4.5 | pass |
+| es-group-text / group frame (35% event over canvas) | `#431407` | `#FAD6B8` | 11.46 | 4.5 | pass |
+| es-group-border / canvas | `#C2410C` | `#F9FAFB` | 4.96 | 3 | pass |
+| model-state / surface | `#475569` | `#FFFFFF` | 7.58 | 4.5 | pass |
+| model-state / its tint | `#475569` | `#F1F5F9` | 6.92 | 4.5 | pass |
+| model-error / surface | `#991B1B` | `#FFFFFF` | 8.31 | 4.5 | pass |
+| model-error / its tint | `#991B1B` | `#FEF2F2` | 7.60 | 4.5 | pass |
+| model-edge / canvas | `#475569` | `#F9FAFB` | 7.25 | 3 | pass |
+| model-edge-quiet (dotted) / canvas | `#8492A6` | `#F9FAFB` | 3.02 | 3 | pass |
+| model-edge-label / canvas | `#334155` | `#F9FAFB` | 9.91 | 4.5 | pass |
+| model-ink (field names) / surface | `#1E293B` | `#FFFFFF` | 14.63 | 4.5 | pass |
+| text-secondary (a field's type) / surface | `#475569` | `#FFFFFF` | 7.58 | 4.5 | pass |
+| text / aggregate root's header (aggregate tint) | `#0F172A` | `#EEF2FF` | 15.97 | 4.5 | pass |
+| muted (stereotype) / aggregate root's header | `#5E6B7F` | `#EEF2FF` | 4.83 | 4.5 | pass |
+| model-aggregate (boundary label) / boundary (50% tint over canvas) | `#4338CA` | `#F4F6FD` | 7.32 | 4.5 | pass |
+| model-aggregate (edge, references) / canvas | `#4338CA` | `#F9FAFB` | 7.56 | 3 | pass |
+| model-context (frame) / canvas | `#64748B` | `#F9FAFB` | 4.55 | 3 | pass |
+| text-secondary (context caption) / context (60% surface-muted) | `#475569` | `#F4F7FA` | 7.05 | 4.5 | pass |
+| model-command (transition) / canvas | `#2563EB` | `#F9FAFB` | 4.95 | 3 | pass |
+| selected-ring / canvas | `#4338CA` | `#F9FAFB` | 7.56 | 3 | pass |
+| on-status / removed label | `#FFFFFF` | `#BE123C` | 6.29 | 4.5 | pass |
+| syntax-keyword / surface | `#6D28D9` | `#FFFFFF` | 7.10 | 4.5 | pass |
+| syntax-type / error row | `#1D4ED8` | `#FEE2E2` | 5.49 | 4.5 | pass |
+| syntax-primitive / error row | `#115E59` | `#FEE2E2` | 6.21 | 4.5 | pass |
+| syntax-literal / error row | `#9A3412` | `#FEE2E2` | 5.98 | 4.5 | pass |
+| syntax-comment / error row | `#475569` | `#FEE2E2` | 6.20 | 4.5 | pass |
+| syntax-doc / error row | `#166534` | `#FEE2E2` | 5.84 | 4.5 | pass |
+| syntax-keyword / focused row (selected-bg) | `#6D28D9` | `#EEF2FF` | 6.35 | 4.5 | pass |
+| syntax-primitive / warning row | `#115E59` | `#FEF3C7` | 6.81 | 4.5 | pass |
+
+##### Diagrams, W3 (dark)
+
+| Pair | Fg | Bg | Ratio | Needs | |
+| --- | --- | --- | --- | --- | --- |
+| es-sequence / canvas | `#FB923C` | `#101011` | 8.40 | 3 | pass |
+| es-sequence-text / canvas | `#FDBA74` | `#101011` | 11.28 | 4.5 | pass |
+| es-group-text / group frame (35% event over canvas) | `#FFEDD5` | `#4E210F` | 11.84 | 4.5 | pass |
+| es-group-border / canvas | `#FB923C` | `#101011` | 8.40 | 3 | pass |
+| model-state / surface | `#CBD5E1` | `#191D2B` | 11.30 | 4.5 | pass |
+| model-state / its tint | `#CBD5E1` | `#252B3B` | 9.51 | 4.5 | pass |
+| model-error / surface | `#FCA5A5` | `#191D2B` | 8.84 | 4.5 | pass |
+| model-error / its tint | `#FCA5A5` | `#4B222A` | 7.09 | 4.5 | pass |
+| model-edge / canvas | `#94A3B8` | `#101011` | 7.42 | 3 | pass |
+| model-edge-quiet (dotted) / canvas | `#64708A` | `#101011` | 3.83 | 3 | pass |
+| model-edge-label / canvas | `#CBD5E1` | `#101011` | 12.81 | 4.5 | pass |
+| model-ink (field names) / surface | `#E2E8F0` | `#191D2B` | 13.61 | 4.5 | pass |
+| text-secondary (a field's type) / surface | `#CBD5E1` | `#191D2B` | 11.30 | 4.5 | pass |
+| text / aggregate root's header (aggregate tint) | `#F1F5F9` | `#2A2E52` | 11.90 | 4.5 | pass |
+| muted (stereotype) / aggregate root's header | `#94A3B8` | `#2A2E52` | 5.08 | 4.5 | pass |
+| model-aggregate (boundary label) / boundary (50% tint over canvas) | `#A5B4FC` | `#1D1F32` | 8.14 | 4.5 | pass |
+| model-aggregate (edge, references) / canvas | `#A5B4FC` | `#101011` | 9.54 | 3 | pass |
+| model-context (frame) / canvas | `#94A3B8` | `#101011` | 7.42 | 3 | pass |
+| text-secondary (context caption) / context (60% surface-muted) | `#CBD5E1` | `#1D202A` | 10.95 | 4.5 | pass |
+| model-command (transition) / canvas | `#93C5FD` | `#101011` | 10.55 | 3 | pass |
+| selected-ring / canvas | `#A5B4FC` | `#101011` | 9.54 | 3 | pass |
+| on-status / removed label | `#10131D` | `#FDA4AF` | 9.80 | 4.5 | pass |
+| syntax-keyword / surface | `#C4B5FD` | `#191D2B` | 9.09 | 4.5 | pass |
+| syntax-type / error row | `#93C5FD` | `#4B222A` | 7.46 | 4.5 | pass |
+| syntax-primitive / error row | `#5EEAD4` | `#4B222A` | 9.09 | 4.5 | pass |
+| syntax-literal / error row | `#FDBA74` | `#4B222A` | 7.97 | 4.5 | pass |
+| syntax-comment / error row | `#94A3B8` | `#4B222A` | 5.25 | 4.5 | pass |
+| syntax-doc / error row | `#86EFAC` | `#4B222A` | 9.58 | 4.5 | pass |
+| syntax-comment / focused row (selected-bg) | `#94A3B8` | `#30345A` | 4.64 | 4.5 | pass |
+| syntax-comment / warning row | `#94A3B8` | `#47361F` | 4.51 | 4.5 | pass |
+
 ## Open for a human decision
 
 - `--border` follows the issue (`#CBD5E1` / `#465066`) and is visibly heavier than the old hairlines (`#E2E2E6` /
@@ -548,3 +686,12 @@ The tables (light, then dark):
 - Same-value tokens across roles (`--es-actor-border` = `--diff-changed`; `--model-command-tint` = the dark info
   background; participant ochre vs the warning): accepted as the issue allows; the overlay rules (§5) keep them apart
   by channel.
+- (W3) The selection is drawn twice: our indigo ring outside the node and tldraw's own thin blue outline on its edge.
+  Hiding tldraw's would take an override of a `--tl-*` variable or `.tl-*` rule, which the issue rules out.
+- (W3) A state view still draws the transitions of an element with an error in the error's red (`de-tone-error`,
+  decided in `render.ts`); §5 would rather keep them blue with the mark on the state. Left as it was: it is the
+  renderer's choice, not a colour token.
+- (W3) A field's type in a card moved from blue to `--text-secondary` (blue is now the command's hue); the cards read
+  calmer but the type column stands out less.
+- (W3) The context map's "borrows types" edge moved from indigo to the strong neutral ink (`--model-ink`, 2px): indigo
+  is the ID reference's (dashed), which points at an aggregate root.
