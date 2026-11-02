@@ -81,23 +81,17 @@
     --p-violet-950: #2e1065;
     --p-violet-night: #2e2550;
     --p-amber-100: #fef3c7;
-    --p-amber-200: #fde68a;
     --p-amber-300: #fcd34d;
-    --p-amber-600: #d97706;
     --p-amber-800: #92400e;
     --p-amber-900: #78350f;
     --p-amber-night: #47361f;
     --p-yellow-100: #fef9c3;
     --p-yellow-300: #fde047;
-    --p-yellow-400: #facc15;
     --p-yellow-700: #a16207;
-    --p-yellow-750: #975a0a;
     --p-yellow-900: #713f12;
     --p-yellow-night: #3a3214;
     --p-emerald-100: #d1fae5;
-    --p-emerald-200: #a7f3d0;
     --p-emerald-300: #6ee7b7;
-    --p-emerald-600: #059669;
     --p-emerald-700: #047857;
     --p-emerald-900: #064e3b;
     --p-emerald-night: #113b35;
@@ -114,23 +108,51 @@
     --p-red-50: #fef2f2;
     --p-red-100: #fee2e2;
     --p-red-300: #fca5a5;
-    --p-red-600: #dc2626;
     --p-red-700: #b91c1c;
     --p-red-800: #991b1b;
-    --p-red-900: #7f1d1d;
     --p-red-night: #4b222a;
     --p-rose-100: #ffe4e6;
     --p-rose-300: #fda4af;
     --p-rose-700: #be123c;
     --p-rose-night: #4a1d2a;
     --p-pink-100: #fce7f3;
-    --p-pink-800: #9d174d;
+    --p-pink-900: #831843;
     --p-fuchsia-100: #fae8ff;
-    --p-fuchsia-200: #f5d0fe;
-    --p-fuchsia-300: #f0abfc;
-    --p-fuchsia-600: #c026d3;
-    --p-fuchsia-800: #86198f;
     --p-fuchsia-950: #4a044e;
+    /* the Event Storming notes' papers and edges (main's soft sticky-note tone, by the human's choice over issue #33's
+       saturated values): pastel papers with a coloured edge in light, muted deep papers with a coloured edge in dark */
+    --p-note-orange: #ffd8a8;
+    --p-note-orange-edge: #e8590c;
+    --p-note-blue: #cfe5ff;
+    --p-note-blue-edge: #1c7ed6;
+    --p-note-purple: #e5dbff;
+    --p-note-purple-edge: #7048e8;
+    --p-note-yellow: #fff3bf;
+    --p-note-yellow-edge: #b8860b;
+    --p-note-green: #d3f9d8;
+    --p-note-green-edge: #2f9e44;
+    --p-note-pink: #ffdeeb;
+    --p-note-pink-edge: #d6336c;
+    --p-note-cream: #fff9db;
+    --p-note-cream-edge: #a07d00;
+    --p-note-lilac: #f4d0f8;
+    --p-note-lilac-edge: #a632b8;
+    --p-note-orange-night: #4a2b14;
+    --p-note-orange-night-edge: #ff922b;
+    --p-note-blue-night: #16304d;
+    --p-note-blue-night-edge: #4dabf7;
+    --p-note-purple-night: #2c2250;
+    --p-note-purple-night-edge: #9775fa;
+    --p-note-yellow-night: #3d3410;
+    --p-note-yellow-night-edge: #fcc419;
+    --p-note-green-night: #173a22;
+    --p-note-green-night-edge: #51cf66;
+    --p-note-pink-night: #4a1a2e;
+    --p-note-pink-night-edge: #f06595;
+    --p-note-cream-night: #36321a;
+    --p-note-cream-night-edge: #e0c050;
+    --p-note-lilac-night: #44204c;
+    --p-note-lilac-night-edge: #d65fe0;
     /* the participants' identity hues (issue #33 §4.3), the same in both themes */
     --p-person-teal: #0f766e;
     --p-person-violet: #7c3aed;
@@ -197,32 +219,33 @@
 
     /* ---------- 3. meaning ---------- */
     /* Event Storming sticky notes (issue #33 §3.2, the convention: event orange, command blue, policy purple,
-       aggregate yellow, read model green, hotspot red; actor pale yellow, external system fuchsia): the paper, its
-       edge and its text, on the canvas's notes, the inspector's kind chips and the legend's key. Light: pale paper,
-       dark text; dark: deep paper, pale text (the theme's text also reads on it). */
-    --es-event: var(--p-orange-400);
-    --es-event-border: var(--p-orange-700);
+       aggregate yellow, read model green, hotspot pink; actor pale yellow, external system lilac): the paper, its
+       edge and its text, on the canvas's notes, the inspector's kind chips and the legend's key. Light: soft pastel
+       paper, a coloured edge, dark text; dark: muted deep paper, a coloured edge, pale text (the theme's text also
+       reads on it). */
+    --es-event: var(--p-note-orange);
+    --es-event-border: var(--p-note-orange-edge);
     --es-event-text: var(--p-orange-950);
-    --es-command: var(--p-blue-300);
-    --es-command-border: var(--p-blue-600);
+    --es-command: var(--p-note-blue);
+    --es-command-border: var(--p-note-blue-edge);
     --es-command-text: var(--p-blue-950);
-    --es-policy: var(--p-violet-300);
-    --es-policy-border: var(--p-violet-600);
+    --es-policy: var(--p-note-purple);
+    --es-policy-border: var(--p-note-purple-edge);
     --es-policy-text: var(--p-violet-950);
-    --es-aggregate: var(--p-amber-200);
-    --es-aggregate-border: var(--p-amber-600);
+    --es-aggregate: var(--p-note-yellow);
+    --es-aggregate-border: var(--p-note-yellow-edge);
     --es-aggregate-text: var(--p-amber-900);
-    --es-readmodel: var(--p-emerald-200);
-    --es-readmodel-border: var(--p-emerald-600);
+    --es-readmodel: var(--p-note-green);
+    --es-readmodel-border: var(--p-note-green-edge);
     --es-readmodel-text: var(--p-emerald-900);
-    --es-hotspot: var(--p-red-300);
-    --es-hotspot-border: var(--p-red-600);
-    --es-hotspot-text: var(--p-red-900);
-    --es-actor: var(--p-yellow-100);
-    --es-actor-border: var(--p-yellow-700);
+    --es-hotspot: var(--p-note-pink);
+    --es-hotspot-border: var(--p-note-pink-edge);
+    --es-hotspot-text: var(--p-pink-900);
+    --es-actor: var(--p-note-cream);
+    --es-actor-border: var(--p-note-cream-edge);
     --es-actor-text: var(--p-yellow-900);
-    --es-external: var(--p-fuchsia-200);
-    --es-external-border: var(--p-fuchsia-600);
+    --es-external: var(--p-note-lilac);
+    --es-external-border: var(--p-note-lilac-edge);
     --es-external-text: var(--p-fuchsia-950);
     /* a timeline's group of events: a frame of the event's hue, its caption in the event's text */
     --es-group-border: var(--es-event-border);
@@ -395,29 +418,29 @@
     --gutter: var(--p-night-500);
 
     /* 3. meaning */
-    --es-event: var(--p-orange-700);
-    --es-event-border: var(--p-orange-400);
+    --es-event: var(--p-note-orange-night);
+    --es-event-border: var(--p-note-orange-night-edge);
     --es-event-text: var(--p-orange-100);
-    --es-command: var(--p-blue-700);
-    --es-command-border: var(--p-blue-300);
+    --es-command: var(--p-note-blue-night);
+    --es-command-border: var(--p-note-blue-night-edge);
     --es-command-text: var(--p-blue-100);
-    --es-policy: var(--p-violet-700);
-    --es-policy-border: var(--p-violet-300);
+    --es-policy: var(--p-note-purple-night);
+    --es-policy-border: var(--p-note-purple-night-edge);
     --es-policy-text: var(--p-violet-100);
-    --es-aggregate: var(--p-yellow-750);
-    --es-aggregate-border: var(--p-amber-200);
+    --es-aggregate: var(--p-note-yellow-night);
+    --es-aggregate-border: var(--p-note-yellow-night-edge);
     --es-aggregate-text: var(--p-yellow-100);
-    --es-readmodel: var(--p-emerald-700);
-    --es-readmodel-border: var(--p-emerald-300);
+    --es-readmodel: var(--p-note-green-night);
+    --es-readmodel-border: var(--p-note-green-night-edge);
     --es-readmodel-text: var(--p-emerald-100);
-    --es-hotspot: var(--p-pink-800);
-    --es-hotspot-border: var(--p-red-300);
+    --es-hotspot: var(--p-note-pink-night);
+    --es-hotspot-border: var(--p-note-pink-night-edge);
     --es-hotspot-text: var(--p-pink-100);
-    --es-actor: var(--p-yellow-900);
-    --es-actor-border: var(--p-yellow-400);
+    --es-actor: var(--p-note-cream-night);
+    --es-actor-border: var(--p-note-cream-night-edge);
     --es-actor-text: var(--p-yellow-100);
-    --es-external: var(--p-fuchsia-800);
-    --es-external-border: var(--p-fuchsia-300);
+    --es-external: var(--p-note-lilac-night);
+    --es-external-border: var(--p-note-lilac-night-edge);
     --es-external-text: var(--p-fuchsia-100);
     --es-sequence: var(--p-orange-400);
     --es-sequence-text: var(--p-orange-300);
