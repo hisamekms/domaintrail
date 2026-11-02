@@ -208,12 +208,12 @@ The chat has two views:
   a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
   `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
   facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
-  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ right after a running or
-  queued turn's state, always shown, after a dialog asks), and reaches
-  the undo and the changes from a card's ⋯ (この作業を取り消す…, 変更を見る; the revisions are
-  in the tooltips only: an undo is done mechanically, a 取り消し card, or by the AI, a card of its own; an undone work's
-  assumptions read 取り消し済み) and recording, 以前の状態に戻す… (the last resort), the hand-over and コラボを終える… from the
-  collab menu. Once the
+  with Shift/⌘-click), answers questions and picks alternatives in the cards, stops runs (✕ right after a running or
+  queued turn's state, always shown, after a dialog asks: 実行を中止), and reaches
+  the revert and the changes from a card's ⋯ (この作業を打ち消す…, 変更を見る; the revisions are
+  in the tooltips only: a revert queues like any work and, when its turn comes, is done mechanically by the server, a
+  打ち消し card, or left to the AI, its card saying why; a reverted work's assumptions read 打ち消し済み) and recording,
+  以前の状態に復元… (the last resort), the hand-over and コラボを終える… from the collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
   run waits; the facilitator sees the counts and decides. Options start with ○ (single choice) or ☐ (multiple), and

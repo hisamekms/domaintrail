@@ -1157,73 +1157,129 @@ concept of a revision, S7 ("Confirm"), the card's ⋯ of "messages, apply…" an
   revision is taken or restored, then never changes.
 - **The API.** `POST /api/session/revisions/:id/confirm` and the use case `confirmRevision` are gone; the route is
   `NotFound` like any unknown one. The state's revisions carry no confirmation.
-- **The page.** A card's ⋯ offers この作業の前に戻す… (*amended*: この作業を取り消す… — see "undo a run" below) and 変更を見る; the stream has no 「… がこの作業の結果を確認済みにしました」
+- **The page.** A card's ⋯ offers この作業の前に戻す… (*amended*: この作業を打ち消す… — see "revert a run" below) and 変更を見る; the stream has no 「… がこの作業の結果を確認済みにしました」
   notice; ending the collab counts the runs queued and running and the questions unanswered, not results.
 - **Sessions written before** (migration 9): a confirmed revision becomes the recorded one it was (`state` and the
   JSON's `state` set to `Recorded`, `confirmedBy` and `confirmedAt` removed), and the outbox's `RevisionConfirmed`
   events are deleted, so that a page or an agent replaying the outbox reads only events that exist. The outbox's
   positions are not renumbered: a cursor stays valid, and gaps were already there (one outbox for every session).
 
-## Appendix: undo a run instead of restoring before it (amendment)
+## Appendix: revert a run instead of restoring before it (amendment)
 
-*Decided by the maintainer* (2026-11-03): a card's この作業の前に戻す… restored the whole workspace to the snapshot before
+*Decided by the maintainer* (2026-11-03; names amended by "three verbs" and the refusal by "a revert queues" below): a card's この作業の前に戻す… restored the whole workspace to the snapshot before
 the run, throwing away every later run's work with it, while what people mean is "take back what this work did". The
-card now undoes the run's changes; the snapshot restore stays, as the facilitator's last resort in the collab menu.
+card now reverts the run's changes; the snapshot restore stays, as the facilitator's last resort in the collab menu.
 This amends S7 (restore), "changes in the model's words" and "revisions are not confirmed".
 
-- **On the card, undo; mechanically first, the AI otherwise.** ⋯ → この作業を取り消す… (asked first) is offered on a card
-  whose latest run changed files (`undoableChanges`: an ended run whose base and result revisions differ, a run failed
-  by the rule and a mechanical undo included) and is not undone nor being undone (`undoStatus`). The facilitator's
-  message 「〈作業名〉の変更を取り消す」 (the page writes it) is sent as an **undo request** either way, so everyone sees
-  what is undone. The run's changes are its base and result revisions, file by file; they are reversed onto the
-  workspace as it is now (`domain/undo.ts`, pure): a file still as the run left it gets its base back (a file the run
+- **On the card, revert; mechanically first, the AI otherwise.** ⋯ → この作業を打ち消す… (asked first) is offered on a card
+  whose latest run changed files (`revertableChanges`: an ended run whose base and result revisions differ, a run failed
+  by the rule and a mechanical revert included) and is not reverted nor being reverted (`revertStatus`). The facilitator's
+  message 「〈作業名〉の変更を打ち消す」 (the page writes it) is sent as a **revert request** either way, so everyone sees
+  what is reverted. The run's changes are its base and result revisions, file by file; they are reversed onto the
+  workspace as it is now (`domain/revert.ts`, pure): a file still as the run left it gets its base back (a file the run
   added is removed, one it removed comes back), a file already as before is left, and a file changed since gets the
   reverse merged line by line — a diff3 of the current text and the base from the run's result as ancestor, conflicting
   where both changed the same or touching lines (as `git revert` does). A file the run added and someone changed, a file
   the run changed and someone removed, or a file past the diff's bounds is a conflict too. Without conflict the result
   is checked as a run is (no `.dt` error the workspace does not have now, every `.dtes` parses), formatted as `dt fmt`
   formats (a `SourceFormatter` port, the printers of `dt fmt`), written behind the watcher hold and recorded as **one
-  unit of work**: a run in a new state, `Reverted` (機械的な取り消し), bundling the undo request, with its own base and
+  unit of work**: a run in a new state, `Reverted` (打ち消し), bundling the revert request, with its own base and
   result revisions (RunBase, RunResult), attributed to the facilitator, no agent involved. The chat shows it as the card
-  取り消し with its changes. Otherwise (conflict, the check, the sources no longer stored) the undo request is queued as
+  打ち消し with its changes. Otherwise (conflict, the check, the sources no longer stored) the revert request is queued as
   a run for the AI, through the normal queue, cancellable, with the usual success rule; the answer says which way and
-  why (`UndoObstacle`: `conflict` with the paths, `check`, `unreadable`). `NothingToUndo` when the workspace has none of
-  the run's changes any more.
-- **Only the facilitator** (`FacilitatorOnly` from the commands `requestUndo` and `revert`, checked before the
-  workspace is read). Refused while a run is running or claimed (`RunInProgress`): the merge reads the workspace.
-- **Model** (`.dt`, generated code and contract tests regenerated). `Request.undoes?: AgentRunId` (references the run),
-  set only by `create command requestUndo(…, authorRole, …, undoes: UndoableRun)` (`facilitatorUndoes`); the verified
-  `UndoableRun` refuses a run without changes, one undone or being undone (`RunNotUndoable`), and runs of another
-  session. `RequestSent.undoes?` and `FrozenRequest.undoes?`. `AgentRun` gets the state `Reverted { baseRevision,
-  resultRevision, finishedAt }` (invariants: it changes the workspace, it bundles undo requests only) and `create command
-  revert` (facilitator, the requests covered by the input, `inputUndoes`, `revertChanges`) emitting `RunReverted`. A
-  run's undo status is derived, not stored: undone by a `Reverted` run or a `Completed` run whose requests undo it —
-  unless that undo was itself undone —, pending while such a run is queued, running or asks, none otherwise (a failed,
-  declined or cancelled undo may be asked again).
-- **Assumptions of an undone run** are closed as 取り消し済み: `assumptionStatus` and `markTargetStatus` read the undo
+  why (`RevertObstacle`: `conflict` with the paths, `check`, `unreadable`). A workspace with none of the run's changes any more was refused (`NothingToRevert`; *amended*: completed as nothing
+  to revert, below).
+- **Only the facilitator** (`FacilitatorOnly` from the commands `requestRevert` and `revert`, checked before the
+  workspace is read). Refused while a run is running or claimed (`RunInProgress`): the merge reads the workspace (*amended*: queued
+  instead, below).
+- **Model** (`.dt`, generated code and contract tests regenerated). `Request.reverts?: AgentRunId` (references the run),
+  set only by `create command requestRevert(…, authorRole, …, reverts: RevertableRun)` (`facilitatorReverts`); the verified
+  `RevertableRun` refuses a run without changes, one reverted or being reverted (`RunNotRevertable`), and runs of another
+  session. `RequestSent.reverts?` and `FrozenRequest.reverts?`. `AgentRun` gets the state `Reverted { baseRevision,
+  resultRevision, finishedAt }` (invariants: it changes the workspace, it bundles revert requests only) and `create command
+  revert` (*amended*: a transition from `Queued`, below) (facilitator, the requests covered by the input, `inputReverts`, `revertChanges`) emitting `RunReverted`. A
+  run's revert status is derived, not stored: reverted by a `Reverted` run or a `Completed` run whose requests revert it —
+  unless that revert was itself reverted —, pending while such a run is queued, running or asks, none otherwise (a failed,
+  declined or cancelled revert may be asked again).
+- **Assumptions of a reverted run** are closed as 打ち消し済み: `assumptionStatus` and `markTargetStatus` read the revert
   status (`AssumptionClosed`, votes `MarkTargetClosed`), and the page shows them muted and struck through, without
-  承認待ち or 承認, with `取り消し済み name · time` (the time a link to the undo). An assumption approved or picked before
-  stays what it was. The undone run's card says 取り消し済み too.
-- **Agent protocol.** The subscriber claims with `capabilities: AGENT_CAPABILITIES` (`['undo']`); the server never hands
-  an undo to a claim that does not name `undo` (`SubscriberOutdated`, 409, the run stays queued and the old subscriber
-  logs the refusal), so an older subscriber fails clearly instead of running the undo as a plain request. A newer
+  承認待ち or 承認, with `打ち消し済み name · time` (the time a link to the revert). An assumption approved or picked before
+  stays what it was. The reverted run's card says 打ち消し済み too.
+- **Agent protocol.** The subscriber claims with `capabilities: AGENT_CAPABILITIES` (`['revert']`); the server never hands
+  a revert to a claim that does not name `revert` (`SubscriberOutdated`, 409, the run stays queued and the old subscriber
+  logs the refusal), so an older subscriber fails clearly instead of running the revert as a plain request. A newer
   subscriber against a server before this amendment is refused for the unknown field (400). `POST /agent/runs/:id/start`
-  answers `undo: [{ run, changes }]` (`undoneRuns`): each run undone, with each file's unified diff while they fit
-  `MAX_UNDO_DIFF` (64 KiB) and the line counts past it. The subscriber fails a run whose undo has no changes given. The
-  prompt numbers them in `undo` (requests, reply then, changes per file), marks the request `undoesRun: n`, and rule 10
-  says to undo only those changes in the current files, keep every later change, restore no whole file, and say in the
-  request's note what could not be undone and why.
-- **API.** `POST /api/session/runs/:id/undo { body }` (the facilitator) → 201 `UndoneBody` (`way: 'mechanical'` with the
-  request and the `Reverted` run, or `way: 'agent'` with the queued run and the obstacle). Every page gets
+  answers `revert: [{ run, changes }]` (`revertedRuns`): each run reverted, with each file's unified diff while they fit
+  `MAX_REVERT_DIFF` (64 KiB) and the line counts past it. The subscriber fails a run whose revert has no changes given. The
+  prompt numbers them in `revert` (requests, reply then, changes per file), marks the request `revertsRun: n`, and rule 10
+  says to revert only those changes in the current files, keep every later change, restore no whole file, and say in the
+  request's note what could not be reverted and why.
+- **API.** `POST /api/session/runs/:id/revert { body }` (the facilitator) → 201 (`way: 'mechanical'` with the
+  request and the `Reverted` run, or `way: 'agent'` with the queued run and the obstacle; *amended*: `{ request, run,
+  ahead }`, below). Every page gets
   `request.sent`, the revisions and `run.reverted` (or `run.queued`).
-- **Restore stays, in the collab menu.** 以前の状態に戻す… (the facilitator's, next to いまの状態を記録) lists the earlier
+- **Restore stays, in the collab menu.** 以前の状態に復元… (the facilitator's, next to いまの状態を記録) lists the earlier
   states, newest first, by what they were (the collab's start, before or after a unit of work, a manual record, before
   or after a restore; those with the latest's sources left out) and goes through the existing restore flow (the
   confirmation, external changes recorded first, a running run cancelled or waited for, manual recovery).
-- **Persistence.** Migration 10 adds `requests.undoes` (a foreign key to `agent_runs`, indexed when set): the database
-  refuses an undo of a run it does not hold. Rows written before undo nothing; a `Reverted` run is a row of
-  `agent_runs` like the others (never claimed: it is not `Queued`).
+- **Persistence.** Migration 10 adds `requests.reverts` (a foreign key to `agent_runs`, indexed when set): the database
+  refuses a revert of a run it does not hold. Rows written before have none (NULL); a `Reverted` run is a row of
+  `agent_runs` like the others.
 - **Limits.** The merge is line-based: changes on adjacent lines conflict even when they would combine (then the AI
-  does it). The formatter formats the files the undo writes, as `dt fmt` formats a run's edits, so a hand-made layout in
+  does it). The formatter formats the files the revert writes, as `dt fmt` formats a run's edits, so a hand-made layout in
   those files is normalized. A write that fails midway is not recovered as a restore's is (the watcher then sees the
   sources as external changes).
+
+## Appendix: three verbs, and a revert queues like any other change (amendment)
+
+*Decided by the maintainer* (2026-11-03), amending "revert a run" above (whose names are given here as they are now;
+it was written with "undo", a name that never shipped).
+
+- **Three concepts, three verbs**, in both languages, in the UI, the prompt, the docs and the code where cheap:
+  **stop** a queued or running run — 「実行を中止」 / Stop the run, state 中止 / Stopped (the domain keeps `cancel`,
+  `Cancelled`); **revert** a finished run — a new change that counteracts it, history and later changes kept —
+  「この作業を打ち消す…」 / Revert this work…, the card 打ち消し / Revert, the reverted run's card and assumptions
+  「打ち消し済み 〈誰〉 · 〈時刻〉」 / Reverted; **restore** the whole workspace to a snapshot — 「以前の状態に復元…」 /
+  Restore an earlier state…, the entries named without nested quotes (コラボの開始時, 〈作業名〉の前, 〈作業名〉の後,
+  〈作業名〉の打ち消しの前・の後, 復元の前・の後). The page writes the revert request 「〈作業名〉の変更を打ち消す」. Renamed
+  (unreleased): `Request.reverts`, `requestRevert`, `RevertableRun`, `RunNotRevertable`, `domain/revert.ts`
+  (`revertableChanges`, `revertStatus`, `isRevert`), `POST /api/session/runs/:id/revert`, the agent capability `revert`
+  and the start's `revert: [{ run, changes }]`, `MAX_REVERT_DIFF`, and migration 10's column `requests.reverts`.
+- **A revert queues.** `requestRevert` (the facilitator's) sends the revert request and queues its run behind the
+  other work through the normal queue — never refused because a run is running; stoppable (実行を中止) while it waits.
+  A second revert of the same run is refused while one is queued or under way (`RunNotRevertable`).
+- **The server takes its turn.** When a revert reaches the head of the queue, the server — not an agent — tries the
+  mechanical revert of "revert a run" against the workspace as it is then (`revertNext`): merge, check, format, write
+  behind the watcher hold, and record. It needs no agent, so a clean revert completes with none connected. The run
+  goes `Queued -> Reverted` (`command revert(baseRevision, resultRevision, changed, finishedAt)`, `inputReverts`,
+  `changedMatchesResult`; `RunReverted { runId, baseRevision, resultRevision, changed, finishedAt }`), replacing the
+  former `create command revert`. When none of the reverted run's changes is left by then, it completes as nothing to
+  revert (`changed: false`, the result revision is the base, nothing written; the card says so) rather than being
+  refused: `NothingToRevert` is gone. Otherwise — a conflict, the check, the sources no longer stored — the run stays
+  queued for the agent with why: `command leaveToAgent(obstacle: RevertObstacle) Queued -> Queued changes
+  revertObstacle`, emitting `RevertLeftToAgent { runId, obstacle }`; `Queued { revertObstacle: RevertObstacle? }` with
+  the union `RevertObstacle` (`Conflict { paths }`, `Check { newDtErrors, unparsedDtes }`, `Unreadable`).
+- **No race with an agent's claim** (the choice). The server claims the head with **its own lease** (owner `dt-server`,
+  the agent's lease length) through the same atomic claim of the queue's head as an agent (`RunQueue.claimNext`), in a
+  transaction that also checks that the head is a revert it has not tried (`awaitsServer`: queued, a revert, no
+  obstacle) and releases it at once otherwise. An agent's claim does the reverse: an untried revert at the head is
+  released in the same transaction and the agent is answered `RunInProgress` — so an agent never gets a revert before
+  the server tried it, and the server never takes one twice (once tried, it carries its obstacle). While the server
+  holds its lease the session has a live lease, so agents' claims and restores wait, as for any run. Writing and
+  recording are one transaction that first checks the lease is still the server's: a revert stopped meanwhile (the stop
+  ends its lease) writes nothing (`LeaseLost`). A refused write (the workspace changed meanwhile) releases the lease and
+  keeps the revert untried, for the next try; an exception does too. Chosen over a separate "tried" flag that agents
+  would skip past, which would let an agent run the work queued behind the revert first and break the queue's order.
+- **When the server tries.** After every event of the session (a run queued, ended, stopped; the relay's pump), on the
+  lease ticker (every 5 s, after expiring leases: a refused try, or a lease of a server that stopped mid-try, is retried)
+  and at startup; one pass at a time, each taking reverts at the head until the head is not one. An agent whose claim
+  met an untried revert nudges it too. The agent's stream gets `run.reverted` and `run.revert_left_to_agent`, after
+  which the subscriber claims again (as after `run.queued`): a run behind a mechanical revert, or the revert left to it.
+- **API and page.** `POST /api/session/runs/:id/revert { body }` → 201 `{ request, run, ahead }`: the run as it is once
+  the server had its turn — `Reverted` when the queue was empty and it went through at once, `Queued` with its
+  `revertObstacle` when it was left to the AI, `Queued` while it waits behind `ahead` runs. The page's revert box
+  follows the run live (queued and how many ahead, reverted, nothing to revert, left to the AI and why, with the AI,
+  stopped); the "run in progress" refusal is gone. A queued revert's card says why it waits for the AI. Telling that no
+  agent is connected (「AI 接続なし（n 件待ち）」) is a later amendment.
+- **Persistence.** None new: the obstacle is in the run's JSON (older rows have none), and `RevertLeftToAgent` is an
+  outbox event like the others.
