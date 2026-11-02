@@ -1931,6 +1931,18 @@ select,
     place-items: center;
     color: var(--brand-ink);
 }
+/* the logo (assets/brand: indigo on light, light indigo on dark, the amber dot in both), 24px tall in its 144:128
+   proportion, centred in the activity bar's cell; only the one for the page's theme shows */
+.brand-logo {
+    display: block;
+    height: 24px;
+    width: auto;
+    aspect-ratio: 144 / 128;
+}
+:root:not([data-theme='dark']) .brand-logo-dark,
+:root[data-theme='dark'] .brand-logo-light {
+    display: none;
+}
 .brand-text {
     min-width: 0;
     display: flex;

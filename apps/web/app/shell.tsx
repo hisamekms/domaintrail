@@ -1,5 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { Diff, Ellipsis, FolderTree, PanelBottomOpen, PanelRightOpen, TriangleAlert, Waypoints, type LucideIcon } from 'lucide-react';
+import { Diff, Ellipsis, FolderTree, PanelBottomOpen, PanelRightOpen, TriangleAlert, type LucideIcon } from 'lucide-react';
+// the approved logo (assets/brand, never redrawn), bundled into dist/web with a hashed name: one per theme
+import logoDark from '../../../assets/brand/logo-dark.svg';
+import logoLight from '../../../assets/brand/logo-light.svg';
 import { useT } from '../i18n';
 import { Resizer, useDismiss } from '../shared/layout';
 import { usePaneMotion } from '../shared/motion';
@@ -86,8 +89,11 @@ export function AppShell(props: {
         <div className={`app motion-${motion}`}>
             <div className={`left${leftOpen ? ' open' : ''}`} style={{ width: leftWidth }}>
                 <div className="left-head">
-                    <span className="brand-mark" aria-hidden>
-                        <Waypoints size={20} />
+                    {/* the logo for the theme (the other hidden by CSS); open, the text beside it names it, so the image is
+                        decorative; collapsed, the text is inert and the image names the brand */}
+                    <span className="brand-mark">
+                        <img className="brand-logo brand-logo-light" src={logoLight} alt={leftOpen ? '' : 'DomainTrail'} />
+                        <img className="brand-logo brand-logo-dark" src={logoDark} alt={leftOpen ? '' : 'DomainTrail'} />
                     </span>
                     <span className="brand-text" inert={!leftOpen}>
                         <span className="brand">DomainTrail</span>
