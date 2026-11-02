@@ -1431,6 +1431,12 @@ select,
     background: var(--accent);
     color: var(--on-action);
 }
+/* the keyboard focus inside a segmented control, whose overflow clips the page's outer ring: drawn inside the button,
+   with a gap of the surface so that it also reads on the selected (filled) one */
+.segmented button:focus-visible {
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--surface);
+}
 
 .doc {
     margin: 6px 0;
