@@ -685,8 +685,9 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const approved = decision.kind === 'approved';
                 const picked = decision.kind === 'picked' ? decision.alternative : undefined;
                 const keptVote = votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />;
-                // not decided yet: 承認待ち at the start of its row (a human decision, apart from the run's state)
-                const awaiting = decision.kind === 'open' && (
+                // not decided yet: 承認待ち at the start of its row (a human decision, apart from the run's state), for
+                // those who cannot decide it; the facilitator sees the 承認 button there instead
+                const awaiting = decision.kind === 'open' && !deciding && (
                     <span className="reply-awaiting">
                         <Hourglass size={12} aria-hidden />
                         {r.awaitingApproval}
@@ -707,7 +708,6 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                                 {text}
                                 <div className="reply-row-actions">
                                     <span className="reply-row-start">
-                                        {awaiting}
                                         <button type="button" className="chat-small ghost" disabled={actions.busy} onClick={() => void actions.approve(run, i)}>
                                             <Check size={12} aria-hidden /> {tx.chat.approve}
                                         </button>

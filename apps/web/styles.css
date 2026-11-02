@@ -6005,8 +6005,8 @@ button.add-to-request.added:hover {
 .reply-section.assumed > .reply-section-label {
     color: var(--text-secondary);
 }
-/* an assumption not yet decided: a small warning badge (承認待ち) at the start of its row; deciding it is 承認 or
-   送り直す */
+/* an assumption not yet decided: a small warning badge (承認待ち) at the start of its row, for those who cannot decide
+   it (the facilitator sees 承認 and 送り直す there instead) */
 .reply-awaiting {
     display: inline-flex;
     align-items: center;
