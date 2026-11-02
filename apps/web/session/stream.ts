@@ -105,7 +105,6 @@ export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
-    | { readonly kind: 'confirmed'; readonly key: string; readonly at: string; readonly revision: number; readonly by: string }
     | {
           readonly kind: 'restored';
           readonly key: string;
@@ -176,8 +175,7 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
 
 /**
  * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the facilitator
- * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions confirmed
- * or restored.
+ * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions restored.
  */
 export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
@@ -191,7 +189,6 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' |
             const work = byId.get(from)?.origin.kind !== 'PreRestore';
             items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
         }
-        if (r.state === 'Confirmed') items.push({ kind: 'confirmed', key: `confirmed:${r.id}`, at: r.confirmedAt, revision, by: r.confirmedBy });
     }
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });

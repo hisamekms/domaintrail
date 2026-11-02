@@ -444,7 +444,6 @@ const ja = {
             Manual: '手動',
             Restored: '復元',
         } as Record<RevisionOriginKind, string>,
-        confirmed: '確認済み',
         staleValidation: '検証が古い',
         latest: '最新',
         originDetails: {
@@ -462,8 +461,6 @@ const ja = {
         chooseTwo: '比較するリビジョンを2つ選んでください',
         compare: (a: string, b: string) => `#${a} と #${b} を比較`,
         takeRevision: 'いまの状態を記録',
-        confirm: '確認済みにする',
-        confirmHint: '確認は印です。ほかの操作を止めません',
         restore: '復元…',
         // the chat's collab menu, the end and its summary (apps/web/session/collab-menu.tsx)
         collab: {
@@ -481,7 +478,6 @@ const ja = {
                 queued: (n: number) => `実行待ち ${n} 件`,
                 running: (n: number) => `実行中 ${n} 件`,
                 clarification: (n: number) => `確認待ち ${n} 件`,
-                unconfirmed: (n: number) => `確認済みにしていない結果 ${n} 件`,
             },
             nothingUnfinished: '終わっていないものはありません。',
             endConfirm: '終える',
@@ -564,7 +560,6 @@ const ja = {
             cardUpdated: (name: string) => (name ? `「${name}」が更新されました` : 'AI のカードが更新されました'),
             latest: (count: number, forMe: number) => (forMe > 0 ? `最新へ（あなた宛て ${forMe} 件）` : count > 0 ? `最新へ（新着 ${count} 件）` : '最新へ'),
             cardMenu: 'カードのメニュー',
-            confirmResult: 'この作業の結果を確認済みにする',
             restoreBefore: 'この作業の前に戻す…',
             showChanges: '変更を見る',
             // the revisions behind a card's menu and the stream's notices: in tooltips only
@@ -717,7 +712,6 @@ const ja = {
                 multiple: '複数選べます',
                 filesUnchangedNote: (files: number) => `（${files} ファイル変更）`,
             },
-            confirmed: (name: string) => `${name} がこの作業の結果を確認済みにしました`,
             restored: (work: boolean): string => (work ? '作業の前に戻しました' : '以前の状態に戻しました'),
             restoredHint: (from: number | undefined, n: number) => `リビジョン #${from ?? '?'} を復元（#${n}）`,
             showMore: '続きを表示',
@@ -1164,7 +1158,6 @@ const en: Messages = {
             Manual: 'Manual',
             Restored: 'Restored',
         },
-        confirmed: 'Confirmed',
         staleValidation: 'validation out of date',
         latest: 'latest',
         originDetails: {
@@ -1182,8 +1175,6 @@ const en: Messages = {
         chooseTwo: 'Choose two revisions to compare',
         compare: (a, b) => `Compare #${a} and #${b}`,
         takeRevision: 'Record the current state',
-        confirm: 'Mark as confirmed',
-        confirmHint: 'A mark only: it blocks nothing',
         restore: 'Restore…',
         collab: {
             menu: 'The collab menu',
@@ -1200,7 +1191,6 @@ const en: Messages = {
                 queued: (n) => `${n} queued`,
                 running: (n) => `${n} running`,
                 clarification: (n) => `${n} waiting for an answer`,
-                unconfirmed: (n) => `${n} results not confirmed`,
             },
             nothingUnfinished: 'Nothing is left unfinished.',
             endConfirm: 'End',
@@ -1282,7 +1272,6 @@ const en: Messages = {
             cardUpdated: (name) => (name ? `"${name}" was updated` : 'An AI card was updated'),
             latest: (count, forMe) => (forMe > 0 ? `Jump to latest (${forMe} for you)` : count > 0 ? `Jump to latest (${count} new)` : 'Jump to latest'),
             cardMenu: "The card's menu",
-            confirmResult: "Mark this work's result as confirmed",
             restoreBefore: 'Restore as before this work…',
             showChanges: 'See the changes',
             revisionHint: (n) => `Revision #${n}`,
@@ -1433,7 +1422,6 @@ const en: Messages = {
                 multiple: 'Several may be chosen',
                 filesUnchangedNote: (files) => ` (${files} ${files === 1 ? 'file' : 'files'} changed)`,
             },
-            confirmed: (name) => `${name} marked this work's result as confirmed`,
             restored: (work) => (work ? 'Restored as before the work' : 'Restored an earlier state'),
             restoredHint: (from, n) => `Revision #${from ?? '?'} restored (#${n})`,
             showMore: 'Show more',

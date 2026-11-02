@@ -225,19 +225,6 @@ export const revisionCommands: Collaboration.RevisionCommands = {
             },
         });
     }),
-
-    confirm: decide<Collaboration.ConfirmRevisionDecision>(Collaboration.RevisionShape, {
-        Recorded: (revision, params) => {
-            if (Collaboration.checkConfirmRevisionRequires(revision, params) === 'facilitatorConfirms') return err({ type: 'FacilitatorOnly' });
-            const { confirmedBy, confirmedAt } = params;
-            return ok({
-                Confirmed: {
-                    set: { confirmedBy, confirmedAt },
-                    events: { RevisionConfirmed: { type: 'RevisionConfirmed', revisionId: revision.id, confirmedBy, confirmedAt } },
-                },
-            });
-        },
-    }),
 };
 
 /** The declared invariants of the aggregates, as the contract tests and the stores check them. */

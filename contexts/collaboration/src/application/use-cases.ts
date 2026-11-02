@@ -408,11 +408,6 @@ export interface CollaborationUseCases {
         readonly session: SessionId;
         readonly actor: Actor;
     }): Promise<Result<Collaboration.RecordedRevision, NotFound | Collaboration.FacilitatorOnly | Collaboration.PathOutsideRoot>>;
-    /** Marks a recorded revision confirmed: the facilitator's. */
-    confirmRevision(input: {
-        readonly revision: RevisionId;
-        readonly actor: Actor;
-    }): Promise<Result<Collaboration.ConfirmedRevision, NotFound | NotAllowed | Collaboration.FacilitatorOnly>>;
     /**
      * Writes a past revision back: refused while a run is running or claimed, or when the workspace has a symbolic
      * link, a path outside the root, or changes since the session's last revision — unless `recordExternalChanges`,
@@ -1052,21 +1047,6 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             const captured = await capture(deps);
             if (!captured.ok) return captured;
             return uow.transaction((stores) => ok(record(stores, session, { kind: 'Manual', takenBy: actor.participant }, captured.value, clock.now())));
-        },
-
-        async confirmRevision({ revision, actor }) {
-            return uow.transaction((stores) => {
-                const found = stores.revisions.load(revision);
-                if (!found) return err(notFound('Revision', revision));
-                if (found.state !== 'Recorded') return err(notAllowed('confirm', found.state));
-                const at = clock.now();
-                const confirmed = revisionCommands.confirm(found, { confirmedBy: actor.participant, confirmedByRole: actor.role, confirmedAt: at });
-                if (!confirmed.ok) return confirmed;
-                const { Confirmed } = confirmed.value;
-                stores.revisions.save(Confirmed.aggregate);
-                publish(stores, found.session, Confirmed.events, at);
-                return ok(Confirmed.aggregate);
-            });
         },
 
         async restoreRevision({ session, revision, actor, recordExternalChanges }) {

@@ -218,7 +218,7 @@ function EndDialog(props: { session: SessionData; units: readonly ChangeUnit[]; 
             setBusy(false);
         }
     };
-    const lines = (['queued', 'running', 'clarification', 'unconfirmed'] as const).filter((k) => unfinished[k] > 0);
+    const lines = (['queued', 'running', 'clarification'] as const).filter((k) => unfinished[k] > 0);
     return (
         <dialog
             ref={dialog}

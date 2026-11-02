@@ -105,7 +105,6 @@ export const EVENT_MESSAGE_TYPES = {
     RunCancelled: 'run.cancelled',
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
-    RevisionConfirmed: 'revision.confirmed',
     MarkPlaced: 'mark.placed',
     MarkRemoved: 'mark.removed',
     AssumptionApproved: 'assumption.approved',

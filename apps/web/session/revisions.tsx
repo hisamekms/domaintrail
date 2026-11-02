@@ -1,9 +1,8 @@
 // The revisions as the chat's menus reach them (ADR 0026, S7 and the amendments "messages and apply" and "changes in the
 // model's words"): what a unit of work changed, in a dialog — the model's elements added, changed and removed, then,
 // folded, the comparison of its two revisions (each changed file's status and line diff, `.dt` and `.dtes` together,
-// and the validations when either has a finding); and, for the facilitator, confirming (a mark, never a gate),
-// recording the current state and restoring, with the two-step for external changes and the way through a run in
-// progress. The words are the unit's: a revision
+// and the validations when either has a finding); and, for the facilitator, recording the current state and restoring,
+// with the two-step for external changes and the way through a run in progress. The words are the unit's: a revision
 // and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
@@ -46,14 +45,13 @@ export interface ChangesSubject {
     readonly about: string;
 }
 
-/** What the chat's menus do with revisions: compare two, confirm one, restore one (asked first), record the workspace. */
+/** What the chat's menus do with revisions: compare two, restore one (asked first), record the workspace. */
 export interface RevisionTools {
     /** The restore's box, while one is under way: placed in the chat. */
     readonly node: ReactNode;
     /** The changes' dialog, while one is open: placed outside the tabs, so that AI の作業 opens it too. */
     readonly dialog: ReactNode;
     showChanges(subject: ChangesSubject): void;
-    confirm(revision: string): void;
     restore(revision: string): void;
     take(): void;
     /** A revision's number in the session (`#3`), for tooltips. */
@@ -61,9 +59,8 @@ export interface RevisionTools {
 }
 
 /**
- * The facilitator's revision actions in the chat (ADR 0026, amendment): confirming (a mark, never a gate), recording
- * the current state and restoring, with the two-step for external changes and the way through a run in progress, and
- * the changes of a unit in a dialog. The server checks the role anyway.
+ * The facilitator's revision actions in the chat (ADR 0026, amendment): recording the current state and restoring,
+ * with the two-step for external changes and the way through a run in progress, and the changes of a unit in a dialog. The server checks the role anyway.
  */
 export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools {
     const entries = timeline(state);
@@ -130,7 +127,6 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
         node,
         dialog: showing && <ChangesDialog subject={showing} n={n} entries={entries} onClose={() => setShowing(undefined)} />,
         showChanges: setShowing,
-        confirm: (revision) => void act(() => sessionApi.confirmRevision(revision)),
         restore: (revision) => setFlow({ what: 'work', step: 'confirm', revision }),
         take: () => void act(() => sessionApi.takeRevision()),
         number: n,

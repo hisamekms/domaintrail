@@ -2,10 +2,10 @@
 // join form, the facilitator link) and the sign-in answer for a page without an identity. Every input is checked at
 // the boundary (`input.ts`); every error is typed JSON (`{ "error": { "type": … } }`). Participants read, send
 // requests, react to messages and AI turns and vote on a question's options or an assumption's choices; only the
-// facilitator queues and cancels runs, takes, confirms and restores revisions, hands the role over and closes the
-// session. Who may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its
-// commands refuse what the role does not allow; the role of each route below is a hint that answers first, with the
-// same status and body as the refusal of the domain.
+// facilitator queues and cancels runs, takes and restores revisions, hands the role over and closes the session. Who
+// may do what is the collaboration's (ADR 0027): each use case takes the `Actor` of the identity and its commands
+// refuse what the role does not allow; the role of each route below is a hint that answers first, with the same
+// status and body as the refusal of the domain.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
     type AnswerData,
@@ -481,18 +481,6 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             handle: async ({ req, res, auth }) => {
                 if (!(await input(req, res, []))) return;
                 await answer(res, await use.takeRevision({ session, actor: who(auth).actor }), 201, (revision) => ({ revision }));
-            },
-        },
-        {
-            method: 'POST',
-            path: /^\/api\/session\/revisions\/([^/]+)\/confirm$/,
-            role: 'facilitator',
-            handle: async ({ res, auth, params }) => {
-                const id = checked(res, uuid(params[0], 'id'));
-                if (!id) return;
-                const revision = (await state()).revisions.find((r) => r.id === id);
-                if (!revision) return fail(res, { type: 'NotFound', aggregate: 'Revision', id });
-                await answer(res, await use.confirmRevision({ revision: revision.id, actor: who(auth).actor }), 200, (r) => ({ revision: r }));
             },
         },
         {

@@ -215,6 +215,16 @@ export const MIGRATIONS: readonly string[] = [
     ) STRICT;
     CREATE INDEX approvals_by_session ON approvals(session_id, seq);
     `,
+    // ---------- no confirmed revisions ----------
+    // a revision is no longer confirmed (ADR 0026, amendment "Revisions are not confirmed"): a confirmed revision
+    // becomes the recorded one it was, without who confirmed it and when, and the outbox's RevisionConfirmed events go
+    `
+    UPDATE revisions
+       SET state = 'Recorded',
+           data = json_remove(json_set(data, '$.state', 'Recorded'), '$.confirmedBy', '$.confirmedAt')
+     WHERE state = 'Confirmed';
+    DELETE FROM outbox WHERE type = 'RevisionConfirmed';
+    `,
 ];
 
 /** The database was written by a newer DomainTrail: its schema is unknown here. */

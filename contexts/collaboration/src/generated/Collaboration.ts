@@ -3286,7 +3286,7 @@ export function equalRevisionOrigin(a: RevisionOrigin, b: RevisionOrigin): boole
  * Fields shared by every state of リビジョン (Revision).
  * @invariant distinctPaths (パスは1ファイル1回): unique(files, f => f.path)
  * @invariant hashOfFiles (内容ハッシュはファイルから決まる): not expressed in the DSL
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
 export interface RevisionCommon {
     /** リビジョンID */
@@ -3310,50 +3310,37 @@ export interface RevisionCommon {
 
 /**
  * 記録済み
- * @see contexts/collaboration/model/revision.dt:68
+ * @see contexts/collaboration/model/revision.dt:67
  */
 export interface RecordedRevision extends RevisionCommon {
     readonly state: 'Recorded';
 }
 
 /**
- * 確認済み
- * @see contexts/collaboration/model/revision.dt:69
- */
-export interface ConfirmedRevision extends RevisionCommon {
-    readonly state: 'Confirmed';
-    /** 確認した人 */
-    readonly confirmedBy: ParticipantId;
-    /** 確認日時 */
-    readonly confirmedAt: Timestamp;
-}
-
-/**
  * リビジョン
  * ワークスペースのすべてのソース（`.dt` と `.dtes`）の、ある時点のスナップショット。内容ハッシュで識別する。
- * 確認は印で、ほかの操作を止めない。
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
-export type Revision = RecordedRevision | ConfirmedRevision;
+export type Revision = RecordedRevision;
 
 /**
  * The fields of Revision as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
 export const RevisionShape: Shape = {
     fields: ['id', 'session', 'origin', 'contentHash', 'files', 'validation', 'takenAt'],
-    states: { Recorded: [], Confirmed: ['confirmedBy', 'confirmedAt'] },
+    states: { Recorded: [] },
 };
 
 /**
  * The invariants of Revision that the DSL does not express: implement them in your code and pass them to `checkRevisionWith`.
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
 export type RevisionDeclaredChecks = { readonly hashOfFiles: (revision: RevisionCommon) => boolean };
 
 /**
  * The invariants of Revision (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
 export function checkRevisionCommonWith(checks: RevisionDeclaredChecks): (revision: RevisionCommon) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
@@ -3366,7 +3353,7 @@ export function checkRevisionCommonWith(checks: RevisionDeclaredChecks): (revisi
 
 /**
  * The invariants of Revision in state Recorded (the aggregate's, by `checkRevisionCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/revision.dt:68
+ * @see contexts/collaboration/model/revision.dt:67
  */
 export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revision: RecordedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
@@ -3375,31 +3362,20 @@ export function checkRecordedRevisionWith(checks: RevisionDeclaredChecks): (revi
 }
 
 /**
- * The invariants of Revision in state Confirmed (the aggregate's, by `checkRevisionCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/revision.dt:69
- */
-export function checkConfirmedRevisionWith(checks: RevisionDeclaredChecks): (revision: ConfirmedRevision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
-    return (revision) => {
-        return checkRevisionCommonWith(checks)(revision);
-    };
-}
-
-/**
  * The invariants of Revision in the state it is in that an aggregate violates (see the check of each state).
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
 export function checkRevisionWith(checks: RevisionDeclaredChecks): (revision: Revision) => readonly ('distinctPaths' | 'hashOfFiles')[] {
     return (revision) => {
         switch (revision.state) {
             case 'Recorded': return checkRecordedRevisionWith(checks)(revision);
-            case 'Confirmed': return checkConfirmedRevisionWith(checks)(revision);
         }
     };
 }
 
 /**
  * The parameters of Revision.take, by name.
- * @see contexts/collaboration/model/revision.dt:74
+ * @see contexts/collaboration/model/revision.dt:69
  */
 export interface TakeRevisionParams {
     /** リビジョンID */
@@ -3423,7 +3399,7 @@ export interface TakeRevisionParams {
  * @requires notRestored (復元でない) else RestoreNeedsCheck: origin.kind != RevisionOrigin.Restored
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRecorded — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:74
+ * @see contexts/collaboration/model/revision.dt:69
  */
 export type TakeRevision = (
     params: TakeRevisionParams,
@@ -3441,7 +3417,7 @@ export type TakeRevision = (
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * new -> Recorded — set: every field
  * @emits RevisionRecorded — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:74
+ * @see contexts/collaboration/model/revision.dt:69
  */
 export type TakeRevisionDecision = (
     params: TakeRevisionParams,
@@ -3454,13 +3430,13 @@ export type TakeRevisionDecision = (
 
 /**
  * The requirements of Revision.take that the DSL does not express: implement them in your code and pass them to `checkTakeRevisionRequiresWith`.
- * @see contexts/collaboration/model/revision.dt:74
+ * @see contexts/collaboration/model/revision.dt:69
  */
 export type TakeRevisionDeclaredRequires = { readonly hashMatchesFiles: (params: TakeRevisionParams) => boolean };
 
 /**
  * The first requirement of Revision.take that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/revision.dt:74
+ * @see contexts/collaboration/model/revision.dt:69
  */
 export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequires): (params: TakeRevisionParams) => 'notRestored' | 'hashMatchesFiles' | undefined {
     return (params) => {
@@ -3472,7 +3448,7 @@ export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequir
 
 /**
  * The parameters of Revision.restore, by name.
- * @see contexts/collaboration/model/revision.dt:83
+ * @see contexts/collaboration/model/revision.dt:78
  */
 export interface RestoreRevisionParams {
     /** リビジョンID */
@@ -3502,7 +3478,7 @@ export interface RestoreRevisionParams {
  * @requires facilitatorRestores (ファシリテーターが復元する) else FacilitatorOnly: restoredByRole == ParticipantRole.Facilitator
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:83
+ * @see contexts/collaboration/model/revision.dt:78
  */
 export type RestoreRevision = (
     params: RestoreRevisionParams,
@@ -3520,7 +3496,7 @@ export type RestoreRevision = (
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * new -> Recorded — set: every field
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:83
+ * @see contexts/collaboration/model/revision.dt:78
  */
 export type RestoreRevisionDecision = (
     params: RestoreRevisionParams,
@@ -3533,13 +3509,13 @@ export type RestoreRevisionDecision = (
 
 /**
  * The requirements of Revision.restore that the DSL does not express: implement them in your code and pass them to `checkRestoreRevisionRequiresWith`.
- * @see contexts/collaboration/model/revision.dt:83
+ * @see contexts/collaboration/model/revision.dt:78
  */
 export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (params: RestoreRevisionParams) => boolean };
 
 /**
  * The first requirement of Revision.restore that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/revision.dt:83
+ * @see contexts/collaboration/model/revision.dt:78
  */
 export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (params: RestoreRevisionParams) => 'facilitatorRestores' | 'hashMatchesFiles' | undefined {
     return (params) => {
@@ -3550,87 +3526,27 @@ export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclared
 }
 
 /**
- * The parameters of Revision.confirm, by name.
- * @see contexts/collaboration/model/revision.dt:93
- */
-export interface ConfirmRevisionParams {
-    /** 参加者ID */
-    readonly confirmedBy: ParticipantId;
-    /** 役割 */
-    readonly confirmedByRole: ParticipantRole;
-    readonly confirmedAt: Timestamp;
-}
-
-/**
- * Revision.confirm (Recorded -> Confirmed)
- * リビジョンを確認済みにする
- * 確認済みにするのはファシリテーター。
- * @requires facilitatorConfirms (ファシリテーターが確認する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * @emits RevisionConfirmed — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:93
- */
-export type ConfirmRevision = (
-    revision: RecordedRevision,
-    params: ConfirmRevisionParams,
-) => Result<{
-    readonly Confirmed: {
-        readonly aggregate: ConfirmedRevision;
-        readonly events: { readonly RevisionConfirmed: RevisionConfirmed };
-    };
-}, FacilitatorOnly>;
-
-/**
- * Revision.confirm, decided per source state; implement it with `decide(RevisionShape, …)` from the runtime.
- * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires facilitatorConfirms (ファシリテーターが確認する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Recorded -> Confirmed — set: confirmedBy (new in Confirmed), confirmedAt (new in Confirmed); carried over: id, session, origin, contentHash, files, validation, takenAt
- * @see contexts/collaboration/model/revision.dt:93
- */
-export type ConfirmRevisionDecision = {
-    /** @emits RevisionConfirmed — exactly once when the command succeeds */
-    readonly Recorded: (revision: RecordedRevision, params: ConfirmRevisionParams) => Result<{
-        readonly Confirmed: {
-            readonly set: { readonly confirmedBy: ParticipantId; readonly confirmedAt: Timestamp };
-            readonly events: { readonly RevisionConfirmed: RevisionConfirmed };
-        };
-    }, FacilitatorOnly>;
-};
-
-/**
- * The first requirement of Revision.confirm that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/revision.dt:93
- */
-export function checkConfirmRevisionRequires(_revision: RecordedRevision, params: ConfirmRevisionParams): 'facilitatorConfirms' | undefined {
-    if (!(params.confirmedByRole === 'Facilitator')) return 'facilitatorConfirms';
-    return undefined;
-}
-
-/**
  * Command contracts of Revision. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
 export interface RevisionCommands {
     /** スナップショットを取る */
     readonly take: TakeRevision;
     /** リビジョンを復元する */
     readonly restore: RestoreRevision;
-    /** リビジョンを確認済みにする */
-    readonly confirm: ConfirmRevision;
 }
 
 /**
  * Events that the commands of Revision may emit.
- * @see contexts/collaboration/model/revision.dt:55
+ * @see contexts/collaboration/model/revision.dt:54
  */
-export type RevisionEvent = RevisionRecorded | RevisionRestored | RevisionConfirmed;
+export type RevisionEvent = RevisionRecorded | RevisionRestored;
 
 /**
  * リビジョン記録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/revision.dt:101
+ * @see contexts/collaboration/model/revision.dt:88
  */
 export interface RevisionRecorded {
     readonly type: 'RevisionRecorded';
@@ -3650,7 +3566,7 @@ export interface RevisionRecorded {
 /**
  * リビジョン復元
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/revision.dt:110
+ * @see contexts/collaboration/model/revision.dt:97
  */
 export interface RevisionRestored {
     readonly type: 'RevisionRestored';
@@ -3670,23 +3586,9 @@ export interface RevisionRestored {
 }
 
 /**
- * リビジョン確認
- * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/revision.dt:120
- */
-export interface RevisionConfirmed {
-    readonly type: 'RevisionConfirmed';
-    /** リビジョンID */
-    readonly revisionId: RevisionId;
-    /** 参加者ID */
-    readonly confirmedBy: ParticipantId;
-    readonly confirmedAt: Timestamp;
-}
-
-/**
  * リビジョンなし
  * 指定したリビジョンがない。
- * @see contexts/collaboration/model/revision.dt:127
+ * @see contexts/collaboration/model/revision.dt:108
  */
 export interface RevisionNotFound {
     readonly type: 'RevisionNotFound';
@@ -3697,7 +3599,7 @@ export interface RevisionNotFound {
 /**
  * 別のセッションのリビジョン
  * リビジョンは別のセッションのもの。
- * @see contexts/collaboration/model/revision.dt:132
+ * @see contexts/collaboration/model/revision.dt:113
  */
 export interface RevisionOfAnotherSession {
     readonly type: 'RevisionOfAnotherSession';
@@ -3708,7 +3610,7 @@ export interface RevisionOfAnotherSession {
 /**
  * シンボリックリンク
  * ワークスペースのソースのパスにシンボリックリンクがある。
- * @see contexts/collaboration/model/revision.dt:137
+ * @see contexts/collaboration/model/revision.dt:118
  */
 export interface SymlinkInWorkspace {
     readonly type: 'SymlinkInWorkspace';
@@ -3719,7 +3621,7 @@ export interface SymlinkInWorkspace {
 /**
  * ルートの外のパス
  * リビジョンのパスがワークスペースのルートの外を指す。
- * @see contexts/collaboration/model/revision.dt:142
+ * @see contexts/collaboration/model/revision.dt:123
  */
 export interface PathOutsideRoot {
     readonly type: 'PathOutsideRoot';
@@ -3729,7 +3631,7 @@ export interface PathOutsideRoot {
 /**
  * 外部での変更
  * 最後のスナップショットのあとで、ワークスペースのソースが外部で変わった。
- * @see contexts/collaboration/model/revision.dt:147
+ * @see contexts/collaboration/model/revision.dt:128
  */
 export interface ExternalChangesSinceSnapshot {
     readonly type: 'ExternalChangesSinceSnapshot';
@@ -3740,7 +3642,7 @@ export interface ExternalChangesSinceSnapshot {
 /**
  * 内容ハッシュの不一致
  * 内容ハッシュが、ファイルのパスと内容ハッシュから決まるものと合わない。
- * @see contexts/collaboration/model/revision.dt:152
+ * @see contexts/collaboration/model/revision.dt:133
  */
 export interface ContentHashMismatch {
     readonly type: 'ContentHashMismatch';
@@ -3749,7 +3651,7 @@ export interface ContentHashMismatch {
 /**
  * 復元は確認が必要
  * 復元の由来のリビジョンは、復元できると確かめてから restore で記録する。
- * @see contexts/collaboration/model/revision.dt:155
+ * @see contexts/collaboration/model/revision.dt:136
  */
 export interface RestoreNeedsCheck {
     readonly type: 'RestoreNeedsCheck';
@@ -4718,10 +4620,10 @@ export function checkTargetSnapshot(targetSnapshot: TargetSnapshot): readonly 'w
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */
-export type PersistentEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
+export type PersistentEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
+export type DomainEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Aggregates of Collaboration. */
 export type Aggregate = AgentRun | AssumptionApproval | Mark | Request | Revision | Session;

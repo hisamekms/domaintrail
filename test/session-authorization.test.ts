@@ -99,9 +99,8 @@ describe('the operations reserved to the facilitator', () => {
             ['runs/not-a-uuid/cancel', {}],
             ['revisions', {}],
             ['revisions', { extra: 1 }],
-            [`revisions/${revision}/confirm`, {}],
-            [`revisions/${UNKNOWN}/confirm`, {}],
             [`revisions/${revision}/restore`, {}],
+            [`revisions/${UNKNOWN}/restore`, {}],
             [`revisions/${revision}/restore`, { recordExternalChanges: 'yes' }],
             ['facilitator/link', {}],
             ['close', {}],
@@ -149,7 +148,7 @@ describe('the operations reserved to the facilitator', () => {
 
     test('the facilitator: what is unknown is 404, what the state refuses is 409, the rest succeeds', async () => {
         expect(await answer(await api(ada, `runs/${UNKNOWN}/cancel`, {}))).toEqual([404, { error: { type: 'NotFound', aggregate: 'AgentRun', id: UNKNOWN } }]);
-        expect(await answer(await api(ada, `revisions/${UNKNOWN}/confirm`, {}))).toEqual([
+        expect(await answer(await api(ada, `revisions/${UNKNOWN}/restore`, {}))).toEqual([
             404,
             { error: { type: 'NotFound', aggregate: 'Revision', id: UNKNOWN } },
         ]);
@@ -171,12 +170,6 @@ describe('the operations reserved to the facilitator', () => {
         expect(taken.status).toBe(201);
         const revision = ((await taken.json()) as { revision: { id: string; origin: { kind: string } } }).revision;
         expect(revision.origin.kind).toBe('Manual');
-        const confirmed = await api(ada, `revisions/${revision.id}/confirm`, {});
-        expect([confirmed.status, ((await confirmed.json()) as { revision: { state: string } }).revision.state]).toEqual([200, 'Confirmed']);
-        expect(await answer(await api(ada, `revisions/${revision.id}/confirm`, {}))).toEqual([
-            409,
-            { error: { type: 'NotAllowed', command: 'confirm', state: 'Confirmed' } },
-        ]);
         expect((await api(ada, `revisions/${revision.id}/restore`, {})).status).toBe(200);
         expect((await api(ada, 'facilitator/link', {})).status).toBe(201);
     });

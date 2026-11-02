@@ -89,7 +89,6 @@ export const sessionApi = {
     cancelRun: (id: string): Promise<unknown> => call(`runs/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
     /** Records the workspace as it is now (the facilitator). */
     takeRevision: (): Promise<unknown> => call('revisions', { method: 'POST', body: {} }),
-    confirmRevision: (id: string): Promise<unknown> => call(`revisions/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: {} }),
     /** Restores a revision (the facilitator); `recordExternalChanges` records the workspace's external changes first. */
     restoreRevision: (id: string, recordExternalChanges = false): Promise<RestoredBody> =>
         call(`revisions/${encodeURIComponent(id)}/restore`, { method: 'POST', body: recordExternalChanges ? { recordExternalChanges } : {} }),

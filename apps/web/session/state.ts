@@ -197,16 +197,6 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, approvals: [...approvals, approval] }, refetch: false };
         }
-        case 'RevisionConfirmed':
-            return {
-                state: {
-                    ...at,
-                    revisions: replaceById(state.revisions, e.revisionId, (r: RevisionJson) =>
-                        r.state === 'Recorded' ? { ...r, state: 'Confirmed', confirmedBy: e.confirmedBy, confirmedAt: e.confirmedAt } : r,
-                    ),
-                },
-                refetch: false,
-            };
     }
 }
 

@@ -1,6 +1,6 @@
 // Databases written by earlier versions, upgraded in place: before marks and emoji reactions (migration 4), before
-// replies (migration 5), before replies to messages (migration 7), before approvals (migration 8). The store itself:
-// sqlite.test.ts.
+// replies (migration 5), before replies to messages (migration 7), before approvals (migration 8), with confirmed
+// revisions (migration 9). The store itself: sqlite.test.ts.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
 import { makeEmoji, markKey, VOTE, type MarkTargetData } from '../domain/marks.js';
 import { createUnitOfWork, MIGRATIONS, openDatabase } from './sqlite.js';
-import { knownAgentRunId, knownMarkId, knownRequestId, knownSessionId } from '../domain/ids.js';
+import { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -198,7 +198,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(8);
+        expect(MIGRATIONS.length).toBe(9);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -415,6 +415,69 @@ describe('the approvals table (migration 8)', () => {
         const second = approval('00000000-0000-4000-8000-000000000007', 0);
         await uow.transaction((s) => s.approvals.save(second));
         expect(await uow.transaction((s) => s.approvals.listBySession(session8))).toEqual([first, second]);
+        db.close();
+    });
+});
+
+describe('no confirmed revisions (migration 9)', () => {
+    test('a database with a confirmed revision: it loads as the recorded one it was, and its RevisionConfirmed event is gone', async () => {
+        const dir = await workspace({});
+        const file = path.join(dir, 'session.db');
+        // the schema with confirmations (8 migrations): a recorded revision, a confirmed one and their events
+        const old = new DatabaseSync(file);
+        for (const m of MIGRATIONS.slice(0, 8)) old.exec(m);
+        old.exec('PRAGMA user_version = 8');
+        const sid = '00000000-0000-4000-8000-000000000001';
+        const recorded = '00000000-0000-4000-8000-000000000002';
+        const confirmed = '00000000-0000-4000-8000-000000000003';
+        const at = { $date: '2026-10-31T09:00:00.000Z' };
+        const who = 'local:facilitator';
+        const session = {
+            state: 'Open',
+            id: sid,
+            facilitator: who,
+            participants: [{ id: who, name: 'Facilitator', role: 'Facilitator', joinedAt: at }],
+            startedAt: at,
+        };
+        const validation = { dtErrors: 0, dtesErrors: 0, dtesWarnings: 0, linkWarnings: 0, stale: false };
+        const revision = (id: string) => ({
+            state: 'Recorded',
+            id,
+            session: sid,
+            origin: { kind: 'SessionStart', session: sid },
+            contentHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+            files: [],
+            validation,
+            takenAt: at,
+        });
+        const confirmedRow = { ...revision(confirmed), state: 'Confirmed', confirmedBy: who, confirmedAt: { $date: '2026-10-31T10:00:00.000Z' } };
+        old.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(sid, 'Open', JSON.stringify(session));
+        const insert = old.prepare('INSERT INTO revisions (id, session_id, seq, state, origin, content_hash, data) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        insert.run(recorded, sid, 1, 'Recorded', 'SessionStart', revision(recorded).contentHash, JSON.stringify(revision(recorded)));
+        insert.run(confirmed, sid, 2, 'Confirmed', 'SessionStart', confirmedRow.contentHash, JSON.stringify(confirmedRow));
+        const outbox = old.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)');
+        outbox.run(sid, 'RevisionRecorded', JSON.stringify({ type: 'RevisionRecorded', revisionId: recorded }), '2026-10-31T09:00:00.000Z');
+        outbox.run(
+            sid,
+            'RevisionConfirmed',
+            JSON.stringify({ type: 'RevisionConfirmed', revisionId: confirmed, confirmedBy: who, confirmedAt: at }),
+            '2026-10-31T10:00:00.000Z',
+        );
+        old.close();
+
+        const db = openDatabase(file);
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
+        expect(db.prepare('SELECT id, state FROM revisions ORDER BY seq').all()).toEqual([
+            { id: recorded, state: 'Recorded' },
+            { id: confirmed, state: 'Recorded' },
+        ]);
+        const uow = createUnitOfWork(db);
+        const read = await uow.transaction((s) => ({
+            revision: s.revisions.load(knownRevisionId(confirmed)),
+            events: s.outbox.readAfter(0, 10, knownSessionId(sid)),
+        }));
+        expect(read.revision).toEqual({ ...revision(confirmed), takenAt: new Date('2026-10-31T09:00:00.000Z') } as unknown as C.Revision);
+        expect(read.events.map((e) => e.event.type)).toEqual(['RevisionRecorded']);
         db.close();
     });
 });

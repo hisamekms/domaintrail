@@ -80,11 +80,9 @@ export interface Arbitraries {
     readonly ValidationSummary: fc.Arbitrary<Collaboration.ValidationSummary>;
     readonly RevisionOrigin: fc.Arbitrary<Collaboration.RevisionOrigin>;
     readonly RecordedRevision: fc.Arbitrary<Collaboration.RecordedRevision>;
-    readonly ConfirmedRevision: fc.Arbitrary<Collaboration.ConfirmedRevision>;
     readonly Revision: fc.Arbitrary<Collaboration.Revision>;
     readonly RevisionRecorded: fc.Arbitrary<Collaboration.RevisionRecorded>;
     readonly RevisionRestored: fc.Arbitrary<Collaboration.RevisionRestored>;
-    readonly RevisionConfirmed: fc.Arbitrary<Collaboration.RevisionConfirmed>;
     readonly SessionId: fc.Arbitrary<Collaboration.SessionId>;
     readonly ParticipantId: fc.Arbitrary<Collaboration.ParticipantId>;
     readonly DisplayName: fc.Arbitrary<Collaboration.DisplayName>;
@@ -136,8 +134,8 @@ export interface Examples {
         readonly commands?: { readonly send?: readonly Parameters<Collaboration.RequestCommands['send']>[] };
     };
     readonly Revision?: {
-        readonly states?: { readonly Recorded?: readonly Collaboration.RecordedRevision[]; readonly Confirmed?: readonly Collaboration.ConfirmedRevision[] };
-        readonly commands?: { readonly take?: readonly Parameters<Collaboration.RevisionCommands['take']>[]; readonly restore?: readonly Parameters<Collaboration.RevisionCommands['restore']>[]; readonly confirm?: readonly Parameters<Collaboration.RevisionCommands['confirm']>[] };
+        readonly states?: { readonly Recorded?: readonly Collaboration.RecordedRevision[] };
+        readonly commands?: { readonly take?: readonly Parameters<Collaboration.RevisionCommands['take']>[]; readonly restore?: readonly Parameters<Collaboration.RevisionCommands['restore']>[] };
     };
     readonly Session?: {
         readonly states?: { readonly Open?: readonly Collaboration.OpenSession[]; readonly Closed?: readonly Collaboration.ClosedSession[] };
@@ -246,11 +244,9 @@ export function arbitraries(options: Options = {}): Arbitraries {
         ValidationSummary: () => given.ValidationSummary ?? testing.cast<Collaboration.ValidationSummary>(fc.record({ dtErrors: a.Tally, dtesErrors: a.Tally, dtesWarnings: a.Tally, linkWarnings: a.Tally, stale: testing.cast<boolean>(scalar.Bool) })),
         RevisionOrigin: () => given.RevisionOrigin ?? testing.cast<Collaboration.RevisionOrigin>(fc.oneof(fc.record({ kind: fc.constant('SessionStart' as const), session: a.SessionId }), fc.record({ kind: fc.constant('RunBase' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('RunResult' as const), run: a.AgentRunId }), fc.record({ kind: fc.constant('PreRestore' as const), restoring: a.RevisionId }), fc.record({ kind: fc.constant('Manual' as const), takenBy: a.ParticipantId }), fc.record({ kind: fc.constant('Restored' as const), restoredFrom: a.RevisionId, preRestore: a.RevisionId }))),
         RecordedRevision: () => testing.withExamples(testing.valid(given.RecordedRevision ?? testing.cast<Collaboration.RecordedRevision>(fc.record({ state: fc.constant('Recorded' as const), id: a.RevisionId, session: a.SessionId, origin: a.RevisionOrigin, contentHash: a.ContentHash, files: testing.many(a.SnapshotFile, 0), validation: a.ValidationSummary, takenAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRecordedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision))(v).length === 0, 'Collaboration.RecordedRevision'), options.examples?.Revision?.states?.Recorded, Collaboration.checkRecordedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision)), 'Collaboration.RecordedRevision'),
-        ConfirmedRevision: () => testing.withExamples(testing.valid(given.ConfirmedRevision ?? testing.cast<Collaboration.ConfirmedRevision>(fc.record({ state: fc.constant('Confirmed' as const), id: a.RevisionId, session: a.SessionId, origin: a.RevisionOrigin, contentHash: a.ContentHash, files: testing.many(a.SnapshotFile, 0), validation: a.ValidationSummary, takenAt: testing.cast<Date>(scalar.Timestamp), confirmedBy: a.ParticipantId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkConfirmedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision))(v).length === 0, 'Collaboration.ConfirmedRevision'), options.examples?.Revision?.states?.Confirmed, Collaboration.checkConfirmedRevisionWith(testing.declared<Collaboration.RevisionDeclaredChecks>(['hashOfFiles'], declared.Revision)), 'Collaboration.ConfirmedRevision'),
-        Revision: () => given.Revision ?? fc.oneof(a.RecordedRevision, a.ConfirmedRevision),
+        Revision: () => given.Revision ?? fc.oneof(a.RecordedRevision),
         RevisionRecorded: () => given.RevisionRecorded ?? testing.cast<Collaboration.RevisionRecorded>(fc.record({ type: fc.constant('RevisionRecorded' as const), revisionId: a.RevisionId, session: a.SessionId, origin: a.RevisionOrigin, contentHash: a.ContentHash, validation: a.ValidationSummary, takenAt: testing.cast<Date>(scalar.Timestamp) })),
         RevisionRestored: () => given.RevisionRestored ?? testing.cast<Collaboration.RevisionRestored>(fc.record({ type: fc.constant('RevisionRestored' as const), revisionId: a.RevisionId, session: a.SessionId, restoredFrom: a.RevisionId, preRestore: a.RevisionId, contentHash: a.ContentHash, validation: a.ValidationSummary, takenAt: testing.cast<Date>(scalar.Timestamp) })),
-        RevisionConfirmed: () => given.RevisionConfirmed ?? testing.cast<Collaboration.RevisionConfirmed>(fc.record({ type: fc.constant('RevisionConfirmed' as const), revisionId: a.RevisionId, confirmedBy: a.ParticipantId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
         SessionId: () => testing.valid(given.SessionId ?? testing.collide(testing.cast<Collaboration.SessionId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkSessionId(v).length === 0, 'Collaboration.SessionId'),
         ParticipantId: () => testing.valid(given.ParticipantId ?? testing.collide(testing.cast<Collaboration.ParticipantId>(testing.base('String', { minLength: 1 })), seed), (v) => Collaboration.checkParticipantId(v).length === 0, 'Collaboration.ParticipantId'),
         DisplayName: () => testing.valid(given.DisplayName ?? testing.collide(testing.cast<Collaboration.DisplayName>(testing.base('String', { minLength: 1, maxLength: 200 })), seed), (v) => Collaboration.checkDisplayName(v).length === 0, 'Collaboration.DisplayName'),
@@ -682,21 +678,6 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declaredRequires: ['hashMatchesFiles'],
                 firstFailing: Collaboration.checkRestoreRevisionRequiresWith,
                 givenRequires: declared.RestoreRevision,
-                invariants: Collaboration.checkRevisionWith,
-                declaredInvariants: ['hashOfFiles'],
-                givenInvariants: declared.Revision,
-                stateful: true,
-                counted: [],
-            }, options),
-            ...testing.commandCases({
-                name: 'Revision.confirm',
-                run: impl.Revision.confirm,
-                input: () => fc.tuple(fc.oneof(a.RecordedRevision), fc.record({ confirmedBy: a.ParticipantId, confirmedByRole: a.ParticipantRole, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
-                examples: options.examples?.Revision?.commands?.confirm ?? [],
-                factory: false,
-                requires: [{ name: 'facilitatorConfirms', error: 'FacilitatorOnly' }],
-                declaredRequires: [],
-                firstFailing: () => Collaboration.checkConfirmRevisionRequires,
                 invariants: Collaboration.checkRevisionWith,
                 declaredInvariants: ['hashOfFiles'],
                 givenInvariants: declared.Revision,

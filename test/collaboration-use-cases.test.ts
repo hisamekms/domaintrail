@@ -647,14 +647,6 @@ describe('revisions', () => {
     test('restore writes a past revision back after a pre-restore snapshot, and records it', async () => {
         const s = await session();
         const { id, start } = await started(s);
-        const confirmed = value(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) }));
-        expect(confirmed.state).toBe('Confirmed');
-        expect(error(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) }))).toEqual({
-            type: 'NotAllowed',
-            command: 'confirm',
-            state: 'Confirmed',
-        });
-
         await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
         await mkdir(path.join(s.root, 'extra'), { recursive: true });
         await s.write('extra/new.dt', 'context Extra {}\n');
@@ -1058,7 +1050,7 @@ describe('revisions', () => {
 describe('who may do what (ADR 0027): the actor of every use case, the rules in the commands', () => {
     const FACILITATOR_ONLY: C.FacilitatorOnly = { type: 'FacilitatorOnly' };
 
-    test('only the facilitator queues, cancels, takes, confirms, restores and closes; nothing changes on a refusal', async () => {
+    test('only the facilitator queues, cancels, takes, restores and closes; nothing changes on a refusal', async () => {
         const s = await session();
         const { id, start } = await started(s);
         const run = await queuedRun(s, id, start);
@@ -1068,7 +1060,6 @@ describe('who may do what (ADR 0027): the actor of every use case, the rules in 
         expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
         expect(error(await s.use.cancelRun({ run: run.id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
         expect(error(await s.use.takeRevision({ session: id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
-        expect(error(await s.use.confirmRevision({ revision: start.id, actor: actor(guest) }))).toEqual(FACILITATOR_ONLY);
         await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
         expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(guest), recordExternalChanges: true }))).toEqual(
             FACILITATOR_ONLY,
@@ -1087,7 +1078,6 @@ describe('who may do what (ADR 0027): the actor of every use case, the rules in 
         ]);
 
         expect(value(await s.use.cancelRun({ run: run.id, actor: actor(facilitator) })).state).toBe('Cancelled');
-        expect(value(await s.use.confirmRevision({ revision: start.id, actor: actor(facilitator) })).state).toBe('Confirmed');
         expect(value(await s.use.closeSession({ session: id, actor: actor(facilitator) })).state).toBe('Closed');
     });
 

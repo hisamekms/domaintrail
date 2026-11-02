@@ -4,8 +4,8 @@
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
-// cancels a run (asked first), and through the card's menu confirms its result, restores the workspace as it was before it or
-// shows what it changed. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
+// cancels a run (asked first), and through the card's menu restores the workspace as it was before it or shows what it
+// changed. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
 // AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Hourglass, Pencil, Square, SquareCheck } from 'lucide-react';
@@ -161,8 +161,8 @@ export function useUnitAbout(unit: ChangeUnit): string {
 }
 
 /**
- * The card's menu (the facilitator's), worded by the unit of work: its result confirmed, the workspace restored as
- * before it, its changes shown. The revisions behind each are in the tooltips.
+ * The card's menu (the facilitator's), worded by the unit of work: the workspace restored as before it, its changes
+ * shown. The revisions behind each are in the tooltips.
  */
 function CardMenu({ last, about }: { last: RunJson; about: string }) {
     const { tx, revisions } = useChat();
@@ -191,11 +191,6 @@ function CardMenu({ last, about }: { last: RunJson; about: string }) {
             </button>
             {open && (
                 <div className="pane-menu-list" role="menu">
-                    {result !== base && (
-                        <button role="menuitem" onClick={pick(() => revisions.confirm(result))} data-tooltip={tx.chat.revisionHint(revisions.number(result))}>
-                            {tx.chat.confirmResult}
-                        </button>
-                    )}
                     <button role="menuitem" onClick={pick(() => revisions.restore(base))} data-tooltip={tx.chat.revisionHint(revisions.number(base))}>
                         {tx.chat.restoreBefore}
                     </button>
