@@ -2608,8 +2608,12 @@ message stands for it, on one line. In AI の作業, the cards are grouped — �
 run, numbered), 終わったもの (newest first; すべて filters only these) — and the tab's badge counts the running and
 queued ones. Each card's row is its name, then, small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how
 many runs when more than one and its time span (`19:21–22:32`; the running one's elapsed time), then
-the files it changed after a file-diff icon (`billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
-card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
+what the whole card changed in the model's words: up to three elements as chips — `＋` added, `✎` changed, `−` removed,
+then `#` and the element's own name (its whole name in the tooltip; a click goes to it, a removed one is struck
+through) — `ほか n` and 変更を見る; the same line is under each run's text. 変更を見る lists the elements added, changed
+and removed, each with what it is (`返品 の状態`), and keeps the source diff of `.dt` and `.dtes` files, for engineers,
+folded at the bottom. A field, a parameter or an invariant counts as a change of the element it is in. The chat speaks
+of the work, not of revisions: their numbers are only in tooltips and in the source diff. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
 what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`; the quote is cut with … first, never that), and,
 when it applied several, the reply's short note on each; a click goes to the message, and hovering either one marks
 the other. A run of the same messages as the one before on the card quotes them only when its reply says what it did
@@ -2629,8 +2633,8 @@ under an unselected その他 are not sent. On a
 done card, an alternative of an assumption queues them again with that pick and a note asking for it; the facilitator's ✕ (a bordered
 button first among a queued or running card's actions, and at the end of its row in AI の作業) cancels it after a
 dialog asks: 実行を取り消しますか？ for a running run (its work so far is not applied), 依頼を取り消しますか？ for a queued
-one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks its result as confirmed, restores the workspace as
-it was before the run (asked first) or compares the two.
+one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks the work's result as confirmed (この作業の結果を確認済みにする),
+restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
 
 **Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
@@ -2838,11 +2842,15 @@ hand. `--port` and `--host` win over the file.
 A **revision** is every `.dt` and `.dtes` source of the workspace at one moment, with the validation per DSL (`.dt`
 errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One is taken when the session starts,
 before and after each run, when the facilitator records the current state (*Record the current state*), and around a
-restore; saves while a run is in progress make none. They are numbered in the order taken; the chat shows those
-confirmed or restored, and a run's card reaches the two around it (its ⋯).
+restore; saves while a run is in progress make none. They are numbered in the order taken; the chat words them by the
+work (a card's result, the state before it) and keeps their numbers in tooltips, and a run's card reaches the two
+around it (its ⋯).
 
-- **Compare**: a run's card (⋯ → 比較) shows its revisions compared, every file of either, `.dt` and `.dtes` together, as added,
-  removed, changed or unchanged, with a line diff, and both validations side by side. The work is bounded: a file over
+- **Changes**: a card (⋯ → 変更を見る, or 変更を見る on its line) lists the model's elements its revisions differ by —
+  `.dt` elements, states and commands by their IDs, storming elements by their storming and local IDs — as added,
+  changed or removed. Under it, folded, the source diff for engineers: every file of either revision, `.dt` and `.dtes`
+  together, as added, removed, changed or unchanged, with a line diff, and both validations side by side. When a side
+  does not parse, the model is not compared and the source diff is open. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
 - **Mark as confirmed**: the facilitator's mark on a revision. It blocks nothing.
