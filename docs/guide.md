@@ -2586,12 +2586,13 @@ runs are serial, so it waits as 実行待ち while another runs), and … (そ�
 on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
 まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
 run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
-is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. A message that was
-sent shows the
-state of its latest run (`✓ 対応`, `◐ 一部`, `– 未対応`, `● 実行中`, …) in the status slot of its name row, for everyone;
-the tooltip names the card, and a click goes to the card. Every message and AI turn has that slot, right before its
-actions and as wide on every row (the longest state of the language), so the states line up in one column down the
-chat; the right end holds only actions.
+is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. Every message and
+AI turn has a status slot, right before its actions and as wide on every row (the longest state of the language), so
+what is there lines up in one column down the chat; the right end holds only actions. The state is the work's, so
+only the AI turn shows it (below); a message that was sent shows, in its slot, a small link to the AI turn of its
+latest run (the AI's mark and ↓), its state in the tooltip (`AI の作業へ（実行待ち）`), and a click goes to the turn —
+several messages sent in one run read as one queued run, not one per message. What the run did of each message
+(`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`) is on the message's quote in the AI turn.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
 failed or cancelled; its status slot shows the state where nothing else does (queued, running with the time,
@@ -2608,9 +2609,11 @@ run, numbered), 終わったもの (newest first; すべて filters only these) 
 queued ones. Each card's row is its name, then, small, whose messages its first run applied (`佐藤 ほか 2 人の依頼`), how
 many runs when more than one and its time span (`19:21–22:32`; the running one's elapsed time), then
 the files it changed after a file-diff icon (`billing.dt、tax.dt ほか 1`), a link that compares the revisions before and after the whole
-card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — and, when it applied several, what
-the reply says of each (✓ done, ◐ partly, – not done, ? a question, and a short note); a click goes to the message, and
-hovering either one marks the other. A
+card. Run numbers stay where precision is the point: the revisions in the ⋯ menu, the comparison and the restore. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
+what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`; the quote is cut with … first, never that), and,
+when it applied several, the reply's short note on each; a click goes to the message, and hovering either one marks
+the other. A run of the same messages as the one before on the card quotes them only when its reply says what it did
+of them. A
 run that answers the card's question, or that picks another alternative of one of its assumptions, is added to the same
 card under the one before (question → answer → result), under its time alone (`19:25`; the run's number is in its
 tooltip); a run of the same messages after a completed one too. The card stays where its first run was queued; when it

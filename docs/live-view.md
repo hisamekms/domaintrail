@@ -172,16 +172,17 @@ come back when the window is wide again).
 The chat has two views:
 
 - **チャット**: one stream of every message posted, one card per run — updated in place, with the runs that continue it
-  (an answer, an alternative) one under the other and a quote of each message it applied (with the reply's mark when
-  it applied several) — the
+  (an answer, an alternative) one under the other and a quote of each message it applied (followed, once the run
+  replied, by what it did of it: `✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`) — the
   revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target chips),
   picked with `#` or added from the selection, whose unsent text and targets stay in the browser; `@` mentions a
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
   background in your stream, and the closed chat's button shows `@ n` for the new ones. A card is named by the title
   the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
-  it show their time only. A message sent to the AI shows its latest run's state (`✓ 対応`, the card's name in the
-  tooltip, a click going to the card) in the status slot before its actions; an AI turn shows its state there too
-  (queued, running with its time, declined, failed, cancelled), so the states of all rows line up in one column. While
+  it show their time only. An AI turn shows its state in the status slot before its actions (queued, running with its
+  time, declined, failed, cancelled), so the states line up in one column; the state is the work's, so a message sent
+  to the AI shows none, only a small link to its turn in the same slot (the AI's mark and ↓; its state in the tooltip,
+  `AI の作業へ（実行待ち）`, a click going to the turn). While
   a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
   `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
   facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
