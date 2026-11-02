@@ -467,7 +467,6 @@ function Stream({ items }: { items: StreamItem[] }) {
     // only those posted after come in with motion
     const [initial] = useState(() => new Set<string>());
     if (initial.size === 0) for (const row of rows) initial.add(row.key);
-    const substantive = items.some((i) => i.kind !== 'session-start');
     return (
         <div className="chat-stream-wrap">
             <div className="chat-stream" ref={ref} onScroll={(e) => onScroll(e.currentTarget)}>
@@ -488,7 +487,6 @@ function Stream({ items }: { items: StreamItem[] }) {
                         </li>
                     ))}
                 </ol>
-                {!substantive && <p className="chat-empty muted small">{tx.chat.empty}</p>}
             </div>
             {pill && (
                 <button
@@ -878,7 +876,6 @@ function History({ units: all }: { units: readonly ChangeUnit[] }) {
                     {h.all}
                 </label>
             </div>
-            {units.length === 0 && <p className="chat-empty muted small">{everything ? h.emptyAll : h.empty}</p>}
             <ol className="chat-units">
                 {units.map((unit) => (
                     <HistoryUnit key={unit.key} unit={unit} open={open.has(unit.key)} onToggle={() => toggle(unit.key)} />
@@ -1317,7 +1314,7 @@ function Composer(props: {
                 />
             </div>
             <div className="chat-composer-bar">
-                <div className="chat-chips" aria-label={tx.chat.target}>
+                <div className="chat-chips" aria-label={count > 0 ? `${tx.chat.target} ${tx.chat.targetCount(count, MAX_REQUEST_TARGETS)}` : tx.chat.target}>
                     {value.chips.map((c, i) => (
                         <span
                             key={targetKey(c.target.target)}
@@ -1356,16 +1353,10 @@ function Composer(props: {
                             </button>
                         </span>
                     ))}
-                    {count > 0 && <span className="muted small">{tx.chat.targetCount(count, MAX_REQUEST_TARGETS)}</span>}
                     {suggested.overLimit > 0 && <span className="muted small">{tx.chat.targetsLimit(MAX_REQUEST_TARGETS)}</span>}
                 </div>
                 <div className="chat-composer-actions">
-                    {/* the shortcut, only while there is something to send */}
-                    {value.text.trim() !== '' && (
-                        <kbd className="chat-shortcut" aria-hidden>
-                            {mac ? '⌘↵' : 'Ctrl↵'}
-                        </kbd>
-                    )}
+                    {/* the shortcut is in the tooltip */}
                     <button
                         className="chat-send"
                         disabled={!canSend}

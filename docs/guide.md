@@ -2569,8 +2569,8 @@ facilitator applies messages, answers the agent, cancels runs, records, confirms
 shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
 only hides what is not yours.
 
-**The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars, how
-many are online and コラボ中 ▾ — that opens the participants (where each is, and → to open the view another is on) and
+**The collab menu.** The page calls a session a *collab* (コラボ). The chat's head has one button — the avatars and how
+many are online ▾ — that opens the participants (where each is, and → to open the view another is on) and
 the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
 behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
 ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and

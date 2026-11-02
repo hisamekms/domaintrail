@@ -157,7 +157,7 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 ## In a session
 
 Under `dt session start` (not `dt view`) the session's chat is a pillar at the right end of the page, the whole height,
-the same for everyone and open when the page joins. Its head shows the collab menu (the avatars, the participants online and コラボ中 ▾: who is where, the invite link,
+the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
 the agent's status at a glance, with ✕ to close it; while it is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of

@@ -34,7 +34,7 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 1. **Start the session** (terminal 1): `dt -r /tmp/dt-session session start`. It prints `Session: … (started, identity
    dev)`, the Live View's URL (`http://127.0.0.1:4321/`), a facilitator link and the agent API's address.
 2. **Become the facilitator**: open the Live View in your browser, give a name on the join form (*Ada*), then open the
-   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, コラボ中 ▾) list you once, as
+   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, the avatars ▾) list you once, as
    *Facilitator*.
 3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
 4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session session subscribe --agent claude --once`. It prints
