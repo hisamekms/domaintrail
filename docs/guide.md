@@ -2675,8 +2675,8 @@ note in one timeline's view of a storming targets that occurrence (the timeline 
 which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
 text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
 sent message never changes. (Sessions from before kept a *dismissed* mark on some requests; they load and show as
-messages, and the page no longer dismisses.) A sent message shows its targets above its text as read-only chips named
-as their mentions are (`#注文`), a link to each; each target shows whether it is still in the sources
+messages, and the page no longer dismisses.) A sent message shows its targets above its text as read-only chips, each
+by its own name (`#支払済み`, its whole name in the tooltip), a link to each; each target shows whether it is still in the sources
 (`current`), no longer found (`stale`: a target is never re-bound to something else), or `unknown` while the file it
 would be in does not parse. The agent sees each request's targets numbered from 1, so `#注文[1]` in one request never
 means another request's target.

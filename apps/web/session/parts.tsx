@@ -9,7 +9,7 @@ import { parseBody } from './mentions';
 import { useTargetNaming } from './naming';
 import { initials, participantColor } from './presence';
 import { targetText } from './stream';
-import { targetKey, type ModelTarget } from './targets';
+import { targetKey, targetShortName, type ModelTarget } from './targets';
 
 type Tx = Messages['session'];
 type FrozenRequest = SessionStateBody['runs'][number]['input']['requests'][number];
@@ -31,8 +31,8 @@ export function Avatar({ id, name, url }: { id: string; name: string; url?: stri
 type Snapshot = FrozenRequest['targets'][number];
 
 /**
- * A target of a sent request as a read-only chip, named as a mention of it in the body is (`#注文`; its whole name in
- * the tooltip): a link to it while it is in the sources, else its name marked stale or unknown.
+ * A target of a sent request as a read-only chip, `#` and its own name (`#支払済み (Paid)`; its whole name, as a mention
+ * of it in the body reads, in the tooltip): a link to it while it is in the sources, else its name marked stale or unknown.
  */
 export function TargetChip({
     target,
@@ -47,7 +47,7 @@ export function TargetChip({
 }) {
     const naming = useTargetNaming();
     const text = targetText(target, tx.workspace, naming);
-    const shown = <span className="chat-chip-name">#{text}</span>;
+    const shown = <span className="chat-chip-name">#{(naming && targetShortName(target.target, naming)) ?? text}</span>;
     const kind = `chat-chip chat-target kind-${target.target.kind}`;
     if (status === 'current' && target.target.kind !== 'Workspace')
         return (
@@ -66,7 +66,7 @@ export function TargetChip({
 }
 
 /**
- * A request's targets above its body as a row of read-only chips (`#注文` `#請求書`, wrapping), each with its status;
+ * A request's targets above its body as a row of read-only chips (`#請求書` `#支払済み`, wrapping), each with its status;
  * none (the whole workspace): no row.
  */
 export function TargetChips(props: {
