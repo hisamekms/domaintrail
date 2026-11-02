@@ -114,6 +114,18 @@ describe('the scene of a state graph', () => {
         expect(Math.min(...place.props.points.map((p) => p.y), place.props.ly)).toBe(0);
     });
 
+    test('names the items of the nodes an edge joins (a canvas joins them)', async () => {
+        const [, after] = await payloads();
+        const graph = after.states['A.Order'].both;
+        const scene = buildScene(graph, optionsOf(after));
+        const items = new Set(sceneItems(scene).map((i) => i.id));
+        for (const e of scene.edges) {
+            const edge = graph.edges.find((g) => g.id === e.edge)!;
+            expect([e.source, e.target]).toEqual([`n:${edge.source}`, `n:${edge.target}`]);
+            expect(items.has(e.source) && items.has(e.target)).toBe(true);
+        }
+    });
+
     test('labels transitions as asked', async () => {
         const [, after] = await payloads();
         const scene = buildScene(after.states['A.Order'].event, { ...optionsOf(after), transitionLabels: 'event' });

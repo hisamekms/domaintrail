@@ -211,6 +211,8 @@ function edgeItem(graph: LaidOutGraph, e: GraphEdge, v: Variant, owner: string, 
         y: oy,
         elementId: owner,
         edge: e.id,
+        source: nodeItemId(e.source),
+        target: nodeItemId(e.target),
         props: {
             points: route.points.map((p) => ({ x: p.x - ox, y: p.y - oy })),
             kind: e.kind,

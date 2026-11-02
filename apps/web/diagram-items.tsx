@@ -1,6 +1,7 @@
 // What the canvas draws for each kind of scene item (`scene.ts`), independent of the canvas library: the classes and
-// size of an item's box and what goes in it. A canvas wraps each in its own container (tldraw's `HTMLContainer` and
-// `SVGContainer` in `shapes.tsx`), at the item's place on the page.
+// size of an item's box, what goes in it, and the outline drawn around it while it is hovered or selected. A canvas
+// wraps each in its own container (React Flow's custom nodes and edges in `view/flow-canvas.tsx`), at the item's place
+// on the page.
 import { Fragment, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
 import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps, Point } from './scene';
@@ -97,7 +98,7 @@ export const edgeClassName = (p: EdgeProps): string => `de de-${p.kind} de-tone-
 export function EdgeContent({ p }: { p: EdgeProps }): ReactNode {
     const { points, kind, label, sub, faded, lx, ly, lw, lh, scale } = p;
     if (points.length < 2) return null;
-    const d = points.map((pt, i) => `${i ? 'L' : 'M'}${pt.x},${pt.y}`).join(' ');
+    const d = edgeOutlinePath(points);
     const [a, b] = [points[points.length - 2], points[points.length - 1]];
     const [s0, s1] = [points[0], points[1]];
     return (
@@ -204,3 +205,39 @@ export function EdgeMarks({ badge, diag, scale }: { badge: string; diag: DiagMar
         </>
     );
 }
+
+/** An SVG path of a rounded rectangle `w` × `h` with corners of radius `r`, from the origin. */
+export function roundRectPath(w: number, h: number, r: number): string {
+    return `M${r},0 H${w - r} A${r},${r} 0 0 1 ${w},${r} V${h - r} A${r},${r} 0 0 1 ${w - r},${h} H${r} A${r},${r} 0 0 1 0,${h - r} V${r} A${r},${r} 0 0 1 ${r},0 Z`;
+}
+
+/** The gap the outline leaves around the change badge and the diagnostic mark. */
+const OUTLINE_GAP = 2;
+
+/**
+ * The outline of a node while it is hovered or selected (an SVG path, from the node's top-left corner): a rounded
+ * rectangle whose top edge steps out around the change badge and whose top-right corner steps out around the
+ * diagnostic mark, both enlarged `k` times (`markScale` of the zoom), instead of crossing them.
+ */
+export function nodeOutlinePath(p: Pick<NodeProps, 'w' | 'h' | 'kind' | 'badge' | 'diag'>, k: number): string {
+    const { w, h } = p;
+    const r = 8;
+    if (p.kind === 'initial' || (!p.badge && p.diag === 'none')) return roundRectPath(w, h, r);
+    const g = OUTLINE_GAP;
+    const d: string[] = [`M${r},0`];
+    if (p.badge) {
+        const [x0, x1, y] = [BADGE.left - g, BADGE.left + badgeWidth(p.badge) * k + g, BADGE.bottom - BADGE.height * k - g];
+        d.push(`L${x0},0 L${x0},${y} L${x1},${y} L${x1},0`);
+    }
+    if (p.diag !== 'none') {
+        const m = DIAG_RADIUS * k + g;
+        d.push(`L${w - m},0 L${w - m},${-m} L${w + m},${-m} L${w + m},${m} L${w},${m}`);
+    } else {
+        d.push(`L${w - r},0 A${r},${r} 0 0 1 ${w},${r}`);
+    }
+    d.push(`L${w},${h - r} A${r},${r} 0 0 1 ${w - r},${h} L${r},${h} A${r},${r} 0 0 1 0,${h - r} L0,${r} A${r},${r} 0 0 1 ${r},0 Z`);
+    return d.join(' ');
+}
+
+/** The outline of an edge while it is hovered or selected: its route. */
+export const edgeOutlinePath = (points: readonly Point[]): string => points.map((pt, i) => `${i ? 'L' : 'M'}${pt.x},${pt.y}`).join(' ');

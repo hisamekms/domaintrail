@@ -112,6 +112,9 @@ export interface SceneEdge extends ItemBase {
     readonly type: 'edge';
     /** The graph edge it draws. */
     readonly edge: string;
+    /** The items of the graph nodes it joins (`nodeItemId` of its source and target; groups included). */
+    readonly source: SceneId;
+    readonly target: SceneId;
     readonly props: EdgeProps;
 }
 
