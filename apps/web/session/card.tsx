@@ -294,8 +294,8 @@ function RunSection({
 
 /**
  * A message the run applied, on one muted line (`↳ name: the head of its body`), then what the reply says of it once
- * there is a reply (`✓ 対応`, in its color: a message shows no state of its own); with several messages, the reply's
- * note on each too. A click goes to the message.
+ * there is a reply (`✓ 対応`, in its color: a message shows no state of its own; not for a message the run asks about,
+ * whose question is right below); with several messages, the reply's note on each too. A click goes to the message.
  */
 function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
     const { tx, nameOf, jump, onNavigate } = useChat();
@@ -309,7 +309,7 @@ function QuoteLine({ quote, detailed }: { quote: Quote; detailed: boolean }) {
                     <span className="run-quote-who">↳ {nameOf(r.author)}:</span>
                     <span className="run-quote-head">{head}</span>
                 </button>
-                {quote.progress && (
+                {quote.progress && quote.progress !== 'Question' && (
                     <span className="run-quote-outcome">
                         <span aria-hidden>{PROGRESS_MARK[quote.progress]}</span>
                         {tx.chat.reply.status[quote.progress]}

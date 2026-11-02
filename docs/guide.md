@@ -2594,7 +2594,7 @@ hovered or focused (or one of their menus is open), always on touch. The state i
 only the AI turn shows it (below); a message that was sent shows, in its slot, a small link to the AI turn of its
 latest run (the AI's mark and ↓), its state in the tooltip (`AI の作業へ（実行待ち）`), and a click goes to the turn —
 several messages sent in one run read as one queued run, not one per message. What the run did of each message
-(`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`) is on the message's quote in the AI turn.
+(`✓ 対応`, `◐ 一部`, `– 未対応`) is on the message's quote in the AI turn.
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
 failed or cancelled; its status slot shows the state where nothing else does (queued, running with the time,
@@ -2617,7 +2617,7 @@ through) — `ほか n` and 変更を見る; the same line is under each run's t
 and removed, each with what it is (`返品 の状態`), and keeps the source diff of `.dt` and `.dtes` files folded at the
 bottom. A field, a parameter or an invariant counts as a change of the element it is in. The chat speaks
 of the work, not of revisions: their numbers are only in tooltips and in the source diff. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
-what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`; the quote is cut with … first, never that), and,
+what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`; none for a message it asks about, whose question follows; the quote is cut with … first, never that), and,
 when it applied several, the reply's short note on each; a click goes to the message (hovering one does not mark the
 other). A run of the same messages as the one before on the card quotes them only when its reply says what it did
 of them. A

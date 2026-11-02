@@ -174,7 +174,7 @@ The chat has two views:
 
 - **チャット**: one stream of every message posted, one card per run — updated in place, with the runs that continue it
   (an answer, an alternative) one under the other and a quote of each message it applied (followed, once the run
-  replied, by what it did of it: `✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`) — the
+  replied, by what it did of it: `✓ 対応`, `◐ 一部`, `– 未対応`; none when it asks about it) — the
   revisions confirmed or restored, and a composer for a message about up to 20 targets (none: the whole workspace, shown with no target chips),
   picked with `#` or added from the selection, whose unsent text and targets stay in the browser; `@` mentions a
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
