@@ -76,15 +76,14 @@ function VoteCount({ tally }: { tally: Tally }) {
 /**
  * The vote of a row (a question's option, an assumption kept or an alternative), at its right: `♡ 2`. A participant
  * clicks ♡ to vote (again to take it off; in a single-choice question or an assumption it moves); mine is a filled ♥ in
- * violet. The facilitator, and everyone once the vote closed, only sees the count. Nothing while nobody can vote and
- * nobody voted.
+ * violet. The facilitator, and everyone once the vote closed, only sees the count. The ♡ is always there and the count
+ * has a slot of its own (two digits wide), so that the hearts of a reply's rows stand in one column, counted or not.
  */
 export function VoteMark({ target }: { target: MarkTargetData }) {
     const { tx, session, marking } = useChat();
     const live = useLive();
     const tally = tallyOf(marking.index, target, VOTE);
     const can = canVote(target, session.state, session.me.participant.role, live);
-    if (!can && tally.count === 0) return null;
     const v = tx.chat.votes;
     const heart = <Heart size={12} aria-hidden fill={tally.mine ? 'currentColor' : 'none'} />;
     return (
@@ -106,7 +105,7 @@ export function VoteMark({ target }: { target: MarkTargetData }) {
                     {heart}
                 </span>
             )}
-            {tally.count > 0 && <VoteCount tally={tally} />}
+            <span className="vote-count">{tally.count > 0 && <VoteCount tally={tally} />}</span>
         </span>
     );
 }

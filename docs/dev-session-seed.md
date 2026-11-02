@@ -67,8 +67,9 @@ card gives a title of its own that the card does not take.
 - `questions`: a single-choice and a multiple-choice question with votes open, two questions (one without options), an
   answered one (an option, and その他 in the facilitator's words) whose run completes the card, and one taken over by a
   run with a note (its votes frozen).
-- `assumptions`: assumptions with alternatives and votes open (for an alternative and for keeping it), an alternative
-  picked (`選択 name · time`, the time a link to the run that redoes it), and assumptions left as they were (the message applied again).
+- `assumptions`: an assumption with alternatives and votes open (for an alternative and for keeping it) beside one the
+  facilitator approved (`承認 name · time`, nothing sent to the AI), an alternative picked (`送り直し name · time`, the
+  time a link to the run that redoes it), and assumptions left as they were (the message applied again).
 - `replies`: two replies to a completed run applied together (their run continues the card), a reply to that run, and
   replies to people's messages: one to 田中's message (sign in as 田中 to see it marked) and a reply to that reply, with a
   target.

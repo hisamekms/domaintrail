@@ -3993,11 +3993,6 @@ del.was.block {
     font-size: var(--fs-small);
     line-height: var(--lh-small);
 }
-/* the AI's question: the one amber mark, a bar beside it */
-.run-question {
-    padding-left: 8px;
-    border-left: 2px solid var(--warning);
-}
 .chat-pulse {
     display: inline-block;
     width: 7px;
@@ -4348,9 +4343,8 @@ del.was.block {
 }
 .reply-requests,
 .reply-assumptions,
-.reply-questions,
 .reply-options {
-    margin: 0.375rem 0 0;
+    margin: 0;
     padding: 0;
     list-style: none;
 }
@@ -4359,13 +4353,6 @@ del.was.block {
     align-items: flex-start;
     gap: 6px;
     margin-top: 2px;
-    font-size: 0.75rem;
-    line-height: 1.5;
-}
-/* an assumption as a group of rows: 「前提: …」, then each 「別案: …」 */
-.reply-assumption {
-    margin-top: 2px;
-    color: var(--text-soft);
     font-size: 0.75rem;
     line-height: 1.5;
 }
@@ -4419,11 +4406,7 @@ del.was.block {
 .reply-alternatives {
     display: block;
 }
-.reply-question + .reply-question {
-    margin-top: 0.75rem;
-}
-.reply-question > .reply-refs,
-.reply-options {
+.reply-question > .reply-refs {
     margin-left: 10px;
 }
 .reply-option {
@@ -4449,7 +4432,8 @@ del.was.block {
 .reply-option-detail {
     display: block;
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
 }
 .session-chat button.chat-dismiss {
     flex: none;
@@ -5197,110 +5181,223 @@ del.was.block {
 .run-files-icon {
     flex: none;
 }
-.run-answer-form {
-    margin-top: 0.375rem;
-}
-.run-answer-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 0.375rem;
-}
-/* an alternative the facilitator can pick: a link */
-.session-chat button.reply-alternative.pickable {
-    display: inline;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--accent);
-    text-decoration: underline;
-    text-decoration-thickness: 1px;
-    text-underline-offset: 2px;
-    text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    text-align: left;
-    cursor: pointer;
-}
-.session-chat button.reply-alternative.pickable:hover {
-    text-decoration-color: currentColor;
-}
-.session-chat button.reply-alternative.pickable:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
 .chat-unit-body .run-card {
     margin-top: 0;
 }
-/* ---------- answered questions and chosen alternatives ---------- */
+/* ---------- inside an AI reply: the question, the assumptions, and what was decided ---------- */
 
-/* the mark at the start of a row of choices: ○ / ☐ outline and muted, ◉ / ☑ once chosen in the text's colour; centred
-   on the row's first line, where the facilitator's radio or checkbox is */
+/* the AI's question and what it assumed sit on a faint surface, headed small and strong in their colour (amber: the AI
+   waits; violet: the AI assumed); everything in it starts at the body's left edge */
+.reply-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--border) 35%, transparent);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.reply-section-label {
+    margin: 0;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    font-weight: var(--fw-strong);
+}
+.reply-section.ask > .reply-section-label {
+    color: var(--warning);
+}
+.reply-section.assumed > .reply-section-label {
+    color: var(--accent);
+}
+.reply-section .reply-questions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.reply-section .reply-question {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.reply-question-text {
+    margin: 0;
+    font-weight: var(--fw-strong);
+    word-break: break-word;
+}
+/* an option or an alternative: a card of its own, ♡ at its right end */
+.reply-cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.reply-card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+.reply-card-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+.reply-card-text > .reply-option-label {
+    display: block;
+}
+/* chosen (being chosen, or decided): the accent's border and background; the others, once decided, muted */
+.reply-card.chosen {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.reply-card.unchosen,
+.reply-card.unchosen .reply-option-detail {
+    color: var(--muted);
+}
+/* the facilitator's: the whole card is the click target (its label, all but ♡), the radio or checkbox in the accent */
+.reply-card.pickable {
+    padding: 0 var(--space-3) 0 0;
+    cursor: pointer;
+}
+.reply-card.pickable:hover:not(.chosen) {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+.reply-card-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) 0 var(--space-2) var(--space-3);
+    cursor: pointer;
+}
+.reply-card-main > input {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+/* an alternative the facilitator can send again: its text, then 送り直す and ♡ on a row under it */
+.reply-card.stack {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+}
+.reply-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+}
+/* an assumption's own row lines its ♡ up with the cards' (their inner padding and border) */
+.reply-assumption > .reply-row-actions,
+.reply-assumption-row {
+    padding-right: calc(var(--space-3) + 1px);
+}
+.reply-assumption {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.reply-assumption + .reply-assumption {
+    margin-top: var(--space-1);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+}
+.reply-assumption-row {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+.reply-assumption-row > .vote-mark {
+    margin-top: calc((var(--fs-body) * var(--lh-body) - var(--fs-small) * var(--lh-small)) / 2);
+}
+.reply-assumption-text {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.reply-assumption-row.unchosen {
+    color: var(--muted);
+}
+.reply-sublabel {
+    margin: 0 0 calc(-1 * var(--space-1));
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.reply-actions {
+    display: flex;
+}
+/* the buttons of a decision: small and strong; 回答を送る the primary, 承認 and 送り直す ghosts in the accent */
+.session-chat .reply-section button.chat-small {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: var(--lh-small);
+    white-space: nowrap;
+    border-radius: 6px;
+}
+.session-chat .reply-section button.chat-small.primary {
+    padding: var(--space-1) var(--space-3);
+}
+.session-chat .reply-section button.chat-small.ghost {
+    padding: 2px var(--space-2);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent);
+}
+.session-chat .reply-section button.chat-small.ghost:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.session-chat .reply-section button.chat-small:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.session-chat .reply-section button.chat-small svg {
+    vertical-align: 0;
+}
+
+/* the mark at the start of a card or row once decided: ◉ / ☑ in the accent for what was chosen, ○ / ☐ muted */
 .choice-mark {
     flex: none;
     display: inline-flex;
     align-items: center;
-    height: 1.5em;
     color: var(--muted);
 }
 .choice-mark > svg {
     display: block;
 }
 .chosen > .choice-mark {
-    color: var(--text);
+    color: var(--accent);
 }
-.reply-option > .choice-mark + span {
-    flex: 1;
-    min-width: 0;
+.reply-assumption-row > .choice-mark {
+    height: calc(var(--fs-body) * var(--lh-body));
 }
-/* a question once answered (or left): the same rows as when it was asked, the chosen ones filled, the rest muted */
-.decided-option.chosen {
-    color: var(--text);
-}
-.decided-option.unchosen,
-.decided-option.unchosen .reply-option-detail {
-    color: var(--muted);
-}
-/* an assumption's rows: 前提 and its alternatives one under the other; once one is picked, it in the text's colour and
-   the others muted */
-.reply-choices {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-.reply-choice + .reply-choice {
-    margin-top: 2px;
-}
-.reply-choice > .reply-text {
-    flex: 1;
-    min-width: 0;
-}
-.reply-choice.chosen {
-    color: var(--text);
-}
-.reply-choice.unchosen {
-    color: var(--muted);
-}
-.visually-hidden {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
-}
+
 /* who decided and when: small and muted, under what was decided */
 .decided-line {
-    margin: 0.375rem 0 0;
+    margin: 0;
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
     font-variant-numeric: tabular-nums;
-    line-height: 1.5;
+    line-height: var(--lh-small);
 }
-.reply-assumption .decided-line {
-    margin-top: 2px;
-}
-/* the run a pick queued: a link */
+/* the run a decision queued: a link */
 .session-chat button.decided-run {
     display: inline;
     padding: 0;
@@ -5318,43 +5415,39 @@ del.was.block {
     color: var(--muted);
 }
 
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
 /* ---------- votes and reactions (apps/web/session/mark-controls.tsx) ---------- */
 
-/* a row with a vote at its right end: a question's option */
-.vote-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-}
-.vote-row > .reply-option {
-    flex: 1;
-    min-width: 0;
-}
-.reply-option.vote-row {
-    cursor: default;
-}
-.vote-hint {
-    margin: 2px 0 0 10px;
-}
 /* `♡ 2`: small muted text; mine is the clickable violet with a filled heart, never red */
 .vote-mark {
     flex: none;
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    margin-top: 1px;
+    gap: var(--space-1);
     color: var(--muted);
-    font-size: 0.6875rem;
+    font-size: var(--fs-small);
     font-variant-numeric: tabular-nums;
-    line-height: 1.5;
+    line-height: var(--lh-small);
     vertical-align: baseline;
+}
+/* the count's slot: two digits wide whether or not there is a count, so the hearts of a reply stand in one column */
+.vote-count {
+    width: 2ch;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
 }
 .vote-mark.mine {
     color: var(--accent);
-}
-/* the assumptions apart a little, now that each has its votes */
-.reply-assumption + .reply-assumption {
-    margin-top: 0.375rem;
 }
 .vote-heart {
     display: inline-grid;

@@ -1,7 +1,16 @@
 // The session's REST API as a seeded participant calls it (`/api/session/*`), with the participant's own `dev` cookie:
 // the same requests a page sends. Every failure throws with the route, the status and the server's error, so that a
 // seed stops loudly where it went wrong.
-import type { Me, MarkSetBody, QueueRunBody, SendRequestBody, SessionStateBody, SetMarkBody } from '@domaintrail/collaboration/protocol';
+import type {
+    ApproveBody,
+    ApprovedBody,
+    Me,
+    MarkSetBody,
+    QueueRunBody,
+    SendRequestBody,
+    SessionStateBody,
+    SetMarkBody,
+} from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
@@ -56,6 +65,7 @@ export function sessionClient(base: string): {
     queue(p: Participant, body: QueueRunBody): Promise<RunJson>;
     cancel(p: Participant, run: string): Promise<RunJson>;
     mark(p: Participant, body: SetMarkBody): Promise<MarkSetBody>;
+    approve(p: Participant, body: ApproveBody): Promise<ApprovedBody>;
 } {
     return {
         async join(name) {
@@ -79,6 +89,7 @@ export function sessionClient(base: string): {
         queue: async (p, body) => (await call<{ run: RunJson }>(base, 'runs', p.cookie, body)).value.run,
         cancel: async (p, run) => (await call<{ run: RunJson }>(base, `runs/${run}/cancel`, p.cookie, {})).value.run,
         mark: async (p, body) => (await call<MarkSetBody>(base, 'marks', p.cookie, body)).value,
+        approve: async (p, body) => (await call<ApprovedBody>(base, 'approvals', p.cookie, body)).value,
     };
 }
 

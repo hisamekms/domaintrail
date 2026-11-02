@@ -55,6 +55,8 @@ export interface Ctx {
     answer(run: RunJson, answer: AnswerBody, step: Step): Promise<RunJson>;
     /** The facilitator picks another alternative of an assumption of a completed run, played as `step`. */
     pickAlternative(run: RunJson, assumption: number, alternative: string, step: Step): Promise<RunJson>;
+    /** The facilitator approves an assumption of a completed run as it is: recorded, nothing queued. */
+    approveAssumption(run: RunJson, assumption: number): Promise<void>;
     /** The facilitator applies messages as a run the agent works on until the facilitator cancels it. */
     cancelWhileRunning(requests: readonly RequestJson[]): Promise<RunJson>;
     /** `who` votes for a question's option. */
@@ -317,6 +319,9 @@ function makeCtx(deps: {
                 },
                 step,
             );
+        },
+        async approveAssumption(run, assumption) {
+            await api.approve(f, { run: run.id, assumption });
         },
         async cancelWhileRunning(requests) {
             const step: Step = { kind: 'hang' };
