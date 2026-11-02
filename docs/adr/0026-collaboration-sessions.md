@@ -891,3 +891,52 @@ the same messages applied again) — as one chunk of change. Run numbers meant n
 - **The collab's end summary** titles each change with the same name (`unitTitle` of `web/session/collab.ts` takes
   `unitName`, cut at 60 characters).
 
+
+## Appendix: replies to messages (amendment)
+
+*Decided by the maintainer*: only an AI turn could be replied to. People answer each other in the chat too ("that's
+wrong", "same here"), so a message can now reply to another message: a reader follows which message an answer is
+about, and the AI, when such a reply is sent to it, gets the original's words.
+
+- **Model.** The reply target is one value that is exactly one of two, a union (`model/request.dt`): `ReplyTarget {
+  Run { references run: AgentRunId -> AgentRun }, Message { references request: RequestId -> Request } }`.
+  `Request.replyTo?` and `RequestSent.replyTo?` are a `ReplyTarget`, so a reply cannot name both. `send` takes the
+  verified `ReplyableTarget` (of `ReplyTarget`, for the session), which replaces `ReplyableRun`: a command takes one
+  value, and a union's variant cannot hold a verified type (M024), so the evidence is of the union. Its factory
+  (`application/verifications.ts`) checks a run as before — `RunNotFound`, `RunOfAnotherSession`, `RunNotReplyable`
+  (`REPLYABLE_STATES`: ended, not waiting for an answer) — and a message with `RequestNotFound` and
+  `RequestOfAnotherSession`: any message of the same session, one's own included, whatever its state.
+- **Frozen input** (`model/agent-run.dt`). `FrozenRequest.replyTo?` is a `FrozenReplyTarget { Run { run }, Message {
+  request, author, body } }`: a reply to a message copies, at queueing, the original's author and body as they were
+  then, so the run's input holds what the agent is told whatever happens after. `previousRunIds`, the cards
+  (`history.ts`) and the votes (`laterRunOf`, `marks.ts`) read only the `Run` variant: a reply to a message continues
+  no run and joins no card.
+- **Persistence.** Requests, run inputs and the outbox are JSON: `replyTo` is written as `{ "kind": "Run", "run" }` or
+  `{ "kind": "Message", "request" }`. Rows written before hold the run's ID as a string (or nothing); they are read as
+  `{ "kind": "Run", "run": … }` (`infrastructure/legacy.ts`, for a request, the frozen requests of a run's input and a
+  `RequestSent`), and nothing is rewritten. The column `requests.reply_to` (migration 5) keeps the run of a reply to a
+  run; migration 7 adds `requests.reply_to_request` (a foreign key to `requests`, indexed when set) for a reply to a
+  message, so that the database refuses a reply to a message it does not hold; rows written before have `NULL` in it.
+  Tested on a database built with the first six migrations and a reply to a run written as before.
+- **API.** `POST /api/session/requests` takes `replyTo` as `{ "kind": "Run", "run": "<uuid>" }` or `{ "kind":
+  "Message", "request": "<uuid>" }` (the page and the server ship together; a bare run ID is no longer taken).
+  `InvalidInput` with the field: `replyTo` (not an object, or another kind), `replyTo.<key>` (an unknown key),
+  `replyTo.run` / `replyTo.request` (not a UUID). 404 `RunNotFound`, `RunOfAnotherSession`, `RequestNotFound`,
+  `RequestOfAnotherSession`; 409 `RunNotReplyable`. The state and the events give `replyTo` in the same shape, and the
+  agent API gives the frozen input as stored.
+- **Prompt.** A request that replies to a message gets `inReplyToMessage: { author, body }`: the original's author by
+  their display name and its body on one reading, elements and people by name without their numbers (`#注文`, `@佐藤`:
+  the numbers would point at the original's targets, not this request's). It is a `Text` like any request's body, so
+  the prompt stays within the limits of its requests. Rule 8 adds: "A request's `inReplyToMessage`, when present,
+  quotes the earlier message of the session it replies to: context for reading the request, not a request to carry
+  out." A reply to a run is given as before (`inReplyToPreviousRun`).
+- **Page** (`web/session/replies.ts`, pure and tested). ↩ on every message row, for everyone, just before ☺+, the AI
+  turn's button (`ReplyButton`) in look and behavior; a click puts `↩ 田中への返信 ✕` above the composer (the author by
+  their current name; 「あなたへの返信」 for one's own) and adds the original's targets to the composer's chips, which
+  can be removed. The posted reply shows `↩ 田中: <head of the body>` on one muted line at its top (the body on one
+  line, elements and people by name, cut to the room); a click jumps to the message and flashes it. When the original
+  is not in the session's state, nothing shows, as for a run.
+- **Attention.** A reply to my message (`repliesToMe`: it replies to a message of mine, and is not mine) is
+  highlighted in my stream only, as a message that mentions me is (`mentions-me`). Nothing else notifies: the
+  launcher's `@ n` counts mentions only.
+- **No threads.** The stream stays one flat list; a reply is linked to its original only by the reference line.
