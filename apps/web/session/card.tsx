@@ -562,11 +562,12 @@ function ChoiceMark({ multiple = false, state, size = 14 }: { multiple?: boolean
 }
 
 /**
- * What the AI assumed without asking, on its surface: each assumption as the AI's text with its ♡ at the right, then,
- * under 別の案, each alternative as a card. The facilitator decides each assumption once (while its run is the latest of
- * its requests): ✓ 承認 under it keeps it as it is (recorded, nothing sent), 送り直す in an alternative's card sends the
- * requests to the AI again with that alternative. Decided: ◉ on what was chosen, the rest muted, and who decided and when
- * under it. Participants see the same cards with their ♡, without buttons.
+ * What the AI assumed without asking, on its surface: each assumption as the AI's text over the whole width, its ♡ on a
+ * row under it, then, under 別の案, each alternative as a card. The facilitator decides each assumption once (while its
+ * run is the latest of its requests): ✓ 承認 under it keeps it as it is (recorded, nothing sent), 送り直す in an
+ * alternative's card sends the requests to the AI again with that alternative. Decided: ◉ on what was chosen (at the
+ * start of an assumption's text), the rest muted, and who decided and when under it. Participants see the same cards
+ * with their ♡, without buttons.
  */
 function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: ReplyView; offer: boolean; compact: boolean }) {
     const { tx, actions, onNavigate, session } = useChat();
@@ -581,8 +582,11 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                 const approved = decision.kind === 'approved';
                 const picked = decision.kind === 'picked' ? decision.alternative : undefined;
                 const keptVote = votes && <VoteMark target={{ kind: 'AssumptionChoice', run: run.id, assumption: i }} />;
+                const chosen = approved ? 'chosen' : picked !== undefined ? 'unchosen' : undefined;
+                // the text takes the whole width, ◉ / ○ at its start once decided; ♡ on a row of its own under it
                 const text = (
-                    <p className="reply-assumption-text">
+                    <p className={`reply-assumption-text${chosen ? ` ${chosen}` : ''}`}>
+                        {chosen && <ChoiceMark state={chosen} />}
                         <ReplyText text={a.text} onNavigate={onNavigate} />
                     </p>
                 );
@@ -599,11 +603,10 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
                                 </div>
                             </>
                         ) : (
-                            <div className={`reply-assumption-row${approved ? ' chosen' : picked !== undefined ? ' unchosen' : ''}`}>
-                                {(approved || picked !== undefined) && <ChoiceMark state={approved ? 'chosen' : 'unchosen'} />}
+                            <>
                                 {text}
-                                {keptVote}
-                            </div>
+                                {keptVote && <div className="reply-row-actions end">{keptVote}</div>}
+                            </>
                         )}
                         {a.alternatives.length > 0 && (
                             <>

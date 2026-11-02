@@ -5391,9 +5391,12 @@ del.was.block {
     justify-content: space-between;
     gap: var(--space-2);
 }
+/* ♡ alone on the row (nothing to decide): at its right end */
+.reply-row-actions.end {
+    justify-content: flex-end;
+}
 /* an assumption's own row lines its ♡ up with the cards' (their inner padding and border) */
-.reply-assumption > .reply-row-actions,
-.reply-assumption-row {
+.reply-assumption > .reply-row-actions {
     padding-right: calc(var(--space-3) + 1px);
 }
 .reply-assumption {
@@ -5406,23 +5409,19 @@ del.was.block {
     padding-top: var(--space-3);
     border-top: 1px solid var(--border);
 }
-.reply-assumption-row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-2);
-}
-.reply-assumption-row > .vote-mark {
-    margin-top: calc((var(--fs-body) * var(--lh-body) - var(--fs-small) * var(--lh-small)) / 2);
-}
 .reply-assumption-text {
-    flex: 1;
-    min-width: 0;
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
 }
-.reply-assumption-row.unchosen {
+.reply-assumption-text.unchosen {
     color: var(--muted);
+}
+/* ◉ / ○ at the start of a decided assumption's text, in its first line */
+.reply-assumption-text > .choice-mark {
+    display: inline-flex;
+    margin-right: var(--space-2);
+    vertical-align: -2px;
 }
 .reply-sublabel {
     margin: 0 0 calc(-1 * var(--space-1));
@@ -5480,9 +5479,6 @@ del.was.block {
 }
 .chosen > .choice-mark {
     color: var(--accent);
-}
-.reply-assumption-row > .choice-mark {
-    height: calc(var(--fs-body) * var(--lh-body));
 }
 
 /* who decided and when: small and muted, under what was decided */
