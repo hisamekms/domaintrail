@@ -4,7 +4,7 @@
 import { createContext, useContext } from 'react';
 import type { Classification } from '@domaintrail/collaboration/protocol';
 import type { Messages } from '../i18n';
-import type { ChatActions } from './actions';
+import type { ChatActions, QuestionChoice } from './actions';
 import type { MessageMark } from './cards';
 import type { MarkIndex, MarkTargetData, Sign } from './marks';
 import type { MessageReference, ReplyDraft, ReplyReference } from './replies';
@@ -23,6 +23,14 @@ export interface ChatContextValue {
     /** The facilitator, in an open session: the actions are offered. */
     readonly control: boolean;
     readonly actions: ChatActions;
+    /**
+     * The facilitator's answer being chosen to each run's questions (by run ID, then question ID), kept here so that the
+     * chat's form and AI の作業's form of the same run show one answer.
+     */
+    readonly answers: {
+        of(run: string): Readonly<Record<string, QuestionChoice>>;
+        update(run: string, f: (choices: Readonly<Record<string, QuestionChoice>>) => Readonly<Record<string, QuestionChoice>>): void;
+    };
     readonly revisions: RevisionTools;
     readonly marks: ReadonlyMap<string, MessageMark>;
     /** Votes and reactions: the session's placed marks counted, and setting one of mine (placed or taken off). */

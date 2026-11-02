@@ -182,9 +182,10 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
     const reply = run.message.kind === 'clarification' ? run.message.reply : undefined;
     const questions = reply !== undefined && reply.questions.length > 0 ? questionsState(run.run, runs) : undefined;
     // open: the facilitator answers them; whoever is not answering sees them with their votes; once a later run took
-    // over the requests, they stay as they were asked, with what was answered (or nothing) and the votes frozen
-    const asking = last && control && live && !compact && questions?.kind === 'open';
-    const voting = !asking && !compact && questions?.kind === 'open';
+    // over the requests, they stay as they were asked, with what was answered (or nothing) and the votes frozen. The
+    // compact card of AI の作業 asks them as the chat does: a waiting unit is answered from there too
+    const asking = last && control && live && questions?.kind === 'open';
+    const voting = !asking && questions?.kind === 'open';
     const decided = questions !== undefined && questions.kind !== 'open';
     // the answer this run gave is shown with the questions it answered; one shown nowhere else keeps its line
     const asked = run.answer && runs.find((r) => r.id === run.answer?.answerTo);
@@ -405,14 +406,16 @@ function ReplySection({ kind, children }: { kind: 'ask' | 'assumed'; children: R
  * words, which come back when it is chosen again.
  */
 function AnswerForm({ run, reply }: { run: RunJson; reply: ReplyView }) {
-    const { tx, actions, onNavigate } = useChat();
+    const { tx, actions, answers, onNavigate } = useChat();
     const r = tx.chat.reply;
-    const [choices, setChoices] = useState<Record<string, QuestionChoice>>({});
+    // shared with the other form of the run (the chat's, AI の作業's): both show the one answer being chosen
+    const choices = answers.of(run.id);
     // the question whose その他 is being written; kept as the dialog closes, so that it fades out with its question
     const [writing, setWriting] = useState<{ question: string; open: boolean } | undefined>();
     const answer = answerBody(reply.questions, choices);
     type Question = ReplyView['questions'][number];
-    const update = (q: string, f: (c: QuestionChoice) => QuestionChoice): void => setChoices((all) => ({ ...all, [q]: f(all[q] ?? { options: [] }) }));
+    const update = (q: string, f: (c: QuestionChoice) => QuestionChoice): void =>
+        answers.update(run.id, (all) => ({ ...all, [q]: f(all[q] ?? { options: [] }) }));
     const choose = (q: Question, option: string, on: boolean): void =>
         update(q.id, (c) =>
             q.multiple

@@ -26,7 +26,7 @@ import {
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { useT } from '../i18n';
-import { useChatActions } from './actions';
+import { useChatActions, type QuestionChoice } from './actions';
 import { sessionApi } from './api';
 import { ChangedFiles, ReplyButton, RunCard } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
@@ -76,6 +76,9 @@ import type { ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
 
 type RequestJson = SessionData['state']['requests'][number];
+
+/** A run's answer before anything was chosen. */
+const NO_CHOICES: Readonly<Record<string, QuestionChoice>> = {};
 
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -241,6 +244,15 @@ export function SessionChat(props: {
     }, [selecting, selection]);
 
     const [hovered, hover] = useState<string | undefined>();
+    // the answers being chosen, per run: one draft for the chat's form and AI の作業's of the same run
+    const [answerDrafts, setAnswerDrafts] = useState<Readonly<Record<string, Readonly<Record<string, QuestionChoice>>>>>({});
+    const answers = useMemo(
+        (): ChatContextValue['answers'] => ({
+            of: (run) => answerDrafts[run] ?? NO_CHOICES,
+            update: (run, f) => setAnswerDrafts((all) => ({ ...all, [run]: f(all[run] ?? NO_CHOICES) })),
+        }),
+        [answerDrafts],
+    );
     const root = useRef<HTMLDivElement | null>(null);
     // an item of the stream, scrolled to the middle and marked for a moment (from AI の作業, a quote or a mark)
     const jump = useCallback((key: string): void => {
@@ -265,6 +277,7 @@ export function SessionChat(props: {
         onNavigate: props.onNavigate,
         control,
         actions,
+        answers,
         revisions,
         marks,
         marking,
