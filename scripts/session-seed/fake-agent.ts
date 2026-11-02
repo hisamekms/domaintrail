@@ -17,7 +17,7 @@ import {
     systemClock,
 } from '@domaintrail/agent';
 import { readCredential } from '@domaintrail/dt';
-import { plainQuestion, readReply, type ReplyData, requestNumber } from '@domaintrail/collaboration';
+import { plainQuestion, readReply, type ReplyData, requestNumber, type RunActivity } from '@domaintrail/collaboration';
 import { sourceSelection } from '@domaintrail/analysis';
 import { findDomainFiles } from '@domaintrail/workspace';
 
@@ -32,7 +32,10 @@ export type Step =
     | { readonly kind: 'exit'; readonly exitCode: number }
     /** Cannot run at all: the run fails (AgentError). */
     | { readonly kind: 'crash' }
-    /** Runs until it is stopped (a cancel): the scenario cancels the run once it is running. */
+    /**
+     * Runs until it is stopped (a cancel): the scenario cancels the run once it is running. Meanwhile it tells what it
+     * is doing, `HANG_ACTIVITIES` one after another every `HANG_ACTIVITY_MS`, round and round.
+     */
     | { readonly kind: 'hang' };
 
 export interface FakeAgent {
@@ -51,6 +54,19 @@ export interface FakeAgentOptions {
     readonly log: (line: string) => void;
 }
 
+/** What a run left running tells it is doing (files of examples/shop), the way a real agent goes: it reads, edits, checks. */
+const HANG_ACTIVITIES: readonly RunActivity[] = [
+    { phase: 'reading', subject: 'stormings/returns.dtes' },
+    { phase: 'reading', subject: 'sales/order.dt' },
+    { phase: 'editing', subject: 'stormings/returns.dtes' },
+    { phase: 'checking', subject: 'dt check' },
+    { phase: 'editing', subject: 'sales/order.dt' },
+    { phase: 'checking', subject: 'dt fmt' },
+    { phase: 'finishing' },
+];
+/** How long each of them lasts. */
+const HANG_ACTIVITY_MS = 3_000;
+
 function scriptedRunner(steps: Step[], root: string): AgentRunner {
     return {
         async run(invocation: AgentInvocation): Promise<AgentOutcome> {
@@ -64,7 +80,21 @@ function scriptedRunner(steps: Step[], root: string): AgentRunner {
                 case 'hang':
                     return new Promise<AgentOutcome>((_resolve, reject) => {
                         if (invocation.signal.aborted) return reject(new Error('stopped'));
-                        invocation.signal.addEventListener('abort', () => reject(new Error('stopped')), { once: true });
+                        let next = 0;
+                        const tell = (): void => {
+                            invocation.onActivity?.(HANG_ACTIVITIES[next]);
+                            next = (next + 1) % HANG_ACTIVITIES.length;
+                        };
+                        tell();
+                        const timer = setInterval(tell, HANG_ACTIVITY_MS);
+                        invocation.signal.addEventListener(
+                            'abort',
+                            () => {
+                                clearInterval(timer);
+                                reject(new Error('stopped'));
+                            },
+                            { once: true },
+                        );
                     });
                 case 'reply': {
                     // the reply a scenario wrote is checked as Claude Code's would be: a mistake in a scenario fails loudly
