@@ -1,3 +1,14 @@
+/*
+ * Colour tokens, in five layers (docs/plans/brand-identity.md has the table of every token, its values and its uses):
+ *   1. primitives (--p-*): the raw palette, the same in both themes; never used by a rule directly
+ *   2. theme: surfaces, text, borders, action, focus, selected, disabled (and the hovers and shadows around them)
+ *   3. meaning: what a model element is, the Event Storming kinds (--es-*) and the modeling concepts (--model-*)
+ *   4. status and diff: how something went (--status-*) and what changed from the baseline (--diff-*)
+ *   5. collaboration: chat roles (--chat-*), the agent's activity (--agent-*), participants (--participant-*)
+ * The dark theme (below) re-points layers 2–5 to other primitives; each layer has its own names, so one meaning never
+ * borrows another's token (the brand's amber is not the warning, nor the event; indigo is the brand, actions and the
+ * local selection). The older names (--panel, --accent, --error, …) stay as aliases of the new ones.
+ */
 :root {
     color-scheme: light;
     --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -5,46 +16,276 @@
        Meiryo (older Windows), Noto Sans CJK (Linux); not Yu Gothic, which renders thin on Windows */
     --sans: 'Hiragino Sans', 'BIZ UDPGothic', Meiryo, 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif;
 
+    /* ---------- 1. primitives ---------- */
+    /* the logo's colours (fixed: issue #33 §1) */
+    --p-brand-indigo: #4338ca;
+    --p-brand-indigo-dark: #a5b4fc;
+    --p-brand-amber: #fbbf24;
+    /* slate, and the blue-black neutrals of the dark theme */
+    --p-white: #ffffff;
+    --p-slate-50: #f8fafc;
+    --p-slate-100: #f1f5f9;
+    --p-slate-200: #e2e8f0;
+    --p-slate-300: #cbd5e1;
+    --p-slate-400: #94a3b8;
+    --p-slate-450: #8492a6;
+    --p-slate-500: #64748b;
+    --p-slate-550: #5e6b7f;
+    --p-slate-600: #475569;
+    --p-slate-700: #334155;
+    --p-slate-900: #0f172a;
+    --p-night-500: #64708a;
+    --p-night-600: #465066;
+    --p-night-650: #343b4f;
+    --p-night-700: #2e3547;
+    --p-night-750: #2a3042;
+    --p-night-800: #252b3b;
+    --p-night-850: #242a3b;
+    --p-night-900: #191d2b;
+    --p-night-950: #10131d;
+    /* indigo */
+    --p-indigo-50: #eef2ff;
+    --p-indigo-100: #e0e7ff;
+    --p-indigo-200: #c7d2fe;
+    --p-indigo-300: #a5b4fc;
+    --p-indigo-400: #818cf8;
+    --p-indigo-500: #6366f1;
+    --p-indigo-600: #4f46e5;
+    --p-indigo-700: #4338ca;
+    --p-indigo-800: #3730a3;
+    --p-indigo-900: #312e81;
+    --p-indigo-night-600: #373c67;
+    --p-indigo-night-700: #30345a;
+    --p-indigo-night-750: #2a2e52;
+    --p-indigo-night-800: #292d4c;
+    /* the concept and status hues (Tailwind-like steps; -night: the dark theme's tinted backgrounds) */
+    --p-orange-100: #ffedd5;
+    --p-orange-300: #fdba74;
+    --p-orange-400: #fb923c;
+    --p-orange-700: #c2410c;
+    --p-orange-950: #431407;
+    --p-orange-night: #43291a;
+    --p-blue-50: #eff6ff;
+    --p-blue-100: #dbeafe;
+    --p-blue-300: #93c5fd;
+    --p-blue-600: #2563eb;
+    --p-blue-700: #1d4ed8;
+    --p-blue-950: #172554;
+    --p-blue-night: #1d3552;
+    --p-violet-100: #ede9fe;
+    --p-violet-300: #c4b5fd;
+    --p-violet-600: #7c3aed;
+    --p-violet-700: #6d28d9;
+    --p-violet-950: #2e1065;
+    --p-violet-night: #2e2550;
+    --p-amber-100: #fef3c7;
+    --p-amber-200: #fde68a;
+    --p-amber-300: #fcd34d;
+    --p-amber-600: #d97706;
+    --p-amber-800: #92400e;
+    --p-amber-900: #78350f;
+    --p-amber-night: #47361f;
+    --p-yellow-100: #fef9c3;
+    --p-yellow-300: #fde047;
+    --p-yellow-400: #facc15;
+    --p-yellow-700: #a16207;
+    --p-yellow-750: #975a0a;
+    --p-yellow-900: #713f12;
+    --p-yellow-night: #3a3214;
+    --p-emerald-100: #d1fae5;
+    --p-emerald-200: #a7f3d0;
+    --p-emerald-300: #6ee7b7;
+    --p-emerald-600: #059669;
+    --p-emerald-700: #047857;
+    --p-emerald-900: #064e3b;
+    --p-emerald-night: #113b35;
+    --p-green-100: #dcfce7;
+    --p-green-300: #86efac;
+    --p-green-700: #15803d;
+    --p-green-night: #14321f;
+    --p-teal-100: #ccfbf1;
+    --p-teal-300: #5eead4;
+    --p-teal-700: #0f766e;
+    --p-teal-night: #12332f;
+    --p-red-100: #fee2e2;
+    --p-red-300: #fca5a5;
+    --p-red-600: #dc2626;
+    --p-red-700: #b91c1c;
+    --p-red-900: #7f1d1d;
+    --p-red-night: #4b222a;
+    --p-rose-100: #ffe4e6;
+    --p-rose-300: #fda4af;
+    --p-rose-700: #be123c;
+    --p-rose-night: #4a1d2a;
+    --p-pink-100: #fce7f3;
+    --p-pink-800: #9d174d;
+    --p-fuchsia-100: #fae8ff;
+    --p-fuchsia-200: #f5d0fe;
+    --p-fuchsia-300: #f0abfc;
+    --p-fuchsia-600: #c026d3;
+    --p-fuchsia-800: #86198f;
+    --p-fuchsia-950: #4a044e;
+    /* the participants' identity hues (issue #33 §4.3), the same in both themes */
+    --p-person-teal: #0f766e;
+    --p-person-violet: #7c3aed;
+    --p-person-ochre: #b45309;
+    --p-person-pink: #be185d;
+    --p-person-sky: #0369a1;
+    --p-person-green: #4d7c0f;
+
+    /* ---------- 2. theme ---------- */
+    /* the logo's ink on this theme's background (the activity bar's mark); the amber dot is the same in both */
+    --brand-ink: var(--p-brand-indigo);
+    --brand-amber: var(--p-brand-amber);
     /* surfaces and text */
-    --bg: #f7f7f8;
-    --panel: #ffffff;
-    --border: #e2e2e6;
-    --border-strong: #d8d8e0;
-    --text: #1d1d22;
-    --text-soft: #44444f;
-    --muted: #6b6b76;
-    --hover: #f4f2fd;
-    /* the hover of the session's rows (chat, AI の作業): a colourless tint that only says "this one"; violet is for what
-       is chosen */
-    --row-hover: rgba(29, 29, 34, 0.045);
+    --bg: var(--p-slate-50);
+    --surface: var(--p-white);
+    --surface-raised: var(--p-white);
+    --surface-muted: var(--p-slate-100);
+    --text: var(--p-slate-900);
+    --text-secondary: var(--p-slate-600);
+    /* the quietest text (hints, counts, group labels); a step darker than slate-500 so it stays AA on surface-muted */
+    --muted: var(--p-slate-550);
+    /* separators, and the edges of controls (inputs, buttons, menus: at least 3:1 against the surface) */
+    --border: var(--p-slate-300);
+    --border-strong: var(--p-slate-450);
+    /* primary controls and links, and what is written on them */
+    --action: var(--p-indigo-700);
+    --on-action: var(--p-white);
+    /* the keyboard focus ring (outline), and a soft halo of it */
+    --focus: var(--p-indigo-500);
+    --focus-ring: color-mix(in srgb, var(--focus) 30%, transparent);
+    /* the local selection: selected rows, the open list, pressed toggles */
+    --selected-bg: var(--p-indigo-50);
+    --selected-text: var(--p-indigo-900);
+    /* a control that cannot be used now (not held to the contrast minimum, by WCAG's exception) */
+    --disabled-bg: var(--p-slate-100);
+    --disabled-text: var(--p-slate-400);
+    --disabled-border: var(--p-slate-200);
+    /* hovers: a colourless tint that only says "this one" (indigo is for what is chosen) */
+    --hover: var(--p-slate-100);
+    --row-hover: rgba(15, 23, 42, 0.045);
     /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
-    --hover-strong: #e6e6eb;
-    --shadow: rgba(0, 0, 0, 0.12);
+    --hover-strong: var(--p-slate-200);
+    --neutral-tint: var(--p-slate-200);
+    --shadow: rgba(15, 23, 42, 0.12);
     --legend-bg: rgba(255, 255, 255, 0.92);
-    --banner-bg: #fff4e5;
-    --banner-border: #f2d6a6;
-    --neutral-tint: #ececf2;
+    --resizer: color-mix(in srgb, var(--action) 35%, transparent);
+    /* older names of the theme tokens */
+    --panel: var(--surface);
+    --text-soft: var(--text-secondary);
+    --accent: var(--action);
 
-    /* accent and states */
-    --accent: #5b47d6;
-    --focus-ring: rgba(91, 71, 214, 0.25);
-    --resizer: rgba(91, 71, 214, 0.35);
-    --added: #1a9b52;
-    --changed: #d97a00;
-    --removed: #d23a3a;
-    --error: #d23a3a;
-    --warning: #c78a00;
-    --error-wash: #fdecec;
-    --warning-wash: #fff6e0;
-    --amber: #d39b2a;
+    /* ---------- 3. meaning ---------- */
+    /* Event Storming sticky notes (issue #33 §3.2, the convention: event orange, command blue, policy purple,
+       aggregate yellow, read model green, hotspot red; actor pale yellow, external system fuchsia): the paper, its
+       edge and its text. Light: pale paper, dark text; dark: deep paper, pale text (the theme's text also reads on it). */
+    --es-event: var(--p-orange-400);
+    --es-event-border: var(--p-orange-700);
+    --es-event-text: var(--p-orange-950);
+    --es-command: var(--p-blue-300);
+    --es-command-border: var(--p-blue-600);
+    --es-command-text: var(--p-blue-950);
+    --es-policy: var(--p-violet-300);
+    --es-policy-border: var(--p-violet-600);
+    --es-policy-text: var(--p-violet-950);
+    --es-aggregate: var(--p-amber-200);
+    --es-aggregate-border: var(--p-amber-600);
+    --es-aggregate-text: var(--p-amber-900);
+    --es-readmodel: var(--p-emerald-200);
+    --es-readmodel-border: var(--p-emerald-600);
+    --es-readmodel-text: var(--p-emerald-900);
+    --es-hotspot: var(--p-red-300);
+    --es-hotspot-border: var(--p-red-600);
+    --es-hotspot-text: var(--p-red-900);
+    --es-actor: var(--p-yellow-100);
+    --es-actor-border: var(--p-yellow-700);
+    --es-actor-text: var(--p-yellow-900);
+    --es-external: var(--p-fuchsia-200);
+    --es-external-border: var(--p-fuchsia-600);
+    --es-external-text: var(--p-fuchsia-950);
+    /* the timeline's arrows (an event's hue: an order of events, not a warning) */
+    --es-sequence: var(--p-orange-700);
+    /* Domain Modeling concepts (issue #33 §3.3): neutral cards; the concept's hue on a stripe, label or border
+       (accent), and the faint background of a chip (tint). The aggregate root takes the brand's indigo, by design. */
+    --model-context: var(--p-slate-500);
+    --model-context-tint: var(--p-slate-50);
+    --model-aggregate: var(--p-indigo-700);
+    --model-aggregate-tint: var(--p-indigo-50);
+    --model-entity: var(--p-slate-600);
+    --model-entity-tint: var(--p-slate-100);
+    --model-value: var(--p-teal-700);
+    --model-value-tint: var(--p-teal-100);
+    --model-command: var(--p-blue-600);
+    --model-command-tint: var(--p-blue-50);
+    --model-event: var(--p-orange-700);
+    --model-event-tint: var(--p-orange-100);
+    --model-policy: var(--p-violet-600);
+    --model-policy-tint: var(--p-violet-100);
 
-    /* hues: strong (borders, lines), text, tint (badge backgrounds), wash (node backgrounds) */
-    --violet: #6a55e0;
-    --violet-text: #4a37b8;
-    --violet-tint: #e8e3ff;
-    --violet-soft: #f6f3ff;
-    --violet-wash: #faf9ff;
-    --violet-border: #c9c0f4;
+    /* ---------- 4. status and diff ---------- */
+    /* how something went (issue #33 §3.4): ink for text and icons, bg for its block, the ink as a solid fill with
+       on-status written on it */
+    --status-info-ink: var(--p-blue-700);
+    --status-info-bg: var(--p-blue-100);
+    --status-success-ink: var(--p-emerald-700);
+    --status-success-bg: var(--p-emerald-100);
+    --status-warning-ink: var(--p-amber-800);
+    --status-warning-bg: var(--p-amber-100);
+    --status-danger-ink: var(--p-red-700);
+    --status-danger-bg: var(--p-red-100);
+    --status-idle-ink: var(--p-slate-500);
+    --status-idle-bg: var(--p-slate-50);
+    --on-status: var(--p-white);
+    /* what changed from the baseline (not a status: added is not "completed", removed is not an error) */
+    --diff-added: var(--p-green-700);
+    --diff-added-bg: var(--p-green-100);
+    --diff-changed: var(--p-yellow-700);
+    --diff-changed-bg: var(--p-yellow-100);
+    --diff-removed: var(--p-rose-700);
+    --diff-removed-bg: var(--p-rose-100);
+    /* older names of the status and diff tokens */
+    --error: var(--status-danger-ink);
+    --error-wash: var(--status-danger-bg);
+    --warning: var(--status-warning-ink);
+    --warning-wash: var(--status-warning-bg);
+    --banner-bg: var(--status-warning-bg);
+    --banner-border: color-mix(in srgb, var(--status-warning-ink) 30%, transparent);
+    --added: var(--diff-added);
+    --changed: var(--diff-changed);
+    --removed: var(--diff-removed);
+
+    /* ---------- 5. collaboration ---------- */
+    /* chat roles (issue #33 §4.1): the message's background; the sender's name and avatar say who, not the colour */
+    --chat-own-bg: var(--p-indigo-50);
+    --chat-other-bg: var(--p-slate-100);
+    --chat-agent-bg: var(--p-white);
+    --chat-mention-bg: var(--p-indigo-100);
+    --chat-unread: var(--p-indigo-700);
+    /* the agent's activity (§4.2): one hue for every running phase (reading, editing, checking, finishing), the phase
+       told by its icon and text; the other outcomes take the status tokens */
+    --agent-active: var(--action);
+    --agent-active-bg: var(--selected-bg);
+    /* participants (§4.3): a stable hue per person, apart from the model's and the statuses' hues, with its name in
+       on-participant and a halo of the surface around it */
+    --participant-1: var(--p-person-teal);
+    --participant-2: var(--p-person-violet);
+    --participant-3: var(--p-person-ochre);
+    --participant-4: var(--p-person-pink);
+    --participant-5: var(--p-person-sky);
+    --participant-6: var(--p-person-green);
+    --on-participant: var(--p-white);
+    --participant-halo: var(--surface);
+
+    /* ---------- hues of the diagrams (to be replaced by the meaning tokens above) ---------- */
+    /* strong (borders, lines), text, tint (badge backgrounds), wash (node backgrounds); violet is the old accent's
+       family and now follows the brand's indigo */
+    --violet: var(--p-indigo-600);
+    --violet-text: var(--p-indigo-800);
+    --violet-tint: var(--selected-bg);
+    --violet-soft: #f5f7ff;
+    --violet-wash: #fafbff;
+    --violet-border: var(--p-indigo-200);
     --purple: #8a4fd6;
     --purple-text: #6a2fb5;
     --purple-tint: #f1e6ff;
@@ -64,51 +305,34 @@
     --teal-tint: #e6f4f4;
     --teal-tint2: #e0f4f2;
     --teal-wash: #f0faf8;
+    /* the event's dot and band (not the brand's amber) */
+    --amber: var(--model-event);
     --amber-text: #8a5a00;
     --amber-tint: #fff1d6;
     --red-text: #a52a2a;
     --red-tint: #fde3e3;
     --orange-text: #a3480f;
-    --grey: #9a9aa6;
-    --grey-text: #8a8a96;
-    --grey-border: #c9c9d3;
+    --grey: var(--p-slate-400);
+    --grey-text: #7b8698;
+    --grey-border: var(--p-slate-300);
 
     /* canvas */
-    --node-bg: #ffffff;
-    --node-divider: #ececf0;
-    --ink-strong: #2b2b33;
-    --stub-bg: #f6f6f9;
-    --context-bg: rgba(240, 240, 246, 0.6);
-    --context-label: #50505c;
-    --boundary-border: #8b7be6;
-    --boundary-bg: rgba(246, 243, 255, 0.5);
+    --node-bg: var(--surface);
+    --node-divider: var(--p-slate-200);
+    --ink-strong: #1e293b;
+    --stub-bg: var(--p-slate-50);
+    --context-bg: rgba(241, 245, 249, 0.6);
+    --context-label: var(--p-slate-600);
+    --boundary-border: var(--p-indigo-400);
+    --boundary-bg: rgba(238, 242, 255, 0.5);
     --shared-bg: rgba(230, 244, 244, 0.6);
-    --edge: #55555f;
-    --edge-label: #3a3a44;
-
-    /* Event Storming sticky notes (spec §9.4: default colors, with no meaning): background, border */
-    --es-event: #ffd8a8;
-    --es-event-border: #e8590c;
-    --es-command: #cfe5ff;
-    --es-command-border: #1c7ed6;
-    --es-policy: #e5dbff;
-    --es-policy-border: #7048e8;
-    --es-aggregate: #fff3bf;
-    --es-aggregate-border: #d9a400;
-    --es-readmodel: #d3f9d8;
-    --es-readmodel-border: #2f9e44;
-    --es-hotspot: #ffdeeb;
-    --es-hotspot-border: #d6336c;
-    --es-actor: #fff9db;
-    --es-actor-border: #a07d00;
-    --es-external: #f1e4f7;
-    --es-external-border: #9c36b5;
-    --es-sequence: #b8530f;
+    --edge: #556070;
+    --edge-label: var(--p-slate-700);
     --ref-edge: #3a6fd8;
     --ref-label: #2f5fbf;
 
     /* source */
-    --gutter: #a0a0aa;
+    --gutter: var(--p-slate-400);
     --keyword: #8a2fb5;
     --doc-comment: #3c7a3a;
     /* type and spacing of the session's views: three text roles, five spacing steps */
@@ -124,44 +348,110 @@
     --space-5: 24px;
 }
 
-/* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). */
+/* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). It
+   re-points layers 2–5 to other primitives; the aliases follow by themselves. */
 :root[data-theme='dark'] {
     color-scheme: dark;
 
-    --bg: #16161b;
-    --panel: #1e1e24;
-    --border: #33333d;
-    --border-strong: #3d3d48;
-    --text: #e6e6ea;
-    --text-soft: #c4c4cc;
-    --muted: #9a9aa6;
-    --hover: #26243a;
-    --row-hover: rgba(230, 230, 234, 0.05);
-    --hover-strong: #383843;
+    /* 2. theme */
+    --brand-ink: var(--p-brand-indigo-dark);
+    --bg: var(--p-night-950);
+    --surface: var(--p-night-900);
+    --surface-raised: var(--p-night-850);
+    --surface-muted: var(--p-night-800);
+    --text: var(--p-slate-100);
+    --text-secondary: var(--p-slate-300);
+    --muted: var(--p-slate-400);
+    --border: var(--p-night-600);
+    --border-strong: var(--p-night-500);
+    --action: var(--p-indigo-300);
+    --on-action: var(--p-night-950);
+    --focus: var(--p-indigo-300);
+    --selected-bg: var(--p-indigo-night-700);
+    --selected-text: var(--p-indigo-100);
+    --disabled-bg: var(--p-night-800);
+    --disabled-text: var(--p-night-500);
+    --disabled-border: var(--p-night-650);
+    --hover: var(--p-night-750);
+    --row-hover: rgba(241, 245, 249, 0.05);
+    --hover-strong: var(--p-night-650);
+    --neutral-tint: var(--p-night-700);
     --shadow: rgba(0, 0, 0, 0.5);
-    --legend-bg: rgba(30, 30, 36, 0.92);
-    --banner-bg: #3a2d14;
-    --banner-border: #6b5320;
-    --neutral-tint: #2c2c35;
+    --legend-bg: rgba(25, 29, 43, 0.92);
 
-    --accent: #8576f2;
-    --focus-ring: rgba(133, 118, 242, 0.35);
-    --resizer: rgba(133, 118, 242, 0.45);
-    --added: #2fbf6f;
-    --changed: #f0962a;
-    --removed: #ef5a5a;
-    --error: #ef5a5a;
-    --warning: #e0a52a;
-    --error-wash: #3a1f22;
-    --warning-wash: #3a3016;
-    --amber: #e0a842;
+    /* 3. meaning */
+    --es-event: var(--p-orange-700);
+    --es-event-border: var(--p-orange-400);
+    --es-event-text: var(--p-orange-100);
+    --es-command: var(--p-blue-700);
+    --es-command-border: var(--p-blue-300);
+    --es-command-text: var(--p-blue-100);
+    --es-policy: var(--p-violet-700);
+    --es-policy-border: var(--p-violet-300);
+    --es-policy-text: var(--p-violet-100);
+    --es-aggregate: var(--p-yellow-750);
+    --es-aggregate-border: var(--p-amber-200);
+    --es-aggregate-text: var(--p-yellow-100);
+    --es-readmodel: var(--p-emerald-700);
+    --es-readmodel-border: var(--p-emerald-300);
+    --es-readmodel-text: var(--p-emerald-100);
+    --es-hotspot: var(--p-pink-800);
+    --es-hotspot-border: var(--p-red-300);
+    --es-hotspot-text: var(--p-pink-100);
+    --es-actor: var(--p-yellow-900);
+    --es-actor-border: var(--p-yellow-400);
+    --es-actor-text: var(--p-yellow-100);
+    --es-external: var(--p-fuchsia-800);
+    --es-external-border: var(--p-fuchsia-300);
+    --es-external-text: var(--p-fuchsia-100);
+    --es-sequence: var(--p-orange-400);
+    --model-context: var(--p-slate-400);
+    --model-context-tint: var(--p-night-800);
+    --model-aggregate: var(--p-indigo-300);
+    --model-aggregate-tint: var(--p-indigo-night-750);
+    --model-entity: var(--p-slate-300);
+    --model-entity-tint: var(--p-night-800);
+    --model-value: var(--p-teal-300);
+    --model-value-tint: var(--p-teal-night);
+    --model-command: var(--p-blue-300);
+    --model-command-tint: var(--p-blue-night);
+    --model-event: var(--p-orange-300);
+    --model-event-tint: var(--p-orange-night);
+    --model-policy: var(--p-violet-300);
+    --model-policy-tint: var(--p-violet-night);
 
-    --violet: #8a78ff;
-    --violet-text: #b3a8ff;
-    --violet-tint: #2f2a52;
-    --violet-soft: #252039;
-    --violet-wash: #1f1c30;
-    --violet-border: #4b4380;
+    /* 4. status and diff */
+    --status-info-ink: var(--p-blue-300);
+    --status-info-bg: var(--p-blue-night);
+    --status-success-ink: var(--p-emerald-300);
+    --status-success-bg: var(--p-emerald-night);
+    --status-warning-ink: var(--p-amber-300);
+    --status-warning-bg: var(--p-amber-night);
+    --status-danger-ink: var(--p-red-300);
+    --status-danger-bg: var(--p-red-night);
+    --status-idle-ink: var(--p-slate-300);
+    --status-idle-bg: var(--p-night-800);
+    --on-status: var(--p-night-950);
+    --diff-added: var(--p-green-300);
+    --diff-added-bg: var(--p-green-night);
+    --diff-changed: var(--p-yellow-300);
+    --diff-changed-bg: var(--p-yellow-night);
+    --diff-removed: var(--p-rose-300);
+    --diff-removed-bg: var(--p-rose-night);
+
+    /* 5. collaboration */
+    --chat-own-bg: var(--p-indigo-night-800);
+    --chat-other-bg: var(--p-night-800);
+    --chat-agent-bg: var(--p-night-900);
+    --chat-mention-bg: var(--p-indigo-night-600);
+    --chat-unread: var(--p-indigo-300);
+
+    /* hues of the diagrams */
+    --violet: var(--p-indigo-400);
+    --violet-text: var(--p-indigo-200);
+    --violet-soft: #262a48;
+    --violet-wash: #1f2235;
+    --violet-border: #4a5190;
     --purple: #a979f0;
     --purple-text: #c9a3ff;
     --purple-tint: #33244a;
@@ -186,43 +476,24 @@
     --red-text: #ff9b9b;
     --red-tint: #4a2222;
     --orange-text: #f0a070;
-    --grey: #6a6a78;
-    --grey-text: #8a8a98;
-    --grey-border: #3d3d48;
+    --grey: var(--p-night-500);
+    --grey-text: #8b95a8;
+    --grey-border: var(--p-night-650);
 
-    --node-bg: #1e1e24;
-    --node-divider: #33333d;
-    --ink-strong: #d6d6dc;
-    --stub-bg: #23232b;
-    --context-bg: rgba(40, 40, 50, 0.6);
-    --context-label: #a8a8b4;
-    --boundary-border: #6f63c9;
-    --boundary-bg: rgba(60, 50, 110, 0.22);
+    --node-divider: var(--p-night-700);
+    --ink-strong: #d5dbe5;
+    --stub-bg: #20253a;
+    --context-bg: rgba(37, 43, 59, 0.6);
+    --context-label: #a7b1c2;
+    --boundary-border: var(--p-indigo-500);
+    --boundary-bg: rgba(67, 56, 202, 0.18);
     --shared-bg: rgba(30, 70, 70, 0.35);
-    --edge: #9a9aa6;
-    --edge-label: #d0d0d8;
-
-    --es-event: #4a2b14;
-    --es-event-border: #ff922b;
-    --es-command: #16304d;
-    --es-command-border: #4dabf7;
-    --es-policy: #2c2250;
-    --es-policy-border: #9775fa;
-    --es-aggregate: #3d3410;
-    --es-aggregate-border: #fcc419;
-    --es-readmodel: #173a22;
-    --es-readmodel-border: #51cf66;
-    --es-hotspot: #4a1a2e;
-    --es-hotspot-border: #f06595;
-    --es-actor: #36321a;
-    --es-actor-border: #e0c050;
-    --es-external: #3a2244;
-    --es-external-border: #cc5de8;
-    --es-sequence: #ff9f5a;
+    --edge: #9aa4b5;
+    --edge-label: #d0d6df;
     --ref-edge: #6c9bff;
     --ref-label: #8fb3ff;
 
-    --gutter: #6a6a76;
+    --gutter: #5f6a80;
     --keyword: #d08cff;
     --doc-comment: #86c784;
 }
@@ -236,6 +507,13 @@ input {
 
 * {
     box-sizing: border-box;
+}
+
+/* the keyboard focus of the page's own controls: one visible ring in the focus colour (zero specificity, so that a
+   control's own focus style wins; not inside tldraw's canvas, which draws its own) */
+:where(:is(button, a, select, summary, [role='tab'], [tabindex]):focus-visible:not(.tl-container *)) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
 }
 
 /* light text on a dark background looks heavier with macOS's default smoothing (it thickens the strokes) */
@@ -268,7 +546,7 @@ body,
     min-height: min(26.25rem, calc(100vh - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
-    background: var(--panel);
+    background: var(--surface-raised);
     color: var(--text);
     border: 1px solid var(--border-strong);
     border-radius: 10px;
@@ -329,7 +607,7 @@ body,
     border-radius: 999px;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--on-status);
 }
 .pill-ok {
     background: var(--added);
@@ -376,7 +654,7 @@ body,
     margin-left: 3px;
     border-radius: 9px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     font-size: 0.8125rem;
 }
 .count-error {
@@ -553,7 +831,7 @@ code.block {
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.8125rem;
-    color: #fff;
+    color: var(--on-status);
 }
 .change-added {
     background: var(--added);
@@ -754,7 +1032,7 @@ a.field-origin {
     place-items: center;
     font-size: 11px;
     font-weight: 700;
-    color: #fff;
+    color: var(--on-status);
 }
 .di-diag-error .di-diag {
     background: var(--error);
@@ -871,7 +1149,7 @@ a.field-origin {
     border-radius: 4px;
     font-family: var(--sans);
     font-size: 12px;
-    color: #fff;
+    color: var(--on-action);
     background: var(--accent);
 }
 .dn-change-added .dn-badge {
@@ -895,7 +1173,7 @@ a.field-origin {
     font-family: var(--sans);
     font-size: 13px;
     font-weight: 700;
-    color: #fff;
+    color: var(--on-status);
 }
 .dn-diag-error .dn-diag {
     background: var(--error);
@@ -1107,7 +1385,7 @@ select,
 }
 .segmented button.active {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 
 .doc {
@@ -1300,7 +1578,7 @@ select,
     border-radius: 50%;
     display: grid;
     place-items: center;
-    color: #fff;
+    color: var(--on-status);
     font-size: 0.625rem;
     font-weight: 700;
 }
@@ -1651,7 +1929,7 @@ select,
     width: 43px;
     display: grid;
     place-items: center;
-    color: var(--accent);
+    color: var(--brand-ink);
 }
 .brand-text {
     min-width: 0;
@@ -1707,8 +1985,8 @@ select,
     color: var(--text);
 }
 .activity.active {
-    color: var(--accent);
-    background: var(--violet-tint);
+    color: var(--action);
+    background: var(--selected-bg);
 }
 .activity-badge {
     position: absolute;
@@ -1728,10 +2006,12 @@ select,
     box-shadow: 0 0 0 2px var(--panel);
 }
 .activity-badge.badge-error {
-    background: var(--error);
+    background: var(--status-danger-ink);
+    color: var(--on-status);
 }
 .activity-badge.badge-warning {
-    background: var(--warning);
+    background: var(--status-warning-ink);
+    color: var(--on-status);
 }
 .left-pane {
     height: 100%;
@@ -1819,7 +2099,7 @@ select,
     position: fixed;
     z-index: 40;
     padding: 10px 14px;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -1944,7 +2224,7 @@ select,
     padding: 4px;
     display: flex;
     flex-direction: column;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -2008,7 +2288,7 @@ select,
     border: none;
     border-radius: 50%;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     box-shadow: 0 4px 14px var(--shadow);
 }
 .chat-launcher:hover {
@@ -2045,7 +2325,7 @@ svg.chat-launcher-mark {
     padding: 0 5px;
     border-radius: 9px;
     background: var(--error);
-    color: #fff;
+    color: var(--on-status);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1.125rem;
@@ -2131,7 +2411,7 @@ svg.chat-launcher-mark {
     font-weight: 600;
 }
 .view-tab-list > button:disabled {
-    opacity: 0.4;
+    color: var(--disabled-text);
     cursor: default;
 }
 /*
@@ -2229,7 +2509,7 @@ svg.chat-launcher-mark {
     display: flex;
     flex-direction: column;
     white-space: nowrap;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -2262,9 +2542,9 @@ svg.chat-launcher-mark {
     position: relative;
 }
 .filter-button.active {
-    color: var(--accent);
-    background: var(--violet-tint);
-    border-color: var(--accent);
+    color: var(--action);
+    background: var(--selected-bg);
+    border-color: var(--action);
 }
 .filter-count {
     min-width: 1.125rem;
@@ -2274,7 +2554,7 @@ svg.chat-launcher-mark {
     font-weight: 600;
     line-height: 1.125rem;
     text-align: center;
-    color: #fff;
+    color: var(--on-action);
     background: var(--accent);
 }
 .filter-menu {
@@ -2303,8 +2583,7 @@ svg.chat-launcher-mark {
     background: var(--hover);
 }
 .filter-clear:disabled {
-    color: var(--muted);
-    opacity: 0.6;
+    color: var(--disabled-text);
     cursor: default;
 }
 .filter-section {
@@ -2432,8 +2711,8 @@ svg.chat-launcher-mark {
     height: 18px;
 }
 .explorer-head .icon-button[aria-pressed='true'] {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--selected-bg);
+    color: var(--action);
 }
 .explorer-body {
     flex: 1;
@@ -2480,7 +2759,7 @@ svg.chat-launcher-mark {
 }
 .explorer-section-title:focus-visible {
     outline: none;
-    box-shadow: inset 0 0 0 2px var(--focus-ring);
+    box-shadow: inset 0 0 0 2px var(--focus);
 }
 .tree-item,
 .tree-group {
@@ -2505,8 +2784,8 @@ svg.chat-launcher-mark {
     background: var(--hover);
 }
 .tree-item.selected {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--selected-bg);
+    color: var(--selected-text);
 }
 .tree-twisty {
     width: 14px;
@@ -3262,7 +3541,7 @@ details.deps > .sub {
 .legend .icon-button:disabled,
 .pane .icon-button:disabled,
 .rail .icon-button:disabled {
-    opacity: 0.35;
+    color: var(--disabled-text);
     cursor: default;
 }
 .context-picker-all {
@@ -3398,7 +3677,7 @@ del.was.block {
     width: min(26.25rem, calc(100vw - 16px));
     overflow: auto;
     padding: 8px;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -3487,7 +3766,7 @@ del.was.block {
     margin-top: 6px;
     border-color: var(--accent);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-panel button:disabled {
     opacity: 0.5;
@@ -3593,21 +3872,21 @@ del.was.block {
 .session-status.status-current,
 .session-status.run-state-Completed {
     background: var(--added);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.status-stale,
 .session-status.run-state-Failed {
     background: var(--error);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.status-unknown,
 .session-status.run-state-NeedsClarification {
     background: var(--warning);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.run-state-Running {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-request.state-Dismissed {
     opacity: 0.6;
@@ -3748,15 +4027,15 @@ del.was.block {
 }
 .session-status.file-added {
     background: var(--added);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.file-removed {
     background: var(--removed);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.file-changed {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .diff-count-add {
     color: var(--added);
@@ -3999,6 +4278,7 @@ del.was.block {
 }
 .chat-agent-avatar {
     background: var(--accent);
+    color: var(--on-action);
 }
 /* a sent message's targets: a row of read-only chips above its body (`#注文` `#請求書`), wrapping; the chips are the
    composer's (`.chat-chip`), without the number and the × */
@@ -4256,7 +4536,7 @@ button.add-to-request {
 }
 button.add-to-request:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 button.add-to-request.added {
     border-color: var(--border-strong);
@@ -4355,7 +4635,7 @@ button.add-to-request.added:hover {
     border: 1px solid var(--accent);
     border-radius: 6px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-chat button.chat-send:disabled {
     opacity: 0.45;
@@ -4665,7 +4945,7 @@ button.add-to-request.added:hover {
 .collab-end-confirm.primary.danger {
     background: var(--error);
     border-color: var(--error);
-    color: #fff;
+    color: var(--on-status);
 }
 .collab-unfinished {
     padding: 8px 10px;
@@ -4758,14 +5038,14 @@ button.add-to-request.added:hover {
     padding: 0 5px;
     border-radius: 999px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1;
     font-variant-numeric: tabular-nums;
 }
 .session-chat .chat-views button.active .chat-views-badge {
-    background: #fff;
+    background: var(--on-action);
     color: var(--accent);
 }
 .chat-view {
@@ -5277,7 +5557,7 @@ button.add-to-request.added:hover {
 .cancel-dialog button.cancel-dialog-button.danger {
     border-color: var(--error);
     background: var(--error);
-    color: #fff;
+    color: var(--on-status);
 }
 .chat-apply {
     display: inline-flex;
@@ -5310,7 +5590,7 @@ button.add-to-request.added:hover {
 .session-chat button.primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-chat button.primary:disabled {
     opacity: 0.5;
@@ -5357,7 +5637,7 @@ button.add-to-request.added:hover {
     border: none;
     border-radius: 12px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     box-shadow: 0 2px 8px var(--shadow);
@@ -6089,7 +6369,7 @@ button.add-to-request.added:hover {
     white-space: nowrap;
 }
 .canvas-controls .canvas-control[aria-disabled='true'] {
-    opacity: 0.35;
+    color: var(--disabled-text);
     cursor: default;
 }
 .canvas-controls-bar .canvas-zoom-level {
@@ -6097,8 +6377,8 @@ button.add-to-request.added:hover {
     font-variant-numeric: tabular-nums;
 }
 .canvas-controls-bar .canvas-legend-button.active {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--selected-bg);
+    color: var(--action);
 }
 /*
  * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
@@ -6387,7 +6667,7 @@ button.add-to-request.added:hover {
 .answer-other-dialog button.answer-other-button.primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .answer-other-dialog button.answer-other-button:disabled {
     opacity: 0.5;
