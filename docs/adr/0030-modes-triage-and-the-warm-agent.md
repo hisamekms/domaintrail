@@ -50,7 +50,7 @@ message saying what to rename; the answerer's and the runner's settings are sepa
 - `agent.*`, top level, for everything the agent (`dt agent` or in process) reads, in both modes:
   - `agent.port`: the agent API (was `session.agent.port`);
   - `agent.run.*`: the runner — `allowedTools`, `dt`, `maxPreviousRunDiff` (were `session.agent.*`), and the new
-    `model`, `effort`, `warm`, `restartAfter`;
+    `model`, `effort`, `warm`, `restartAfter`, `idleTimeout`;
   - `agent.answer.*`: the answerer — `model`, `effort`, `warm`, `restartAfter`, `timeout` (new);
   - `agent.triage.model`: the light model of stage 3 (new).
 - `classifier.*`, top level: Clef (was `session.classifier.*`), called by the server in both modes.
@@ -133,7 +133,9 @@ separate, with separate settings and separate entry points.
 default, with `agent.run.warm: false` / `agent.answer.warm: false` to turn it off. *Proposed* (the plan's design): Claude Code's
 `--input-format stream-json` rather than the Agent SDK; restart after the role's `restartAfter` jobs, past 150k tokens of context,
 after a revert or restore, a declined run, or a change of tools, models or `dt`; interrupt by the control request; fall
-back to cold runs when the warm process misbehaves.
+back to cold runs when the warm process misbehaves. *Decided by the maintainer* (M3b): a warm process of the runner
+that takes no turn for `agent.run.idleTimeout` minutes (default 30; `0` = never) is ended to free its memory, never
+during a turn; the next run starts a fresh one, which is not a failure.
 
 ### 8. The record of each triage
 

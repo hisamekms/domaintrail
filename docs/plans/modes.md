@@ -213,7 +213,7 @@ Four top-level sections, by what they configure rather than by the command that 
 | `open` | `port`, `host` | `dt open` | `view.port`, `view.host` |
 | `collab` | `port`, `host`, `identity`, `access.*`, `maxParticipants`, `quickReactions` | `dt collab`, `dt collab link` | `session.*` (the same keys) |
 | `agent` | `port` (the agent API, both modes) | the server | `session.agent.port` |
-| `agent.run` | `allowedTools`, `dt`, `maxPreviousRunDiff`, `model`, `effort`, `warm`, `restartAfter` | the runner | `session.agent.allowedTools`, `.dt`, `.maxPreviousRunDiff`; the rest new |
+| `agent.run` | `allowedTools`, `dt`, `maxPreviousRunDiff`, `model`, `effort`, `warm`, `restartAfter`, `idleTimeout` | the runner | `session.agent.allowedTools`, `.dt`, `.maxPreviousRunDiff`; the rest new (`session.agent.run.*` until M5) |
 | `agent.answer` | `model`, `effort`, `warm`, `restartAfter`, `timeout` (all new) | the answerer | — |
 | `agent.triage` | `model` (new) | the answerer's stage 3 | — |
 | `classifier` | `enabled`, `provider`, `model`, `accountId`, `apiTokenEnv`, `threshold` (Clef) | the server's stage 2, both modes | `session.classifier.*` |
@@ -240,6 +240,8 @@ Four top-level sections, by what they configure rather than by the command that 
   (open question Q4).
 - **Warm** (decision 15), per role: `agent.run.warm`, `agent.answer.warm` (`true` by default; `false`: one process per
   job, today's) and `restartAfter` (jobs before a warm process is replaced; default 20 for runs, 50 for answers).
+  `agent.run.idleTimeout`: minutes without a run before the warm process is ended to free its memory (a few hundred
+  MB); default 30, `0` = never (M3b; `session.agent.run.idleTimeout` until M5 moves the run role's keys).
   `agent.answer.timeout`: the most an answer may take (default 120 s; a run has no such limit beyond today's).
 - The answerer's tools are **not** configurable (`Read`, `Grep`, `Glob`): that is the guarantee. The facilitator's
   `agent.run.allowedTools` are the runner's only.
@@ -407,10 +409,10 @@ both roles by default; `--role answer` or `--role run` starts one only.
 | Workspace | reads it as it is | base revision, scan, outside-sources guard, `dt fmt` / `dt check` when files changed, result revision, success rule |
 | Concurrency | in parallel with runs; one job at a time per answerer | serial per session |
 | Prompt and output | its own prompt; `{ answer }` \| `{ proposal }` \| `{ neither }` | `buildPrompt`; today's reply plus `answer` / `answered` (the override) |
-| Settings | `agent.answer.{model, effort, warm, restartAfter, timeout}`, `agent.triage.model` | `agent.run.{model, effort, warm, restartAfter, allowedTools, dt, maxPreviousRunDiff}` |
+| Settings | `agent.answer.{model, effort, warm, restartAfter, timeout}`, `agent.triage.model` | `agent.run.{model, effort, warm, restartAfter, idleTimeout, allowedTools, dt, maxPreviousRunDiff}` |
 | Warm processes | the answerer (and the small triage process) | the runner |
 | Memory hint | `changedSinceYourLastAnswer` | `changedSinceYourLastRun` |
-| Restart | after `restartAfter` jobs, past 150k tokens, after a revert / restore, after a model change | as for answers, plus after a declined run and a change of tools or `dt` |
+| Restart | after `restartAfter` jobs, past 150k tokens, after a revert / restore, after a model change | as for answers, plus after a declined run and a change of tools or `dt`; ended after `idleTimeout` minutes without a run |
 
 - **Why separate** (the alternative was one process for both): a process cannot be both read-only and writable —
   `--tools` is fixed per process, and the read-only guarantee is the process's tools; answers would queue behind runs
@@ -543,6 +545,11 @@ own `--tools`.
   (`usage` of the result: input + cache read + cache creation) passes 150k tokens; after a revert (打ち消し) or restore
   (復元) of a revision; after a run is declined (rule 7: the turn may have carried an attempt to break the rules, and it
   should not stay in the context); after the agent's `dt`, tools or models change; and after `session.closed`.
+- **Idle stop** (M3b, the runner): a warm process that takes no turn for `idleTimeout` minutes (default 30; `0` =
+  never) is ended to free its memory (a few hundred MB), by the same clean retire as a restart (end of input, SIGTERM,
+  SIGKILL after the grace), with one log line. The timer starts when a turn ends and is cleared when one starts, so it
+  never ends a process during a turn. The next run starts a fresh process with the plain prompt; an idle stop is not a
+  failure and does not count towards the fall-back to cold runs.
 - **Context growth**: measured +10–15k tokens a run. Restarting is cheap (~1.3 s plus the files read again), so the
   plan restarts instead of compacting; `/compact` (measured to work) is kept as a later option.
 - **Cross-job influence**: the answerer's memory helps a follow-up question ("なぜ？", "それならどう変える？"). In collab
@@ -600,6 +607,7 @@ cascade (time and cost per stage, how often stages 1 and 2 decide) on a sample o
 | M1 | ADR 0030 (modes, addressing, triage, proposals, warm agent, config; amends ADR 0026); this plan updated | — | M3 |
 | M2 | Collaboration model and use cases: session `mode` (migration) and Solo → Collab; the AI participant `ai` (mentionable, author of answers); the `Triage` aggregate (steps, decided, override); the `ChangeProposal` aggregate (open, approve several/edited → one run, reject, withdraw); run input `proposals`; reply `answer` + status `answered`; the success rule with ran/failed/skipped (`agent-run.dt`, `validation.ts`, regenerate); stage 1 (`domain/triage.ts`); persistence and migration; `protocol.ts` types | M1, `feat/collab-card` merged | M3 |
 | M3 | Agent, warm processes: `createWarmClaudeRunner` (stream-json input, interrupt, crash, restart rules, `changedSinceYourLastRun`), reusable by both roles with their own tools, model/effort, `warm` / `restartAfter` as options (wired to config in M5), the fake agent speaking stream-json input, the usability check of `claude` | M1 | M1, M2 |
+| M3b | Agent: the warm process ended after `session.agent.run.idleTimeout` minutes without a run (default 30, `0` = never), not counted as a failure | M3 | M2 |
 | M4 | Triage and answers end to end: the server's cascade (stage 1, stage 2 Clef with the new questions and threshold, dispatch), the agent API's answers entry point (`/agent/answers/events`, `POST /agent/answers/:job`, hand-out and timeout, no lease) beside the runs' `/agent/events`, the answerer role (stage 3 with no tools, the read-only answerer with `Read,Grep,Glob`, its own prompt and schema, `changedSinceYourLastAnswer`, `agent.answer.timeout`), overrides both ways, the run prompt's rules (answer instead of editing; no `dt` unless needed), skipping `dt fmt`/`dt check` when nothing changed, the routes (address, proposals) and WebSocket messages, presence and waiting counts; server and subscriber tests with the fake agent | M2, M3 | M5 |
 | M5 | CLI and config: `dt open` / `dt collab` / `dt collab link` / `dt agent` (with `--role answer\|run`); removal of `dt view` and `dt session *` (errors naming the replacement); the in-process agent and `--no-agent`; the solo sign-in; decision 13's rules; `dt open --host` read-only; config sections `open` / `collab` / `agent` (`port`, `run.*`, `answer.*`, `triage.model`) / `classifier` with `session` and `view` as errors and hints; the seed moved to `dt collab`; CLI and config tests | M2, M3 | M4, M6 |
 | M6 | Web: mode (solo hides the collab parts), AI status, `@AI` first in the composer and the addressed mark, the facilitator's 「AI に送る」 on any message (and several), triage progress and 「仕分けの記録」, answers as reply bubbles, proposal cards (approve / edit / reject / select several; withdraw), the "answered but changed files" flag; i18n | M4's API, `feat/react-flow` and `feat/collab-card` merged | M5 |
