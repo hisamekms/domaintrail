@@ -69,7 +69,9 @@ card gives a title of its own that the card does not take.
   run with a note (its votes frozen).
 - `assumptions`: assumptions with alternatives and votes open (for an alternative and for keeping it), an alternative
   picked (`選択 name · time`, the time a link to the run that redoes it), and assumptions left as they were (the message applied again).
-- `replies`: two replies to a completed run applied together (their run continues the card), and a reply to that run.
+- `replies`: two replies to a completed run applied together (their run continues the card), a reply to that run, and
+  replies to people's messages: one to 田中's message (sign in as 田中 to see it marked) and a reply to that reply, with a
+  target.
 - `reactions`: one emoji by many (the facilitator's among them), reactions on an AI turn, and 19 different emoji on one
   message (the limit is 20).
 - `references`: `@{…}` in a summary, a note, an assumption, a question and its options — `.dt` elements, states,

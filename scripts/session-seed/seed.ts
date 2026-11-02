@@ -43,11 +43,11 @@ export interface Ctx {
     /** An event's occurrence in a timeline (the step path: `0`, `2.1`) as a target. */
     occurrence(storming: string, timeline: string, eventName: string, step: string, label: string): TargetSpec;
     /** `who` sends a message; `reads`: what the mock classifier answers for it (default: guessed from its words). */
-    /** `mentions`: the people `@name[pN]` in the body names, in order (the N-th from 1). */
+    /** `mentions`: the people `@name[pN]` in the body names, in order (the N-th from 1). `replyTo`: a run or a message it replies to. */
     say(
         who: Person,
         body: string,
-        options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson; mentions?: readonly Person[] },
+        options?: { targets?: readonly TargetSpec[]; reads?: ReadsAs; replyTo?: RunJson | RequestJson; mentions?: readonly Person[] },
     ): Promise<RequestJson>;
     /** The facilitator applies messages as one run that the agent plays as `step`; resolves once the run ended. */
     apply(requests: readonly RequestJson[], step: Step, options?: { note?: string }): Promise<RunJson>;
@@ -293,7 +293,12 @@ function makeCtx(deps: {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the JSON of a target snapshot (the server checks it)
                 targets: targets as Parameters<SessionClient['send']>[1]['targets'],
                 body,
-                ...(options.replyTo && { replyTo: options.replyTo.id }),
+                ...(options.replyTo && {
+                    replyTo:
+                        'input' in options.replyTo
+                            ? { kind: 'Run' as const, run: options.replyTo.id }
+                            : { kind: 'Message' as const, request: options.replyTo.id },
+                }),
                 ...(mentions.length > 0 && { mentions }),
             });
         },

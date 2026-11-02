@@ -604,6 +604,14 @@ const replies = async (s: Ctx): Promise<void> => {
     });
     // a reply to the reply's run
     await s.say('takahashi', '理由が選べるのは良いですね。経理チームにも共有しておきます 👍', { replyTo: second, reads: 'chat' });
+    // replies to people's messages, not to the AI: a reference line names the author (sign in as 田中 to see the reply
+    // to their message marked), and a reply to a reply
+    const addressee = await s.say('suzuki', '宛名の誤りのときは、訂正前の宛名も残しておきたいです', { replyTo: reason, reads: 'request' });
+    await s.say('sato', '賛成です。#請求書再発行[1] に持たせましょう', {
+        replyTo: addressee,
+        targets: [s.dt('Billing.InvoiceReissued', '請求書再発行')],
+        reads: 'chat',
+    });
 };
 
 const reactions = async (s: Ctx): Promise<void> => {
