@@ -40,7 +40,7 @@ or for an answer — without making the person say which, and without letting a 
 - `dt open` refuses on a workspace with an open collab session; `dt collab` continues a solo session, with its person
   as the facilitator. A session records its mode (`Solo` / `Collab`).
 
-### 2. Config: `open`, `collab`, `agent`, `triage`; `session` and `view` are errors
+### 2. Config: `open`, `collab`, `agent`, `classifier`; `session` and `view` are errors
 
 *Decided by the maintainer:* the section `session` is renamed `collab`, and the old key is an error at once, with a
 message saying what to rename; the answerer's and the runner's settings are separate groups (decision 6). *Proposed*
