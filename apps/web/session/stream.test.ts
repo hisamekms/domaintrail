@@ -99,7 +99,7 @@ describe('the main stream', () => {
         const card = items[4];
         expect(card.kind === 'card' && [card.unit.runs.map((r) => r.number), card.updatedAt]).toEqual([[1, 2], at(12)]);
         expect(items[5]).toMatchObject({ kind: 'confirmed', revision: 3, by: 'local:facilitator' });
-        expect(items[6]).toMatchObject({ kind: 'restored', revision: 5, from: 1 });
+        expect(items[6]).toMatchObject({ kind: 'restored', revision: 5, from: 1, work: true });
         // every message is in the stream, applied or not
         expect(items.filter((i) => i.kind === 'message').map((i) => i.kind === 'message' && i.request.id)).toEqual(['q1', 'q2', 'q3']);
     });

@@ -1965,6 +1965,11 @@ select,
 .pane-menu-list > button:hover {
     background: var(--hover);
 }
+.pane-menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border);
+}
 /* the conversation: the whole height at the right end */
 .conversation {
     flex: none;
@@ -6437,36 +6442,162 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
-/* a card's changed files in AI の作業: a file-diff icon, then the files as one link (its place: .chat-unit-files) */
-.chat-unit-changes {
+/* what a unit changed, in the model's words: up to three elements as chips, 「ほか n」, then 変更を見る — under a run's text
+   (.run) and in AI の作業 (.unit, its place: .chat-unit-files); small, wrapping */
+.changed-elements {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-1);
+    min-width: 0;
     margin: 0;
     color: var(--muted);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
-    white-space: nowrap;
 }
-.session-chat button.chat-unit-changes-link,
-.session-chat button.run-files-link {
+.changed-elements.run {
+    margin-top: calc(-1 * var(--space-1));
+}
+.changed-elements-more {
+    flex: none;
+}
+.session-chat button.changed-elements-see {
+    flex: none;
+    margin-left: var(--space-1);
+    padding: 0 var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--muted);
+    font-weight: var(--fw-strong);
+    cursor: pointer;
+}
+.session-chat button.changed-elements-see:hover {
+    background: var(--hover);
+    color: var(--text);
+}
+/* an element changed: its mark (＋ ✎ −, in green, amber, red on a faint wash), then `#` its own name in the accent; a
+   removed one muted and struck through */
+.change-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-width: 100%;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: var(--accent);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.session-chat button.change-chip {
     padding: 0;
     border: none;
     background: none;
-    color: var(--violet-text);
+    color: var(--accent);
     cursor: pointer;
 }
-.session-chat button.chat-unit-changes-link:hover,
-.session-chat button.run-files-link:hover {
+.session-chat button.change-chip:hover .change-name {
     text-decoration: underline;
 }
-.chat-unit-changes-icon,
-.chat-unit-changes-more,
-.run-files-more {
+.change-chip.change-removed {
+    color: var(--muted);
+}
+.change-chip.change-removed .change-name {
+    text-decoration: line-through;
+}
+.change-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.change-mark {
     flex: none;
+    padding: 0 var(--space-1);
+    border-radius: 4px;
+    font-weight: var(--fw-strong);
+}
+.change-added .change-mark {
+    color: var(--green-text);
+    background: var(--green-tint);
+}
+.change-changed .change-mark {
+    color: var(--amber-text);
+    background: var(--amber-tint);
+}
+.change-removed .change-mark {
+    color: var(--red-text);
+    background: var(--red-tint);
+}
+/* この作業の変更: narrow for the elements, as wide as the comparison once the source diff is open */
+.session-dialog.session-changes {
+    width: min(30rem, calc(100vw - 32px));
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.session-dialog.session-changes:has(.session-changes-source[open]) {
+    width: min(68.75rem, calc(100vw - 32px));
+}
+.session-changes .settings-dialog-header {
+    align-items: flex-start;
+}
+.session-changes-heading {
+    min-width: 0;
+}
+.session-changes .settings-dialog-header h2 {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-strong);
+}
+.session-changes-about {
+    margin: 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.session-changes-group > h3 {
+    margin: var(--space-3) 0 var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+}
+.session-changes-group > ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.session-changes-group li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+}
+.session-changes-group .change-chip,
+.session-changes-group .change-chip.change-removed {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.session-changes-what {
+    flex: none;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    white-space: nowrap;
+}
+.session-changes-note {
+    margin: var(--space-3) 0 0;
+    color: var(--muted);
+}
+.session-changes-source {
+    margin-top: var(--space-4);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+}
+.session-changes-source > summary {
+    cursor: pointer;
+}
+.session-changes-source[open] {
+    color: var(--text);
+}
+.session-changes-source[open] > summary {
+    color: var(--muted);
 }
 /* the chat: an AI turn's title beside its name, muted like the rest of the row and cut to one line */
 .run-card-meta {

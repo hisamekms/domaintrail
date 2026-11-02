@@ -4,9 +4,12 @@ import type { ElementKind } from '@domaintrail/modeling';
 import type { SemanticEdgeKind, StormingElementKind as EsElementKind } from '@domaintrail/storming';
 import type { Connection } from './app/useViewSocket';
 import type { CatalogSectionKey } from './model-utils';
-import type { Role } from '@domaintrail/collaboration/protocol';
+import type { ElementChange, Role } from '@domaintrail/collaboration/protocol';
 import type { Collaboration, TargetStatus } from '@domaintrail/collaboration';
 import type { Whereabouts } from './session/presence';
+import type { RestorePoint } from './session/revisions';
+
+type ElementChangeKind = ElementChange['change'];
 
 /** The user's choice: follow the browser, or force a language. */
 export type LangPreference = 'auto' | Lang;
@@ -495,25 +498,26 @@ const ja = {
             close: '閉じる',
         },
         restoreFlow: {
-            confirm: (n: string) =>
-                `#${n} を復元しますか？ ワークスペースの .dt と .dtes がすべてこのリビジョンの内容になり、全員の画面が切り替わります。いまの状態は先に「復元前」のリビジョンとして残ります。`,
-            restore: (n: string) => `#${n} を復元する`,
+            confirm: (what: RestorePoint): string =>
+                what === 'work'
+                    ? 'この作業の前に戻しますか？ ワークスペースの .dt と .dtes がすべて作業の前の内容になり、全員の画面が切り替わります。いまの状態は先に記録しておきます。'
+                    : '戻す前の状態に戻しますか？ ワークスペースの .dt と .dtes がすべてその内容になり、全員の画面が切り替わります。いまの状態は先に記録しておきます。',
+            restore: (what: RestorePoint): string => (what === 'work' ? '作業の前に戻す' : '戻す前の状態に戻す'),
             cancel: 'やめる',
             close: '閉じる',
             external: (paths: string) =>
-                `最後のリビジョンのあとで、ワークスペースが外部で変わっています（${paths}）。上書きせずに止めました。いまの状態をリビジョンとして記録してから復元できます。`,
-            recordThenRestore: 'いまの状態を記録してから復元する',
-            run: (n: number | undefined) =>
-                `実行${n === undefined ? '' : ` ${n}`}が進行中のため復元できません。実行が終わるのを待つか、取り消してから復元してください。`,
+                `最後の記録のあとで、ワークスペースが外部で変わっています（${paths}）。上書きせずに止めました。いまの状態を記録してから戻せます。`,
+            recordThenRestore: 'いまの状態を記録してから戻す',
+            run: '実行中の作業があるため戻せません。作業が終わるのを待つか、取り消してから戻してください。',
             cancelRun: '実行を取り消す',
             cancelled:
-                '実行を取り消しました。エージェントが止まってから復元してください（エージェントが変えたファイルがあれば外部の変更として扱われ、記録してから復元します）。',
-            retry: 'もう一度復元する',
-            manual: (cause: string, pre: string) =>
-                `書き込みの途中で失敗しました（${cause}）。ワークスペースは書きかけかもしれません。手動での復旧が必要です。復元前の状態はリビジョン #${pre} に残っています。ファイルを確かめてから、それを復元してください。`,
-            restorePre: (n: string) => `#${n} を復元する…`,
-            done: (n: string, m: string) => `#${n} を復元しました（新しいリビジョン #${m}）。`,
-            failed: (m: string) => `復元できませんでした: ${m}`,
+                '実行を取り消しました。エージェントが止まってから戻してください（エージェントが変えたファイルがあれば外部の変更として扱われ、記録してから戻します）。',
+            retry: 'もう一度戻す',
+            manual: (cause: string) =>
+                `書き込みの途中で失敗しました（${cause}）。ワークスペースは書きかけかもしれません。手動での復旧が必要です。戻す前の状態は記録してあります。ファイルを確かめてから、その状態に戻してください。`,
+            restorePre: '戻す前の状態に戻す…',
+            done: (what: RestorePoint): string => (what === 'work' ? '作業の前に戻しました。' : '戻す前の状態に戻しました。'),
+            failed: (m: string) => `戻せませんでした: ${m}`,
         },
         chat: {
             close: 'チャットを閉じる',
@@ -560,9 +564,12 @@ const ja = {
             cardUpdated: (name: string) => (name ? `「${name}」が更新されました` : 'AI のカードが更新されました'),
             latest: (count: number, forMe: number) => (forMe > 0 ? `最新へ（あなた宛て ${forMe} 件）` : count > 0 ? `最新へ（新着 ${count} 件）` : '最新へ'),
             cardMenu: 'カードのメニュー',
-            confirmResult: (n: string) => `結果 #${n} を確認済みにする`,
-            restoreBefore: (n: string) => `実行前（#${n}）に戻す…`,
-            compareRun: (a: string, b: string) => `比較（#${a} → #${b}）`,
+            confirmResult: 'この作業の結果を確認済みにする',
+            restoreBefore: 'この作業の前に戻す…',
+            showChanges: '変更を見る',
+            // the revisions behind a card's menu and the stream's notices: in tooltips only
+            revisionHint: (n: string) => `リビジョン #${n}`,
+            revisionsHint: (a: string, b: string) => `リビジョン #${a} → #${b}`,
             answered: '回答',
             picked: '送り直し',
             approved: '承認',
@@ -643,8 +650,8 @@ const ja = {
                 requestersMore: (first: string, others: number) => `${first} ほか ${others} 人の依頼`,
                 more: (n: number) => `ほか ${n}`,
                 separator: '、',
-                changedFiles: '変更したファイル',
-                changedFilesHint: 'このまとまりの変更を比較する',
+                changedElements: '変更した要素',
+                changeMarks: { added: '追加', changed: '変更', removed: '削除' } as Record<ElementChangeKind, string>,
                 untitledHint: '題がまだないので、最初の依頼の文を表示しています',
                 expand: '詳しく見る',
                 collapse: '閉じる',
@@ -677,7 +684,7 @@ const ja = {
             listSeparator: '、',
             agentSays: {
                 clarification: '確認したいこと',
-                completedChanged: (n: number | undefined) => `完了しました。モデルを変更しました${n === undefined ? '' : `（リビジョン #${n}）`}。`,
+                completedChanged: '完了しました。モデルを変更しました。',
                 completedUnchanged: '完了しました。変更はありません。',
                 failedLabel: '失敗',
                 cancelled: (name: string) => `${name} が取り消しました。`,
@@ -685,7 +692,6 @@ const ja = {
             reply: {
                 applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
                 unchanged: '変更なし',
-                appliedHint: 'この実行の変更を比較する',
                 declined: '辞退しました',
                 status: { Done: '対応', Partial: '一部', Skipped: '未対応', Question: '確認' } as Record<RequestProgress, string>,
                 request: (n: number) => `依頼 ${n}`,
@@ -710,8 +716,9 @@ const ja = {
                 multiple: '複数選べます',
                 filesUnchangedNote: (files: number) => `（${files} ファイル変更）`,
             },
-            confirmed: (name: string, n: number) => `${name} がリビジョン #${n} を確認済みにしました`,
-            restored: (from: number | undefined, n: number) => `リビジョン #${from ?? '?'} を復元しました（#${n}）`,
+            confirmed: (name: string) => `${name} がこの作業の結果を確認済みにしました`,
+            restored: (work: boolean): string => (work ? '作業の前に戻しました' : '以前の状態に戻しました'),
+            restoredHint: (from: number | undefined, n: number) => `リビジョン #${from ?? '?'} を復元（#${n}）`,
             showMore: '続きを表示',
             target: '対象',
             removeTarget: (name: string) => `${name} を対象から外す`,
@@ -738,7 +745,12 @@ const ja = {
             sending: '送信中…',
         },
         comparison: {
-            title: (a: string, b: string) => `リビジョンの比較 #${a} → #${b}`,
+            title: 'この作業の変更',
+            groups: { added: '追加', changed: '変更', removed: '削除' } as Record<ElementChangeKind, string>,
+            of: (owner: string, what: string) => `${owner} の${what}`,
+            noElementChanges: 'モデルの要素は変わっていません。',
+            notCompared: 'モデルを比べられませんでした（解析できないソースがあります）。ソースの差分を見てください。',
+            sourceDiff: 'ソースの差分（技術者向け）',
             close: '閉じる',
             loading: '読み込み中…',
             validation: '検証',
@@ -1204,23 +1216,25 @@ const en: Messages = {
             close: 'Close',
         },
         restoreFlow: {
-            confirm: (n) =>
-                `Restore #${n}? Every .dt and .dtes of the workspace becomes that revision's, on everyone's page. The current state is kept first as a "before a restore" revision.`,
-            restore: (n) => `Restore #${n}`,
+            confirm: (what) =>
+                what === 'work'
+                    ? "Restore as before this work? Every .dt and .dtes of the workspace becomes as it was before the work, on everyone's page. The current state is recorded first."
+                    : "Restore the state before the restore? Every .dt and .dtes of the workspace becomes that state, on everyone's page. The current state is recorded first.",
+            restore: (what) => (what === 'work' ? 'Restore as before the work' : 'Restore the state before the restore'),
             cancel: 'Cancel',
             close: 'Close',
             external: (paths) =>
-                `The workspace changed outside the collab since the last revision (${paths}). Nothing was overwritten. You can record the current state as a revision, then restore.`,
+                `The workspace changed outside the collab since it was last recorded (${paths}). Nothing was overwritten. You can record the current state, then restore.`,
             recordThenRestore: 'Record the current state, then restore',
-            run: (n) => `A run${n === undefined ? '' : ` (run ${n})`} is in progress: wait for it to end, or cancel it first, then restore.`,
+            run: 'A run is in progress: wait for it to end, or cancel it first, then restore.',
             cancelRun: 'Cancel the run',
             cancelled:
                 'The run was cancelled. Restore once its agent has stopped (files the agent changed count as external changes: they are recorded before the restore).',
             retry: 'Restore again',
-            manual: (cause, pre) =>
-                `The restore failed while writing (${cause}). The workspace may be half written: manual recovery needed. The state before the restore is revision #${pre}; check the files, then restore it.`,
-            restorePre: (n) => `Restore #${n}…`,
-            done: (n, m) => `Restored #${n} (new revision #${m}).`,
+            manual: (cause) =>
+                `The restore failed while writing (${cause}). The workspace may be half written: manual recovery needed. The state before the restore is recorded; check the files, then restore it.`,
+            restorePre: 'Restore the state before the restore…',
+            done: (what) => (what === 'work' ? 'Restored as before the work.' : 'Restored the state before the restore.'),
             failed: (m) => `Not restored: ${m}`,
         },
         chat: {
@@ -1267,9 +1281,11 @@ const en: Messages = {
             cardUpdated: (name) => (name ? `"${name}" was updated` : 'An AI card was updated'),
             latest: (count, forMe) => (forMe > 0 ? `Jump to latest (${forMe} for you)` : count > 0 ? `Jump to latest (${count} new)` : 'Jump to latest'),
             cardMenu: "The card's menu",
-            confirmResult: (n) => `Mark the result #${n} as confirmed`,
-            restoreBefore: (n) => `Restore as before the run (#${n})…`,
-            compareRun: (a, b) => `Compare (#${a} → #${b})`,
+            confirmResult: "Mark this work's result as confirmed",
+            restoreBefore: 'Restore as before this work…',
+            showChanges: 'See the changes',
+            revisionHint: (n) => `Revision #${n}`,
+            revisionsHint: (a, b) => `Revisions #${a} → #${b}`,
             answered: 'Answer',
             picked: 'Sent again',
             approved: 'Approved',
@@ -1350,8 +1366,8 @@ const en: Messages = {
                 requestersMore: (first, others) => `Requested by ${first} and ${others} ${others === 1 ? 'other' : 'others'}`,
                 more: (n) => `${n} more`,
                 separator: ', ',
-                changedFiles: 'Changed files',
-                changedFilesHint: 'Compare what this chunk changed',
+                changedElements: 'Changed elements',
+                changeMarks: { added: 'added', changed: 'changed', removed: 'removed' },
                 untitledHint: 'No title yet: its first message is shown',
                 expand: 'Show details',
                 collapse: 'Hide details',
@@ -1383,7 +1399,7 @@ const en: Messages = {
             listSeparator: ', ',
             agentSays: {
                 clarification: 'A question',
-                completedChanged: (n) => `Done. I changed the model${n === undefined ? '' : ` (revision #${n})`}.`,
+                completedChanged: 'Done. I changed the model.',
                 completedUnchanged: 'Done. Nothing changed.',
                 failedLabel: 'Failed',
                 cancelled: (name) => `Cancelled by ${name}.`,
@@ -1391,7 +1407,6 @@ const en: Messages = {
             reply: {
                 applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),
                 unchanged: 'No changes',
-                appliedHint: 'Compare what this run changed',
                 declined: 'Declined',
                 status: { Done: 'Done', Partial: 'Partly', Skipped: 'Not done', Question: 'Question' },
                 request: (n) => `Request ${n}`,
@@ -1416,8 +1431,9 @@ const en: Messages = {
                 multiple: 'Several may be chosen',
                 filesUnchangedNote: (files) => ` (${files} ${files === 1 ? 'file' : 'files'} changed)`,
             },
-            confirmed: (name, n) => `${name} marked revision #${n} as confirmed`,
-            restored: (from, n) => `Revision #${from ?? '?'} restored (#${n})`,
+            confirmed: (name) => `${name} marked this work's result as confirmed`,
+            restored: (work) => (work ? 'Restored as before the work' : 'Restored an earlier state'),
+            restoredHint: (from, n) => `Revision #${from ?? '?'} restored (#${n})`,
             showMore: 'Show more',
             target: 'About',
             removeTarget: (name) => `Remove ${name} from the targets`,
@@ -1444,7 +1460,12 @@ const en: Messages = {
             sending: 'Sending…',
         },
         comparison: {
-            title: (a, b) => `Compare revisions #${a} → #${b}`,
+            title: 'Changes of this work',
+            groups: { added: 'Added', changed: 'Changed', removed: 'Removed' },
+            of: (owner, what) => `${what} of ${owner}`,
+            noElementChanges: 'No element of the model changed.',
+            notCompared: 'The model could not be compared (some sources do not parse): see the source diff.',
+            sourceDiff: 'Source diff (for engineers)',
             close: 'Close',
             loading: 'Loading…',
             validation: 'Validation',

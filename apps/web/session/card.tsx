@@ -5,20 +5,24 @@
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
 // cancels a run (asked first), and through the card's menu confirms its result, restores the workspace as it was before it or
-// compares the two.
+// shows what it changed. What a run changed is a line of model elements under its text (`ChangedElements`), shared with
+// AI の作業.
 import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck } from 'lucide-react';
+import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
 import { cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
+import { changeFullName, changeKey, changeShortName, changeTarget, useModelChanges } from './changes';
 import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
-import { changedPaths, cutList, unitName, type ChangeUnit } from './history';
+import { changedPaths, cutList, requestersOf, unitName, type ChangeUnit } from './history';
 import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
+import { useTargetNaming } from './naming';
 import { ReplyText } from './reply';
 import { runningLabel, turnState } from './status';
 import { CancelButton, RowActions, StateLabel, StatusSlot } from './status-slot';
@@ -41,6 +45,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     const queuedBy = nameOf(first.run.queuedBy);
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
+    const about = useUnitAbout(unit);
     // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); in the
     // status slot, the state only where nothing else shows it (queued, running with its time, declined, failed, cancelled)
     return (
@@ -85,7 +90,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                             <RowActions>
                                 {/* first: the facilitator's ✕ on a run not finished, or the card's menu on one ended */}
                                 {cancellable && <CancelButton unit={unit} />}
-                                {control && <CardMenu last={last.run} />}
+                                {control && <CardMenu last={last.run} about={about} />}
                                 {actions}
                                 <ReplyButton to={{ kind: 'Run', run: last.run }} />
                                 {/* last: ☺+ at the right end of every row, messages and turns alike */}
@@ -95,7 +100,15 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     </span>
                 </div>
                 {runs.map((r, i) => (
-                    <RunSection key={r.run.id} run={r} display={quoteDisplay(runs, i)} first={i === 0} last={i === runs.length - 1} compact={compact} />
+                    <RunSection
+                        key={r.run.id}
+                        run={r}
+                        display={quoteDisplay(runs, i)}
+                        first={i === 0}
+                        last={i === runs.length - 1}
+                        compact={compact}
+                        about={about}
+                    />
                 ))}
             </div>
         </div>
@@ -128,8 +141,24 @@ export function ReplyButton({ to }: { to: { readonly kind: 'Run'; readonly run: 
     );
 }
 
-/** The card's menu (the facilitator's): the result confirmed, the workspace restored as before the run, the two compared. */
-function CardMenu({ last }: { last: RunJson }) {
+/**
+ * A unit as the changes' dialog names it, small under its title: its name, whose messages and when
+ * (`返品の受付期限 · 田中 の依頼 · 15:09`).
+ */
+export function useUnitAbout(unit: ChangeUnit): string {
+    const { tx, nameOf } = useChat();
+    const h = tx.chat.history;
+    const asked = requestersOf(unit.requesters.map(nameOf));
+    const who =
+        asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
+    return [unitName(unit).text, who, time(unit.start)].filter((x) => x !== undefined && x !== '').join(' · ');
+}
+
+/**
+ * The card's menu (the facilitator's), worded by the unit of work: its result confirmed, the workspace restored as
+ * before it, its changes shown. The revisions behind each are in the tooltips.
+ */
+function CardMenu({ last, about }: { last: RunJson; about: string }) {
     const { tx, revisions } = useChat();
     const [open, setOpen] = useState(false);
     const root = useRef<HTMLDivElement>(null);
@@ -157,17 +186,24 @@ function CardMenu({ last }: { last: RunJson }) {
             {open && (
                 <div className="pane-menu-list" role="menu">
                     {result !== base && (
-                        <button role="menuitem" onClick={pick(() => revisions.confirm(result))}>
-                            {tx.chat.confirmResult(revisions.number(result))}
+                        <button role="menuitem" onClick={pick(() => revisions.confirm(result))} data-tooltip={tx.chat.revisionHint(revisions.number(result))}>
+                            {tx.chat.confirmResult}
                         </button>
                     )}
-                    <button role="menuitem" onClick={pick(() => revisions.restore(base))}>
-                        {tx.chat.restoreBefore(revisions.number(base))}
+                    <button role="menuitem" onClick={pick(() => revisions.restore(base))} data-tooltip={tx.chat.revisionHint(revisions.number(base))}>
+                        {tx.chat.restoreBefore}
                     </button>
                     {result !== base && (
-                        <button role="menuitem" onClick={pick(() => revisions.compare(base, result))}>
-                            {tx.chat.compareRun(revisions.number(base), revisions.number(result))}
-                        </button>
+                        <>
+                            <div className="pane-menu-separator" role="separator" />
+                            <button
+                                role="menuitem"
+                                onClick={pick(() => revisions.showChanges({ base, result, about }))}
+                                data-tooltip={tx.chat.revisionsHint(revisions.number(base), revisions.number(result))}
+                            >
+                                {tx.chat.showChanges}
+                            </button>
+                        </>
                     )}
                 </div>
             )}
@@ -175,7 +211,21 @@ function CardMenu({ last }: { last: RunJson }) {
     );
 }
 
-function RunSection({ run, display, first, last, compact }: { run: CardRun; display: QuoteDisplay; first: boolean; last: boolean; compact: boolean }) {
+function RunSection({
+    run,
+    display,
+    first,
+    last,
+    compact,
+    about,
+}: {
+    run: CardRun;
+    display: QuoteDisplay;
+    first: boolean;
+    last: boolean;
+    compact: boolean;
+    about: string;
+}) {
     const { tx, nameOf, control, session } = useChat();
     const runs = session.state.runs;
     const live = session.status === 'live' && session.state.session.state === 'Open';
@@ -218,8 +268,8 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
             {!compact && run.message.kind === 'running' && <ActivityLine run={run.run.id} />}
             <div className="run-agent-body">
                 <AgentBody message={run.message} />
-                {/* in AI の作業, the unit's own line above already lists the files */}
-                {!compact && <RunFiles run={run.run} />}
+                {/* in AI の作業, the unit's own line above already lists what it changed */}
+                {!compact && <RunFiles run={run.run} about={about} />}
                 {(asking || voting || decided) && reply && questions && (
                     <ReplySection kind="ask">
                         {asking && <AnswerForm run={run.run} reply={reply} />}
@@ -322,7 +372,7 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
                 </p>
             ) : (
-                <p className="chat-text">{m.changed ? says.completedChanged(m.result) : says.completedUnchanged}</p>
+                <p className="chat-text">{m.changed ? says.completedChanged : says.completedUnchanged}</p>
             );
         case 'declined':
             return (
@@ -343,10 +393,10 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
 }
 
 /**
- * The files a run changed, on a small line of their own under what the AI says; nothing when none changed, or while
- * it has no result.
+ * What a run changed, on a small line of their own under what the AI says (`ChangedElements`); nothing when it changed no
+ * file, or while it has no result.
  */
-function RunFiles({ run }: { run: RunJson }) {
+function RunFiles({ run, about }: { run: RunJson; about: string }) {
     const { session, tx } = useChat();
     if (run.state !== 'Completed' && run.state !== 'NeedsClarification' && run.state !== 'Declined') return null;
     const lookup = revisionLookup(session.state);
@@ -360,30 +410,71 @@ function RunFiles({ run }: { run: RunJson }) {
             </p>
         );
     if (paths.size === 0) return null;
-    return <ChangedFiles kind="run" paths={[...paths].sort()} base={run.baseRevision} result={run.resultRevision} />;
+    return <ChangedElements kind="run" base={run.baseRevision} result={run.resultRevision} about={about} />;
 }
 
-/** A path's last segment (`billing.dt` of `src/billing.dt`). */
-const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+/** The mark of a change: ＋ added, ✎ changed (as text, never the emoji), − removed. */
+const CHANGE_MARK: Record<ElementChange['change'], string> = { added: '＋', changed: '✎\uFE0E', removed: '−' };
 
 /**
- * Changed files, on one small line: a file-diff icon, then the first files (their last segments; all of them in the
- * tooltip) as one link comparing the revisions before and after. Under a run's text (`run`), and under a unit's heading
- * in AI の作業 (`unit`).
+ * An element a unit changed as a chip: its kind of change (＋ ✎ −, in green, amber, red on a faint wash) and `#` its own
+ * name, its whole name in the tooltip, as the target chips name them. A click goes to it (`onPick` first: the dialog
+ * closes); a removed one is muted, struck through and goes nowhere.
  */
-export function ChangedFiles({ kind, paths, base, result }: { kind: 'run' | 'unit'; paths: readonly string[]; base: string; result: string }) {
+export function ChangeChip({ change, onPick }: { change: ElementChange; onPick?: () => void }) {
+    const { tx, onNavigate } = useChat();
+    const naming = useTargetNaming();
+    const mark = (
+        <span className="change-mark" role="img" aria-label={tx.chat.history.changeMarks[change.change]}>
+            {CHANGE_MARK[change.change]}
+        </span>
+    );
+    const name = <span className="change-name">#{changeShortName(change, naming)}</span>;
+    const className = `change-chip change-${change.change}`;
+    const tooltip = changeFullName(change, naming);
+    if (change.change === 'removed')
+        return (
+            <span className={className} data-tooltip={tooltip}>
+                {mark}
+                {name}
+            </span>
+        );
+    return (
+        <button
+            type="button"
+            className={className}
+            data-tooltip={tooltip}
+            onClick={() => {
+                onPick?.();
+                onNavigate(changeTarget(change));
+            }}
+        >
+            {mark}
+            {name}
+        </button>
+    );
+}
+
+/**
+ * What a unit changed, on one small line: the first three elements as chips (`ChangeChip`), 「ほか n」 for the rest, then
+ * 変更を見る, opening the changes' dialog. Under a run's text (`run`), and under a unit's heading in AI の作業 (`unit`).
+ * Until the server answered, and when no element changed (a comment, the layout) or the model could not be compared,
+ * 変更を見る alone.
+ */
+export function ChangedElements({ kind, base, result, about }: { kind: 'run' | 'unit'; base: string; result: string; about: string }) {
     const { tx, revisions } = useChat();
     const h = tx.chat.history;
-    const changed = cutList(paths, 3);
-    const c = kind === 'run' ? 'run-files' : 'chat-unit-changes';
-    const hint = kind === 'run' ? tx.chat.reply.appliedHint : h.changedFilesHint;
+    const changes = useModelChanges(base, result);
+    const shown = cutList(changes.kind === 'loaded' ? changes.body.changes : [], 3);
     return (
-        <p className={c} aria-label={h.changedFiles}>
-            <FileDiff size={kind === 'run' ? 12 : 13} className={`${c}-icon`} aria-hidden />
-            <button type="button" className={`${c}-link`} onClick={() => revisions.compare(base, result)} data-tooltip={`${hint}: ${paths.join(', ')}`}>
-                {changed.shown.map(baseName).join(h.separator)}
+        <p className={`changed-elements ${kind}`} aria-label={h.changedElements}>
+            {shown.shown.map((c) => (
+                <ChangeChip key={changeKey(c)} change={c} />
+            ))}
+            {shown.more > 0 && <span className="changed-elements-more">{h.more(shown.more)}</span>}
+            <button type="button" className="changed-elements-see" onClick={() => revisions.showChanges({ base, result, about })}>
+                {tx.chat.showChanges}
             </button>
-            {changed.more > 0 && <span className={`${c}-more`}> {h.more(changed.more)}</span>}
         </p>
     );
 }

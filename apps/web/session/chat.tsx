@@ -31,7 +31,7 @@ import { useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import { sessionApi } from './api';
-import { ChangedFiles, ReplyButton, RunCard } from './card';
+import { ChangedElements, ReplyButton, RunCard, useUnitAbout } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
@@ -636,7 +636,11 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
                     key: item.key,
                     kind: item.kind,
                     author: undefined,
-                    render: () => <Divider at={item.at}>{tx.chat.restored(item.from, item.revision)}</Divider>,
+                    render: () => (
+                        <Divider at={item.at} hint={tx.chat.restoredHint(item.from, item.revision)}>
+                            {tx.chat.restored(item.work)}
+                        </Divider>
+                    ),
                 };
             case 'message':
                 return {
@@ -653,7 +657,11 @@ function streamRows(items: readonly StreamItem[], tx: Tx): Row[] {
 
 function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirmed' }> }) {
     const { tx, nameOf } = useChat();
-    return <Divider at={item.at}>{tx.chat.confirmed(nameOf(item.by), item.revision)}</Divider>;
+    return (
+        <Divider at={item.at} hint={tx.chat.revisionHint(String(item.revision))}>
+            {tx.chat.confirmed(nameOf(item.by))}
+        </Divider>
+    );
 }
 
 /**
@@ -1033,8 +1041,9 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
         asked.kind === 'names' ? h.requesters(asked.names.join(h.separator)) : asked.kind === 'more' ? h.requestersMore(asked.first, asked.others) : undefined;
     const span = unit.span;
     const paths = unit.paths ?? [];
+    const about = useUnitAbout(unit);
     const last = unit.runs[unit.runs.length - 1].run;
-    // the files line says which files (and how many); one run is the rule, said only when there were more
+    // the changes line stands for the files (and how many); one run is the rule, said only when there were more
     const listed = paths.length > 0 && span !== undefined;
     const facts = [
         who,
@@ -1086,9 +1095,9 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                     <CancelButton unit={unit} />
                 </span>
             )}
-            {/* what the chunk changed: its files (the page knows them, not the elements) after a file-diff icon, a link to
-                compare the whole chunk. The line is part of the row: a click on it, but on the link, opens or closes the
-                unit as the head does (a pointer's convenience; the head stays the one toggle for the keyboard) */}
+            {/* what the whole chunk changed: its elements as chips, then 変更を見る. The line is part of the row: a click on
+                it, but on a chip or the button, opens or closes the unit as the head does (a pointer's convenience; the
+                head stays the one toggle for the keyboard) */}
             {listed && span && (
                 <div
                     className="chat-unit-files"
@@ -1096,7 +1105,7 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                         if (!(e.target instanceof Element && e.target.closest('button'))) onToggle();
                     }}
                 >
-                    <ChangedFiles kind="unit" paths={paths} base={span.base} result={span.result} />
+                    <ChangedElements kind="unit" base={span.base} result={span.result} about={about} />
                 </div>
             )}
             {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}
@@ -1156,10 +1165,13 @@ export function ChatLauncher(props: { status: AgentStatus; unread: number; menti
     );
 }
 
-function Divider({ at, children }: { at: string; children: ReactNode }) {
+/** A line of the stream about the session (its start, a result confirmed, a restore); `hint`: its tooltip. */
+function Divider({ at, hint, children }: { at: string; hint?: string; children: ReactNode }) {
     return (
         <div className="chat-system">
-            <span className="chat-system-text">{children}</span>
+            <span className="chat-system-text" {...(hint !== undefined && { 'data-tooltip': hint })}>
+                {children}
+            </span>
             <time className="chat-time" dateTime={at}>
                 {time(at)}
             </time>

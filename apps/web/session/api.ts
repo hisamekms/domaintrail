@@ -7,6 +7,7 @@ import type {
     ErrorBody,
     MarkSetBody,
     Me,
+    ModelChangesBody,
     QueueRunBody,
     RestoredBody,
     SendRequestBody,
@@ -94,4 +95,7 @@ export const sessionApi = {
         call(`revisions/${encodeURIComponent(id)}/restore`, { method: 'POST', body: recordExternalChanges ? { recordExternalChanges } : {} }),
     compareRevisions: (before: string, after: string): Promise<ComparisonBody> =>
         call(`revisions/${encodeURIComponent(before)}/compare/${encodeURIComponent(after)}`),
+    /** What a unit changed between two revisions, in the model's words: the elements added, changed and removed. */
+    modelChanges: (before: string, after: string): Promise<ModelChangesBody> =>
+        call(`revisions/${encodeURIComponent(before)}/changes/${encodeURIComponent(after)}`),
 };

@@ -106,7 +106,15 @@ export type StreamItem =
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
     | { readonly kind: 'confirmed'; readonly key: string; readonly at: string; readonly revision: number; readonly by: string }
-    | { readonly kind: 'restored'; readonly key: string; readonly at: string; readonly revision: number; readonly from: number | undefined };
+    | {
+          readonly kind: 'restored';
+          readonly key: string;
+          readonly at: string;
+          readonly revision: number;
+          readonly from: number | undefined;
+          /** It went back to the state before a unit of work (else to one kept before a restore). */
+          readonly work: boolean;
+      };
 
 /** The numbers of the session's revisions, and the revisions by ID, for the agent's messages. */
 export function revisionLookup(state: Pick<SessionStateBody, 'revisions' | 'runs'>): {
@@ -173,12 +181,16 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
  */
 export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
+    const byId = new Map(state.revisions.map((r) => [r.id, r]));
     const items: StreamItem[] = [];
     for (const r of state.revisions) {
         const revision = numbers.get(r.id) ?? 0;
         if (r.origin.kind === 'SessionStart') items.push({ kind: 'session-start', key: `start:${r.id}`, at: r.takenAt, revision });
-        if (r.origin.kind === 'Restored')
-            items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(r.origin.restoredFrom) });
+        if (r.origin.kind === 'Restored') {
+            const from = r.origin.restoredFrom;
+            const work = byId.get(from)?.origin.kind !== 'PreRestore';
+            items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
+        }
         if (r.state === 'Confirmed') items.push({ kind: 'confirmed', key: `confirmed:${r.id}`, at: r.confirmedAt, revision, by: r.confirmedBy });
     }
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
