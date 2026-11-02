@@ -3,7 +3,8 @@
 The Live View draws its diagrams (コンテキストマップ, 構造図, イベントストーミング, the inspector's 状態遷移) with tldraw
 5.5.2. This plan replaces tldraw with React Flow (`@xyflow/react`, MIT). It was written against `main` at `45bc5a8`
 with W1: the boundary between the app and the canvas library (the scene model and the canvas port), still drawn with
-tldraw and with no visible change. The later tasks implement the same port with React Flow and remove tldraw.
+tldraw and with no visible change. The later tasks implement the same port with React Flow and remove tldraw. W2 did
+(see [W2: the swap as done](#w2-the-swap-as-done)); the decision is [ADR 0029](../adr/0029-react-flow-canvas.md).
 
 ## Why
 
@@ -145,6 +146,44 @@ which also makes the canvas read-only, keeps the pointer cursor over clickable i
    hand tool; ADR 0001, 0024, 0026; `CONTRIBUTING.md`) and `contexts/collaboration/src/protocol.ts` ("tldraw world
    coordinates": page coordinates, which stay the same, so peers on old and new pages agree). The boundary test then
    allows `@xyflow/react` in the new adapter only.
+
+## W2: the swap as done
+
+`view/flow-canvas.tsx` implements the port; `view/workspace.tsx` and `states-canvas.tsx` mount `<FlowCanvas onMount>`;
+`shapes.tsx`, `view/tldraw-canvas.tsx`, `tldraw`, `@tldraw/tlschema`, `tldraw/tldraw.css` (now
+`@xyflow/react/dist/base.css`) and the `.tl-*` / `--tl-*` CSS are gone. Where it differs from the plan above:
+
+- **Gestures.** A drag pans everywhere (`panOnDrag`; non-draggable nodes do not stop it, and `noPanClassName` is one
+  no element has, so edges do not either); the selection box is Shift + drag (`selectionKeyCode`), not a plain drag on
+  the background, and takes a group only when it does not lie inside it. `H` (tldraw's hand tool) is dropped. *For the
+  maintainer to confirm.* The wheel pans 1:1 (`panOnScroll`, `panOnScrollSpeed` 1); Ctrl / ⌘ + wheel and the pinch are
+  the adapter's own listener with tldraw's arithmetic (`viewport.ts` `wheelZoom`: at most 10% per event), not React
+  Flow's (×4 per mouse-wheel notch).
+- **The camera's arithmetic** is in `view/viewport.ts`, tested: the conversion, tldraw's zoom steps (`zoomInStep` /
+  `zoomOutStep`, a level within half a step counting as that step), `zoomAround`, `fitCamera` (inset 128 or 28% of
+  the width by default, clamped to 5–800%), `selectionMaxZoom` (tldraw's `zoomToSelection`), `centerCamera`. The
+  adapter applies them with the store's `panZoom.setViewport` (200 ms, linear interpolation for an animated move), not
+  with `fitView` / `fitBounds` / `setCenter`.
+- **Scene, selection and hover are the adapter's** (`CanvasState`): the port answers from them at once (`show` then
+  `fitContent` in the same task), and React Flow gets controlled nodes and edges built from them, reusing the objects
+  of unchanged items. Select changes come back through `onNodesChange` / `onEdgesChange`; ghosts are not selectable.
+- **Node types** are `domain-node`, `domain-group`, `domain-internal` (React Flow's stylesheet draws its own `group`).
+  Each renders two hidden `<Handle>`s and carries `handles`: React Flow draws an edge only between handles, measured or
+  declared. An edge whose end the scene does not draw gets an invisible anchor node, so that it is still drawn.
+  `SceneEdge` gained `source` / `target`, the items of the graph nodes it joins.
+- **The outline** (tldraw's indicator) is an SVG in each node and a path in each edge, shown by CSS on hover (not on a
+  ghost) and on React Flow's `selected` class, 1.5 px on the screen (`vector-effect: non-scaling-stroke`); a node with
+  marks follows the zoom for its `nodeOutlinePath`. It is drawn in the item's layer, so an edge passes over a node's
+  outline (tldraw drew outlines over everything).
+- **Keys and focus.** The canvas's container takes the focus on a pointer press (as tldraw's did): `Escape` clears the
+  selection; `+` / `-`, `Shift+0`, `Shift+1`, `Shift+2` move the camera (on the main canvas the app takes `Shift+1` /
+  `Shift+2` first, as before).
+- **`watch`** runs its effects once per task (a microtask) after any change of the adapter's state or React Flow's
+  store; `useCanvasValue` keeps the previous value when the new one is equal (`sameValue`), so that an effect that
+  returns a fresh object does not render on every pointer move.
+- **The attribution** stays (bottom-right); **`window.__domaintrailEditor`** is gone (nothing used it).
+- **Culling.** `onlyRenderVisibleElements`: an edge is drawn when the box of its two nodes is in view (see ADR 0029,
+  Consequences).
 
 ## To verify after the swap
 

@@ -57,10 +57,17 @@ The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in aroun
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
 nothing is selected), the book (凡例, named in its tooltip) opens the legend upward, and « at the right end collapses the
 bar toward the corner, leaving only », which brings it back (the legend's panel is hidden while collapsed and keeps
-its own open or closed state). `U` does the same as « and » (`H` stays tldraw's hand tool), and the choice is
-remembered per browser. Hovering an edge (its line or arrowhead) tells what it means, in the legend's words for that
-view (「参照（ID で別の集約へ）」…). The keys do nothing while typing. The
-inspector's 状態遷移 diagram has the same controls.
+its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. Hovering an
+edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…).
+The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls.
+
+The canvas is read-only and moves the same way everywhere: a drag pans (on the background or over an item; there is
+no hand tool, so `H` does nothing), the wheel or a trackpad's two fingers pan, and Ctrl / ⌘ + wheel or a pinch zoom
+around the pointer. A click selects an item and Shift-click adds one (or takes it out); Shift + drag draws a selection
+box; `Escape` clears the selection. Once you clicked a canvas, `+` / `-` zoom, `Shift+0` goes back to 100% and, in the
+inspector's diagram, `Shift+1` / `Shift+2` fit everything or the selection. The levels go from 5% to 800%, and − and +
+step through 5, 10, 25, 50, 100, 200, 400 and 800%. React Flow's attribution sits in the canvas's bottom-right corner
+([ADR 0029](adr/0029-react-flow-canvas.md)).
 
 - **Context Map**: one node per bounded context and one edge per dependency between contexts, labeled with the number
   of ID references and borrowed types (solid when types are borrowed). Shared contexts and contexts that only declare
