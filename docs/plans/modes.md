@@ -609,21 +609,23 @@ M3 can start at once (it touches only `capabilities/agent`); M2 waits for `feat/
 
 ## Open questions
 
-Round 1's Q1 (participants' consultations), Q3 (the `dt view` alias) and Q4 (renaming `session`) are superseded by
-round 2; Q2, Q5 and Q6 are decided (decisions 13–15); Q7 (a toast for answers while the chat is closed) stays out of
-this plan. What remains:
+Round 3 (maintainer, 2026-11-03) decided the questions this plan left open:
 
-| # | Question | Options | Recommendation |
-|---|---|---|---|
-| Q1 | Who writes a participant's change proposal? | **a** the read-only answerer (a `propose` job: it reads the files, so where/how are grounded) **b** the stage-3 model (cheap, but blind to the files) **c** no text: the message itself is the proposal | **a**; it is also what the answerer's override produces |
-| Q2 | Proposals approved together: one run or one each? | One run (as まとめて送る) / one run each | One run; the facilitator can approve one at a time to get separate runs |
-| Q3 | The facilitator's 「AI に送る」 on a participant's message that triages as 依頼: proposal or queue? | Proposal (approved by the facilitator next) / straight to the queue (the sending is the approval) | Straight to the queue: the facilitator chose to send it |
-| Q4 | Stage 3's model and how it is called | **a** default `haiku` through Claude Code (warm, no tools) **b** no default (skip stage 3 unless set) **c** the Anthropic API with a key | **a**: the stage exists to be light; no second credential |
-| Q5 | Confidence thresholds (Clef's and the model's) | Fixed now / set from M7's measured sample | Start strict (Clef 0.9, model 0.8 for "neither") and set them from M7's sample |
-| Q6 | The facilitator addresses again a message the cascade judged "neither" | Re-run the cascade / skip "neither" and go on as 相談 | Skip: the facilitator says it needs an answer; the answerer can still answer briefly |
-| Q7 | Limits per person in collab (cost per addressed message) | None / at most n waiting addressed messages per participant / a session budget | At most 3 waiting per participant (a 429 with a message); a budget later if asked |
-| Q8 | `dt open --host <non-loopback>` as the read-only Live View that replaces `dt view --host` | Keep / drop (loopback only) | Keep: it is the only way left to show the model to others without a session |
-| Q9 | The AI participant: virtual (reserved ID, not stored) or stored in `Session.participants` with a role `Ai` | Virtual / stored | Virtual: no migration of older sessions, no effect on `maxParticipants` or the facilitator invariants |
-| Q10 | An answer while a run edits the same files | Answer in parallel on the files as they are / wait for the run | Parallel (decision); the answer records the revision it read and says when a run was running |
-| Q11 | A generic classifier provider interface (other JEV-compatible APIs) for stage 2 | Now / later | Later; `classifier.provider` already leaves room |
-| Q12 | The triage process: a third warm process in the answerer role, or cold `claude -p` calls (~2.8 s each) | Warm / cold / the answerer's process with its model | Warm (small: no tools, no carried context needed); measure in M7 whether it pays |
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Who writes a participant's change proposal? | The read-only answerer (a `propose` job), as recommended |
+| Q2 | Proposals approved together: one run or one each? | One run; approving one at a time gives separate runs |
+| Q3 | The facilitator's 「AI に送る」 on a participant's message that triages as 依頼 | Straight to the queue: the sending is the approval |
+| Q4 | Stage 3's model and how it is called | Default `haiku` through Claude Code, no tools, no second credential |
+| Q5 | Confidence thresholds | Start strict (Clef 0.9, model 0.8 for "neither"), then set them from M7's sample |
+| Q6 | The facilitator addresses again a message judged "neither" | Skip the cascade and go on as 相談 |
+| Q7 | Limits per person in collab | **None**: the facilitator controls the collab |
+| Q8 | `dt open --host <non-loopback>` | Kept as the read-only Live View |
+| Q9 | The AI participant | Virtual (reserved ID, not stored) |
+| Q10 | An answer while a run edits the same files | Resolved by the two roles: answers run in parallel with runs, on the files as they are; the answer records the revision it read |
+| Q11 | A generic classifier provider interface | Later |
+| Q12 | The triage process | **Configurable** (`agent.triage.warm`); the default is a fresh `claude -p` call per triage. M7 measures whether warm pays |
+
+Still open: what the agents are given about the session so far (the changes since it started, the decisions taken,
+the chat around an addressed message) — proposed to the maintainer as a "session context" built from the session's
+events; to be decided before M2.
