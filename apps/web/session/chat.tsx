@@ -724,8 +724,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     );
     return (
         <div
-            // its role (mine or another participant's) sets its background; mentioning me, the mention's
-            className={`chat-row ${mine ? 'own' : 'other'}${selected ? ' selected' : ''}${toMe ? ' mentions-me' : ''}`}
+            className={`chat-row${selected ? ' selected' : ''}${toMe ? ' mentions-me' : ''}`}
             onClickCapture={choose}
             // Shift / ⌘ chooses the message: no text selection
             onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}
