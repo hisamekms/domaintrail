@@ -108,4 +108,40 @@ describe("the page's derivations", () => {
         } as const;
         expect(applyEvent(once, removed)).toEqual({ state: { ...once, seq: 3, marks: [] }, refetch: false });
     });
+
+    test("an approved assumption's votes close; the approval event is applied once, to a state with or without approvals", () => {
+        const assuming = { questions: [], assumptions: [{ alternatives: [{ id: 'alt' }] }, { alternatives: [] }] };
+        const state = { requests: [{ id: 'm1' }], runs: [run('r1', 'Completed', ['m1'], { reply: assuming })], approvals: [] } as unknown as SessionStateBody;
+        const choice = { kind: 'AssumptionChoice', run: 'r1', assumption: 0, alternative: 'alt' } as const;
+        expect(canVote(choice, state, 'participant', true)).toBe(true);
+        const approved = {
+            type: 'assumption.approved',
+            seq: 2,
+            event: {
+                type: 'AssumptionApproved',
+                approvalId: 'a1',
+                session: 's',
+                assumption: { run: 'r1', assumption: 0 },
+                approvedBy: 'dev:f',
+                approvedAt: '2026-11-01T09:00:00.000Z',
+            },
+        } as const;
+        const once = applyEvent({ ...state, seq: 1 }, approved).state;
+        expect(once.approvals).toEqual([
+            {
+                id: 'a1',
+                session: 's',
+                assumption: { run: 'r1', assumption: 0 },
+                approvedBy: 'dev:f',
+                approvedAt: '2026-11-01T09:00:00.000Z',
+                state: 'Approved',
+            },
+        ]);
+        expect(applyEvent(once, approved).state).toBe(once);
+        expect(canVote(choice, once, 'participant', true)).toBe(false);
+        expect(canVote({ kind: 'AssumptionChoice', run: 'r1', assumption: 1 }, once, 'participant', true)).toBe(true);
+        // a state from before approvals has none
+        const older = { seq: 1 } as unknown as SessionStateBody;
+        expect(applyEvent(older, approved).state.approvals).toHaveLength(1);
+    });
 });

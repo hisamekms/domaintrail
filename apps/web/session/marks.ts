@@ -67,15 +67,21 @@ export function reactionFits(index: MarkIndex, target: MarkTargetData, emoji: st
 export const quickReactions = (state: Partial<Pick<SessionStateBody, 'quickReactions'>>): readonly string[] =>
     state.quickReactions && state.quickReactions.length > 0 ? state.quickReactions : DEFAULT_QUICK_REACTIONS;
 
-/** Whether a target's marks can change now: reactions while the session is live, votes while their run is the latest of its requests too. */
-export function markStatus(target: MarkTargetData, state: Pick<SessionStateBody, 'requests' | 'runs'>): MarkStatus {
+/**
+ * Whether a target's marks can change now: reactions while the session is live, votes while their run is the latest of
+ * its requests too (and, for an assumption's, while it is not approved).
+ */
+export function markStatus(
+    target: MarkTargetData,
+    state: Pick<SessionStateBody, 'requests' | 'runs'> & Partial<Pick<SessionStateBody, 'approvals'>>,
+): MarkStatus {
     return markTargetStatus(target, state);
 }
 
 /** What I may do with a vote: place or move it (a participant, open), only see it (the facilitator, or closed). */
 export function canVote(
     target: MarkTargetData,
-    state: Pick<SessionStateBody, 'requests' | 'runs'>,
+    state: Pick<SessionStateBody, 'requests' | 'runs'> & Partial<Pick<SessionStateBody, 'approvals'>>,
     role: 'facilitator' | 'participant',
     live: boolean,
 ): boolean {

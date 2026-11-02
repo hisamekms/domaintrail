@@ -312,6 +312,15 @@ export function pick(v: unknown, field = 'pick'): Result<PickData, InvalidInput>
     return ok({ pickOf: knownAgentRunId(of.value), assumption: assumption.value, alternative: alternative.value });
 }
 
+/** The assumption approved, from a body's `run` and `assumption` (its number in the run's reply). */
+export function assumptionRef(raw: Raw): Result<Collaboration.AssumptionRef, InvalidInput> {
+    const run = uuid(raw.run, 'run');
+    if (!run.ok) return run;
+    const assumption = assumptionNumber(raw.assumption, 'assumption');
+    if (!assumption.ok) return assumption;
+    return ok({ run: knownAgentRunId(run.value), assumption: assumption.value });
+}
+
 /** What a mark is on: a message, an AI turn, a question's option, or an assumption's choice (none: kept as it is). */
 export function markTarget(v: unknown, field = 'target'): Result<Collaboration.MarkTarget, InvalidInput> {
     if (!isObject(v)) return invalid(field, 'Expected a mark target.');

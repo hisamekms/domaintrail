@@ -41,6 +41,12 @@ export interface Arbitraries {
     readonly RunDeclined: fc.Arbitrary<Collaboration.RunDeclined>;
     readonly RunFailed: fc.Arbitrary<Collaboration.RunFailed>;
     readonly RunCancelled: fc.Arbitrary<Collaboration.RunCancelled>;
+    readonly AssumptionApprovalId: fc.Arbitrary<Collaboration.AssumptionApprovalId>;
+    readonly AssumptionRef: fc.Arbitrary<Collaboration.AssumptionRef>;
+    readonly DecidableAssumption: fc.Arbitrary<Collaboration.DecidableAssumption>;
+    readonly ApprovedAssumptionApproval: fc.Arbitrary<Collaboration.ApprovedAssumptionApproval>;
+    readonly AssumptionApproval: fc.Arbitrary<Collaboration.AssumptionApproval>;
+    readonly AssumptionApproved: fc.Arbitrary<Collaboration.AssumptionApproved>;
     readonly Text: fc.Arbitrary<Collaboration.Text>;
     readonly LineNumber: fc.Arbitrary<Collaboration.LineNumber>;
     readonly ColumnNumber: fc.Arbitrary<Collaboration.ColumnNumber>;
@@ -117,6 +123,10 @@ export interface Examples {
         readonly states?: { readonly Queued?: readonly Collaboration.QueuedAgentRun[]; readonly Running?: readonly Collaboration.RunningAgentRun[]; readonly Completed?: readonly Collaboration.CompletedAgentRun[]; readonly NeedsClarification?: readonly Collaboration.NeedsClarificationAgentRun[]; readonly Declined?: readonly Collaboration.DeclinedAgentRun[]; readonly Failed?: readonly Collaboration.FailedAgentRun[]; readonly Cancelled?: readonly Collaboration.CancelledAgentRun[] };
         readonly commands?: { readonly queue?: readonly Parameters<Collaboration.AgentRunCommands['queue']>[]; readonly start?: readonly Parameters<Collaboration.AgentRunCommands['start']>[]; readonly finish?: readonly Parameters<Collaboration.AgentRunCommands['finish']>[]; readonly askClarification?: readonly Parameters<Collaboration.AgentRunCommands['askClarification']>[]; readonly decline?: readonly Parameters<Collaboration.AgentRunCommands['decline']>[]; readonly fail?: readonly Parameters<Collaboration.AgentRunCommands['fail']>[]; readonly cancel?: readonly Parameters<Collaboration.AgentRunCommands['cancel']>[] };
     };
+    readonly AssumptionApproval?: {
+        readonly states?: { readonly Approved?: readonly Collaboration.ApprovedAssumptionApproval[] };
+        readonly commands?: { readonly approve?: readonly Parameters<Collaboration.AssumptionApprovalCommands['approve']>[] };
+    };
     readonly Mark?: {
         readonly states?: { readonly Placed?: readonly Collaboration.PlacedMark[]; readonly Removed?: readonly Collaboration.RemovedMark[] };
         readonly commands?: { readonly place?: readonly Parameters<Collaboration.MarkCommands['place']>[]; readonly remove?: readonly Parameters<Collaboration.MarkCommands['remove']>[] };
@@ -149,8 +159,9 @@ export interface Options extends Generation {
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
 export interface Implementation {
-    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
+    readonly make?: { readonly AgentRunId?: Collaboration.MakeAgentRunId; readonly ReplyKey?: Collaboration.MakeReplyKey; readonly AssumptionApprovalId?: Collaboration.MakeAssumptionApprovalId; readonly Text?: Collaboration.MakeText; readonly LineNumber?: Collaboration.MakeLineNumber; readonly ColumnNumber?: Collaboration.MakeColumnNumber; readonly Tally?: Collaboration.MakeTally; readonly ContentHash?: Collaboration.MakeContentHash; readonly WorkspacePath?: Collaboration.MakeWorkspacePath; readonly MarkId?: Collaboration.MakeMarkId; readonly Emoji?: Collaboration.MakeEmoji; readonly RequestId?: Collaboration.MakeRequestId; readonly RevisionId?: Collaboration.MakeRevisionId; readonly SessionId?: Collaboration.MakeSessionId; readonly ParticipantId?: Collaboration.MakeParticipantId; readonly DisplayName?: Collaboration.MakeDisplayName; readonly ElementName?: Collaboration.MakeElementName; readonly StormingName?: Collaboration.MakeStormingName; readonly StormingLocalName?: Collaboration.MakeStormingLocalName; readonly TimelineName?: Collaboration.MakeTimelineName; readonly StormingEventName?: Collaboration.MakeStormingEventName; readonly OccurrencePath?: Collaboration.MakeOccurrencePath };
     readonly AgentRun?: Collaboration.AgentRunCommands;
+    readonly AssumptionApproval?: Collaboration.AssumptionApprovalCommands;
     readonly Mark?: Collaboration.MarkCommands;
     readonly Request?: Collaboration.RequestCommands;
     readonly Revision?: Collaboration.RevisionCommands;
@@ -196,6 +207,12 @@ export function arbitraries(options: Options = {}): Arbitraries {
         RunDeclined: () => given.RunDeclined ?? testing.cast<Collaboration.RunDeclined>(fc.record({ type: fc.constant('RunDeclined' as const), runId: a.AgentRunId, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) })),
         RunFailed: () => given.RunFailed ?? testing.cast<Collaboration.RunFailed>(fc.record({ type: fc.constant('RunFailed' as const), runId: a.AgentRunId, reason: a.FailureReason, finishedAt: testing.cast<Date>(scalar.Timestamp) })),
         RunCancelled: () => given.RunCancelled ?? testing.cast<Collaboration.RunCancelled>(fc.record({ type: fc.constant('RunCancelled' as const), runId: a.AgentRunId, cancelledBy: a.ParticipantId, cancelledAt: testing.cast<Date>(scalar.Timestamp) })),
+        AssumptionApprovalId: () => testing.valid(given.AssumptionApprovalId ?? testing.collide(testing.cast<Collaboration.AssumptionApprovalId>(testing.base('UUID', {})), seed), (v) => Collaboration.checkAssumptionApprovalId(v).length === 0, 'Collaboration.AssumptionApprovalId'),
+        AssumptionRef: () => given.AssumptionRef ?? testing.cast<Collaboration.AssumptionRef>(fc.record({ run: a.AgentRunId, assumption: a.Tally })),
+        DecidableAssumption: () => given.DecidableAssumption ?? testing.cast<Collaboration.DecidableAssumption>(a.AssumptionRef),
+        ApprovedAssumptionApproval: () => testing.withExamples(given.ApprovedAssumptionApproval ?? testing.cast<Collaboration.ApprovedAssumptionApproval>(fc.record({ state: fc.constant('Approved' as const), id: a.AssumptionApprovalId, session: a.SessionId, assumption: a.AssumptionRef, approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.AssumptionApproval?.states?.Approved, () => [], 'Collaboration.ApprovedAssumptionApproval'),
+        AssumptionApproval: () => given.AssumptionApproval ?? fc.oneof(a.ApprovedAssumptionApproval),
+        AssumptionApproved: () => given.AssumptionApproved ?? testing.cast<Collaboration.AssumptionApproved>(fc.record({ type: fc.constant('AssumptionApproved' as const), approvalId: a.AssumptionApprovalId, session: a.SessionId, assumption: a.AssumptionRef, approvedBy: a.ParticipantId, approvedAt: testing.cast<Date>(scalar.Timestamp) })),
         Text: () => testing.valid(given.Text ?? testing.collide(testing.cast<Collaboration.Text>(testing.base('String', { minLength: 1, maxLength: 20000 })), seed), (v) => Collaboration.checkText(v).length === 0, 'Collaboration.Text'),
         LineNumber: () => testing.valid(given.LineNumber ?? testing.collide(testing.cast<Collaboration.LineNumber>(testing.base('Int', { ge: 1 })), seed), (v) => Collaboration.checkLineNumber(v).length === 0, 'Collaboration.LineNumber'),
         ColumnNumber: () => testing.valid(given.ColumnNumber ?? testing.collide(testing.cast<Collaboration.ColumnNumber>(testing.base('Int', { ge: 1 })), seed), (v) => Collaboration.checkColumnNumber(v).length === 0, 'Collaboration.ColumnNumber'),
@@ -289,6 +306,15 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declared: [],
                 check: () => Collaboration.checkReplyKey,
                 make: impl.make.ReplyKey,
+            }, options) : []),
+            ...(impl.make.AssumptionApprovalId ? testing.primitiveCases({
+                type: 'Collaboration.AssumptionApprovalId',
+                base: 'UUID',
+                hints: {},
+                invariants: ['uuid'],
+                declared: [],
+                check: () => Collaboration.checkAssumptionApprovalId,
+                make: impl.make.AssumptionApprovalId,
             }, options) : []),
             ...(impl.make.Text ? testing.primitiveCases({
                 type: 'Collaboration.Text',
@@ -565,6 +591,21 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 invariants: Collaboration.checkAgentRunWith,
                 declaredInvariants: ['serial'],
                 givenInvariants: declared.AgentRun,
+                stateful: true,
+                counted: [],
+            }, options),
+        ]),
+        impl.AssumptionApproval && testing.suite('AssumptionApproval', [
+            ...testing.commandCases({
+                name: 'AssumptionApproval.approve',
+                run: impl.AssumptionApproval.approve,
+                input: () => fc.tuple(fc.record({ id: a.AssumptionApprovalId, session: a.ActiveSession, assumption: a.DecidableAssumption, approvedBy: a.ParticipantId, approvedByRole: a.ParticipantRole, approvedAt: testing.cast<Date>(scalar.Timestamp) })),
+                examples: options.examples?.AssumptionApproval?.commands?.approve ?? [],
+                factory: true,
+                requires: [{ name: 'facilitatorApproves', error: 'FacilitatorOnly' }],
+                declaredRequires: [],
+                firstFailing: () => Collaboration.checkApproveAssumptionApprovalRequires,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),

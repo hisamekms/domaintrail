@@ -559,6 +559,75 @@ describe('agent replies', () => {
             run: run.id,
         });
     });
+
+    test("the facilitator's approval of an assumption is recorded once, sends nothing, and excludes a pick of it", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const tally = (n: number): C.Tally => value(C.makeTally(n));
+        const approve = (of: C.AgentRunId, assumption: number, who = facilitator) =>
+            s.use.approveAssumption({ session: id, actor: actor(who), assumption: { run: of, assumption: tally(assumption) } });
+        const pickOf = (assumption: number, alternative: string) =>
+            s.use.queueRun({
+                session: id,
+                requests: [request],
+                actor: actor(facilitator),
+                pick: { pickOf: run.id, assumption: tally(assumption), alternative: value(C.makeReplyKey(alternative)) },
+            });
+        // not completed yet: nothing to approve
+        expect(error(await approve(run.id, 0))).toEqual({ type: 'RunNotApprovable', run: run.id });
+        const assumptions = [
+            { text: 'Only drafts.', requests: [request], alternatives: [{ id: 'any', label: 'Any state' }] },
+            { text: 'Cancel keeps the order.', requests: [request], alternatives: [{ id: 'delete', label: 'Delete it' }] },
+        ];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+
+        const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ee');
+        expect(error(await approve(unknown, 0))).toEqual({ type: 'RunNotFound', run: unknown });
+        expect(error(await approve(run.id, 2))).toEqual({ type: 'AssumptionNotFound', run: run.id });
+        expect(error(await approve(run.id, 0, guest))).toEqual({ type: 'FacilitatorOnly' });
+
+        const before = value(await s.use.sessionState({ session: id }));
+        const approval = value(await approve(run.id, 0));
+        expect(approval).toMatchObject({ state: 'Approved', session: id, assumption: { run: run.id, assumption: 0 }, approvedBy: facilitator });
+        const after = value(await s.use.sessionState({ session: id }));
+        expect(after.approvals).toEqual([approval]);
+        // nothing is queued for the agent; the pages get the event
+        expect(after.runs).toHaveLength(before.runs.length);
+        const events = await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 });
+        expect(events.at(-1)?.event).toMatchObject({ type: 'AssumptionApproved', approvalId: approval.id, assumption: { run: run.id, assumption: 0 } });
+
+        // one decision per assumption: approved once, and not sent again with an alternative
+        expect(error(await approve(run.id, 0))).toEqual({ type: 'AssumptionClosed', run: run.id });
+        expect(error(await pickOf(0, 'any'))).toEqual({ type: 'AssumptionClosed', run: run.id });
+        // the votes of the approved assumption close; those of the other stay open
+        const vote = (assumption: number) =>
+            s.use.setMark({
+                session: id,
+                actor: actor(guest),
+                target: { kind: 'AssumptionChoice', run: run.id, assumption: tally(assumption) },
+                sign: { kind: 'Vote' },
+                placed: true,
+            });
+        expect(error(await vote(0))).toEqual({ type: 'MarkTargetClosed' });
+        value(await vote(1));
+        // the other assumption picked: a later run took over the run's requests, so nothing of it can be approved now
+        value(await pickOf(1, 'delete'));
+        expect(error(await approve(run.id, 1))).toEqual({ type: 'AssumptionClosed', run: run.id });
+    });
+
+    test("an approval of another session's run is refused", async () => {
+        const { s, id, run, token, request } = await runningRun();
+        const assumptions = [{ text: 'Only drafts.', requests: [request], alternatives: [] }];
+        value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
+        value(await s.use.closeSession({ session: id, actor: actor(facilitator) }));
+        const { id: second } = await started(s);
+        const assumption = { run: run.id, assumption: value(C.makeTally(0)) };
+        expect(error(await s.use.approveAssumption({ session: second, actor: actor(facilitator), assumption }))).toEqual({
+            type: 'RunOfAnotherSession',
+            run: run.id,
+        });
+        // nor in a closed session
+        expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption }))).toEqual({ type: 'SessionAlreadyClosed' });
+    });
 });
 
 describe('revisions', () => {

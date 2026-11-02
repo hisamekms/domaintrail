@@ -1475,6 +1475,273 @@ export interface InvalidReply {
 }
 
 /**
+ * 前提の承認ID
+ * 前提の承認の識別子。
+ * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version
+ * Make it with `makeAssumptionApprovalId`; never `as AssumptionApprovalId` (see dt guide lint).
+ * @see contexts/collaboration/model/approval.dt:3
+ */
+export type AssumptionApprovalId = string & { readonly __domain: 'Collaboration.AssumptionApprovalId' };
+
+/**
+ * A value that violates an invariant of AssumptionApprovalId.
+ * @see contexts/collaboration/model/approval.dt:3
+ */
+export interface InvalidAssumptionApprovalId {
+    readonly type: 'InvalidAssumptionApprovalId';
+    readonly value: string;
+    /** The violated invariant. */
+    readonly invariant: 'uuid';
+}
+
+/**
+ * Creates a AssumptionApprovalId, checking its invariants: generated as `makeAssumptionApprovalId`, or written by hand.
+ * @see contexts/collaboration/model/approval.dt:3
+ */
+export type MakeAssumptionApprovalId = (value: string) => Result<AssumptionApprovalId, InvalidAssumptionApprovalId>;
+
+/**
+ * The invariants of AssumptionApprovalId that a value violates, in declaration order after 'uuid'; empty when it is a AssumptionApprovalId.
+ * @see contexts/collaboration/model/approval.dt:3
+ */
+export function checkAssumptionApprovalId(value: string): readonly InvalidAssumptionApprovalId['invariant'][] {
+    const violated: InvalidAssumptionApprovalId['invariant'][] = [];
+    if (!(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value))) violated.push('uuid');
+    return violated;
+}
+
+/**
+ * Creates a AssumptionApprovalId, checking its invariants with `checkAssumptionApprovalId`: the first one violated is reported.
+ * @see contexts/collaboration/model/approval.dt:3
+ */
+export const makeAssumptionApprovalId: MakeAssumptionApprovalId = (value) => {
+    const [invariant] = checkAssumptionApprovalId(value);
+    if (invariant === undefined) return ok(value as AssumptionApprovalId);
+    return err({ type: 'InvalidAssumptionApprovalId', value, invariant });
+};
+
+/**
+ * 前提の参照
+ * 完了した実行の返答の前提1つ。前提にはキーがないので、返答の中の番号で指す（返答は保存したら変わらない）。
+ * @see contexts/collaboration/model/approval.dt:6
+ */
+export interface AssumptionRef {
+    /**
+     * 実行
+     * @see {@link AgentRun}
+     */
+    readonly run: AgentRunId;
+    /** 前提の番号 */
+    readonly assumption: Tally;
+}
+
+/**
+ * Whether two AssumptionRef values are equal: by all their fields (ADR 0016).
+ * @see contexts/collaboration/model/approval.dt:6
+ */
+export function equalAssumptionRef(a: AssumptionRef, b: AssumptionRef): boolean {
+    return a.run === b.run && a.assumption === b.assumption;
+}
+
+/**
+ * 決められる前提
+ * いま決められると、承認のときに確かめた前提: そのセッションの完了した実行の返答にあり、まだ決まっていない（承認も
+ * 別案の選択もなく、あとの実行がその実行の依頼を引き継いでいない）。
+ * A value of AssumptionRef for which MakeDecidableAssumption made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
+ * Make it with your `MakeDecidableAssumption` factory; never `as DecidableAssumption` outside it (see dt guide lint).
+ * @see contexts/collaboration/model/approval.dt:13
+ */
+export type DecidableAssumption = AssumptionRef & { readonly 'verified:Collaboration.DecidableAssumption': true };
+
+/**
+ * Checks a value of AssumptionRef, given the SessionId the check needs, and returns it as DecidableAssumption when the check passes. Written by hand (with repositories and services): the only code that may assert the type.
+ * The errors of the `Result` are the domain's answers: RunNotFound, RunOfAnotherSession, RunNotApprovable, AssumptionNotFound or AssumptionClosed. A rejected promise means the check could not be made (the repository or a service failed): not a domain error, it is left to the application's edge (an error response, a retry).
+ * @see contexts/collaboration/model/approval.dt:13
+ */
+export type MakeDecidableAssumption = (value: AssumptionRef, context: SessionId) => Promise<Result<DecidableAssumption, RunNotFound | RunOfAnotherSession | RunNotApprovable | AssumptionNotFound | AssumptionClosed>>;
+
+/**
+ * Fields shared by every state of 前提の承認 (AssumptionApproval).
+ * @see contexts/collaboration/model/approval.dt:17
+ */
+export interface AssumptionApprovalCommon {
+    /** 前提の承認ID */
+    readonly id: AssumptionApprovalId;
+    /**
+     * セッション
+     * @see {@link Session}
+     */
+    readonly session: SessionId;
+    /** 前提 */
+    readonly assumption: AssumptionRef;
+    /** 承認した人 */
+    readonly approvedBy: ParticipantId;
+    /** 承認日時 */
+    readonly approvedAt: Timestamp;
+}
+
+/**
+ * 承認済み
+ * @see contexts/collaboration/model/approval.dt:24
+ */
+export interface ApprovedAssumptionApproval extends AssumptionApprovalCommon {
+    readonly state: 'Approved';
+}
+
+/**
+ * 前提の承認
+ * ファシリテーターが、AI が仮に決めた前提をそのままでよいと決めたこと。AI には何も送らない（記録だけ）。前提1つに決定は
+ * 1つで、承認か別案の選択（`RunInput.pick`）のどちらか。実行は終わったら変わらないので、承認は実行の外に持つ。
+ * @see contexts/collaboration/model/approval.dt:17
+ */
+export type AssumptionApproval = ApprovedAssumptionApproval;
+
+/**
+ * The fields of AssumptionApproval as data for `decide`: the common fields, and the fields of each state on top of them.
+ * @see contexts/collaboration/model/approval.dt:17
+ */
+export const AssumptionApprovalShape: Shape = {
+    fields: ['id', 'session', 'assumption', 'approvedBy', 'approvedAt'],
+    states: { Approved: [] },
+};
+
+/**
+ * The invariants of AssumptionApproval (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
+ * @see contexts/collaboration/model/approval.dt:17
+ */
+export function checkAssumptionApprovalCommon(_assumptionApproval: AssumptionApprovalCommon): readonly never[] {
+    return [];
+}
+
+/**
+ * The parameters of AssumptionApproval.approve, by name.
+ * @see contexts/collaboration/model/approval.dt:27
+ */
+export interface ApproveAssumptionApprovalParams {
+    /** 前提の承認ID */
+    readonly id: AssumptionApprovalId;
+    /** セッション */
+    readonly session: ActiveSession;
+    /** 決められる前提 */
+    readonly assumption: DecidableAssumption;
+    /** 参加者ID */
+    readonly approvedBy: ParticipantId;
+    /** 役割 */
+    readonly approvedByRole: ParticipantRole;
+    readonly approvedAt: Timestamp;
+}
+
+/**
+ * AssumptionApproval.approve (new -> Approved) — factory
+ * 前提を承認する
+ * 承認するのはファシリテーター。
+ * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
+ * @emits AssumptionApproved — exactly once when the command succeeds
+ * @see contexts/collaboration/model/approval.dt:27
+ */
+export type ApproveAssumptionApproval = (
+    params: ApproveAssumptionApprovalParams,
+) => Result<{
+    readonly Approved: {
+        readonly aggregate: ApprovedAssumptionApproval;
+        readonly events: { readonly AssumptionApproved: AssumptionApproved };
+    };
+}, FacilitatorOnly>;
+
+/**
+ * AssumptionApproval.approve, decided by one function; implement it with `decide(AssumptionApprovalShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
+ * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
+ * new -> Approved — set: every field
+ * @emits AssumptionApproved — exactly once when the command succeeds
+ * @see contexts/collaboration/model/approval.dt:27
+ */
+export type ApproveAssumptionApprovalDecision = (
+    params: ApproveAssumptionApprovalParams,
+) => Result<{
+    readonly Approved: {
+        readonly set: { readonly id: AssumptionApprovalId; readonly session: SessionId; readonly assumption: AssumptionRef; readonly approvedBy: ParticipantId; readonly approvedAt: Timestamp };
+        readonly events: { readonly AssumptionApproved: AssumptionApproved };
+    };
+}, FacilitatorOnly>;
+
+/**
+ * The first requirement of AssumptionApproval.approve that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/collaboration/model/approval.dt:27
+ */
+export function checkApproveAssumptionApprovalRequires(params: ApproveAssumptionApprovalParams): 'facilitatorApproves' | undefined {
+    if (!(params.approvedByRole === 'Facilitator')) return 'facilitatorApproves';
+    return undefined;
+}
+
+/**
+ * Command contracts of AssumptionApproval. Implement this interface by hand.
+ * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
+ * @see contexts/collaboration/model/approval.dt:17
+ */
+export interface AssumptionApprovalCommands {
+    /** 前提を承認する */
+    readonly approve: ApproveAssumptionApproval;
+}
+
+/**
+ * Events that the commands of AssumptionApproval may emit.
+ * @see contexts/collaboration/model/approval.dt:17
+ */
+export type AssumptionApprovalEvent = AssumptionApproved;
+
+/**
+ * 前提を承認した
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/collaboration/model/approval.dt:35
+ */
+export interface AssumptionApproved {
+    readonly type: 'AssumptionApproved';
+    /** 前提の承認ID */
+    readonly approvalId: AssumptionApprovalId;
+    /** セッション */
+    readonly session: SessionId;
+    /** 前提の参照 */
+    readonly assumption: AssumptionRef;
+    /** 参加者ID */
+    readonly approvedBy: ParticipantId;
+    readonly approvedAt: Timestamp;
+}
+
+/**
+ * 前提を承認できない実行
+ * 承認する前提の実行は、完了していないか、返答に前提がない（承認できるのは前提のある完了の実行）。
+ * @see contexts/collaboration/model/approval.dt:44
+ */
+export interface RunNotApprovable {
+    readonly type: 'RunNotApprovable';
+    /** エージェント実行ID */
+    readonly run: AgentRunId;
+}
+
+/**
+ * 返答にない前提
+ * 前提の番号が、その実行の返答にない。
+ * @see contexts/collaboration/model/approval.dt:49
+ */
+export interface AssumptionNotFound {
+    readonly type: 'AssumptionNotFound';
+    /** エージェント実行ID */
+    readonly run: AgentRunId;
+}
+
+/**
+ * 決まった前提
+ * 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ）。
+ * @see contexts/collaboration/model/approval.dt:54
+ */
+export interface AssumptionClosed {
+    readonly type: 'AssumptionClosed';
+    /** エージェント実行ID */
+    readonly run: AgentRunId;
+}
+
+/**
  * 文章
  * 本文や問いかけのように、人が書く空でない文章。
  * @invariant valid: length(value) >= 1 and length(value) <= 20000
@@ -4451,10 +4718,10 @@ export function checkTargetSnapshot(targetSnapshot: TargetSnapshot): readonly 'w
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */
-export type PersistentEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
+export type PersistentEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
+export type DomainEvent = RunQueued | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | RevisionConfirmed | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Aggregates of Collaboration. */
-export type Aggregate = AgentRun | Mark | Request | Revision | Session;
+export type Aggregate = AgentRun | AssumptionApproval | Mark | Request | Revision | Session;

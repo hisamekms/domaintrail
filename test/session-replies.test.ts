@@ -491,6 +491,52 @@ describe('the requests route and the agent API with replies', () => {
         expect(next.started.previousRuns.map((p) => [p.run.id, p.run.state])).toEqual([[run, 'Completed']]);
         expect((await agent(`runs/${picked.id}/finish`, { token: next.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
     });
+
+    test('only the facilitator approves an assumption; it is checked, recorded once, sent to no agent, and excludes a pick of it', async () => {
+        const request = ((await (await api(bob, 'requests', { targets: [], body: 'Add a discount.' })).json()) as { request: { id: string } }).request.id;
+        const run = ((await (await api(ada, 'runs', { requests: [request] })).json()) as { run: { id: string } }).run.id;
+        const refused = async (who: string, body: unknown, p = 'approvals'): Promise<[number, string]> => {
+            const res = await api(who, p, body);
+            const e = ((await res.json()) as { error: { type: string; field?: string } }).error;
+            return [res.status, e.field ?? e.type];
+        };
+        // queued: not completed
+        expect(await refused(ada, { run, assumption: 0 })).toEqual([409, 'RunNotApprovable']);
+        const { token } = await start(run);
+        const reply = {
+            outcome: 'done',
+            summary: 'Added a discount.',
+            requests: [{ request, status: 'done' }],
+            assumptions: [{ text: 'The discount is a rate', requests: [request], alternatives: [{ id: 'amount', label: 'A fixed amount' }] }],
+        };
+        expect((await agent(`runs/${run}/finish`, { token, exitCode: 0, formatted: true, checked: true, reply })).status).toBe(200);
+
+        expect(await refused(bob, { run, assumption: 0 })).toEqual([403, 'FacilitatorOnly']);
+        expect(await refused(ada, { run: 'nope', assumption: 0 })).toEqual([400, 'run']);
+        expect(await refused(ada, { run, assumption: -1 })).toEqual([400, 'assumption']);
+        expect(await refused(ada, { run, assumption: 0, extra: 1 })).toEqual([400, 'extra']);
+        expect(await refused(ada, { run: crypto.randomUUID(), assumption: 0 })).toEqual([404, 'RunNotFound']);
+        expect(await refused(ada, { run, assumption: 1 })).toEqual([400, 'AssumptionNotFound']);
+
+        const runsBefore = ((await (await api(ada, 'state')).json()) as { runs: unknown[] }).runs.length;
+        const res = await api(ada, 'approvals', { run, assumption: 0 });
+        expect(res.status).toBe(201);
+        const { approval } = (await res.json()) as { approval: { id: string; state: string; assumption: unknown } };
+        expect(approval).toMatchObject({ state: 'Approved', assumption: { run, assumption: 0 } });
+        const state = (await (await api(bob, 'state')).json()) as { runs: unknown[]; approvals: { id: string }[] };
+        expect(state.approvals.map((a) => a.id)).toEqual([approval.id]);
+        expect(state.runs).toHaveLength(runsBefore);
+        // decided: not approved again, not sent again with an alternative, its votes closed
+        expect(await refused(ada, { run, assumption: 0 })).toEqual([409, 'AssumptionClosed']);
+        expect(await refused(ada, { requests: [request], pick: { pickOf: run, assumption: 0, alternative: 'amount' } }, 'runs')).toEqual([
+            409,
+            'AssumptionClosed',
+        ]);
+        expect(await refused(bob, { target: { kind: 'AssumptionChoice', run, assumption: 0 }, sign: { kind: 'Vote' }, placed: true }, 'marks')).toEqual([
+            409,
+            'MarkTargetClosed',
+        ]);
+    });
 });
 
 // ---- the page's derivations ----

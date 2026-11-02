@@ -145,6 +145,11 @@ describe('the rules of marks', () => {
         // the facilitator picked an alternative: the same requests run again with a note
         expect(markTargetStatus(choice('alt1'), { requests, runs: [r1, run('r2', 'Queued', ['m1'])] })).toBe('closed');
         expect(markTargetStatus(choice(), { requests, runs: [{ ...r1, state: 'NeedsClarification' }] })).toBe('closed');
+        // the facilitator approved the assumption: its choices close; another run's approval changes nothing
+        const approved = (r: string, assumption = 0) => [{ assumption: { run: r, assumption } }];
+        expect(markTargetStatus(choice('alt1'), { requests, runs: [r1], approvals: approved('r1') })).toBe('closed');
+        expect(markTargetStatus(choice(), { requests, runs: [r1], approvals: approved('r1') })).toBe('closed');
+        expect(markTargetStatus(choice(), { requests, runs: [r1], approvals: approved('r9') })).toBe('open');
     });
 
     test('reactions never close; their target only has to be in the session', () => {

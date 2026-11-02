@@ -11,4 +11,5 @@ export const knownSessionId = (v: string): Collaboration.SessionId => known(Coll
 export const knownRevisionId = (v: string): Collaboration.RevisionId => known(Collaboration.makeRevisionId(v));
 export const knownRequestId = (v: string): Collaboration.RequestId => known(Collaboration.makeRequestId(v));
 export const knownMarkId = (v: string): Collaboration.MarkId => known(Collaboration.makeMarkId(v));
+export const knownAssumptionApprovalId = (v: string): Collaboration.AssumptionApprovalId => known(Collaboration.makeAssumptionApprovalId(v));
 export const knownAgentRunId = (v: string): Collaboration.AgentRunId => known(Collaboration.makeAgentRunId(v));

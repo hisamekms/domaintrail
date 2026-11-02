@@ -7,6 +7,7 @@
 // `requires` decide who may do what. The agent's use cases take the token of the lease it claimed.
 import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
+import { approvalCommands, approvalOf } from '../domain/approvals.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
@@ -18,7 +19,7 @@ import type { Actor } from './actor.js';
 import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
-import { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
+import { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
 
 type SessionId = Collaboration.SessionId;
 type AgentRunId = Collaboration.AgentRunId;
@@ -159,6 +160,8 @@ export interface SessionState {
     readonly revisions: readonly Collaboration.Revision[];
     /** The marks still placed (votes and reactions), in the order they were placed. */
     readonly marks: readonly Collaboration.PlacedMark[];
+    /** The assumptions the facilitator approved, in the order they were approved. */
+    readonly approvals: readonly Collaboration.AssumptionApproval[];
 }
 
 /** What setting a mark changed: the mark placed (none when it was there already or taken off) and the marks removed. */
@@ -299,6 +302,29 @@ export interface CollaborationUseCases {
             | Collaboration.RunNotPickable
             | Collaboration.AlternativeNotFound
             | Collaboration.PickMismatch
+            | Collaboration.AssumptionClosed
+        >
+    >;
+    /**
+     * Approves an assumption of a completed run of the session: it stands as the AI made it. The facilitator's; sends
+     * nothing to the agent. Refused when the assumption was decided already (approved, or a later run took over the
+     * run's requests, a pick among them).
+     */
+    approveAssumption(input: {
+        readonly session: SessionId;
+        readonly actor: Actor;
+        readonly assumption: Collaboration.AssumptionRef;
+    }): Promise<
+        Result<
+            Collaboration.AssumptionApproval,
+            | Collaboration.FacilitatorOnly
+            | Collaboration.SessionNotFound
+            | Collaboration.SessionAlreadyClosed
+            | Collaboration.RunNotFound
+            | Collaboration.RunOfAnotherSession
+            | Collaboration.RunNotApprovable
+            | Collaboration.AssumptionNotFound
+            | Collaboration.AssumptionClosed
         >
     >;
     /** Claims the next queued run of the session for `leaseMs`, unless a run of the session is running or claimed. */
@@ -735,6 +761,8 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     if (of.session !== session) return err({ type: 'RunOfAnotherSession', run: pick.pickOf });
                     const resolved = resolvePick(pick, of, requests);
                     if (!resolved.ok) return resolved;
+                    // one decision per assumption: an approved one is not sent again with an alternative
+                    if (approvalOf(stores.approvals.listBySession(session), of.id, pick.assumption)) return err({ type: 'AssumptionClosed', run: of.id });
                     picked = resolved.value;
                 }
                 const pending: Collaboration.PendingRequest[] = [];
@@ -767,6 +795,29 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 stores.runs.enqueue(queued.value.Queued.aggregate);
                 publish(stores, session, queued.value.Queued.events, at);
                 return ok(queued.value.Queued.aggregate);
+            });
+        },
+
+        async approveAssumption({ session, actor, assumption }) {
+            return uow.transaction(async (stores) => {
+                const verify = storeVerifications(stores);
+                const active = await verify.makeActiveSession(session);
+                if (!active.ok) return active;
+                const decidable = await verify.makeDecidableAssumption(assumption, session);
+                if (!decidable.ok) return decidable;
+                const at = clock.now();
+                const approved = approvalCommands.approve({
+                    id: knownAssumptionApprovalId(ids.newId()),
+                    session: active.value,
+                    assumption: decidable.value,
+                    approvedBy: actor.participant,
+                    approvedByRole: actor.role,
+                    approvedAt: at,
+                });
+                if (!approved.ok) return approved;
+                stores.approvals.save(approved.value.Approved.aggregate);
+                publish(stores, session, approved.value.Approved.events, at);
+                return ok(approved.value.Approved.aggregate);
             });
         },
 
@@ -1184,6 +1235,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     runs: stores.runs.listBySession(session),
                     revisions: stores.revisions.listBySession(session),
                     marks: stores.marks.placedBySession(session),
+                    approvals: stores.approvals.listBySession(session),
                 });
             });
         },

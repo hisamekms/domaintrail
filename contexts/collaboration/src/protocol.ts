@@ -40,6 +40,8 @@ export interface SessionStateBody {
     readonly revisions: Json<readonly Collaboration.Revision[]>;
     /** The marks still placed (votes and reactions), in the order they were placed: a page that joins late sees them. */
     readonly marks: Json<readonly Collaboration.PlacedMark[]>;
+    /** The assumptions the facilitator approved, in the order they were approved. */
+    readonly approvals: Json<readonly Collaboration.AssumptionApproval[]>;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), in the form reactions are kept. */
     readonly quickReactions: readonly string[];
     /** The outbox position the state includes: event messages with a `seq` up to it are already in it. */
@@ -104,6 +106,7 @@ export const EVENT_MESSAGE_TYPES = {
     RevisionConfirmed: 'revision.confirmed',
     MarkPlaced: 'mark.placed',
     MarkRemoved: 'mark.removed',
+    AssumptionApproved: 'assumption.approved',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -128,7 +131,7 @@ export type SessionServerMessage =
     | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
     | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification };
 
-/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `presence.*`). */
+/** The message type of a session message (`session.*`, `request.*`, `run.*`, `revision.*`, `mark.*`, `assumption.*`, `presence.*`). */
 export type SessionMessageType = SessionServerMessage['type'];
 
 /** An error of the session APIs: `{ "error": { "type": …, … } }` with an HTTP status. */
@@ -184,6 +187,23 @@ export interface SetMarkBody {
 export interface MarkSetBody {
     readonly placed?: Json<Collaboration.PlacedMark>;
     readonly removed: Json<readonly Collaboration.RemovedMark[]>;
+}
+
+/**
+ * `POST /api/session/approvals` (the facilitator): approves an assumption of a completed run of the session — `run`, and
+ * `assumption`, its index in the run's reply. It stands as the AI made it; nothing is sent to the agent. Refused with
+ * `RunNotFound` / `RunOfAnotherSession` (404), `RunNotApprovable` (409: the run is not completed, or its reply has no
+ * assumptions), `AssumptionNotFound` (400), `AssumptionClosed` (409: approved already, an alternative of it picked, or a
+ * later run took over the run's requests). → 201 `ApprovedBody`; every page gets `assumption.approved`.
+ */
+export interface ApproveBody {
+    readonly run: string;
+    readonly assumption: number;
+}
+
+/** `POST /api/session/approvals` → 201: the approval made. */
+export interface ApprovedBody {
+    readonly approval: Json<Collaboration.AssumptionApproval>;
 }
 
 /**

@@ -51,6 +51,14 @@ export interface MarkRepository {
     placedBy(session: SessionId, participant: Collaboration.ParticipantId): Collaboration.PlacedMark[];
 }
 
+/** The facilitator's approvals of assumptions: at most one per run and assumption (a unique index). */
+export interface ApprovalRepository {
+    /** Inserts the approval; a second approval of the same assumption is refused by the store (it throws). */
+    save(approval: Collaboration.AssumptionApproval): void;
+    /** The approvals of a session, in the order they were made. */
+    listBySession(session: SessionId): Collaboration.AssumptionApproval[];
+}
+
 /** A claim on a run: who holds it, its secret token, and until when. */
 export interface Lease {
     readonly owner: string;
@@ -189,6 +197,7 @@ export interface Stores {
     readonly runs: RunQueue;
     readonly revisions: RevisionStore;
     readonly marks: MarkRepository;
+    readonly approvals: ApprovalRepository;
     readonly outbox: EventOutbox;
     readonly access: AccessStore;
     readonly operations: OperationLog;

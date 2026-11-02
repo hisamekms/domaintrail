@@ -23,6 +23,7 @@ import type { SessionSurface } from '../http/server.js';
 import { DEV_COOKIE, type Identified, type SessionIdentities } from './identities.js';
 import {
     answer as answerInput,
+    assumptionRef,
     body,
     pick as pickInput,
     displayName,
@@ -99,6 +100,7 @@ export function statusOf(type: string): number {
         case 'InvalidReply':
         case 'InvalidAnswer':
         case 'AlternativeNotFound':
+        case 'AssumptionNotFound':
         case 'PickMismatch':
         case 'MarkNotForTarget':
             return 400;
@@ -439,6 +441,19 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                     ...(picked && { pick: picked }),
                 });
                 await answer(res, queued, 201, (run) => ({ run }));
+            },
+        },
+        {
+            method: 'POST',
+            path: /^\/api\/session\/approvals$/,
+            role: 'facilitator',
+            handle: async ({ req, res, auth }) => {
+                // an assumption of a completed run approved as it is: recorded, nothing sent to the agent
+                const raw = await input(req, res, ['run', 'assumption']);
+                if (!raw) return;
+                const assumption = checked(res, assumptionRef(raw));
+                if (!assumption) return;
+                await answer(res, await use.approveAssumption({ session, actor: who(auth).actor, assumption }), 201, (approval) => ({ approval }));
             },
         },
         {

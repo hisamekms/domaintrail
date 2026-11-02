@@ -1,5 +1,6 @@
 // Databases written by earlier versions, upgraded in place: before marks and emoji reactions (migration 4), before
-// replies (migration 5), before replies to messages (migration 7). The store itself: sqlite.test.ts.
+// replies (migration 5), before replies to messages (migration 7), before approvals (migration 8). The store itself:
+// sqlite.test.ts.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -197,7 +198,7 @@ describe('the reply_to column (migration 5)', () => {
 
         const db = openDatabase(file);
         expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
-        expect(MIGRATIONS.length).toBe(7);
+        expect(MIGRATIONS.length).toBe(8);
         const uow = createUnitOfWork(db);
         const loaded = await uow.transaction((s) => s.requests.load(knownRequestId(rid)));
         expect(loaded).toMatchObject({ state: 'Sent', body: 'Add cancel.' });
@@ -339,6 +340,81 @@ describe('the reply_to_request column (migration 7)', () => {
                 () => 'refused',
             );
         expect(dangling).toBe('refused');
+        db.close();
+    });
+});
+
+describe('the approvals table (migration 8)', () => {
+    test('a database of the schema before approvals is upgraded in place: its runs load as they were, with no approvals; one approval per assumption from then on', async () => {
+        const dir = await workspace({});
+        const file = path.join(dir, 'session.db');
+        // the schema before approvals (7 migrations), with a completed run that made two assumptions
+        const old = new DatabaseSync(file);
+        for (const m of MIGRATIONS.slice(0, 7)) old.exec(m);
+        old.exec('PRAGMA user_version = 7');
+        const sid = '00000000-0000-4000-8000-000000000001';
+        const rid = '00000000-0000-4000-8000-000000000002';
+        const runId = '00000000-0000-4000-8000-000000000003';
+        const rev = '00000000-0000-4000-8000-000000000004';
+        const at = { $date: '2026-10-31T09:00:00.000Z' };
+        const who = 'local:facilitator';
+        const session = {
+            state: 'Open',
+            id: sid,
+            facilitator: who,
+            participants: [{ id: who, name: 'Facilitator', role: 'Facilitator', joinedAt: at }],
+            startedAt: at,
+        };
+        const assumption = (t: string) => ({ text: t, requests: [rid], alternatives: [{ id: 'other', label: 'Other' }] });
+        const run = {
+            state: 'Completed',
+            id: runId,
+            session: sid,
+            input: { requests: [{ request: rid, author: who, targets: [], body: 'Add cancel.' }] },
+            queuedBy: who,
+            queuedAt: at,
+            baseRevision: rev,
+            startedAt: at,
+            report: { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+            resultRevision: rev,
+            changed: false,
+            reply: { summary: 'Added cancel.', requests: [], questions: [], assumptions: [assumption('Only drafts.'), assumption('Keeps the order.')] },
+            finishedAt: at,
+        };
+        old.prepare('INSERT INTO sessions (id, state, data) VALUES (?, ?, ?)').run(sid, 'Open', JSON.stringify(session));
+        old.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)').run(runId, sid, 1, 'Completed', JSON.stringify(run));
+        old.close();
+
+        const db = openDatabase(file);
+        expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: MIGRATIONS.length });
+        const uow = createUnitOfWork(db);
+        const session8 = knownSessionId(sid);
+        const before = await uow.transaction((s) => ({ run: s.runs.load(knownAgentRunId(runId))?.run, approvals: s.approvals.listBySession(session8) }));
+        expect(before.run?.state).toBe('Completed');
+        expect(before.approvals).toEqual([]);
+
+        const approval = (id: string, index: number): C.AssumptionApproval => ({
+            state: 'Approved',
+            id: value(C.makeAssumptionApprovalId(id)),
+            session: session8,
+            assumption: { run: knownAgentRunId(runId), assumption: value(C.makeTally(index)) },
+            approvedBy: value(C.makeParticipantId(who)),
+            approvedAt: new Date('2026-11-01T09:00:00Z'),
+        });
+        const first = approval('00000000-0000-4000-8000-000000000005', 1);
+        await uow.transaction((s) => s.approvals.save(first));
+        expect(await uow.transaction((s) => s.approvals.listBySession(session8))).toEqual([first]);
+        // a second approval of the same assumption is refused by the store; another assumption is approved
+        const twice = await uow
+            .transaction((s) => s.approvals.save(approval('00000000-0000-4000-8000-000000000006', 1)))
+            .then(
+                () => 'saved',
+                () => 'refused',
+            );
+        expect(twice).toBe('refused');
+        const second = approval('00000000-0000-4000-8000-000000000007', 0);
+        await uow.transaction((s) => s.approvals.save(second));
+        expect(await uow.transaction((s) => s.approvals.listBySession(session8))).toEqual([first, second]);
         db.close();
     });
 });

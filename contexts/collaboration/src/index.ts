@@ -5,7 +5,7 @@
 // ---- published language: the generated contracts (model/*.dt) --------------------------------------------------
 export { Collaboration, err, ok, type Result } from './generated/index.js';
 
-// ---- published language: a message's body, the agent's reply, marks, targets -----------------------------------
+// ---- published language: a message's body, the agent's reply, marks, approvals, targets -------------------------
 export {
     MAX_REQUEST_MENTIONS,
     parseBody,
@@ -46,9 +46,10 @@ export {
     type MarkStatus,
     type MarkTargetData,
 } from './domain/marks.js';
+export { approvalOf, assumptionStatus, type ApprovalFacts } from './domain/approvals.js';
 export { MAX_REQUEST_TARGETS, type TargetStatus } from './domain/targets.js';
 // the IDs from values known to be UUIDs (the ID generator's, input already checked); the generated constructors check
-export { knownAgentRunId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
+export { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from './domain/ids.js';
 // the rule of the `Emoji` primitive: what counts as one emoji and the form it is kept in (the page decides alike)
 export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/emoji.js';
 

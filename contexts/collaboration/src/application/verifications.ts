@@ -2,6 +2,7 @@
 // aggregate. Each is the only code that asserts its type; the check holds when it is made, so the stores enforce what
 // they can where they save (a request is bundled while sent, one active run per session).
 import { Collaboration, err, ok } from '../generated/index.js';
+import { assumptionStatus } from '../domain/approvals.js';
 import { markTargetStatus } from '../domain/marks.js';
 import { changedPaths, workspacePath } from '../domain/snapshot.js';
 import type { Stores, UnitOfWork, WorkspaceSnapshot } from './ports.js';
@@ -12,6 +13,7 @@ export interface StoreVerifications {
     readonly makeOpenMarkTarget: Collaboration.MakeOpenMarkTarget;
     readonly makeReplyableTarget: Collaboration.MakeReplyableTarget;
     readonly makeMentionableParticipant: Collaboration.MakeMentionableParticipant;
+    readonly makeDecidableAssumption: Collaboration.MakeDecidableAssumption;
 }
 
 /** The states of a run that a message may reply to: it ended, and it does not wait for an answer (a clarification has its form). */
@@ -37,7 +39,11 @@ export function storeVerifications(stores: Stores): StoreVerifications {
         },
         async makeOpenMarkTarget(target, session) {
             // the session's requests and runs, in queue order: whether the target is there, and whether its vote closed
-            const status = markTargetStatus(target, { requests: stores.requests.listBySession(session), runs: stores.runs.listBySession(session) });
+            const status = markTargetStatus(target, {
+                requests: stores.requests.listBySession(session),
+                runs: stores.runs.listBySession(session),
+                approvals: stores.approvals.listBySession(session),
+            });
             if (status === 'missing') return err({ type: 'MarkTargetNotFound' });
             if (status === 'closed') return err({ type: 'MarkTargetClosed' });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
@@ -64,6 +70,22 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             if (!stores.sessions.load(session)?.participants.some((p) => p.id === id)) return err({ type: 'MentionedNotAParticipant', participant: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(id as Collaboration.MentionableParticipant);
+        },
+        async makeDecidableAssumption(ref, session) {
+            const run = stores.runs.load(ref.run)?.run;
+            if (!run) return err({ type: 'RunNotFound', run: ref.run });
+            if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: ref.run });
+            // completed with that assumption, neither approved nor taken over by a later run (a pick among them)
+            switch (assumptionStatus(run, ref.assumption, stores.runs.listBySession(session), stores.approvals.listBySession(session))) {
+                case 'notApprovable':
+                    return err({ type: 'RunNotApprovable', run: run.id });
+                case 'missing':
+                    return err({ type: 'AssumptionNotFound', run: run.id });
+                case 'closed':
+                    return err({ type: 'AssumptionClosed', run: run.id });
+            }
+            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
+            return ok(ref as Collaboration.DecidableAssumption);
         },
     };
 }
