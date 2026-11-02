@@ -962,6 +962,36 @@ describe('revisions', () => {
         });
     });
 
+    test('model changes: the elements two revisions differ by, kept per pair of revisions', async () => {
+        const s = await session();
+        const { id, start } = await started(s);
+        await s.write('sales/sales.dt', SALES.replace('state Confirmed', 'state Confirmed\n    state Cancelled'));
+        await s.write('stormings/more.dtes', 'storming More {\n  event Happened\n}\n');
+        const manual = value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
+        let validated = 0;
+        const counting = createCollaboration({ ...s.deps, validator: { validate: (sources) => (validated++, s.deps.validator.validate(sources)) } });
+        const m = value(await counting.modelChanges({ session: id, before: start.id, after: manual.id }));
+        expect(m.complete).toBe(true);
+        expect(m.changes.map((c) => [c.change, c.language, c.kind, c.name, c.owner?.name])).toEqual([
+            ['added', 'Dt', 'state', 'Cancelled', 'Order'],
+            ['added', 'Dtes', 'event', 'Happened', 'More'],
+        ]);
+        expect(validated).toBe(2);
+        expect(value(await counting.modelChanges({ session: id, before: start.id, after: manual.id }))).toEqual(m);
+        // the pair is kept, and the revisions' analyses for the next pair
+        expect(validated).toBe(2);
+        expect(value(await counting.modelChanges({ session: id, before: manual.id, after: start.id })).changes.map((c) => c.change)).toEqual([
+            'removed',
+            'removed',
+        ]);
+        expect(validated).toBe(2);
+        const other = value(await s.use.startSession({ facilitator, name })).revision;
+        expect(error(await counting.modelChanges({ session: id, before: start.id, after: other.id }))).toEqual({
+            type: 'RevisionOfAnotherSession',
+            revision: other.id,
+        });
+    });
+
     test('compare bounds its work: a blob over the limit is never read, and the diffs stop at the budget', async () => {
         const s = await session();
         const { id, start } = await started(s);

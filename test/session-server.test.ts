@@ -9,7 +9,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { type AccessClaims, type AccessTokenVerifier, REPLY_LIMITS } from '@domaintrail/collaboration';
-import type { ComparisonBody, Me, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { ComparisonBody, Me, ModelChangesBody, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import {
     cliDeps,
     createWatcherHold,
@@ -877,6 +877,18 @@ describe('revisions: comparison and restore (S7)', () => {
             expect(c.files[2].diff?.kind === 'diff' && c.files[2].diff.unified).toContain('+    state Shipped');
             expect(c.files[1].diff).toBeUndefined();
             expect([c.before.validation, c.after.validation].map((v) => v.dtErrors)).toEqual([0, 0]);
+
+            // the same, in the model's words: the elements added, changed and removed
+            const changed = await api(server, bob, `revisions/${first.id}/changes/${second.id}`);
+            expect(changed.status).toBe(200);
+            const m = (await changed.json()) as ModelChangesBody;
+            expect(m.complete).toBe(true);
+            expect(m.changes.map((e) => [e.change, e.kind, e.name, e.owner?.name])).toEqual([
+                ['added', 'state', 'Shipped', 'Order'],
+                ['added', 'event', 'Happened', 'More'],
+            ]);
+            const unknownChanges = await api(server, bob, `revisions/${first.id}/changes/00000000-0000-4000-8000-000000000000`);
+            expect(unknownChanges.status).toBe(404);
 
             const unknown = await api(server, bob, `revisions/${first.id}/compare/00000000-0000-4000-8000-000000000000`);
             expect([unknown.status, (await errorOf(unknown)).type]).toEqual([404, 'NotFound']);

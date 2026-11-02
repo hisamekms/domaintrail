@@ -16,7 +16,7 @@ import {
     type PickData,
     type SessionState,
 } from '@domaintrail/collaboration';
-import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { Me, ModelChangesBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { AccessPolicy, Authorization } from '../http/access.js';
 import { BodyError, mediaType, readJson, readText, sendError, sendJson } from '../http/json.js';
 import type { SessionSurface } from '../http/server.js';
@@ -547,6 +547,25 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const compared = await use.compareRevisions({ session, before: a.id, after: b.id });
                 if (!compared.ok) return fail(res, compared.error);
                 sendJson(res, 200, compared.value);
+            },
+        },
+        {
+            method: 'GET',
+            path: /^\/api\/session\/revisions\/([^/]+)\/changes\/([^/]+)$/,
+            role: 'participant',
+            handle: async ({ res, params }) => {
+                const before = checked(res, uuid(params[0], 'before'));
+                if (!before) return;
+                const after = checked(res, uuid(params[1], 'after'));
+                if (!after) return;
+                const revisions = (await state()).revisions;
+                const a = revisions.find((r) => r.id === before);
+                if (!a) return fail(res, { type: 'NotFound', aggregate: 'Revision', id: before });
+                const b = revisions.find((r) => r.id === after);
+                if (!b) return fail(res, { type: 'NotFound', aggregate: 'Revision', id: after });
+                const changes = await use.modelChanges({ session, before: a.id, after: b.id });
+                if (!changes.ok) return fail(res, changes.error);
+                sendJson(res, 200, changes.value satisfies ModelChangesBody);
             },
         },
         {

@@ -9,6 +9,7 @@ import { Collaboration, eventList, err, ok, type Result } from '../generated/ind
 import { agentRunCommands, requestCommands, revisionCommands, sessionCommands } from '../domain/commands.js';
 import { approvalCommands, approvalOf } from '../domain/approvals.js';
 import { exclusiveGroup, markChange, markCommands, markKey, MAX_REACTION_EMOJI, reactionRoom } from '../domain/marks.js';
+import { elementChanges, type ElementChanges } from '../domain/changes.js';
 import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparison, type FileStatus, type LineDiff } from '../domain/compare.js';
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
@@ -16,7 +17,7 @@ import { nonEmpty, workspacePath } from '../domain/snapshot.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { Actor } from './actor.js';
-import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, WriteRefusal } from './ports.js';
+import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
 import { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
@@ -143,6 +144,10 @@ export interface Comparison {
 
 /** The most characters of unified diff text a comparison carries; the files after it get no diff. */
 export const MAX_COMPARISON_DIFF = 512 * 1024;
+/** How many pairs of revisions `modelChanges` keeps the changes of, and how many revisions it keeps the analysis of. */
+const CHANGES_KEPT = 256;
+const ANALYSES_KEPT = 8;
+
 /** The least budget a file's diff is started with: below it, the rest of the comparison's diffs are omitted. */
 const MIN_DIFF_ROOM = 2 * 1024;
 
@@ -429,6 +434,15 @@ export interface CollaborationUseCases {
         readonly after: RevisionId;
     }): Promise<Result<Comparison, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
     /**
+     * What a unit of work changed in the model's words: the `.dt` and `.dtes` elements the analyses of two revisions
+     * differ by. Kept per pair of revisions (they never change), so a page that asks again is answered at once.
+     */
+    modelChanges(input: {
+        readonly session: SessionId;
+        readonly before: RevisionId;
+        readonly after: RevisionId;
+    }): Promise<Result<ElementChanges, NotFound | Collaboration.RevisionOfAnotherSession | BlobMissing>>;
+    /**
      * The runs a run continues — those its messages reply to, then the one its answer answers, then the one it picked an
      * alternative of, as its frozen input names them — each with what it changed from its base to its result revision:
      * a unified diff while the diffs of all of them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
@@ -607,6 +621,22 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             return ok({ run: decided.value.aggregate, replayed: false });
         });
     };
+
+    // the element changes per pair of revisions, and the analyses of the latest revisions read (a unit's result is the
+    // next one's base): revisions never change, so neither expires; the oldest goes first
+    const changesKept = new Map<string, Promise<Result<ElementChanges, BlobMissing>>>();
+    const analysesKept = new Map<RevisionId, Promise<Result<ValidationResult, BlobMissing>>>();
+    const kept = <K, V>(map: Map<K, V>, key: K, limit: number, make: () => V): V => {
+        const found = map.get(key);
+        if (found !== undefined) return found;
+        const made = make();
+        map.set(key, made);
+        const oldest = map.keys().next();
+        if (map.size > limit && !oldest.done) map.delete(oldest.value);
+        return made;
+    };
+    const analysisKept = (r: Collaboration.Revision): Promise<Result<ValidationResult, BlobMissing>> =>
+        kept(analysesKept, r.id, ANALYSES_KEPT, () => analysisOf(deps, r));
 
     const useCases: CollaborationUseCases = {
         async startSession({ facilitator, name }) {
@@ -1196,6 +1226,32 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 files.push({ ...f, diff });
             }
             return ok({ before: a, after: b, files, counts: statusCounts(files), diffsOmitted });
+        },
+
+        async modelChanges({ session, before, after }) {
+            const found = await uow.transaction((stores) => ({ a: stores.revisions.load(before), b: stores.revisions.load(after) }));
+            for (const [id, r] of [
+                [before, found.a],
+                [after, found.b],
+            ] as const) {
+                if (!r) return err(notFound('Revision', id));
+                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+            }
+            const { a, b } = found;
+            if (!a || !b) throw new Error('Both revisions were found above');
+            const changes = await kept(changesKept, `${a.id}>${b.id}`, CHANGES_KEPT, async (): Promise<Result<ElementChanges, BlobMissing>> => {
+                const was = await analysisKept(a);
+                const is = await analysisKept(b);
+                // a blob missing now may be put back later: not kept
+                if (!was.ok) analysesKept.delete(a.id);
+                if (!is.ok) analysesKept.delete(b.id);
+                if (!was.ok) return was;
+                if (!is.ok) return is;
+                return ok(elementChanges(was.value, is.value));
+            });
+            // a blob missing now may be put back later: not kept
+            if (!changes.ok) changesKept.delete(`${a.id}>${b.id}`);
+            return changes;
         },
 
         async previousRuns({ run, maxDiff }) {

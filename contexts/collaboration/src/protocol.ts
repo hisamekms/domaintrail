@@ -2,6 +2,7 @@
 // (REST under `/api/session/`, and the WebSocket next to the Live View's `type: 'update'`) and the agent subscriber
 // (the agent API on its own loopback listener: REST and an SSE stream). Types only, shared by the app (apps/dt), the page
 // (S5) and the subscriber (S6); what goes over the wire is JSON, so a `Date` arrives as an ISO string (`Json<T>`).
+import type { ElementChange, ElementChanges } from './domain/changes.js';
 import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
 import type { Collaboration } from './generated/index.js';
@@ -280,6 +281,14 @@ export interface ComparisonBody {
     readonly counts: Readonly<Record<Collaboration.SourceLanguage, Readonly<Record<FileStatus, number>>>>;
     readonly diffsOmitted: boolean;
 }
+
+/**
+ * `GET /api/session/revisions/:before/changes/:after` (any participant): what a unit of work changed in the model's
+ * words — the `.dt` and `.dtes` elements added, changed and removed. `complete` is false when a side's sources did not
+ * all parse (that DSL's changes are then left out).
+ */
+export type ModelChangesBody = ElementChanges;
+export type { ElementChange };
 
 // ---- Agent API (loopback listener, `Authorization: Bearer <agent.json token>`) ----
 
