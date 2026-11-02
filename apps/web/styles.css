@@ -3804,7 +3804,9 @@ del.was.block {
     border-bottom: 1px solid var(--border);
 }
 .chat-avatars {
-    padding-left: 3px;
+    /* room for the facilitator's ring and the last avatar's overlap, without making the header taller */
+    padding: var(--space-1);
+    margin-block: calc(-1 * var(--space-1));
     min-width: 0;
     display: flex;
     align-items: center;
@@ -3819,9 +3821,11 @@ del.was.block {
 .chat-avatar .session-avatar {
     --avatar-size: 1.375rem;
 }
-/* the facilitator's ring is wider than the gap the others leave */
+/* the facilitator's ring is wider than the gap the others leave: drawn over its neighbour, whole */
 .chat-avatar:has(> .facilitator) {
-    margin-right: -2px;
+    position: relative;
+    z-index: 1;
+    margin-right: 0;
 }
 .chat-avatar.away {
     opacity: 0.45;
