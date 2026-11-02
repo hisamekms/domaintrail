@@ -16,11 +16,11 @@ const NAME_MAX_AGE = 365 * 24 * 60 * 60;
 
 const escape = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 
-const STYLE = `body{font:15px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f6f7f9;color:#1f2328}
+const STYLE = `:root{color-scheme:light dark}body{font:15px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f6f7f9;color:#1f2328}
 main{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:24px 28px;max-width:360px;width:100%}
 h1{font-size:18px;margin:0 0 12px}label{display:block;margin-bottom:6px}input{width:100%;box-sizing:border-box;padding:6px 8px;font:inherit}
-button{margin-top:12px;padding:6px 14px;font:inherit}.error{color:#cf222e}
-@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}main{background:#161b22;border-color:#30363d}}`;
+button{margin-top:12px;padding:6px 14px;font:inherit}.error{color:#cf222e}a{color:#0969da}
+@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}main{background:#161b22;border-color:#30363d}a{color:#4493f8}.error{color:#ff7b72}}`;
 
 /**
  * The language of a page from the request's `Accept-Language`: the supported language (`ja` and any `ja-*`, `en` and
