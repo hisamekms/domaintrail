@@ -180,15 +180,16 @@ The chat has two views:
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
   background in your stream, and the closed chat's button shows `@ n` for the new ones. A card is named by the title
   the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
-  it show their time only. An AI turn shows its state in the status slot before its actions (queued, running with its
-  time, declined, failed, cancelled), so the states line up in one column; the state is the work's, so a message sent
-  to the AI shows none, only a small link to its turn in the same slot (the AI's mark and ↓; its state in the tooltip,
+  it show their time only (the title takes the row's width, cut with … only when it is too narrow, whole in its
+  tooltip). An AI turn shows its state in the status slot at the right end of its name row (queued, running with its
+  time, declined, failed, cancelled), so the states line up in one column; a row without a status leaves no gap. The
+  state is the work's, so a message sent to the AI shows none, only a small link to its turn in the same slot (the AI's mark and ↓; its state in the tooltip,
   `AI の作業へ（実行待ち）`, a click going to the turn). While
   a run runs, a small line under its quoted messages tells what the AI is doing, as it goes: `読んでいます order.dt`,
   `書き換えています`, `確かめています dt check`, `まとめています` (a file by its last segment, its path in the tooltip). The
   facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
-  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ among a running or queued
-  turn's actions, after a dialog asks), and reaches confirm,
+  with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ right after a running or
+  queued turn's state, always shown, after a dialog asks), and reaches confirm,
   restore and the changes from a card's ⋯ (この作業の結果を確認済みにする, この作業の前に戻す…, 変更を見る; the revisions are
   in the tooltips only) and recording, the hand-over and コラボを終える… from the collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
@@ -197,7 +198,8 @@ The chat has two views:
   an assumption's 前提 and 別案 stand one under the other, each with ○. An answered question keeps its options, with
   the filled mark (◉, ☑) on what was chosen, the rest muted, the votes frozen and `回答 name · time` under it; a picked
   alternative has ◉ and `選択 name · time`, the time a link to the run the pick queued. Anyone reacts to a message or an AI turn with any one emoji
-  (☺+ on hover: the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
+  (☺+ on hover: a row's actions — the facilitator's tools, ↩ and ☺+ — float in a small bar over its top right while
+  it is hovered or focused, always on touch; the quick row of `session.quickReactions` and ＋ to type or paste another; the app gives none a
   meaning). Reactions show as colored emoji with small counts, mine with a violet count and a faint violet outline;
   who marked is in the tooltip and, for a vote, in a list on a click.
   ↩ on an ended AI turn (on hover) replies to it: a chip above the composer (`↩ 「請求書の税区分」への返信 ✕`), the targets of its

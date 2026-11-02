@@ -2587,8 +2587,10 @@ on a message read as talk (where the button is not shown), コメントをつけ
 まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
 run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
 is still queued. Participants see a run once it is in the stream, and the queue in AI の作業. Every message and
-AI turn has a status slot, right before its actions and as wide on every row (the longest state of the language), so
-what is there lines up in one column down the chat; the right end holds only actions. The state is the work's, so
+AI turn has a status slot at the right end of its name row, there only when the row has a status and then as wide on
+every row (the longest state of the language), so what is there lines up in one column down the chat. The row's
+actions (AI に送る and …, ↩, ☺+) take no room in it: they float in a small bar over the row's top right while it is
+hovered or focused (or one of their menus is open), always on touch. The state is the work's, so
 only the AI turn shows it (below); a message that was sent shows, in its slot, a small link to the AI turn of its
 latest run (the AI's mark and ↓), its state in the tooltip (`AI の作業へ（実行待ち）`), and a click goes to the turn —
 several messages sent in one run read as one queued run, not one per message. What the run did of each message
@@ -2596,7 +2598,8 @@ several messages sent in one run read as one queued run, not one per message. Wh
 
 **Cards.** A run is one card, updated in place: queued, running (with the time), then done, a question, declined,
 failed or cancelled; its status slot shows the state where nothing else does (queued, running with the time,
-declined, failed, cancelled; a question shows itself). While it runs, one small line under its quotes (and under its
+declined, failed, cancelled; a question shows itself), and the facilitator's ✕ that cancels a queued or running run
+stands right after it, always shown. While it runs, one small line under its quotes (and under its
 row in AI の作業) tells what the AI is doing now — `読んでいます`, `書き換えています`, `確かめています` or `まとめています`, with
 the file (its last segment; the path in the tooltip) or the command (`dt check`). It changes as the agent goes, is
 not kept once the run ends, and appears only after the agent first tells it. A card is one chunk of change, so it is named, not numbered: the AI gives each run a short title
@@ -2636,7 +2639,7 @@ dialog asks: 実行を取り消しますか？ for a running run (its work so fa
 one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ marks the work's result as confirmed (この作業の結果を確認済みにする),
 restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
 
-**Replies to an AI turn.** Hover an AI turn (on touch it is always there, faint) and ↩ 返信 at its right end starts a
+**Replies to an AI turn.** Hover an AI turn (on touch it is always there) and ↩ 返信 in its actions starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
 a queued or running run is not replied to yet). Anyone can reply. A chip `↩ 「請求書の税区分」への返信 ✕` (the card's
 name) sits above the composer,
@@ -2651,7 +2654,7 @@ its base and result revisions, or only the list of the changed files when the di
 exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
 that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
 
-**Replies to a message.** People answer each other too: ↩ just before ☺+ on any message (on hover, faint on touch),
+**Replies to a message.** People answer each other too: ↩ just before ☺+ on any message (on hover, always on touch),
 one's own included, starts a reply to it. The chip reads `↩ 田中への返信 ✕` (the author by their current name), the
 composer's targets start with those of the message, and the posted reply shows `↩ 田中: <the head of its text>` on one
 muted line at its top, a click scrolling to the message and flashing it (nothing shows when the message is not there).
@@ -2679,7 +2682,7 @@ was picked shows ◉ on it, the others muted, and `選択 name · time` under it
 the same card); one
 left as it was (a later run without a pick) has nothing filled and keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
 every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
-there, faint) and ☺+ at its right end offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
+there) and ☺+ at the end of its actions offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
 and ＋, a small field where any one emoji can be typed or pasted (the OS emoji picker works there; Enter adds it, Escape
 closes the field), with who reacted under them. The app gives no emoji a meaning. A reaction is exactly one emoji — a
 ZWJ sequence (👨‍👩‍👧‍👦), a skin tone (👍🏽), a flag (🇯🇵) or a keycap (1️⃣) counts as one; text and two emoji are refused —

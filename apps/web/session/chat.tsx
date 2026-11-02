@@ -663,8 +663,9 @@ function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirm
 
 /**
  * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at
- * the right of its name line, in the status slot, a link to the AI turn of its latest run once it was sent (the state
- * is the turn's, so only its tooltip says it), then the actions: for the facilitator, the tools to send it to the AI; ↩ and ☺+.
+ * the right end of its name line, in the status slot, a link to the AI turn of its latest run once it was sent (the
+ * state is the turn's, so only its tooltip says it). Its actions float over its top right: for the facilitator, the
+ * tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, avatarOf, onNavigate, control, marks, classifications, selection, actions, showPerson } = useChat();
@@ -688,33 +689,38 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             else selection.start(r.id);
         } else if (selection.active && !(e.target instanceof Element && e.target.closest('a, button, input'))) selection.toggle(r.id);
     };
-    // the status slot (a link to its AI turn), then the actions, in a group as wide on every row
-    const side = (
+    // at the right of the name line, the status slot (a link to its AI turn), only once it was sent
+    const side = mark && (
         <div className="chat-message-side">
-            <StatusSlot>{mark && <TurnLink mark={mark} />}</StatusSlot>
-            <RowActions>
-                {control && !selection.active && (
-                    <span className="chat-apply">
-                        {!mark && !talk && (
-                            <button
-                                className="icon-button chat-apply-button"
-                                disabled={actions.busy}
-                                onClick={() => void actions.apply([r.id])}
-                                aria-label={tx.chat.apply}
-                                data-tooltip={tx.chat.apply}
-                            >
-                                <Bot size={14} aria-hidden />
-                            </button>
-                        )}
-                        <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
-                    </span>
-                )}
-                {/* ↩ just before ☺+, as on an AI turn */}
-                {!selection.active && <ReplyButton to={{ kind: 'Message', request: r.id }} />}
-                {/* last: ☺+ at the right end of every row, messages and turns alike */}
-                {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
-            </RowActions>
+            <StatusSlot>
+                <TurnLink mark={mark} />
+            </StatusSlot>
         </div>
+    );
+    // the actions, floating over the row's top right: none while messages are being chosen
+    const tools = !selection.active && (
+        <RowActions>
+            {control && (
+                <span className="chat-apply">
+                    {!mark && !talk && (
+                        <button
+                            className="icon-button chat-apply-button"
+                            disabled={actions.busy}
+                            onClick={() => void actions.apply([r.id])}
+                            aria-label={tx.chat.apply}
+                            data-tooltip={tx.chat.apply}
+                        >
+                            <Bot size={14} aria-hidden />
+                        </button>
+                    )}
+                    <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
+                </span>
+            )}
+            {/* ↩ just before ☺+, as on an AI turn */}
+            <ReplyButton to={{ kind: 'Message', request: r.id }} />
+            {/* last: ☺+ at the right end of every row, messages and turns alike */}
+            <AddReaction target={{ kind: 'Message', request: r.id }} />
+        </RowActions>
     );
     return (
         <div
@@ -752,6 +758,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 </Clamped>
                 <ReactionRow target={{ kind: 'Message', request: r.id }} />
             </Bubble>
+            {tools}
             {note !== undefined && (
                 <form
                     className="chat-apply-note"
@@ -1183,7 +1190,7 @@ function Bubble(props: {
     /** It continues the bubble before, of the same author: no avatar nor name; the time on hover. */
     continues?: boolean;
     className?: string;
-    /** At the right end of the name line (of a continued message, its first line): its mark, the facilitator's tools, ☺+. */
+    /** At the right end of the name line (of a continued message, a line of its own above the body): its status slot. */
     side?: ReactNode;
     children: ReactNode;
 }) {

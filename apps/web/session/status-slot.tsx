@@ -1,8 +1,9 @@
-// The status slot of a chat row (ADR 0026, amendment): one fixed-width slot right before the row's actions, the same on
-// messages and AI turns, so that what is active can be read down one column. The slot is as wide as the longest text
-// it can show in the current language (measured once, set on the chat as `--chat-status-width`); a row without a
-// status keeps it empty. A message's slot holds a link to its AI turn, not a state: the state is the work's, shown once
-// on the turn. Also the facilitator's cancel of a run: a bordered ✕ that asks first, in a modal dialog.
+// The status slot of a chat row (ADR 0026, amendment): at the right end of the row's header, the same on messages and AI
+// turns, so that what is active can be read down one column. It takes room only when the row has a status, then as much
+// as the longest text it can show in the current language (measured once, set on the chat as `--chat-status-width`),
+// its content at the left, so that the glyphs stand in one column. A message's slot holds a link to its AI turn, not a
+// state: the state is the work's, shown once on the turn. Also the facilitator's cancel of a run: a bordered ✕ right
+// after the slot that asks first, in a modal dialog; and the row's actions, a small toolbar floating at its top right.
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { ArrowDown, Bot, X } from 'lucide-react';
 import type { MarkState, MessageMark } from './cards';
@@ -37,18 +38,17 @@ export function TurnLink({ mark }: { mark: MessageMark }) {
     );
 }
 
-/** The slot itself: empty when the row has no status, so that the actions after it line up too. */
-export function StatusSlot({ children }: { children?: ReactNode }) {
-    return <span className="chat-status-cell">{children}</span>;
+/** The slot itself: nothing when the row has no status, so that the header keeps its width. */
+export function StatusSlot({ children }: { children?: ReactNode }): ReactNode {
+    return children ? <span className="chat-status-cell">{children}</span> : null;
 }
 
 /**
- * A row's actions after its slot, at its right end: as wide on every row (the most a row of the reader's has: the
- * facilitator's four, a participant's ↩ and ☺+), so that the slots line up whichever actions a row offers.
+ * A row's actions (the facilitator's tools, ↩, ☺+ last): a small toolbar over the row's top right, shown while the row
+ * is hovered or holds the focus (or one of its menus is open), always on touch; it takes no room in the header.
  */
-export function RowActions({ children }: { children?: ReactNode }) {
-    const { control } = useChat();
-    return <span className={`chat-actions${control ? ' control' : ''}`}>{children}</span>;
+export function RowActions({ children }: { children?: ReactNode }): ReactNode {
+    return <span className="chat-actions">{children}</span>;
 }
 
 /**

@@ -5032,12 +5032,10 @@ button.add-to-request.added:hover {
 }
 /* a row of the stream — a message, or an AI turn with its chained runs — is one box as wide as the stream (its
    padding and all): its backgrounds (hovered, chosen, mentioning me, flashed) span it whole, the same for
-   every row. Its tools sit at its top-right, ☺+ last, so that ☺+ is at the same x on every row; the body leaves the
-   same room on its right (--chat-tools-room, ☺+'s column) on every row, so that all text wraps at one width and no
-   tool covers it */
+   every row. Its actions float over its top right (.chat-actions), so that they take no room from the header or the
+   body */
 .chat-row,
 .chat-item-card > .run-card {
-    --chat-tools-room: 28px;
     position: relative;
     /* within the item's width, so that long chips are cut short instead of widening the bubble */
     min-width: 0;
@@ -5054,10 +5052,6 @@ button.add-to-request.added:hover {
 }
 .chat-item-card > .run-card:hover {
     background: var(--row-hover);
-}
-.chat-row .chat-bubble,
-.chat-item-card > .run-card .run-section {
-    margin-right: var(--chat-tools-room);
 }
 /* jumped to: the row's box flashes, not the item inside the stream's padding */
 .chat-item.chat-flash {
@@ -5083,41 +5077,26 @@ button.add-to-request.added:hover {
 .chat-message-main {
     position: relative;
 }
-/* at the right end of the message's name line: the status slot (its mark), then the actions — the facilitator's tools,
-   ↩ and ☺+ (last). A continued message has no name line: ↩ and ☺+ alone (no mark) sit in the body's room on the right;
-   with more, they make a line of their own above the body, so that they never cover its text nor narrow it */
+/* at the right end of the message's name line: the status slot (the link to its AI turn). A continued message has no
+   name line: the slot makes a line of its own above the body, so that it never covers its text nor narrows it */
 .chat-message-side {
     margin-left: auto;
     align-self: center;
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: var(--space-1);
 }
 .chat-message.continued .chat-message-side {
     margin-bottom: var(--space-1);
 }
-.chat-message.continued .chat-message-side:not(:has(> .chat-status-cell:not(:empty), > .chat-actions > :not(.reaction-add, .run-card-reply))) {
-    position: absolute;
-    top: 0;
-    right: 0;
-}
-.chat-message.continued
-    .chat-message-side:not(:has(> .chat-status-cell:not(:empty), > .chat-actions > :not(.reaction-add, .run-card-reply)))
-    > .chat-status-cell {
-    display: none;
-}
-.chat-message-side:empty {
-    display: none;
-}
-/* the status slot of a message or a turn, before its actions: as wide on every row (the longest state's text, measured
-   into --chat-status-width), so that the states sit at one x down the chat; empty when the row has none */
+/* the status slot of a message or a turn, at the right end of its header, only when it has a status: then as wide on
+   every row (the longest state's text, measured into --chat-status-width), its content at the left, so that the
+   glyphs stand in one column down the chat */
 .chat-status-cell {
     flex: none;
     display: inline-flex;
     align-items: center;
     min-width: var(--chat-status-width, 6.5em);
-    margin-right: var(--space-1);
 }
 /* a state: its glyph and word, small, in the state's color (muted by default) */
 .chat-state {
@@ -5192,17 +5171,42 @@ button.add-to-request.added:hover {
 .chat-status-sizer > * {
     grid-area: 1 / 1;
 }
-/* a row's actions, right-aligned in a group as wide as the reader's most (the facilitator's four buttons, a
-   participant's two), so that the slot before them stays put */
+/* a row's actions (the facilitator's tools, ↩, ☺+ last): a small toolbar over the row's top right, above its header
+   (clear of the status and ✕), shown while the row is hovered or holds the focus, or one of its menus is open; always
+   on touch. It takes no room in the row */
 .chat-actions {
+    position: absolute;
+    top: -20px;
+    right: 6px;
+    z-index: 5;
     display: inline-flex;
-    justify-content: flex-end;
     align-items: center;
     gap: var(--space-1);
-    min-width: calc(2 * 22px + var(--space-1));
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 2px 8px var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
 }
-.chat-actions.control {
-    min-width: calc(4 * 22px + 3 * var(--space-1));
+.chat-actions:empty {
+    display: none;
+}
+.chat-row:hover > .chat-actions,
+.chat-row:focus-within > .chat-actions,
+.run-card:hover > .run-card-main > .chat-actions,
+.run-card:focus-within > .run-card-main > .chat-actions,
+.chat-actions:has([aria-expanded='true']) {
+    opacity: 1;
+    pointer-events: auto;
+}
+@media (hover: none) {
+    .chat-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
 }
 /* the facilitator's cancel of a run: a small bordered ✕, the danger tint on hover; a dialog asks first */
 .session-chat button.chat-cancel-button {
@@ -5278,12 +5282,7 @@ button.add-to-request.added:hover {
 .chat-apply {
     display: inline-flex;
     align-items: center;
-    opacity: 0.35;
-    transition: opacity var(--motion-pop) var(--motion-ease-standard);
-}
-.chat-row:hover .chat-apply,
-.chat-row:focus-within .chat-apply {
-    opacity: 1;
+    gap: var(--space-1);
 }
 .session-chat .chat-apply .icon-button {
     width: 22px;
@@ -5929,7 +5928,7 @@ button.add-to-request.added:hover {
 .session-chat button.reaction.mine:hover:not(:disabled) {
     background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
-/* ☺+ at the right end of a message or a turn: on hover or focus, always (faint) on touch */
+/* ☺+ at the right end of a row's actions */
 .reaction-add {
     position: relative;
     display: inline-flex;
@@ -5938,20 +5937,6 @@ button.add-to-request.added:hover {
     width: 22px;
     height: 20px;
     color: var(--muted);
-    opacity: 0;
-    transition: opacity var(--motion-swap) var(--motion-ease-standard);
-}
-.chat-row:hover .reaction-add-button,
-.chat-row:focus-within .reaction-add-button,
-.run-card:hover .reaction-add-button,
-.run-card:focus-within .reaction-add-button,
-.reaction-add-button[aria-expanded='true'] {
-    opacity: 1;
-}
-@media (hover: none) {
-    .session-chat .reaction-add-button {
-        opacity: 0.6;
-    }
 }
 .reaction-picker {
     position: absolute;
@@ -6204,28 +6189,14 @@ button.add-to-request.added:hover {
 }
 
 /* ---------- replies to runs ---------- */
-/* ↩ at the right end of an AI turn or a message, just before ☺+: like ☺+, on hover or focus, always (faint) on touch */
+/* ↩ among an AI turn's or a message's actions, just before ☺+ */
 .session-chat button.run-card-reply {
     width: 22px;
     height: 20px;
     color: var(--muted);
-    opacity: 0;
-    transition: opacity var(--motion-swap) var(--motion-ease-standard);
-}
-.run-card:hover .run-card-reply,
-.run-card:focus-within .run-card-reply,
-.chat-row:hover .run-card-reply,
-.chat-row:focus-within .run-card-reply,
-.session-chat button.run-card-reply.active {
-    opacity: 1;
 }
 .session-chat button.run-card-reply.active {
     color: var(--accent);
-}
-@media (hover: none) {
-    .session-chat button.run-card-reply {
-        opacity: 0.6;
-    }
 }
 /* the reply being written: one quiet line above the text, its ✕ stops it */
 .chat-reply-chip {
@@ -6612,7 +6583,8 @@ button.add-to-request.added:hover {
     white-space: nowrap;
     text-overflow: ellipsis;
 }
-/* the name row stays one line: the title gives way (cut with …) before the name, the state and the tools at the right */
+/* the name row stays one line: the title takes the room left and gives way (cut with …) before the name, the state and
+   the ✕ at the right */
 .run-card-head {
     flex-wrap: nowrap;
 }

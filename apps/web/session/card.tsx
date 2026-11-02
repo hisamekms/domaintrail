@@ -1,6 +1,6 @@
 // A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
 // a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
-// facilitator's answer or note, the result). Its state sits in the chat's status slot, before the actions. At the top of each run, a quote of each message it applied (with what the
+// facilitator's answer or note, the result). Its state sits in the chat's status slot, at its header's right end; its actions float over its top right. At the top of each run, a quote of each message it applied (with what the
 // reply says of each, ✓ 対応 ◐ 一部 – 未対応 ? 確認); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
@@ -11,6 +11,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck } from 'lucide-react';
 import type { ElementChange } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
+import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
@@ -46,8 +47,17 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
     const about = useUnitAbout(unit);
-    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); in the
-    // status slot, the state only where nothing else shows it (queued, running with its time, declined, failed, cancelled)
+    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); at the
+    // right end, in the status slot, the state only where nothing else shows it (queued, running with its time, declined,
+    // failed, cancelled), then the facilitator's ✕ on a run not finished
+    const status = state && (
+        <span className={`chat-state state-${state}`}>
+            <StateLabel
+                state={state}
+                label={last.message.kind === 'running' ? runningLabel(tx.chat.marks, elapsed(last.message.since, chat.now)) : tx.chat.marks[state]}
+            />
+        </span>
+    );
     return (
         <div className={`run-card status-${last.message.kind}${compact ? ' compact' : ''}`} data-card={unit.key}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
@@ -60,7 +70,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                         {/* in AI の作業, the row above already names it */}
                         {title.kind === 'title' && !compact && (
                             <>
-                                <span className="run-card-title">{title.text}</span>
+                                <RunCardTitle text={title.text} />
                                 {' · '}
                             </>
                         )}
@@ -68,37 +78,22 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                             {time(first.run.queuedAt)}
                         </time>
                     </span>
-                    <span className="run-card-tools">
-                        <StatusSlot>
-                            {state && (
-                                <span className={`chat-state state-${state}`}>
-                                    <StateLabel
-                                        state={state}
-                                        label={
-                                            last.message.kind === 'running'
-                                                ? runningLabel(tx.chat.marks, elapsed(last.message.since, chat.now))
-                                                : tx.chat.marks[state]
-                                        }
-                                    />
-                                </span>
-                            )}
-                        </StatusSlot>
-                        {/* in AI の作業, the row above has the ✕ and the card only its link to the chat */}
-                        {compact ? (
-                            actions
-                        ) : (
-                            <RowActions>
-                                {/* first: the facilitator's ✕ on a run not finished, or the card's menu on one ended */}
-                                {cancellable && <CancelButton unit={unit} />}
-                                {control && <CardMenu last={last.run} about={about} />}
-                                {actions}
-                                <ReplyButton to={{ kind: 'Run', run: last.run }} />
-                                {/* last: ☺+ at the right end of every row, messages and turns alike */}
-                                <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
-                            </RowActions>
-                        )}
-                    </span>
+                    {/* in AI の作業, the row above has the ✕ and the card only its link to the chat */}
+                    {(status || (cancellable && !compact) || (compact && actions)) && (
+                        <span className="run-card-tools">
+                            <StatusSlot>{status}</StatusSlot>
+                            {compact ? actions : cancellable && <CancelButton unit={unit} />}
+                        </span>
+                    )}
                 </div>
+                {!compact && (
+                    <RowActions>
+                        {control && <CardMenu last={last.run} about={about} />}
+                        <ReplyButton to={{ kind: 'Run', run: last.run }} />
+                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
+                        <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
+                    </RowActions>
+                )}
                 {runs.map((r, i) => (
                     <RunSection
                         key={r.run.id}
@@ -112,6 +107,17 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                 ))}
             </div>
         </div>
+    );
+}
+
+/** The chunk's title beside the AI's name: cut with … when the row is too narrow, then whole in its tooltip. */
+function RunCardTitle({ text }: { text: string }): ReactNode {
+    const ref = useRef<HTMLSpanElement>(null);
+    const clipped = useClipped(ref, text);
+    return (
+        <span ref={ref} className="run-card-title" {...(clipped && { 'data-tooltip': text })}>
+            {text}
+        </span>
     );
 }
 
