@@ -1,7 +1,7 @@
 // The session seed (scripts/session-seed.ts) against the built CLI: one small scenario on a free port fills the
 // session through its APIs, and leaves no run to the seed's agent.
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -29,7 +29,7 @@ const freePort = (): Promise<number> =>
 describe('the session seed', () => {
     test('scenario names: a comma list, repeated, and all', () => {
         expect(scenariosOf(['chat,runs', 'chat'])).toEqual(['chat', 'runs']);
-        expect(scenariosOf(['all'])).toHaveLength(7);
+        expect(scenariosOf(['all'])).toHaveLength(8);
         expect(() => scenariosOf(['nope'])).toThrow('Unknown scenario nope');
     });
 
@@ -67,6 +67,26 @@ describe('the session seed', () => {
             await seeded.stop();
         }
         expect(await refusal(dir)).toContain('already has a session');
+    }, 90_000);
+    test("undo: a unit undone mechanically, a later one's change kept; another undone by the agent after a conflict", async () => {
+        const dir = path.join(await mkdtemp(path.join(tmpdir(), 'dt-seed-test-')), 'ws');
+        dirs.push(path.dirname(dir));
+        const seeded = await seed({ ...seededOptions(dir), scenarios: ['undo'], port: await freePort(), classifier: true });
+        try {
+            const { state } = seeded;
+            expect(state.runs.map((r) => r.state)).toEqual(['Completed', 'Completed', 'Reverted', 'Completed', 'Completed', 'Completed']);
+            const undoes = state.requests.flatMap((r) => (r.undoes ? [[r.undoes, r.body]] : []));
+            expect(undoes).toEqual([
+                [state.runs[0].id, '「再請求のイベント」の変更を取り消す'],
+                [state.runs[3].id, '「支払の督促」の変更を取り消す'],
+            ]);
+            const file = await readFile(path.join(dir, 'stormings', 'order-to-cash.dtes'), 'utf8');
+            expect(file).toContain('readmodel Favorites');
+            expect(file).not.toContain('PaymentRetried');
+            expect(file).not.toContain('InvoiceReminded');
+        } finally {
+            await seeded.stop();
+        }
     }, 90_000);
 });
 
