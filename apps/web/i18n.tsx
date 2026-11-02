@@ -535,6 +535,14 @@ const ja = {
             appliedAs: 'AI に送りました',
             undo: '取り消す',
             cancelRun: '実行を取り消す',
+            /** The confirmation before a run is cancelled: running (its work so far is lost) or queued. */
+            cancelDialog: {
+                running: '実行を取り消しますか？',
+                queued: '依頼を取り消しますか？',
+                lost: 'ここまでの作業は反映されません',
+                keep: 'やめる',
+                confirm: '取り消す',
+            },
             marks: {
                 queued: '実行待ち',
                 running: '実行中',
@@ -1232,6 +1240,13 @@ const en: Messages = {
             appliedAs: 'Sent to the AI',
             undo: 'Undo',
             cancelRun: 'Cancel the run',
+            cancelDialog: {
+                running: 'Cancel the run?',
+                queued: 'Cancel the request?',
+                lost: 'Its work so far will not be applied',
+                keep: 'Keep',
+                confirm: 'Cancel it',
+            },
             marks: {
                 queued: 'queued',
                 running: 'running',

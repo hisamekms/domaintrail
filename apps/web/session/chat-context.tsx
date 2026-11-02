@@ -23,6 +23,8 @@ export interface ChatContextValue {
     /** The facilitator, in an open session: the actions are offered. */
     readonly control: boolean;
     readonly actions: ChatActions;
+    /** The facilitator cancels a unit's running or queued run (`ChangeUnit.key`): a dialog asks first. */
+    readonly confirmCancel: (unit: string) => void;
     /**
      * The facilitator's answer being chosen to each run's questions (by run ID, then question ID), kept here so that the
      * chat's form and AI の作業's form of the same run show one answer.

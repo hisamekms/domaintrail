@@ -4880,15 +4880,11 @@ button.add-to-request.added:hover {
     flex: none;
     width: 20px;
 }
-.session-chat .chat-unit-cancel {
+.chat-unit-cancel {
     position: absolute;
     top: calc(var(--space-2) + (var(--fs-body) * var(--lh-body) - 20px) / 2);
     right: calc(var(--space-4) + 14px + var(--space-2));
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    display: inline-grid;
-    place-items: center;
+    display: inline-flex;
 }
 .outcome-changed .chat-unit-icon {
     color: var(--added);
@@ -5052,9 +5048,9 @@ button.add-to-request.added:hover {
 .chat-message-main {
     position: relative;
 }
-/* at the right end of the message's name line: how it reads, its mark, the facilitator's tools, ↩ and ☺+ (last). A
-   continued message has no name line: ↩ and ☺+ alone sit in the body's room on the right; with more, they make a line
-   of their own above the body, so that they never cover its text nor narrow it */
+/* at the right end of the message's name line: the status slot (its mark), then the actions — the facilitator's tools,
+   ↩ and ☺+ (last). A continued message has no name line: ↩ and ☺+ alone (no mark) sit in the body's room on the right;
+   with more, they make a line of their own above the body, so that they never cover its text nor narrow it */
 .chat-message-side {
     margin-left: auto;
     align-self: center;
@@ -5066,35 +5062,163 @@ button.add-to-request.added:hover {
 .chat-message.continued .chat-message-side {
     margin-bottom: var(--space-1);
 }
-.chat-message.continued .chat-message-side:not(:has(> :not(.reaction-add, .run-card-reply))) {
+.chat-message.continued .chat-message-side:not(:has(> .chat-status-cell:not(:empty), > .chat-actions > :not(.reaction-add, .run-card-reply))) {
     position: absolute;
     top: 0;
     right: 0;
 }
+.chat-message.continued
+    .chat-message-side:not(:has(> .chat-status-cell:not(:empty), > .chat-actions > :not(.reaction-add, .run-card-reply)))
+    > .chat-status-cell {
+    display: none;
+}
 .chat-message-side:empty {
     display: none;
 }
-/* the applied mark (`✓`, the card's name in its tooltip): small muted text, a click goes to the card */
-.session-chat button.chat-mark {
-    padding: 0 2px;
-    border: none;
-    background: none;
+/* the status slot of a message or a turn, before its actions: as wide on every row (the longest state's text, measured
+   into --chat-status-width), so that the states sit at one x down the chat; empty when the row has none */
+.chat-status-cell {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--chat-status-width, 6.5em);
+    margin-right: var(--space-1);
+}
+/* a state: its glyph and word, small, in the state's color (muted by default); a message's is a link to its turn */
+.chat-state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
     color: var(--muted);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.session-chat button.chat-state {
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
     cursor: pointer;
 }
-.session-chat button.chat-mark:hover {
-    color: var(--text);
+.session-chat button.chat-state:hover {
     text-decoration: underline;
 }
-.session-chat button.chat-mark.mark-question,
-.session-chat button.chat-mark.mark-clarification {
+.chat-state > .chat-pulse {
+    margin-right: 0;
+    background: var(--accent);
+}
+.chat-state.state-running {
+    color: var(--accent);
+}
+.chat-state.state-done {
+    color: var(--green-text);
+}
+.chat-state.state-partial,
+.chat-state.state-question,
+.chat-state.state-clarification {
     color: var(--amber-text);
 }
-.session-chat button.chat-mark.mark-failed {
+.chat-state.state-failed {
     color: var(--error);
+}
+/* the slots' sizer: every text a slot can show, laid over each other, hidden */
+.chat-status-sizer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: grid;
+    width: max-content;
+    visibility: hidden;
+    pointer-events: none;
+}
+.chat-status-sizer > * {
+    grid-area: 1 / 1;
+}
+/* a row's actions, right-aligned in a group as wide as the reader's most (the facilitator's four buttons, a
+   participant's two), so that the slot before them stays put */
+.chat-actions {
+    display: inline-flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: calc(2 * 22px + var(--space-1));
+}
+.chat-actions.control {
+    min-width: calc(4 * 22px + 3 * var(--space-1));
+}
+/* the facilitator's cancel of a run: a small bordered ✕, the danger tint on hover; a dialog asks first */
+.session-chat button.chat-cancel-button {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+}
+.session-chat button.chat-cancel-button:hover,
+.session-chat button.chat-cancel-button:focus-visible {
+    border-color: var(--error);
+    background: var(--error-wash);
+    color: var(--error);
+}
+/* the dialog before a cancel: what it asks, the unit's name, and for a running run what is lost; やめる and 取り消す */
+.session-dialog.cancel-dialog {
+    width: min(22rem, calc(100vw - 32px));
+    padding: var(--space-5);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+}
+.cancel-dialog-title {
+    margin: 0 0 var(--space-2);
+    font-size: 0.9375rem;
+    font-weight: var(--fw-strong);
+}
+.cancel-dialog-name {
+    margin: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: var(--fw-strong);
+}
+.cancel-dialog-lost {
+    margin: var(--space-1) 0 0;
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.cancel-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+}
+.cancel-dialog button.cancel-dialog-button {
+    height: 30px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-weight: var(--fw-strong);
+    cursor: pointer;
+}
+.cancel-dialog button.cancel-dialog-button:focus-visible,
+.cancel-dialog button.cancel-dialog-button:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.cancel-dialog button.cancel-dialog-button.danger {
+    border-color: var(--error);
+    background: var(--error);
+    color: #fff;
 }
 .chat-apply {
     display: inline-flex;
@@ -5224,47 +5348,12 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
-/* the state, only where nothing else shows it (queued, running, failed, cancelled): muted, red for a failure */
-.run-card-status {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    color: var(--muted);
-    font-size: var(--fs-small);
-    line-height: var(--lh-small);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-.run-card-status > .chat-pulse {
-    margin-right: 0;
-}
-.run-card-status.status-failed {
-    color: var(--error);
-}
 .run-card-tools {
     margin-left: auto;
     align-self: center;
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-}
-.run-card-tools:empty {
-    display: none;
-}
-.session-chat button.run-card-cancel {
-    display: inline-grid;
-    place-items: center;
-    width: 15px;
-    height: 15px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-}
-.session-chat button.run-card-cancel:hover {
-    background: var(--hover);
 }
 .run-card .pane-menu .icon-button {
     width: 22px;
@@ -6298,7 +6387,6 @@ button.add-to-request.added:hover {
     flex-wrap: nowrap;
 }
 .run-card-head > .chat-who,
-.run-card-head > .run-card-status,
 .run-card-head > .run-card-tools {
     flex: none;
 }

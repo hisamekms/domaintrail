@@ -1,13 +1,13 @@
 // A card of the chat (ADR 0026, amendment): one change unit as an AI turn, updated in place — queued → running → done,
 // a question, declined, failed or cancelled — with the runs that continue it one under the other (the question, the
-// facilitator's answer or note, the result). At the top of each run, a quote of each message it applied (with what the
+// facilitator's answer or note, the result). Its state sits in the chat's status slot, before the actions. At the top of each run, a quote of each message it applied (with what the
 // reply says of each, ✓ ◐ – ?, when there are several); a click goes to the message, a hover marks it. The AI's question
 // and what it assumed sit on surfaces of their own, their options and alternatives as cards with ♡ at the right. The
 // facilitator answers a question by choosing, approves an assumption or sends the requests again with an alternative,
-// cancels a run, and through the card's menu confirms its result, restores the workspace as it was before it or
+// cancels a run (asked first), and through the card's menu confirms its result, restores the workspace as it was before it or
 // compares the two.
 import { useRef, useState, type ReactNode } from 'react';
-import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck, X } from 'lucide-react';
+import { Bot, Check, Circle, CircleDot, Reply, CircleX, Ellipsis, FileDiff, Pencil, Square, SquareCheck } from 'lucide-react';
 import { useDismiss } from '../shared/layout';
 import { answerBody, type QuestionChoice } from './actions';
 import { OtherDialog } from './answer-other';
@@ -19,6 +19,8 @@ import { isReplyable } from './replies';
 import { AddReaction, ReactionRow, VoteMark } from './mark-controls';
 import { bodyText } from './mentions';
 import { ReplyText } from './reply';
+import { runningLabel, turnState } from './status';
+import { CancelButton, RowActions, StateLabel, StatusSlot } from './status-slot';
 import { elapsed, oneLine, revisionLookup, type AgentMessage, type ReplyView, type RequestProgress } from './stream';
 
 type RunJson = CardRun['run'];
@@ -27,29 +29,21 @@ const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hou
 /** The mark of a request's status: ✓ done, ◐ partly, – not done, ? a question. */
 export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Partial: '◐', Skipped: '–', Question: '?' };
 
-/** The state a card shows: its latest run's. */
-function statusOf(m: AgentMessage): 'queued' | 'running' | 'clarification' | 'done' | 'declined' | 'failed' | 'cancelled' {
-    return m.kind === 'completed' ? 'done' : m.kind;
-}
-
-/** Whether the card's name line shows its state: only where nothing else does (a question says so itself, done is the rule). */
-const statusShown = (status: ReturnType<typeof statusOf>): boolean => status !== 'done' && status !== 'clarification';
-
 export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; compact?: boolean; actions?: ReactNode }) {
     const chat = useChat();
     const { session, tx, nameOf, control } = chat;
     const runs = cardRuns(unit, revisionLookup(session.state));
     const first = runs[0];
     const last = runs[runs.length - 1];
-    const status = statusOf(last.message);
+    const state = turnState(last.message);
     const cancellable = control && (last.run.state === 'Queued' || last.run.state === 'Running');
     const queuedBy = nameOf(first.run.queuedBy);
     // the chunk's title, once the AI gave one: the quotes under it already say what the messages were
     const title = unitName(unit);
-    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); the
-    // state only where nothing else shows it (queued, running with its time, declined, failed, cancelled)
+    // an AI turn: the AI's avatar and name, the chunk's title and when it started (who queued it in the tooltip); in the
+    // status slot, the state only where nothing else shows it (queued, running with its time, declined, failed, cancelled)
     return (
-        <div className={`run-card status-${status}${compact ? ' compact' : ''}`} data-card={unit.key}>
+        <div className={`run-card status-${last.message.kind}${compact ? ' compact' : ''}`} data-card={unit.key}>
             <span className="session-avatar chat-agent-avatar" aria-hidden>
                 <Bot size={13} />
             </span>
@@ -68,30 +62,35 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                             {time(first.run.queuedAt)}
                         </time>
                     </span>
-                    {statusShown(status) && (
-                        <span className={`run-card-status status-${status}`}>
-                            {status === 'running' && <span className="chat-pulse" aria-hidden />}
-                            {status === 'running' && last.message.kind === 'running'
-                                ? tx.chat.status.running(elapsed(last.message.since, chat.now))
-                                : tx.chat.marks[status]}
-                            {cancellable && (
-                                <button
-                                    className="run-card-cancel"
-                                    onClick={() => void chat.actions.cancel(last.run.id)}
-                                    aria-label={tx.chat.cancelRun}
-                                    data-tooltip={tx.chat.cancelRun}
-                                >
-                                    <X size={11} aria-hidden />
-                                </button>
-                            )}
-                        </span>
-                    )}
                     <span className="run-card-tools">
-                        {control && !compact && <CardMenu last={last.run} />}
-                        {actions}
-                        {!compact && <ReplyButton to={{ kind: 'Run', run: last.run }} />}
-                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
-                        {!compact && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
+                        <StatusSlot>
+                            {state && (
+                                <span className={`chat-state state-${state}`}>
+                                    <StateLabel
+                                        state={state}
+                                        label={
+                                            last.message.kind === 'running'
+                                                ? runningLabel(tx.chat.marks, elapsed(last.message.since, chat.now))
+                                                : tx.chat.marks[state]
+                                        }
+                                    />
+                                </span>
+                            )}
+                        </StatusSlot>
+                        {/* in AI の作業, the row above has the ✕ and the card only its link to the chat */}
+                        {compact ? (
+                            actions
+                        ) : (
+                            <RowActions>
+                                {/* first: the facilitator's ✕ on a run not finished, or the card's menu on one ended */}
+                                {cancellable && <CancelButton unit={unit} />}
+                                {control && <CardMenu last={last.run} />}
+                                {actions}
+                                <ReplyButton to={{ kind: 'Run', run: last.run }} />
+                                {/* last: ☺+ at the right end of every row, messages and turns alike */}
+                                <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
+                            </RowActions>
+                        )}
                     </span>
                 </div>
                 {runs.map((r, i) => (

@@ -30,7 +30,7 @@ import { useChatActions, type QuestionChoice } from './actions';
 import { sessionApi } from './api';
 import { ChangedFiles, ReplyButton, RunCard } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
-import { messageMarks, updatedCards, type MarkState } from './cards';
+import { messageMarks, updatedCards } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
 import { ComposerResizer, useComposerSize } from './composer-resizer';
 import { changeUnits, requestersOf, shownUnits, unfinishedCount, unitName, workGroups, type ChangeUnit, type UnitOutcome } from './history';
@@ -52,6 +52,7 @@ import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { parseReplyText, referenceText } from './references';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
+import { CancelButton, CancelDialog, RowActions, StateLabel, StatusSizer, StatusSlot } from './status-slot';
 import { latestRevision } from './state';
 import {
     agentStatus,
@@ -268,6 +269,10 @@ export function SessionChat(props: {
 
     // a person shown among the participants (a mention of them clicked): the collab menu opens at them
     const showPerson = useCallback((id: string): void => openPeople(id), []);
+    // the unit whose run is being cancelled: the dialog asking first
+    const [cancelling, setCancelling] = useState<string | undefined>();
+    const closeCancel = useCallback((): void => setCancelling(undefined), []);
+    const cancellingUnit = cancelling === undefined ? undefined : units.find((u) => u.key === cancelling);
 
     const context: ChatContextValue = {
         session,
@@ -277,6 +282,7 @@ export function SessionChat(props: {
         onNavigate: props.onNavigate,
         control,
         actions,
+        confirmCancel: setCancelling,
         answers,
         revisions,
         marks,
@@ -297,7 +303,6 @@ export function SessionChat(props: {
                     session={session}
                     status={status}
                     now={now}
-                    control={control}
                     live={live}
                     units={units}
                     location={props.location}
@@ -362,6 +367,8 @@ export function SessionChat(props: {
                     <History units={units} />
                 </div>
                 {revisions.dialog}
+                {control && cancellingUnit && <CancelDialog unit={cancellingUnit} onClose={closeCancel} />}
+                <StatusSizer root={root} />
             </div>
         </ChatProvider>
     );
@@ -371,7 +378,6 @@ function ChatHeader(props: {
     session: SessionData;
     status: AgentStatus;
     now: number;
-    control: boolean;
     live: boolean;
     units: readonly ChangeUnit[];
     location: ViewLocation;
@@ -384,7 +390,6 @@ function ChatHeader(props: {
     const { session, status, tx } = props;
     const label =
         status.kind === 'running' ? tx.chat.status.running(elapsed(status.since, props.now)) : status.kind === 'idle' ? '' : tx.chat.status[status.kind];
-    const runningRun = session.state.runs.find((r) => r.state === 'Running');
     return (
         <div className="chat-header">
             <CollabMenu
@@ -404,7 +409,6 @@ function ChatHeader(props: {
                             {status.kind === 'running' ? '●' : status.kind === 'clarification' ? '?' : '…'}
                         </span>
                         {label}
-                        {props.control && runningRun && <CancelButton run={runningRun.id} />}
                     </span>
                 )}
             </span>
@@ -412,15 +416,6 @@ function ChatHeader(props: {
                 <X size={16} aria-hidden />
             </button>
         </div>
-    );
-}
-
-function CancelButton({ run }: { run: string }) {
-    const { tx, actions } = useChat();
-    return (
-        <button className="run-card-cancel" onClick={() => void actions.cancel(run)} aria-label={tx.chat.cancelRun} data-tooltip={tx.chat.cancelRun}>
-            <X size={11} aria-hidden />
-        </button>
     );
 }
 
@@ -560,22 +555,10 @@ function ConfirmedDivider({ item }: { item: Extract<StreamItem, { kind: 'confirm
     return <Divider at={item.at}>{tx.chat.confirmed(nameOf(item.by), item.revision)}</Divider>;
 }
 
-const MARK_GLYPH: Record<MarkState, string> = {
-    queued: '…',
-    running: '●',
-    clarification: '?',
-    question: '?',
-    done: '✓',
-    partial: '◐',
-    skipped: '–',
-    declined: '⊘',
-    failed: '✕',
-    cancelled: '⊘',
-};
-
 /**
- * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at its right end, the mark of its latest run (`✓`;
- * the card's name and the state in its tooltip, a click goes to the card) and, for the facilitator, the tools to send it to the AI.
+ * A message of the stream: who sent it (「あなた」 for my own, ファシリ by the facilitator's name), its targets and text; at
+ * the right of its name line, in the status slot, the mark of its latest run (`✓ 対応`; the card's name in its tooltip, a
+ * click goes to the card), then the actions: for the facilitator, the tools to send it to the AI; ↩ and ☺+.
  */
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
@@ -598,38 +581,43 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             else selection.start(r.id);
         } else if (selection.active && !(e.target instanceof Element && e.target.closest('a, button, input'))) selection.toggle(r.id);
     };
+    // the status slot (its mark, a link to the card), then the actions, in a group as wide on every row
     const side = (
         <div className="chat-message-side">
-            {mark && (
-                <button
-                    className={`chat-mark mark-${mark.state}`}
-                    onClick={() => jump(`card:${mark.card}`)}
-                    aria-label={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
-                    data-tooltip={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
-                >
-                    {MARK_GLYPH[mark.state]}
-                </button>
-            )}
-            {control && !selection.active && (
-                <span className="chat-apply">
-                    {!mark && !talk && (
-                        <button
-                            className="icon-button chat-apply-button"
-                            disabled={actions.busy}
-                            onClick={() => void actions.apply([r.id])}
-                            aria-label={tx.chat.apply}
-                            data-tooltip={tx.chat.apply}
-                        >
-                            <Bot size={14} aria-hidden />
-                        </button>
-                    )}
-                    <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
-                </span>
-            )}
-            {/* ↩ just before ☺+, as on an AI turn */}
-            {!selection.active && <ReplyButton to={{ kind: 'Message', request: r.id }} />}
-            {/* last: ☺+ at the right end of every row, messages and turns alike */}
-            {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
+            <StatusSlot>
+                {mark && (
+                    <button
+                        className={`chat-state state-${mark.state}`}
+                        onClick={() => jump(`card:${mark.card}`)}
+                        aria-label={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
+                        data-tooltip={tx.chat.markHint(mark.name, tx.chat.marks[mark.state])}
+                    >
+                        <StateLabel state={mark.state} label={tx.chat.marks[mark.state]} />
+                    </button>
+                )}
+            </StatusSlot>
+            <RowActions>
+                {control && !selection.active && (
+                    <span className="chat-apply">
+                        {!mark && !talk && (
+                            <button
+                                className="icon-button chat-apply-button"
+                                disabled={actions.busy}
+                                onClick={() => void actions.apply([r.id])}
+                                aria-label={tx.chat.apply}
+                                data-tooltip={tx.chat.apply}
+                            >
+                                <Bot size={14} aria-hidden />
+                            </button>
+                        )}
+                        <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
+                    </span>
+                )}
+                {/* ↩ just before ☺+, as on an AI turn */}
+                {!selection.active && <ReplyButton to={{ kind: 'Message', request: r.id }} />}
+                {/* last: ☺+ at the right end of every row, messages and turns alike */}
+                {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
+            </RowActions>
         </div>
     );
     return (
@@ -864,7 +852,7 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
  * order they will run, numbered) and 終わったもの (newest first). すべて filters only the finished ones: by default those
  * that changed files. A unit is one block between lines: its head names the chunk (its title, else its first message)
  * with whose requests they were, how many runs and its time (the running one's elapsed time), then the files it changed
- * (a link to compare them); the facilitator cancels a running or queued unit with ✕. A click on the block opens it:
+ * (a link to compare them); the facilitator cancels a running or queued unit with ✕ (a dialog asks first). A click on the block opens it:
  * under the same left edge, the unit's card (compact, with the AI's question to answer or vote on, as in the chat) and
  * a link to it in the chat. The card's own menu is the place of the facilitator's other actions on a unit.
  */
@@ -932,7 +920,7 @@ function History({ units: all }: { units: readonly ChangeUnit[] }) {
 }
 
 function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: ReactNode; open: boolean; onToggle: () => void }) {
-    const { tx, nameOf, control, actions, now, jump } = useChat();
+    const { tx, nameOf, control, now, jump } = useChat();
     const h = tx.chat.history;
     const Icon = OUTCOME_ICONS[unit.outcome];
     const name = unitName(unit);
@@ -949,7 +937,7 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
         unit.runs.length > 1 ? h.runs(unit.runs.length) : undefined,
         !listed && unit.files !== undefined && unit.files > 0 ? h.files(unit.files) : undefined,
     ].filter((x) => x !== undefined);
-    // the facilitator's ✕ on what has not finished; at the right end, before ›
+    // the facilitator's ✕ on what has not finished (asking first); at the right end, before ›
     const cancellable = control && (last.state === 'Queued' || last.state === 'Running');
     // the card is mounted the first time the unit opens, and stays so that it folds away as it closes
     const [mounted, setMounted] = useState(open);
@@ -989,14 +977,9 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                 <ChevronRight size={14} className="chat-unit-twisty" aria-hidden />
             </button>
             {cancellable && (
-                <button
-                    className="icon-button chat-unit-cancel"
-                    onClick={() => void actions.cancel(last.id)}
-                    aria-label={tx.chat.cancelRun}
-                    data-tooltip={tx.chat.cancelRun}
-                >
-                    <X size={13} aria-hidden />
-                </button>
+                <span className="chat-unit-cancel">
+                    <CancelButton unit={unit} />
+                </span>
             )}
             {/* what the chunk changed: its files (the page knows them, not the elements) after a file-diff icon, a link to
                 compare the whole chunk. The line is part of the row: a click on it, but on the link, opens or closes the
