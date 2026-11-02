@@ -6,7 +6,8 @@
 import { describe, expect, test } from 'bun:test';
 import { buildPrompt, MAX_QUESTION, OUTCOME_MARKER, parseReply } from './prompt.js';
 import { changedPaths, changesOutsideSources, showPaths } from './subscriber.js';
-import { claudeArguments, resultOf, toolNames } from '../adapters/claude-code.js';
+import { claudeArguments, toolNames } from '../adapters/claude-code.js';
+import { resultOf } from '../adapters/claude-stream.js';
 import { type Collaboration, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
 import type { AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
@@ -328,11 +329,12 @@ describe('the reply', () => {
 });
 
 describe('the Claude Code arguments', () => {
-    test('print mode, JSON output, no saved session or MCP server, dontAsk, the rules’ tools and the rules, each its own argument', () => {
+    test('print mode, the events streamed as JSON, no saved session or MCP server, dontAsk, the rules’ tools and the rules, each its own argument', () => {
         expect(claudeArguments(DEFAULT_AGENT_TOOLS)).toEqual([
             '--print',
             '--output-format',
-            'json',
+            'stream-json',
+            '--verbose',
             '--no-session-persistence',
             '--strict-mcp-config',
             '--setting-sources',

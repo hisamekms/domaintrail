@@ -327,13 +327,14 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             // only the .dtes changed
             expect(await readFile(path.join(ctx.root, 'sales', 'order.dt'), 'utf8')).toBe(dtBefore);
 
-            // the agent: in the root, the configured tools only, print mode with JSON output; the prompt has the requests as data
+            // the agent: in the root, the configured tools only, print mode with its events streamed as JSON; the prompt has the requests as data
             const [invocation] = await ctx.invocations();
             expect(invocation.cwd).toBe(await realpath(ctx.root));
-            expect(invocation.args.slice(0, 9)).toEqual([
+            expect(invocation.args.slice(0, 10)).toEqual([
                 '--print',
                 '--output-format',
-                'json',
+                'stream-json',
+                '--verbose',
                 '--no-session-persistence',
                 '--strict-mcp-config',
                 '--setting-sources',

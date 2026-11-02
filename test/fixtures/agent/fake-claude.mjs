@@ -6,8 +6,8 @@
 //                 "reply": { "outcome": "done", "summary": "…", "requests": [{ "request": 1, "status": "done" }] } }, … ] }
 //
 // Step n is used by the n-th invocation (counted in `<plan>.log`, one JSON line per invocation: pid, the pid of a
-// child it started when hanging, the arguments, the working directory and the prompt). It prints what
-// `claude --print --output-format json` prints: one JSON result, with `reply` as its structured output (as
+// child it started when hanging, the arguments, the working directory and the prompt). It prints the last line of what
+// `claude --print --output-format stream-json` prints: one JSON result event, with `reply` as its structured output (as
 // `--json-schema` gives it), else with the former outcome line at the end of its `result`.
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';

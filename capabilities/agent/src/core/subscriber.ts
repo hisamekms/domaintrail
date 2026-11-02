@@ -8,10 +8,12 @@
 // and says why) or a failure (`AgentError`: the agent could not
 // run or changed other files; `Interrupted`: the subscriber was stopped). A cancel of the run (`run.cancel_requested`)
 // or a lost lease stops the agent and ends the run's work: the server has already ended it. After a run, the next
-// queued one is claimed without waiting for anyone. Functions over the ports only: no I/O of its own.
+// queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
+// reported on change, at most once a second, never holding it up. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration';
 import type { AgentClaimed, AgentPreviousRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
+import { createActivityReporter } from './activity.js';
 import { buildPrompt } from './prompt.js';
 
 export interface SubscriberDeps {
@@ -36,6 +38,8 @@ export interface SubscriberOptions {
     readonly once?: boolean;
     /** How often the lease is renewed (default a quarter of `leaseMs`). */
     readonly heartbeatMs?: number;
+    /** The shortest time between two reports of what the agent is doing (default a second). */
+    readonly activityGapMs?: number;
     /** Reconnection delays of the stream: from `minMs`, doubling up to `maxMs`; ends when none opens for `giveUpMs`. */
     readonly reconnect?: { readonly minMs: number; readonly maxMs: number; readonly giveUpMs: number };
 }
@@ -248,6 +252,13 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
 
         try {
             const signal = AbortSignal.any([cancelled, stopping.signal]);
+            // what the agent is doing, for the pages: a change at most once a second, a failure only logged
+            const activity = createActivityReporter({
+                send: (a) => api.activity(id, token, a),
+                clock,
+                log: (line) => log(`run ${id}: ${line}`),
+                ...(options.activityGapMs !== undefined && { gapMs: options.activityGapMs }),
+            });
             let outcome: AgentOutcome;
             try {
                 outcome = await deps.runner.run({
@@ -255,14 +266,17 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                     allowedTools: options.allowedTools,
                     requests: input.requests.length,
                     signal,
+                    onActivity: (a) => activity.report(a),
                 });
             } catch (e) {
+                activity.stop();
                 await inspect();
                 if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
                 if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
                 log(`run ${id}: the agent could not run: ${message(e)}`);
                 return complete('failed (AgentError)', id, () => api.fail(id, token, 'AgentError'));
             }
+            activity.stop();
             const { changed, outside } = await inspect();
             if (cancelled.aborted) return log(`run ${id}: cancelled; the agent was stopped`);
             if (stopping.signal.aborted) return complete('failed (Interrupted)', id, () => api.fail(id, token, 'Interrupted'));
