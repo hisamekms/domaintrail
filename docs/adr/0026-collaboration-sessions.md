@@ -1039,3 +1039,48 @@ tokens as noise and had to match numbers by eye.
   rows of its line height), the limit of 10,000 characters. While an IME composes, no key picks or sends and the
   candidates do not follow the composing text. Paste inserts plain text only. The field is `role="textbox"`,
   `aria-multiline`, labelled as the textarea was.
+
+## Appendix: what a running run is doing (amendment)
+
+*Decided with the maintainer*: while a run was running, the page could say only 実行中 and the time since it started.
+People waited without knowing whether the AI was reading, writing or stuck. The agent now tells, as it goes, what it
+is doing, and the page shows it in one line.
+
+- **A small vocabulary, owned by the protocol.** A run's current activity is one of four phases — `reading`,
+  `editing`, `checking`, `finishing` — with an optional short subject: a file's path relative to the workspace, or a
+  command such as `dt check` (`RunActivity` in `protocol.ts`; the phases and the check of an activity in
+  `domain/activity.ts`). Four phases are what a person can follow at a glance, and they are true of any agent: the
+  protocol owns them, every agent adapter maps its own events onto them, and the page never sees an agent's raw output
+  (nor depends on Claude Code). Anything an adapter cannot map changes nothing. A subject is at most 200 characters on
+  one line, without control or bidirectional characters; a path outside the workspace is never reported (the phase
+  is, without its subject). The phases are not ordered: a run reads, edits, checks and edits again.
+- **Transient.** Like presence, an activity is not part of the model: it is not persisted, makes no event and is not
+  in the outbox. The server keeps the latest one per running run in memory (`createRunActivities`, the collaboration
+  application) and drops it when the relay reads the event that ends the run (completed, a question, declined, failed —
+  a lease that expired too — or cancelled). A page gets every activity held when it connects
+  (`session.activities`) and each change as it comes (`run.activity`), all participants alike; it shows the line only
+  for a run that is `Running`. A server started again knows none.
+- **Reported with the lease, on its own call.** `POST /agent/runs/:id/activity { token, phase, subject? }` → 200 `{}`,
+  refused unless the token is the run's live lease and the run is `Running` (`LeaseLost`, `NotAllowed`, 409). It does
+  not extend the lease and writes nothing to the database. It is not folded into the heartbeat: the heartbeat runs on
+  a timer (a quarter of the lease, 15 s) and renews the lease in the store, while an activity changes at the agent's
+  pace and should show within about a second; carrying it there would either delay it by up to 15 s or make each
+  change renew the lease. The subscriber reports a change only (the same activity again is not sent), at most once a
+  second (the latest waiting one replaces an older one), never waits for it, and logs and ignores a failure; once the
+  agent has returned, nothing more is reported for the run.
+- **Claude Code** runs with `--output-format stream-json --verbose` (checked against 2.1.316 with a real run): one
+  JSON event per line. The adapter reads them as they come and maps the `tool_use` blocks of `assistant` events —
+  `Read`, `Grep`, `Glob`, `LS`, `NotebookRead` → `reading` with the file (or the searched path); `Edit`, `MultiEdit`,
+  `Write`, `NotebookEdit` → `editing` with the file; a `Bash` command that runs `dt <command>` (the shim) →
+  `checking` with `dt <command>`; `StructuredOutput` (the reply of `--json-schema`) → `finishing` — and the `result`
+  event → `finishing`. Text blocks are not mapped: an assistant often writes a sentence before its next tool call, so
+  only the structured reply marks the end. The result (`structured_output` and `result`) is taken from the stream's
+  last `result` event, as before from the single JSON object; output that is not a stream (a JSON object or text, as
+  older or fake agents print) is still read as before. stdout is no longer kept whole: only the result event, and up
+  to 8 MiB of what is not a stream. Everything else — the arguments, the exit code, cancellation, the shim, the scans,
+  no logging of the prompt or the output — is unchanged.
+- **The page.** One small line under the quoted messages of the running AI turn in the chat, and under the facts line
+  of the running unit in AI の作業: an icon of the phase in the accent color, the phase (`読んでいます`, `書き換えています`,
+  `確かめています`, `まとめています`) at strong weight, then the subject in monospace, muted — a file by its last segment,
+  its whole path in the tooltip. A change replaces the line with the page's small fade (none with reduced motion).
+  There is no line before the first activity, and the status stays `実行中 m:ss`.
