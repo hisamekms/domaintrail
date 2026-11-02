@@ -221,8 +221,10 @@ The chat has two views:
   one is struck through and goes nowhere), `ほか n` and 変更を見る. The same line is under each run's text in the chat.
   変更を見る opens この作業の変更: the card's name, requesters and time, then 追加, 変更 and 削除 with each element and what it is
   (`返品 の状態`, `集約`, `返品 のイベント`), a click closing it and going to the element; at the bottom, folded,
-  ソースの差分（技術者向け）: the validations, files and line diffs of the revisions before and after. When the model could not
-  be compared (a side does not parse), it says so and the source diff is open. The facilitator cancels a running or
+  ソースの差分: the files changed between the revisions before and after, with their line diffs, and both validations
+  when either has an error or a warning. When the model could not be compared (a side does not parse), it says so and
+  the source diff is open. The dialog keeps one width and its top in place whether the source diff is open or not; its
+  body scrolls under the header. The facilitator cancels a running or
   queued card with ✕, after a dialog asks.
   A row is one block between lines: a click anywhere on it but a chip, 変更を見る and ✕ opens it, and under the same left
   edge it shows the run's card, compact — a waiting one with the AI's question, answered (or voted on with ♡) as in the

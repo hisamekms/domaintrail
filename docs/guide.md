@@ -2614,8 +2614,8 @@ many runs when more than one and its time span (`19:21–22:32`; the running one
 what the whole card changed in the model's words: up to three elements as chips — `＋` added, `✎` changed, `−` removed,
 then `#` and the element's own name (its whole name in the tooltip; a click goes to it, a removed one is struck
 through) — `ほか n` and 変更を見る; the same line is under each run's text. 変更を見る lists the elements added, changed
-and removed, each with what it is (`返品 の状態`), and keeps the source diff of `.dt` and `.dtes` files, for engineers,
-folded at the bottom. A field, a parameter or an invariant counts as a change of the element it is in. The chat speaks
+and removed, each with what it is (`返品 の状態`), and keeps the source diff of `.dt` and `.dtes` files folded at the
+bottom. A field, a parameter or an invariant counts as a change of the element it is in. The chat speaks
 of the work, not of revisions: their numbers are only in tooltips and in the source diff. At its top, a quote of each message it applied (`↳ name: …`) — followed, once the run replied, by
 what it did of it, in its color (`✓ 対応`, `◐ 一部`, `– 未対応`, `? 確認`; the quote is cut with … first, never that), and,
 when it applied several, the reply's short note on each; a click goes to the message (hovering one does not mark the
@@ -2853,8 +2853,8 @@ around it (its ⋯).
 
 - **Changes**: a card (⋯ → 変更を見る, or 変更を見る on its line) lists the model's elements its revisions differ by —
   `.dt` elements, states and commands by their IDs, storming elements by their storming and local IDs — as added,
-  changed or removed. Under it, folded, the source diff for engineers: every file of either revision, `.dt` and `.dtes`
-  together, as added, removed, changed or unchanged, with a line diff, and both validations side by side. When a side
+  changed or removed. Under it, folded, the source diff: the files added, removed or changed, `.dt` and `.dtes`
+  together, each with a line diff, and both validations side by side when either has an error or a warning. When a side
   does not parse, the model is not compared and the source diff is open. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
