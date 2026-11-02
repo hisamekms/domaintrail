@@ -154,7 +154,7 @@ export function useSessionPage(input: {
             e.stopPropagation();
             confirm(selectionTargets);
         };
-        // before the canvas library's own shortcuts (tldraw binds no plain `c`, but the key is ours here)
+        // before the canvas's own shortcuts (it binds no plain `c`, but the key is ours here)
         document.addEventListener('keydown', onKey, true);
         return () => document.removeEventListener('keydown', onKey, true);
     }, [live, selectionTargets, confirm]);

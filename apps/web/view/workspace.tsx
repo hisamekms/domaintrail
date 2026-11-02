@@ -12,13 +12,13 @@ import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
+import { FlowCanvas } from './flow-canvas';
 import { fitAll } from './canvas';
 import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
-import { TldrawCanvas } from './tldraw-canvas';
 import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
 
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
@@ -175,8 +175,7 @@ export function ViewWorkspace(props: {
                 </div>
             </div>
             <div className="view-area">
-                {/* `expose`: the canvas library's editor on `window.__domaintrailEditor`, for debugging / e2e checks */}
-                <TldrawCanvas onMount={onMount} expose />
+                <FlowCanvas onMount={onMount} />
                 {isCanvas(view) && props.overlay}
                 {isCanvas(view) && (
                     <CanvasControls

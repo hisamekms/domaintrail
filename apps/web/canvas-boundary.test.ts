@@ -1,13 +1,13 @@
-// The canvas library stays behind the canvas port (view/diagram.ts, docs/plans/react-flow.md): only its adapter and
-// the shapes it draws import it, so that replacing it touches those files alone.
+// The canvas library stays behind the canvas port (view/diagram.ts, docs/plans/react-flow.md): only its adapter
+// imports it, so that replacing it touches that file alone; tldraw, which it replaced, is gone for good (ADR 0029).
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const WEB = import.meta.dir;
 
-/** The files that may import tldraw: the adapter, its shapes, and the entry (tldraw's stylesheet, before the page's). */
-const ALLOWED = ['main.tsx', 'shapes.tsx', 'view/tldraw-canvas.tsx'];
+/** The files that may import React Flow: the adapter, and the entry (React Flow's stylesheet, before the page's). */
+const ALLOWED = ['main.tsx', 'view/flow-canvas.tsx'];
 
 function sources(dir: string): string[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -18,11 +18,18 @@ function sources(dir: string): string[] {
     });
 }
 
+const importing = (pattern: RegExp): string[] => sources(WEB).filter((f) => pattern.test(readFileSync(join(WEB, f), 'utf8')));
+
 describe('the canvas library', () => {
-    test('is imported only by the canvas adapter and its shapes', () => {
-        const importing = sources(WEB).filter((f) => /(?:from|import)\s*['"](?:tldraw|@tldraw\/)/.test(readFileSync(join(WEB, f), 'utf8')));
-        expect(importing.filter((f) => !ALLOWED.includes(f))).toEqual([]);
+    test('is imported only by the canvas adapter', () => {
+        const files = importing(/(?:from|import)\s*['"]@xyflow\//);
+        expect(files.filter((f) => !ALLOWED.includes(f))).toEqual([]);
         // the check sees the imports it is about
-        expect(importing).toContain('view/tldraw-canvas.tsx');
+        expect(files).toContain('view/flow-canvas.tsx');
+    });
+
+    test('is no longer tldraw', () => {
+        expect(importing(/(?:from|import)\s*['"](?:tldraw|@tldraw\/)/)).toEqual([]);
+        expect(readFileSync(join(WEB, 'package.json'), 'utf8')).not.toContain('tldraw');
     });
 });

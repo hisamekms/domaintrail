@@ -10,15 +10,14 @@
     "@domaintrail/visualization": "workspace:*",
     "@lexical/history": "0.53.0",
     "@lexical/plain-text": "0.53.0",
+    "@xyflow/react": "12.12.0",
     "lexical": "0.53.0",
     "lucide-react": "1.62.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "tldraw": "5.5.2"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@domaintrail/analysis": "workspace:*",
-    "@tldraw/tlschema": "5.5.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0"
   }

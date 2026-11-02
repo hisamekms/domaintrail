@@ -10,8 +10,8 @@ import { applyTheme, type Theme } from './theme';
 import { CanvasControls, EdgeHint } from './view/canvas-controls';
 import { useCenterOnResize } from './view/center';
 import { useCanvasValue, type Camera, type DiagramCanvas } from './view/diagram';
+import { FlowCanvas } from './view/flow-canvas';
 import { selectedElement } from './view/navigation';
-import { TldrawCanvas } from './view/tldraw-canvas';
 
 /** Camera of each aggregate's diagram, kept while the page is open (the canvas unmounts with its inspector tab). */
 const cameras = new Map<string, Camera>();
@@ -103,7 +103,7 @@ export function StatesCanvas(props: {
 
     return (
         <div className="states-canvas">
-            <TldrawCanvas onMount={onMount} />
+            <FlowCanvas onMount={onMount} />
             {graph ? (
                 <>
                     <div className="canvas-toolbar">

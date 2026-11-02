@@ -113,8 +113,8 @@ function ControlButton(props: { label: string; onClick: () => void; disabled?: b
 }
 
 /**
- * The canvas's keys (`canvasShortcut`), taken before the canvas library's own (tldraw's `Shift+1` / `Shift+2` would fit
- * differently). The inspector's state diagram keeps the library's while it has the focus.
+ * The canvas's keys (`canvasShortcut`), taken before the canvas's own (its `Shift+1` / `Shift+2` would fit differently,
+ * see `flow-canvas.tsx`). The inspector's state diagram keeps the canvas's own while it has the focus.
  */
 function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): void {
     const latest = useRef(run);
