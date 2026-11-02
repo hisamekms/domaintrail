@@ -1,6 +1,7 @@
 // Pieces the session's chat and the facilitator's panel share: avatars, errors, and a request's targets and body
 // (a row of its targets as chips with each one's status, mentions of elements and people as links).
 import { Fragment } from 'react';
+import { CircleAlert, Unlink2 } from 'lucide-react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
 import type { Messages } from '../i18n';
@@ -37,7 +38,8 @@ type Snapshot = FrozenRequest['targets'][number];
 
 /**
  * A target of a sent request as a read-only chip, `#` and its own name (`#支払済み (Paid)`; its whole name, as a mention
- * of it in the body reads, in the tooltip): a link to it while it is in the sources, else its name marked stale or unknown.
+ * of it in the body reads, in the tooltip): a link to it while it is in the sources, else its name marked stale (struck
+ * through) or unknown, with an icon labelled with why (not found, or its sources do not parse).
  */
 export function TargetChip({
     target,
@@ -60,12 +62,18 @@ export function TargetChip({
                 {shown}
             </a>
         );
+    const Icon = status === 'stale' ? Unlink2 : status === 'unknown' ? CircleAlert : undefined;
     return (
         <span
-            className={`${kind}${status === 'stale' ? ' stale' : ''}`}
+            className={`${kind}${status === 'stale' || status === 'unknown' ? ` ${status}` : ''}`}
             data-tooltip={status && status !== 'current' ? `${text}\n${tx.targetStatusHint[status]}` : text}
         >
             {shown}
+            {Icon && status && (
+                <span className="chat-target-state" role="img" aria-label={tx.targetStatusHint[status]}>
+                    <Icon size={12} aria-hidden />
+                </span>
+            )}
         </span>
     );
 }

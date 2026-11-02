@@ -58,3 +58,79 @@ export function useSwap<T>(value: T, token = '--motion-swap'): { shown: T; swapp
     if (instant) return { shown: value, swapping: false };
     return { shown, swapping: shown !== value };
 }
+
+/** The clock a hold runs on (the page's timers; a fake one in the tests). */
+export interface HoldClock {
+    now(): number;
+    /** Runs `run` in `ms`; what it returns cancels it. */
+    after(ms: number, run: () => void): () => void;
+}
+
+const PAGE_CLOCK: HoldClock = {
+    now: () => Date.now(),
+    after: (ms, run) => {
+        const timer = setTimeout(run, ms);
+        return () => clearTimeout(timer);
+    },
+};
+
+/** A value held on screen (see `useHeld`): `set` it as it changes, `cancel` drops what waits (the line unmounting). */
+export interface Hold<T> {
+    set(value: T | undefined): void;
+    cancel(): void;
+}
+
+/**
+ * The timing of `useHeld`, without React: `show` is called with each value to show. A value is shown for `holdMs` at
+ * least; what is set meanwhile waits for the end of it, and a newer value replaces the waiting one (only the latest is
+ * shown, nothing is replayed). The first value, and a change from or to `undefined` (nothing shown), are shown at once.
+ * `same` tells a value that did not change (shown or waiting, it is then left as it is).
+ */
+export function createHold<T>(
+    initial: T | undefined,
+    holdMs: number,
+    show: (value: T | undefined) => void,
+    same: (a: T, b: T) => boolean = Object.is,
+    clock: HoldClock = PAGE_CLOCK,
+): Hold<T> {
+    let shown = initial;
+    let since = clock.now();
+    let timer: (() => void) | undefined;
+    const cancel = (): void => {
+        timer?.();
+        timer = undefined;
+    };
+    const apply = (value: T | undefined): void => {
+        timer = undefined;
+        shown = value;
+        since = clock.now();
+        show(value);
+    };
+    return {
+        set(value) {
+            cancel();
+            if (shown === undefined || value === undefined) {
+                if (shown !== value) apply(value);
+                return;
+            }
+            if (same(shown, value)) return;
+            const wait = since + holdMs - clock.now();
+            if (wait <= 0) apply(value);
+            else timer = clock.after(wait, () => apply(value));
+        },
+        cancel,
+    };
+}
+
+/**
+ * `value`, held on screen `holdMs` at least (see `createHold`): a value that changes faster than one can read shows
+ * the latest one at that pace. This is a pace, not a motion: it is the same with "reduce motion".
+ */
+export function useHeld<T>(value: T | undefined, holdMs: number, same?: (a: T, b: T) => boolean): T | undefined {
+    const [shown, setShown] = useState(value);
+    const [hold] = useState(() => createHold(value, holdMs, setShown, same));
+    useEffect(() => hold.set(value), [hold, value]);
+    // what waits is dropped with the component (the run ended, the line left the page)
+    useEffect(() => () => hold.cancel(), [hold]);
+    return shown;
+}

@@ -89,9 +89,29 @@ inspector's 状態遷移 diagram has the same controls.
   remembered per browser and never change the `.dtes` file. The integrated canvas draws each event once (no group
   frames), and a dashed arrow between two events names the timelines it belongs to when not all of them do; one
   timeline draws each occurrence, and a group is a frame around its events. Solid arrows are type-level causes
-  (possible, not "happened"), dashed orange arrows the order of a timeline, dotted lines the other relations (without
-  an arrowhead for a hotspot's event); the colours of the notes are defaults with no
-  meaning (see the legend). A storming whose file stops parsing stays as it last parsed, with a banner.
+  (possible, not "happened"), dashed orange arrows the order of a timeline (the event's orange, not a warning),
+  dotted lines the other relations (without an arrowhead for a hotspot's event). The notes take the convention's
+  colours, and the legend shows each kind with its colour and name: event orange, command blue, policy purple,
+  aggregate yellow, read model green, hotspot pink, actor pale yellow (rounded), external system lilac (dashed edge),
+  and a group a dashed frame tinted with the event's orange. Every note also names its kind above its label
+  («イベント»), so the colour is never the only cue. Light: soft pastel paper, a coloured edge and dark text; dark:
+  muted deep paper of the same hue, a coloured edge and pale text. A storming whose file stops parsing stays as it last parsed, with a banner.
+
+The modeling views (Context Map, Structure, Catalog, the inspector, the explorer) use the same hues for the same
+concepts, on smaller areas: the cards are neutral, and the kind is on their edge, their stereotype («集約ルート») and
+their shape. A bounded context is a slate frame with its caption (dashed for a shared one); an aggregate root an indigo
+edge with a tinted header, and its boundary indigo dashes (indigo, not the storming's yellow: the boundary of
+consistency is the model's structure); an entity slate; a value object teal with rounded corners (a union also dashed).
+A command is blue, a domain event orange and a policy purple (the kind chips, the explorer's dots, the 振る舞い
+cards' stripes, a state view's transitions), as in the storming; a domain error is a deep red, apart from the
+diagnostics. A state is neutral: the arrows and names tell the way through the states. References by ID are indigo
+dashes (they point at an aggregate root).
+
+On every canvas, the overlays keep their own channel and never recolour a node's kind: the local selection is an
+indigo ring outside the node; a change from the baseline is a green (added) or yellow (changed) ring with a 追加 / 変更
+badge, and a removed element a faded, dashed ghost with its name struck through and a 削除 badge; a diagnostic is a ✕
+or ! mark on the node's corner, with its text in the inspector and the problems list (a state view's transitions keep
+their command's blue). The others' cursors and names have a light halo, so that they read over any sticky note.
 
 ## Inspector (right or below)
 

@@ -1,3 +1,14 @@
+/*
+ * Colour tokens, in five layers (docs/plans/brand-identity.md has the table of every token, its values and its uses):
+ *   1. primitives (--p-*): the raw palette, the same in both themes; never used by a rule directly
+ *   2. theme: surfaces, text, borders, action, focus, selected, disabled (and the hovers and shadows around them)
+ *   3. meaning: what a model element is, the Event Storming kinds (--es-*) and the modeling concepts (--model-*)
+ *   4. status and diff: how something went (--status-*) and what changed from the baseline (--diff-*)
+ *   5. collaboration: the chat's mention and unread (--chat-*), the agent's activity (--agent-*), participants (--participant-*)
+ * The dark theme (below) re-points layers 2–5 to other primitives; each layer has its own names, so one meaning never
+ * borrows another's token (the brand's amber is not the warning, nor the event; indigo is the brand, actions and the
+ * local selection). The older names (--panel, --accent, --error, …) stay as aliases of the new ones.
+ */
 :root {
     color-scheme: light;
     --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -5,112 +16,356 @@
        Meiryo (older Windows), Noto Sans CJK (Linux); not Yu Gothic, which renders thin on Windows */
     --sans: 'Hiragino Sans', 'BIZ UDPGothic', Meiryo, 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif;
 
+    /* ---------- 1. primitives ---------- */
+    /* the logo's colours (fixed: issue #33 §1) */
+    --p-brand-indigo: #4338ca;
+    --p-brand-indigo-dark: #a5b4fc;
+    --p-brand-amber: #fbbf24;
+    /* slate, and the blue-black neutrals of the dark theme */
+    --p-white: #ffffff;
+    --p-slate-50: #f8fafc;
+    --p-slate-100: #f1f5f9;
+    --p-slate-200: #e2e8f0;
+    --p-slate-300: #cbd5e1;
+    --p-slate-400: #94a3b8;
+    --p-slate-450: #8492a6;
+    --p-slate-500: #64748b;
+    --p-slate-550: #5e6b7f;
+    --p-slate-600: #475569;
+    --p-slate-700: #334155;
+    --p-slate-800: #1e293b;
+    --p-slate-900: #0f172a;
+    --p-night-500: #64708a;
+    --p-night-600: #465066;
+    --p-night-650: #343b4f;
+    --p-night-700: #2e3547;
+    --p-night-750: #2a3042;
+    --p-night-800: #252b3b;
+    --p-night-850: #242a3b;
+    --p-night-900: #191d2b;
+    --p-night-950: #10131d;
+    /* indigo */
+    --p-indigo-50: #eef2ff;
+    --p-indigo-100: #e0e7ff;
+    --p-indigo-200: #c7d2fe;
+    --p-indigo-300: #a5b4fc;
+    --p-indigo-400: #818cf8;
+    --p-indigo-500: #6366f1;
+    --p-indigo-600: #4f46e5;
+    --p-indigo-700: #4338ca;
+    --p-indigo-800: #3730a3;
+    --p-indigo-900: #312e81;
+    --p-indigo-night-600: #373c67;
+    --p-indigo-night-700: #30345a;
+    --p-indigo-night-750: #2a2e52;
+    /* the concept and status hues (Tailwind-like steps; -night: the dark theme's tinted backgrounds) */
+    --p-orange-100: #ffedd5;
+    --p-orange-300: #fdba74;
+    --p-orange-400: #fb923c;
+    --p-orange-600: #ea580c;
+    --p-orange-700: #c2410c;
+    --p-orange-800: #9a3412;
+    --p-orange-950: #431407;
+    --p-orange-night: #43291a;
+    --p-blue-50: #eff6ff;
+    --p-blue-100: #dbeafe;
+    --p-blue-300: #93c5fd;
+    --p-blue-600: #2563eb;
+    --p-blue-700: #1d4ed8;
+    --p-blue-950: #172554;
+    --p-blue-night: #1d3552;
+    --p-violet-100: #ede9fe;
+    --p-violet-300: #c4b5fd;
+    --p-violet-600: #7c3aed;
+    --p-violet-700: #6d28d9;
+    --p-violet-950: #2e1065;
+    --p-violet-night: #2e2550;
+    --p-amber-100: #fef3c7;
+    --p-amber-300: #fcd34d;
+    --p-amber-800: #92400e;
+    --p-amber-900: #78350f;
+    --p-amber-night: #47361f;
+    --p-yellow-100: #fef9c3;
+    --p-yellow-300: #fde047;
+    --p-yellow-700: #a16207;
+    --p-yellow-900: #713f12;
+    --p-yellow-night: #3a3214;
+    --p-emerald-100: #d1fae5;
+    --p-emerald-300: #6ee7b7;
+    --p-emerald-700: #047857;
+    --p-emerald-900: #064e3b;
+    --p-emerald-night: #113b35;
+    --p-green-100: #dcfce7;
+    --p-green-300: #86efac;
+    --p-green-700: #15803d;
+    --p-green-800: #166534;
+    --p-green-night: #14321f;
+    --p-teal-100: #ccfbf1;
+    --p-teal-300: #5eead4;
+    --p-teal-700: #0f766e;
+    --p-teal-800: #115e59;
+    --p-teal-night: #12332f;
+    --p-red-50: #fef2f2;
+    --p-red-100: #fee2e2;
+    --p-red-300: #fca5a5;
+    --p-red-700: #b91c1c;
+    --p-red-800: #991b1b;
+    --p-red-night: #4b222a;
+    --p-rose-100: #ffe4e6;
+    --p-rose-300: #fda4af;
+    --p-rose-700: #be123c;
+    --p-rose-night: #4a1d2a;
+    --p-pink-100: #fce7f3;
+    --p-pink-900: #831843;
+    --p-fuchsia-100: #fae8ff;
+    --p-fuchsia-950: #4a044e;
+    /* the Event Storming notes' papers and edges (main's soft sticky-note tone, by the human's choice over issue #33's
+       saturated values): pastel papers with a coloured edge in light, muted deep papers with a coloured edge in dark */
+    --p-note-orange: #ffd8a8;
+    --p-note-orange-edge: #e8590c;
+    --p-note-blue: #cfe5ff;
+    --p-note-blue-edge: #1c7ed6;
+    --p-note-purple: #e5dbff;
+    --p-note-purple-edge: #7048e8;
+    --p-note-yellow: #fff3bf;
+    --p-note-yellow-edge: #b8860b;
+    --p-note-green: #d3f9d8;
+    --p-note-green-edge: #2f9e44;
+    --p-note-pink: #ffdeeb;
+    --p-note-pink-edge: #d6336c;
+    --p-note-cream: #fff9db;
+    --p-note-cream-edge: #a07d00;
+    --p-note-lilac: #f4d0f8;
+    --p-note-lilac-edge: #a632b8;
+    --p-note-orange-night: #4a2b14;
+    --p-note-orange-night-edge: #ff922b;
+    --p-note-blue-night: #16304d;
+    --p-note-blue-night-edge: #4dabf7;
+    --p-note-purple-night: #2c2250;
+    --p-note-purple-night-edge: #9775fa;
+    --p-note-yellow-night: #3d3410;
+    --p-note-yellow-night-edge: #fcc419;
+    --p-note-green-night: #173a22;
+    --p-note-green-night-edge: #51cf66;
+    --p-note-pink-night: #4a1a2e;
+    --p-note-pink-night-edge: #f06595;
+    --p-note-cream-night: #36321a;
+    --p-note-cream-night-edge: #e0c050;
+    --p-note-lilac-night: #44204c;
+    --p-note-lilac-night-edge: #d65fe0;
+    /* the participants' identity hues (issue #33 §4.3), the same in both themes */
+    --p-person-teal: #0f766e;
+    --p-person-violet: #7c3aed;
+    --p-person-ochre: #b45309;
+    --p-person-pink: #be185d;
+    --p-person-sky: #0369a1;
+    --p-person-green: #4d7c0f;
+
+    /* ---------- 2. theme ---------- */
+    /* the logo's ink on this theme's background (the activity bar's mark); the amber dot is the same in both */
+    --brand-ink: var(--p-brand-indigo);
+    --brand-amber: var(--p-brand-amber);
     /* surfaces and text */
-    --bg: #f7f7f8;
-    --panel: #ffffff;
-    --border: #e2e2e6;
-    --border-strong: #d8d8e0;
-    --text: #1d1d22;
-    --text-soft: #44444f;
-    --muted: #6b6b76;
-    --hover: #f4f2fd;
-    /* the hover of the session's rows (chat, AI の作業): a colourless tint that only says "this one"; violet is for what
-       is chosen */
-    --row-hover: rgba(29, 29, 34, 0.045);
+    --bg: var(--p-slate-50);
+    --surface: var(--p-white);
+    --surface-raised: var(--p-white);
+    --surface-muted: var(--p-slate-100);
+    --text: var(--p-slate-900);
+    --text-secondary: var(--p-slate-600);
+    /* the quietest text (hints, counts, group labels); a step darker than slate-500 so it stays AA on surface-muted */
+    --muted: var(--p-slate-550);
+    /* separators (a light hairline), and the edges of controls (inputs, buttons, menus: at least 3:1 against the
+       surface) */
+    --border: var(--p-slate-200);
+    --border-strong: var(--p-slate-450);
+    /* primary controls and links, and what is written on them */
+    --action: var(--p-indigo-700);
+    --on-action: var(--p-white);
+    /* the keyboard focus ring (outline), and a soft halo of it */
+    --focus: var(--p-indigo-500);
+    --focus-ring: color-mix(in srgb, var(--focus) 30%, transparent);
+    /* the local selection: selected rows, the open list, pressed toggles */
+    --selected-bg: var(--p-indigo-50);
+    --selected-text: var(--p-indigo-900);
+    /* the local selection on the canvas: a ring outside the node, apart from its kind's edge and the change's ring */
+    --selected-ring: var(--action);
+    /* a control that cannot be used now (not held to the contrast minimum, by WCAG's exception) */
+    --disabled-bg: var(--p-slate-100);
+    --disabled-text: var(--p-slate-400);
+    --disabled-border: var(--p-slate-200);
+    /* hovers: a colourless tint that only says "this one" (indigo is for what is chosen) */
+    --hover: var(--p-slate-100);
+    --row-hover: rgba(15, 23, 42, 0.045);
     /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
-    --hover-strong: #e6e6eb;
-    --shadow: rgba(0, 0, 0, 0.12);
+    --hover-strong: var(--p-slate-200);
+    --neutral-tint: var(--p-slate-200);
+    --shadow: rgba(15, 23, 42, 0.12);
+    /* behind a modal dialog (the same in both themes) */
+    --backdrop: rgba(15, 23, 42, 0.35);
     --legend-bg: rgba(255, 255, 255, 0.92);
-    --banner-bg: #fff4e5;
-    --banner-border: #f2d6a6;
-    --neutral-tint: #ececf2;
+    --resizer: color-mix(in srgb, var(--action) 35%, transparent);
+    /* the source view's syntax colours (AA on the surface and on the error, warning and selected rows) */
+    --syntax-keyword: var(--p-violet-700);
+    --syntax-type: var(--p-blue-700);
+    --syntax-primitive: var(--p-teal-800);
+    --syntax-literal: var(--p-orange-800);
+    --syntax-comment: var(--p-slate-600);
+    --syntax-doc: var(--p-green-800);
+    --gutter: var(--p-slate-400);
+    /* older names of the theme tokens */
+    --panel: var(--surface);
+    --text-soft: var(--text-secondary);
+    --accent: var(--action);
 
-    /* accent and states */
-    --accent: #5b47d6;
-    --focus-ring: rgba(91, 71, 214, 0.25);
-    --resizer: rgba(91, 71, 214, 0.35);
-    --added: #1a9b52;
-    --changed: #d97a00;
-    --removed: #d23a3a;
-    --error: #d23a3a;
-    --warning: #c78a00;
-    --error-wash: #fdecec;
-    --warning-wash: #fff6e0;
-    --amber: #d39b2a;
+    /* ---------- 3. meaning ---------- */
+    /* Event Storming sticky notes (issue #33 §3.2, the convention: event orange, command blue, policy purple,
+       aggregate yellow, read model green, hotspot pink; actor pale yellow, external system lilac): the paper, its
+       edge and its text, on the canvas's notes, the inspector's kind chips and the legend's key. Light: soft pastel
+       paper, a coloured edge, dark text; dark: muted deep paper, a coloured edge, pale text (the theme's text also
+       reads on it). */
+    --es-event: var(--p-note-orange);
+    --es-event-border: var(--p-note-orange-edge);
+    --es-event-text: var(--p-orange-950);
+    --es-command: var(--p-note-blue);
+    --es-command-border: var(--p-note-blue-edge);
+    --es-command-text: var(--p-blue-950);
+    --es-policy: var(--p-note-purple);
+    --es-policy-border: var(--p-note-purple-edge);
+    --es-policy-text: var(--p-violet-950);
+    --es-aggregate: var(--p-note-yellow);
+    --es-aggregate-border: var(--p-note-yellow-edge);
+    --es-aggregate-text: var(--p-amber-900);
+    --es-readmodel: var(--p-note-green);
+    --es-readmodel-border: var(--p-note-green-edge);
+    --es-readmodel-text: var(--p-emerald-900);
+    --es-hotspot: var(--p-note-pink);
+    --es-hotspot-border: var(--p-note-pink-edge);
+    --es-hotspot-text: var(--p-pink-900);
+    --es-actor: var(--p-note-cream);
+    --es-actor-border: var(--p-note-cream-edge);
+    --es-actor-text: var(--p-yellow-900);
+    --es-external: var(--p-note-lilac);
+    --es-external-border: var(--p-note-lilac-edge);
+    --es-external-text: var(--p-fuchsia-950);
+    /* a timeline's group of events: a frame of the event's hue, its caption in the event's text */
+    --es-group-border: var(--es-event-border);
+    --es-group-bg: color-mix(in srgb, var(--es-event) 35%, transparent);
+    --es-group-text: var(--es-event-text);
+    /* the timeline's arrows and their labels (an event's hue: an order of events, not a warning; a clear orange, apart
+       from the red of an error, and dashed) */
+    --es-sequence: var(--p-orange-600);
+    --es-sequence-text: var(--p-orange-800);
+    /* Domain Modeling concepts (issue #33 §3.3): neutral cards; the concept's hue on a stripe, label or border
+       (accent), and the faint background of a chip (tint). The aggregate root takes the brand's indigo, by design. */
+    --model-context: var(--p-slate-500);
+    --model-context-tint: var(--p-slate-50);
+    --model-aggregate: var(--p-indigo-700);
+    --model-aggregate-tint: var(--p-indigo-50);
+    --model-entity: var(--p-slate-600);
+    --model-entity-tint: var(--p-slate-100);
+    --model-value: var(--p-teal-700);
+    --model-value-tint: var(--p-teal-100);
+    --model-command: var(--p-blue-600);
+    --model-command-tint: var(--p-blue-50);
+    --model-event: var(--p-orange-700);
+    --model-event-tint: var(--p-orange-100);
+    --model-policy: var(--p-violet-600);
+    --model-policy-tint: var(--p-violet-100);
+    /* a state of an aggregate: neutral (the states carry no meaning of their own; the arrows and names tell the way) */
+    --model-state: var(--p-slate-600);
+    --model-state-tint: var(--p-slate-100);
+    /* a domain error (a declared `error`, a kind of the model): not a diagnostic, though of the red family */
+    --model-error: var(--p-red-800);
+    --model-error-tint: var(--p-red-50);
+    /* the diagrams' lines: owns and transitions' default (edge), the dotted relations (quiet), the edges' labels, and
+       the strongest ink (field names, the composition's diamond, the initial state) */
+    --model-edge: var(--p-slate-600);
+    --model-edge-quiet: var(--p-slate-450);
+    --model-edge-label: var(--p-slate-700);
+    --model-ink: var(--p-slate-800);
 
-    /* hues: strong (borders, lines), text, tint (badge backgrounds), wash (node backgrounds) */
-    --violet: #6a55e0;
-    --violet-text: #4a37b8;
-    --violet-tint: #e8e3ff;
-    --violet-soft: #f6f3ff;
-    --violet-wash: #faf9ff;
-    --violet-border: #c9c0f4;
-    --purple: #8a4fd6;
-    --purple-text: #6a2fb5;
-    --purple-tint: #f1e6ff;
-    --purple-wash: #faf6ff;
-    --blue: #3b82c4;
-    --blue-text: #1c5fa8;
+    /* ---------- 4. status and diff ---------- */
+    /* how something went (issue #33 §3.4): ink for text and icons, bg for its block, the ink as a solid fill with
+       on-status written on it */
+    --status-info-ink: var(--p-blue-700);
+    --status-info-bg: var(--p-blue-100);
+    --status-success-ink: var(--p-emerald-700);
+    --status-success-bg: var(--p-emerald-100);
+    --status-warning-ink: var(--p-amber-800);
+    --status-warning-bg: var(--p-amber-100);
+    --status-danger-ink: var(--p-red-700);
+    --status-danger-bg: var(--p-red-100);
+    --status-idle-ink: var(--p-slate-500);
+    --status-idle-bg: var(--p-slate-50);
+    --on-status: var(--p-white);
+    /* what changed from the baseline (not a status: added is not "completed", removed is not an error) */
+    --diff-added: var(--p-green-700);
+    --diff-added-bg: var(--p-green-100);
+    --diff-changed: var(--p-yellow-700);
+    --diff-changed-bg: var(--p-yellow-100);
+    --diff-removed: var(--p-rose-700);
+    --diff-removed-bg: var(--p-rose-100);
+    /* older names of the status and diff tokens */
+    --error: var(--status-danger-ink);
+    --error-wash: var(--status-danger-bg);
+    --warning: var(--status-warning-ink);
+    --warning-wash: var(--status-warning-bg);
+    --banner-bg: var(--status-warning-bg);
+    --banner-border: color-mix(in srgb, var(--status-warning-ink) 30%, transparent);
+    --added: var(--diff-added);
+    --changed: var(--diff-changed);
+    --removed: var(--diff-removed);
+
+    /* ---------- 5. collaboration ---------- */
+    /* chat (issue #33 §4.1): a mention of me and the unread marker; messages have no background by role (the sender's
+       avatar and name say who) */
+    --chat-mention-bg: var(--p-indigo-100);
+    --chat-unread: var(--p-indigo-700);
+    /* the agent's activity (§4.2): one hue for every running phase (reading, editing, checking, finishing), the phase
+       told by its icon and text; the other outcomes take the status tokens */
+    --agent-active: var(--action);
+    --agent-active-bg: var(--selected-bg);
+    /* the agent's avatar: one neutral mark on every AI turn, whatever its state (the state is told beside it) */
+    --agent-avatar: var(--p-slate-600);
+    --on-agent-avatar: var(--p-white);
+    /* participants (§4.3): a stable hue per person, apart from the model's and the statuses' hues, with its name in
+       on-participant and a halo of the surface around it */
+    --participant-1: var(--p-person-teal);
+    --participant-2: var(--p-person-violet);
+    --participant-3: var(--p-person-ochre);
+    --participant-4: var(--p-person-pink);
+    --participant-5: var(--p-person-sky);
+    --participant-6: var(--p-person-green);
+    --on-participant: var(--p-white);
+    --participant-halo: var(--surface);
+    /* the halo of a cursor and its name over the canvas: light in both themes, so that it reads over a sticky note of a
+       close luminance (the dark theme's deep papers); the header's and the chat's avatars keep --participant-halo */
+    --participant-halo-canvas: var(--p-white);
+
+    /* ---------- older hues, kept for the chat and the chrome until their tasks move them ---------- */
+    /* the diagrams no longer use them (they use the meaning tokens above); violet is the old accent's family and now
+       follows the brand's indigo */
+    --violet-text: var(--p-indigo-800);
+    --violet-tint: var(--selected-bg);
+    --violet-soft: #f5f7ff;
+    --violet-border: var(--p-indigo-200);
     --blue-tint: #e0f0ff;
     --blue-wash: #f2f8ff;
-    --green: #2f9a5f;
     --green-text: #1a7a45;
     --green-tint: #e3f6ec;
-    --green-wash: #f1fbf5;
-    --teal: #2f9a8a;
-    --teal-light: #4fb3b1;
-    --teal-text: #19706f;
-    --teal-text2: #146b63;
-    --teal-tint: #e6f4f4;
-    --teal-tint2: #e0f4f2;
-    --teal-wash: #f0faf8;
     --amber-text: #8a5a00;
     --amber-tint: #fff1d6;
     --red-text: #a52a2a;
     --red-tint: #fde3e3;
-    --orange-text: #a3480f;
-    --grey: #9a9aa6;
-    --grey-text: #8a8a96;
-    --grey-border: #c9c9d3;
+    --grey: var(--p-slate-400);
+    --grey-border: var(--p-slate-300);
 
-    /* canvas */
-    --node-bg: #ffffff;
-    --node-divider: #ececf0;
-    --ink-strong: #2b2b33;
-    --stub-bg: #f6f6f9;
-    --context-bg: rgba(240, 240, 246, 0.6);
-    --context-label: #50505c;
-    --boundary-border: #8b7be6;
-    --boundary-bg: rgba(246, 243, 255, 0.5);
-    --shared-bg: rgba(230, 244, 244, 0.6);
-    --edge: #55555f;
-    --edge-label: #3a3a44;
+    /* canvas: the cards' surface and dividers, a stub's paper, a bounded context's frame */
+    --node-bg: var(--surface);
+    --node-divider: var(--p-slate-200);
+    --stub-bg: var(--p-slate-50);
+    --context-bg: color-mix(in srgb, var(--surface-muted) 60%, transparent);
 
-    /* Event Storming sticky notes (spec §9.4: default colors, with no meaning): background, border */
-    --es-event: #ffd8a8;
-    --es-event-border: #e8590c;
-    --es-command: #cfe5ff;
-    --es-command-border: #1c7ed6;
-    --es-policy: #e5dbff;
-    --es-policy-border: #7048e8;
-    --es-aggregate: #fff3bf;
-    --es-aggregate-border: #d9a400;
-    --es-readmodel: #d3f9d8;
-    --es-readmodel-border: #2f9e44;
-    --es-hotspot: #ffdeeb;
-    --es-hotspot-border: #d6336c;
-    --es-actor: #fff9db;
-    --es-actor-border: #a07d00;
-    --es-external: #f1e4f7;
-    --es-external-border: #9c36b5;
-    --es-sequence: #b8530f;
-    --ref-edge: #3a6fd8;
-    --ref-label: #2f5fbf;
-
-    /* source */
-    --gutter: #a0a0aa;
-    --keyword: #8a2fb5;
-    --doc-comment: #3c7a3a;
     /* type and spacing of the session's views: three text roles, five spacing steps */
     --fs-body: 0.875rem;
     --fs-small: 0.75rem;
@@ -124,107 +379,137 @@
     --space-5: 24px;
 }
 
-/* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). */
+/* Dark theme: set by the app on <html data-theme="dark"> (the OS setting, or the user's choice in the header). It
+   re-points layers 2–5 to other primitives; the aliases follow by themselves. */
 :root[data-theme='dark'] {
     color-scheme: dark;
 
-    --bg: #16161b;
-    --panel: #1e1e24;
-    --border: #33333d;
-    --border-strong: #3d3d48;
-    --text: #e6e6ea;
-    --text-soft: #c4c4cc;
-    --muted: #9a9aa6;
-    --hover: #26243a;
-    --row-hover: rgba(230, 230, 234, 0.05);
-    --hover-strong: #383843;
+    /* 2. theme */
+    --brand-ink: var(--p-brand-indigo-dark);
+    --bg: var(--p-night-950);
+    --surface: var(--p-night-900);
+    --surface-raised: var(--p-night-850);
+    --surface-muted: var(--p-night-800);
+    --text: var(--p-slate-100);
+    --text-secondary: var(--p-slate-300);
+    --muted: var(--p-slate-400);
+    --border: var(--p-night-700);
+    --border-strong: var(--p-night-500);
+    --action: var(--p-indigo-300);
+    --on-action: var(--p-night-950);
+    --focus: var(--p-indigo-300);
+    --selected-bg: var(--p-indigo-night-700);
+    --selected-text: var(--p-indigo-100);
+    --disabled-bg: var(--p-night-800);
+    --disabled-text: var(--p-night-500);
+    --disabled-border: var(--p-night-650);
+    --hover: var(--p-night-750);
+    --row-hover: rgba(241, 245, 249, 0.05);
+    --hover-strong: var(--p-night-650);
+    --neutral-tint: var(--p-night-700);
     --shadow: rgba(0, 0, 0, 0.5);
-    --legend-bg: rgba(30, 30, 36, 0.92);
-    --banner-bg: #3a2d14;
-    --banner-border: #6b5320;
-    --neutral-tint: #2c2c35;
+    --legend-bg: rgba(25, 29, 43, 0.92);
+    --syntax-keyword: var(--p-violet-300);
+    --syntax-type: var(--p-blue-300);
+    --syntax-primitive: var(--p-teal-300);
+    --syntax-literal: var(--p-orange-300);
+    --syntax-comment: var(--p-slate-400);
+    --syntax-doc: var(--p-green-300);
+    --gutter: var(--p-night-500);
 
-    --accent: #8576f2;
-    --focus-ring: rgba(133, 118, 242, 0.35);
-    --resizer: rgba(133, 118, 242, 0.45);
-    --added: #2fbf6f;
-    --changed: #f0962a;
-    --removed: #ef5a5a;
-    --error: #ef5a5a;
-    --warning: #e0a52a;
-    --error-wash: #3a1f22;
-    --warning-wash: #3a3016;
-    --amber: #e0a842;
+    /* 3. meaning */
+    --es-event: var(--p-note-orange-night);
+    --es-event-border: var(--p-note-orange-night-edge);
+    --es-event-text: var(--p-orange-100);
+    --es-command: var(--p-note-blue-night);
+    --es-command-border: var(--p-note-blue-night-edge);
+    --es-command-text: var(--p-blue-100);
+    --es-policy: var(--p-note-purple-night);
+    --es-policy-border: var(--p-note-purple-night-edge);
+    --es-policy-text: var(--p-violet-100);
+    --es-aggregate: var(--p-note-yellow-night);
+    --es-aggregate-border: var(--p-note-yellow-night-edge);
+    --es-aggregate-text: var(--p-yellow-100);
+    --es-readmodel: var(--p-note-green-night);
+    --es-readmodel-border: var(--p-note-green-night-edge);
+    --es-readmodel-text: var(--p-emerald-100);
+    --es-hotspot: var(--p-note-pink-night);
+    --es-hotspot-border: var(--p-note-pink-night-edge);
+    --es-hotspot-text: var(--p-pink-100);
+    --es-actor: var(--p-note-cream-night);
+    --es-actor-border: var(--p-note-cream-night-edge);
+    --es-actor-text: var(--p-yellow-100);
+    --es-external: var(--p-note-lilac-night);
+    --es-external-border: var(--p-note-lilac-night-edge);
+    --es-external-text: var(--p-fuchsia-100);
+    --es-sequence: var(--p-orange-400);
+    --es-sequence-text: var(--p-orange-300);
+    --model-context: var(--p-slate-400);
+    --model-context-tint: var(--p-night-800);
+    --model-aggregate: var(--p-indigo-300);
+    --model-aggregate-tint: var(--p-indigo-night-750);
+    --model-entity: var(--p-slate-300);
+    --model-entity-tint: var(--p-night-800);
+    --model-value: var(--p-teal-300);
+    --model-value-tint: var(--p-teal-night);
+    --model-command: var(--p-blue-300);
+    --model-command-tint: var(--p-blue-night);
+    --model-event: var(--p-orange-300);
+    --model-event-tint: var(--p-orange-night);
+    --model-policy: var(--p-violet-300);
+    --model-policy-tint: var(--p-violet-night);
+    --model-state: var(--p-slate-300);
+    --model-state-tint: var(--p-night-800);
+    --model-error: var(--p-red-300);
+    --model-error-tint: var(--p-red-night);
+    --model-edge: var(--p-slate-400);
+    --model-edge-quiet: var(--p-night-500);
+    --model-edge-label: var(--p-slate-300);
+    --model-ink: var(--p-slate-200);
 
-    --violet: #8a78ff;
-    --violet-text: #b3a8ff;
-    --violet-tint: #2f2a52;
-    --violet-soft: #252039;
-    --violet-wash: #1f1c30;
-    --violet-border: #4b4380;
-    --purple: #a979f0;
-    --purple-text: #c9a3ff;
-    --purple-tint: #33244a;
-    --purple-wash: #251d33;
-    --blue: #5aa2e6;
-    --blue-text: #8cc4ff;
+    /* 4. status and diff */
+    --status-info-ink: var(--p-blue-300);
+    --status-info-bg: var(--p-blue-night);
+    --status-success-ink: var(--p-emerald-300);
+    --status-success-bg: var(--p-emerald-night);
+    --status-warning-ink: var(--p-amber-300);
+    --status-warning-bg: var(--p-amber-night);
+    --status-danger-ink: var(--p-red-300);
+    --status-danger-bg: var(--p-red-night);
+    --status-idle-ink: var(--p-slate-300);
+    --status-idle-bg: var(--p-night-800);
+    --on-status: var(--p-night-950);
+    --diff-added: var(--p-green-300);
+    --diff-added-bg: var(--p-green-night);
+    --diff-changed: var(--p-yellow-300);
+    --diff-changed-bg: var(--p-yellow-night);
+    --diff-removed: var(--p-rose-300);
+    --diff-removed-bg: var(--p-rose-night);
+
+    /* 5. collaboration */
+    --chat-mention-bg: var(--p-indigo-night-600);
+    --chat-unread: var(--p-indigo-300);
+    --agent-avatar: var(--p-slate-300);
+    --on-agent-avatar: var(--p-night-950);
+    --participant-halo-canvas: var(--p-slate-100);
+
+    /* older hues (chat and chrome) */
+    --violet-text: var(--p-indigo-200);
+    --violet-soft: #262a48;
+    --violet-border: #4a5190;
     --blue-tint: #1d3047;
     --blue-wash: #1a2533;
-    --green: #45b97a;
     --green-text: #7fd8a6;
     --green-tint: #1b3a2a;
-    --green-wash: #18281f;
-    --teal: #45b9a8;
-    --teal-light: #3f9a98;
-    --teal-text: #79d1d0;
-    --teal-text2: #7fd6cb;
-    --teal-tint: #173535;
-    --teal-tint2: #173835;
-    --teal-wash: #172a28;
     --amber-text: #f0c46a;
     --amber-tint: #3d3016;
     --red-text: #ff9b9b;
     --red-tint: #4a2222;
-    --orange-text: #f0a070;
-    --grey: #6a6a78;
-    --grey-text: #8a8a98;
-    --grey-border: #3d3d48;
+    --grey: var(--p-night-500);
+    --grey-border: var(--p-night-650);
 
-    --node-bg: #1e1e24;
-    --node-divider: #33333d;
-    --ink-strong: #d6d6dc;
-    --stub-bg: #23232b;
-    --context-bg: rgba(40, 40, 50, 0.6);
-    --context-label: #a8a8b4;
-    --boundary-border: #6f63c9;
-    --boundary-bg: rgba(60, 50, 110, 0.22);
-    --shared-bg: rgba(30, 70, 70, 0.35);
-    --edge: #9a9aa6;
-    --edge-label: #d0d0d8;
-
-    --es-event: #4a2b14;
-    --es-event-border: #ff922b;
-    --es-command: #16304d;
-    --es-command-border: #4dabf7;
-    --es-policy: #2c2250;
-    --es-policy-border: #9775fa;
-    --es-aggregate: #3d3410;
-    --es-aggregate-border: #fcc419;
-    --es-readmodel: #173a22;
-    --es-readmodel-border: #51cf66;
-    --es-hotspot: #4a1a2e;
-    --es-hotspot-border: #f06595;
-    --es-actor: #36321a;
-    --es-actor-border: #e0c050;
-    --es-external: #3a2244;
-    --es-external-border: #cc5de8;
-    --es-sequence: #ff9f5a;
-    --ref-edge: #6c9bff;
-    --ref-label: #8fb3ff;
-
-    --gutter: #6a6a76;
-    --keyword: #d08cff;
-    --doc-comment: #86c784;
+    --node-divider: var(--p-night-700);
+    --stub-bg: var(--p-night-850);
 }
 
 /* form controls follow the theme (their default colors come from the browser) */
@@ -236,6 +521,13 @@ input {
 
 * {
     box-sizing: border-box;
+}
+
+/* the keyboard focus of the page's own controls: one visible ring in the focus colour (zero specificity, so that a
+   control's own focus style wins; not inside tldraw's canvas, which draws its own) */
+:where(:is(button, a, select, summary, [role='tab'], [tabindex]):focus-visible:not(.tl-container *)) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
 }
 
 /* light text on a dark background looks heavier with macOS's default smoothing (it thickens the strokes) */
@@ -268,7 +560,7 @@ body,
     min-height: min(26.25rem, calc(100vh - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
-    background: var(--panel);
+    background: var(--surface-raised);
     color: var(--text);
     border: 1px solid var(--border-strong);
     border-radius: 10px;
@@ -280,7 +572,7 @@ body,
     flex-direction: column;
 }
 .settings-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--backdrop);
 }
 .settings-dialog-header {
     display: flex;
@@ -329,30 +621,31 @@ body,
     border-radius: 999px;
     font-size: 0.875rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--on-status);
 }
 .pill-ok {
-    background: var(--added);
+    background: var(--status-success-ink);
 }
 .pill-invalid,
 .pill-syntax-error {
-    background: var(--error);
+    background: var(--status-danger-ink);
 }
 .pill-empty {
-    background: var(--muted);
+    background: var(--status-idle-ink);
 }
+/* the connection's dot, always beside its word (接続中, 接続済み, 切断): a status, never a participant's hue */
 .conn {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--muted);
+    background: var(--status-idle-ink);
 }
 .conn-open {
-    background: var(--added);
+    background: var(--status-success-ink);
 }
 .conn-closed {
-    background: var(--error);
+    background: var(--status-danger-ink);
 }
 .banner {
     padding: 6px 14px;
@@ -376,7 +669,7 @@ body,
     margin-left: 3px;
     border-radius: 9px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     font-size: 0.8125rem;
 }
 .count-error {
@@ -465,16 +758,17 @@ code.block {
     text-align: center;
 }
 .kind-aggregate {
-    background: var(--violet-tint);
-    color: var(--violet-text);
+    background: var(--model-aggregate-tint);
+    color: var(--model-aggregate);
 }
 .kind-entity {
-    background: var(--blue-tint);
-    color: var(--blue-text);
+    background: var(--model-entity-tint);
+    color: var(--model-entity);
 }
+/* value types: the value object's teal; a union also has a dashed edge, as on the canvas */
 .kind-valueObject {
-    background: var(--green-tint);
-    color: var(--green-text);
+    background: var(--model-value-tint);
+    color: var(--model-value);
 }
 .kind-fieldSet {
     background: var(--bg);
@@ -482,48 +776,63 @@ code.block {
     border: 1px dashed var(--grey-border);
 }
 .kind-union {
-    background: var(--teal-tint2);
-    color: var(--teal-text2);
+    background: var(--model-value-tint);
+    color: var(--model-value);
+    border: 1px dashed var(--model-value);
 }
 .kind-event {
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--model-event-tint);
+    color: var(--model-event);
 }
+/* the storming's kinds: the note's paper, edge and text */
 .kind-es-event {
     background: var(--es-event);
     border: 1px solid var(--es-event-border);
+    color: var(--es-event-text);
 }
 .kind-es-command {
     background: var(--es-command);
     border: 1px solid var(--es-command-border);
+    color: var(--es-command-text);
 }
 .kind-es-policy {
     background: var(--es-policy);
     border: 1px solid var(--es-policy-border);
+    color: var(--es-policy-text);
 }
 .kind-es-aggregate {
     background: var(--es-aggregate);
     border: 1px solid var(--es-aggregate-border);
+    color: var(--es-aggregate-text);
 }
 .kind-es-readmodel {
     background: var(--es-readmodel);
     border: 1px solid var(--es-readmodel-border);
+    color: var(--es-readmodel-text);
 }
 .kind-es-hotspot {
     background: var(--es-hotspot);
     border: 1px solid var(--es-hotspot-border);
+    color: var(--es-hotspot-text);
 }
 .kind-es-actor {
     background: var(--es-actor);
     border: 1px solid var(--es-actor-border);
+    color: var(--es-actor-text);
+    border-radius: 999px;
 }
 .kind-es-external {
     background: var(--es-external);
     border: 1px dashed var(--es-external-border);
+    color: var(--es-external-text);
 }
-.kind-es-group,
+.kind-es-group {
+    background: var(--es-group-bg);
+    border: 1px dashed var(--es-group-border);
+    color: var(--es-group-text);
+}
 .kind-es-timeline {
-    border: 1px dashed var(--es-event-border);
+    border: 1px dashed var(--es-sequence);
 }
 .es-list {
     margin: 0;
@@ -534,32 +843,41 @@ code.block {
     padding: 2px 0;
 }
 .kind-error {
-    background: var(--red-tint);
-    color: var(--red-text);
+    background: var(--model-error-tint);
+    color: var(--model-error);
 }
-.kind-state,
+.kind-state {
+    background: var(--model-state-tint);
+    color: var(--model-state);
+}
 .kind-command {
-    background: var(--purple-tint);
-    color: var(--purple-text);
+    background: var(--model-command-tint);
+    color: var(--model-command);
 }
 /* a policy: when an event happens, a command runs (Event Storming's lilac sticky between the two) */
 .kind-policy {
-    background: var(--bg);
-    color: var(--purple-text);
-    border: 1px dashed var(--purple);
+    background: var(--model-policy-tint);
+    color: var(--model-policy);
+    border: 1px dashed var(--model-policy);
 }
+/* a row's or an element's change from the baseline: a label on the diff's colour (an inline block, so that a removed
+   row's strike-through does not cross it) */
 .change {
+    display: inline-block;
     margin-left: 6px;
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 0.8125rem;
-    color: #fff;
+    color: var(--on-status);
 }
 .change-added {
     background: var(--added);
 }
 .change-changed {
     background: var(--changed);
+}
+.change.change-removed {
+    background: var(--removed);
 }
 .diffrow-added a {
     color: var(--added);
@@ -639,10 +957,11 @@ code.block {
     white-space: nowrap;
 }
 .dn-key {
-    color: var(--ink-strong);
+    color: var(--model-ink);
 }
+/* a field's type: quieter than its name, without a concept's hue (a type may be of any kind) */
 .dn-value {
-    color: var(--blue-text);
+    color: var(--text-secondary);
 }
 /* the field set a field comes from, after its type */
 .dn-origin,
@@ -663,29 +982,35 @@ a.field-origin {
 .dn-full {
     grid-column: 1 / -1;
 }
+/* Domain Modeling cards (issue #33 §3.3): neutral paper, the concept on the edge and in the stereotype; the shape tells
+   the kind too (an aggregate root's tinted header and heavier edge, a value's rounded corners, a union's dashes) */
 .dn-aggregate {
-    border-color: var(--violet);
-    background: var(--violet-soft);
+    border-color: var(--model-aggregate);
+    border-width: 2px;
+}
+.dn-aggregate .dn-head {
+    border-radius: 6px 6px 0 0;
+    background: var(--model-aggregate-tint);
+}
+/* the overview's card is its header alone */
+.dn-aggregate .dn-head:not(:has(~ .dn-body)) {
+    border-radius: 6px;
 }
 .dn-entity {
-    border-color: var(--blue);
-    background: var(--blue-wash);
+    border-color: var(--model-entity);
 }
 .dn-valueObject {
-    border-color: var(--green);
-    background: var(--green-wash);
+    border-color: var(--model-value);
     border-radius: 16px;
 }
 .dn-union {
-    border-color: var(--teal);
+    border-color: var(--model-value);
     border-style: dashed;
-    background: var(--teal-wash);
     border-radius: 16px;
 }
 .dn-boundedContext {
-    border-color: var(--violet-text);
+    border-color: var(--model-context);
     border-width: 2px;
-    background: var(--violet-wash);
     border-radius: 10px;
 }
 .dn-stub {
@@ -695,8 +1020,7 @@ a.field-origin {
     opacity: 0.85;
 }
 .dn-state {
-    border-color: var(--purple);
-    background: var(--purple-wash);
+    border-color: var(--model-state);
     border-radius: 14px;
 }
 .dn-compartment {
@@ -714,7 +1038,7 @@ a.field-origin {
     border-radius: 4px;
     font-family: var(--sans);
     font-size: 14px;
-    color: var(--purple-text);
+    color: var(--model-edge-label);
     white-space: nowrap;
     pointer-events: all;
 }
@@ -740,9 +1064,6 @@ a.field-origin {
     opacity: 0.55;
     text-decoration: line-through;
 }
-.di-diag-error .di-main {
-    color: var(--error);
-}
 .di-diag {
     position: absolute;
     top: 2px;
@@ -754,7 +1075,7 @@ a.field-origin {
     place-items: center;
     font-size: 11px;
     font-weight: 700;
-    color: #fff;
+    color: var(--on-status);
 }
 .di-diag-error .di-diag {
     background: var(--error);
@@ -768,7 +1089,7 @@ a.field-origin {
     display: grid;
     place-items: center;
     border-radius: 50%;
-    background: var(--ink-strong);
+    background: var(--model-ink);
     color: var(--node-bg);
     font-family: var(--sans);
     font-weight: 700;
@@ -777,7 +1098,8 @@ a.field-origin {
     border: none;
     background: transparent;
 }
-/* Event Storming sticky notes: square corners, a colored paper, the text of the theme */
+/* Event Storming sticky notes (issue #33 §3.2): square corners, the kind's paper, edge and text; the stereotype
+   («イベント») names the kind too */
 .dn-esEvent,
 .dn-esCommand,
 .dn-esPolicy,
@@ -792,35 +1114,43 @@ a.field-origin {
 .dn-esEvent {
     border-color: var(--es-event-border);
     background: var(--es-event);
+    color: var(--es-event-text);
 }
 .dn-esCommand {
     border-color: var(--es-command-border);
     background: var(--es-command);
+    color: var(--es-command-text);
 }
 .dn-esPolicy {
     border-color: var(--es-policy-border);
     background: var(--es-policy);
+    color: var(--es-policy-text);
 }
 .dn-esAggregate {
     border-color: var(--es-aggregate-border);
     background: var(--es-aggregate);
+    color: var(--es-aggregate-text);
 }
 .dn-esReadModel {
     border-color: var(--es-readmodel-border);
     background: var(--es-readmodel);
+    color: var(--es-readmodel-text);
 }
 .dn-esHotspot {
     border-color: var(--es-hotspot-border);
     background: var(--es-hotspot);
+    color: var(--es-hotspot-text);
 }
 .dn-esActor {
     border-color: var(--es-actor-border);
     background: var(--es-actor);
+    color: var(--es-actor-text);
     border-radius: 18px;
 }
 .dn-esExternal {
     border-color: var(--es-external-border);
     background: var(--es-external);
+    color: var(--es-external-text);
     border-style: dashed;
 }
 /* the notes are squares with no body: the label wraps and sits in the middle */
@@ -840,20 +1170,37 @@ a.field-origin {
     height: 100%;
     overflow-wrap: anywhere;
 }
+/* the stereotype in the note's own text (the theme's muted grey would not read on every paper) */
+.dn-esEvent .dn-stereo,
+.dn-esCommand .dn-stereo,
+.dn-esPolicy .dn-stereo,
+.dn-esActor .dn-stereo,
+.dn-esExternal .dn-stereo,
+.dn-esAggregate .dn-stereo,
+.dn-esReadModel .dn-stereo,
+.dn-esHotspot .dn-stereo {
+    color: inherit;
+}
 .dn-change-added {
     box-shadow: 0 0 0 3px var(--added);
 }
 .dn-change-changed {
     box-shadow: 0 0 0 3px var(--changed);
 }
+/* a removed element's ghost keeps its kind (edge and paper): it is told by its dashes, its fading, its struck-through
+   name and its 削除 badge, not by an error's colours */
 .dn-change-removed {
-    opacity: 0.55;
+    opacity: 0.7;
     border-style: dashed;
-    border-color: var(--removed);
-    background: var(--error-wash);
 }
 .dn-change-removed .dn-label {
     text-decoration: line-through;
+}
+/* the local selection (issue #33 §5): an indigo ring outside the node and the change's 3px ring, so that it never
+   recolours the kind's edge or paper (two classes: tldraw's container clears the outline) */
+.tl-html-container.dn-selected {
+    outline: 2px solid var(--selected-ring);
+    outline-offset: 5px;
 }
 /* on the top edge, where the selection outline goes around them (see `DomainNodeUtil.getIndicatorPath`) */
 .dn-badge {
@@ -871,7 +1218,7 @@ a.field-origin {
     border-radius: 4px;
     font-family: var(--sans);
     font-size: 12px;
-    color: #fff;
+    color: var(--on-status);
     background: var(--accent);
 }
 .dn-change-added .dn-badge {
@@ -895,16 +1242,13 @@ a.field-origin {
     font-family: var(--sans);
     font-size: 13px;
     font-weight: 700;
-    color: #fff;
+    color: var(--on-status);
 }
 .dn-diag-error .dn-diag {
     background: var(--error);
 }
 .dn-diag-warning .dn-diag {
     background: var(--warning);
-}
-.dn-diag-error {
-    border-color: var(--error);
 }
 
 .dg {
@@ -925,72 +1269,76 @@ a.field-origin {
     white-space: nowrap;
     color: var(--muted);
 }
+/* a bounded context: a slate frame and its caption (structure, not a concept's hue) */
 .dg-context {
-    border: 1.5px solid var(--grey-border);
+    border: 1.5px solid var(--model-context);
     background: var(--context-bg);
 }
 .dg-context .dg-label {
-    color: var(--context-label);
+    color: var(--text-secondary);
 }
+/* an aggregate's boundary: the aggregate root's indigo, dashed */
 .dg-aggregateBoundary {
-    border: 1.5px dashed var(--boundary-border);
-    background: var(--boundary-bg);
+    border: 1.5px dashed var(--model-aggregate);
+    background: color-mix(in srgb, var(--model-aggregate-tint) 50%, transparent);
 }
 .dg-esGroup {
-    border: 1.5px dashed var(--es-event-border);
-    background: color-mix(in srgb, var(--es-event) 35%, transparent);
+    border: 1.5px dashed var(--es-group-border);
+    background: var(--es-group-bg);
 }
 .dg-esGroup .dg-label {
     font-size: calc(13px * var(--s, 1));
-    color: var(--es-event-border);
+    color: var(--es-group-text);
 }
 .dg-aggregateBoundary .dg-label {
     font-size: calc(13px * var(--s, 1));
-    color: var(--violet);
+    color: var(--model-aggregate);
 }
 
 .de {
     overflow: visible;
 }
+/* edges: told apart by their dashes and heads first; a hue only where it names a concept (a reference by ID points
+   at an aggregate root: indigo; a transition is a command's: blue; a timeline's order: the event's orange) */
 .de-line {
     fill: none;
-    stroke: var(--edge);
+    stroke: var(--model-edge);
     stroke-width: 1.4;
 }
 .de-head {
-    fill: var(--edge);
+    fill: var(--model-edge);
 }
 .de-diamond {
-    fill: var(--ink-strong);
+    fill: var(--model-ink);
 }
 .de-value .de-line {
-    stroke: var(--grey-text);
+    stroke: var(--model-edge-quiet);
     stroke-dasharray: 2 3;
 }
 .de-references .de-line {
-    stroke: var(--ref-edge);
+    stroke: var(--model-aggregate);
     stroke-dasharray: 6 4;
 }
 .de-references .de-head {
-    fill: var(--ref-edge);
+    fill: var(--model-aggregate);
 }
 .de-dependsOn .de-line {
-    stroke: var(--violet-text);
+    stroke: var(--model-ink);
     stroke-width: 2;
 }
 .de-dependsOn .de-head {
-    fill: var(--violet-text);
+    fill: var(--model-ink);
 }
 .de-dependsOn .de-label {
-    fill: var(--violet-text);
+    fill: var(--model-ink);
     font-weight: 600;
 }
 .de-transition .de-line {
-    stroke: var(--purple);
+    stroke: var(--model-command);
     stroke-width: 1.6;
 }
 .de-transition .de-head {
-    fill: var(--purple);
+    fill: var(--model-command);
 }
 .de-esCausal .de-line {
     stroke-width: 1.6;
@@ -1004,31 +1352,28 @@ a.field-origin {
     fill: var(--es-sequence);
 }
 .de-esSequence .de-label {
-    fill: var(--es-sequence);
+    fill: var(--es-sequence-text);
     font-weight: 600;
 }
 .de-esRelated .de-line,
 .de-esHotspot .de-line {
-    stroke: var(--grey-text);
+    stroke: var(--model-edge-quiet);
     stroke-width: 1.1;
     stroke-dasharray: 1.5 3;
 }
 .de-esRelated .de-head {
-    fill: var(--grey-text);
+    fill: var(--model-edge-quiet);
 }
 .de-label {
     font: 13px var(--sans);
-    fill: var(--edge-label);
+    fill: var(--model-edge-label);
     paint-order: stroke;
     stroke: var(--tl-color-background);
     stroke-width: 4px;
     stroke-linejoin: round;
 }
 .de-references .de-label {
-    fill: var(--ref-label);
-}
-.de-transition .de-label {
-    fill: var(--purple-text);
+    fill: var(--model-aggregate);
 }
 .de-transition .de-label.de-sub,
 .de-transition .de-label.de-faded {
@@ -1047,12 +1392,6 @@ a.field-origin {
 }
 .de-tone-changed .de-head {
     fill: var(--changed);
-}
-.de-tone-error .de-line {
-    stroke: var(--error);
-}
-.de-tone-error .de-head {
-    fill: var(--error);
 }
 
 /* ---------- cursors: everything that reacts to a click shows a pointer ---------- */
@@ -1107,7 +1446,13 @@ select,
 }
 .segmented button.active {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
+}
+/* the keyboard focus inside a segmented control, whose overflow clips the page's outer ring: drawn inside the button,
+   with a gap of the surface so that it also reads on the selected (filled) one */
+.segmented button:focus-visible {
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--surface);
 }
 
 .doc {
@@ -1138,8 +1483,8 @@ select,
 .kind-primitive,
 .kind-verified,
 .kind-id {
-    background: var(--teal-tint);
-    color: var(--teal-text);
+    background: var(--model-value-tint);
+    color: var(--model-value);
 }
 
 /* ---------- Catalog ---------- */
@@ -1169,15 +1514,16 @@ select,
     font-size: 1.1875rem;
 }
 .catalog-shared h2 {
-    border-bottom-color: var(--teal-light);
+    border-bottom-style: dashed;
+    border-bottom-color: var(--model-context);
 }
 .shared-badge {
     padding: 2px 8px;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--teal-text);
-    background: var(--teal-tint);
+    color: var(--text-secondary);
+    background: var(--neutral-tint);
 }
 .persistence-badge {
     margin-left: 6px;
@@ -1193,9 +1539,10 @@ select,
     padding: 2px 8px;
     font-size: 0.75rem;
 }
+/* persistent: filled; transient: outlined (a property of the event, not a concept's hue) */
 .persistence-badge.persistent {
-    color: var(--teal-text);
-    background: var(--teal-tint);
+    color: var(--text-secondary);
+    background: var(--neutral-tint);
     border-color: transparent;
 }
 .cards {
@@ -1300,7 +1647,7 @@ select,
     border-radius: 50%;
     display: grid;
     place-items: center;
-    color: #fff;
+    color: var(--on-status);
     font-size: 0.625rem;
     font-weight: 700;
 }
@@ -1348,12 +1695,13 @@ select,
     color: var(--muted);
 }
 
+/* a shared context (a Shared Kernel): a bounded context's frame, dashed */
 .dg-sharedContext {
-    border: 1.5px dashed var(--teal-light);
-    background: var(--shared-bg);
+    border: 1.5px dashed var(--model-context);
+    background: var(--context-bg);
 }
 .dg-sharedContext .dg-label {
-    color: var(--teal-text);
+    color: var(--text-secondary);
 }
 
 /* ---------- Source view ---------- */
@@ -1408,27 +1756,27 @@ select,
     padding-right: 16px;
 }
 .tok-keyword {
-    color: var(--keyword);
+    color: var(--syntax-keyword);
     font-weight: 600;
 }
 .tok-type {
-    color: var(--blue-text);
+    color: var(--syntax-type);
 }
 .tok-primitive {
-    color: var(--teal-text);
+    color: var(--syntax-primitive);
 }
 .tok-string {
-    color: var(--orange-text);
+    color: var(--syntax-literal);
 }
 .tok-number {
-    color: var(--orange-text);
+    color: var(--syntax-literal);
 }
 .tok-comment {
-    color: var(--grey-text);
+    color: var(--syntax-comment);
     font-style: italic;
 }
 .tok-doc {
-    color: var(--doc-comment);
+    color: var(--syntax-doc);
     font-style: italic;
 }
 .event-row {
@@ -1475,17 +1823,18 @@ select,
     border-radius: 2px;
     background: var(--grey);
 }
+/* the card's stripe: the concept's hue, as the modeling diagrams' accents */
 .band-command {
-    background: var(--purple);
+    background: var(--model-command);
 }
 .band-event {
-    background: var(--amber);
+    background: var(--model-event);
 }
 .band-error {
-    background: var(--error);
+    background: var(--model-error);
 }
 .band-policy {
-    background: var(--purple);
+    background: var(--model-policy);
 }
 .bcard-reaction {
     display: flex;
@@ -1502,8 +1851,8 @@ select,
     border-radius: 999px;
     font-size: 0.6875rem;
     font-weight: 600;
-    color: var(--purple-text);
-    background: var(--purple-tint);
+    color: var(--model-command);
+    background: var(--model-command-tint);
 }
 .bcard-doc {
     font-size: 0.8125rem;
@@ -1538,8 +1887,8 @@ select,
 .pane a.state-chip {
     padding: 1px 7px;
     border-radius: 4px;
-    color: var(--purple-text);
-    background: var(--purple-tint);
+    color: var(--model-state);
+    background: var(--model-state-tint);
 }
 .initial-state {
     font-size: 0.6875rem;
@@ -1651,7 +2000,19 @@ select,
     width: 43px;
     display: grid;
     place-items: center;
-    color: var(--accent);
+    color: var(--brand-ink);
+}
+/* the logo (assets/brand: indigo on light, light indigo on dark, the amber dot in both), 24px tall in its 144:128
+   proportion, centred in the activity bar's cell; only the one for the page's theme shows */
+.brand-logo {
+    display: block;
+    height: 24px;
+    width: auto;
+    aspect-ratio: 144 / 128;
+}
+:root:not([data-theme='dark']) .brand-logo-dark,
+:root[data-theme='dark'] .brand-logo-light {
+    display: none;
 }
 .brand-text {
     min-width: 0;
@@ -1707,8 +2068,8 @@ select,
     color: var(--text);
 }
 .activity.active {
-    color: var(--accent);
-    background: var(--violet-tint);
+    color: var(--action);
+    background: var(--selected-bg);
 }
 .activity-badge {
     position: absolute;
@@ -1728,10 +2089,12 @@ select,
     box-shadow: 0 0 0 2px var(--panel);
 }
 .activity-badge.badge-error {
-    background: var(--error);
+    background: var(--status-danger-ink);
+    color: var(--on-status);
 }
 .activity-badge.badge-warning {
-    background: var(--warning);
+    background: var(--status-warning-ink);
+    color: var(--on-status);
 }
 .left-pane {
     height: 100%;
@@ -1787,7 +2150,7 @@ select,
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--added);
+    background: var(--status-success-ink);
 }
 .health-warning .health-dot,
 .health-error .health-dot {
@@ -1795,12 +2158,12 @@ select,
     height: 10px;
 }
 .health-warning .health-dot {
-    background: var(--warning);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 28%, transparent);
+    background: var(--status-warning-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-warning-ink) 28%, transparent);
 }
 .health-error .health-dot {
-    background: var(--error);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 28%, transparent);
+    background: var(--status-danger-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-ink) 28%, transparent);
 }
 .health-text {
     min-width: 0;
@@ -1810,16 +2173,16 @@ select,
     font-weight: 600;
 }
 .health-warning .health-text {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
 }
 .health-error .health-text {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .health-popover {
     position: fixed;
     z-index: 40;
     padding: 10px 14px;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -1944,7 +2307,7 @@ select,
     padding: 4px;
     display: flex;
     flex-direction: column;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -2008,7 +2371,7 @@ select,
     border: none;
     border-radius: 50%;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     box-shadow: 0 4px 14px var(--shadow);
 }
 .chat-launcher:hover {
@@ -2026,13 +2389,13 @@ select,
 }
 svg.chat-launcher-mark {
     padding: 1px;
-    color: var(--accent);
+    color: var(--agent-active);
 }
 .chat-launcher-mark.question {
     display: grid;
     place-items: center;
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
 }
@@ -2044,8 +2407,8 @@ svg.chat-launcher-mark {
     height: 1.125rem;
     padding: 0 5px;
     border-radius: 9px;
-    background: var(--error);
-    color: #fff;
+    background: var(--chat-unread);
+    color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1.125rem;
@@ -2131,7 +2494,7 @@ svg.chat-launcher-mark {
     font-weight: 600;
 }
 .view-tab-list > button:disabled {
-    opacity: 0.4;
+    color: var(--disabled-text);
     cursor: default;
 }
 /*
@@ -2229,7 +2592,7 @@ svg.chat-launcher-mark {
     display: flex;
     flex-direction: column;
     white-space: nowrap;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -2262,9 +2625,9 @@ svg.chat-launcher-mark {
     position: relative;
 }
 .filter-button.active {
-    color: var(--accent);
-    background: var(--violet-tint);
-    border-color: var(--accent);
+    color: var(--action);
+    background: var(--selected-bg);
+    border-color: var(--action);
 }
 .filter-count {
     min-width: 1.125rem;
@@ -2274,7 +2637,7 @@ svg.chat-launcher-mark {
     font-weight: 600;
     line-height: 1.125rem;
     text-align: center;
-    color: #fff;
+    color: var(--on-action);
     background: var(--accent);
 }
 .filter-menu {
@@ -2303,8 +2666,7 @@ svg.chat-launcher-mark {
     background: var(--hover);
 }
 .filter-clear:disabled {
-    color: var(--muted);
-    opacity: 0.6;
+    color: var(--disabled-text);
     cursor: default;
 }
 .filter-section {
@@ -2432,8 +2794,8 @@ svg.chat-launcher-mark {
     height: 18px;
 }
 .explorer-head .icon-button[aria-pressed='true'] {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--selected-bg);
+    color: var(--action);
 }
 .explorer-body {
     flex: 1;
@@ -2480,7 +2842,7 @@ svg.chat-launcher-mark {
 }
 .explorer-section-title:focus-visible {
     outline: none;
-    box-shadow: inset 0 0 0 2px var(--focus-ring);
+    box-shadow: inset 0 0 0 2px var(--focus);
 }
 .tree-item,
 .tree-group {
@@ -2505,8 +2867,8 @@ svg.chat-launcher-mark {
     background: var(--hover);
 }
 .tree-item.selected {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--selected-bg);
+    color: var(--selected-text);
 }
 .tree-twisty {
     width: 14px;
@@ -2550,20 +2912,24 @@ svg.chat-launcher-mark {
     border-radius: 2px;
     background: var(--grey-border);
 }
+/* the kinds' dots: the modeling concepts' hues (as on the canvas and the kind chips), and a shape per family:
+   squares for the model's elements, circles for values and states, rings for the values without fields, dashes for
+   what is not an element of its own */
 .dot-context {
-    background: var(--grey);
+    background: var(--model-context);
 }
 .dot-shared {
-    background: var(--teal-light);
+    background: transparent;
+    border: 1.5px dashed var(--model-context);
 }
 .dot-aggregate {
-    background: var(--violet);
+    background: var(--model-aggregate);
 }
 .dot-entity {
-    background: var(--blue);
+    background: var(--model-entity);
 }
 .dot-valueObject {
-    background: var(--green);
+    background: var(--model-value);
     border-radius: 50%;
 }
 .dot-fieldSet {
@@ -2571,32 +2937,34 @@ svg.chat-launcher-mark {
     border: 1.5px dashed var(--grey);
 }
 .dot-union {
-    background: var(--teal);
+    background: transparent;
+    border: 1.5px dashed var(--model-value);
     border-radius: 50%;
 }
 .dot-primitive,
 .dot-verified,
 .dot-id,
 .dot-enum {
-    background: var(--teal-text);
+    background: transparent;
+    border: 1.5px solid var(--model-value);
     border-radius: 50%;
 }
 .dot-event {
-    background: var(--amber);
+    background: var(--model-event);
 }
 .dot-error {
-    background: var(--error);
+    background: var(--model-error);
 }
 .dot-state {
-    background: var(--purple);
+    background: var(--model-state);
     border-radius: 50%;
 }
 .dot-command {
-    background: var(--purple);
+    background: var(--model-command);
 }
 .dot-policy {
     background: transparent;
-    border: 1.5px dashed var(--purple);
+    border: 1.5px dashed var(--model-policy);
     transform: rotate(45deg);
 }
 .tree-change {
@@ -2614,7 +2982,7 @@ svg.chat-launcher-mark {
 .tree-persistent {
     display: inline-flex;
     flex: none;
-    color: var(--teal-text);
+    color: var(--muted);
 }
 .tree-diag {
     font-size: 0.6875rem;
@@ -3173,6 +3541,20 @@ svg.chat-launcher-mark {
     margin-top: 2px;
     color: var(--muted);
 }
+/* the storming's kinds: each note's paper with its name (the colour is not the only cue) */
+.legend-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 22rem;
+    margin: 6px 0 4px;
+}
+.legend-kinds .kind {
+    padding: 0 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+}
 
 .segmented.small button {
     padding: 2px 10px;
@@ -3205,13 +3587,14 @@ details.deps > .sub {
     padding: 0 4px;
     border-radius: 4px;
 }
+/* a dependency by ID (on an aggregate root: indigo, as the references' edges) or by a borrowed type (neutral) */
 .dep-id {
-    background: var(--blue-tint);
-    color: var(--blue-text);
+    background: var(--model-aggregate-tint);
+    color: var(--model-aggregate);
 }
 .dep-type {
-    background: var(--violet-tint);
-    color: var(--violet-text);
+    background: var(--neutral-tint);
+    color: var(--text-secondary);
 }
 
 .context-list {
@@ -3262,7 +3645,7 @@ details.deps > .sub {
 .legend .icon-button:disabled,
 .pane .icon-button:disabled,
 .rail .icon-button:disabled {
-    opacity: 0.35;
+    color: var(--disabled-text);
     cursor: default;
 }
 .context-picker-all {
@@ -3398,7 +3781,7 @@ del.was.block {
     width: min(26.25rem, calc(100vw - 16px));
     overflow: auto;
     padding: 8px;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -3487,7 +3870,7 @@ del.was.block {
     margin-top: 6px;
     border-color: var(--accent);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-panel button:disabled {
     opacity: 0.5;
@@ -3542,17 +3925,17 @@ del.was.block {
     height: var(--avatar-size);
     overflow: clip;
     border-radius: 50%;
-    color: #fff;
+    color: var(--on-participant);
     font-size: calc(var(--avatar-size) * 0.42);
     line-height: 1;
     font-weight: var(--fw-strong);
     white-space: nowrap;
     object-fit: cover;
 }
-/* the facilitator's mark wherever an avatar is drawn: a gap of the panel's color, then the accent, scaled to the size */
+/* the facilitator's mark wherever an avatar is drawn: a gap of the halo, then the accent, scaled to the size */
 .session-avatar.facilitator {
     box-shadow:
-        0 0 0 calc(var(--avatar-size) * 0.09) var(--panel),
+        0 0 0 calc(var(--avatar-size) * 0.09) var(--participant-halo),
         0 0 0 calc(var(--avatar-size) * 0.16) var(--accent);
 }
 .session-role {
@@ -3592,22 +3975,22 @@ del.was.block {
 }
 .session-status.status-current,
 .session-status.run-state-Completed {
-    background: var(--added);
-    color: #fff;
+    background: var(--status-success-ink);
+    color: var(--on-status);
 }
 .session-status.status-stale,
 .session-status.run-state-Failed {
-    background: var(--error);
-    color: #fff;
+    background: var(--status-danger-ink);
+    color: var(--on-status);
 }
 .session-status.status-unknown,
 .session-status.run-state-NeedsClarification {
-    background: var(--warning);
-    color: #fff;
+    background: var(--status-warning-ink);
+    color: var(--on-status);
 }
 .session-status.run-state-Running {
-    background: var(--accent);
-    color: #fff;
+    background: var(--agent-active);
+    color: var(--on-action);
 }
 .session-request.state-Dismissed {
     opacity: 0.6;
@@ -3636,10 +4019,10 @@ del.was.block {
     color: var(--muted);
 }
 .session-table tr.worse td {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .session-table tr.better td {
-    color: var(--added);
+    color: var(--status-success-ink);
 }
 .session-note {
     margin: 8px 0;
@@ -3649,7 +4032,7 @@ del.was.block {
     border: 1px solid var(--banner-border);
 }
 .session-error {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .peer-cursors {
     position: absolute;
@@ -3670,9 +4053,15 @@ del.was.block {
     margin: 12px 0 0 2px;
     padding: 1px 6px;
     border-radius: 4px;
-    color: #fff;
+    color: var(--on-participant);
     font-size: 0.75rem;
     white-space: nowrap;
+    /* a light halo, so that the name reads over any sticky note or edge */
+    box-shadow: 0 0 0 1.5px var(--participant-halo-canvas);
+}
+/* the arrow: the participant's hue (currentColor) edged with the canvas's halo */
+.peer-cursor-arrow {
+    stroke: var(--participant-halo-canvas);
 }
 
 /* ---------- the revision timeline, its comparison and the restore (dt session start only) ---------- */
@@ -3705,7 +4094,7 @@ del.was.block {
     width: min(68.75rem, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
-    background: var(--panel);
+    background: var(--surface-raised);
     color: var(--text);
     border: 1px solid var(--border-strong);
     border-radius: 10px;
@@ -3717,7 +4106,7 @@ del.was.block {
     flex-direction: column;
 }
 .session-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--backdrop);
 }
 .session-comparison-body h3 {
     margin: 16px 0 6px;
@@ -3748,15 +4137,15 @@ del.was.block {
 }
 .session-status.file-added {
     background: var(--added);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.file-removed {
     background: var(--removed);
-    color: #fff;
+    color: var(--on-status);
 }
 .session-status.file-changed {
-    background: var(--accent);
-    color: #fff;
+    background: var(--diff-changed);
+    color: var(--on-status);
 }
 .diff-count-add {
     color: var(--added);
@@ -3825,7 +4214,7 @@ del.was.block {
     flex: none;
     margin-right: -4px;
     border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--panel);
+    box-shadow: 0 0 0 2px var(--participant-halo);
 }
 .chat-avatar .session-avatar {
     --avatar-size: 1.375rem;
@@ -3859,19 +4248,20 @@ del.was.block {
     line-height: 1.25rem;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    background: var(--neutral-tint);
-    color: var(--muted);
+    background: var(--status-idle-bg);
+    color: var(--status-idle-ink);
 }
+/* running: the agent's active hue (every phase); waiting for an answer: the warning, with its ? */
 .chat-status.status-running {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--agent-active-bg);
+    color: var(--agent-active);
 }
 .chat-status.status-running .chat-status-mark {
     animation: chat-blink 1.2s ease-in-out infinite;
 }
 .chat-status.status-clarification {
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
 }
 /* the status is a button, a click opening its unit in AI の作業: the pill's own type (not the chat's buttons'), and
    under the pointer or focused a ring in its color */
@@ -3997,8 +4387,10 @@ del.was.block {
 .chat-message.continued .chat-bubble {
     margin-top: 0;
 }
+/* the AI's avatar: the same neutral mark on every turn (its icon says AI); its state is told beside it, not by it */
 .chat-agent-avatar {
-    background: var(--accent);
+    background: var(--agent-avatar);
+    color: var(--on-agent-avatar);
 }
 /* a sent message's targets: a row of read-only chips above its body (`#注文` `#請求書`), wrapping; the chips are the
    composer's (`.chat-chip`), without the number and the × */
@@ -4022,6 +4414,15 @@ del.was.block {
 }
 .chat-target.stale .chat-chip-name {
     text-decoration: line-through;
+}
+/* a target not in the sources (stale) or in sources that do not parse (unknown): an icon labelled with why, after
+   its name */
+.chat-target-state {
+    flex: none;
+    display: inline-flex;
+}
+.chat-target.unknown .chat-target-state {
+    color: var(--status-warning-ink);
 }
 .chat-text {
     margin: 0;
@@ -4075,7 +4476,7 @@ del.was.block {
     margin: 0;
     padding: var(--space-1);
     list-style: none;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 6px;
     box-shadow: 0 4px 16px var(--shadow);
@@ -4103,12 +4504,13 @@ del.was.block {
     border-radius: 4px;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
-    background: var(--violet-tint);
-    color: var(--violet-text);
+    background: var(--model-aggregate-tint);
+    color: var(--model-aggregate);
 }
+/* an Event Storming element: the event's hue (the storming board), apart from the model's */
 .chat-mention-kind.lang-dtes {
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--model-event-tint);
+    color: var(--model-event);
 }
 .chat-mention-where {
     grid-column: 1 / -1;
@@ -4256,7 +4658,7 @@ button.add-to-request {
 }
 button.add-to-request:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 button.add-to-request.added {
     border-color: var(--border-strong);
@@ -4301,13 +4703,13 @@ button.add-to-request.added:hover {
     text-overflow: ellipsis;
     pointer-events: none;
 }
-/* a mention in the text: an atomic chip that sits in the line, an element as a violet pill (`#未払い`), a person as
-   violet text (`@田中`) */
+/* a mention in the text: an atomic chip that sits in the line, an element as a pill of the mention's tint (`#未払い`),
+   a person as text in the accent (`@田中`) */
 .chat-inline-chip {
     display: inline-block;
     padding: 0 var(--space-1);
     border-radius: 6px;
-    background: var(--violet-tint);
+    background: var(--chat-mention-bg);
     color: var(--accent);
     font-weight: var(--fw-strong);
     line-height: 1.375rem;
@@ -4355,7 +4757,7 @@ button.add-to-request.added:hover {
     border: 1px solid var(--accent);
     border-radius: 6px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-chat button.chat-send:disabled {
     opacity: 0.45;
@@ -4409,7 +4811,7 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
 }
 .chat-person.where-same-view .chat-person-where {
-    color: var(--added);
+    color: var(--status-success-ink);
 }
 .session-chat button.chat-person-go {
     flex: none;
@@ -4459,7 +4861,7 @@ button.add-to-request.added:hover {
     margin: 0;
 }
 .chat-with-icon.session-error > .chat-icon {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 /* the agent's reply (reply.tsx): what the AI says, as plain text */
 .reply-summary {
@@ -4491,7 +4893,7 @@ button.add-to-request.added:hover {
     color: var(--muted);
 }
 .reply-request.status-Question .reply-mark {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
 }
 .reply-line {
     min-width: 0;
@@ -4602,7 +5004,7 @@ button.add-to-request.added:hover {
     max-height: min(32rem, calc(100vh - 80px));
     overflow: auto;
     padding: var(--space-1);
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -4633,7 +5035,7 @@ button.add-to-request.added:hover {
     outline: none;
 }
 .session-chat .collab-menu-actions > button.danger {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 /* the menu's note (a link copied) opens under the button, from its left */
 .collab-menu-note {
@@ -4663,15 +5065,15 @@ button.add-to-request.added:hover {
     justify-content: flex-end;
 }
 .collab-end-confirm.primary.danger {
-    background: var(--error);
-    border-color: var(--error);
-    color: #fff;
+    background: var(--status-danger-ink);
+    border-color: var(--status-danger-ink);
+    color: var(--on-status);
 }
 .collab-unfinished {
     padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+    border: 1px solid color-mix(in srgb, var(--status-warning-ink) 45%, var(--border));
     border-radius: 6px;
-    background: color-mix(in srgb, var(--warning) 8%, transparent);
+    background: var(--status-warning-bg);
 }
 .collab-unfinished ul {
     margin: 0;
@@ -4758,14 +5160,14 @@ button.add-to-request.added:hover {
     padding: 0 5px;
     border-radius: 999px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1;
     font-variant-numeric: tabular-nums;
 }
 .session-chat .chat-views button.active .chat-views-badge {
-    background: #fff;
+    background: var(--on-action);
     color: var(--accent);
 }
 .chat-view {
@@ -4782,12 +5184,10 @@ button.add-to-request.added:hover {
     border-radius: 6px;
 }
 @keyframes chat-flash {
+    /* then back to the row's own background */
     0%,
     40% {
-        background: var(--violet-tint);
-    }
-    100% {
-        background: transparent;
+        background-color: var(--selected-bg);
     }
 }
 .chat-history {
@@ -4827,7 +5227,7 @@ button.add-to-request.added:hover {
     font-variant-numeric: tabular-nums;
 }
 .session-chat .chat-work-group.awaiting .chat-work-label {
-    color: var(--warning);
+    color: var(--status-warning-ink);
 }
 .chat-work-label-row > .check {
     font-size: var(--fs-small);
@@ -4888,24 +5288,24 @@ button.add-to-request.added:hover {
 }
 .chat-unit-icon {
     flex: none;
-    color: var(--muted);
+    color: var(--status-idle-ink);
 }
-/* the running one: a pulsing dot in the accent */
+/* the running one: a pulsing dot in the agent's active hue */
 .chat-pulse.chat-unit-pulse {
     margin: 0;
     width: 8px;
     height: 8px;
-    background: var(--accent);
+    background: var(--agent-active);
 }
-/* a queued one: its place in the line, in a circle */
+/* a queued one: its place in the line, in a circle (neutral: it waits) */
 .chat-unit-order {
     display: inline-grid;
     place-items: center;
     width: 16px;
     height: 16px;
-    border: 1.5px solid var(--muted);
+    border: 1.5px solid var(--status-idle-ink);
     border-radius: 50%;
-    color: var(--muted);
+    color: var(--status-idle-ink);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1;
@@ -4922,17 +5322,22 @@ button.add-to-request.added:hover {
     right: calc(var(--space-4) + 14px + var(--space-2));
     display: inline-flex;
 }
+/* each outcome's icon (its word in the label): changed success, a question warning, declined info (not a failure),
+   failed danger; unchanged, cancelled and queued stay neutral */
 .outcome-changed .chat-unit-icon {
-    color: var(--added);
+    color: var(--status-success-ink);
 }
 .outcome-clarification .chat-unit-icon {
-    color: var(--warning);
+    color: var(--status-warning-ink);
+}
+.outcome-declined .chat-unit-icon {
+    color: var(--status-info-ink);
 }
 .outcome-failed .chat-unit-icon {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .outcome-running .chat-unit-icon {
-    color: var(--accent);
+    color: var(--agent-active);
     animation: spin 1s linear infinite;
 }
 /* the opened body starts at the same left edge as the title and the files */
@@ -5051,7 +5456,7 @@ button.add-to-request.added:hover {
     flex-wrap: wrap;
 }
 .chat-item-card > .run-card:hover {
-    background: var(--row-hover);
+    background-image: linear-gradient(var(--row-hover), var(--row-hover));
 }
 /* jumped to: the row's box flashes, not the item inside the stream's padding */
 .chat-item.chat-flash {
@@ -5065,11 +5470,15 @@ button.add-to-request.added:hover {
     flex: 1;
     min-width: 0;
 }
+/* no background by role: the avatar (initials, or the AI's mark) and the name say who speaks, mine, another
+   participant's or the AI's. Hovered: a tint over whatever the row has (chosen, mentioning me) */
 .chat-row:hover {
-    background: var(--row-hover);
+    background-image: linear-gradient(var(--row-hover), var(--row-hover));
 }
+/* chosen (to send to the AI): the local selection, with an indigo edge (its checkbox says so too) */
 .chat-row.selected {
-    background: var(--violet-tint);
+    background-color: var(--selected-bg);
+    box-shadow: inset 0 0 0 1px var(--action);
 }
 .chat-select {
     margin-top: calc((var(--chat-avatar) - 13px) / 2);
@@ -5140,23 +5549,28 @@ button.add-to-request.added:hover {
     width: 1em;
     height: 1em;
 }
+/* the states (glyph and word; queued, skipped and cancelled stay neutral): every running phase in the agent's active
+   hue, done success, partly done or waiting for an answer warning, declined info (not a failure), failed danger */
 .chat-state > .chat-pulse {
     margin-right: 0;
-    background: var(--accent);
+    background: var(--agent-active);
 }
 .chat-state.state-running {
-    color: var(--accent);
+    color: var(--agent-active);
 }
 .chat-state.state-done {
-    color: var(--green-text);
+    color: var(--status-success-ink);
 }
 .chat-state.state-partial,
 .chat-state.state-question,
 .chat-state.state-clarification {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
+}
+.chat-state.state-declined {
+    color: var(--status-info-ink);
 }
 .chat-state.state-failed {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 /* the slots' sizer: every text a slot can show, laid over each other, hidden */
 .chat-status-sizer {
@@ -5185,7 +5599,7 @@ button.add-to-request.added:hover {
     padding: 2px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--panel);
+    background: var(--surface-raised);
     box-shadow: 0 2px 8px var(--shadow);
     opacity: 0;
     pointer-events: none;
@@ -5223,9 +5637,9 @@ button.add-to-request.added:hover {
 }
 .session-chat button.chat-cancel-button:hover,
 .session-chat button.chat-cancel-button:focus-visible {
-    border-color: var(--error);
-    background: var(--error-wash);
-    color: var(--error);
+    border-color: var(--status-danger-ink);
+    background: var(--status-danger-bg);
+    color: var(--status-danger-ink);
 }
 /* the dialog before a cancel: what it asks, the unit's name, and for a running run what is lost; やめる and 取り消す */
 .session-dialog.cancel-dialog {
@@ -5263,7 +5677,7 @@ button.add-to-request.added:hover {
     padding: 0 14px;
     border: 1px solid var(--border-strong);
     border-radius: 8px;
-    background: var(--panel);
+    background: var(--surface-raised);
     color: var(--text);
     font: inherit;
     font-weight: var(--fw-strong);
@@ -5275,9 +5689,9 @@ button.add-to-request.added:hover {
     outline-offset: 2px;
 }
 .cancel-dialog button.cancel-dialog-button.danger {
-    border-color: var(--error);
-    background: var(--error);
-    color: #fff;
+    border-color: var(--status-danger-ink);
+    background: var(--status-danger-ink);
+    color: var(--on-status);
 }
 .chat-apply {
     display: inline-flex;
@@ -5310,7 +5724,7 @@ button.add-to-request.added:hover {
 .session-chat button.primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .session-chat button.primary:disabled {
     opacity: 0.5;
@@ -5334,7 +5748,7 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
 }
 .chat-selection-bar {
-    background: var(--violet-tint);
+    background: var(--selected-bg);
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .chat-selection-count {
@@ -5356,15 +5770,15 @@ button.add-to-request.added:hover {
     padding: var(--space-1) var(--space-3);
     border: none;
     border-radius: 12px;
-    background: var(--accent);
-    color: #fff;
+    background: var(--chat-unread);
+    color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     box-shadow: 0 2px 8px var(--shadow);
     cursor: pointer;
 }
 .pane-menu-list > button.danger {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .session-menu-note {
     width: 17.5rem;
@@ -5502,11 +5916,11 @@ button.add-to-request.added:hover {
     white-space: nowrap;
 }
 .run-quote.status-Done .run-quote-outcome {
-    color: var(--green-text);
+    color: var(--status-success-ink);
 }
 .run-quote.status-Partial .run-quote-outcome,
 .run-quote.status-Question .run-quote-outcome {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
 }
 .run-quote-note {
     flex-basis: 100%;
@@ -5534,8 +5948,9 @@ button.add-to-request.added:hover {
 .run-files-icon {
     flex: none;
 }
-/* what a running run is doing: one small line — the phase's icon in the accent, the phase (strong), then the file or
-   the command in monospace, muted — close under the quoted messages, and under the facts of the unit in AI の作業 */
+/* what a running run is doing: one small line — the phase's icon in the agent's active hue (one hue for every phase;
+   the icon and the word tell them apart), the phase (strong), then the file or the command in monospace, muted — close
+   under the quoted messages, and under the facts of the unit in AI の作業 */
 .run-activity {
     display: flex;
     align-items: center;
@@ -5553,8 +5968,9 @@ button.add-to-request.added:hover {
     margin-top: var(--space-1);
 }
 .run-activity-icon {
+    display: flex;
     flex: none;
-    color: var(--accent);
+    color: var(--agent-active);
 }
 .run-activity-phase {
     flex: none;
@@ -5567,20 +5983,29 @@ button.add-to-request.added:hover {
     color: var(--muted);
     font-family: var(--mono);
 }
+/* a change of activity cross-fades in place (session/activity.tsx): the part that changed fades out, then the new one
+   in, without moving; the rest stays */
+.run-activity > * {
+    transition: opacity var(--motion-swap) var(--motion-ease-standard);
+}
+.run-activity > .swapping {
+    opacity: 0;
+}
 .chat-unit-body .run-card {
     margin-top: 0;
 }
 /* ---------- inside an AI reply: the question, the assumptions, and what was decided ---------- */
 
-/* the AI's question and what it assumed sit on a faint surface, headed small and strong in their colour (amber: the AI
-   waits; violet: the AI assumed); everything in it starts at the body's left edge */
+/* the AI's question and what it assumed sit on a faint surface, headed small and strong (the question in the warning:
+   the AI waits; what it assumed in the secondary text, each assumption not yet decided marked 承認待ち); everything in
+   it starts at the body's left edge */
 .reply-section {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-3);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--border) 35%, transparent);
+    background: var(--surface-muted);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
 }
@@ -5591,10 +6016,30 @@ button.add-to-request.added:hover {
     font-weight: var(--fw-strong);
 }
 .reply-section.ask > .reply-section-label {
-    color: var(--warning);
+    color: var(--status-warning-ink);
 }
 .reply-section.assumed > .reply-section-label {
-    color: var(--accent);
+    color: var(--text-secondary);
+}
+/* an assumption not yet decided: a small warning badge (承認待ち) at the start of its row, for those who cannot decide
+   it (the facilitator sees 承認 and 送り直す there instead) */
+.reply-awaiting {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+    border-radius: 999px;
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+.reply-row-actions > .reply-row-start {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 .reply-section .reply-questions {
     display: flex;
@@ -5630,7 +6075,7 @@ button.add-to-request.added:hover {
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--panel);
+    background: var(--surface);
 }
 .reply-card-text {
     flex: 1;
@@ -5640,10 +6085,11 @@ button.add-to-request.added:hover {
 .reply-card-text > .reply-option-label {
     display: block;
 }
-/* chosen (being chosen, or decided): the accent's border and background; the others, once decided, muted */
+/* chosen (being chosen, or decided): the selection's indigo border and background, with its ◉ / ☑; the others, once
+   decided, muted */
 .reply-card.chosen {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    border-color: var(--action);
+    background: var(--selected-bg);
 }
 .reply-card.unchosen,
 .reply-card.unchosen .reply-option-detail {
@@ -5752,7 +6198,7 @@ button.add-to-request.added:hover {
     color: var(--accent);
 }
 .session-chat .reply-section button.chat-small.ghost:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    background: var(--selected-bg);
 }
 .session-chat .reply-section button.chat-small:disabled {
     opacity: 0.5;
@@ -5874,7 +6320,7 @@ button.add-to-request.added:hover {
     gap: 1px;
     min-width: 7rem;
     padding: var(--space-1) var(--space-3);
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -5888,7 +6334,8 @@ button.add-to-request.added:hover {
     color: var(--muted);
 }
 /* the reactions under a message or a turn: each emoji in colour (the one exception to the decoration budget) and a
-   small muted count, no pills; mine: the count in violet, with a faint violet outline and background */
+   small muted count, no pills; mine (aria-pressed): the count in the accent, in an indigo outline on the selection's
+   background */
 .reaction-row {
     display: flex;
     flex-wrap: wrap;
@@ -5922,11 +6369,11 @@ button.add-to-request.added:hover {
 }
 .session-chat button.reaction.mine {
     color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: var(--action);
+    background: var(--selected-bg);
 }
 .session-chat button.reaction.mine:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    background: color-mix(in srgb, var(--action) 14%, var(--selected-bg));
 }
 /* ☺+ at the right end of a row's actions */
 .reaction-add {
@@ -5944,7 +6391,7 @@ button.add-to-request.added:hover {
     right: 0;
     z-index: 30;
     padding: 4px;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -5977,8 +6424,8 @@ button.add-to-request.added:hover {
     cursor: default;
 }
 .session-chat button.reaction-choice.mine {
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: var(--action);
+    background: var(--selected-bg);
 }
 /* [＋]: any other emoji, typed or pasted */
 .reaction-field {
@@ -6003,7 +6450,7 @@ button.add-to-request.added:hover {
     border-color: var(--accent);
 }
 .session-chat .reaction-input[aria-invalid='true'] {
-    border-color: var(--error);
+    border-color: var(--status-danger-ink);
 }
 .reaction-hint {
     color: var(--muted);
@@ -6089,7 +6536,7 @@ button.add-to-request.added:hover {
     white-space: nowrap;
 }
 .canvas-controls .canvas-control[aria-disabled='true'] {
-    opacity: 0.35;
+    color: var(--disabled-text);
     cursor: default;
 }
 .canvas-controls-bar .canvas-zoom-level {
@@ -6097,8 +6544,8 @@ button.add-to-request.added:hover {
     font-variant-numeric: tabular-nums;
 }
 .canvas-controls-bar .canvas-legend-button.active {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--selected-bg);
+    color: var(--action);
 }
 /*
  * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
@@ -6265,11 +6712,13 @@ button.add-to-request.added:hover {
 .chat-mention.person {
     white-space: nowrap;
 }
-/* a message that mentions me, in my stream only: a faint blue wash (it asks for my attention). Not violet, which is
-   what can be clicked, nor amber, which is a question waiting for an answer */
-.chat-row.mentions-me:not(:hover, .selected) {
-    background: var(--blue-wash);
-    box-shadow: inset 2px 0 0 var(--blue-tint);
+/* a message that mentions me, in my stream only: the mention's background and an indigo bar at its left edge (it asks
+   for my attention; a hidden label says so). Not amber, which is a question waiting for an answer */
+.chat-row.mentions-me:not(.selected) {
+    /* the quietest text a step darker, to stay AA on this background */
+    --muted: var(--text-secondary);
+    background-color: var(--chat-mention-bg);
+    box-shadow: inset 3px 0 0 var(--chat-unread);
 }
 /* the launcher's count when messages mention me: `@ 2`, in place of the count of new items */
 .chat-launcher-count.mentions {
@@ -6387,7 +6836,7 @@ button.add-to-request.added:hover {
 .answer-other-dialog button.answer-other-button.primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-action);
 }
 .answer-other-dialog button.answer-other-button:disabled {
     opacity: 0.5;
@@ -6446,8 +6895,8 @@ button.add-to-request.added:hover {
     background: var(--hover);
     color: var(--text);
 }
-/* an element changed: its mark (＋ ✎ −, in green, amber, red on a faint wash), then `#` its own name in the accent; a
-   removed one muted and struck through */
+/* an element changed: its mark (＋ ✎ −, in the diff's added, changed, removed on their background), then `#` its own
+   name in the accent; a removed one muted and struck through */
 .change-chip {
     display: inline-flex;
     align-items: center;
@@ -6486,16 +6935,16 @@ button.add-to-request.added:hover {
     font-weight: var(--fw-strong);
 }
 .change-added .change-mark {
-    color: var(--green-text);
-    background: var(--green-tint);
+    color: var(--diff-added);
+    background: var(--diff-added-bg);
 }
 .change-changed .change-mark {
-    color: var(--amber-text);
-    background: var(--amber-tint);
+    color: var(--diff-changed);
+    background: var(--diff-changed-bg);
 }
 .change-removed .change-mark {
-    color: var(--red-text);
-    background: var(--red-tint);
+    color: var(--diff-removed);
+    background: var(--diff-removed-bg);
 }
 /* この作業の変更: one size and place whether or not the source diff is open — as wide as a diff reads well, its top
    fixed below the viewport's so that growing only extends it downward, and its body scrolling under the header */

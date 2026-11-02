@@ -13,6 +13,7 @@ import {
     type Editor,
     type RecordProps,
     type TLShape,
+    type TLShapeId,
 } from 'tldraw';
 
 export type ChangeMark = 'none' | 'added' | 'changed' | 'removed';
@@ -83,10 +84,16 @@ export type DomainNodeShape = TLShape<'domain-node'>;
 export type DomainGroupShape = TLShape<'domain-group'>;
 export type DomainEdgeShape = TLShape<'domain-edge'>;
 export type DomainInternalShape = TLShape<'domain-internal'>;
-export type EdgeTone = 'normal' | 'added' | 'changed' | 'error';
+export type EdgeTone = 'normal' | 'added' | 'changed';
 
 const changeMark = T.literalEnum('none', 'added', 'changed', 'removed');
 const diagMark = T.literalEnum('none', 'warning', 'error');
+
+/**
+ * Whether a shape is selected, to draw the local selection as a ring outside it (`.dn-selected`): tldraw's own outline
+ * runs on the node's edge, where it is lost against an edge of the same hue (an aggregate root's indigo, a command's blue).
+ */
+const useSelected = (editor: Editor, id: TLShapeId): boolean => useValue('selected', () => editor.getSelectedShapeIds().includes(id), [editor, id]);
 
 /** A model element (aggregate root, entity, value object, state). Read-only in the MVP. */
 export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
@@ -119,9 +126,10 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
 
     component(shape: DomainNodeShape) {
         const p = shape.props;
+        const selected = useSelected(this.editor, shape.id);
         return (
             <HTMLContainer
-                className={`dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`}
+                className={`dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`}
                 style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}
             >
                 {p.kind === 'initial' ? (
@@ -231,9 +239,10 @@ export class DomainGroupUtil extends BaseBoxShapeUtil<DomainGroupShape> {
 
     component(shape: DomainGroupShape) {
         const p = shape.props;
+        const selected = useSelected(this.editor, shape.id);
         return (
             <HTMLContainer
-                className={`dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}`}
+                className={`dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`}
                 style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}
             >
                 <div className="dg-label">{p.label}</div>
@@ -270,7 +279,7 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
         ly: T.number,
         lw: T.number,
         lh: T.number,
-        tone: T.literalEnum('normal', 'added', 'changed', 'error'),
+        tone: T.literalEnum('normal', 'added', 'changed'),
     };
 
     getDefaultProps(): DomainEdgeShape['props'] {

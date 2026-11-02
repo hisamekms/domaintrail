@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react';
+import type { StormingElementKind } from '@domaintrail/storming';
 import type { EdgeKind } from '@domaintrail/visualization';
 import { useT, type Messages } from './i18n';
 
@@ -50,8 +51,26 @@ export function legendRows(view: LegendView, words: Messages['legendRows']): rea
 }
 
 /**
- * Key for the edges of the canvas views; every edge points from the dependent to its dependency (in an Event Storming,
- * along causes and time). It opens upward from the 凡例 button of the canvas's bottom-left controls.
+ * The storming's kinds in the legend's key, in the convention's order: the core notes (event orange, command blue,
+ * policy purple, aggregate yellow, read model green, hotspot red), then the actor, the external system and a
+ * timeline's group. A timeline itself is its arrows (the rows above).
+ */
+export const STORMING_LEGEND_KINDS: readonly StormingElementKind[] = [
+    'event',
+    'command',
+    'policy',
+    'aggregate',
+    'readmodel',
+    'hotspot',
+    'actor',
+    'external',
+    'group',
+];
+
+/**
+ * Key for the edges of the canvas views (and, for an Event Storming, the colour of each kind of note); every edge
+ * points from the dependent to its dependency (in an Event Storming, along causes and time). It opens upward from the
+ * 凡例 button of the canvas's bottom-left controls.
  */
 export function Legend({ view, open, onToggle }: { view: LegendView; open: boolean; onToggle: () => void }) {
     const t = useT();
@@ -80,7 +99,15 @@ export function Legend({ view, open, onToggle }: { view: LegendView; open: boole
                     {view === 'structureFocus' && <div className="legend-note">{t.stubNote}</div>}
                     {view === 'aggregatesFocus' && <div className="legend-note">{t.aggregateStubNote}</div>}
                     {view === 'states' && <div className="legend-note">{t.internalNote}</div>}
-                    {view === 'storming' && <div className="legend-note">{t.stormingColorNote}</div>}
+                    {view === 'storming' && (
+                        <div className="legend-kinds">
+                            {STORMING_LEGEND_KINDS.map((k) => (
+                                <span key={k} className={`kind kind-es-${k}`}>
+                                    {t.esKinds[k]}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                     <div className="legend-note">{view === 'storming' ? t.stormingArrowNote : t.arrowNote}</div>
                 </div>
             </div>

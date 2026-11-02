@@ -732,6 +732,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             {control && selection.active && (
                 <input type="checkbox" className="chat-select" checked={selected} onChange={() => selection.toggle(r.id)} aria-label={tx.chat.select} />
             )}
+            {toMe && <span className="visually-hidden">{tx.chat.mentionsYou}</span>}
             <Bubble
                 avatar={<Avatar id={r.author} name={author} {...(avatarUrl && { url: avatarUrl })} facilitator={facilitator} />}
                 who={speakerName(r.author, session.me.participant.id, nameOf, tx.chat.you)}

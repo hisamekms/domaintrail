@@ -127,7 +127,8 @@ export function renderGraph(editor: Editor, graph: LaidOutGraph, opts: RenderOpt
     const edges: TLShapePartial[] = [];
     for (const e of graph.edges) {
         const owner = storming ? (elementOf.get(e.source) ?? e.source) : edgeOwner(e, structure);
-        const shape = edgeShape(graph, e, opts, owner, severity.get(owner) === 'error' && !structure && !storming ? 'error' : toneOf(change(owner)));
+        // an element's error is told by its mark and text (issue #33 §5); its lines keep their kind's colour
+        const shape = edgeShape(graph, e, opts, owner, toneOf(change(owner)));
         if (shape) edges.push(shape);
     }
 
