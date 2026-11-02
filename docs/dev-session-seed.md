@@ -43,7 +43,7 @@ tags, see below).
 
 - **As the facilitator**: open the Live View, join with any name, then open the printed facilitator link (single use,
   10 minutes; `node dist/dt.js -r <dir> session link` prints another). You then hold the role `ooyama_F` held: the
-  facilitator's messages and reactions show as 「あなた」, and the 依頼 / 会話 tags, the ⤓ and the menus are yours.
+  facilitator's messages and reactions show as 「あなた」, and the 依頼 / 会話 tags, the AI に送る buttons and the menus are yours.
 - **As a participant**: a private window, the same URL, another name. Your browser is a new participant, so none of the
   seeded messages are yours; the seeded people's cookies (`dt_session`) are in `<dir>/.domaintrail/seed.json`, for a
   browser (or a test) that should be one of them.

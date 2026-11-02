@@ -176,8 +176,8 @@ The chat has two views:
   participant (`@佐藤`, a link that opens the participants at them). A message that mentions you has a faint blue
   background in your stream, and the closed chat's button shows `@ n` for the new ones. A card is named by the title
   the AI gave its first run (`AI · 請求書の税区分 · 19:21`), else by the head of its first message; the runs continuing
-  it show their time only. An applied message shows its latest run's mark (`✓`, the card's name in the tooltip). The
-  facilitator applies messages from the stream (⤓, ▾ with a note, several
+  it show their time only. A message sent to the AI shows its latest run's mark (`✓`, the card's name in the tooltip). The
+  facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs, and reaches confirm,
   restore and comparison from a card's ⋯ and recording, the hand-over and コラボを終える… from the collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).

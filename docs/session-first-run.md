@@ -43,7 +43,7 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
    an event's note, write a message about the selection (e.g. "Add an event for a return the customer cancels") and
    send it, then a second about the whole workspace. Both appear in everyone's chat, the first with its occurrence
    (the timeline and the step).
-6. **A run** (as Ada): Shift-click both messages and まとめてアプライ (or ⤓ on one). The run's card appears; terminal 2
+6. **A run** (as Ada): Shift-click both messages and まとめて送る (or the AI に送る button on one). The run's card appears; terminal 2
    logs its progress; within a few minutes the card is *done* (or asks questions — choose and 答えて再実行 — or is
    *declined* with its reason, or *failed* with its report). Both pages show the storming as the agent left it, without
    a reload. The agent runs `dt fmt` / `dt check` itself through the `dt` the subscriber puts on its `PATH`.

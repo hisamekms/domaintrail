@@ -2579,12 +2579,15 @@ the last revision confirmed — then 終える. Every page then shows コラボ�
 files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
 when it ended; the session's record stays in the workspace's `.domaintrail`.
 
-**Messages and apply.** Everything posted in the chat is a **message**, shown in the stream as it is sent; nothing
-runs until the facilitator **applies** it. On each message the facilitator has ⤓ (apply: a run of that message,
-queued at once; runs are serial, so it waits as 実行待ち while another runs) and ▾ (補足を付けてアプライ: a note for the
-agent first; 選択: choose several). Shift- or ⌘-click chooses messages too; a bar then offers a note and まとめてアプライ,
-one run of all of them, and Esc leaves it. Right after applying, 取り消す cancels the run while it is still queued.
-Participants see a run only once it is in the stream: there is no queue to watch. A message that was applied shows the
+**Messages and sending to the AI.** Everything posted in the chat is a **message**, shown in the stream as it is
+sent; nothing runs until the facilitator **sends** it to the AI (*applies* it, in the ADR's terms: queues a run with it
+as the input). On each message the facilitator has the robot button, AI に送る (a run of that message, queued at once;
+runs are serial, so it waits as 実行待ち while another runs), and … (その他の操作): もう一度送る once it was sent, AI に送る
+on a message read as talk (where the button is not shown), コメントをつけて送る (a comment for the agent first) and
+まとめて送る (choose several). Shift- or ⌘-click chooses messages too; a bar then offers コメント… and まとめて送る, one
+run of all of them, and Esc leaves it. Right after sending, AI に送りました offers 取り消す, which cancels the run while it
+is still queued. Participants see a run only once it is in the stream: there is no queue to watch. A message that was
+sent shows the
 mark of its latest run at its right end (`✓`, `◐`, `–`, `?`, …), for everyone; the tooltip names the card and the
 state, and a click goes to the card.
 
@@ -2621,8 +2624,8 @@ reply to its latest run — when that run ended: done, failed, declined or cance
 a queued or running run is not replied to yet). Anyone can reply. A chip `↩ 「請求書の税区分」への返信 ✕` (the card's
 name) sits above the composer,
 whose targets start with those of the run's messages (change them as usual); ✕, or Esc on an empty text, stops the
-reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), applied or not by the
-facilitator (⤓ runs it at once, or choose several replies to apply as one run; in collab mode the facilitator's own reply
+reply. The reply is a message like any other — classified like one (a 「ありがとう」 reads as talk), sent to the AI or not
+by the facilitator (AI に送る runs it at once, or まとめて送る several replies as one run; in collab mode the facilitator's own reply
 too) — and shows `↩ 請求書の税区分: <what the AI said>` on one muted line at its top, a click going to the card. The run
 made from replies continues the replied run's card in place, quoting the replies like any applied message, and a reply to
 that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
@@ -2690,8 +2693,8 @@ blue background in their own stream, and while their chat is closed its floating
 messages that mention them instead of the count of new items. Nothing else notifies: no sound, no e-mail. The agent
 reads a person mentioned as a plain `@name`, never as a target.
 
-**Runs.** A run is up to 100 applied messages (requests) with the facilitator's note if any (up to 4,000
-characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.
+**Runs.** A run is up to 100 messages sent to the AI (requests) with the facilitator's comment if any (its `note`, up
+to 4,000 characters); its input is frozen when it is queued, and a message stays as it was, so it can go into another run later.
 A run is `Queued`, `Running`, then `Completed`, `NeedsClarification` (the agent asked questions, answered in its card), `Declined` (the agent would not do the requests: they break its rules or are not
 about the model; the chat shows why, and no `dt fmt`/`dt check` runs), `Failed` or `Cancelled`; the facilitator can
 cancel a queued or running one. A run **succeeds** when the agent exits 0, `dt fmt` and `dt check` ran, there is no new
@@ -2716,13 +2719,13 @@ asking for it; the agent is given the run it assumed in, and the card shows the 
 **Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
 Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
 message appears at once; its classification follows, shown to the facilitator only (a small 依頼 / 会話 mark).
-⤓ is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a probability near
-`threshold` leaves a message applicable — while a message read as talk can still be applied from its ▾. Results are
-kept in memory: after a restart, earlier messages are all applicable. **The text of each message is sent to
+The AI に送る button is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
+probability near `threshold` leaves a message sendable — while a message read as talk can still be sent from its …
+menu. Results are kept in memory: after a restart, earlier messages are all sendable. **The text of each message is sent to
 Cloudflare** under your account (the token is read from the environment variable named by `apiTokenEnv`, never from
 the file); Cloudflare states that it does not use customer content processed by Workers AI to train models
 ([Workers AI data usage](https://developers.cloudflare.com/workers-ai/platform/data-usage/)). Disabled (the default),
-nothing is sent and every message can be applied.
+nothing is sent and every message can be sent to the AI.
 
 **Presence** is never stored: each page tells the others where it is (this page, the same view, another view,
 offline) and its cursor, at most about 20 times a second. A cursor is drawn only on the same view — the same `.dt`
