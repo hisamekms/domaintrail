@@ -870,10 +870,11 @@ const OUTCOME_ICONS: Record<UnitOutcome, LucideIcon> = {
 /**
  * AI の作業: everything sent to the AI, from start to end, in groups — 答え待ち (the AI asked), 実行中, 待ち (in the
  * order they will run, numbered) and 終わったもの (newest first). すべて filters only the finished ones: by default those
- * that changed files. A unit's row names the chunk (its title, else its first message) with whose requests they were,
- * how many runs and its time (the running one's elapsed time), then the files it changed (a link to compare them); the
- * facilitator cancels a running or queued unit with ✕. Opened, it shows the unit's card (compact) and a link to it in
- * the chat. The card's own menu is the place of the facilitator's other actions on a unit.
+ * that changed files. A unit is one block between lines: its head names the chunk (its title, else its first message)
+ * with whose requests they were, how many runs and its time (the running one's elapsed time), then the files it changed
+ * (a link to compare them); the facilitator cancels a running or queued unit with ✕. A click on the block opens it:
+ * under the same left edge, the unit's card (compact, with the AI's question to answer or vote on, as in the chat) and
+ * a link to it in the chat. The card's own menu is the place of the facilitator's other actions on a unit.
  */
 function History({ units: all }: { units: readonly ChangeUnit[] }) {
     const { tx } = useChat();
@@ -962,7 +963,10 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
     const [mounted, setMounted] = useState(open);
     if (open && !mounted) setMounted(true);
     return (
-        <li className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}${cancellable ? ' cancellable' : ''}`} data-unit={unit.key}>
+        <li
+            className={`chat-unit outcome-${unit.outcome}${open ? ' open' : ''}${cancellable ? ' cancellable' : ''}${listed ? ' has-files' : ''}`}
+            data-unit={unit.key}
+        >
             <button className="chat-unit-head" aria-expanded={open} aria-label={open ? h.collapse : h.expand} onClick={onToggle}>
                 <span className="chat-unit-mark">{mark ?? <Icon size={14} className="chat-unit-icon" aria-label={h.outcomes[unit.outcome]} />}</span>
                 <span className="chat-unit-text">
@@ -1003,8 +1007,18 @@ function HistoryUnit({ unit, mark, open, onToggle }: { unit: ChangeUnit; mark: R
                 </button>
             )}
             {/* what the chunk changed: its files (the page knows them, not the elements) after a file-diff icon, a link to
-                compare the whole chunk */}
-            {listed && span && <ChangedFiles kind="unit" paths={paths} base={span.base} result={span.result} />}
+                compare the whole chunk. The line is part of the row: a click on it, but on the link, opens or closes the
+                unit as the head does (a pointer's convenience; the head stays the one toggle for the keyboard) */}
+            {listed && span && (
+                <div
+                    className="chat-unit-files"
+                    onClick={(e) => {
+                        if (!(e.target instanceof Element && e.target.closest('button'))) onToggle();
+                    }}
+                >
+                    <ChangedFiles kind="unit" paths={paths} base={span.base} result={span.result} />
+                </div>
+            )}
             {/* the body unfolds like the tree's branches (a grid row from 0fr to 1fr) */}
             <div className="chat-unit-fold" inert={!open}>
                 <div className="chat-unit-fold-inner">

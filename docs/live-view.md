@@ -204,7 +204,9 @@ The chat has two views:
   will run) and 終わったもの (newest first). A row reads its mark and name (the title, else the first message), then,
   small, whose messages its first run applied, how many runs and its time span; and the files it changed, a link that
   compares the revisions before and after the whole card. The facilitator cancels a running or queued card with ✕.
-  Opened, a row shows the run's card, and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
+  A row is one block between lines: a click anywhere on it but the files link and ✕ opens it, and under the same left
+  edge it shows the run's card, compact — a waiting one with the AI's question, answered (or voted on with ♡) as in the
+  chat, the choices shared with the chat's card — and チャットで見る scrolls the chat to it. By default 終わったもの lists the cards
   that changed files; すべて also lists the runs that changed nothing, and those declined, failed or cancelled. The
   other groups always show.
 

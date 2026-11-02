@@ -4798,6 +4798,20 @@ button.add-to-request.added:hover {
     position: relative;
     border-bottom: 1px solid var(--border);
 }
+/* a unit is one block between the lines — its head, its files and, open, its body share one background: closed, the
+   whole block is one hover area; open, it sits on a faint surface, where the head and the files line (a click on them
+   closes it) are tinted more under the pointer and the body is not */
+.chat-unit:not(.open):hover {
+    background: var(--hover);
+}
+.chat-unit.open {
+    background: var(--bg);
+}
+.session-chat .chat-unit.open > button.chat-unit-head:hover,
+.chat-unit.open:has(> .chat-unit-cancel:hover) > button.chat-unit-head,
+.chat-unit.open > .chat-unit-files:hover {
+    background: var(--hover);
+}
 /* a unit's row: its mark, its title and under it, small, whose requests and when; at the right end only actions (✕, ›) */
 .session-chat button.chat-unit-head {
     display: flex;
@@ -4812,8 +4826,13 @@ button.add-to-request.added:hover {
     font-size: var(--fs-body);
     line-height: var(--lh-body);
 }
-.session-chat button.chat-unit-head:hover {
-    background: var(--hover);
+.session-chat .chat-unit.has-files > button.chat-unit-head {
+    padding-bottom: 0;
+}
+/* the files line, under the title's left edge (after the mark's column) */
+.chat-unit-files {
+    padding: 0 var(--space-4) var(--space-2) calc(var(--space-4) + 16px + var(--space-2));
+    cursor: pointer;
 }
 .chat-unit-mark {
     flex: none;
@@ -4882,9 +4901,10 @@ button.add-to-request.added:hover {
     color: var(--accent);
     animation: spin 1s linear infinite;
 }
+/* the opened body starts at the same left edge as the title and the files */
 .chat-unit-body {
-    padding: var(--space-2) var(--space-4) var(--space-3);
-    background: var(--bg);
+    padding: var(--space-1) var(--space-4) var(--space-3) calc(var(--space-4) + 16px + var(--space-2));
+    cursor: default;
 }
 /* the body unfolds and folds like the tree's branches; the chevron turns with it */
 .chat-unit-fold {
@@ -6235,13 +6255,12 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
     font-variant-numeric: tabular-nums;
 }
-/* a card's changed files in AI の作業: a file-diff icon, then the files as one link, under the title's left edge */
+/* a card's changed files in AI の作業: a file-diff icon, then the files as one link (its place: .chat-unit-files) */
 .chat-unit-changes {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    margin: calc(-1 * var(--space-2)) 0 0;
-    padding: 0 var(--space-4) var(--space-2) calc(var(--space-4) + 16px + var(--space-2));
+    margin: 0;
     color: var(--muted);
     font-size: var(--fs-small);
     line-height: var(--lh-small);
