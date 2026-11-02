@@ -3,6 +3,7 @@
 // it), the facilitator's note or answer, and the agent's message — and the latest run of each applied message, which
 // its link to the AI turn goes to (its state in the link's tooltip). Everything is derived from the session's state on the page.
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { undoableChanges, undoStatus } from '@domaintrail/collaboration';
 import type { ChangeUnit } from './history';
 import { agentMessage, type AgentMessage, type RequestProgress, type revisionLookup } from './stream';
 
@@ -98,6 +99,8 @@ function markState(run: RunJson, request: string): MarkState {
             return line ? PROGRESS[line.status] : 'clarification';
         case 'Completed':
             return line ? PROGRESS[line.status] : 'done';
+        case 'Reverted':
+            return 'done';
         case 'Declined':
             return 'declined';
         case 'Failed':
@@ -117,6 +120,18 @@ export function messageMarks(units: readonly ChangeUnit[]): Map<string, MessageM
                 if (!seen || run.queuedAt >= seen.run.queuedAt) latest.set(r.request, { run, unit });
             }
     return new Map([...latest].map(([request, { run, unit }]) => [request, { state: markState(run, request), card: unit.key }]));
+}
+
+/** An item of a card's menu (the facilitator's): undo the unit's changes, see them. */
+export type CardMenuItem = 'undo' | 'changes';
+
+/**
+ * The items of a card's menu, from the unit's latest run: none unless it changed files; 変更を見る then, and first
+ * この作業を取り消す… while the collab is open (`live`) and its changes are not undone nor being undone.
+ */
+export function cardMenuItems(last: RunJson, runs: readonly RunJson[], live: boolean): CardMenuItem[] {
+    if (!undoableChanges(last)) return [];
+    return live && undoStatus(last, runs).kind === 'none' ? ['undo', 'changes'] : ['changes'];
 }
 
 /** The cards whose runs moved on since the reader last saw them (`seen`: each card's `updatedAt` then). */

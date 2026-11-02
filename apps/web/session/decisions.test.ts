@@ -191,3 +191,35 @@ describe('what became of one assumption', () => {
         expect(assumptionDecision(done, 0, [done, pick], [approval(0, 3)])).toEqual({ kind: 'approved', by: 'dev:f', at: at(3) });
     });
 });
+
+describe('the assumptions of a run undone', () => {
+    const undo = (state: object, minute = 7): RunJson =>
+        ({
+            ...run('u', minute, [], state),
+            input: { requests: [{ ...frozen('m8'), undoes: 'd' }] },
+        }) as unknown as RunJson;
+    const reverted = undo({ state: 'Reverted', baseRevision: 'r1', resultRevision: 'r2', finishedAt: at(7) });
+
+    test('closed as undone by a mechanical undo or a completed undo of the AI: the undo, who asked and when', () => {
+        expect(assumptionDecision(done, 0, [done, reverted], [])).toEqual({ kind: 'undone', by: { run: 'u', number: 2, by: 'dev:f', at: at(7) } });
+        const byAi = undo({ state: 'Completed', ...ended(8), changed: true, report: {} });
+        expect(assumptionDecision(done, 1, [done, byAi], []).kind).toBe('undone');
+    });
+
+    test('open while the undo waits or runs, and again once it failed', () => {
+        expect(assumptionDecision(done, 0, [done, undo({ state: 'Queued' })], [])).toEqual({ kind: 'open' });
+        expect(assumptionDecision(done, 0, [done, undo({ state: 'Failed', ...ended(8), reason: 'AgentError' })], [])).toEqual({ kind: 'open' });
+    });
+
+    test('an assumption decided before stays as it was decided', () => {
+        const approval = {
+            id: 'a0',
+            session: 's',
+            assumption: { run: 'd', assumption: 0 },
+            approvedBy: 'dev:f',
+            approvedAt: at(3),
+            state: 'Approved',
+        } as SessionStateBody['approvals'][number];
+        expect(assumptionDecision(done, 0, [done, reverted], [approval])).toEqual({ kind: 'approved', by: 'dev:f', at: at(3) });
+    });
+});

@@ -25,12 +25,13 @@ export const STATE_GLYPH: Record<MarkState, string> = {
 
 /**
  * The state an AI turn shows in its slot: its latest run's, only where nothing else shows it (queued, running,
- * declined, failed, cancelled) — a question says so itself, and done is the rule.
+ * declined, failed, cancelled) — a question says so itself, and done is the rule (a mechanical undo is done).
  */
 export function turnState(m: AgentMessage): MarkState | undefined {
     switch (m.kind) {
         case 'completed':
         case 'clarification':
+        case 'reverted':
             return undefined;
         default:
             return m.kind;

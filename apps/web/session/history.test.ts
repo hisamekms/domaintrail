@@ -482,3 +482,30 @@ describe('the cards of the chat', () => {
         expect(answerBody(questions, { x: { options: ['gross', 'net'] } })).toEqual({ answers: [{ question: 'x', options: ['gross'] }] });
     });
 });
+
+describe('a mechanical undo in the history', () => {
+    const changed = run('run1', 1, [qa], {
+        state: 'Completed',
+        baseRevision: 'r0',
+        startedAt: at(1),
+        resultRevision: 'r1',
+        changed: true,
+        finishedAt: at(2),
+        report: {},
+    });
+    const undoRequest = { ...request('qu', 'local:facilitator'), body: '「a」の変更を取り消す', undoes: 'run1' } as RequestJson;
+    const reverted = run('run2', 4, [undoRequest], { state: 'Reverted', baseRevision: 'r1', resultRevision: 'r2', finishedAt: at(4) });
+
+    test('a unit of its own, with the files it changed, its message done, and its card the 取り消し message', () => {
+        const units = changeUnits({ runs: [changed, reverted], revisions });
+        const unit = units.find((u) => u.key === 'run2');
+        expect(unit).toMatchObject({ outcome: 'changed', files: 3, span: { base: 'r1', result: 'r2' } });
+        expect(unitName(unit!)).toEqual({ kind: 'request', text: '「a」の変更を取り消す' });
+        const [card] = cardRuns(unit!, revisionLookup({ revisions, runs: [changed, reverted] }));
+        expect(card.message).toEqual({ kind: 'reverted', result: 3, files: 3 });
+        expect(messageMarks(units).get('qu')).toEqual({ state: 'done', card: 'run2' });
+        // the message and the card in the stream, the message first
+        const items = streamItems({ runs: [changed, reverted], revisions, requests: [{ ...undoRequest, sentAt: at(4) }] }).map((i) => i.key);
+        expect(items.indexOf('message:qu')).toBeLessThan(items.indexOf('card:run2'));
+    });
+});

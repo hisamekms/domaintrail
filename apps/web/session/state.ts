@@ -115,6 +115,9 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 state: runs((r) => (r.state === 'Queued' ? { ...r, state: 'Running', baseRevision: e.baseRevision, startedAt: e.startedAt } : r), e.runId),
                 refetch: false,
             };
+        case 'RunReverted':
+            // the run's frozen input is not in the event
+            return { state: at, refetch: !state.runs.some((r) => r.id === e.runId) };
         case 'RunCompleted':
             // the report is not in the event
             return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Completed' };

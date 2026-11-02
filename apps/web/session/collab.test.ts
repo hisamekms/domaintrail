@@ -87,8 +87,8 @@ const runs = [
 const state = (s: 'Open' | 'Closed'): SessionStateBody => ({ session: session(s), runs, revisions, requests: [] }) as unknown as SessionStateBody;
 
 describe('the collab menu', () => {
-    test('the facilitator copies the invite link, records, hands over and ends; no 退出', () => {
-        expect(collabMenuItems('facilitator', true)).toEqual(['invite', 'record', 'hand-over', 'end']);
+    test('the facilitator copies the invite link, records, restores an earlier state, hands over and ends; no 退出', () => {
+        expect(collabMenuItems('facilitator', true)).toEqual(['invite', 'record', 'restore', 'hand-over', 'end']);
     });
 
     test('a participant copies the invite link and leaves', () => {

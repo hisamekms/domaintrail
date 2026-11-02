@@ -63,6 +63,8 @@ export type AgentMessage =
           readonly reply?: ReplyView;
       }
     | { readonly kind: 'declined'; readonly result: number | undefined; readonly files: number | undefined; readonly reply: ReplyView }
+    /** The changes of a run undone mechanically, without the agent. */
+    | { readonly kind: 'reverted'; readonly result: number | undefined; readonly files: number | undefined }
     | { readonly kind: 'failed'; readonly reason: FailureReason }
     | { readonly kind: 'cancelled'; readonly by: string };
 
@@ -170,6 +172,11 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
             return { at: run.finishedAt, message: { kind: 'failed', reason: run.reason } };
         case 'Cancelled':
             return { at: run.cancelledAt, message: { kind: 'cancelled', by: run.cancelledBy } };
+        case 'Reverted':
+            return {
+                at: run.finishedAt,
+                message: { kind: 'reverted', result: revisionNumber(run.resultRevision), files: files(run.baseRevision, run.resultRevision) },
+            };
     }
 }
 

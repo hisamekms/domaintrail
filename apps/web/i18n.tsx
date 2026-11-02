@@ -410,6 +410,7 @@ const ja = {
             Declined: '辞退',
             Failed: '失敗',
             Cancelled: '取消',
+            Reverted: '取り消し',
         } as Record<RunState, string>,
         failureReasons: {
             RuleNotMet: '成功の条件を満たさない',
@@ -470,6 +471,20 @@ const ja = {
             invite: '招待リンクをコピー',
             inviteHint: 'このページのアドレスです。開いた人は参加者として加わります',
             inviteCopied: (link: string) => `招待リンクをコピーしました: ${link}`,
+            restore: '以前の状態に戻す…',
+            restoreTitle: '以前の状態に戻す',
+            restoreBody:
+                'ワークスペースの .dt と .dtes をすべて、選んだ時点の内容に戻します。あとの作業の変更も消えます。ひとつの作業だけを戻すときは、そのカードの「この作業を取り消す…」を使ってください。',
+            restoreNone: '戻せる以前の状態はありません。',
+            restorePick: (n: number) => `#${n} の状態に戻す`,
+            restorePoints: {
+                SessionStart: 'コラボを始めたとき',
+                RunBase: (name: string) => `「${name}」の前`,
+                RunResult: (name: string) => `「${name}」のあと`,
+                Manual: (who: string) => `${who} が記録したとき`,
+                PreRestore: '以前の状態に戻す前',
+                Restored: '以前の状態に戻したあと',
+            },
             end: 'コラボを終える…',
             endTitle: 'コラボを終えますか？',
             endBody: '全員の画面が閉じ、元に戻せません。チャットと変更の記録は、ワークスペースの .domaintrail に残ります。',
@@ -494,10 +509,10 @@ const ja = {
         },
         restoreFlow: {
             confirm: (what: RestorePoint): string =>
-                what === 'work'
-                    ? 'この作業の前に戻しますか？ ワークスペースの .dt と .dtes がすべて作業の前の内容になり、全員の画面が切り替わります。いまの状態は先に記録しておきます。'
+                what === 'revision'
+                    ? '選んだ時点の状態に戻しますか？ ワークスペースの .dt と .dtes がすべてその時点の内容になり、全員の画面が切り替わります。いまの状態は先に記録しておきます。'
                     : '戻す前の状態に戻しますか？ ワークスペースの .dt と .dtes がすべてその内容になり、全員の画面が切り替わります。いまの状態は先に記録しておきます。',
-            restore: (what: RestorePoint): string => (what === 'work' ? '作業の前に戻す' : '戻す前の状態に戻す'),
+            restore: (what: RestorePoint): string => (what === 'revision' ? 'この状態に戻す' : '戻す前の状態に戻す'),
             cancel: 'やめる',
             close: '閉じる',
             external: (paths: string) =>
@@ -511,8 +526,23 @@ const ja = {
             manual: (cause: string) =>
                 `書き込みの途中で失敗しました（${cause}）。ワークスペースは書きかけかもしれません。手動での復旧が必要です。戻す前の状態は記録してあります。ファイルを確かめてから、その状態に戻してください。`,
             restorePre: '戻す前の状態に戻す…',
-            done: (what: RestorePoint): string => (what === 'work' ? '作業の前に戻しました。' : '戻す前の状態に戻しました。'),
+            done: (what: RestorePoint): string => (what === 'revision' ? '以前の状態に戻しました。' : '戻す前の状態に戻しました。'),
             failed: (m: string) => `戻せませんでした: ${m}`,
+        },
+        // undoing a unit of work from its card (apps/web/session/revisions.tsx)
+        undoFlow: {
+            confirm: (name: string) =>
+                `「${name}」の変更を取り消しますか？ この作業が変えたところだけを元に戻し、あとの作業の変更は残します。あとの変更と重なるなどで機械的に取り消せないときは、AI に取り消しを頼みます。`,
+            undo: '取り消す',
+            cancel: 'やめる',
+            close: '閉じる',
+            mechanical: (name: string) => `「${name}」の変更を取り消しました。`,
+            conflict: (paths: string) => `あとの変更と重なるところがあり（${paths}）、機械的には取り消せませんでした。AI に取り消しを頼みました。`,
+            check: '機械的に取り消すとモデルの検査が通らないため、AI に取り消しを頼みました。',
+            unreadable: '作業の前後の内容が残っていないため、AI に取り消しを頼みました。',
+            run: '実行中の作業があるため取り消せません。作業が終わってから取り消してください。',
+            nothing: 'この作業の変更は、もうワークスペースに残っていません。',
+            failed: (m: string) => `取り消せませんでした: ${m}`,
         },
         chat: {
             close: 'チャットを閉じる',
@@ -560,7 +590,12 @@ const ja = {
             cardUpdated: (name: string) => (name ? `「${name}」が更新されました` : 'AI のカードが更新されました'),
             latest: (count: number, forMe: number) => (forMe > 0 ? `最新へ（あなた宛て ${forMe} 件）` : count > 0 ? `最新へ（新着 ${count} 件）` : '最新へ'),
             cardMenu: 'カードのメニュー',
-            restoreBefore: 'この作業の前に戻す…',
+            undoWork: 'この作業を取り消す…',
+            undoWorkHint: 'この作業が変えたところだけを元に戻します（あとの作業の変更は残ります）',
+            undoBody: (name: string) => `「${name}」の変更を取り消す`,
+            undone: '取り消し済み',
+            undoneHint: '取り消しのカードへ',
+            reverter: '取り消し',
             showChanges: '変更を見る',
             // the revisions behind a card's menu and the stream's notices: in tooltips only
             revisionHint: (n: string) => `リビジョン #${n}`,
@@ -609,7 +644,8 @@ const ja = {
                     NeedsClarification: '確認待ち',
                     Queued: '実行待ち',
                     Running: '実行中',
-                } as Record<'Completed' | 'Failed' | 'Declined' | 'Cancelled' | 'NeedsClarification' | 'Queued' | 'Running', string>,
+                    Reverted: '取り消し',
+                } as Record<'Completed' | 'Failed' | 'Declined' | 'Cancelled' | 'NeedsClarification' | 'Queued' | 'Running' | 'Reverted', string>,
             },
             alternativeNote: (assumption: string, alternative: string) => `前提「${assumption}」は採らず、「${alternative}」としてやり直してください。`,
             handOver: 'ファシリテーターを引き継ぐ',
@@ -683,6 +719,7 @@ const ja = {
                 completedUnchanged: '完了しました。変更はありません。',
                 failedLabel: '失敗',
                 cancelled: (name: string) => `${name} が取り消しました。`,
+                reverted: '変更を機械的に取り消しました（AI は使っていません）。',
             },
             reply: {
                 applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
@@ -712,7 +749,7 @@ const ja = {
                 multiple: '複数選べます',
                 filesUnchangedNote: (files: number) => `（${files} ファイル変更）`,
             },
-            restored: (work: boolean): string => (work ? '作業の前に戻しました' : '以前の状態に戻しました'),
+            restored: (work: boolean): string => (work ? '以前の状態に戻しました' : '戻す前の状態に戻しました'),
             restoredHint: (from: number | undefined, n: number) => `リビジョン #${from ?? '?'} を復元（#${n}）`,
             showMore: '続きを表示',
             target: '対象',
@@ -1124,6 +1161,7 @@ const en: Messages = {
             Declined: 'Declined',
             Failed: 'Failed',
             Cancelled: 'Cancelled',
+            Reverted: 'Undone',
         },
         failureReasons: {
             RuleNotMet: 'The success rule was not met',
@@ -1183,6 +1221,20 @@ const en: Messages = {
             invite: 'Copy the invite link',
             inviteHint: "This page's address: whoever opens it joins as a participant",
             inviteCopied: (link) => `Invite link copied: ${link}`,
+            restore: 'Restore an earlier state…',
+            restoreTitle: 'Restore an earlier state',
+            restoreBody:
+                "Every .dt and .dtes of the workspace becomes as it was at the point you choose, later work's changes included. To take back one piece of work only, use its card's “Undo this work…”.",
+            restoreNone: 'There is no earlier state to restore.',
+            restorePick: (n) => `Restore the state #${n}`,
+            restorePoints: {
+                SessionStart: 'When the collab started',
+                RunBase: (name) => `Before “${name}”`,
+                RunResult: (name) => `After “${name}”`,
+                Manual: (who) => `Recorded by ${who}`,
+                PreRestore: 'Before a restore',
+                Restored: 'After a restore',
+            },
             end: 'End the collab…',
             endTitle: 'End the collab?',
             endBody: "Everyone's page closes, and it cannot be undone. The chat and the record of changes stay in the workspace's .domaintrail.",
@@ -1207,10 +1259,10 @@ const en: Messages = {
         },
         restoreFlow: {
             confirm: (what) =>
-                what === 'work'
-                    ? "Restore as before this work? Every .dt and .dtes of the workspace becomes as it was before the work, on everyone's page. The current state is recorded first."
+                what === 'revision'
+                    ? "Restore the state you chose? Every .dt and .dtes of the workspace becomes as it was then, on everyone's page. The current state is recorded first."
                     : "Restore the state before the restore? Every .dt and .dtes of the workspace becomes that state, on everyone's page. The current state is recorded first.",
-            restore: (what) => (what === 'work' ? 'Restore as before the work' : 'Restore the state before the restore'),
+            restore: (what) => (what === 'revision' ? 'Restore this state' : 'Restore the state before the restore'),
             cancel: 'Cancel',
             close: 'Close',
             external: (paths) =>
@@ -1224,8 +1276,22 @@ const en: Messages = {
             manual: (cause) =>
                 `The restore failed while writing (${cause}). The workspace may be half written: manual recovery needed. The state before the restore is recorded; check the files, then restore it.`,
             restorePre: 'Restore the state before the restore…',
-            done: (what) => (what === 'work' ? 'Restored as before the work.' : 'Restored the state before the restore.'),
+            done: (what) => (what === 'revision' ? 'Restored an earlier state.' : 'Restored the state before the restore.'),
             failed: (m) => `Not restored: ${m}`,
+        },
+        undoFlow: {
+            confirm: (name) =>
+                `Undo the changes of “${name}”? Only what this work changed goes back; later work's changes stay. When it cannot be undone mechanically (later changes overlap it, say), the AI is asked to undo it.`,
+            undo: 'Undo',
+            cancel: 'Cancel',
+            close: 'Close',
+            mechanical: (name) => `Undid the changes of “${name}”.`,
+            conflict: (paths) => `Later changes overlap it (${paths}): it could not be undone mechanically. The AI is asked to undo it.`,
+            check: 'Undone mechanically, the model would not check: the AI is asked to undo it.',
+            unreadable: 'The contents before and after the work are gone: the AI is asked to undo it.',
+            run: 'A run is in progress: undo once it has ended.',
+            nothing: "None of this work's changes are left in the workspace.",
+            failed: (m) => `Not undone: ${m}`,
         },
         chat: {
             close: 'Close the chat',
@@ -1272,7 +1338,12 @@ const en: Messages = {
             cardUpdated: (name) => (name ? `"${name}" was updated` : 'An AI card was updated'),
             latest: (count, forMe) => (forMe > 0 ? `Jump to latest (${forMe} for you)` : count > 0 ? `Jump to latest (${count} new)` : 'Jump to latest'),
             cardMenu: "The card's menu",
-            restoreBefore: 'Restore as before this work…',
+            undoWork: 'Undo this work…',
+            undoWorkHint: "Takes back only what this work changed (later work's changes stay)",
+            undoBody: (name) => `Undo the changes of “${name}”`,
+            undone: 'Undone',
+            undoneHint: 'To the card of the undo',
+            reverter: 'Undo',
             showChanges: 'See the changes',
             revisionHint: (n) => `Revision #${n}`,
             revisionsHint: (a, b) => `Revisions #${a} → #${b}`,
@@ -1320,6 +1391,7 @@ const en: Messages = {
                     NeedsClarification: 'waiting for an answer',
                     Queued: 'queued',
                     Running: 'running',
+                    Reverted: 'undone',
                 },
             },
             alternativeNote: (assumption, alternative) => `Do not assume "${assumption}": redo it with "${alternative}".`,
@@ -1393,6 +1465,7 @@ const en: Messages = {
                 completedUnchanged: 'Done. Nothing changed.',
                 failedLabel: 'Failed',
                 cancelled: (name) => `Cancelled by ${name}.`,
+                reverted: 'Undid the changes mechanically (no AI involved).',
             },
             reply: {
                 applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),
@@ -1422,7 +1495,7 @@ const en: Messages = {
                 multiple: 'Several may be chosen',
                 filesUnchangedNote: (files) => ` (${files} ${files === 1 ? 'file' : 'files'} changed)`,
             },
-            restored: (work) => (work ? 'Restored as before the work' : 'Restored an earlier state'),
+            restored: (work) => (work ? 'Restored an earlier state' : 'Restored the state before a restore'),
             restoredHint: (from, n) => `Revision #${from ?? '?'} restored (#${n})`,
             showMore: 'Show more',
             target: 'About',

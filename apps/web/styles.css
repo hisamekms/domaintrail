@@ -4084,11 +4084,35 @@ del.was.block {
     font-size: 0.75rem;
     padding: 1px 6px;
 }
-.session-restore p {
+.session-restore p,
+.session-undo p {
     margin: 0 0 6px;
 }
-.session-restore .session-buttons button.primary {
+.session-restore .session-buttons button.primary,
+.session-undo .session-buttons button.primary {
     margin-top: 0;
+}
+/* the collab menu's 以前の状態に戻す…: the earlier states, newest first, each a row to choose */
+.collab-restore-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 50vh;
+    overflow-y: auto;
+}
+.collab-restore-list button {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+    width: 100%;
+    text-align: left;
+}
+.collab-restore-list .collab-restore-number {
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
 }
 .session-dialog {
     width: min(68.75rem, calc(100vw - 32px));
@@ -6157,6 +6181,11 @@ button.add-to-request.added:hover {
 }
 .reply-assumption-text.unchosen {
     color: var(--muted);
+}
+/* an assumption of a run whose changes were undone: closed, nothing chosen, struck through */
+.reply-assumption-text.undone {
+    color: var(--muted);
+    text-decoration: line-through;
 }
 /* ◉ / ○ at the start of a decided assumption's text, in its first line */
 .reply-assumption-text > .choice-mark {

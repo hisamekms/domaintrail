@@ -12,17 +12,18 @@ import { participantAvatars, participantNames } from './stream';
  * start`); a solo page (`dt view`, one person) would get a menu of its own here, 「👤 1 人 ▾」 with `start` (コラボを始める),
  * once the page can start one.
  */
-export type CollabMenuItem = 'invite' | 'record' | 'hand-over' | 'end' | 'leave';
+export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'end' | 'leave';
 
 /**
  * The actions of the collab menu for a role. Everyone can copy the invite link. The facilitator records the workspace,
- * hands the role over and ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
+ * restores an earlier state of it (the last resort: a unit of work is undone from its card), hands the role over and
+ * ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
  * participant), or end it. `live` false (ended, or signed out): only the list.
  */
 export function collabMenuItems(role: Me['participant']['role'], live: boolean): CollabMenuItem[] {
     if (!live) return [];
-    return role === 'facilitator' ? ['invite', 'record', 'hand-over', 'end'] : ['invite', 'leave'];
+    return role === 'facilitator' ? ['invite', 'record', 'restore', 'hand-over', 'end'] : ['invite', 'leave'];
 }
 
 /**

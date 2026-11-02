@@ -1,12 +1,13 @@
 // The revisions as the chat's menus reach them (ADR 0026, S7 and the amendments "messages and apply" and "changes in the
 // model's words"): what a unit of work changed, in a dialog — the model's elements added, changed and removed, then,
 // folded, the comparison of its two revisions (each changed file's status and line diff, `.dt` and `.dtes` together,
-// and the validations when either has a finding); and, for the facilitator, recording the current state and restoring,
-// with the two-step for external changes and the way through a run in progress. The words are the unit's: a revision
-// and its number are only in tooltips and in the source diff.
+// and the validations when either has a finding); and, for the facilitator, recording the current state, undoing a unit
+// of work (from its card: mechanically, or by the AI) and restoring an earlier state (from the collab menu, the last
+// resort), with the two-step for external changes and the way through a run in progress. The words are the unit's: a
+// revision and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import type { ComparedFileBody, ComparisonBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { ComparedFileBody, ComparisonBody, SessionStateBody, UndoneBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
 import { ChangeChip } from './card';
@@ -24,8 +25,23 @@ const LANGUAGES = ['Dt', 'Dtes'] as const;
 const failure = (e: unknown): string => (e instanceof SessionApiError ? (e.message && e.message !== e.type ? `${e.type}: ${e.message}` : e.type) : String(e));
 const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-/** What a restore goes back to: the state before a unit of work, or the one kept before a restore that failed midway. */
-export type RestorePoint = 'work' | 'preRestore';
+/** What a restore goes back to: an earlier state chosen in the collab menu, or the one kept before a restore that failed midway. */
+export type RestorePoint = 'revision' | 'preRestore';
+
+/** Where an undo of a unit of work stands: asked first, then how it went. */
+type UndoFlow = { readonly run: string; readonly name: string } & (
+    | { readonly step: 'confirm' }
+    | { readonly step: 'done'; readonly undone: UndoneBody }
+    | { readonly step: 'run' }
+    | { readonly step: 'nothing' }
+    | { readonly step: 'failed'; readonly message: string }
+);
+
+/** A unit of work to undo: its latest run, and its name as the chat shows it. */
+export interface UndoSubject {
+    readonly run: string;
+    readonly name: string;
+}
 
 /** Where a restore stands: what the facilitator is asked next. */
 type RestoreFlow = { readonly what: RestorePoint } & (
@@ -52,7 +68,10 @@ export interface RevisionTools {
     /** The changes' dialog, while one is open: placed outside the tabs, so that AI の作業 opens it too. */
     readonly dialog: ReactNode;
     showChanges(subject: ChangesSubject): void;
+    /** Restores an earlier state of the workspace (asked first): the collab menu's last resort. */
     restore(revision: string): void;
+    /** Undoes a unit of work (asked first): its changes only, mechanically or by the AI. */
+    undo(subject: UndoSubject): void;
     take(): void;
     /** A revision's number in the session (`#3`), for tooltips. */
     number(id: string): string;
@@ -67,6 +86,7 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
     const numberOf = new Map(entries.map((e) => [e.revision.id, e.number]));
     const [showing, setShowing] = useState<ChangesSubject | undefined>();
     const [flow, setFlow] = useState<RestoreFlow | undefined>();
+    const [undoing, setUndoing] = useState<UndoFlow | undefined>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
     const n = (id: string): string => String(numberOf.get(id) ?? '?');
@@ -99,12 +119,27 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
             setBusy(false);
         }
     };
+    const undo = async (subject: UndoSubject): Promise<void> => {
+        setBusy(true);
+        try {
+            const undone = await sessionApi.undoRun(subject.run, tx.chat.undoBody(subject.name));
+            setUndoing({ ...subject, step: 'done', undone });
+        } catch (e) {
+            const type = e instanceof SessionApiError ? e.type : undefined;
+            if (type === 'RunInProgress') setUndoing({ ...subject, step: 'run' });
+            else if (type === 'NothingToUndo') setUndoing({ ...subject, step: 'nothing' });
+            else setUndoing({ ...subject, step: 'failed', message: failure(e) });
+        } finally {
+            setBusy(false);
+        }
+    };
     const cancelRun = async (what: RestorePoint, revision: string, run: string): Promise<void> => {
         if (await act(() => sessionApi.cancelRun(run))) setFlow({ what, step: 'run', revision, run, cancelled: true });
     };
 
     const node = (
         <>
+            {undoing && <UndoBox flow={undoing} busy={busy} onUndo={() => void undo(undoing)} onClose={() => setUndoing(undefined)} tx={tx} />}
             {flow && (
                 <RestoreBox
                     flow={flow}
@@ -127,10 +162,56 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
         node,
         dialog: showing && <ChangesDialog subject={showing} n={n} entries={entries} onClose={() => setShowing(undefined)} />,
         showChanges: setShowing,
-        restore: (revision) => setFlow({ what: 'work', step: 'confirm', revision }),
+        restore: (revision) => {
+            setUndoing(undefined);
+            setFlow({ what: 'revision', step: 'confirm', revision });
+        },
+        undo: (subject) => {
+            setFlow(undefined);
+            setUndoing({ ...subject, step: 'confirm' });
+        },
         take: () => void act(() => sessionApi.takeRevision()),
         number: n,
     };
+}
+
+/** The undo of a unit of work in the chat: asked first, then whether it was undone mechanically or sent to the AI, and why. */
+function UndoBox(props: { flow: UndoFlow; busy: boolean; onUndo: () => void; onClose: () => void; tx: Tx }) {
+    const { flow, busy, tx } = props;
+    const u = tx.undoFlow;
+    const body = ((): { text: string; error?: boolean } => {
+        switch (flow.step) {
+            case 'confirm':
+                return { text: u.confirm(flow.name) };
+            case 'done': {
+                const d = flow.undone;
+                if (d.way === 'mechanical') return { text: u.mechanical(flow.name) };
+                const o = d.obstacle;
+                return { text: o.kind === 'conflict' ? u.conflict(o.paths.join(', ')) : o.kind === 'check' ? u.check : u.unreadable };
+            }
+            case 'run':
+                return { text: u.run, error: true };
+            case 'nothing':
+                return { text: u.nothing };
+            case 'failed':
+                return { text: u.failed(flow.message), error: true };
+        }
+    })();
+    return (
+        <div className={`session-note session-undo step-${flow.step}${body.error ? ' session-error' : ''}`} role="status">
+            <p>{body.text}</p>
+            <div className="session-buttons">
+                {flow.step === 'confirm' && (
+                    <button className="primary session-undo-confirm" disabled={busy} onClick={props.onUndo}>
+                        {u.undo}
+                    </button>
+                )}
+                <button className="small" onClick={props.onClose}>
+                    {flow.step === 'confirm' ? u.cancel : u.close}
+                </button>
+            </div>
+        </div>
+    );
 }
 
 function RestoreBox(props: {
