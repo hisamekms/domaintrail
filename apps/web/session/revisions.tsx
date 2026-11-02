@@ -1,8 +1,9 @@
 // The revisions as the chat's menus reach them (ADR 0026, S7 and the amendments "messages and apply" and "changes in the
 // model's words"): what a unit of work changed, in a dialog — the model's elements added, changed and removed, then,
-// folded, the comparison of its two revisions for engineers (each file's status and line diff, `.dt` and `.dtes`
-// together); and, for the facilitator, confirming (a mark, never a gate), recording the current state and restoring,
-// with the two-step for external changes and the way through a run in progress. The words are the unit's: a revision
+// folded, the comparison of its two revisions (each changed file's status and line diff, `.dt` and `.dtes` together,
+// and the validations when either has a finding); and, for the facilitator, confirming (a mark, never a gate),
+// recording the current state and restoring, with the two-step for external changes and the way through a run in
+// progress. The words are the unit's: a revision
 // and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
@@ -219,8 +220,8 @@ function RestoreBox(props: {
 
 /**
  * この作業の変更: the unit's name, whose messages and when; the elements it added, changed and removed (only the groups it
- * has), each with what it is, a click closing the dialog and going to it; at the bottom, folded, the source diff for
- * engineers — the comparison of the two revisions, asked for when it is first opened. When the model could not be
+ * has), each with what it is, a click closing the dialog and going to it; at the bottom, folded, the source diff — the
+ * comparison of the two revisions, asked for when it is first opened. When the model could not be
  * compared, a line says so and the source diff is open.
  */
 function ChangesDialog(props: { subject: ChangesSubject; n: (id: string) => string; entries: readonly TimelineEntry[]; onClose: () => void }) {
@@ -320,33 +321,36 @@ function ChangesDialog(props: { subject: ChangesSubject; n: (id: string) => stri
 
 function ComparisonView({ data, n, tx }: { data: ComparisonBody; n: (id: string) => string; tx: Tx }) {
     const c = tx.comparison;
+    // only the files that changed, by language; the validations only when either side has a finding
+    const changed = data.files.filter((f) => f.status !== 'unchanged');
+    const findings = VALIDATION_ROWS.some((k) => data.before.validation[k] > 0 || data.after.validation[k] > 0);
     return (
         <>
-            <ValidationSides before={data.before.validation} after={data.after.validation} labels={[`#${n(data.before.id)}`, `#${n(data.after.id)}`]} tx={tx} />
+            {findings && (
+                <ValidationSides
+                    before={data.before.validation}
+                    after={data.after.validation}
+                    labels={[`#${n(data.before.id)}`, `#${n(data.after.id)}`]}
+                    tx={tx}
+                />
+            )}
             {data.diffsOmitted && <p className="session-note">{c.omitted}</p>}
+            {changed.length === 0 && <p className="muted small">{c.noChanges}</p>}
             {LANGUAGES.map((lang) => {
-                const files = data.files.filter((f) => f.language === lang);
+                const files = changed.filter((f) => f.language === lang);
                 if (files.length === 0) return null;
                 const counts = data.counts[lang];
-                const changed = files.filter((f) => f.status !== 'unchanged');
-                const unchanged = files.filter((f) => f.status === 'unchanged');
                 return (
                     <section key={lang} className={`session-comparison-language lang-${lang}`}>
                         <h3>
                             {c.languages[lang]}{' '}
                             <span className="muted small">
-                                {(['added', 'removed', 'changed', 'unchanged'] as const).map((s) => `${c.statuses[s]} ${counts[s]}`).join(' · ')}
+                                {(['added', 'removed', 'changed'] as const).map((s) => `${c.statuses[s]} ${counts[s]}`).join(' · ')}
                             </span>
                         </h3>
-                        {changed.length === 0 && <p className="muted small">{c.noChanges}</p>}
-                        {changed.map((f) => (
+                        {files.map((f) => (
                             <FileDiff key={f.path} file={f} tx={tx} />
                         ))}
-                        {unchanged.length > 0 && (
-                            <p className="muted small session-unchanged">
-                                {c.statuses.unchanged}: {unchanged.map((f) => f.path).join(', ')}
-                            </p>
-                        )}
                     </section>
                 );
             })}
