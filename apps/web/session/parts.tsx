@@ -1,5 +1,5 @@
 // Pieces the session's chat and the facilitator's panel share: avatars, errors, and a request's targets and body
-// (a line of its targets with each one's status, mentions of elements and people as links).
+// (a row of its targets as chips with each one's status, mentions of elements and people as links).
 import { Fragment } from 'react';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
@@ -9,7 +9,7 @@ import { parseBody } from './mentions';
 import { useTargetNaming } from './naming';
 import { initials, participantColor } from './presence';
 import { targetText } from './stream';
-import { targetKey, targetShortName, type ModelTarget } from './targets';
+import { targetKey, type ModelTarget } from './targets';
 
 type Tx = Messages['session'];
 type FrozenRequest = SessionStateBody['runs'][number]['input']['requests'][number];
@@ -31,8 +31,8 @@ export function Avatar({ id, name, url }: { id: string; name: string; url?: stri
 type Snapshot = FrozenRequest['targets'][number];
 
 /**
- * A target of a sent request, by its own name (its whole name in the tooltip): a link to it while it is in the sources,
- * else its name marked stale or unknown.
+ * A target of a sent request as a read-only chip, named as a mention of it in the body is (`#注文`; its whole name in
+ * the tooltip): a link to it while it is in the sources, else its name marked stale or unknown.
  */
 export function TargetChip({
     target,
@@ -47,8 +47,8 @@ export function TargetChip({
 }) {
     const naming = useTargetNaming();
     const text = targetText(target, tx.workspace, naming);
-    const shown = (naming && targetShortName(target.target, naming)) ?? text;
-    const kind = `chat-target kind-${target.target.kind}`;
+    const shown = <span className="chat-chip-name">#{text}</span>;
+    const kind = `chat-chip chat-target kind-${target.target.kind}`;
     if (status === 'current' && target.target.kind !== 'Workspace')
         return (
             <a className={kind} onClick={() => onNavigate(target.target)} data-tooltip={`${text}\n${tx.targetStatusHint.current}`}>
@@ -65,7 +65,10 @@ export function TargetChip({
     );
 }
 
-/** A request's targets on one line above its body (`→ 注文、請求書`), each with its status; none (the whole workspace): no line. */
+/**
+ * A request's targets above its body as a row of read-only chips (`#注文` `#請求書`, wrapping), each with its status;
+ * none (the whole workspace): no row.
+ */
 export function TargetChips(props: {
     targets: readonly Snapshot[];
     statuses: readonly TargetStatus[] | undefined;
@@ -75,15 +78,11 @@ export function TargetChips(props: {
     const { targets, tx } = props;
     if (targets.length === 0) return null;
     return (
-        <p className="chat-targets">
-            <span aria-hidden>→ </span>
+        <div className="chat-targets" role="group" aria-label={tx.chat.target}>
             {targets.map((t, i) => (
-                <Fragment key={targetKey(t.target)}>
-                    {i > 0 && tx.chat.listSeparator}
-                    <TargetChip target={t} status={props.statuses?.[i]} onNavigate={props.onNavigate} tx={tx} />
-                </Fragment>
+                <TargetChip key={targetKey(t.target)} target={t} status={props.statuses?.[i]} onNavigate={props.onNavigate} tx={tx} />
             ))}
-        </p>
+        </div>
     );
 }
 

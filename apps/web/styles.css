@@ -3911,16 +3911,19 @@ del.was.block {
 .chat-agent-avatar {
     background: var(--accent);
 }
-/* a sent message's targets: one line of links above its body (`→ 注文、請求書`) */
+/* a sent message's targets: a row of read-only chips above its body (`#注文` `#請求書`), wrapping; the chips are the
+   composer's (`.chat-chip`), without the number and the × */
 .chat-targets {
-    margin: 0 0 2px;
-    color: var(--muted);
-    font-size: 0.75rem;
-    line-height: 1.5;
-    word-break: break-word;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0 0 4px;
+    min-width: 0;
 }
-.chat-target {
+.chat-chip.chat-target {
+    padding: 0 6px;
     color: var(--muted);
+    line-height: 1.5;
 }
 .pane a.chat-target {
     color: var(--accent);
@@ -3928,11 +3931,10 @@ del.was.block {
     cursor: pointer;
 }
 .pane a.chat-target:hover {
-    text-decoration: underline;
+    background: var(--hover);
 }
-.chat-target.stale {
+.chat-target.stale .chat-chip-name {
     text-decoration: line-through;
-    color: var(--muted);
 }
 .chat-text {
     margin: 0;

@@ -53,7 +53,7 @@ tags, see below).
 ## What the scenarios show
 
 - `chat`: consecutive messages by one person, the facilitator's own messages, targets of each kind (a `.dt` element, a
-  state, a command, a storming element, an occurrence) and the whole workspace (no target line), `#name[n]` mentions
+  state, a command, a storming element, an occurrence) and the whole workspace (no target chips), `#name[n]` mentions
   (and one `@name[n]`, as bodies were written before), people mentioned (`@name[pN]`: two in one message, the
   facilitator in the long one, an element and two people together — sign in as 田中 or 鈴木 to see them marked), a long message
   (clamped), 依頼 / 会話 / no tag, applied marks, and two targets a run then renames and removes (stale).
