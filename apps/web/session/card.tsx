@@ -215,7 +215,8 @@ function RunSection({ run, display, first, last, compact }: { run: CardRun; disp
             )}
             <div className="run-agent-body">
                 <AgentBody message={run.message} />
-                <RunFiles run={run.run} />
+                {/* in AI の作業, the unit's own line above already lists the files */}
+                {!compact && <RunFiles run={run.run} />}
                 {(asking || voting || decided) && reply && questions && (
                     <ReplySection kind="ask">
                         {asking && <AnswerForm run={run.run} reply={reply} />}
