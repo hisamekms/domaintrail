@@ -51,7 +51,7 @@
   "scripts": {
     "langium:generate": "langium generate --file contexts/modeling/langium-config.json && langium generate --file contexts/storming/langium-config.json",
     "build": "bun run langium:generate && bun ./scripts/build.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "lint": "oxlint --type-aware --deny-warnings",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
