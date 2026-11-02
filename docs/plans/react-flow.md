@@ -181,7 +181,7 @@ which also makes the canvas read-only, keeps the pointer cursor over clickable i
 - **`watch`** runs its effects once per task (a microtask) after any change of the adapter's state or React Flow's
   store; `useCanvasValue` keeps the previous value when the new one is equal (`sameValue`), so that an effect that
   returns a fresh object does not render on every pointer move.
-- **The attribution** stays (bottom-right); **`window.__domaintrailEditor`** is gone (nothing used it).
+- **The attribution** is hidden (`proOptions.hideAttribution`, the maintainer's decision); **`window.__domaintrailEditor`** is gone (nothing used it).
 - **Culling.** `onlyRenderVisibleElements`: an edge is drawn when the box of its two nodes is in view (see ADR 0029,
   Consequences).
 

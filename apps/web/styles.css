@@ -1415,7 +1415,6 @@ a.field-origin {
     --xy-background-color: var(--canvas-bg);
     --xy-selection-background-color: color-mix(in srgb, var(--canvas-outline) 8%, transparent);
     --xy-selection-border: 1px solid var(--canvas-outline);
-    --xy-attribution-background-color: color-mix(in srgb, var(--canvas-bg) 70%, transparent);
 }
 /* the background shows the arrow, as it did; a drag on it pans */
 .diagram-canvas .react-flow__pane.draggable {
@@ -2423,7 +2422,7 @@ select,
     display: flex;
     flex-direction: column;
 }
-/* the floating button opening it while it is closed, at the bottom right of the canvas (above React Flow's attribution) */
+/* the floating button opening it while it is closed, at the bottom right of the canvas */
 .launcher-slot {
     position: absolute;
     right: 18px;

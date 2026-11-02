@@ -66,8 +66,7 @@ no hand tool, so `H` does nothing), the wheel or a trackpad's two fingers pan, a
 around the pointer. A click selects an item and Shift-click adds one (or takes it out); Shift + drag draws a selection
 box; `Escape` clears the selection. Once you clicked a canvas, `+` / `-` zoom, `Shift+0` goes back to 100% and, in the
 inspector's diagram, `Shift+1` / `Shift+2` fit everything or the selection. The levels go from 5% to 800%, and − and +
-step through 5, 10, 25, 50, 100, 200, 400 and 800%. React Flow's attribution sits in the canvas's bottom-right corner
-([ADR 0029](adr/0029-react-flow-canvas.md)).
+step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-flow-canvas.md)).
 
 - **Context Map**: one node per bounded context and one edge per dependency between contexts, labeled with the number
   of ID references and borrowed types (solid when types are borrowed). Shared contexts and contexts that only declare

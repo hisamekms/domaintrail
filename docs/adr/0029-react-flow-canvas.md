@@ -61,9 +61,9 @@ loopback) showed no diagram at all.
   to the selection, `Escape` clears it, and once a canvas was clicked `+` / `-`, `Shift+0` (100%) and, in the
   inspector's diagram, `Shift+1` / `Shift+2` work as tldraw's did. Ctrl / ⌘ + A (select all) and tldraw's other
   shortcuts are gone. *For the maintainer to confirm.*
-- **Attribution.** React Flow shows a small "React Flow" link in the bottom-right corner of each canvas. MIT allows
-  hiding it (`proOptions.hideAttribution`), which React Flow asks only of its Pro subscribers; it is kept visible for
-  now, and does not cover the canvas's controls, the legend or the chat's launcher. *For the maintainer to decide.*
+- **Attribution.** React Flow shows a small "React Flow" link in the bottom-right corner of each canvas unless
+  `proOptions.hideAttribution` is set. The licence (MIT) allows hiding it; React Flow asks that only its Pro
+  subscribers do. *Decided by the maintainer (2026-11-03):* hidden, so that nothing but the model sits on the canvas.
 - **The zoom steps, margins and limits are kept** (5%–800%, the steps above), not React Flow's (×1.2 per step,
   50%–200% by default).
 - The look is unchanged: the canvas's background and the outline of the hovered or selected item keep tldraw's colours

@@ -654,6 +654,8 @@ function Flow({ onMount }: { onMount: (canvas: DiagramCanvas) => void }): ReactN
                 edges={edges}
                 nodeTypes={NODE_TYPES}
                 edgeTypes={EDGE_TYPES}
+                // no "React Flow" link in the corner (ADR 0029, Attribution)
+                proOptions={{ hideAttribution: true }}
                 onInit={onInit}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
