@@ -33,6 +33,7 @@
     --p-slate-550: #5e6b7f;
     --p-slate-600: #475569;
     --p-slate-700: #334155;
+    --p-slate-800: #1e293b;
     --p-slate-900: #0f172a;
     --p-night-500: #64708a;
     --p-night-600: #465066;
@@ -62,7 +63,9 @@
     --p-orange-100: #ffedd5;
     --p-orange-300: #fdba74;
     --p-orange-400: #fb923c;
+    --p-orange-600: #ea580c;
     --p-orange-700: #c2410c;
+    --p-orange-800: #9a3412;
     --p-orange-950: #431407;
     --p-orange-night: #43291a;
     --p-blue-50: #eff6ff;
@@ -102,15 +105,19 @@
     --p-green-100: #dcfce7;
     --p-green-300: #86efac;
     --p-green-700: #15803d;
+    --p-green-800: #166534;
     --p-green-night: #14321f;
     --p-teal-100: #ccfbf1;
     --p-teal-300: #5eead4;
     --p-teal-700: #0f766e;
+    --p-teal-800: #115e59;
     --p-teal-night: #12332f;
+    --p-red-50: #fef2f2;
     --p-red-100: #fee2e2;
     --p-red-300: #fca5a5;
     --p-red-600: #dc2626;
     --p-red-700: #b91c1c;
+    --p-red-800: #991b1b;
     --p-red-900: #7f1d1d;
     --p-red-night: #4b222a;
     --p-rose-100: #ffe4e6;
@@ -159,6 +166,8 @@
     /* the local selection: selected rows, the open list, pressed toggles */
     --selected-bg: var(--p-indigo-50);
     --selected-text: var(--p-indigo-900);
+    /* the local selection on the canvas: a ring outside the node, apart from its kind's edge and the change's ring */
+    --selected-ring: var(--action);
     /* a control that cannot be used now (not held to the contrast minimum, by WCAG's exception) */
     --disabled-bg: var(--p-slate-100);
     --disabled-text: var(--p-slate-400);
@@ -174,6 +183,14 @@
     --backdrop: rgba(15, 23, 42, 0.35);
     --legend-bg: rgba(255, 255, 255, 0.92);
     --resizer: color-mix(in srgb, var(--action) 35%, transparent);
+    /* the source view's syntax colours (AA on the surface and on the error, warning and selected rows) */
+    --syntax-keyword: var(--p-violet-700);
+    --syntax-type: var(--p-blue-700);
+    --syntax-primitive: var(--p-teal-800);
+    --syntax-literal: var(--p-orange-800);
+    --syntax-comment: var(--p-slate-600);
+    --syntax-doc: var(--p-green-800);
+    --gutter: var(--p-slate-400);
     /* older names of the theme tokens */
     --panel: var(--surface);
     --text-soft: var(--text-secondary);
@@ -182,7 +199,8 @@
     /* ---------- 3. meaning ---------- */
     /* Event Storming sticky notes (issue #33 §3.2, the convention: event orange, command blue, policy purple,
        aggregate yellow, read model green, hotspot red; actor pale yellow, external system fuchsia): the paper, its
-       edge and its text. Light: pale paper, dark text; dark: deep paper, pale text (the theme's text also reads on it). */
+       edge and its text, on the canvas's notes, the inspector's kind chips and the legend's key. Light: pale paper,
+       dark text; dark: deep paper, pale text (the theme's text also reads on it). */
     --es-event: var(--p-orange-400);
     --es-event-border: var(--p-orange-700);
     --es-event-text: var(--p-orange-950);
@@ -207,8 +225,14 @@
     --es-external: var(--p-fuchsia-200);
     --es-external-border: var(--p-fuchsia-600);
     --es-external-text: var(--p-fuchsia-950);
-    /* the timeline's arrows (an event's hue: an order of events, not a warning) */
-    --es-sequence: var(--p-orange-700);
+    /* a timeline's group of events: a frame of the event's hue, its caption in the event's text */
+    --es-group-border: var(--es-event-border);
+    --es-group-bg: color-mix(in srgb, var(--es-event) 35%, transparent);
+    --es-group-text: var(--es-event-text);
+    /* the timeline's arrows and their labels (an event's hue: an order of events, not a warning; a clear orange, apart
+       from the red of an error, and dashed) */
+    --es-sequence: var(--p-orange-600);
+    --es-sequence-text: var(--p-orange-800);
     /* Domain Modeling concepts (issue #33 §3.3): neutral cards; the concept's hue on a stripe, label or border
        (accent), and the faint background of a chip (tint). The aggregate root takes the brand's indigo, by design. */
     --model-context: var(--p-slate-500);
@@ -225,6 +249,18 @@
     --model-event-tint: var(--p-orange-100);
     --model-policy: var(--p-violet-600);
     --model-policy-tint: var(--p-violet-100);
+    /* a state of an aggregate: neutral (the states carry no meaning of their own; the arrows and names tell the way) */
+    --model-state: var(--p-slate-600);
+    --model-state-tint: var(--p-slate-100);
+    /* a domain error (a declared `error`, a kind of the model): not a diagnostic, though of the red family */
+    --model-error: var(--p-red-800);
+    --model-error-tint: var(--p-red-50);
+    /* the diagrams' lines: owns and transitions' default (edge), the dotted relations (quiet), the edges' labels, and
+       the strongest ink (field names, the composition's diamond, the initial state) */
+    --model-edge: var(--p-slate-600);
+    --model-edge-quiet: var(--p-slate-450);
+    --model-edge-label: var(--p-slate-700);
+    --model-ink: var(--p-slate-800);
 
     /* ---------- 4. status and diff ---------- */
     /* how something went (issue #33 §3.4): ink for text and icons, bg for its block, the ink as a solid fill with
@@ -283,64 +319,30 @@
     --on-participant: var(--p-white);
     --participant-halo: var(--surface);
 
-    /* ---------- hues of the diagrams (to be replaced by the meaning tokens above) ---------- */
-    /* strong (borders, lines), text, tint (badge backgrounds), wash (node backgrounds); violet is the old accent's
-       family and now follows the brand's indigo */
-    --violet: var(--p-indigo-600);
+    /* ---------- older hues, kept for the chat and the chrome until their tasks move them ---------- */
+    /* the diagrams no longer use them (they use the meaning tokens above); violet is the old accent's family and now
+       follows the brand's indigo */
     --violet-text: var(--p-indigo-800);
     --violet-tint: var(--selected-bg);
     --violet-soft: #f5f7ff;
-    --violet-wash: #fafbff;
     --violet-border: var(--p-indigo-200);
-    --purple: #8a4fd6;
-    --purple-text: #6a2fb5;
-    --purple-tint: #f1e6ff;
-    --purple-wash: #faf6ff;
-    --blue: #3b82c4;
-    --blue-text: #1c5fa8;
     --blue-tint: #e0f0ff;
     --blue-wash: #f2f8ff;
-    --green: #2f9a5f;
     --green-text: #1a7a45;
     --green-tint: #e3f6ec;
-    --green-wash: #f1fbf5;
-    --teal: #2f9a8a;
-    --teal-light: #4fb3b1;
-    --teal-text: #19706f;
-    --teal-text2: #146b63;
-    --teal-tint: #e6f4f4;
-    --teal-tint2: #e0f4f2;
-    --teal-wash: #f0faf8;
-    /* the event's dot and band (not the brand's amber) */
-    --amber: var(--model-event);
     --amber-text: #8a5a00;
     --amber-tint: #fff1d6;
     --red-text: #a52a2a;
     --red-tint: #fde3e3;
-    --orange-text: #a3480f;
     --grey: var(--p-slate-400);
-    --grey-text: #7b8698;
     --grey-border: var(--p-slate-300);
 
-    /* canvas */
+    /* canvas: the cards' surface and dividers, a stub's paper, a bounded context's frame */
     --node-bg: var(--surface);
     --node-divider: var(--p-slate-200);
-    --ink-strong: #1e293b;
     --stub-bg: var(--p-slate-50);
-    --context-bg: rgba(241, 245, 249, 0.6);
-    --context-label: var(--p-slate-600);
-    --boundary-border: var(--p-indigo-400);
-    --boundary-bg: rgba(238, 242, 255, 0.5);
-    --shared-bg: rgba(230, 244, 244, 0.6);
-    --edge: #556070;
-    --edge-label: var(--p-slate-700);
-    --ref-edge: #3a6fd8;
-    --ref-label: #2f5fbf;
+    --context-bg: color-mix(in srgb, var(--surface-muted) 60%, transparent);
 
-    /* source */
-    --gutter: var(--p-slate-400);
-    --keyword: #8a2fb5;
-    --doc-comment: #3c7a3a;
     /* type and spacing of the session's views: three text roles, five spacing steps */
     --fs-body: 0.875rem;
     --fs-small: 0.75rem;
@@ -384,6 +386,13 @@
     --neutral-tint: var(--p-night-700);
     --shadow: rgba(0, 0, 0, 0.5);
     --legend-bg: rgba(25, 29, 43, 0.92);
+    --syntax-keyword: var(--p-violet-300);
+    --syntax-type: var(--p-blue-300);
+    --syntax-primitive: var(--p-teal-300);
+    --syntax-literal: var(--p-orange-300);
+    --syntax-comment: var(--p-slate-400);
+    --syntax-doc: var(--p-green-300);
+    --gutter: var(--p-night-500);
 
     /* 3. meaning */
     --es-event: var(--p-orange-700);
@@ -411,6 +420,7 @@
     --es-external-border: var(--p-fuchsia-300);
     --es-external-text: var(--p-fuchsia-100);
     --es-sequence: var(--p-orange-400);
+    --es-sequence-text: var(--p-orange-300);
     --model-context: var(--p-slate-400);
     --model-context-tint: var(--p-night-800);
     --model-aggregate: var(--p-indigo-300);
@@ -425,6 +435,14 @@
     --model-event-tint: var(--p-orange-night);
     --model-policy: var(--p-violet-300);
     --model-policy-tint: var(--p-violet-night);
+    --model-state: var(--p-slate-300);
+    --model-state-tint: var(--p-night-800);
+    --model-error: var(--p-red-300);
+    --model-error-tint: var(--p-red-night);
+    --model-edge: var(--p-slate-400);
+    --model-edge-quiet: var(--p-night-500);
+    --model-edge-label: var(--p-slate-300);
+    --model-ink: var(--p-slate-200);
 
     /* 4. status and diff */
     --status-info-ink: var(--p-blue-300);
@@ -454,56 +472,23 @@
     --agent-avatar: var(--p-slate-300);
     --on-agent-avatar: var(--p-night-950);
 
-    /* hues of the diagrams */
-    --violet: var(--p-indigo-400);
+    /* older hues (chat and chrome) */
     --violet-text: var(--p-indigo-200);
     --violet-soft: #262a48;
-    --violet-wash: #1f2235;
     --violet-border: #4a5190;
-    --purple: #a979f0;
-    --purple-text: #c9a3ff;
-    --purple-tint: #33244a;
-    --purple-wash: #251d33;
-    --blue: #5aa2e6;
-    --blue-text: #8cc4ff;
     --blue-tint: #1d3047;
     --blue-wash: #1a2533;
-    --green: #45b97a;
     --green-text: #7fd8a6;
     --green-tint: #1b3a2a;
-    --green-wash: #18281f;
-    --teal: #45b9a8;
-    --teal-light: #3f9a98;
-    --teal-text: #79d1d0;
-    --teal-text2: #7fd6cb;
-    --teal-tint: #173535;
-    --teal-tint2: #173835;
-    --teal-wash: #172a28;
     --amber-text: #f0c46a;
     --amber-tint: #3d3016;
     --red-text: #ff9b9b;
     --red-tint: #4a2222;
-    --orange-text: #f0a070;
     --grey: var(--p-night-500);
-    --grey-text: #8b95a8;
     --grey-border: var(--p-night-650);
 
     --node-divider: var(--p-night-700);
-    --ink-strong: #d5dbe5;
-    --stub-bg: #20253a;
-    --context-bg: rgba(37, 43, 59, 0.6);
-    --context-label: #a7b1c2;
-    --boundary-border: var(--p-indigo-500);
-    --boundary-bg: rgba(67, 56, 202, 0.18);
-    --shared-bg: rgba(30, 70, 70, 0.35);
-    --edge: #9aa4b5;
-    --edge-label: #d0d6df;
-    --ref-edge: #6c9bff;
-    --ref-label: #8fb3ff;
-
-    --gutter: #5f6a80;
-    --keyword: #d08cff;
-    --doc-comment: #86c784;
+    --stub-bg: var(--p-night-850);
 }
 
 /* form controls follow the theme (their default colors come from the browser) */
@@ -752,16 +737,17 @@ code.block {
     text-align: center;
 }
 .kind-aggregate {
-    background: var(--violet-tint);
-    color: var(--violet-text);
+    background: var(--model-aggregate-tint);
+    color: var(--model-aggregate);
 }
 .kind-entity {
-    background: var(--blue-tint);
-    color: var(--blue-text);
+    background: var(--model-entity-tint);
+    color: var(--model-entity);
 }
+/* value types: the value object's teal; a union also has a dashed edge, as on the canvas */
 .kind-valueObject {
-    background: var(--green-tint);
-    color: var(--green-text);
+    background: var(--model-value-tint);
+    color: var(--model-value);
 }
 .kind-fieldSet {
     background: var(--bg);
@@ -769,48 +755,63 @@ code.block {
     border: 1px dashed var(--grey-border);
 }
 .kind-union {
-    background: var(--teal-tint2);
-    color: var(--teal-text2);
+    background: var(--model-value-tint);
+    color: var(--model-value);
+    border: 1px dashed var(--model-value);
 }
 .kind-event {
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--model-event-tint);
+    color: var(--model-event);
 }
+/* the storming's kinds: the note's paper, edge and text */
 .kind-es-event {
     background: var(--es-event);
     border: 1px solid var(--es-event-border);
+    color: var(--es-event-text);
 }
 .kind-es-command {
     background: var(--es-command);
     border: 1px solid var(--es-command-border);
+    color: var(--es-command-text);
 }
 .kind-es-policy {
     background: var(--es-policy);
     border: 1px solid var(--es-policy-border);
+    color: var(--es-policy-text);
 }
 .kind-es-aggregate {
     background: var(--es-aggregate);
     border: 1px solid var(--es-aggregate-border);
+    color: var(--es-aggregate-text);
 }
 .kind-es-readmodel {
     background: var(--es-readmodel);
     border: 1px solid var(--es-readmodel-border);
+    color: var(--es-readmodel-text);
 }
 .kind-es-hotspot {
     background: var(--es-hotspot);
     border: 1px solid var(--es-hotspot-border);
+    color: var(--es-hotspot-text);
 }
 .kind-es-actor {
     background: var(--es-actor);
     border: 1px solid var(--es-actor-border);
+    color: var(--es-actor-text);
+    border-radius: 999px;
 }
 .kind-es-external {
     background: var(--es-external);
     border: 1px dashed var(--es-external-border);
+    color: var(--es-external-text);
 }
-.kind-es-group,
+.kind-es-group {
+    background: var(--es-group-bg);
+    border: 1px dashed var(--es-group-border);
+    color: var(--es-group-text);
+}
 .kind-es-timeline {
-    border: 1px dashed var(--es-event-border);
+    border: 1px dashed var(--es-sequence);
 }
 .es-list {
     margin: 0;
@@ -821,21 +822,27 @@ code.block {
     padding: 2px 0;
 }
 .kind-error {
-    background: var(--red-tint);
-    color: var(--red-text);
+    background: var(--model-error-tint);
+    color: var(--model-error);
 }
-.kind-state,
+.kind-state {
+    background: var(--model-state-tint);
+    color: var(--model-state);
+}
 .kind-command {
-    background: var(--purple-tint);
-    color: var(--purple-text);
+    background: var(--model-command-tint);
+    color: var(--model-command);
 }
 /* a policy: when an event happens, a command runs (Event Storming's lilac sticky between the two) */
 .kind-policy {
-    background: var(--bg);
-    color: var(--purple-text);
-    border: 1px dashed var(--purple);
+    background: var(--model-policy-tint);
+    color: var(--model-policy);
+    border: 1px dashed var(--model-policy);
 }
+/* a row's or an element's change from the baseline: a label on the diff's colour (an inline block, so that a removed
+   row's strike-through does not cross it) */
 .change {
+    display: inline-block;
     margin-left: 6px;
     padding: 1px 6px;
     border-radius: 4px;
@@ -847,6 +854,9 @@ code.block {
 }
 .change-changed {
     background: var(--changed);
+}
+.change.change-removed {
+    background: var(--removed);
 }
 .diffrow-added a {
     color: var(--added);
@@ -926,10 +936,11 @@ code.block {
     white-space: nowrap;
 }
 .dn-key {
-    color: var(--ink-strong);
+    color: var(--model-ink);
 }
+/* a field's type: quieter than its name, without a concept's hue (a type may be of any kind) */
 .dn-value {
-    color: var(--blue-text);
+    color: var(--text-secondary);
 }
 /* the field set a field comes from, after its type */
 .dn-origin,
@@ -950,29 +961,35 @@ a.field-origin {
 .dn-full {
     grid-column: 1 / -1;
 }
+/* Domain Modeling cards (issue #33 §3.3): neutral paper, the concept on the edge and in the stereotype; the shape tells
+   the kind too (an aggregate root's tinted header and heavier edge, a value's rounded corners, a union's dashes) */
 .dn-aggregate {
-    border-color: var(--violet);
-    background: var(--violet-soft);
+    border-color: var(--model-aggregate);
+    border-width: 2px;
+}
+.dn-aggregate .dn-head {
+    border-radius: 6px 6px 0 0;
+    background: var(--model-aggregate-tint);
+}
+/* the overview's card is its header alone */
+.dn-aggregate .dn-head:not(:has(~ .dn-body)) {
+    border-radius: 6px;
 }
 .dn-entity {
-    border-color: var(--blue);
-    background: var(--blue-wash);
+    border-color: var(--model-entity);
 }
 .dn-valueObject {
-    border-color: var(--green);
-    background: var(--green-wash);
+    border-color: var(--model-value);
     border-radius: 16px;
 }
 .dn-union {
-    border-color: var(--teal);
+    border-color: var(--model-value);
     border-style: dashed;
-    background: var(--teal-wash);
     border-radius: 16px;
 }
 .dn-boundedContext {
-    border-color: var(--violet-text);
+    border-color: var(--model-context);
     border-width: 2px;
-    background: var(--violet-wash);
     border-radius: 10px;
 }
 .dn-stub {
@@ -982,8 +999,7 @@ a.field-origin {
     opacity: 0.85;
 }
 .dn-state {
-    border-color: var(--purple);
-    background: var(--purple-wash);
+    border-color: var(--model-state);
     border-radius: 14px;
 }
 .dn-compartment {
@@ -1001,7 +1017,7 @@ a.field-origin {
     border-radius: 4px;
     font-family: var(--sans);
     font-size: 14px;
-    color: var(--purple-text);
+    color: var(--model-edge-label);
     white-space: nowrap;
     pointer-events: all;
 }
@@ -1026,9 +1042,6 @@ a.field-origin {
 .di-change-removed {
     opacity: 0.55;
     text-decoration: line-through;
-}
-.di-diag-error .di-main {
-    color: var(--error);
 }
 .di-diag {
     position: absolute;
@@ -1055,7 +1068,7 @@ a.field-origin {
     display: grid;
     place-items: center;
     border-radius: 50%;
-    background: var(--ink-strong);
+    background: var(--model-ink);
     color: var(--node-bg);
     font-family: var(--sans);
     font-weight: 700;
@@ -1064,7 +1077,8 @@ a.field-origin {
     border: none;
     background: transparent;
 }
-/* Event Storming sticky notes: square corners, a colored paper, the text of the theme */
+/* Event Storming sticky notes (issue #33 §3.2): square corners, the kind's paper, edge and text; the stereotype
+   («イベント») names the kind too */
 .dn-esEvent,
 .dn-esCommand,
 .dn-esPolicy,
@@ -1079,35 +1093,43 @@ a.field-origin {
 .dn-esEvent {
     border-color: var(--es-event-border);
     background: var(--es-event);
+    color: var(--es-event-text);
 }
 .dn-esCommand {
     border-color: var(--es-command-border);
     background: var(--es-command);
+    color: var(--es-command-text);
 }
 .dn-esPolicy {
     border-color: var(--es-policy-border);
     background: var(--es-policy);
+    color: var(--es-policy-text);
 }
 .dn-esAggregate {
     border-color: var(--es-aggregate-border);
     background: var(--es-aggregate);
+    color: var(--es-aggregate-text);
 }
 .dn-esReadModel {
     border-color: var(--es-readmodel-border);
     background: var(--es-readmodel);
+    color: var(--es-readmodel-text);
 }
 .dn-esHotspot {
     border-color: var(--es-hotspot-border);
     background: var(--es-hotspot);
+    color: var(--es-hotspot-text);
 }
 .dn-esActor {
     border-color: var(--es-actor-border);
     background: var(--es-actor);
+    color: var(--es-actor-text);
     border-radius: 18px;
 }
 .dn-esExternal {
     border-color: var(--es-external-border);
     background: var(--es-external);
+    color: var(--es-external-text);
     border-style: dashed;
 }
 /* the notes are squares with no body: the label wraps and sits in the middle */
@@ -1127,20 +1149,37 @@ a.field-origin {
     height: 100%;
     overflow-wrap: anywhere;
 }
+/* the stereotype in the note's own text (the theme's muted grey would not read on every paper) */
+.dn-esEvent .dn-stereo,
+.dn-esCommand .dn-stereo,
+.dn-esPolicy .dn-stereo,
+.dn-esActor .dn-stereo,
+.dn-esExternal .dn-stereo,
+.dn-esAggregate .dn-stereo,
+.dn-esReadModel .dn-stereo,
+.dn-esHotspot .dn-stereo {
+    color: inherit;
+}
 .dn-change-added {
     box-shadow: 0 0 0 3px var(--added);
 }
 .dn-change-changed {
     box-shadow: 0 0 0 3px var(--changed);
 }
+/* a removed element's ghost keeps its kind (edge and paper): it is told by its dashes, its fading, its struck-through
+   name and its 削除 badge, not by an error's colours */
 .dn-change-removed {
-    opacity: 0.55;
+    opacity: 0.7;
     border-style: dashed;
-    border-color: var(--removed);
-    background: var(--error-wash);
 }
 .dn-change-removed .dn-label {
     text-decoration: line-through;
+}
+/* the local selection (issue #33 §5): an indigo ring outside the node and the change's 3px ring, so that it never
+   recolours the kind's edge or paper (two classes: tldraw's container clears the outline) */
+.tl-html-container.dn-selected {
+    outline: 2px solid var(--selected-ring);
+    outline-offset: 5px;
 }
 /* on the top edge, where the selection outline goes around them (see `DomainNodeUtil.getIndicatorPath`) */
 .dn-badge {
@@ -1158,7 +1197,7 @@ a.field-origin {
     border-radius: 4px;
     font-family: var(--sans);
     font-size: 12px;
-    color: var(--on-action);
+    color: var(--on-status);
     background: var(--accent);
 }
 .dn-change-added .dn-badge {
@@ -1190,9 +1229,6 @@ a.field-origin {
 .dn-diag-warning .dn-diag {
     background: var(--warning);
 }
-.dn-diag-error {
-    border-color: var(--error);
-}
 
 .dg {
     border-radius: 12px;
@@ -1212,72 +1248,76 @@ a.field-origin {
     white-space: nowrap;
     color: var(--muted);
 }
+/* a bounded context: a slate frame and its caption (structure, not a concept's hue) */
 .dg-context {
-    border: 1.5px solid var(--grey-border);
+    border: 1.5px solid var(--model-context);
     background: var(--context-bg);
 }
 .dg-context .dg-label {
-    color: var(--context-label);
+    color: var(--text-secondary);
 }
+/* an aggregate's boundary: the aggregate root's indigo, dashed */
 .dg-aggregateBoundary {
-    border: 1.5px dashed var(--boundary-border);
-    background: var(--boundary-bg);
+    border: 1.5px dashed var(--model-aggregate);
+    background: color-mix(in srgb, var(--model-aggregate-tint) 50%, transparent);
 }
 .dg-esGroup {
-    border: 1.5px dashed var(--es-event-border);
-    background: color-mix(in srgb, var(--es-event) 35%, transparent);
+    border: 1.5px dashed var(--es-group-border);
+    background: var(--es-group-bg);
 }
 .dg-esGroup .dg-label {
     font-size: calc(13px * var(--s, 1));
-    color: var(--es-event-border);
+    color: var(--es-group-text);
 }
 .dg-aggregateBoundary .dg-label {
     font-size: calc(13px * var(--s, 1));
-    color: var(--violet);
+    color: var(--model-aggregate);
 }
 
 .de {
     overflow: visible;
 }
+/* edges: told apart by their dashes and heads first; a hue only where it names a concept (a reference by ID points
+   at an aggregate root: indigo; a transition is a command's: blue; a timeline's order: the event's orange) */
 .de-line {
     fill: none;
-    stroke: var(--edge);
+    stroke: var(--model-edge);
     stroke-width: 1.4;
 }
 .de-head {
-    fill: var(--edge);
+    fill: var(--model-edge);
 }
 .de-diamond {
-    fill: var(--ink-strong);
+    fill: var(--model-ink);
 }
 .de-value .de-line {
-    stroke: var(--grey-text);
+    stroke: var(--model-edge-quiet);
     stroke-dasharray: 2 3;
 }
 .de-references .de-line {
-    stroke: var(--ref-edge);
+    stroke: var(--model-aggregate);
     stroke-dasharray: 6 4;
 }
 .de-references .de-head {
-    fill: var(--ref-edge);
+    fill: var(--model-aggregate);
 }
 .de-dependsOn .de-line {
-    stroke: var(--violet-text);
+    stroke: var(--model-ink);
     stroke-width: 2;
 }
 .de-dependsOn .de-head {
-    fill: var(--violet-text);
+    fill: var(--model-ink);
 }
 .de-dependsOn .de-label {
-    fill: var(--violet-text);
+    fill: var(--model-ink);
     font-weight: 600;
 }
 .de-transition .de-line {
-    stroke: var(--purple);
+    stroke: var(--model-command);
     stroke-width: 1.6;
 }
 .de-transition .de-head {
-    fill: var(--purple);
+    fill: var(--model-command);
 }
 .de-esCausal .de-line {
     stroke-width: 1.6;
@@ -1291,31 +1331,28 @@ a.field-origin {
     fill: var(--es-sequence);
 }
 .de-esSequence .de-label {
-    fill: var(--es-sequence);
+    fill: var(--es-sequence-text);
     font-weight: 600;
 }
 .de-esRelated .de-line,
 .de-esHotspot .de-line {
-    stroke: var(--grey-text);
+    stroke: var(--model-edge-quiet);
     stroke-width: 1.1;
     stroke-dasharray: 1.5 3;
 }
 .de-esRelated .de-head {
-    fill: var(--grey-text);
+    fill: var(--model-edge-quiet);
 }
 .de-label {
     font: 13px var(--sans);
-    fill: var(--edge-label);
+    fill: var(--model-edge-label);
     paint-order: stroke;
     stroke: var(--tl-color-background);
     stroke-width: 4px;
     stroke-linejoin: round;
 }
 .de-references .de-label {
-    fill: var(--ref-label);
-}
-.de-transition .de-label {
-    fill: var(--purple-text);
+    fill: var(--model-aggregate);
 }
 .de-transition .de-label.de-sub,
 .de-transition .de-label.de-faded {
@@ -1425,8 +1462,8 @@ select,
 .kind-primitive,
 .kind-verified,
 .kind-id {
-    background: var(--teal-tint);
-    color: var(--teal-text);
+    background: var(--model-value-tint);
+    color: var(--model-value);
 }
 
 /* ---------- Catalog ---------- */
@@ -1456,15 +1493,16 @@ select,
     font-size: 1.1875rem;
 }
 .catalog-shared h2 {
-    border-bottom-color: var(--teal-light);
+    border-bottom-style: dashed;
+    border-bottom-color: var(--model-context);
 }
 .shared-badge {
     padding: 2px 8px;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--teal-text);
-    background: var(--teal-tint);
+    color: var(--text-secondary);
+    background: var(--neutral-tint);
 }
 .persistence-badge {
     margin-left: 6px;
@@ -1480,9 +1518,10 @@ select,
     padding: 2px 8px;
     font-size: 0.75rem;
 }
+/* persistent: filled; transient: outlined (a property of the event, not a concept's hue) */
 .persistence-badge.persistent {
-    color: var(--teal-text);
-    background: var(--teal-tint);
+    color: var(--text-secondary);
+    background: var(--neutral-tint);
     border-color: transparent;
 }
 .cards {
@@ -1635,12 +1674,13 @@ select,
     color: var(--muted);
 }
 
+/* a shared context (a Shared Kernel): a bounded context's frame, dashed */
 .dg-sharedContext {
-    border: 1.5px dashed var(--teal-light);
-    background: var(--shared-bg);
+    border: 1.5px dashed var(--model-context);
+    background: var(--context-bg);
 }
 .dg-sharedContext .dg-label {
-    color: var(--teal-text);
+    color: var(--text-secondary);
 }
 
 /* ---------- Source view ---------- */
@@ -1695,27 +1735,27 @@ select,
     padding-right: 16px;
 }
 .tok-keyword {
-    color: var(--keyword);
+    color: var(--syntax-keyword);
     font-weight: 600;
 }
 .tok-type {
-    color: var(--blue-text);
+    color: var(--syntax-type);
 }
 .tok-primitive {
-    color: var(--teal-text);
+    color: var(--syntax-primitive);
 }
 .tok-string {
-    color: var(--orange-text);
+    color: var(--syntax-literal);
 }
 .tok-number {
-    color: var(--orange-text);
+    color: var(--syntax-literal);
 }
 .tok-comment {
-    color: var(--grey-text);
+    color: var(--syntax-comment);
     font-style: italic;
 }
 .tok-doc {
-    color: var(--doc-comment);
+    color: var(--syntax-doc);
     font-style: italic;
 }
 .event-row {
@@ -1762,17 +1802,18 @@ select,
     border-radius: 2px;
     background: var(--grey);
 }
+/* the card's stripe: the concept's hue, as the modeling diagrams' accents */
 .band-command {
-    background: var(--purple);
+    background: var(--model-command);
 }
 .band-event {
-    background: var(--amber);
+    background: var(--model-event);
 }
 .band-error {
-    background: var(--error);
+    background: var(--model-error);
 }
 .band-policy {
-    background: var(--purple);
+    background: var(--model-policy);
 }
 .bcard-reaction {
     display: flex;
@@ -1789,8 +1830,8 @@ select,
     border-radius: 999px;
     font-size: 0.6875rem;
     font-weight: 600;
-    color: var(--purple-text);
-    background: var(--purple-tint);
+    color: var(--model-command);
+    background: var(--model-command-tint);
 }
 .bcard-doc {
     font-size: 0.8125rem;
@@ -1825,8 +1866,8 @@ select,
 .pane a.state-chip {
     padding: 1px 7px;
     border-radius: 4px;
-    color: var(--purple-text);
-    background: var(--purple-tint);
+    color: var(--model-state);
+    background: var(--model-state-tint);
 }
 .initial-state {
     font-size: 0.6875rem;
@@ -2850,20 +2891,24 @@ svg.chat-launcher-mark {
     border-radius: 2px;
     background: var(--grey-border);
 }
+/* the kinds' dots: the modeling concepts' hues (as on the canvas and the kind chips), and a shape per family:
+   squares for the model's elements, circles for values and states, rings for the values without fields, dashes for
+   what is not an element of its own */
 .dot-context {
-    background: var(--grey);
+    background: var(--model-context);
 }
 .dot-shared {
-    background: var(--teal-light);
+    background: transparent;
+    border: 1.5px dashed var(--model-context);
 }
 .dot-aggregate {
-    background: var(--violet);
+    background: var(--model-aggregate);
 }
 .dot-entity {
-    background: var(--blue);
+    background: var(--model-entity);
 }
 .dot-valueObject {
-    background: var(--green);
+    background: var(--model-value);
     border-radius: 50%;
 }
 .dot-fieldSet {
@@ -2871,32 +2916,34 @@ svg.chat-launcher-mark {
     border: 1.5px dashed var(--grey);
 }
 .dot-union {
-    background: var(--teal);
+    background: transparent;
+    border: 1.5px dashed var(--model-value);
     border-radius: 50%;
 }
 .dot-primitive,
 .dot-verified,
 .dot-id,
 .dot-enum {
-    background: var(--teal-text);
+    background: transparent;
+    border: 1.5px solid var(--model-value);
     border-radius: 50%;
 }
 .dot-event {
-    background: var(--amber);
+    background: var(--model-event);
 }
 .dot-error {
-    background: var(--error);
+    background: var(--model-error);
 }
 .dot-state {
-    background: var(--purple);
+    background: var(--model-state);
     border-radius: 50%;
 }
 .dot-command {
-    background: var(--purple);
+    background: var(--model-command);
 }
 .dot-policy {
     background: transparent;
-    border: 1.5px dashed var(--purple);
+    border: 1.5px dashed var(--model-policy);
     transform: rotate(45deg);
 }
 .tree-change {
@@ -2914,7 +2961,7 @@ svg.chat-launcher-mark {
 .tree-persistent {
     display: inline-flex;
     flex: none;
-    color: var(--teal-text);
+    color: var(--muted);
 }
 .tree-diag {
     font-size: 0.6875rem;
@@ -3473,6 +3520,20 @@ svg.chat-launcher-mark {
     margin-top: 2px;
     color: var(--muted);
 }
+/* the storming's kinds: each note's paper with its name (the colour is not the only cue) */
+.legend-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 22rem;
+    margin: 6px 0 4px;
+}
+.legend-kinds .kind {
+    padding: 0 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.125rem;
+}
 
 .segmented.small button {
     padding: 2px 10px;
@@ -3505,13 +3566,14 @@ details.deps > .sub {
     padding: 0 4px;
     border-radius: 4px;
 }
+/* a dependency by ID (on an aggregate root: indigo, as the references' edges) or by a borrowed type (neutral) */
 .dep-id {
-    background: var(--blue-tint);
-    color: var(--blue-text);
+    background: var(--model-aggregate-tint);
+    color: var(--model-aggregate);
 }
 .dep-type {
-    background: var(--violet-tint);
-    color: var(--violet-text);
+    background: var(--neutral-tint);
+    color: var(--text-secondary);
 }
 
 .context-list {
