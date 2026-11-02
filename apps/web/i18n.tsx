@@ -525,6 +525,7 @@ const ja = {
             launcher: (unread: number, mentions: number) =>
                 mentions > 0 ? `チャットを開く（あなた宛て ${mentions} 件）` : unread > 0 ? `チャットを開く（新着 ${unread} 件）` : 'チャットを開く',
             apply: 'AI に送る',
+            mentionsYou: 'あなた宛て',
             applyNow: '送る',
             applyWithNote: 'コメントをつけて送る',
             applyAgain: 'もう一度送る',
@@ -700,6 +701,7 @@ const ja = {
                 asks: 'AI からの質問',
                 assumed: 'AI が仮に決めたこと',
                 otherOptions: '別の案',
+                awaitingApproval: '承認待ち',
                 other: 'その他',
                 otherWrite: 'その他を書く',
                 otherEdit: 'その他を書き直す',
@@ -1243,6 +1245,7 @@ const en: Messages = {
             launcher: (unread, mentions) =>
                 mentions > 0 ? `Open the chat (${mentions} for you)` : unread > 0 ? `Open the chat (${unread} new)` : 'Open the chat',
             apply: 'Send to the AI',
+            mentionsYou: 'For you',
             applyNow: 'Send',
             applyWithNote: 'Send with a comment',
             applyAgain: 'Send again',
@@ -1415,6 +1418,7 @@ const en: Messages = {
                 asks: 'The AI asks',
                 assumed: 'What the AI assumed',
                 otherOptions: 'Other options',
+                awaitingApproval: 'Awaiting approval',
                 other: 'Other',
                 otherWrite: 'Write an answer of your own',
                 otherEdit: 'Rewrite your own answer',

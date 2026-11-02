@@ -724,7 +724,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
     );
     return (
         <div
-            className={`chat-row${selected ? ' selected' : ''}${toMe ? ' mentions-me' : ''}`}
+            // its role (mine or another participant's) sets its background; mentioning me, the mention's
+            className={`chat-row ${mine ? 'own' : 'other'}${selected ? ' selected' : ''}${toMe ? ' mentions-me' : ''}`}
             onClickCapture={choose}
             // Shift / ⌘ chooses the message: no text selection
             onMouseDown={(e) => control && (e.shiftKey || e.metaKey || e.ctrlKey) && e.preventDefault()}
@@ -732,6 +733,7 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
             {control && selection.active && (
                 <input type="checkbox" className="chat-select" checked={selected} onChange={() => selection.toggle(r.id)} aria-label={tx.chat.select} />
             )}
+            {toMe && <span className="visually-hidden">{tx.chat.mentionsYou}</span>}
             <Bubble
                 avatar={<Avatar id={r.author} name={author} {...(avatarUrl && { url: avatarUrl })} facilitator={facilitator} />}
                 who={speakerName(r.author, session.me.participant.id, nameOf, tx.chat.you)}

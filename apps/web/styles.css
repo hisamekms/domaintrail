@@ -146,8 +146,9 @@
     --text-secondary: var(--p-slate-600);
     /* the quietest text (hints, counts, group labels); a step darker than slate-500 so it stays AA on surface-muted */
     --muted: var(--p-slate-550);
-    /* separators, and the edges of controls (inputs, buttons, menus: at least 3:1 against the surface) */
-    --border: var(--p-slate-300);
+    /* separators (a light hairline), and the edges of controls (inputs, buttons, menus: at least 3:1 against the
+       surface) */
+    --border: var(--p-slate-200);
     --border-strong: var(--p-slate-450);
     /* primary controls and links, and what is written on them */
     --action: var(--p-indigo-700);
@@ -169,6 +170,8 @@
     --hover-strong: var(--p-slate-200);
     --neutral-tint: var(--p-slate-200);
     --shadow: rgba(15, 23, 42, 0.12);
+    /* behind a modal dialog (the same in both themes) */
+    --backdrop: rgba(15, 23, 42, 0.35);
     --legend-bg: rgba(255, 255, 255, 0.92);
     --resizer: color-mix(in srgb, var(--action) 35%, transparent);
     /* older names of the theme tokens */
@@ -266,6 +269,9 @@
        told by its icon and text; the other outcomes take the status tokens */
     --agent-active: var(--action);
     --agent-active-bg: var(--selected-bg);
+    /* the agent's avatar: one neutral mark on every AI turn, whatever its state (the state is told beside it) */
+    --agent-avatar: var(--p-slate-600);
+    --on-agent-avatar: var(--p-white);
     /* participants (§4.3): a stable hue per person, apart from the model's and the statuses' hues, with its name in
        on-participant and a halo of the surface around it */
     --participant-1: var(--p-person-teal);
@@ -362,7 +368,7 @@
     --text: var(--p-slate-100);
     --text-secondary: var(--p-slate-300);
     --muted: var(--p-slate-400);
-    --border: var(--p-night-600);
+    --border: var(--p-night-700);
     --border-strong: var(--p-night-500);
     --action: var(--p-indigo-300);
     --on-action: var(--p-night-950);
@@ -445,6 +451,8 @@
     --chat-agent-bg: var(--p-night-900);
     --chat-mention-bg: var(--p-indigo-night-600);
     --chat-unread: var(--p-indigo-300);
+    --agent-avatar: var(--p-slate-300);
+    --on-agent-avatar: var(--p-night-950);
 
     /* hues of the diagrams */
     --violet: var(--p-indigo-400);
@@ -558,7 +566,7 @@ body,
     flex-direction: column;
 }
 .settings-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--backdrop);
 }
 .settings-dialog-header {
     display: flex;
@@ -610,27 +618,28 @@ body,
     color: var(--on-status);
 }
 .pill-ok {
-    background: var(--added);
+    background: var(--status-success-ink);
 }
 .pill-invalid,
 .pill-syntax-error {
-    background: var(--error);
+    background: var(--status-danger-ink);
 }
 .pill-empty {
-    background: var(--muted);
+    background: var(--status-idle-ink);
 }
+/* the connection's dot, always beside its word (接続中, 接続済み, 切断): a status, never a participant's hue */
 .conn {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--muted);
+    background: var(--status-idle-ink);
 }
 .conn-open {
-    background: var(--added);
+    background: var(--status-success-ink);
 }
 .conn-closed {
-    background: var(--error);
+    background: var(--status-danger-ink);
 }
 .banner {
     padding: 6px 14px;
@@ -1931,6 +1940,18 @@ select,
     place-items: center;
     color: var(--brand-ink);
 }
+/* the logo (assets/brand: indigo on light, light indigo on dark, the amber dot in both), 24px tall in its 144:128
+   proportion, centred in the activity bar's cell; only the one for the page's theme shows */
+.brand-logo {
+    display: block;
+    height: 24px;
+    width: auto;
+    aspect-ratio: 144 / 128;
+}
+:root:not([data-theme='dark']) .brand-logo-dark,
+:root[data-theme='dark'] .brand-logo-light {
+    display: none;
+}
 .brand-text {
     min-width: 0;
     display: flex;
@@ -2067,7 +2088,7 @@ select,
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--added);
+    background: var(--status-success-ink);
 }
 .health-warning .health-dot,
 .health-error .health-dot {
@@ -2075,12 +2096,12 @@ select,
     height: 10px;
 }
 .health-warning .health-dot {
-    background: var(--warning);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 28%, transparent);
+    background: var(--status-warning-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-warning-ink) 28%, transparent);
 }
 .health-error .health-dot {
-    background: var(--error);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 28%, transparent);
+    background: var(--status-danger-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-danger-ink) 28%, transparent);
 }
 .health-text {
     min-width: 0;
@@ -2090,10 +2111,10 @@ select,
     font-weight: 600;
 }
 .health-warning .health-text {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
 }
 .health-error .health-text {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .health-popover {
     position: fixed;
@@ -2306,13 +2327,13 @@ select,
 }
 svg.chat-launcher-mark {
     padding: 1px;
-    color: var(--accent);
+    color: var(--agent-active);
 }
 .chat-launcher-mark.question {
     display: grid;
     place-items: center;
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
 }
@@ -2324,8 +2345,8 @@ svg.chat-launcher-mark {
     height: 1.125rem;
     padding: 0 5px;
     border-radius: 9px;
-    background: var(--error);
-    color: var(--on-status);
+    background: var(--chat-unread);
+    color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1.125rem;
@@ -3821,17 +3842,17 @@ del.was.block {
     height: var(--avatar-size);
     overflow: clip;
     border-radius: 50%;
-    color: #fff;
+    color: var(--on-participant);
     font-size: calc(var(--avatar-size) * 0.42);
     line-height: 1;
     font-weight: var(--fw-strong);
     white-space: nowrap;
     object-fit: cover;
 }
-/* the facilitator's mark wherever an avatar is drawn: a gap of the panel's color, then the accent, scaled to the size */
+/* the facilitator's mark wherever an avatar is drawn: a gap of the halo, then the accent, scaled to the size */
 .session-avatar.facilitator {
     box-shadow:
-        0 0 0 calc(var(--avatar-size) * 0.09) var(--panel),
+        0 0 0 calc(var(--avatar-size) * 0.09) var(--participant-halo),
         0 0 0 calc(var(--avatar-size) * 0.16) var(--accent);
 }
 .session-role {
@@ -3871,21 +3892,21 @@ del.was.block {
 }
 .session-status.status-current,
 .session-status.run-state-Completed {
-    background: var(--added);
+    background: var(--status-success-ink);
     color: var(--on-status);
 }
 .session-status.status-stale,
 .session-status.run-state-Failed {
-    background: var(--error);
+    background: var(--status-danger-ink);
     color: var(--on-status);
 }
 .session-status.status-unknown,
 .session-status.run-state-NeedsClarification {
-    background: var(--warning);
+    background: var(--status-warning-ink);
     color: var(--on-status);
 }
 .session-status.run-state-Running {
-    background: var(--accent);
+    background: var(--agent-active);
     color: var(--on-action);
 }
 .session-request.state-Dismissed {
@@ -3915,10 +3936,10 @@ del.was.block {
     color: var(--muted);
 }
 .session-table tr.worse td {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .session-table tr.better td {
-    color: var(--added);
+    color: var(--status-success-ink);
 }
 .session-note {
     margin: 8px 0;
@@ -3928,7 +3949,7 @@ del.was.block {
     border: 1px solid var(--banner-border);
 }
 .session-error {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .peer-cursors {
     position: absolute;
@@ -3949,9 +3970,15 @@ del.was.block {
     margin: 12px 0 0 2px;
     padding: 1px 6px;
     border-radius: 4px;
-    color: #fff;
+    color: var(--on-participant);
     font-size: 0.75rem;
     white-space: nowrap;
+    /* a halo of the surface, so that the name reads over any sticky note or edge */
+    box-shadow: 0 0 0 1.5px var(--participant-halo);
+}
+/* the arrow: the participant's hue (currentColor) edged with the halo */
+.peer-cursor-arrow {
+    stroke: var(--participant-halo);
 }
 
 /* ---------- the revision timeline, its comparison and the restore (dt session start only) ---------- */
@@ -3984,7 +4011,7 @@ del.was.block {
     width: min(68.75rem, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
-    background: var(--panel);
+    background: var(--surface-raised);
     color: var(--text);
     border: 1px solid var(--border-strong);
     border-radius: 10px;
@@ -3996,7 +4023,7 @@ del.was.block {
     flex-direction: column;
 }
 .session-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--backdrop);
 }
 .session-comparison-body h3 {
     margin: 16px 0 6px;
@@ -4034,8 +4061,8 @@ del.was.block {
     color: var(--on-status);
 }
 .session-status.file-changed {
-    background: var(--accent);
-    color: var(--on-action);
+    background: var(--diff-changed);
+    color: var(--on-status);
 }
 .diff-count-add {
     color: var(--added);
@@ -4104,7 +4131,7 @@ del.was.block {
     flex: none;
     margin-right: -4px;
     border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--panel);
+    box-shadow: 0 0 0 2px var(--participant-halo);
 }
 .chat-avatar .session-avatar {
     --avatar-size: 1.375rem;
@@ -4138,19 +4165,20 @@ del.was.block {
     line-height: 1.25rem;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    background: var(--neutral-tint);
-    color: var(--muted);
+    background: var(--status-idle-bg);
+    color: var(--status-idle-ink);
 }
+/* running: the agent's active hue (every phase); waiting for an answer: the warning, with its ? */
 .chat-status.status-running {
-    background: var(--violet-tint);
-    color: var(--accent);
+    background: var(--agent-active-bg);
+    color: var(--agent-active);
 }
 .chat-status.status-running .chat-status-mark {
     animation: chat-blink 1.2s ease-in-out infinite;
 }
 .chat-status.status-clarification {
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
 }
 /* the status is a button, a click opening its unit in AI の作業: the pill's own type (not the chat's buttons'), and
    under the pointer or focused a ring in its color */
@@ -4276,9 +4304,10 @@ del.was.block {
 .chat-message.continued .chat-bubble {
     margin-top: 0;
 }
+/* the AI's avatar: the same neutral mark on every turn (its icon says AI); its state is told beside it, not by it */
 .chat-agent-avatar {
-    background: var(--accent);
-    color: var(--on-action);
+    background: var(--agent-avatar);
+    color: var(--on-agent-avatar);
 }
 /* a sent message's targets: a row of read-only chips above its body (`#注文` `#請求書`), wrapping; the chips are the
    composer's (`.chat-chip`), without the number and the × */
@@ -4302,6 +4331,15 @@ del.was.block {
 }
 .chat-target.stale .chat-chip-name {
     text-decoration: line-through;
+}
+/* a target not in the sources (stale) or in sources that do not parse (unknown): an icon labelled with why, after
+   its name */
+.chat-target-state {
+    flex: none;
+    display: inline-flex;
+}
+.chat-target.unknown .chat-target-state {
+    color: var(--status-warning-ink);
 }
 .chat-text {
     margin: 0;
@@ -4355,7 +4393,7 @@ del.was.block {
     margin: 0;
     padding: var(--space-1);
     list-style: none;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 6px;
     box-shadow: 0 4px 16px var(--shadow);
@@ -4383,12 +4421,13 @@ del.was.block {
     border-radius: 4px;
     font-size: var(--fs-small);
     line-height: var(--lh-small);
-    background: var(--violet-tint);
-    color: var(--violet-text);
+    background: var(--model-aggregate-tint);
+    color: var(--model-aggregate);
 }
+/* an Event Storming element: the event's hue (the storming board), apart from the model's */
 .chat-mention-kind.lang-dtes {
-    background: var(--amber-tint);
-    color: var(--amber-text);
+    background: var(--model-event-tint);
+    color: var(--model-event);
 }
 .chat-mention-where {
     grid-column: 1 / -1;
@@ -4581,13 +4620,13 @@ button.add-to-request.added:hover {
     text-overflow: ellipsis;
     pointer-events: none;
 }
-/* a mention in the text: an atomic chip that sits in the line, an element as a violet pill (`#未払い`), a person as
-   violet text (`@田中`) */
+/* a mention in the text: an atomic chip that sits in the line, an element as a pill of the mention's tint (`#未払い`),
+   a person as text in the accent (`@田中`) */
 .chat-inline-chip {
     display: inline-block;
     padding: 0 var(--space-1);
     border-radius: 6px;
-    background: var(--violet-tint);
+    background: var(--chat-mention-bg);
     color: var(--accent);
     font-weight: var(--fw-strong);
     line-height: 1.375rem;
@@ -4689,7 +4728,7 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
 }
 .chat-person.where-same-view .chat-person-where {
-    color: var(--added);
+    color: var(--status-success-ink);
 }
 .session-chat button.chat-person-go {
     flex: none;
@@ -4739,7 +4778,7 @@ button.add-to-request.added:hover {
     margin: 0;
 }
 .chat-with-icon.session-error > .chat-icon {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 /* the agent's reply (reply.tsx): what the AI says, as plain text */
 .reply-summary {
@@ -4771,7 +4810,7 @@ button.add-to-request.added:hover {
     color: var(--muted);
 }
 .reply-request.status-Question .reply-mark {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
 }
 .reply-line {
     min-width: 0;
@@ -4882,7 +4921,7 @@ button.add-to-request.added:hover {
     max-height: min(32rem, calc(100vh - 80px));
     overflow: auto;
     padding: var(--space-1);
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -4913,7 +4952,7 @@ button.add-to-request.added:hover {
     outline: none;
 }
 .session-chat .collab-menu-actions > button.danger {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 /* the menu's note (a link copied) opens under the button, from its left */
 .collab-menu-note {
@@ -4943,15 +4982,15 @@ button.add-to-request.added:hover {
     justify-content: flex-end;
 }
 .collab-end-confirm.primary.danger {
-    background: var(--error);
-    border-color: var(--error);
+    background: var(--status-danger-ink);
+    border-color: var(--status-danger-ink);
     color: var(--on-status);
 }
 .collab-unfinished {
     padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+    border: 1px solid color-mix(in srgb, var(--status-warning-ink) 45%, var(--border));
     border-radius: 6px;
-    background: color-mix(in srgb, var(--warning) 8%, transparent);
+    background: var(--status-warning-bg);
 }
 .collab-unfinished ul {
     margin: 0;
@@ -5062,12 +5101,10 @@ button.add-to-request.added:hover {
     border-radius: 6px;
 }
 @keyframes chat-flash {
+    /* then back to the row's own background */
     0%,
     40% {
-        background: var(--violet-tint);
-    }
-    100% {
-        background: transparent;
+        background-color: var(--selected-bg);
     }
 }
 .chat-history {
@@ -5107,7 +5144,7 @@ button.add-to-request.added:hover {
     font-variant-numeric: tabular-nums;
 }
 .session-chat .chat-work-group.awaiting .chat-work-label {
-    color: var(--warning);
+    color: var(--status-warning-ink);
 }
 .chat-work-label-row > .check {
     font-size: var(--fs-small);
@@ -5168,24 +5205,24 @@ button.add-to-request.added:hover {
 }
 .chat-unit-icon {
     flex: none;
-    color: var(--muted);
+    color: var(--status-idle-ink);
 }
-/* the running one: a pulsing dot in the accent */
+/* the running one: a pulsing dot in the agent's active hue */
 .chat-pulse.chat-unit-pulse {
     margin: 0;
     width: 8px;
     height: 8px;
-    background: var(--accent);
+    background: var(--agent-active);
 }
-/* a queued one: its place in the line, in a circle */
+/* a queued one: its place in the line, in a circle (neutral: it waits) */
 .chat-unit-order {
     display: inline-grid;
     place-items: center;
     width: 16px;
     height: 16px;
-    border: 1.5px solid var(--muted);
+    border: 1.5px solid var(--status-idle-ink);
     border-radius: 50%;
-    color: var(--muted);
+    color: var(--status-idle-ink);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
     line-height: 1;
@@ -5202,17 +5239,22 @@ button.add-to-request.added:hover {
     right: calc(var(--space-4) + 14px + var(--space-2));
     display: inline-flex;
 }
+/* each outcome's icon (its word in the label): changed success, a question warning, declined info (not a failure),
+   failed danger; unchanged, cancelled and queued stay neutral */
 .outcome-changed .chat-unit-icon {
-    color: var(--added);
+    color: var(--status-success-ink);
 }
 .outcome-clarification .chat-unit-icon {
-    color: var(--warning);
+    color: var(--status-warning-ink);
+}
+.outcome-declined .chat-unit-icon {
+    color: var(--status-info-ink);
 }
 .outcome-failed .chat-unit-icon {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .outcome-running .chat-unit-icon {
-    color: var(--accent);
+    color: var(--agent-active);
     animation: spin 1s linear infinite;
 }
 /* the opened body starts at the same left edge as the title and the files */
@@ -5331,7 +5373,7 @@ button.add-to-request.added:hover {
     flex-wrap: wrap;
 }
 .chat-item-card > .run-card:hover {
-    background: var(--row-hover);
+    background-image: linear-gradient(var(--row-hover), var(--row-hover));
 }
 /* jumped to: the row's box flashes, not the item inside the stream's padding */
 .chat-item.chat-flash {
@@ -5345,11 +5387,31 @@ button.add-to-request.added:hover {
     flex: 1;
     min-width: 0;
 }
-.chat-row:hover {
-    background: var(--row-hover);
+/* a message's box in its role's colour (the sender's name and avatar say who): mine, another participant's; an AI
+   turn stays on the chat's own surface (--chat-agent-bg), its avatar and name saying AI. One speaker's consecutive
+   messages join into one block */
+.chat-row.own {
+    background-color: var(--chat-own-bg);
 }
+.chat-row.other {
+    background-color: var(--chat-other-bg);
+}
+.chat-item:has(+ .chat-item.continued) > .chat-row {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+.chat-item.continued > .chat-row {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+/* hovered: a tint over the role's colour */
+.chat-row:hover {
+    background-image: linear-gradient(var(--row-hover), var(--row-hover));
+}
+/* chosen (to send to the AI): the local selection, with an indigo edge (its checkbox says so too) */
 .chat-row.selected {
-    background: var(--violet-tint);
+    background-color: var(--selected-bg);
+    box-shadow: inset 0 0 0 1px var(--action);
 }
 .chat-select {
     margin-top: calc((var(--chat-avatar) - 13px) / 2);
@@ -5420,23 +5482,28 @@ button.add-to-request.added:hover {
     width: 1em;
     height: 1em;
 }
+/* the states (glyph and word; queued, skipped and cancelled stay neutral): every running phase in the agent's active
+   hue, done success, partly done or waiting for an answer warning, declined info (not a failure), failed danger */
 .chat-state > .chat-pulse {
     margin-right: 0;
-    background: var(--accent);
+    background: var(--agent-active);
 }
 .chat-state.state-running {
-    color: var(--accent);
+    color: var(--agent-active);
 }
 .chat-state.state-done {
-    color: var(--green-text);
+    color: var(--status-success-ink);
 }
 .chat-state.state-partial,
 .chat-state.state-question,
 .chat-state.state-clarification {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
+}
+.chat-state.state-declined {
+    color: var(--status-info-ink);
 }
 .chat-state.state-failed {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 /* the slots' sizer: every text a slot can show, laid over each other, hidden */
 .chat-status-sizer {
@@ -5465,7 +5532,7 @@ button.add-to-request.added:hover {
     padding: 2px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--panel);
+    background: var(--surface-raised);
     box-shadow: 0 2px 8px var(--shadow);
     opacity: 0;
     pointer-events: none;
@@ -5503,9 +5570,9 @@ button.add-to-request.added:hover {
 }
 .session-chat button.chat-cancel-button:hover,
 .session-chat button.chat-cancel-button:focus-visible {
-    border-color: var(--error);
-    background: var(--error-wash);
-    color: var(--error);
+    border-color: var(--status-danger-ink);
+    background: var(--status-danger-bg);
+    color: var(--status-danger-ink);
 }
 /* the dialog before a cancel: what it asks, the unit's name, and for a running run what is lost; やめる and 取り消す */
 .session-dialog.cancel-dialog {
@@ -5543,7 +5610,7 @@ button.add-to-request.added:hover {
     padding: 0 14px;
     border: 1px solid var(--border-strong);
     border-radius: 8px;
-    background: var(--panel);
+    background: var(--surface-raised);
     color: var(--text);
     font: inherit;
     font-weight: var(--fw-strong);
@@ -5555,8 +5622,8 @@ button.add-to-request.added:hover {
     outline-offset: 2px;
 }
 .cancel-dialog button.cancel-dialog-button.danger {
-    border-color: var(--error);
-    background: var(--error);
+    border-color: var(--status-danger-ink);
+    background: var(--status-danger-ink);
     color: var(--on-status);
 }
 .chat-apply {
@@ -5614,7 +5681,7 @@ button.add-to-request.added:hover {
     line-height: var(--lh-small);
 }
 .chat-selection-bar {
-    background: var(--violet-tint);
+    background: var(--selected-bg);
     border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .chat-selection-count {
@@ -5636,7 +5703,7 @@ button.add-to-request.added:hover {
     padding: var(--space-1) var(--space-3);
     border: none;
     border-radius: 12px;
-    background: var(--accent);
+    background: var(--chat-unread);
     color: var(--on-action);
     font-size: var(--fs-small);
     font-weight: var(--fw-strong);
@@ -5644,7 +5711,7 @@ button.add-to-request.added:hover {
     cursor: pointer;
 }
 .pane-menu-list > button.danger {
-    color: var(--error);
+    color: var(--status-danger-ink);
 }
 .session-menu-note {
     width: 17.5rem;
@@ -5782,11 +5849,11 @@ button.add-to-request.added:hover {
     white-space: nowrap;
 }
 .run-quote.status-Done .run-quote-outcome {
-    color: var(--green-text);
+    color: var(--status-success-ink);
 }
 .run-quote.status-Partial .run-quote-outcome,
 .run-quote.status-Question .run-quote-outcome {
-    color: var(--amber-text);
+    color: var(--status-warning-ink);
 }
 .run-quote-note {
     flex-basis: 100%;
@@ -5814,8 +5881,9 @@ button.add-to-request.added:hover {
 .run-files-icon {
     flex: none;
 }
-/* what a running run is doing: one small line — the phase's icon in the accent, the phase (strong), then the file or
-   the command in monospace, muted — close under the quoted messages, and under the facts of the unit in AI の作業 */
+/* what a running run is doing: one small line — the phase's icon in the agent's active hue (one hue for every phase;
+   the icon and the word tell them apart), the phase (strong), then the file or the command in monospace, muted — close
+   under the quoted messages, and under the facts of the unit in AI の作業 */
 .run-activity {
     display: flex;
     align-items: center;
@@ -5834,7 +5902,7 @@ button.add-to-request.added:hover {
 }
 .run-activity-icon {
     flex: none;
-    color: var(--accent);
+    color: var(--agent-active);
 }
 .run-activity-phase {
     flex: none;
@@ -5852,15 +5920,16 @@ button.add-to-request.added:hover {
 }
 /* ---------- inside an AI reply: the question, the assumptions, and what was decided ---------- */
 
-/* the AI's question and what it assumed sit on a faint surface, headed small and strong in their colour (amber: the AI
-   waits; violet: the AI assumed); everything in it starts at the body's left edge */
+/* the AI's question and what it assumed sit on a faint surface, headed small and strong (the question in the warning:
+   the AI waits; what it assumed in the secondary text, each assumption not yet decided marked 承認待ち); everything in
+   it starts at the body's left edge */
 .reply-section {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-3);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--border) 35%, transparent);
+    background: var(--surface-muted);
     font-size: var(--fs-body);
     line-height: var(--lh-body);
 }
@@ -5871,10 +5940,30 @@ button.add-to-request.added:hover {
     font-weight: var(--fw-strong);
 }
 .reply-section.ask > .reply-section-label {
-    color: var(--warning);
+    color: var(--status-warning-ink);
 }
 .reply-section.assumed > .reply-section-label {
-    color: var(--accent);
+    color: var(--text-secondary);
+}
+/* an assumption not yet decided: a small warning badge (承認待ち) at the start of its row; deciding it is 承認 or
+   送り直す */
+.reply-awaiting {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0 var(--space-2);
+    border-radius: 999px;
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+.reply-row-actions > .reply-row-start {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 .reply-section .reply-questions {
     display: flex;
@@ -5910,7 +5999,7 @@ button.add-to-request.added:hover {
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--panel);
+    background: var(--surface);
 }
 .reply-card-text {
     flex: 1;
@@ -5920,10 +6009,11 @@ button.add-to-request.added:hover {
 .reply-card-text > .reply-option-label {
     display: block;
 }
-/* chosen (being chosen, or decided): the accent's border and background; the others, once decided, muted */
+/* chosen (being chosen, or decided): the selection's indigo border and background, with its ◉ / ☑; the others, once
+   decided, muted */
 .reply-card.chosen {
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    border-color: var(--action);
+    background: var(--selected-bg);
 }
 .reply-card.unchosen,
 .reply-card.unchosen .reply-option-detail {
@@ -6032,7 +6122,7 @@ button.add-to-request.added:hover {
     color: var(--accent);
 }
 .session-chat .reply-section button.chat-small.ghost:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    background: var(--selected-bg);
 }
 .session-chat .reply-section button.chat-small:disabled {
     opacity: 0.5;
@@ -6154,7 +6244,7 @@ button.add-to-request.added:hover {
     gap: 1px;
     min-width: 7rem;
     padding: var(--space-1) var(--space-3);
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -6168,7 +6258,8 @@ button.add-to-request.added:hover {
     color: var(--muted);
 }
 /* the reactions under a message or a turn: each emoji in colour (the one exception to the decoration budget) and a
-   small muted count, no pills; mine: the count in violet, with a faint violet outline and background */
+   small muted count, no pills; mine (aria-pressed): the count in the accent, in an indigo outline on the selection's
+   background */
 .reaction-row {
     display: flex;
     flex-wrap: wrap;
@@ -6202,11 +6293,11 @@ button.add-to-request.added:hover {
 }
 .session-chat button.reaction.mine {
     color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: var(--action);
+    background: var(--selected-bg);
 }
 .session-chat button.reaction.mine:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    background: color-mix(in srgb, var(--action) 14%, var(--selected-bg));
 }
 /* ☺+ at the right end of a row's actions */
 .reaction-add {
@@ -6224,7 +6315,7 @@ button.add-to-request.added:hover {
     right: 0;
     z-index: 30;
     padding: 4px;
-    background: var(--panel);
+    background: var(--surface-raised);
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     box-shadow: 0 6px 20px var(--shadow);
@@ -6257,8 +6348,8 @@ button.add-to-request.added:hover {
     cursor: default;
 }
 .session-chat button.reaction-choice.mine {
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border-color: var(--action);
+    background: var(--selected-bg);
 }
 /* [＋]: any other emoji, typed or pasted */
 .reaction-field {
@@ -6283,7 +6374,7 @@ button.add-to-request.added:hover {
     border-color: var(--accent);
 }
 .session-chat .reaction-input[aria-invalid='true'] {
-    border-color: var(--error);
+    border-color: var(--status-danger-ink);
 }
 .reaction-hint {
     color: var(--muted);
@@ -6545,11 +6636,13 @@ button.add-to-request.added:hover {
 .chat-mention.person {
     white-space: nowrap;
 }
-/* a message that mentions me, in my stream only: a faint blue wash (it asks for my attention). Not violet, which is
-   what can be clicked, nor amber, which is a question waiting for an answer */
-.chat-row.mentions-me:not(:hover, .selected) {
-    background: var(--blue-wash);
-    box-shadow: inset 2px 0 0 var(--blue-tint);
+/* a message that mentions me, in my stream only: the mention's background and an indigo bar at its left edge (it asks
+   for my attention; a hidden label says so). Not amber, which is a question waiting for an answer */
+.chat-row.mentions-me:not(.selected) {
+    /* the quietest text a step darker, to stay AA on this background */
+    --muted: var(--text-secondary);
+    background-color: var(--chat-mention-bg);
+    box-shadow: inset 3px 0 0 var(--chat-unread);
 }
 /* the launcher's count when messages mention me: `@ 2`, in place of the count of new items */
 .chat-launcher-count.mentions {
@@ -6726,8 +6819,8 @@ button.add-to-request.added:hover {
     background: var(--hover);
     color: var(--text);
 }
-/* an element changed: its mark (＋ ✎ −, in green, amber, red on a faint wash), then `#` its own name in the accent; a
-   removed one muted and struck through */
+/* an element changed: its mark (＋ ✎ −, in the diff's added, changed, removed on their background), then `#` its own
+   name in the accent; a removed one muted and struck through */
 .change-chip {
     display: inline-flex;
     align-items: center;
@@ -6766,16 +6859,16 @@ button.add-to-request.added:hover {
     font-weight: var(--fw-strong);
 }
 .change-added .change-mark {
-    color: var(--green-text);
-    background: var(--green-tint);
+    color: var(--diff-added);
+    background: var(--diff-added-bg);
 }
 .change-changed .change-mark {
-    color: var(--amber-text);
-    background: var(--amber-tint);
+    color: var(--diff-changed);
+    background: var(--diff-changed-bg);
 }
 .change-removed .change-mark {
-    color: var(--red-text);
-    background: var(--red-tint);
+    color: var(--diff-removed);
+    background: var(--diff-removed-bg);
 }
 /* この作業の変更: one size and place whether or not the source diff is open — as wide as a diff reads well, its top
    fixed below the viewport's so that growing only extends it downward, and its body scrolling under the header */
