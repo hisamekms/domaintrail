@@ -8,6 +8,7 @@ import type {
     AgentLease,
     AgentPreviousRun,
     AgentParticipantsBody,
+    AgentUndoneRun,
     AgentSessionBody,
     EventMessage,
     Json,
@@ -40,11 +41,15 @@ export type StreamItem =
     /** The stream is open (first, and again after each reconnection): queued runs may have been missed meanwhile. */
     { readonly kind: 'open' } | { readonly kind: 'event'; readonly id: string; readonly type: string; readonly message: EventMessage };
 
-/** `POST /agent/runs/:id/start` → 200 (`AgentStartedBody`): `previousRuns` may be absent from an older server. */
+/**
+ * `POST /agent/runs/:id/start` → 200 (`AgentStartedBody`): `previousRuns` may be absent from an older server, `undo`
+ * is there only for an undo.
+ */
 export interface Started {
     readonly run: Json<Collaboration.RunningAgentRun>;
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns?: readonly AgentPreviousRun[];
+    readonly undo?: readonly AgentUndoneRun[];
 }
 
 /** The agent API of the session server (loopback, bearer token). */
@@ -57,7 +62,8 @@ export interface AgentApi {
      * error, with another error when the stream cannot be opened or breaks.
      */
     events(lastEventId: string | undefined, signal: AbortSignal): AsyncIterable<StreamItem>;
-    claim(owner: string): Promise<ApiResult<AgentClaimed>>;
+    /** Claims the next run; `capabilities`: what this subscriber can run (`AGENT_CAPABILITIES`), so that it is given no run it cannot. */
+    claim(owner: string, capabilities: readonly string[]): Promise<ApiResult<AgentClaimed>>;
     start(run: string, token: string): Promise<ApiResult<Started>>;
     heartbeat(run: string, token: string): Promise<ApiResult<{ readonly lease: AgentLease }>>;
     /** What the running run is doing now (the server keeps the latest for the pages; the lease is not extended). */

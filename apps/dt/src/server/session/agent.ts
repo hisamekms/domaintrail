@@ -2,7 +2,7 @@
 // public listener, and requiring the bearer token of `.domaintrail/session/agent.json` on every request. Browsers are
 // refused (any `Origin`). The subscriber (S6) follows an SSE stream of the outbox (`id:` = outbox position, resumed
 // with `Last-Event-ID`), reads the participants' display names (for the prompt), claims the next run with a lease,
-// starts it (and gets the runs it continues, with what they changed), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
+// starts it (and gets the runs it continues, with what they changed, and the runs it undoes), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
 // fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
 // While a run runs, its holder also reports what it is doing (an activity, ADR 0026, amendment): held in memory and
 // sent to the pages, never stored.
@@ -201,7 +201,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 // the runs it continues (replies, an answer) and what they changed, measured now (ADR 0026, "replies to runs")
                 const previous = await use.previousRuns({ run, maxDiff: deps.maxPreviousRunDiff });
                 const previousRuns = previous.ok ? previous.value : [];
-                return answer(res, started, (v) => ({ run: v.run, baseRevision: v.base, previousRuns }));
+                // the runs it undoes and what they changed, file by file (ADR 0026, amendment "undo a run")
+                const undone = await use.undoneRuns({ run });
+                const undo = undone.ok ? undone.value : [];
+                return answer(res, started, (v) => ({ run: v.run, baseRevision: v.base, previousRuns, ...(undo.length > 0 && { undo }) }));
             }
             case 'heartbeat': {
                 const b = await input(req, res, ['token']);
@@ -317,10 +320,14 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         }
         if (path === '/agent/events' && req.method === 'GET') return events(req, url, res);
         if (path === '/agent/runs/claim' && req.method === 'POST') {
-            const b = await input(req, res, ['owner']);
+            const b = await input(req, res, ['owner', 'capabilities']);
             if (!b) return;
             if (!isToken(b.owner)) return sendError(res, 400, 'InvalidInput', 'Expected who claims (a short name without spaces).', { field: 'owner' });
-            const claimed = await use.claimNextRun({ session, owner: b.owner, leaseMs: deps.leaseMs });
+            // what the subscriber can run (`AGENT_CAPABILITIES`): an older one names none, and is given no undo
+            const capabilities = b.capabilities ?? [];
+            if (!Array.isArray(capabilities) || capabilities.length > 20 || !capabilities.every(isToken))
+                return sendError(res, 400, 'InvalidInput', 'Expected the names of what the subscriber can run.', { field: 'capabilities' });
+            const claimed = await use.claimNextRun({ session, owner: b.owner, leaseMs: deps.leaseMs, capabilities });
             return answer(res, claimed, (v) => ({ run: v.run, lease: { token: v.lease.token, expiresAt: v.lease.expiresAt.toISOString() } }));
         }
         const run = /^\/agent\/runs\/([^/]+)\/([a-z]+)$/.exec(path);

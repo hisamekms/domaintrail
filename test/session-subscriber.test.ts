@@ -685,6 +685,89 @@ describe('the pipeline', () => {
     });
 });
 
+describe('undoing a run', () => {
+    /** Runs `steps` one per queued run (requests sent by Bob) through the fake agent, each completed: their IDs. */
+    async function runs(ctx: Context, steps: Step[], more: Step[] = []): Promise<{ ids: string[]; planFile: string; subscriber: RunningSubscriber }> {
+        const ids: string[] = [];
+        for (const [i] of steps.entries()) ids.push(await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, `Change ${i + 1}.`)]));
+        const planFile = await ctx.plan([...steps, ...more]);
+        const { subscriber } = await subscribe(ctx, planFile);
+        for (const id of ids) expect((await until(ctx, id, ['Completed', 'Failed'])).state).toBe('Completed');
+        return { ids, planFile, subscriber };
+    }
+    const undo = (ctx: Context, run: string, cookie = ctx.ada): Promise<Response> =>
+        api(ctx.server, cookie, `runs/${run}/undo`, { body: '「返品の取り消し」の変更を取り消す' });
+    const read = (ctx: Context, file: string): Promise<string> => readFile(path.join(ctx.root, file), 'utf8');
+
+    integration(
+        "mechanically: only the facilitator; the run's .dtes change is undone, a later run's .dt change stays, recorded as a run of its own",
+        async () => {
+            const ctx = await setup();
+            const later = { path: 'sales/order.dt', replace: ['context Sales', '/// 販売。\ncontext Sales'] as [string, string] };
+            const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [later] }]);
+            const orderAfter = await read(ctx, 'sales/order.dt');
+            expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
+
+            expect((await undo(ctx, ids[0], ctx.bob)).status).toBe(403);
+            const res = await undo(ctx, ids[0]);
+            expect(res.status).toBe(201);
+            const body = (await res.json()) as { way: string; run: Run; request: { undoes: string; body: string } };
+            expect(body.way).toBe('mechanical');
+            expect(body.request).toMatchObject({ undoes: ids[0], body: '「返品の取り消し」の変更を取り消す' });
+            expect(body.run.state).toBe('Reverted');
+            expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
+            expect(await read(ctx, 'sales/order.dt')).toBe(orderAfter);
+            const s = await state(ctx);
+            expect(s.runs.at(-1)).toMatchObject({ id: body.run.id, state: 'Reverted', queuedBy: s.session.facilitator });
+            expect(s.requests.at(-1)).toMatchObject({ undoes: ids[0] });
+            // asked again: it is undone already
+            const again = await undo(ctx, ids[0]);
+            expect(again.status).toBe(409);
+            expect(((await again.json()) as { error: { type: string } }).error.type).toBe('RunNotUndoable');
+        },
+    );
+
+    integration('a conflict goes to the AI: the subscriber gets the run undone with its diff; an older subscriber is refused the run', async () => {
+        const ctx = await setup();
+        const relabel = { path: RETURNS, replace: ['"返品を取り消した"', '"返品がキャンセルされた"'] as [string, string] };
+        const undoStep: Step = {
+            edits: [{ path: RETURNS, replace: ['  event ReturnCancelled "返品がキャンセルされた"\n', ''] }],
+            reply: { outcome: 'done', summary: 'Removed ReturnCancelled.', requests: [{ request: 1, status: 'done' }] },
+        };
+        const { ids, planFile, subscriber } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [relabel] }], [undoStep]);
+        await subscriber.stop();
+        const before = await read(ctx, RETURNS);
+
+        const res = await undo(ctx, ids[0]);
+        expect(res.status).toBe(201);
+        const body = (await res.json()) as { way: string; obstacle: { kind: string; paths: string[] }; run: Run };
+        expect(body).toMatchObject({ way: 'agent', obstacle: { kind: 'conflict', paths: [RETURNS] } });
+        expect(await read(ctx, RETURNS)).toBe(before);
+
+        // an older subscriber names no capability: the undo is not given to it, and stays queued
+        const credential = await readCredential(ctx.root);
+        const claim = (b: unknown): Promise<Response> =>
+            fetch(`${credential.url}agent/runs/claim`, {
+                method: 'POST',
+                headers: { authorization: `Bearer ${credential.token}`, ...json },
+                body: JSON.stringify(b),
+            });
+        const old = await claim({ owner: 'old' });
+        expect(old.status).toBe(409);
+        expect(((await old.json()) as { error: { type: string; needs: string } }).error).toMatchObject({ type: 'SubscriberOutdated', needs: 'undo' });
+        expect((await state(ctx)).runs.find((r) => r.id === body.run.id)?.state).toBe('Queued');
+
+        await subscribe(ctx, planFile);
+        const done = await until(ctx, body.run.id, ['Completed', 'Failed']);
+        expect(done.state).toBe('Completed');
+        expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
+        const prompt = (await ctx.invocations()).at(-1)?.prompt ?? '';
+        expect(prompt).toContain('"undoesRun": 1');
+        expect(prompt).toContain('+  event ReturnCancelled');
+        expect(prompt).toContain('Undo only those changes');
+    });
+});
+
 describe('the stream and the completions', () => {
     /** The application's subscriber on the real adapters, with the agent API wrapped by `wrap`. */
     async function applicationSubscriber(
