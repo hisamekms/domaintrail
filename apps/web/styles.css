@@ -1,7 +1,9 @@
 :root {
     color-scheme: light;
     --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Segoe UI', sans-serif;
+    /* one typeface for Japanese and Latin per OS, all preinstalled: Hiragino (Mac), BIZ UDPGothic (Windows 10 1809+),
+       Meiryo (older Windows), Noto Sans CJK (Linux); not Yu Gothic, which renders thin on Windows */
+    --sans: 'Hiragino Sans', 'BIZ UDPGothic', Meiryo, 'Noto Sans JP', 'Noto Sans CJK JP', sans-serif;
 
     /* surfaces and text */
     --bg: #f7f7f8;
