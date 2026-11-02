@@ -1121,3 +1121,17 @@ named, not numbered".
     anything but its source ranges did (a timeline not because of its groups' own changes).
   - A side whose `.dt` sources do not parse gives no `.dt` changes, and one where a `.dtes` file does not parse no
     storming changes; the list is then marked incomplete.
+
+## Appendix: the join form remembers the name and speaks the browser's language (amendment)
+
+*Decided with the maintainer*: amends S4's `dev` mode.
+
+- **The name is remembered.** A join through the form also sets `dt_name`: the name joined with (URI-encoded),
+  HttpOnly, SameSite=Lax, a year, Secure as `dt_session` is. The next join form starts with it and it can be edited;
+  a cookie that is not a valid name (the join's own check) is ignored. It is no credential, and it outlives the
+  session and its sign-out on purpose. Cookies are per host, not per port, so a session of another workspace on the
+  same machine offers the same name.
+- **The pages are in the browser's language.** The server's own pages (the join form, the facilitator link's answers,
+  the sign-in and not-found pages) are Japanese when the best supported match of `Accept-Language` (by q-value) is `ja`
+  or a `ja-*`, else English; they set `<html lang>` and `Vary: Accept-Language`. Their texts are one table per language
+  next to them (`apps/dt/src/server/session/page-texts.ts`). Still no script; the CSP is unchanged.
