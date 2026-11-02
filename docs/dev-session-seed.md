@@ -26,6 +26,7 @@ bun run session:seed --scenario chat,replies --dir /tmp/dt-seed-2 --reset
 | `--port <port>` | The Live View's port (default 4321). |
 | `--no-classifier` | Leaves the message classifier off: no 依頼 / 会話 tags. |
 | `--leave-queued` | Leaves one run queued at the end; the next subscriber takes it. |
+| `--leave-running` | Leaves one run running at the end, held by the seed's agent, and two queued behind it (AI の作業's 実行中 and 待ち). Not with `--leave-queued`. |
 | `--exit` | Stops the session server once seeded instead of leaving it running. |
 
 The seed copies the workspace (without `.domaintrail/` and `generated/`), commits it to a git repository of its own
@@ -78,8 +79,12 @@ card gives a title of its own that the card does not take.
 - `references`: `@{…}` in a summary, a note, an assumption, a question and its options — `.dt` elements, states,
   commands, storming elements, ones that do not resolve, and `\@{` written as text.
 
-Not produced: a run left **running** (the seed's agent would have to hold its lease; stopped, the lease expires and
-the run fails), and a run **queued** unless `--leave-queued` (a real subscriber started later would take it).
+Not produced by default: a run left **running** and runs **queued**. `--leave-running` leaves both: once the scenarios
+are done, 田中's message runs and the seed's agent keeps working on it (holding its lease) while the seed runs, and two
+runs wait behind it — 佐藤's message, then 鈴木's and 高橋's together. Cancelling the running one (✕) starts the next,
+which the agent holds the same way. Without it the agent is stopped (stopped, a lease expires and the run fails);
+`--leave-queued` leaves one run queued for a real subscriber started later. The questions left open by `questions`
+show in AI の作業 as 答え待ち.
 
 ## The classifier
 
