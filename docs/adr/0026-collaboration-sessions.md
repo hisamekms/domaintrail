@@ -823,6 +823,51 @@ note is written by hand. The pick is now part of the frozen input.
   only (between the messages appendix and this one, never released) show no ✓: their note line still says what was
   asked.
 
+### Assumptions approved (amendment)
+
+*Decided by the maintainer*: an assumption the AI made had two outcomes, an alternative picked (a run) or nothing. The
+facilitator can now also approve it: it stands as the AI made it. An approval sends nothing to the AI; it records who
+approved and when, and the card shows it as it shows a pick. An assumption has one decision, never both: approved, or
+one of its alternatives picked.
+
+- **Where it belongs.** Four places were weighed. A **mark** (a sign `Approval` on `AssumptionChoice`) reuses the
+  table and the events, but a mark is anyone's preference, removable at will, and refused as a vote to the facilitator
+  (`FacilitatorDoesNotVote`) precisely because the facilitator's act is the decision; a decision closes the votes, it is
+  not one of them. A **field of the run** is ruled out because a run never changes once it ended (the reason `Mark` is
+  not on `AgentRun` either). The **input of a run**, where a pick lives, holds what a run is asked; an approval queues
+  no run. So an approval is an **aggregate of its own**, `AssumptionApproval`: outside the run as a mark is, the
+  facilitator's with who and when as a pick is. It is final, as a pick is: there is no command to withdraw it.
+- **Model** (`model/approval.dt`, generated code regenerated). Value `AssumptionRef { references run: AgentRunId ->
+  AgentRun, assumption: Tally }` (the assumption by its index in the reply, as `AlternativePick` and
+  `MarkTarget.AssumptionChoice` name it). Aggregate `AssumptionApproval { id, session, assumption: AssumptionRef,
+  approvedBy, approvedAt }` with one state, `Approved`; `create command approve(id, session: ActiveSession, assumption:
+  DecidableAssumption, approvedBy, approvedByRole, approvedAt)` requires `facilitatorApproves` (`FacilitatorOnly`) and
+  emits `AssumptionApproved { approvalId, session, assumption, approvedBy, approvedAt }`.
+- **One decision per assumption.** The verified `DecidableAssumption` (of `AssumptionRef`, for the session; its factory
+  in `application/verifications.ts`) is the evidence that the assumption can still be decided: the run is the
+  session's (`RunNotFound`, `RunOfAnotherSession`), completed with assumptions (`RunNotApprovable`, as
+  `RunNotPickable`), the index is in its reply (`AssumptionNotFound`), and it is not decided (`AssumptionClosed`): not
+  approved, and no later run took over the run's requests (`laterRunOf`: a pick of any of its alternatives is such a
+  run). The other way round, `queueRun` refuses a `pick` of an approved assumption with `AssumptionClosed`. The store
+  keeps one approval per run and assumption (a unique index), so two facilitator pages racing get one approval and a
+  refusal. Approving one assumption leaves the run's other assumptions as they were.
+- **Votes.** An approval closes the votes of its assumption (the assumption and its alternatives), as an answer or a
+  pick closes theirs: `markTargetStatus` reads the scope's `approvals` (`domain/marks.ts`, the server and the page
+  alike).
+- **Use case and API.** `approveAssumption { session, actor, run, assumption }` → `POST /api/session/approvals { run,
+  assumption }` (the facilitator; each field checked: `run` a UUID, `assumption` an integer ≥ 0) → 201 `{ approval }`;
+  403 `FacilitatorOnly`, 404 `RunNotFound` / `RunOfAnotherSession`, 409 `RunNotApprovable` / `AssumptionClosed`, 400
+  `AssumptionNotFound`. The event reaches the pages as `assumption.approved`; the agent's stream does not carry it (not
+  in `AGENT_EVENT_TYPES`) and the prompt is unchanged. `session.state` and `GET /api/session/state` carry `approvals`.
+- **Persistence.** Migration 8 adds `approvals` (`run_id` a foreign key to `agent_runs`, `assumption`, JSON `data`),
+  unique on `(run_id, assumption)`. Nothing else changes: a database of the version before is upgraded in place and its
+  sessions have no approvals; a page given a state without `approvals` reads none.
+- **Page** (`web/session/decisions.ts`, pure and tested). `assumptionDecision(run, index, runs, approvals)`: open,
+  approved (who, when) or picked (the alternative, who, when, the run it queued). The card shows each assumption as the
+  AI's text; the facilitator approves it (✓ 承認) or sends it again with an alternative (送り直す in the alternative's
+  card, as a pick did). Once decided: ◉ on what was chosen, the rest muted, and `承認 name · time` or `送り直し name ·
+  time` (the time a link to the run it queued).
+
 ## Appendix: mentions of people (amendment)
 
 *Decided by the maintainer*: in the composer `#` names elements (what `@` did) and `@` names people, so that a
