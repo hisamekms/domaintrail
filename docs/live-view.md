@@ -161,8 +161,8 @@ the same for everyone and open when the page joins. Its head shows the collab me
 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
 the agent's status at a glance, with ✕ to close it; while it is closed, a round 💬 button at the bottom right of the
 canvas opens it again, marked with a spinner while the agent runs, `?` while it waits for an answer, and the number of
-messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection and `C`
-open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
+messages since the chat was last shown (else of the requests awaiting approval). The 💬 next to the selection (on the canvas,
+or next to the element's name in the inspector) and `C` add the selection as targets and open it too. Its width is remembered per browser; on a window narrower than about 1280px the left pane collapses to
 its activity bar while the chat is open, and below about 1024px the inspector moves below the canvas (your own choices
 come back when the window is wide again).
 

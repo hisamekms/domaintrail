@@ -2685,9 +2685,11 @@ written or sent, a mention in a sent text, a card named after its first message 
 what it is in (`#支払済み`, not `#請求書.支払済み`), its whole name in the tooltip; only the `#` list keeps the kind and
 where beside each name, to tell the candidates apart. (Messages written before `#` named elements have
 `@name[n]`: they still read as elements.) The chips are the request's targets: delete every mention of one to
-drop it, or remove it with ×, which leaves its mentions as plain text. What you select (on the canvas or in the
-explorer) is suggested as dashed chips: sending makes them targets, × drops a suggestion until the selection changes;
-the 💬 button next to the selection on the canvas, or `C`, makes them chips and puts the caret in the text. Selecting a
+drop it, or remove it with ×, which leaves its mentions as plain text. Selecting changes nothing in the composer: to
+make the selection targets, press the 💬 button next to it on the canvas (or next to the element's name in the
+inspector, for something selected in the explorer or by a search), or `C`; that adds it as chips, opens the chat and
+puts the caret in the text. Once everything selected is a chip, the 💬 shows a ✓. The chips take two rows at most:
+`+n` shows the others, and they fold again when you send. Selecting a
 note in one timeline's view of a storming targets that occurrence (the timeline and the step), the integrated canvas,
 which draws each event once, targets the event's definition, and a selection of several shapes adds each of them. The
 text and chips you are writing stay in your browser (IndexedDB, per session and participant) until you send them. A
