@@ -534,7 +534,7 @@ const ja = {
         // reverting a unit of work from its card (apps/web/session/revisions.tsx)
         revertFlow: {
             confirm: (name: string) =>
-                `${name}の変更を打ち消しますか？ この作業が変えたところだけを元に戻し、あとの作業の変更は残します。あとの変更と重なるなどで機械的に打ち消せないときは、AI に打ち消しを頼みます。`,
+                `${name}の変更を打ち消しますか？ この作業が変えたところだけを元に戻し、あとの作業の変更は残します。ほかの作業と同じく待ちに入り、順が来たら機械的に打ち消します。あとの変更と重なるなどで機械的に打ち消せないときは、AI に打ち消しを頼みます。`,
             revert: '打ち消す',
             cancel: 'やめる',
             close: '閉じる',
@@ -542,8 +542,13 @@ const ja = {
             conflict: (paths: string) => `あとの変更と重なるところがあり（${paths}）、機械的には打ち消せませんでした。AI に打ち消しを頼みました。`,
             check: '機械的に打ち消すとモデルの検査が通らないため、AI に打ち消しを頼みました。',
             unreadable: '作業の前後の内容が残っていないため、AI に打ち消しを頼みました。',
-            run: '実行中の作業があるため打ち消せません。作業が終わってから打ち消してください。',
-            nothing: 'この作業の変更は、もうワークスペースに残っていません。',
+            queued: (ahead: number) =>
+                ahead > 0
+                    ? `打ち消しを待ちに入れました（前に ${ahead} 件）。順が来たら機械的に打ち消し、できなければ AI に頼みます。`
+                    : '打ち消しを待ちに入れました。機械的に打ち消し、できなければ AI に頼みます。',
+            agent: 'AI が打ち消しています。',
+            stopped: '打ち消しを中止しました。',
+            nothing: 'この作業の変更は、もうワークスペースに残っていませんでした。打ち消すものはありません。',
             failed: (m: string) => `打ち消せませんでした: ${m}`,
         },
         chat: {
@@ -722,6 +727,7 @@ const ja = {
                 failedLabel: '失敗',
                 cancelled: (name: string) => `${name} が実行を中止しました。`,
                 reverted: '変更を機械的に打ち消しました（AI は使っていません）。',
+                revertedNothing: '打ち消す変更は、もう残っていませんでした（AI は使っていません）。',
             },
             reply: {
                 applied: (files: number | undefined) => (files === undefined ? 'ファイル変更あり' : `${files} ファイル変更`),
@@ -1285,7 +1291,7 @@ const en: Messages = {
         },
         revertFlow: {
             confirm: (name) =>
-                `Revert the changes of ${name}? Only what this work changed is counteracted; later work's changes stay. When it cannot be reverted mechanically (later changes overlap it, say), the AI is asked to revert it.`,
+                `Revert the changes of ${name}? Only what this work changed is counteracted; later work's changes stay. It queues like any work and is reverted mechanically when its turn comes; when it cannot be (later changes overlap it, say), the AI is asked to revert it.`,
             revert: 'Revert',
             cancel: 'Cancel',
             close: 'Close',
@@ -1293,8 +1299,13 @@ const en: Messages = {
             conflict: (paths) => `Later changes overlap it (${paths}): it could not be reverted mechanically. The AI is asked to revert it.`,
             check: 'Reverted mechanically, the model would not check: the AI is asked to revert it.',
             unreadable: 'The contents before and after the work are gone: the AI is asked to revert it.',
-            run: 'A run is in progress: revert once it has ended.',
-            nothing: "None of this work's changes are left in the workspace.",
+            queued: (ahead) =>
+                ahead > 0
+                    ? `The revert is queued (${ahead} ahead). When its turn comes it is reverted mechanically, else the AI is asked.`
+                    : 'The revert is queued: it is reverted mechanically, else the AI is asked.',
+            agent: 'The AI is reverting it.',
+            stopped: 'The revert was stopped.',
+            nothing: "None of this work's changes were left in the workspace: there was nothing to revert.",
             failed: (m) => `Not reverted: ${m}`,
         },
         chat: {
@@ -1470,6 +1481,7 @@ const en: Messages = {
                 failedLabel: 'Failed',
                 cancelled: (name) => `Stopped by ${name}.`,
                 reverted: 'Reverted the changes mechanically (no AI involved).',
+                revertedNothing: 'None of the changes were left to revert (no AI involved).',
             },
             reply: {
                 applied: (files) => (files === undefined ? 'files changed' : `${files} ${files === 1 ? 'file' : 'files'} changed`),

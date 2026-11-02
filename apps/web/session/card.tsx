@@ -16,7 +16,7 @@ import { useClipped } from '../view/toolbar';
 import { answerBody, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import { OtherDialog } from './answer-other';
-import { cardMenuItems, cardRuns, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
+import { cardMenuItems, cardRuns, obstacleText, quoteDisplay, type CardRun, type Quote, type QuoteDisplay } from './cards';
 import { changeFullName, changeKey, changeShortName, changeTarget, useModelChanges } from './changes';
 import { useChat, type Tx } from './chat-context';
 import { assumptionDecision, questionsState, type QuestionsState } from './decisions';
@@ -368,6 +368,8 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
     const says = tx.chat.agentSays;
     switch (m.kind) {
         case 'queued':
+            // a revert left to the AI: why, until the AI takes it
+            return m.revertObstacle ? <p className="chat-text muted">{obstacleText(m.revertObstacle, tx.revertFlow)}</p> : null;
         case 'running':
             return null;
         case 'clarification':
@@ -404,7 +406,7 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
         case 'cancelled':
             return <p className="chat-text muted">{says.cancelled(nameOf(m.by))}</p>;
         case 'reverted':
-            return <p className="chat-text">{says.reverted}</p>;
+            return <p className="chat-text">{m.changed ? says.reverted : says.revertedNothing}</p>;
     }
 }
 

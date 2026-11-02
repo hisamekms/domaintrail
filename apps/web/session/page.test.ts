@@ -299,9 +299,23 @@ describe('the session state from the socket', () => {
         expect(failed).toMatchObject({ refetch: false, state: { runs: [{ state: 'Failed', reason: 'AgentError' }] } });
         const cancelled = applyEvent(started.state, message(5, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'local:facilitator', cancelledAt: at }));
         expect(cancelled.state.runs[0]).toMatchObject({ state: 'Cancelled', baseRevision: 'r1' });
-        // a mechanical revert is recorded done: its input is not in the event
-        const reverted = { type: 'RunReverted', runId: 'run2', session: 's1', requests: ['q2'], queuedBy: 'local:facilitator', queuedAt: at };
-        expect(applyEvent(held, message(5, { ...reverted, baseRevision: 'r1', resultRevision: 'r2', finishedAt: at })).refetch).toBe(true);
+        // a queued revert the server took: left to the AI with why (still queued), or reverted mechanically
+        const obstacle = { kind: 'Conflict', paths: ['a.dt'] };
+        const left = applyEvent(held, message(5, { type: 'RevertLeftToAgent', runId: 'run1', obstacle }));
+        expect(left).toMatchObject({ refetch: false, state: { runs: [{ state: 'Queued', revertObstacle: obstacle }] } });
+        const reverted = applyEvent(
+            held,
+            message(5, { type: 'RunReverted', runId: 'run1', baseRevision: 'r1', resultRevision: 'r2', changed: true, finishedAt: at }),
+        );
+        expect(reverted).toMatchObject({
+            refetch: false,
+            state: { runs: [{ id: 'run1', state: 'Reverted', baseRevision: 'r1', resultRevision: 'r2', changed: true }] },
+        });
+        // one the page does not have yet is fetched
+        expect(
+            applyEvent(base, message(5, { type: 'RunReverted', runId: 'run2', baseRevision: 'r1', resultRevision: 'r1', changed: false, finishedAt: at }))
+                .refetch,
+        ).toBe(true);
         // a cancel after the run ended changes nothing
         expect(applyEvent(failed.state, message(6, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'x', cancelledAt: at })).state.runs[0].state).toBe(
             'Failed',

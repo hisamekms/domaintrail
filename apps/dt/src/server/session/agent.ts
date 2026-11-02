@@ -47,6 +47,8 @@ export interface AgentApiDeps {
     readonly pump: () => Promise<void>;
     /** What a running run is doing now, reported by its lease's holder: kept as its latest and sent to the pages. */
     readonly activity: (run: Collaboration.AgentRunId, activity: RunActivity) => void;
+    /** Lets the server take a revert at the head of the queue (a claim found one it has not tried yet). */
+    readonly reverts?: () => void;
 }
 
 export interface AgentApi {
@@ -328,6 +330,8 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             if (!Array.isArray(capabilities) || capabilities.length > 20 || !capabilities.every(isToken))
                 return sendError(res, 400, 'InvalidInput', 'Expected the names of what the subscriber can run.', { field: 'capabilities' });
             const claimed = await use.claimNextRun({ session, owner: b.owner, leaseMs: deps.leaseMs, capabilities });
+            // a revert at the head is the server's to try first: nudge it (it is normally on it already)
+            if (!claimed.ok && claimed.error.type === 'RunInProgress') deps.reverts?.();
             return answer(res, claimed, (v) => ({ run: v.run, lease: { token: v.lease.token, expiresAt: v.lease.expiresAt.toISOString() } }));
         }
         const run = /^\/agent\/runs\/([^/]+)\/([a-z]+)$/.exec(path);

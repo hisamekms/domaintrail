@@ -3,6 +3,9 @@
 // run's changes applied onto the workspace as it is now — mechanically, as `git revert` does, or not at all — and what
 // an agent asked to revert a run is told of its changes.
 //
+// A revert is queued like any other change (amendment "a revert queues"). When its turn comes, the server tries the
+// mechanical revert below first (`awaitsServer`); only when it cannot is the run left to the agent, with why.
+//
 // The mechanical revert, per source the run changed (its base and result revisions differ there):
 //   - the workspace still has the run's result → the base is written back (a file the run added is removed, one it
 //     removed comes back);
@@ -26,6 +29,8 @@ export interface RevertRun {
     /** Absent until it ended with a result. */
     readonly resultRevision?: string;
     readonly input: { readonly requests: readonly { readonly reverts?: string }[] };
+    /** A queued revert the server could not revert mechanically: why (absent until it tried). */
+    readonly revertObstacle?: unknown;
 }
 
 /**
@@ -40,6 +45,16 @@ export function revertableChanges(run: RevertRun): { readonly base: string; read
 
 /** Whether a run is a revert: it bundles a request that reverts a run. */
 export const isRevert = (run: RevertRun): boolean => run.input.requests.some((r) => r.reverts !== undefined);
+
+/** The run a revert reverts (its revert request names it); `undefined` for a run that is not a revert. */
+export const revertedRunId = <I extends string>(run: { readonly input: { readonly requests: readonly { readonly reverts?: I }[] } }): I | undefined =>
+    run.input.requests.find((r) => r.reverts !== undefined)?.reverts;
+
+/**
+ * Whether a run is a queued revert the server has not tried mechanically yet: the server's to take when its turn comes,
+ * never an agent's (an agent gets it only once the server left it, with why).
+ */
+export const awaitsServer = (run: RevertRun): boolean => run.state === 'Queued' && isRevert(run) && run.revertObstacle === undefined;
 
 /** The states of a revert that reverted its run: recorded mechanically, or completed by the AI. */
 const DONE: ReadonlySet<string> = new Set(['Reverted', 'Completed']);

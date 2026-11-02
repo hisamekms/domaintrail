@@ -12,7 +12,7 @@
 // queued one is claimed without waiting for anyone. While the agent runs, what it is doing (as the runner maps it) is
 // reported on change, at most once a second, never holding it up. Functions over the ports only: no I/O of its own.
 import { mapRequests } from '@domaintrail/collaboration';
-import { AGENT_CAPABILITIES, type AgentClaimed, type AgentPreviousRun, type AgentRevertedRun } from '@domaintrail/collaboration/protocol';
+import { AGENT_CAPABILITIES, AGENT_EVENT_TYPES, type AgentClaimed, type AgentPreviousRun, type AgentRevertedRun } from '@domaintrail/collaboration/protocol';
 import { AgentApiError, type AgentApi, type AgentOutcome, type AgentRunner, type ApiResult, type Clock, type DslTools, type WorkspaceFiles } from './ports.js';
 import { createActivityReporter } from './activity.js';
 import { buildPrompt } from './prompt.js';
@@ -69,6 +69,12 @@ export interface Subscriber {
 const DEFAULT_RECONNECT = { minMs: 500, maxMs: 5_000, giveUpMs: 60_000 };
 /** How often a completion is tried again after a transport failure (it is idempotent on the server). */
 const COMPLETION_TRIES = 5;
+
+/**
+ * The events after which a run may be claimable: a run queued; a revert the server reverted itself (the queue moved
+ * on), or left to the agent. A revert the server has not tried yet is never given to the agent.
+ */
+const CLAIMABLE: ReadonlySet<string> = new Set([AGENT_EVENT_TYPES.RunQueued, AGENT_EVENT_TYPES.RunReverted, AGENT_EVENT_TYPES.RevertLeftToAgent]);
 
 /** A run's state on the server may have moved on: cancelled, lease expired or taken. Nothing more to do for it. */
 const isFinal = (r: ApiResult<unknown>): boolean => !r.ok && (r.status === 409 || r.status === 404);
@@ -364,7 +370,8 @@ export function startSubscriber(deps: SubscriberDeps, options: SubscriberOptions
                         continue;
                     }
                     lastEventId = item.id;
-                    if (item.type === 'run.queued') wake();
+                    // a run queued, or the queue moved past a revert the server took first: something may be claimable
+                    if (CLAIMABLE.has(item.type)) wake();
                     else if (item.type === 'session.closed') finish('closed');
                     else if (item.type === 'run.cancel_requested' && item.message.type === 'run.cancelled' && item.message.event.runId === current?.run) {
                         log(`run ${current.run}: cancel requested`);

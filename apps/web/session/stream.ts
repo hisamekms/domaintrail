@@ -46,7 +46,8 @@ export interface ReplyView {
 
 /** What the agent says about a run, from the run's state; `files`: how many sources the run changed (measured). */
 export type AgentMessage =
-    | { readonly kind: 'queued' }
+    /** Waiting its turn; a revert the server could not revert mechanically says why it waits for the AI. */
+    | { readonly kind: 'queued'; readonly revertObstacle?: NonNullable<Extract<RunJson, { state: 'Queued' }>['revertObstacle']> }
     | { readonly kind: 'running'; readonly since: string }
     | {
           readonly kind: 'clarification';
@@ -64,7 +65,7 @@ export type AgentMessage =
       }
     | { readonly kind: 'declined'; readonly result: number | undefined; readonly files: number | undefined; readonly reply: ReplyView }
     /** The changes of a run reverted mechanically, without the agent. */
-    | { readonly kind: 'reverted'; readonly result: number | undefined; readonly files: number | undefined }
+    | { readonly kind: 'reverted'; readonly changed: boolean; readonly result: number | undefined; readonly files: number | undefined }
     | { readonly kind: 'failed'; readonly reason: FailureReason }
     | { readonly kind: 'cancelled'; readonly by: string };
 
@@ -133,7 +134,7 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
     const files = (base: string, result: string): number | undefined => filesChanged(lookup.revision(base), lookup.revision(result));
     switch (run.state) {
         case 'Queued':
-            return { at: run.queuedAt, message: { kind: 'queued' } };
+            return { at: run.queuedAt, message: run.revertObstacle ? { kind: 'queued', revertObstacle: run.revertObstacle } : { kind: 'queued' } };
         case 'Running':
             return { at: run.startedAt, message: { kind: 'running', since: run.startedAt } };
         case 'NeedsClarification':
@@ -175,7 +176,12 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
         case 'Reverted':
             return {
                 at: run.finishedAt,
-                message: { kind: 'reverted', result: revisionNumber(run.resultRevision), files: files(run.baseRevision, run.resultRevision) },
+                message: {
+                    kind: 'reverted',
+                    changed: run.changed,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                },
             };
     }
 }

@@ -14,11 +14,11 @@ import { compareFiles, lineDiff, MAX_DIFF_BYTES, statusCounts, type FileComparis
 import { resolveAnswer, resolvePick, type AnswerData, type PickData } from '../domain/reply.js';
 import { boundChanges, previousRunIds, type ComparedChange, type PreviousRunChanges } from '../domain/previous-runs.js';
 import { nonEmpty, workspacePath } from '../domain/snapshot.js';
-import { isRevert, reverseChanges, revertableChanges, revertChanges, type RevertChanges } from '../domain/revert.js';
+import { awaitsServer, isRevert, reverseChanges, revertableChanges, revertChanges, revertedRunId, type RevertChanges } from '../domain/revert.js';
 import { targetStatus, type TargetStatus } from '../domain/targets.js';
 import { diagnosticsDiff, runReport, tally, type DiagnosticsDiff, type RunFacts } from '../domain/validation.js';
 import type { Actor } from './actor.js';
-import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WriteRefusal } from './ports.js';
+import type { CollaborationDeps, Lease, OutboxEntry, RestoreOperation, StoredRun, Stores, ValidationResult, WorkspaceScan, WriteRefusal } from './ports.js';
 import { analysisOf, capture, sourcesOf, type BlobMissing, type Captured } from './snapshots.js';
 import { restorableRevision, storeVerifications } from './verifications.js';
 import { knownAgentRunId, knownAssumptionApprovalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
@@ -99,12 +99,6 @@ export interface ManualRecoveryNeeded {
     readonly message: string;
 }
 
-/** The workspace already has none of the changes of the run to revert (reverted by hand, or by later changes). */
-export interface NothingToRevert {
-    readonly type: 'NothingToRevert';
-    readonly run: AgentRunId;
-}
-
 /**
  * The next queued run needs what the claiming subscriber did not say it can do (`capabilities` of the claim): a revert
  * needs `revert`. The run stays queued for a subscriber that can; this one is told to update.
@@ -118,6 +112,12 @@ export interface SubscriberOutdated {
 
 /** What a subscriber says it can run, when it claims: `revert`, a run that reverts another run's changes. */
 export const REVERT_CAPABILITY = 'revert';
+
+/**
+ * The owner of the server's own lease on a queued revert, while it tries it mechanically (`revertNext`): shown where a
+ * lease's owner is, never an agent's name.
+ */
+export const SERVER_REVERT_OWNER = 'dt-server';
 
 export type { BlobMissing };
 
@@ -204,29 +204,41 @@ export interface TargetStatuses {
     readonly statuses: ReadonlyMap<Collaboration.RequestId, readonly TargetStatus[]>;
 }
 
-/** Why a revert was left to the AI rather than done mechanically. */
-export type RevertObstacle =
-    /** Later changes touch what the run changed (or a file is too large to merge): the paths. */
-    | { readonly kind: 'conflict'; readonly paths: readonly Collaboration.WorkspacePath[] }
-    /** Reverted, the sources would not check: `.dt` errors the workspace does not have now, `.dtes` files that do not parse. */
-    | { readonly kind: 'check'; readonly newDtErrors: number; readonly unparsedDtes: readonly string[] }
-    /** The run's sources before or after it are no longer stored. */
-    | { readonly kind: 'unreadable' };
+/** Why a revert was left to the AI rather than done mechanically (the model's `RevertObstacle`). */
+export type RevertObstacle = Collaboration.RevertObstacle;
 
-/** How a revert went: done mechanically (recorded as a run of its own), or queued for the AI and why. */
-export type Reverted =
-    | { readonly way: 'mechanical'; readonly request: Collaboration.SentRequest; readonly run: Collaboration.RevertedAgentRun }
-    | { readonly way: 'agent'; readonly request: Collaboration.SentRequest; readonly run: Collaboration.QueuedAgentRun; readonly obstacle: RevertObstacle };
+/** A revert asked: its request, and its run queued like any other (`revertNext` takes it when its turn comes). */
+export interface RevertRequested {
+    readonly request: Collaboration.SentRequest;
+    readonly run: Collaboration.QueuedAgentRun;
+}
 
-export type RevertError =
+export type RequestRevertError =
     | Collaboration.FacilitatorOnly
     | Collaboration.SessionNotFound
     | Collaboration.SessionAlreadyClosed
     | Collaboration.RunNotFound
     | Collaboration.RunOfAnotherSession
-    | Collaboration.RunNotRevertable
+    | Collaboration.RunNotRevertable;
+
+/**
+ * What the server did with the revert at the head of the queue: reverted mechanically (`changed`: false when none of
+ * the run's changes was left: nothing to revert, nothing written), or left queued for the agent, with why.
+ */
+export type RevertOutcome =
+    | { readonly kind: 'reverted'; readonly run: Collaboration.RevertedAgentRun }
+    | { readonly kind: 'leftToAgent'; readonly run: Collaboration.QueuedAgentRun; readonly obstacle: RevertObstacle };
+
+/**
+ * Why the server did not take the head of the queue: it is not a revert it has to try (`NothingQueued`: none queued,
+ * not a revert, or one already left to the agent), a run is running or claimed (`RunInProgress`), or the write was
+ * refused (the workspace changed meanwhile, …: nothing written, the revert stays queued and is tried again), or the
+ * revert was cancelled while it was tried (`LeaseLost`: nothing written).
+ */
+export type RevertNextError =
+    | NothingQueued
     | RunInProgress
-    | NothingToRevert
+    | LeaseLost
     | Collaboration.PathOutsideRoot
     | Collaboration.ExternalChangesSinceSnapshot
     | Collaboration.SymlinkInWorkspace;
@@ -463,20 +475,28 @@ export interface CollaborationUseCases {
      */
     expireLeases(): Promise<{ readonly failed: readonly Collaboration.FailedAgentRun[]; readonly released: readonly AgentRunId[] }>;
     /**
-     * Reverts the changes of a run of the session (one that changed files, not reverted yet nor being reverted): the
-     * facilitator's, refused while a run is running or claimed. The facilitator's message `body` (what is reverted, for
-     * everyone) is sent as a revert request. The run's changes — its base and result revisions, file by file — are
-     * reversed onto the workspace as it is now (`domain/revert.ts`); when that merges and the result checks as a run's
-     * would (no `.dt` error the workspace does not have, every `.dtes` parses; formatted), it is written and recorded
-     * as a mechanical revert (a run `Reverted`, with its base and result revisions). Otherwise the request is queued for
-     * the AI, with why. `NothingToRevert` when the workspace has none of the run's changes any more.
+     * Asks to revert the changes of a run of the session (one that changed files, not reverted yet nor being reverted):
+     * the facilitator's. The facilitator's message `body` (what is reverted, for everyone) is sent as a revert request,
+     * and queued as a run of its own behind the others, like any change (never refused for a run in progress). When its
+     * turn comes, the server tries it mechanically first (`revertNext`).
      */
-    revertRun(input: {
+    requestRevert(input: {
         readonly session: SessionId;
         readonly actor: Actor;
         readonly run: AgentRunId;
         readonly body: Collaboration.Text;
-    }): Promise<Result<Reverted, RevertError>>;
+    }): Promise<Result<RevertRequested, RequestRevertError>>;
+    /**
+     * The server's turn at the head of the session's queue, when it is a revert it has not tried yet (no agent needed).
+     * It claims the run with its own lease (`SERVER_REVERT_OWNER`, for `leaseMs`), so that no agent claims it meanwhile;
+     * reverses the reverted run's changes — its base and result revisions, file by file — onto the workspace as it is
+     * then (`domain/revert.ts`); when that merges and the result checks as a run's would (no `.dt` error the workspace
+     * does not have, every `.dtes` parses; formatted), writes it and records the run `Reverted` (with its base and result
+     * revisions; unchanged when none of the run's changes was left). Otherwise the run stays queued for the agent, with
+     * why (`RevertLeftToAgent`). Writing and recording are one transaction that first checks the lease is still the
+     * server's: a revert cancelled meanwhile writes nothing.
+     */
+    revertNext(input: { readonly session: SessionId; readonly leaseMs: number }): Promise<Result<RevertOutcome, RevertNextError>>;
     /**
      * The runs a run reverts (its revert requests), each with what it changed, file by file: a unified diff per file while
      * they fit `MAX_REVERT_DIFF` characters, else the file's line counts. Measured now, from the revisions (for the run's start).
@@ -576,6 +596,55 @@ function frozenReplyTarget(target: Collaboration.ReplyTarget | undefined, stores
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
+
+/** What the mechanical revert of a run does to the workspace: leave it to the agent (why), write sources, or nothing. */
+type RevertPlan =
+    | { readonly kind: 'agent'; readonly obstacle: RevertObstacle }
+    | { readonly kind: 'write'; readonly sources: ReadonlyMap<string, string> }
+    | { readonly kind: 'nothing' };
+
+/** The paths of the workspace among `raw` (a path that is not one is left out: it never comes from a snapshot). */
+function workspacePaths(raw: readonly string[]): Collaboration.WorkspacePath[] {
+    return raw.flatMap((r) => {
+        const p = workspacePath(r);
+        return p.ok ? [p.value] : [];
+    });
+}
+
+/**
+ * The mechanical revert of the run whose sources were `base` before and `result` after it, onto the workspace `scan`
+ * (captured as `current`): the reverse merge (`domain/revert.ts`), checked as a run is (no `.dt` error the workspace
+ * does not have now, every `.dtes` parses) and formatted as `dt fmt` formats a run's edits. Reads only; writes nothing.
+ */
+async function revertPlan(
+    deps: Pick<CollaborationDeps, 'blobs' | 'validator' | 'formatter'>,
+    base: Collaboration.Revision,
+    result: Collaboration.Revision,
+    scan: WorkspaceScan,
+    current: Captured,
+): Promise<RevertPlan> {
+    const before = await sourcesOf(deps, base);
+    const after = await sourcesOf(deps, result);
+    if (!before.ok || !after.ok) return { kind: 'agent', obstacle: { kind: 'Unreadable' } };
+    const texts = (files: readonly { readonly path: string; readonly bytes: Uint8Array }[]): Map<string, string> =>
+        new Map(files.map((f) => [f.path, decoder.decode(f.bytes)]));
+    const now = texts(scan.files);
+    const merge = reverseChanges(texts(before.value), texts(after.value), now);
+    if (merge.kind === 'nothing') return { kind: 'nothing' };
+    if (merge.kind === 'conflict') return { kind: 'agent', obstacle: { kind: 'Conflict', paths: workspacePaths(merge.paths) } };
+    const sources = new Map(now);
+    for (const path of merge.remove) sources.delete(path);
+    for (const [path, text] of merge.write) sources.set(path, text);
+    const analysis = await deps.validator.validate([...sources].map(([path, text]) => ({ path, text })));
+    const diff = diagnosticsDiff(current.analysis.diagnostics, analysis.diagnostics);
+    if (diff.newDtErrors.length > 0 || diff.unparsedDtes.length > 0)
+        return { kind: 'agent', obstacle: { kind: 'Check', newDtErrors: tally(diff.newDtErrors.length), unparsedDtes: workspacePaths(diff.unparsedDtes) } };
+    // formatted as `dt fmt` formats a run's edits: the sources it wrote that parse
+    const broken = new Set(analysis.diagnostics.filter((d) => d.code === 'SYNTAX').map((d) => d.file));
+    for (const [path, text] of merge.write) if (deps.formatter && !broken.has(path)) sources.set(path, deps.formatter.format(path, text));
+    const same = sources.size === now.size && [...sources].every(([path, text]) => now.get(path) === text);
+    return same ? { kind: 'nothing' } : { kind: 'write', sources };
+}
 
 /** The success value of a command that cannot fail. */
 function decided<T>(r: Result<T, never>): T {
@@ -953,6 +1022,13 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (id === undefined) return err({ type: 'NothingQueued' });
                 const run = stores.runs.load(id)?.run;
                 if (run?.state !== 'Queued') throw new Error(`The claimed run ${id} is not queued`);
+                // a revert the server has not tried is the server's (`revertNext`): an agent never gets it before the
+                // mechanical try. Released in this same transaction, so nobody ever sees it claimed; the agent is told
+                // a run is in progress (the server takes it now) and is woken by RunReverted or RevertLeftToAgent
+                if (awaitsServer(run)) {
+                    stores.runs.release(id, lease.token);
+                    return err({ type: 'RunInProgress', run: id });
+                }
                 // a subscriber that cannot run a revert would run it as a plain request: it stays queued for one that can
                 if (isRevert(run) && !capabilities.includes(REVERT_CAPABILITY)) {
                     stores.runs.release(id, lease.token);
@@ -1137,136 +1213,38 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             });
         },
 
-        async revertRun({ session, actor, run, body }) {
-            // requestRevert and revert require the facilitator: asked first, before the workspace is read
+        async requestRevert({ session, actor, run, body }) {
+            // requestRevert and queue require the facilitator: asked first
             if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
-            const verified = async (
-                stores: Stores,
-            ): Promise<Result<{ active: Collaboration.ActiveSession; revertable: Collaboration.RevertableRun }, RevertError>> => {
+            return uow.transaction(async (stores): Promise<Result<RevertRequested, RequestRevertError>> => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
                 if (!active.ok) return active;
+                // not reverted, nor a revert of it queued or under way: a second one is refused
                 const revertable = await verify.makeRevertableRun(run, session);
                 if (!revertable.ok) return revertable;
-                // the merge reads the workspace: no agent may be writing it
-                const busy = stores.runs.active(session, clock.now());
-                if (busy) return err({ type: 'RunInProgress', run: busy.run.id });
-                return ok({ active: active.value, revertable: revertable.value });
-            };
-            const checked = await uow.transaction(
-                async (stores): Promise<Result<{ base: Collaboration.Revision; result: Collaboration.Revision }, RevertError>> => {
-                    const v = await verified(stores);
-                    if (!v.ok) return v;
-                    const reverted = stores.runs.load(run)?.run;
-                    const changes = reverted && revertableChanges(reverted);
-                    const base = changes && stores.revisions.load(knownRevisionId(changes.base));
-                    const result = changes && stores.revisions.load(knownRevisionId(changes.result));
-                    if (!base || !result) throw new Error(`The revisions of run ${run} are missing`);
-                    return ok({ base, result });
-                },
-            );
-            if (!checked.ok) return checked;
-
-            // the workspace now, kept as the revert's base; the run's sources before and after it
-            const scan = await deps.workspace.read();
-            const current = await capture(deps, scan);
-            if (!current.ok) return current;
-            const before = await sourcesOf(deps, checked.value.base);
-            const after = await sourcesOf(deps, checked.value.result);
-            const texts = (files: readonly { readonly path: string; readonly bytes: Uint8Array }[]): Map<string, string> =>
-                new Map(files.map((f) => [f.path, decoder.decode(f.bytes)]));
-            const now = texts(scan.files);
-            let plan: { readonly kind: 'agent'; readonly obstacle: RevertObstacle } | { readonly kind: 'write'; readonly sources: Map<string, string> };
-            if (!before.ok || !after.ok) plan = { kind: 'agent', obstacle: { kind: 'unreadable' } };
-            else {
-                const merge = reverseChanges(texts(before.value), texts(after.value), now);
-                if (merge.kind === 'nothing') return err({ type: 'NothingToRevert', run });
-                if (merge.kind === 'conflict') {
-                    const paths: Collaboration.WorkspacePath[] = [];
-                    for (const raw of merge.paths) {
-                        const p = workspacePath(raw);
-                        if (p.ok) paths.push(p.value);
-                    }
-                    plan = { kind: 'agent', obstacle: { kind: 'conflict', paths } };
-                } else {
-                    const sources = new Map(now);
-                    for (const path of merge.remove) sources.delete(path);
-                    for (const [path, text] of merge.write) sources.set(path, text);
-                    // checked as a run is: no .dt error the workspace does not have now, every .dtes parses
-                    const analysis = await deps.validator.validate([...sources].map(([path, text]) => ({ path, text })));
-                    const diff = diagnosticsDiff(current.value.analysis.diagnostics, analysis.diagnostics);
-                    if (diff.newDtErrors.length > 0 || diff.unparsedDtes.length > 0)
-                        plan = { kind: 'agent', obstacle: { kind: 'check', newDtErrors: diff.newDtErrors.length, unparsedDtes: diff.unparsedDtes } };
-                    else {
-                        // formatted as `dt fmt` formats a run's edits: the sources it wrote that parse
-                        const broken = new Set(analysis.diagnostics.filter((d) => d.code === 'SYNTAX').map((d) => d.file));
-                        for (const [path, text] of merge.write) if (deps.formatter && !broken.has(path)) sources.set(path, deps.formatter.format(path, text));
-                        const same = sources.size === now.size && [...sources].every(([path, text]) => now.get(path) === text);
-                        if (same) return err({ type: 'NothingToRevert', run });
-                        plan = { kind: 'write', sources };
-                    }
-                }
-            }
-
-            let written: Captured | undefined;
-            if (plan.kind === 'write') {
-                const files = [...plan.sources].map(([path, text]) => ({ path, bytes: encoder.encode(text) }));
-                const wrote = await deps.workspace.write(files, scan.files);
-                if (!wrote.ok) return err(writeRefusal(wrote.error));
-                const read = await capture(deps);
-                if (!read.ok) return read;
-                written = read.value;
-            }
-            const mechanical = written;
-            return uow.transaction(async (stores): Promise<Result<Reverted, RevertError>> => {
-                const v = await verified(stores);
-                if (!v.ok) return v;
                 const at = clock.now();
                 const sent = requestCommands.requestRevert({
                     id: knownRequestId(ids.newId()),
-                    session: v.value.active,
+                    session: active.value,
                     author: actor.participant,
                     authorRole: actor.role,
                     body,
                     sentAt: at,
-                    reverts: v.value.revertable,
+                    reverts: revertable.value,
                 });
                 if (!sent.ok) return sent;
                 const request = sent.value.Sent.aggregate;
                 stores.requests.save(request);
                 publish(stores, session, sent.value.Sent.events, at);
-                const pending = await storeVerifications(stores).makePendingRequest(request.id, session);
+                const pending = await verify.makePendingRequest(request.id, session);
                 if (!pending.ok) throw new Error(`The revert request ${request.id} just sent is not pending: ${pending.error.type}`);
-                const input: Collaboration.RunInput = {
-                    requests: [{ request: request.id, author: request.author, targets: [], body: request.body, reverts: run }],
-                };
-                const id = knownAgentRunId(ids.newId());
-                if (mechanical) {
-                    const base = record(stores, session, { kind: 'RunBase', run: id }, current.value, at);
-                    const result = record(stores, session, { kind: 'RunResult', run: id }, mechanical, at);
-                    const reverted = agentRunCommands.revert({
-                        id,
-                        session: v.value.active,
-                        requests: [pending.value],
-                        input,
-                        queuedBy: actor.participant,
-                        queuedByRole: actor.role,
-                        queuedAt: at,
-                        baseRevision: base.id,
-                        resultRevision: result.id,
-                    });
-                    // the role was checked, the request is the one revert, and the merge changed the sources
-                    if (!reverted.ok) throw new Error(`Recording the revert of run ${run} failed: ${reverted.error.type}`);
-                    stores.runs.enqueue(reverted.value.Reverted.aggregate);
-                    publish(stores, session, reverted.value.Reverted.events, at);
-                    return ok({ way: 'mechanical', request, run: reverted.value.Reverted.aggregate });
-                }
-                if (plan.kind !== 'agent') throw new Error("A revert that wrote nothing is the agent's");
+                // queued behind the others like any change; the server tries it first when its turn comes (revertNext)
                 const queued = agentRunCommands.queue({
-                    id,
-                    session: v.value.active,
+                    id: knownAgentRunId(ids.newId()),
+                    session: active.value,
                     requests: [pending.value],
-                    input,
+                    input: { requests: [{ request: request.id, author: request.author, targets: [], body: request.body, reverts: run }] },
                     queuedBy: actor.participant,
                     queuedByRole: actor.role,
                     queuedAt: at,
@@ -1274,8 +1252,104 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (!queued.ok) throw new Error(`Queueing the revert of run ${run} failed: ${queued.error.type}`);
                 stores.runs.enqueue(queued.value.Queued.aggregate);
                 publish(stores, session, queued.value.Queued.events, at);
-                return ok({ way: 'agent', request, run: queued.value.Queued.aggregate, obstacle: plan.obstacle });
+                return ok({ request, run: queued.value.Queued.aggregate });
             });
+        },
+
+        async revertNext({ session, leaseMs }) {
+            // The race with an agent's claim: the server claims the head with a lease of its own, in one transaction
+            // that also checks it is a revert not tried yet (else released at once, unseen). While the server holds the
+            // lease, the session has a live lease: an agent's claim answers RunInProgress, and a restore is refused, as
+            // for an agent's run. And an agent's claim never takes an untried revert (claimNextRun releases it), so the
+            // two never process the same run.
+            const claimed = await uow.transaction(
+                (
+                    stores,
+                ): Result<
+                    { run: Collaboration.QueuedAgentRun; lease: Lease; base: Collaboration.Revision; result: Collaboration.Revision },
+                    NothingQueued | RunInProgress
+                > => {
+                    const now = clock.now();
+                    const active = stores.runs.active(session, now);
+                    if (active) return err({ type: 'RunInProgress', run: active.run.id });
+                    const lease: Lease = { owner: SERVER_REVERT_OWNER, token: ids.newId(), expiresAt: new Date(now.getTime() + leaseMs) };
+                    const id = stores.runs.claimNext(session, lease, now);
+                    if (id === undefined) return err({ type: 'NothingQueued' });
+                    const run = stores.runs.load(id)?.run;
+                    if (run?.state !== 'Queued') throw new Error(`The claimed run ${id} is not queued`);
+                    if (!awaitsServer(run)) {
+                        stores.runs.release(id, lease.token);
+                        return err({ type: 'NothingQueued' });
+                    }
+                    const reverted = revertedRunId(run);
+                    const target = reverted && stores.runs.load(reverted)?.run;
+                    const changes = target && revertableChanges(target);
+                    const base = changes && stores.revisions.load(knownRevisionId(changes.base));
+                    const result = changes && stores.revisions.load(knownRevisionId(changes.result));
+                    if (!base || !result) throw new Error(`The revisions of run ${reverted ?? '?'}, reverted by ${id}, are missing`);
+                    return ok({ run, lease, base, result });
+                },
+            );
+            if (!claimed.ok) return claimed;
+            const { run, lease } = claimed.value;
+            const id = run.id;
+            try {
+                // the workspace now, kept as the revert's base; the run's sources before and after it
+                const scan = await deps.workspace.read();
+                const current = await capture(deps, scan);
+                if (!current.ok) {
+                    await uow.transaction((stores) => stores.runs.release(id, lease.token));
+                    return current;
+                }
+                const plan = await revertPlan(deps, claimed.value.base, claimed.value.result, scan, current.value);
+
+                // written and recorded in one transaction, once it is sure the revert is still the server's: a revert
+                // cancelled meanwhile (or whose lease expired) writes nothing
+                return await uow.transaction(async (stores): Promise<Result<RevertOutcome, RevertNextError>> => {
+                    const stored = stores.runs.load(id);
+                    if (stored?.run.state !== 'Queued' || stored.lease?.token !== lease.token) return err({ type: 'LeaseLost', run: id });
+                    const queued = stored.run;
+                    if (plan.kind === 'agent') {
+                        const left = agentRunCommands.leaveToAgent(queued, { obstacle: plan.obstacle });
+                        if (!left.ok) throw new Error(`Leaving the revert ${id} to the agent failed: ${left.error.type}`);
+                        stores.runs.save(left.value.Queued.aggregate);
+                        stores.runs.release(id, lease.token);
+                        publish(stores, session, left.value.Queued.events, clock.now());
+                        return ok({ kind: 'leftToAgent', run: left.value.Queued.aggregate, obstacle: plan.obstacle });
+                    }
+                    let after = current.value;
+                    if (plan.kind === 'write') {
+                        const files = [...plan.sources].map(([path, text]) => ({ path, bytes: encoder.encode(text) }));
+                        const wrote = await deps.workspace.write(files, scan.files);
+                        if (!wrote.ok) {
+                            stores.runs.release(id, lease.token);
+                            return err(writeRefusal(wrote.error));
+                        }
+                        const read = await capture(deps);
+                        if (!read.ok) throw new Error(`The workspace reverted by ${id} could not be read back: ${read.error.path}`);
+                        after = read.value;
+                    }
+                    const at = clock.now();
+                    const base = record(stores, session, { kind: 'RunBase', run: id }, current.value, at);
+                    // nothing left to revert: nothing written, the result is the base
+                    const result = plan.kind === 'write' ? record(stores, session, { kind: 'RunResult', run: id }, after, at) : base;
+                    const reverted = agentRunCommands.revert(queued, {
+                        baseRevision: base.id,
+                        resultRevision: result.id,
+                        changed: plan.kind === 'write',
+                        finishedAt: at,
+                    });
+                    if (!reverted.ok) throw new Error(`Recording the revert ${id} failed: ${reverted.error.type}`);
+                    stores.runs.save(reverted.value.Reverted.aggregate);
+                    stores.runs.endLease(id, lease.token);
+                    publish(stores, session, reverted.value.Reverted.events, at);
+                    return ok({ kind: 'reverted', run: reverted.value.Reverted.aggregate });
+                });
+            } catch (e) {
+                // anything else: the lease goes, the revert stays queued and untried (tried again later)
+                await uow.transaction((stores) => stores.runs.release(id, lease.token));
+                throw e;
+            }
         },
 
         async revertedRuns({ run }) {

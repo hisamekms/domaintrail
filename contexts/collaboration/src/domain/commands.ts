@@ -94,44 +94,43 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         const { id, session, requests, input, queuedBy, queuedAt } = params;
         return ok({
             Queued: {
-                set: { id, session, input, queuedBy, queuedAt },
+                set: { id, session, input, queuedBy, queuedAt, revertObstacle: undefined },
                 events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
             },
         });
     }),
 
-    // the record of a mechanical revert: no agent, done when it is recorded
-    revert: decide<Collaboration.RevertAgentRunDecision>(Collaboration.AgentRunShape, (params) => {
-        switch (Collaboration.checkRevertAgentRunRequires(params)) {
-            case 'facilitatorReverts':
-                return err({ type: 'FacilitatorOnly' });
-            case 'distinctRequests':
-                return err({ type: 'DuplicateRequest' });
-            case 'inputCoversRequests':
-            case 'inputReverts':
-                return err({ type: 'InputMismatch' });
-            case 'revertChanges':
-                return err({ type: 'ChangedMismatch' });
-        }
-        const { id, session, requests, input, queuedBy, queuedAt, baseRevision, resultRevision } = params;
-        return ok({
-            Reverted: {
-                set: { id, session, input, queuedBy, queuedAt, baseRevision, resultRevision, finishedAt: queuedAt },
-                events: {
-                    RunReverted: {
-                        type: 'RunReverted',
-                        runId: id,
-                        session,
-                        requests,
-                        queuedBy,
-                        queuedAt,
-                        baseRevision,
-                        resultRevision,
-                        finishedAt: queuedAt,
-                    },
+    // a queued revert whose turn came, reverted mechanically by the server (no agent); unchanged when nothing was left
+    revert: decide<Collaboration.RevertAgentRunDecision>(Collaboration.AgentRunShape, {
+        Queued: (run, params) => {
+            switch (Collaboration.checkRevertAgentRunRequires(run, params)) {
+                case 'inputReverts':
+                    return err({ type: 'InputMismatch' });
+                case 'changedMatchesResult':
+                    return err({ type: 'ChangedMismatch' });
+            }
+            const { baseRevision, resultRevision, changed, finishedAt } = params;
+            return ok({
+                Reverted: {
+                    set: { baseRevision, resultRevision, changed, finishedAt },
+                    events: { RunReverted: { type: 'RunReverted', runId: run.id, baseRevision, resultRevision, changed, finishedAt } },
                 },
-            },
-        });
+            });
+        },
+    }),
+
+    // a queued revert the server could not revert mechanically: it stays queued, for the agent, with why
+    leaveToAgent: decide<Collaboration.LeaveToAgentAgentRunDecision>(Collaboration.AgentRunShape, {
+        Queued: (run, params) => {
+            if (Collaboration.checkLeaveToAgentAgentRunRequires(run, params) === 'inputReverts') return err({ type: 'InputMismatch' });
+            const { obstacle } = params;
+            return ok({
+                Queued: {
+                    set: { revertObstacle: obstacle },
+                    events: { RevertLeftToAgent: { type: 'RevertLeftToAgent', runId: run.id, obstacle } },
+                },
+            });
+        },
     }),
 
     start: decide<Collaboration.StartAgentRunDecision>(Collaboration.AgentRunShape, {

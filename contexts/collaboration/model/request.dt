@@ -23,7 +23,7 @@ context Collaboration {
   verified ReplyableTarget "返信できる相手" of ReplyTarget for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable, RequestNotFound, RequestOfAnotherSession
 
   /// 打ち消せると、打ち消しの依頼を送るときに確かめた実行: そのセッションの、ファイルの変更を記録した実行（基準と結果の
-  /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの最中でもない。
+  /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
   verified RevertableRun "打ち消せる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotRevertable
 
   /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）。
@@ -44,7 +44,7 @@ context Collaboration {
     /// 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。
     mentions: ParticipantId[0..20] "言及した人"
     /// 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを
-    /// 皆に伝える（「〈作業名〉の変更を打ち消す」）。機械的に打ち消せれば機械的な打ち消しの記録が、できなければ AI の実行が束ねる。
+    /// 皆に伝える（「〈作業名〉の変更を打ち消す」）。ほかの依頼と同じく実行として待ちに入り、順が来るとサーバーが機械的に打ち消すか、できなければ AI に任せる。
     references reverts: AgentRunId? -> AgentRun "打ち消す実行"
 
     invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
@@ -139,7 +139,7 @@ context Collaboration {
     run: AgentRunId
   }
 
-  /// 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの最中。
+  /// 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
   error RunNotRevertable "打ち消せない実行" {
     run: AgentRunId
   }

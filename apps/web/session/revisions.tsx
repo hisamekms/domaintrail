@@ -7,10 +7,11 @@
 // revision and its number are only in tooltips and in the source diff.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X } from 'lucide-react';
-import type { ComparedFileBody, ComparisonBody, SessionStateBody, RevertedBody } from '@domaintrail/collaboration/protocol';
+import type { ComparedFileBody, ComparisonBody, SessionStateBody, RevertRequestedBody } from '@domaintrail/collaboration/protocol';
 import { useT, type Messages } from '../i18n';
 import { sessionApi, SessionApiError } from './api';
 import { ChangeChip } from './card';
+import { obstacleText, revertProgress } from './cards';
 import { changeGroups, changeKey, changeWhat, useModelChanges } from './changes';
 import { useTargetNaming } from './naming';
 import { diffLines, restoreProblem, timeline, type TimelineEntry } from './timeline';
@@ -28,12 +29,10 @@ const time = (iso: string): string => new Date(iso).toLocaleTimeString([], { hou
 /** What a restore goes back to: an earlier state chosen in the collab menu, or the one kept before a restore that failed midway. */
 export type RestorePoint = 'revision' | 'preRestore';
 
-/** Where a revert of a unit of work stands: asked first, then how it went. */
+/** Where a revert of a unit of work stands: asked first, then its run (queued, followed on the page as it goes). */
 type RevertFlow = { readonly run: string; readonly name: string } & (
     | { readonly step: 'confirm' }
-    | { readonly step: 'done'; readonly reverted: RevertedBody }
-    | { readonly step: 'run' }
-    | { readonly step: 'nothing' }
+    | { readonly step: 'done'; readonly requested: RevertRequestedBody }
     | { readonly step: 'failed'; readonly message: string }
 );
 
@@ -70,7 +69,7 @@ export interface RevisionTools {
     showChanges(subject: ChangesSubject): void;
     /** Restores an earlier state of the workspace (asked first): the collab menu's last resort. */
     restore(revision: string): void;
-    /** Reverts a unit of work (asked first): its changes only, mechanically or by the AI. */
+    /** Reverts a unit of work (asked first): its changes only, queued, then mechanically or by the AI. */
     revert(subject: RevertSubject): void;
     take(): void;
     /** A revision's number in the session (`#3`), for tooltips. */
@@ -122,13 +121,10 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
     const revert = async (subject: RevertSubject): Promise<void> => {
         setBusy(true);
         try {
-            const reverted = await sessionApi.revertRun(subject.run, tx.chat.revertBody(subject.name));
-            setReverting({ ...subject, step: 'done', reverted });
+            const requested = await sessionApi.revertRun(subject.run, tx.chat.revertBody(subject.name));
+            setReverting({ ...subject, step: 'done', requested });
         } catch (e) {
-            const type = e instanceof SessionApiError ? e.type : undefined;
-            if (type === 'RunInProgress') setReverting({ ...subject, step: 'run' });
-            else if (type === 'NothingToRevert') setReverting({ ...subject, step: 'nothing' });
-            else setReverting({ ...subject, step: 'failed', message: failure(e) });
+            setReverting({ ...subject, step: 'failed', message: failure(e) });
         } finally {
             setBusy(false);
         }
@@ -139,7 +135,16 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
 
     const node = (
         <>
-            {reverting && <RevertBox flow={reverting} busy={busy} onRevert={() => void revert(reverting)} onClose={() => setReverting(undefined)} tx={tx} />}
+            {reverting && (
+                <RevertBox
+                    flow={reverting}
+                    runs={state.runs}
+                    busy={busy}
+                    onRevert={() => void revert(reverting)}
+                    onClose={() => setReverting(undefined)}
+                    tx={tx}
+                />
+            )}
             {flow && (
                 <RestoreBox
                     flow={flow}
@@ -175,8 +180,11 @@ export function useRevisionTools(state: SessionStateBody, tx: Tx): RevisionTools
     };
 }
 
-/** The revert of a unit of work in the chat: asked first, then whether it was reverted mechanically or sent to the AI, and why. */
-function RevertBox(props: { flow: RevertFlow; busy: boolean; onRevert: () => void; onClose: () => void; tx: Tx }) {
+/**
+ * The revert of a unit of work in the chat: asked first, then where its run stands, followed live — queued (behind how
+ * many), reverted mechanically (or nothing was left to revert), left to the AI and why, with the AI, or stopped.
+ */
+function RevertBox(props: { flow: RevertFlow; runs: SessionStateBody['runs']; busy: boolean; onRevert: () => void; onClose: () => void; tx: Tx }) {
     const { flow, busy, tx } = props;
     const u = tx.revertFlow;
     const body = ((): { text: string; error?: boolean } => {
@@ -184,18 +192,27 @@ function RevertBox(props: { flow: RevertFlow; busy: boolean; onRevert: () => voi
             case 'confirm':
                 return { text: u.confirm(flow.name) };
             case 'done': {
-                const d = flow.reverted;
-                if (d.way === 'mechanical') return { text: u.mechanical(flow.name) };
-                const o = d.obstacle;
-                return { text: o.kind === 'conflict' ? u.conflict(o.paths.join(', ')) : o.kind === 'check' ? u.check : u.unreadable };
+                const p = revertProgress(flow.requested.run.id, props.runs) ?? { kind: 'queued', ahead: flow.requested.ahead };
+                switch (p.kind) {
+                    case 'queued':
+                        return { text: u.queued(p.ahead) };
+                    case 'reverted':
+                        return { text: u.mechanical(flow.name) };
+                    case 'nothing':
+                        return { text: u.nothing };
+                    case 'leftToAgent':
+                        return { text: obstacleText(p.obstacle, u) };
+                    case 'agent':
+                        return { text: u.agent };
+                    case 'stopped':
+                        return { text: u.stopped };
+                }
+                break;
             }
-            case 'run':
-                return { text: u.run, error: true };
-            case 'nothing':
-                return { text: u.nothing };
             case 'failed':
                 return { text: u.failed(flow.message), error: true };
         }
+        return { text: '' };
     })();
     return (
         <div className={`session-note session-revert step-${flow.step}${body.error ? ' session-error' : ''}`} role="status">

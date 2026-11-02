@@ -49,9 +49,11 @@ export {
 export { approvalOf, assumptionStatus, type ApprovalFacts } from './domain/approvals.js';
 // reverting a run: which runs can be reverted, whether one was reverted (its assumptions closed), what the agent is told
 export {
+    awaitsServer,
     isRevert,
     MAX_REVERT_DIFF,
     revertableChanges,
+    revertedRunId,
     revertStatus,
     type RevertChanges,
     type RevertFile,
@@ -79,10 +81,13 @@ export { DEFAULT_QUICK_REACTIONS, MAX_EMOJI_BYTES, readEmoji } from './domain/em
 export {
     createCollaboration,
     REVERT_CAPABILITY,
+    SERVER_REVERT_OWNER,
     type CollaborationUseCases,
     type SessionState,
-    type Reverted,
+    type RevertNextError,
     type RevertObstacle,
+    type RevertOutcome,
+    type RevertRequested,
 } from './application/use-cases.js';
 export { actorOf, type Actor } from './application/actor.js';
 export { createSessionAccess, secretHash, type LinkInvalid, type SessionAccess } from './application/access.js';

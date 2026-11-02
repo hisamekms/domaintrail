@@ -695,26 +695,30 @@ describe('reverting a run', () => {
         for (const id of ids) expect((await until(ctx, id, ['Completed', 'Failed'])).state).toBe('Completed');
         return { ids, planFile, subscriber };
     }
-    const revert = (ctx: Context, run: string, cookie = ctx.ada): Promise<Response> =>
-        api(ctx.server, cookie, `runs/${run}/revert`, { body: '「返品の取り消し」の変更を取り消す' });
+    const BODY = '返品の取り消しの変更を打ち消す';
+    const revert = (ctx: Context, run: string, cookie = ctx.ada): Promise<Response> => api(ctx.server, cookie, `runs/${run}/revert`, { body: BODY });
     const read = (ctx: Context, file: string): Promise<string> => readFile(path.join(ctx.root, file), 'utf8');
+    type Requested = { run: Run; request: { reverts: string; body: string }; ahead: number };
 
     integration(
-        "mechanically: only the facilitator; the run's .dtes change is reverted, a later run's .dt change stays, recorded as a run of its own",
+        "mechanically, with no agent connected: only the facilitator; the run's .dtes change is reverted, a later run's .dt change stays, recorded as a run of its own",
         async () => {
             const ctx = await setup();
             const later = { path: 'sales/order.dt', replace: ['context Sales', '/// 販売。\ncontext Sales'] as [string, string] };
-            const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [later] }]);
+            const { ids, subscriber } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [later] }]);
+            // no agent from here on: the server reverts by itself
+            await subscriber.stop();
             const orderAfter = await read(ctx, 'sales/order.dt');
             expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
 
             expect((await revert(ctx, ids[0], ctx.bob)).status).toBe(403);
             const res = await revert(ctx, ids[0]);
             expect(res.status).toBe(201);
-            const body = (await res.json()) as { way: string; run: Run; request: { reverts: string; body: string } };
-            expect(body.way).toBe('mechanical');
-            expect(body.request).toMatchObject({ reverts: ids[0], body: '「返品の取り消し」の変更を取り消す' });
-            expect(body.run.state).toBe('Reverted');
+            const body = (await res.json()) as Requested;
+            // the queue was empty: queued, then reverted at once, before the answer
+            expect(body.request).toMatchObject({ reverts: ids[0], body: BODY });
+            expect(body.run).toMatchObject({ state: 'Reverted', changed: true });
+            expect(body.ahead).toBe(0);
             expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
             expect(await read(ctx, 'sales/order.dt')).toBe(orderAfter);
             const s = await state(ctx);
@@ -727,7 +731,47 @@ describe('reverting a run', () => {
         },
     );
 
-    integration('a conflict goes to the AI: the subscriber gets the run reverted with its diff; an older subscriber is refused the run', async () => {
+    integration('asked while a run is running: queued behind it, then reverted mechanically by the server once that run ends', async () => {
+        const ctx = await setup();
+        const later = { path: 'sales/order.dt', replace: ['context Sales', '/// 販売。\ncontext Sales'] as [string, string] };
+        const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }], [{ edits: [later], delayMs: 1500 }]);
+        const busy = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Change 2.')]);
+        await until(ctx, busy, ['Running']);
+
+        const res = await revert(ctx, ids[0]);
+        expect(res.status).toBe(201);
+        const body = (await res.json()) as Requested;
+        // not refused: waiting its turn behind the running run, nothing written yet
+        expect(body.run).toMatchObject({ state: 'Queued' });
+        expect(body.run).not.toHaveProperty('revertObstacle');
+        expect(body.ahead).toBe(1);
+        expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
+
+        // the running run ends; the server takes the revert by itself, against the workspace as it is then
+        expect((await until(ctx, busy, ['Completed', 'Failed'])).state).toBe('Completed');
+        const done = await until(ctx, body.run.id, ['Reverted', 'Running', 'Completed', 'Failed']);
+        expect(done).toMatchObject({ state: 'Reverted', changed: true });
+        expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
+        expect(await read(ctx, 'sales/order.dt')).toContain('/// 販売。');
+        // the agent never ran it: two runs played, no third
+        expect(await ctx.invocations()).toHaveLength(2);
+    });
+
+    integration('a queued revert can be stopped: it is never tried, and nothing is written', async () => {
+        const ctx = await setup();
+        const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }], [{ delayMs: 1500 }]);
+        const busy = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Change 2.')]);
+        await until(ctx, busy, ['Running']);
+        const body = (await (await revert(ctx, ids[0])).json()) as Requested;
+        expect(body.run.state).toBe('Queued');
+        expect((await api(ctx.server, ctx.ada, `runs/${body.run.id}/cancel`, {})).status).toBe(200);
+        expect((await until(ctx, busy, ['Completed', 'Failed'])).state).toBe('Completed');
+        await Bun.sleep(300);
+        expect((await state(ctx)).runs.find((r) => r.id === body.run.id)?.state).toBe('Cancelled');
+        expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
+    });
+
+    integration('a conflict waits for the AI: the subscriber gets the run reverted with its diff; an older subscriber is refused the run', async () => {
         const ctx = await setup();
         const relabel = { path: RETURNS, replace: ['"返品を取り消した"', '"返品がキャンセルされた"'] as [string, string] };
         const revertStep: Step = {
@@ -740,8 +784,9 @@ describe('reverting a run', () => {
 
         const res = await revert(ctx, ids[0]);
         expect(res.status).toBe(201);
-        const body = (await res.json()) as { way: string; obstacle: { kind: string; paths: string[] }; run: Run };
-        expect(body).toMatchObject({ way: 'agent', obstacle: { kind: 'conflict', paths: [RETURNS] } });
+        const body = (await res.json()) as Requested;
+        // tried by the server, left queued for the AI with why; nothing written
+        expect(body.run).toMatchObject({ state: 'Queued', revertObstacle: { kind: 'Conflict', paths: [RETURNS] } });
         expect(await read(ctx, RETURNS)).toBe(before);
 
         // an older subscriber names no capability: the revert is not given to it, and stays queued

@@ -531,9 +531,58 @@ export function equalAlternativePick(a: AlternativePick, b: AlternativePick): bo
 }
 
 /**
+ * AI に任せたわけ
+ * 打ち消しを機械的にできず、AI に任せたわけ。
+ * @see contexts/collaboration/model/agent-run.dt:159
+ */
+export type RevertObstacle =
+    /**
+     * あとの変更と重なる
+     * あとの変更が、打ち消す実行の変更と重なる（大きすぎてマージできないファイルも）。
+     */
+    | {
+          readonly kind: 'Conflict';
+          /** 重なるファイル */
+          readonly paths: readonly WorkspacePath[];
+      }
+    /**
+     * 検査が通らない
+     * 打ち消すと、いまのワークスペースにない .dt のエラーが出るか、構文解析できない .dtes ができる。
+     */
+    | {
+          readonly kind: 'Check';
+          /** 増える .dt のエラー */
+          readonly newDtErrors: Tally;
+          /** 構文解析できない .dtes */
+          readonly unparsedDtes: readonly WorkspacePath[];
+      }
+    /**
+     * 前後の内容がない
+     * 打ち消す実行の前後のソースが、もう残っていない。
+     */
+    | { readonly kind: 'Unreadable'; };
+
+/**
+ * Whether two RevertObstacle values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see contexts/collaboration/model/agent-run.dt:159
+ */
+export function equalRevertObstacle(a: RevertObstacle, b: RevertObstacle): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'Conflict') {
+        const y = b as Extract<RevertObstacle, { readonly kind: 'Conflict' }>;
+        return sameList(a.paths, y.paths, ($16: WorkspacePath, $17: WorkspacePath) => $16 === $17);
+    }
+    if (a.kind === 'Check') {
+        const y = b as Extract<RevertObstacle, { readonly kind: 'Check' }>;
+        return a.newDtErrors === y.newDtErrors && sameList(a.unparsedDtes, y.unparsedDtes, ($18: WorkspacePath, $19: WorkspacePath) => $18 === $19);
+    }
+    return true;
+}
+
+/**
  * Fields shared by every state of エージェント実行 (AgentRun).
  * @invariant serial (セッションで実行中の実行は1つ): not expressed in the DSL
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
 export interface AgentRunCommon {
     /** エージェント実行ID */
@@ -553,15 +602,17 @@ export interface AgentRunCommon {
 
 /**
  * 待機中
- * @see contexts/collaboration/model/agent-run.dt:171
+ * @see contexts/collaboration/model/agent-run.dt:187
  */
 export interface QueuedAgentRun extends AgentRunCommon {
     readonly state: 'Queued';
+    /** AI に任せたわけ — 打ち消しの実行で、サーバーが機械的に打ち消せず、エージェントに任せたわけ。打ち消しの実行でこれがないものは、 まだサーバーが試していない: エージェントには渡さない（サーバーが先に試す）。 */
+    readonly revertObstacle?: RevertObstacle;
 }
 
 /**
  * 実行中
- * @see contexts/collaboration/model/agent-run.dt:172
+ * @see contexts/collaboration/model/agent-run.dt:192
  */
 export interface RunningAgentRun extends AgentRunCommon {
     readonly state: 'Running';
@@ -577,7 +628,7 @@ export interface RunningAgentRun extends AgentRunCommon {
  * @invariant unchangedKeepsBase (変更がなければ結果は基準リビジョン): (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
  * @invariant completedAsksNothing (完了の返答に問いはない): exists(reply) implies count(reply.questions) == 0
  * @invariant completedReplyAboutInput (完了の返答の依頼は実行の依頼): exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
- * @see contexts/collaboration/model/agent-run.dt:176
+ * @see contexts/collaboration/model/agent-run.dt:196
  */
 export interface CompletedAgentRun extends AgentRunCommon {
     readonly state: 'Completed';
@@ -602,7 +653,7 @@ export interface CompletedAgentRun extends AgentRunCommon {
  * エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
  * @invariant clarificationAsks (確認待ちの返答には問いがある): exists(reply) implies count(reply.questions) >= 1
  * @invariant clarificationReplyAboutInput (確認の返答の依頼は実行の依頼): exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
- * @see contexts/collaboration/model/agent-run.dt:201
+ * @see contexts/collaboration/model/agent-run.dt:221
  */
 export interface NeedsClarificationAgentRun extends AgentRunCommon {
     readonly state: 'NeedsClarification';
@@ -625,7 +676,7 @@ export interface NeedsClarificationAgentRun extends AgentRunCommon {
  * エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
  * @invariant declinedAsksNothing (辞退の返答に問いはない): count(reply.questions) == 0
  * @invariant declinedReplyAboutInput (辞退の返答の依頼は実行の依頼): (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
- * @see contexts/collaboration/model/agent-run.dt:216
+ * @see contexts/collaboration/model/agent-run.dt:236
  */
 export interface DeclinedAgentRun extends AgentRunCommon {
     readonly state: 'Declined';
@@ -644,7 +695,7 @@ export interface DeclinedAgentRun extends AgentRunCommon {
 /**
  * 失敗
  * @invariant ruleNotMetReported (成功の条件を満たさないことが報告にある): reason == FailureReason.RuleNotMet implies (exists(report) and not (report.exitCode == 0 and report.formatted == true and report.checked == true and report.newDtErrors == 0 and report.unparsedDtes == 0))
- * @see contexts/collaboration/model/agent-run.dt:228
+ * @see contexts/collaboration/model/agent-run.dt:248
  */
 export interface FailedAgentRun extends AgentRunCommon {
     readonly state: 'Failed';
@@ -664,7 +715,7 @@ export interface FailedAgentRun extends AgentRunCommon {
 
 /**
  * 中止
- * @see contexts/collaboration/model/agent-run.dt:240
+ * @see contexts/collaboration/model/agent-run.dt:260
  */
 export interface CancelledAgentRun extends AgentRunCommon {
     readonly state: 'Cancelled';
@@ -678,12 +729,12 @@ export interface CancelledAgentRun extends AgentRunCommon {
 
 /**
  * 打ち消し
- * エージェントを使わずに、ある実行の変更を機械的に打ち消した記録。その実行の基準と結果の差を、いまのワークスペースに
- * 逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。打ち消しの依頼を束ね、打ち消す前のワークスペース
- * が基準リビジョン、打ち消した後が結果リビジョン。
- * @invariant revertChanges (打ち消しで変わる): resultRevision != baseRevision
+ * エージェントを使わずに、ある実行の変更を機械的に打ち消した記録。順が来たときのワークスペースに、その実行の基準と
+ * 結果の差を逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。打ち消す前のワークスペースが基準
+ * リビジョン、打ち消した後が結果リビジョン。その実行の変更がもう残っていなければ、何も書かずに終わる（変更なし）。
+ * @invariant revertKeepsBaseUnchanged (打ち消すものがなければ結果は基準リビジョン): (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
  * @invariant revertsRevertRequests (打ち消しの依頼を束ねる): all(input.requests, r => exists(r.reverts))
- * @see contexts/collaboration/model/agent-run.dt:248
+ * @see contexts/collaboration/model/agent-run.dt:268
  */
 export interface RevertedAgentRun extends AgentRunCommon {
     readonly state: 'Reverted';
@@ -691,6 +742,8 @@ export interface RevertedAgentRun extends AgentRunCommon {
     readonly baseRevision: RevisionId;
     /** 結果リビジョン */
     readonly resultRevision: RevisionId;
+    /** 変更あり */
+    readonly changed: boolean;
     /** 終了日時 */
     readonly finishedAt: Timestamp;
 }
@@ -698,30 +751,31 @@ export interface RevertedAgentRun extends AgentRunCommon {
 /**
  * エージェント実行
  * ファシリテーターが依頼を束ねて登録する、エージェントの1回の実行。実行は1つずつ順に行う。
- * 作業の打ち消しを機械的にできたときは、エージェントを使わずに、その記録（機械的な打ち消し）も実行として残す。
+ * 作業の打ち消しの依頼も、ほかの依頼と同じく実行として待ちに入る。順が来ると、サーバーがまず機械的に打ち消し
+ * （エージェントを使わない。その記録が打ち消しの状態）、できなければエージェントに任せる。
  * チャットでは、どちらも作業のひとまとまり（カード）になる。
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
 export type AgentRun = QueuedAgentRun | RunningAgentRun | CompletedAgentRun | NeedsClarificationAgentRun | DeclinedAgentRun | FailedAgentRun | CancelledAgentRun | RevertedAgentRun;
 
 /**
  * The fields of AgentRun as data for `decide`: the common fields, and the fields of each state on top of them.
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
 export const AgentRunShape: Shape = {
     fields: ['id', 'session', 'input', 'queuedBy', 'queuedAt'],
-    states: { Queued: [], Running: ['baseRevision', 'startedAt'], Completed: ['baseRevision', 'startedAt', 'report', 'resultRevision', 'changed', 'reply', 'finishedAt'], NeedsClarification: ['baseRevision', 'startedAt', 'question', 'reply', 'resultRevision', 'finishedAt'], Declined: ['baseRevision', 'startedAt', 'reply', 'resultRevision', 'finishedAt'], Failed: ['baseRevision', 'startedAt', 'reason', 'report', 'resultRevision', 'finishedAt'], Cancelled: ['baseRevision', 'cancelledBy', 'cancelledAt'], Reverted: ['baseRevision', 'resultRevision', 'finishedAt'] },
+    states: { Queued: ['revertObstacle'], Running: ['baseRevision', 'startedAt'], Completed: ['baseRevision', 'startedAt', 'report', 'resultRevision', 'changed', 'reply', 'finishedAt'], NeedsClarification: ['baseRevision', 'startedAt', 'question', 'reply', 'resultRevision', 'finishedAt'], Declined: ['baseRevision', 'startedAt', 'reply', 'resultRevision', 'finishedAt'], Failed: ['baseRevision', 'startedAt', 'reason', 'report', 'resultRevision', 'finishedAt'], Cancelled: ['baseRevision', 'cancelledBy', 'cancelledAt'], Reverted: ['baseRevision', 'resultRevision', 'changed', 'finishedAt'] },
 };
 
 /**
  * The invariants of AgentRun that the DSL does not express: implement them in your code and pass them to `checkAgentRunWith`.
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
 export type AgentRunDeclaredChecks = { readonly serial: (agentRun: AgentRunCommon) => boolean };
 
 /**
  * The invariants of AgentRun (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
 export function checkAgentRunCommonWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRunCommon) => readonly 'serial'[] {
     return (agentRun) => {
@@ -733,7 +787,7 @@ export function checkAgentRunCommonWith(checks: AgentRunDeclaredChecks): (agentR
 
 /**
  * The invariants of AgentRun in state Queued (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:171
+ * @see contexts/collaboration/model/agent-run.dt:187
  */
 export function checkQueuedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: QueuedAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
@@ -743,7 +797,7 @@ export function checkQueuedAgentRunWith(checks: AgentRunDeclaredChecks): (agentR
 
 /**
  * The invariants of AgentRun in state Running (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:172
+ * @see contexts/collaboration/model/agent-run.dt:192
  */
 export function checkRunningAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RunningAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
@@ -753,7 +807,7 @@ export function checkRunningAgentRunWith(checks: AgentRunDeclaredChecks): (agent
 
 /**
  * The invariants of AgentRun in state Completed (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:176
+ * @see contexts/collaboration/model/agent-run.dt:196
  */
 export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: CompletedAgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput')[] {
     return (agentRun) => {
@@ -768,7 +822,7 @@ export function checkCompletedAgentRunWith(checks: AgentRunDeclaredChecks): (age
 
 /**
  * The invariants of AgentRun in state NeedsClarification (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:201
+ * @see contexts/collaboration/model/agent-run.dt:221
  */
 export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: NeedsClarificationAgentRun) => readonly ('serial' | 'clarificationAsks' | 'clarificationReplyAboutInput')[] {
     return (agentRun) => {
@@ -781,7 +835,7 @@ export function checkNeedsClarificationAgentRunWith(checks: AgentRunDeclaredChec
 
 /**
  * The invariants of AgentRun in state Declined (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:216
+ * @see contexts/collaboration/model/agent-run.dt:236
  */
 export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: DeclinedAgentRun) => readonly ('serial' | 'declinedAsksNothing' | 'declinedReplyAboutInput')[] {
     return (agentRun) => {
@@ -794,7 +848,7 @@ export function checkDeclinedAgentRunWith(checks: AgentRunDeclaredChecks): (agen
 
 /**
  * The invariants of AgentRun in state Failed (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:228
+ * @see contexts/collaboration/model/agent-run.dt:248
  */
 export function checkFailedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: FailedAgentRun) => readonly ('serial' | 'ruleNotMetReported')[] {
     return (agentRun) => {
@@ -806,7 +860,7 @@ export function checkFailedAgentRunWith(checks: AgentRunDeclaredChecks): (agentR
 
 /**
  * The invariants of AgentRun in state Cancelled (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:240
+ * @see contexts/collaboration/model/agent-run.dt:260
  */
 export function checkCancelledAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: CancelledAgentRun) => readonly 'serial'[] {
     return (agentRun) => {
@@ -816,12 +870,12 @@ export function checkCancelledAgentRunWith(checks: AgentRunDeclaredChecks): (age
 
 /**
  * The invariants of AgentRun in state Reverted (the aggregate's, by `checkAgentRunCommonWith`, and the state's) that an aggregate violates, in declaration order.
- * @see contexts/collaboration/model/agent-run.dt:248
+ * @see contexts/collaboration/model/agent-run.dt:268
  */
-export function checkRevertedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RevertedAgentRun) => readonly ('serial' | 'revertChanges' | 'revertsRevertRequests')[] {
+export function checkRevertedAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: RevertedAgentRun) => readonly ('serial' | 'revertKeepsBaseUnchanged' | 'revertsRevertRequests')[] {
     return (agentRun) => {
-        const violated: ('serial' | 'revertChanges' | 'revertsRevertRequests')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
-        if (!(!(agentRun.resultRevision === agentRun.baseRevision))) violated.push('revertChanges');
+        const violated: ('serial' | 'revertKeepsBaseUnchanged' | 'revertsRevertRequests')[] = [...checkAgentRunCommonWith(checks)(agentRun)];
+        if (!((!(agentRun.changed === true) || !(agentRun.resultRevision === agentRun.baseRevision)) && (!(agentRun.changed === false) || (agentRun.resultRevision === agentRun.baseRevision)))) violated.push('revertKeepsBaseUnchanged');
         if (!(agentRun.input.requests.every((r) => r.reverts !== undefined))) violated.push('revertsRevertRequests');
         return violated;
     };
@@ -829,9 +883,9 @@ export function checkRevertedAgentRunWith(checks: AgentRunDeclaredChecks): (agen
 
 /**
  * The invariants of AgentRun in the state it is in that an aggregate violates (see the check of each state).
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
-export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput' | 'clarificationAsks' | 'clarificationReplyAboutInput' | 'declinedAsksNothing' | 'declinedReplyAboutInput' | 'ruleNotMetReported' | 'revertChanges' | 'revertsRevertRequests')[] {
+export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: AgentRun) => readonly ('serial' | 'succeeded' | 'unchangedKeepsBase' | 'completedAsksNothing' | 'completedReplyAboutInput' | 'clarificationAsks' | 'clarificationReplyAboutInput' | 'declinedAsksNothing' | 'declinedReplyAboutInput' | 'ruleNotMetReported' | 'revertKeepsBaseUnchanged' | 'revertsRevertRequests')[] {
     return (agentRun) => {
         switch (agentRun.state) {
             case 'Queued': return checkQueuedAgentRunWith(checks)(agentRun);
@@ -848,7 +902,7 @@ export function checkAgentRunWith(checks: AgentRunDeclaredChecks): (agentRun: Ag
 
 /**
  * The parameters of AgentRun.queue, by name.
- * @see contexts/collaboration/model/agent-run.dt:260
+ * @see contexts/collaboration/model/agent-run.dt:283
  */
 export interface QueueAgentRunParams {
     /** エージェント実行ID */
@@ -874,7 +928,7 @@ export interface QueueAgentRunParams {
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
  * @emits RunQueued — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:260
+ * @see contexts/collaboration/model/agent-run.dt:283
  */
 export type QueueAgentRun = (
     params: QueueAgentRunParams,
@@ -893,110 +947,149 @@ export type QueueAgentRun = (
  * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
  * new -> Queued — set: every field
  * @emits RunQueued — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:260
+ * @see contexts/collaboration/model/agent-run.dt:283
  */
 export type QueueAgentRunDecision = (
     params: QueueAgentRunParams,
 ) => Result<{
     readonly Queued: {
-        readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp };
+        readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp; readonly revertObstacle: RevertObstacle | undefined };
         readonly events: { readonly RunQueued: RunQueued };
     };
 }, FacilitatorOnly | DuplicateRequest | InputMismatch>;
 
 /**
  * The first requirement of AgentRun.queue that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:260
+ * @see contexts/collaboration/model/agent-run.dt:283
  */
 export function checkQueueAgentRunRequires(params: QueueAgentRunParams): 'facilitatorQueues' | 'distinctRequests' | 'inputCoversRequests' | undefined {
     if (!(params.queuedByRole === 'Facilitator')) return 'facilitatorQueues';
-    if (!(distinct(params.requests, ($16: RequestId, $17: RequestId) => $16 === $17))) return 'distinctRequests';
+    if (!(distinct(params.requests, ($20: RequestId, $21: RequestId) => $20 === $21))) return 'distinctRequests';
     if (!((params.input.requests.length === params.requests.length) && params.requests.every((r) => params.input.requests.some((i) => i.request === r)))) return 'inputCoversRequests';
     return undefined;
 }
 
 /**
  * The parameters of AgentRun.revert, by name.
- * @see contexts/collaboration/model/agent-run.dt:272
+ * @see contexts/collaboration/model/agent-run.dt:295
  */
 export interface RevertAgentRunParams {
-    /** エージェント実行ID */
-    readonly id: AgentRunId;
-    /** セッション */
-    readonly session: ActiveSession;
-    /** 未処理の依頼 */
-    readonly requests: readonly [PendingRequest, ...PendingRequest[]];
-    /** 実行の入力 */
-    readonly input: RunInput;
-    /** 参加者ID */
-    readonly queuedBy: ParticipantId;
-    /** 役割 */
-    readonly queuedByRole: ParticipantRole;
-    readonly queuedAt: Timestamp;
     /** 基準リビジョン */
     readonly baseRevision: RevisionId;
     /** 結果リビジョン */
     readonly resultRevision: RevisionId;
+    /** 変更あり */
+    readonly changed: boolean;
+    readonly finishedAt: Timestamp;
 }
 
 /**
- * AgentRun.revert (new -> Reverted) — factory
+ * AgentRun.revert (Queued -> Reverted)
  * 機械的に打ち消す
- * 打ち消しの依頼を、エージェントを使わずに機械的に打ち消した記録として残す。打ち消すのはファシリテーター。
- * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
- * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
- * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+ * 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
- * @requires revertChanges (打ち消しで変わる) else ChangedMismatch: resultRevision != baseRevision
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+ * @changes none — the command changes no common field
  * @emits RunReverted — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:272
+ * @see contexts/collaboration/model/agent-run.dt:295
  */
 export type RevertAgentRun = (
+    agentRun: QueuedAgentRun,
     params: RevertAgentRunParams,
 ) => Result<{
     readonly Reverted: {
         readonly aggregate: RevertedAgentRun;
         readonly events: { readonly RunReverted: RunReverted };
     };
-}, FacilitatorOnly | DuplicateRequest | InputMismatch | ChangedMismatch>;
+}, InputMismatch | ChangedMismatch>;
 
 /**
- * AgentRun.revert, decided by one function; implement it with `decide(AgentRunShape, …)` from the runtime.
- * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
- * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
- * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+ * AgentRun.revert, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
- * @requires revertChanges (打ち消しで変わる) else ChangedMismatch: resultRevision != baseRevision
- * new -> Reverted — set: every field
- * @emits RunReverted — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:272
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+ * @changes none — the command changes no common field
+ * Queued -> Reverted — set: baseRevision (new in Reverted), resultRevision (new in Reverted), changed (new in Reverted), finishedAt (new in Reverted); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
+ * @see contexts/collaboration/model/agent-run.dt:295
  */
-export type RevertAgentRunDecision = (
-    params: RevertAgentRunParams,
-) => Result<{
-    readonly Reverted: {
-        readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp; readonly baseRevision: RevisionId; readonly resultRevision: RevisionId; readonly finishedAt: Timestamp };
-        readonly events: { readonly RunReverted: RunReverted };
-    };
-}, FacilitatorOnly | DuplicateRequest | InputMismatch | ChangedMismatch>;
+export type RevertAgentRunDecision = {
+    /** @emits RunReverted — exactly once when the command succeeds */
+    readonly Queued: (agentRun: QueuedAgentRun, params: RevertAgentRunParams) => Result<{
+        readonly Reverted: {
+            readonly set: { readonly baseRevision: RevisionId; readonly resultRevision: RevisionId; readonly changed: boolean; readonly finishedAt: Timestamp };
+            readonly events: { readonly RunReverted: RunReverted };
+        };
+    }, InputMismatch | ChangedMismatch>;
+};
 
 /**
  * The first requirement of AgentRun.revert that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:272
+ * @see contexts/collaboration/model/agent-run.dt:295
  */
-export function checkRevertAgentRunRequires(params: RevertAgentRunParams): 'facilitatorReverts' | 'distinctRequests' | 'inputCoversRequests' | 'inputReverts' | 'revertChanges' | undefined {
-    if (!(params.queuedByRole === 'Facilitator')) return 'facilitatorReverts';
-    if (!(distinct(params.requests, ($18: RequestId, $19: RequestId) => $18 === $19))) return 'distinctRequests';
-    if (!((params.input.requests.length === params.requests.length) && params.requests.every((r) => params.input.requests.some((i) => i.request === r)))) return 'inputCoversRequests';
-    if (!(params.input.requests.every((r) => r.reverts !== undefined))) return 'inputReverts';
-    if (!(!(params.resultRevision === params.baseRevision))) return 'revertChanges';
+export function checkRevertAgentRunRequires(agentRun: QueuedAgentRun, params: RevertAgentRunParams): 'inputReverts' | 'changedMatchesResult' | undefined {
+    if (!(agentRun.input.requests.every((r) => r.reverts !== undefined))) return 'inputReverts';
+    if (!((!(params.changed === true) || !(params.resultRevision === params.baseRevision)) && (!(params.changed === false) || (params.resultRevision === params.baseRevision)))) return 'changedMatchesResult';
+    return undefined;
+}
+
+/**
+ * The parameters of AgentRun.leaveToAgent, by name.
+ * @see contexts/collaboration/model/agent-run.dt:304
+ */
+export interface LeaveToAgentAgentRunParams {
+    /** わけ */
+    readonly obstacle: RevertObstacle;
+}
+
+/**
+ * AgentRun.leaveToAgent (Queued -> Queued)
+ * AI に任せる
+ * 順が来た打ち消しの実行を、サーバーが機械的に打ち消せなかった: 待ちのまま、わけを添えてエージェントに任せる。
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @changes revertObstacle
+ * @emits RevertLeftToAgent — exactly once when the command succeeds
+ * @see contexts/collaboration/model/agent-run.dt:304
+ */
+export type LeaveToAgentAgentRun = (
+    agentRun: QueuedAgentRun,
+    params: LeaveToAgentAgentRunParams,
+) => Result<{
+    readonly Queued: {
+        readonly aggregate: QueuedAgentRun;
+        readonly events: { readonly RevertLeftToAgent: RevertLeftToAgent };
+    };
+}, InputMismatch>;
+
+/**
+ * AgentRun.leaveToAgent, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
+ * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @changes revertObstacle
+ * Queued -> Queued — set: revertObstacle; carried over: id, session, input, queuedBy, queuedAt
+ * @see contexts/collaboration/model/agent-run.dt:304
+ */
+export type LeaveToAgentAgentRunDecision = {
+    /** @emits RevertLeftToAgent — exactly once when the command succeeds */
+    readonly Queued: (agentRun: QueuedAgentRun, params: LeaveToAgentAgentRunParams) => Result<{
+        readonly Queued: {
+            readonly set: { readonly revertObstacle: RevertObstacle | undefined };
+            readonly events: { readonly RevertLeftToAgent: RevertLeftToAgent };
+        };
+    }, InputMismatch>;
+};
+
+/**
+ * The first requirement of AgentRun.leaveToAgent that does not hold, in declaration order; `undefined` when all hold.
+ * @see contexts/collaboration/model/agent-run.dt:304
+ */
+export function checkLeaveToAgentAgentRunRequires(agentRun: QueuedAgentRun, _params: LeaveToAgentAgentRunParams): 'inputReverts' | undefined {
+    if (!(agentRun.input.requests.every((r) => r.reverts !== undefined))) return 'inputReverts';
     return undefined;
 }
 
 /**
  * The parameters of AgentRun.start, by name.
- * @see contexts/collaboration/model/agent-run.dt:286
+ * @see contexts/collaboration/model/agent-run.dt:311
  */
 export interface StartAgentRunParams {
     /** リビジョンID */
@@ -1010,7 +1103,7 @@ export interface StartAgentRunParams {
  * 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
  * @changes none — the command changes no common field
  * @emits RunStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:286
+ * @see contexts/collaboration/model/agent-run.dt:311
  */
 export type StartAgentRun = (
     agentRun: QueuedAgentRun,
@@ -1026,8 +1119,8 @@ export type StartAgentRun = (
  * AgentRun.start, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes none — the command changes no common field
- * Queued -> Running — set: baseRevision (new in Running), startedAt (new in Running); carried over: id, session, input, queuedBy, queuedAt
- * @see contexts/collaboration/model/agent-run.dt:286
+ * Queued -> Running — set: baseRevision (new in Running), startedAt (new in Running); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
+ * @see contexts/collaboration/model/agent-run.dt:311
  */
 export type StartAgentRunDecision = {
     /** @emits RunStarted — exactly once when the command succeeds */
@@ -1041,7 +1134,7 @@ export type StartAgentRunDecision = {
 
 /**
  * The parameters of AgentRun.finish, by name.
- * @see contexts/collaboration/model/agent-run.dt:292
+ * @see contexts/collaboration/model/agent-run.dt:317
  */
 export interface FinishAgentRunParams {
     /** 実行の報告 */
@@ -1065,7 +1158,7 @@ export interface FinishAgentRunParams {
  * @changes none — the command changes no common field
  * @emits RunCompleted — exactly once when it ends in Completed
  * @emits RunFailed — exactly once when it ends in Failed
- * @see contexts/collaboration/model/agent-run.dt:292
+ * @see contexts/collaboration/model/agent-run.dt:317
  */
 export type FinishAgentRun = (
     agentRun: RunningAgentRun,
@@ -1097,7 +1190,7 @@ export type FinishAgentRun = (
  * @changes none — the command changes no common field
  * Running -> Completed — set: report (new in Completed), resultRevision (new in Completed), changed (new in Completed), reply (new in Completed), finishedAt (new in Completed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:292
+ * @see contexts/collaboration/model/agent-run.dt:317
  */
 export type FinishAgentRunDecision = {
     /**
@@ -1125,7 +1218,7 @@ export type FinishAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.finish that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:292
+ * @see contexts/collaboration/model/agent-run.dt:317
  */
 export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, params: FinishAgentRunParams): 'changedMatchesResult' | 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!((!(params.changed === true) || !(params.resultRevision === agentRun.baseRevision)) && (!(params.changed === false) || (params.resultRevision === agentRun.baseRevision)))) return 'changedMatchesResult';
@@ -1136,7 +1229,7 @@ export function checkFinishAgentRunRequires(agentRun: RunningAgentRun, params: F
 
 /**
  * The parameters of AgentRun.askClarification, by name.
- * @see contexts/collaboration/model/agent-run.dt:306
+ * @see contexts/collaboration/model/agent-run.dt:331
  */
 export interface AskClarificationAgentRunParams {
     /** 文章 */
@@ -1155,7 +1248,7 @@ export interface AskClarificationAgentRunParams {
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunNeedsClarification — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:306
+ * @see contexts/collaboration/model/agent-run.dt:331
  */
 export type AskClarificationAgentRun = (
     agentRun: RunningAgentRun,
@@ -1174,7 +1267,7 @@ export type AskClarificationAgentRun = (
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> NeedsClarification — set: question (new in NeedsClarification), reply (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:306
+ * @see contexts/collaboration/model/agent-run.dt:331
  */
 export type AskClarificationAgentRunDecision = {
     /** @emits RunNeedsClarification — exactly once when the command succeeds */
@@ -1188,7 +1281,7 @@ export type AskClarificationAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.askClarification that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:306
+ * @see contexts/collaboration/model/agent-run.dt:331
  */
 export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, params: AskClarificationAgentRunParams): 'replyAsks' | 'replyAboutInput' | undefined {
     if (params.reply !== undefined && !(params.reply.questions.length >= 1)) return 'replyAsks';
@@ -1198,7 +1291,7 @@ export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun,
 
 /**
  * The parameters of AgentRun.decline, by name.
- * @see contexts/collaboration/model/agent-run.dt:317
+ * @see contexts/collaboration/model/agent-run.dt:342
  */
 export interface DeclineAgentRunParams {
     /** エージェントの返答 */
@@ -1216,7 +1309,7 @@ export interface DeclineAgentRunParams {
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunDeclined — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:317
+ * @see contexts/collaboration/model/agent-run.dt:342
  */
 export type DeclineAgentRun = (
     agentRun: RunningAgentRun,
@@ -1235,7 +1328,7 @@ export type DeclineAgentRun = (
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> Declined — set: reply (new in Declined), resultRevision (new in Declined), finishedAt (new in Declined); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:317
+ * @see contexts/collaboration/model/agent-run.dt:342
  */
 export type DeclineAgentRunDecision = {
     /** @emits RunDeclined — exactly once when the command succeeds */
@@ -1249,7 +1342,7 @@ export type DeclineAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.decline that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:317
+ * @see contexts/collaboration/model/agent-run.dt:342
  */
 export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, params: DeclineAgentRunParams): 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!(params.reply.questions.length === 0)) return 'replyAsksNothing';
@@ -1259,7 +1352,7 @@ export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, params: 
 
 /**
  * The parameters of AgentRun.fail, by name.
- * @see contexts/collaboration/model/agent-run.dt:326
+ * @see contexts/collaboration/model/agent-run.dt:351
  */
 export interface FailAgentRunParams {
     /** 失敗の理由 */
@@ -1274,7 +1367,7 @@ export interface FailAgentRunParams {
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * @emits RunFailed — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:326
+ * @see contexts/collaboration/model/agent-run.dt:351
  */
 export type FailAgentRun = (
     agentRun: RunningAgentRun,
@@ -1292,7 +1385,7 @@ export type FailAgentRun = (
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
  * @changes none — the command changes no common field
  * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:326
+ * @see contexts/collaboration/model/agent-run.dt:351
  */
 export type FailAgentRunDecision = {
     /** @emits RunFailed — exactly once when the command succeeds */
@@ -1306,7 +1399,7 @@ export type FailAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.fail that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:326
+ * @see contexts/collaboration/model/agent-run.dt:351
  */
 export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, params: FailAgentRunParams): 'abnormal' | undefined {
     if (!(!(params.reason === 'RuleNotMet'))) return 'abnormal';
@@ -1315,7 +1408,7 @@ export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, params: Fa
 
 /**
  * The parameters of AgentRun.cancel, by name.
- * @see contexts/collaboration/model/agent-run.dt:332
+ * @see contexts/collaboration/model/agent-run.dt:357
  */
 export interface CancelAgentRunParams {
     /** 参加者ID */
@@ -1332,7 +1425,7 @@ export interface CancelAgentRunParams {
  * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits RunCancelled — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:332
+ * @see contexts/collaboration/model/agent-run.dt:357
  */
 export type CancelAgentRun = (
     agentRun: QueuedAgentRun | RunningAgentRun,
@@ -1349,9 +1442,9 @@ export type CancelAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
- * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt
+ * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
  * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:332
+ * @see contexts/collaboration/model/agent-run.dt:357
  */
 export type CancelAgentRunDecision = {
     /** @emits RunCancelled — exactly once when the command succeeds */
@@ -1372,7 +1465,7 @@ export type CancelAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.cancel that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:332
+ * @see contexts/collaboration/model/agent-run.dt:357
  */
 export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams): 'facilitatorCancels' | undefined {
     if (!(params.cancelledByRole === 'Facilitator')) return 'facilitatorCancels';
@@ -1382,13 +1475,15 @@ export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningA
 /**
  * Command contracts of AgentRun. Implement this interface by hand.
  * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness. IDs and times are passed in as parameters.
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
 export interface AgentRunCommands {
     /** 実行を登録する */
     readonly queue: QueueAgentRun;
     /** 機械的に打ち消す */
     readonly revert: RevertAgentRun;
+    /** AI に任せる */
+    readonly leaveToAgent: LeaveToAgentAgentRun;
     /** 実行を始める */
     readonly start: StartAgentRun;
     /** 実行を終える */
@@ -1405,14 +1500,14 @@ export interface AgentRunCommands {
 
 /**
  * Events that the commands of AgentRun may emit.
- * @see contexts/collaboration/model/agent-run.dt:161
+ * @see contexts/collaboration/model/agent-run.dt:177
  */
-export type AgentRunEvent = RunQueued | RunReverted | RunStarted | RunCompleted | RunFailed | RunNeedsClarification | RunDeclined | RunCancelled;
+export type AgentRunEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunFailed | RunNeedsClarification | RunDeclined | RunCancelled;
 
 /**
  * 実行登録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:340
+ * @see contexts/collaboration/model/agent-run.dt:365
  */
 export interface RunQueued {
     readonly type: 'RunQueued';
@@ -1430,30 +1525,38 @@ export interface RunQueued {
 /**
  * 打ち消し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:348
+ * @see contexts/collaboration/model/agent-run.dt:373
  */
 export interface RunReverted {
     readonly type: 'RunReverted';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
-    /** セッション */
-    readonly session: SessionId;
-    /** 依頼ID */
-    readonly requests: readonly [RequestId, ...RequestId[]];
-    /** 参加者ID */
-    readonly queuedBy: ParticipantId;
-    readonly queuedAt: Timestamp;
     /** 基準リビジョン */
     readonly baseRevision: RevisionId;
     /** 結果リビジョン */
     readonly resultRevision: RevisionId;
+    /** 変更あり */
+    readonly changed: boolean;
     readonly finishedAt: Timestamp;
+}
+
+/**
+ * AI に任せた打ち消し
+ * @persistent Persisted: storing this event is part of its contract.
+ * @see contexts/collaboration/model/agent-run.dt:381
+ */
+export interface RevertLeftToAgent {
+    readonly type: 'RevertLeftToAgent';
+    /** エージェント実行ID */
+    readonly runId: AgentRunId;
+    /** わけ */
+    readonly obstacle: RevertObstacle;
 }
 
 /**
  * 実行開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:359
+ * @see contexts/collaboration/model/agent-run.dt:386
  */
 export interface RunStarted {
     readonly type: 'RunStarted';
@@ -1467,7 +1570,7 @@ export interface RunStarted {
 /**
  * 実行完了
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:365
+ * @see contexts/collaboration/model/agent-run.dt:392
  */
 export interface RunCompleted {
     readonly type: 'RunCompleted';
@@ -1482,7 +1585,7 @@ export interface RunCompleted {
 /**
  * 確認依頼
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:372
+ * @see contexts/collaboration/model/agent-run.dt:399
  */
 export interface RunNeedsClarification {
     readonly type: 'RunNeedsClarification';
@@ -1498,7 +1601,7 @@ export interface RunNeedsClarification {
 /**
  * 実行辞退
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:379
+ * @see contexts/collaboration/model/agent-run.dt:406
  */
 export interface RunDeclined {
     readonly type: 'RunDeclined';
@@ -1512,7 +1615,7 @@ export interface RunDeclined {
 /**
  * 実行失敗
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:385
+ * @see contexts/collaboration/model/agent-run.dt:412
  */
 export interface RunFailed {
     readonly type: 'RunFailed';
@@ -1526,7 +1629,7 @@ export interface RunFailed {
 /**
  * 実行中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:391
+ * @see contexts/collaboration/model/agent-run.dt:418
  */
 export interface RunCancelled {
     readonly type: 'RunCancelled';
@@ -1540,7 +1643,7 @@ export interface RunCancelled {
 /**
  * 依頼の重複
  * 同じ依頼を2回束ねた。
- * @see contexts/collaboration/model/agent-run.dt:398
+ * @see contexts/collaboration/model/agent-run.dt:425
  */
 export interface DuplicateRequest {
     readonly type: 'DuplicateRequest';
@@ -1549,7 +1652,7 @@ export interface DuplicateRequest {
 /**
  * 入力の不一致
  * 凍結した入力が、束ねた依頼と合わない。
- * @see contexts/collaboration/model/agent-run.dt:401
+ * @see contexts/collaboration/model/agent-run.dt:428
  */
 export interface InputMismatch {
     readonly type: 'InputMismatch';
@@ -1558,7 +1661,7 @@ export interface InputMismatch {
 /**
  * 変更の有無の不一致
  * 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
- * @see contexts/collaboration/model/agent-run.dt:404
+ * @see contexts/collaboration/model/agent-run.dt:431
  */
 export interface ChangedMismatch {
     readonly type: 'ChangedMismatch';
@@ -1567,7 +1670,7 @@ export interface ChangedMismatch {
 /**
  * 報告が必要
  * 成功の条件を満たさない失敗は、報告とともに finish で終える。
- * @see contexts/collaboration/model/agent-run.dt:407
+ * @see contexts/collaboration/model/agent-run.dt:434
  */
 export interface ReportRequired {
     readonly type: 'ReportRequired';
@@ -1576,7 +1679,7 @@ export interface ReportRequired {
 /**
  * 別案を選べない実行
  * 別案を選んだ実行は、完了していないか、返答に前提がない（別案を選べるのは前提のある完了の実行）。
- * @see contexts/collaboration/model/agent-run.dt:410
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export interface RunNotPickable {
     readonly type: 'RunNotPickable';
@@ -1587,7 +1690,7 @@ export interface RunNotPickable {
 /**
  * 返答にない別案
  * 選んだ前提の番号または別案のキーが、その実行の返答にない。
- * @see contexts/collaboration/model/agent-run.dt:415
+ * @see contexts/collaboration/model/agent-run.dt:442
  */
 export interface AlternativeNotFound {
     readonly type: 'AlternativeNotFound';
@@ -1598,7 +1701,7 @@ export interface AlternativeNotFound {
 /**
  * 選んだ実行と依頼の不一致
  * 別案を選んでやり直す実行の依頼が、選んだ実行の依頼と同じでない。
- * @see contexts/collaboration/model/agent-run.dt:420
+ * @see contexts/collaboration/model/agent-run.dt:447
  */
 export interface PickMismatch {
     readonly type: 'PickMismatch';
@@ -1609,7 +1712,7 @@ export interface PickMismatch {
 /**
  * 返答の不整合
  * エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
- * @see contexts/collaboration/model/agent-run.dt:425
+ * @see contexts/collaboration/model/agent-run.dt:452
  */
 export interface InvalidReply {
     readonly type: 'InvalidReply';
@@ -2379,7 +2482,7 @@ export function equalMarkTarget(a: MarkTarget, b: MarkTarget): boolean {
     }
     if (a.kind === 'AssumptionChoice') {
         const y = b as Extract<MarkTarget, { readonly kind: 'AssumptionChoice' }>;
-        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($20: ReplyKey, $21: ReplyKey) => $20 === $21);
+        return a.run === y.run && a.assumption === y.assumption && sameOptional(a.alternative, y.alternative, ($22: ReplyKey, $23: ReplyKey) => $22 === $23);
     }
     return true;
 }
@@ -2841,7 +2944,7 @@ export type MakeReplyableTarget = (value: ReplyTarget, context: SessionId) => Pr
 /**
  * 打ち消せる実行
  * 打ち消せると、打ち消しの依頼を送るときに確かめた実行: そのセッションの、ファイルの変更を記録した実行（基準と結果の
- * リビジョンが違う）で、まだ打ち消されておらず、打ち消しの最中でもない。
+ * リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
  * A value of AgentRunId for which MakeRevertableRun made a check outside the aggregate. Evidence of a check made at that moment, not a guarantee when the aggregate is saved — keep enforcing it where it is stored (e.g. a unique index).
  * Make it with your `MakeRevertableRun` factory; never `as RevertableRun` outside it (see dt guide lint).
  * @see contexts/collaboration/model/request.dt:27
@@ -2901,7 +3004,7 @@ export interface RequestCommon {
     /** 言及した人 — 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。 */
     readonly mentions: readonly ParticipantId[];
     /**
-     * 打ち消す実行 — 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを 皆に伝える（「〈作業名〉の変更を打ち消す」）。機械的に打ち消せれば機械的な打ち消しの記録が、できなければ AI の実行が束ねる。
+     * 打ち消す実行 — 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを 皆に伝える（「〈作業名〉の変更を打ち消す」）。ほかの依頼と同じく実行として待ちに入り、順が来るとサーバーが機械的に打ち消すか、できなければ AI に任せる。
      * @see {@link AgentRun}
      */
     readonly reverts?: AgentRunId;
@@ -2956,7 +3059,7 @@ export function checkRequestCommon(request: RequestCommon): readonly ('atMostTwe
     if (!(request.targets.length <= 20)) violated.push('atMostTwentyTargets');
     if (!(distinct(request.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) violated.push('distinctTargets');
     if (!(request.mentions.length <= 20)) violated.push('atMostTwentyMentions');
-    if (!(distinct(request.mentions, ($22: ParticipantId, $23: ParticipantId) => $22 === $23))) violated.push('distinctMentions');
+    if (!(distinct(request.mentions, ($24: ParticipantId, $25: ParticipantId) => $24 === $25))) violated.push('distinctMentions');
     if (!(request.targets.every((t) => !(t.target.kind === 'Workspace')))) violated.push('noWorkspaceTarget');
     return violated;
 }
@@ -3060,7 +3163,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
     if (!(distinct(params.targets, (t, t2) => equalModelTarget(t.target, t2.target)))) return 'distinctTargets';
     if (!(params.targets.every((t) => !(t.target.kind === 'Workspace')))) return 'noWorkspaceTarget';
     if (!(params.mentions.length <= 20)) return 'atMostTwentyMentions';
-    if (!(distinct(params.mentions, ($24: ParticipantId, $25: ParticipantId) => $24 === $25))) return 'distinctMentions';
+    if (!(distinct(params.mentions, ($26: ParticipantId, $27: ParticipantId) => $26 === $27))) return 'distinctMentions';
     return undefined;
 }
 
@@ -3265,7 +3368,7 @@ export interface RunNotReplyable {
 
 /**
  * 打ち消せない実行
- * 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの最中。
+ * 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
  * @see contexts/collaboration/model/request.dt:143
  */
 export interface RunNotRevertable {
@@ -4772,7 +4875,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'Workspace') {
         const y = b as Extract<ModelTarget, { readonly kind: 'Workspace' }>;
-        return sameOptional(a.scope, y.scope, ($26: string, $27: string) => $26 === $27);
+        return sameOptional(a.scope, y.scope, ($28: string, $29: string) => $28 === $29);
     }
     if (a.kind === 'DtElement') {
         const y = b as Extract<ModelTarget, { readonly kind: 'DtElement' }>;
@@ -4848,7 +4951,7 @@ export interface TargetSnapshot {
  * @see contexts/collaboration/model/target.dt:56
  */
 export function equalTargetSnapshot(a: TargetSnapshot, b: TargetSnapshot): boolean {
-    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($28: string, $29: string) => $28 === $29) && sameOptional(a.range, b.range, equalSourceRange);
+    return equalModelTarget(a.target, b.target) && a.sourceRevision === b.sourceRevision && sameOptional(a.label, b.label, ($30: string, $31: string) => $30 === $31) && sameOptional(a.range, b.range, equalSourceRange);
 }
 
 /**
@@ -4862,10 +4965,10 @@ export function checkTargetSnapshot(targetSnapshot: TargetSnapshot): readonly 'w
 }
 
 /** Events of Collaboration that are persisted (declared `persistent`). */
-export type PersistentEvent = RunQueued | RunReverted | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | ParticipantJoined | SessionClosed;
+export type PersistentEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Events of Collaboration. */
-export type DomainEvent = RunQueued | RunReverted | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | ParticipantJoined | SessionClosed;
+export type DomainEvent = RunQueued | RunReverted | RevertLeftToAgent | RunStarted | RunCompleted | RunNeedsClarification | RunDeclined | RunFailed | RunCancelled | AssumptionApproved | MarkPlaced | MarkRemoved | RequestSent | RequestDismissed | RevisionRecorded | RevisionRestored | SessionStarted | ParticipantJoined | SessionClosed;
 
 /** Aggregates of Collaboration. */
 export type Aggregate = AgentRun | AssumptionApproval | Mark | Request | Revision | Session;

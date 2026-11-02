@@ -60,8 +60,9 @@ export interface Ctx {
     /** The facilitator picks another alternative of an assumption of a completed run, played as `step`. */
     pickAlternative(run: RunJson, assumption: number, alternative: string, step: Step): Promise<RunJson>;
     /**
-     * The facilitator reverts the unit of work of `run`, named `name` (the chat's 「〈name〉の変更を打ち消す」): done
-     * mechanically, or — when `step` is given, which the revert must then need — played by the agent as `step`.
+     * The facilitator reverts the unit of work of `run`, named `name` (the chat's 「〈name〉の変更を打ち消す」): queued, and
+     * — the queue being empty — done mechanically by the server at once, or — when `step` is given, which the revert
+     * must then need — left to the agent and played as `step`.
      */
     revert(run: RunJson, name: string, step?: Step): Promise<RunJson>;
     /** The facilitator approves an assumption of a completed run as it is: recorded, nothing queued. */
@@ -365,15 +366,17 @@ function makeCtx(deps: {
         },
         async revert(run, name, step) {
             if (step) agent.expect(step);
-            const reverted = await api.revert(f, run.id, revertBody(name));
-            if (reverted.way === 'mechanical') {
+            // the queue is empty here: the server takes the revert at once, before it answers
+            const { run: reverted } = await api.revert(f, run.id, revertBody(name));
+            if (reverted.state === 'Reverted') {
                 if (step) throw new Error(`The revert of run ${run.id} was mechanical, not the agent's`);
-                deps.log(`  run ${reverted.run.id.slice(0, 8)}: ${reverted.run.state} (reverted mechanically)`);
-                return reverted.run;
+                deps.log(`  run ${reverted.id.slice(0, 8)}: ${reverted.state} (reverted mechanically${reverted.changed ? '' : ', nothing left'})`);
+                return reverted;
             }
-            if (!step) throw new Error(`The revert of run ${run.id} went to the agent (${reverted.obstacle.kind}), not mechanical`);
-            deps.log(`  the revert of run ${run.id.slice(0, 8)} went to the agent (${reverted.obstacle.kind})`);
-            return played(reverted.run, step);
+            const why = reverted.state === 'Queued' ? (reverted.revertObstacle?.kind ?? 'not tried yet') : reverted.state;
+            if (!step) throw new Error(`The revert of run ${run.id} went to the agent (${why}), not mechanical`);
+            deps.log(`  the revert of run ${run.id.slice(0, 8)} went to the agent (${why})`);
+            return played(reverted, step);
         },
         async approveAssumption(run, assumption) {
             await api.approve(f, { run: run.id, assumption });

@@ -66,6 +66,8 @@ export interface SessionHttpDeps {
      * `wrote(result)`, every page gets the written sources in one refresh and publish on resume.
      */
     readonly holdWatcher: <T>(work: () => Promise<T>, wrote: (result: T) => boolean) => Promise<T>;
+    /** Lets the server take the reverts at the head of the queue (`RevertQueue.kick`); resolves when it is done. */
+    readonly reverts: () => Promise<void>;
     /** An identity's sign-in ended or its role changed: its pages are disconnected (they reconnect as what they are now). */
     readonly disconnect: (identity: IdentityKey, reason: string) => void;
     /** Another identity holds the facilitator's role: every page still connected gets the session's state again. */
@@ -473,7 +475,8 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
             path: /^\/api\/session\/runs\/([^/]+)\/revert$/,
             role: 'facilitator',
             handle: async ({ req, res, auth, params }) => {
-                // the run's changes reverted: mechanically when they reverse cleanly and check, else by the AI (ADR 0026, amendment)
+                // a revert queues like any change (ADR 0026, amendment): asked, then the server takes it at once if it
+                // is at the head (mechanically, or left to the AI); the answer is the run as it is then
                 const id = checked(res, uuid(params[0], 'id'));
                 if (!id) return;
                 const raw = await input(req, res, ['body']);
@@ -481,18 +484,22 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                 const message = checked(res, text(raw.body, 'body', MAX_NOTE));
                 if (!message) return;
                 const me = who(auth);
-                const reverted = await deps.holdWatcher(
-                    () => use.revertRun({ session, actor: me.actor, run: knownAgentRunId(id), body: message }),
-                    (r) => r.ok && r.value.way === 'mechanical',
-                );
-                if (reverted.ok)
-                    deps.log(
-                        reverted.value.way === 'mechanical'
-                            ? `reverted run ${id} mechanically (by ${me.participant.id})`
-                            : `queued the revert of run ${id} for the agent (${reverted.value.obstacle.kind})`,
-                    );
-                else deps.log(`revert of run ${id} refused: ${reverted.error.type}`);
-                await answer(res, reverted, 201, (u) => u);
+                const requested = await use.requestRevert({ session, actor: me.actor, run: knownAgentRunId(id), body: message });
+                if (!requested.ok) {
+                    deps.log(`revert of run ${id} refused: ${requested.error.type}`);
+                    return fail(res, requested.error);
+                }
+                deps.log(`queued the revert of run ${id} (run ${requested.value.run.id}, by ${me.participant.id})`);
+                await deps.pump();
+                await deps.reverts();
+                const { runs } = await state();
+                const run = runs.find((r) => r.id === requested.value.run.id) ?? requested.value.run;
+                // what is before it in the queue: the run in progress and the queued ones ahead
+                const ahead =
+                    run.state === 'Queued'
+                        ? runs.filter((r) => r.state === 'Running' || (r.state === 'Queued' && runs.indexOf(r) < runs.indexOf(run))).length
+                        : 0;
+                sendJson(res, 201, { request: requested.value.request, run, ahead });
             },
         },
         {

@@ -134,6 +134,47 @@ export function cardMenuItems(last: RunJson, runs: readonly RunJson[], live: boo
     return live && revertStatus(last, runs).kind === 'none' ? ['revert', 'changes'] : ['changes'];
 }
 
+/** Why a queued revert was left to the AI (the model's `RevertObstacle`, as JSON). */
+export type RevertObstacleJson = NonNullable<Extract<RunJson, { state: 'Queued' }>['revertObstacle']>;
+
+/**
+ * Where a revert asked from a card stands, from its run (`run`) among the session's: waiting its turn behind `ahead`
+ * runs (the one in progress and the queued ones before it), reverted mechanically, `nothing` left to revert, left to
+ * the AI (why), with the AI (running, asking, done or not by it), or stopped. `undefined` while the page does not have the run yet.
+ */
+export type RevertProgress =
+    | { readonly kind: 'queued'; readonly ahead: number }
+    | { readonly kind: 'reverted' }
+    | { readonly kind: 'nothing' }
+    | { readonly kind: 'leftToAgent'; readonly obstacle: RevertObstacleJson }
+    | { readonly kind: 'agent' }
+    | { readonly kind: 'stopped' };
+
+export function revertProgress(run: string, runs: readonly RunJson[]): RevertProgress | undefined {
+    const at = runs.findIndex((r) => r.id === run);
+    const r = runs[at];
+    if (!r) return undefined;
+    switch (r.state) {
+        case 'Queued':
+            if (r.revertObstacle) return { kind: 'leftToAgent', obstacle: r.revertObstacle };
+            return { kind: 'queued', ahead: runs.filter((o, i) => o.state === 'Running' || (o.state === 'Queued' && i < at)).length };
+        case 'Reverted':
+            return { kind: r.changed ? 'reverted' : 'nothing' };
+        case 'Cancelled':
+            return { kind: 'stopped' };
+        default:
+            return { kind: 'agent' };
+    }
+}
+
+/** Why a revert went to the AI, in words (`tx.revertFlow`). */
+export function obstacleText(
+    o: RevertObstacleJson,
+    u: { readonly conflict: (paths: string) => string; readonly check: string; readonly unreadable: string },
+): string {
+    return o.kind === 'Conflict' ? u.conflict(o.paths.join(', ')) : o.kind === 'Check' ? u.check : u.unreadable;
+}
+
 /** The cards whose runs moved on since the reader last saw them (`seen`: each card's `updatedAt` then). */
 export function updatedCards(cards: readonly { readonly key: string; readonly updatedAt: string }[], seen: ReadonlyMap<string, string>): string[] {
     return cards.filter((c) => seen.has(c.key) && seen.get(c.key) !== c.updatedAt).map((c) => c.key);

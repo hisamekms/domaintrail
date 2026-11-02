@@ -105,6 +105,7 @@ export const EVENT_MESSAGE_TYPES = {
     RunFailed: 'run.failed',
     RunCancelled: 'run.cancelled',
     RunReverted: 'run.reverted',
+    RevertLeftToAgent: 'run.revert_left_to_agent',
     RevisionRecorded: 'revision.recorded',
     RevisionRestored: 'revision.restored',
     MarkPlaced: 'mark.placed',
@@ -269,32 +270,28 @@ export interface ManualRecoveryNeededBody {
 
 /**
  * `POST /api/session/runs/:id/revert` (the facilitator): revert the changes of the run `:id` of the session (one that
- * changed files, not reverted yet nor being reverted). `body` is the message everyone sees in the chat, sent as the revert
- * request (「〈作業名〉の変更を取り消す」). Done mechanically when the run's changes reverse cleanly onto the workspace
- * and the result checks, else queued for the AI (`RevertedBody`). Refused with `FacilitatorOnly` (403), `RunNotFound` /
- * `RunOfAnotherSession` (404), `RunNotRevertable` (409: it changed no file, or it is reverted or being reverted),
- * `RunInProgress` (409: a run is running or claimed), `NothingToRevert` (409: the workspace has none of its changes),
- * `ExternalChangesSinceSnapshot` (409: the workspace changed while it was reverted; nothing was written).
+ * changed files, not reverted yet nor being reverted). `body` is the message everyone sees in the chat, sent as the
+ * revert request (「〈作業名〉の変更を打ち消す」). The revert is queued behind the other work like any change, never
+ * refused for a run in progress; when it reaches the head of the queue, the server reverts it mechanically when the
+ * run's changes reverse cleanly onto the workspace then and the result checks, else leaves it queued for the AI, with
+ * why (`revertObstacle`). Refused with `FacilitatorOnly` (403), `RunNotFound` / `RunOfAnotherSession` (404),
+ * `RunNotRevertable` (409: it changed no file, or it is reverted, or a revert of it is queued or under way).
  */
 export interface RevertRunBody {
     readonly body: string;
 }
 
-/** Why a revert went to the AI: later changes conflict (the paths), the reverted sources do not check, or the run's sources are gone. */
-export type RevertObstacleBody =
-    | { readonly kind: 'conflict'; readonly paths: readonly string[] }
-    | { readonly kind: 'check'; readonly newDtErrors: number; readonly unparsedDtes: readonly string[] }
-    | { readonly kind: 'unreadable' };
-
-/** `POST /api/session/runs/:id/revert` → 201: the revert request, and the mechanical revert recorded or the AI's run queued. */
-export type RevertedBody =
-    | { readonly way: 'mechanical'; readonly request: Json<Collaboration.SentRequest>; readonly run: Json<Collaboration.RevertedAgentRun> }
-    | {
-          readonly way: 'agent';
-          readonly request: Json<Collaboration.SentRequest>;
-          readonly run: Json<Collaboration.QueuedAgentRun>;
-          readonly obstacle: RevertObstacleBody;
-      };
+/**
+ * `POST /api/session/runs/:id/revert` → 201: the revert request, and its run as it is once the server had its turn:
+ * `Reverted` when it was at the head and went through at once (`changed` false: nothing was left to revert), `Queued`
+ * with `revertObstacle` when it was left to the AI, `Queued` without one while it waits its turn behind `ahead` runs
+ * (the run in progress and the queued ones before it).
+ */
+export interface RevertRequestedBody {
+    readonly request: Json<Collaboration.SentRequest>;
+    readonly run: Json<Collaboration.AgentRun>;
+    readonly ahead: number;
+}
 
 /** A file of a comparison: its status by path and DSL, and the line diff of its texts unless it is unchanged. */
 export interface ComparedFileBody extends Json<FileComparison> {
@@ -325,10 +322,13 @@ export type { ElementChange };
 /**
  * The SSE stream `GET /agent/events`: `id:` is the outbox position (resume with `Last-Event-ID`), `event:` one of these
  * types, `data:` the `EventMessage` as JSON. `run.cancel_requested` is the `RunCancelled` event (stop the agent if it
- * is that run's).
+ * is that run's). A queued revert is first tried by the server: `run.reverted` when it went through (the queue moved
+ * on), `run.revert_left_to_agent` when it is left to the agent — both mean a run may now be claimed.
  */
 export const AGENT_EVENT_TYPES = {
     RunQueued: 'run.queued',
+    RunReverted: 'run.reverted',
+    RevertLeftToAgent: 'run.revert_left_to_agent',
     RunStarted: 'run.started',
     RunCompleted: 'run.completed',
     RunNeedsClarification: 'run.needs_clarification',

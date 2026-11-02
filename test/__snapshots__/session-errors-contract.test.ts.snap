@@ -31,7 +31,6 @@ exports[`the status of each error type every error of the collaboration model an
   "NotAParticipant": 403,
   "NotFound": 404,
   "NotYourRequest": 403,
-  "NothingToRevert": 409,
   "PathOutsideRoot": 409,
   "PickMismatch": 400,
   "ReactionLimitReached": 409,
