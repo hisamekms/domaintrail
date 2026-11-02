@@ -210,8 +210,10 @@ The chat has two views:
   facilitator sends messages to the AI from the stream (AI に送る, … to send with a comment, several
   with Shift/⌘-click), answers questions and picks alternatives in the cards, cancels runs (✕ right after a running or
   queued turn's state, always shown, after a dialog asks), and reaches
-  restore and the changes from a card's ⋯ (この作業の前に戻す…, 変更を見る; the revisions are
-  in the tooltips only) and recording, the hand-over and コラボを終える… from the collab menu. Once the
+  the undo and the changes from a card's ⋯ (この作業を取り消す…, 変更を見る; the revisions are
+  in the tooltips only: an undo is done mechanically, a 取り消し card, or by the AI, a card of its own; an undone work's
+  assumptions read 取り消し済み) and recording, 以前の状態に戻す… (the last resort), the hand-over and コラボを終える… from the
+  collab menu. Once the
   collab ended, everyone sees its summary (コラボを終えました: the changes, the participants, how long it lasted).
   Participants vote with ♡ on a question's options and on an assumption (kept, or one of its alternatives) while the
   run waits; the facilitator sees the counts and decides. Options start with ○ (single choice) or ☐ (multiple), and

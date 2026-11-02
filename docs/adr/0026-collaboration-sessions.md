@@ -1157,9 +1157,73 @@ concept of a revision, S7 ("Confirm"), the card's ⋯ of "messages, apply…" an
   revision is taken or restored, then never changes.
 - **The API.** `POST /api/session/revisions/:id/confirm` and the use case `confirmRevision` are gone; the route is
   `NotFound` like any unknown one. The state's revisions carry no confirmation.
-- **The page.** A card's ⋯ offers この作業の前に戻す… and 変更を見る; the stream has no 「… がこの作業の結果を確認済みにしました」
+- **The page.** A card's ⋯ offers この作業の前に戻す… (*amended*: この作業を取り消す… — see "undo a run" below) and 変更を見る; the stream has no 「… がこの作業の結果を確認済みにしました」
   notice; ending the collab counts the runs queued and running and the questions unanswered, not results.
 - **Sessions written before** (migration 9): a confirmed revision becomes the recorded one it was (`state` and the
   JSON's `state` set to `Recorded`, `confirmedBy` and `confirmedAt` removed), and the outbox's `RevisionConfirmed`
   events are deleted, so that a page or an agent replaying the outbox reads only events that exist. The outbox's
   positions are not renumbered: a cursor stays valid, and gaps were already there (one outbox for every session).
+
+## Appendix: undo a run instead of restoring before it (amendment)
+
+*Decided by the maintainer* (2026-11-03): a card's この作業の前に戻す… restored the whole workspace to the snapshot before
+the run, throwing away every later run's work with it, while what people mean is "take back what this work did". The
+card now undoes the run's changes; the snapshot restore stays, as the facilitator's last resort in the collab menu.
+This amends S7 (restore), "changes in the model's words" and "revisions are not confirmed".
+
+- **On the card, undo; mechanically first, the AI otherwise.** ⋯ → この作業を取り消す… (asked first) is offered on a card
+  whose latest run changed files (`undoableChanges`: an ended run whose base and result revisions differ, a run failed
+  by the rule and a mechanical undo included) and is not undone nor being undone (`undoStatus`). The facilitator's
+  message 「〈作業名〉の変更を取り消す」 (the page writes it) is sent as an **undo request** either way, so everyone sees
+  what is undone. The run's changes are its base and result revisions, file by file; they are reversed onto the
+  workspace as it is now (`domain/undo.ts`, pure): a file still as the run left it gets its base back (a file the run
+  added is removed, one it removed comes back), a file already as before is left, and a file changed since gets the
+  reverse merged line by line — a diff3 of the current text and the base from the run's result as ancestor, conflicting
+  where both changed the same or touching lines (as `git revert` does). A file the run added and someone changed, a file
+  the run changed and someone removed, or a file past the diff's bounds is a conflict too. Without conflict the result
+  is checked as a run is (no `.dt` error the workspace does not have now, every `.dtes` parses), formatted as `dt fmt`
+  formats (a `SourceFormatter` port, the printers of `dt fmt`), written behind the watcher hold and recorded as **one
+  unit of work**: a run in a new state, `Reverted` (機械的な取り消し), bundling the undo request, with its own base and
+  result revisions (RunBase, RunResult), attributed to the facilitator, no agent involved. The chat shows it as the card
+  取り消し with its changes. Otherwise (conflict, the check, the sources no longer stored) the undo request is queued as
+  a run for the AI, through the normal queue, cancellable, with the usual success rule; the answer says which way and
+  why (`UndoObstacle`: `conflict` with the paths, `check`, `unreadable`). `NothingToUndo` when the workspace has none of
+  the run's changes any more.
+- **Only the facilitator** (`FacilitatorOnly` from the commands `requestUndo` and `revert`, checked before the
+  workspace is read). Refused while a run is running or claimed (`RunInProgress`): the merge reads the workspace.
+- **Model** (`.dt`, generated code and contract tests regenerated). `Request.undoes?: AgentRunId` (references the run),
+  set only by `create command requestUndo(…, authorRole, …, undoes: UndoableRun)` (`facilitatorUndoes`); the verified
+  `UndoableRun` refuses a run without changes, one undone or being undone (`RunNotUndoable`), and runs of another
+  session. `RequestSent.undoes?` and `FrozenRequest.undoes?`. `AgentRun` gets the state `Reverted { baseRevision,
+  resultRevision, finishedAt }` (invariants: it changes the workspace, it bundles undo requests only) and `create command
+  revert` (facilitator, the requests covered by the input, `inputUndoes`, `revertChanges`) emitting `RunReverted`. A
+  run's undo status is derived, not stored: undone by a `Reverted` run or a `Completed` run whose requests undo it —
+  unless that undo was itself undone —, pending while such a run is queued, running or asks, none otherwise (a failed,
+  declined or cancelled undo may be asked again).
+- **Assumptions of an undone run** are closed as 取り消し済み: `assumptionStatus` and `markTargetStatus` read the undo
+  status (`AssumptionClosed`, votes `MarkTargetClosed`), and the page shows them muted and struck through, without
+  承認待ち or 承認, with `取り消し済み name · time` (the time a link to the undo). An assumption approved or picked before
+  stays what it was. The undone run's card says 取り消し済み too.
+- **Agent protocol.** The subscriber claims with `capabilities: AGENT_CAPABILITIES` (`['undo']`); the server never hands
+  an undo to a claim that does not name `undo` (`SubscriberOutdated`, 409, the run stays queued and the old subscriber
+  logs the refusal), so an older subscriber fails clearly instead of running the undo as a plain request. A newer
+  subscriber against a server before this amendment is refused for the unknown field (400). `POST /agent/runs/:id/start`
+  answers `undo: [{ run, changes }]` (`undoneRuns`): each run undone, with each file's unified diff while they fit
+  `MAX_UNDO_DIFF` (64 KiB) and the line counts past it. The subscriber fails a run whose undo has no changes given. The
+  prompt numbers them in `undo` (requests, reply then, changes per file), marks the request `undoesRun: n`, and rule 10
+  says to undo only those changes in the current files, keep every later change, restore no whole file, and say in the
+  request's note what could not be undone and why.
+- **API.** `POST /api/session/runs/:id/undo { body }` (the facilitator) → 201 `UndoneBody` (`way: 'mechanical'` with the
+  request and the `Reverted` run, or `way: 'agent'` with the queued run and the obstacle). Every page gets
+  `request.sent`, the revisions and `run.reverted` (or `run.queued`).
+- **Restore stays, in the collab menu.** 以前の状態に戻す… (the facilitator's, next to いまの状態を記録) lists the earlier
+  states, newest first, by what they were (the collab's start, before or after a unit of work, a manual record, before
+  or after a restore; those with the latest's sources left out) and goes through the existing restore flow (the
+  confirmation, external changes recorded first, a running run cancelled or waited for, manual recovery).
+- **Persistence.** Migration 10 adds `requests.undoes` (a foreign key to `agent_runs`, indexed when set): the database
+  refuses an undo of a run it does not hold. Rows written before undo nothing; a `Reverted` run is a row of
+  `agent_runs` like the others (never claimed: it is not `Queued`).
+- **Limits.** The merge is line-based: changes on adjacent lines conflict even when they would combine (then the AI
+  does it). The formatter formats the files the undo writes, as `dt fmt` formats a run's edits, so a hand-made layout in
+  those files is normalized. A write that fails midway is not recovered as a restore's is (the watcher then sees the
+  sources as external changes).

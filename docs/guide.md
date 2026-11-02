@@ -2566,7 +2566,7 @@ awaiting an answer, running, queued and finished — and post messages. Closed, 
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
 collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
-facilitator applies messages, answers the agent, cancels runs, records and restores revisions, changes the
+facilitator applies messages, answers the agent, cancels and undoes runs, records and restores revisions, changes the
 shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える…). The server checks every role; the page
 only hides what is not yours.
 
@@ -2574,7 +2574,7 @@ only hides what is not yours.
 many are online ▾ — that opens the participants (where each is, and → to open the view another is on) and
 the collab's actions: 招待リンクをコピー for everyone (the address of the page: the Live View's URL, the public URL
 behind Access in `access` mode), and 退出 for a participant (it signs out). The facilitator has いまの状態を記録,
-ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
+以前の状態に戻す… (below), ファシリテーターを引き継ぐ and コラボを終える… instead of 退出: they hand the role over first to leave. Ending asks first and
 lists what is not finished — runs queued or running and questions waiting for an answer — then 終える. Every page then shows コラボを終えました: the changes (the runs that changed
 files, with how many files and who asked), the participants and how long it lasted, computed from what the page held
 when it ended; the session's record stays in the workspace's `.domaintrail`.
@@ -2636,7 +2636,29 @@ under an unselected その他 are not sent. On a
 done card, an alternative of an assumption queues them again with that pick and a note asking for it; the facilitator's ✕ (a bordered
 button first among a queued or running card's actions, and at the end of its row in AI の作業) cancels it after a
 dialog asks: 実行を取り消しますか？ for a running run (its work so far is not applied), 依頼を取り消しますか？ for a queued
-one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ restores the workspace as it was before the work (この作業の前に戻す…, asked first) or shows its changes (変更を見る).
+one, with the card's name; やめる (or Esc) keeps it; the card's ⋯ undoes the work (この作業を取り消す…, asked first,
+below) or shows its changes (変更を見る).
+
+**Undoing a piece of work.** On a card whose work changed files, the facilitator's ⋯ → この作業を取り消す… takes back
+what that work changed and nothing else: later work's changes stay. Asked first, it sends the facilitator's message
+「〈作業名〉の変更を取り消す」 to the chat, so everyone sees what is undone, then undoes it one of two ways:
+
+- **Mechanically** when it can: for each file the work changed, the file is set back as it was before the work when
+  nothing changed it since; otherwise the work's change is reversed line by line around the later changes (as `git
+  revert` does). The result is checked as a run's (`dt fmt`, no `.dt` error the workspace does not have now, every
+  `.dtes` parses) and written. It is a card of its own, 取り消し (no AI involved), with its changes and 変更を見る.
+- **By the AI** otherwise — a later change overlaps or touches what the work changed (a file it added and someone
+  edited, a file it changed and someone removed), or the undone sources would not check: the message is sent to the AI
+  as a run of its own (waiting, running, done, cancellable like any), with the work's changes file by file; the AI
+  undoes only those, keeps the later ones and says what it could not undo and why. The chat tells which way it went,
+  and why.
+
+A work being undone or undone already offers no second undo (an undo that failed can be asked again); an undo is work
+too, and can be undone in turn. What the AI assumed in an undone work is closed as 取り消し済み (no 承認待ち, no 承認),
+with who undid it and when, as the work's own card says. Undoing is refused while a run is running: wait for it.
+**Restoring an earlier state** of the whole workspace is the collab menu's 以前の状態に戻す…, the last resort: it lists
+the earlier states by what they were (when the collab started, before or after a piece of work, a state someone
+recorded, before or after a restore), and the chosen one goes through the restore below.
 
 **Replies to an AI turn.** Hover an AI turn (on touch it is always there) and ↩ 返信 in its actions starts a
 reply to its latest run — when that run ended: done, failed, declined or cancelled (a question has its answer form, and
@@ -2848,7 +2870,7 @@ errors; `.dtes` errors and warnings; the warnings of `ref`s into the model). One
 before and after each run, when the facilitator records the current state (*Record the current state*), and around a
 restore; saves while a run is in progress make none. They are numbered in the order taken; the chat words them by the
 work (a card's result, the state before it) and keeps their numbers in tooltips, and a run's card reaches the two
-around it (its ⋯).
+around it (its ⋯ → 変更を見る).
 
 - **Changes**: a card (⋯ → 変更を見る, or 変更を見る on its line) lists the model's elements its revisions differ by —
   `.dt` elements, states and commands by their IDs, storming elements by their storming and local IDs — as added,
@@ -2857,8 +2879,9 @@ around it (its ⋯).
   does not parse, the model is not compared and the source diff is open. The work is bounded: a file over
   1 MiB, or of more than 10,000 lines or 1,000 edits, gets no diff; lines are cut at 1,000 characters; a comparison
   stops its diffs after 512 KiB (and a file's after 2,000 lines), and the files after that get none.
-- **Restore**: the facilitator writes a past revision back: every source becomes that revision's, on everyone's page
-  at once. The current state is kept first as a *before a restore* revision, so a restore can itself be undone by
+- **Restore** (the collab menu's 以前の状態に戻す…): the facilitator writes a past revision back: every source becomes
+  that revision's, on everyone's page at once, later work's changes included — to take back one piece of work, undo it
+  from its card instead. The current state is kept first as a *before a restore* revision, so a restore can itself be undone by
   restoring that one. A restore is refused, and nothing is written, when:
   - a run is in progress: wait for it, or cancel it from the restore dialog, then restore again (files the agent
     changed before it stopped count as external changes, below);
