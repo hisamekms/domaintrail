@@ -11,11 +11,13 @@
 //     "crash": 3,               exits with this code after the turn's first events
 //     "mute": true,             says nothing at all for this turn
 //     "die": 4,                 exits with this code at once, before any event of the turn
-//     "ask": true }             sends a control request of its own before the result
+//     "ask": true,              sends a control request of its own before the result
+//     "scribble": "late.txt" }  says nothing and keeps appending to this file (in its working directory) every 10 ms
 //
 // Every turn prints `system/init`, a hook's `notification` (as a user's Stop hook does) and an assistant message
 // with a tool call, then its result.
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 
 const [planFile, ...args] = process.argv.slice(2);
@@ -64,6 +66,10 @@ async function turn(prompt) {
     const step = nextStep(prompt);
     if (step.die !== undefined) process.exit(step.die);
     if (step.mute) return;
+    if (step.scribble) {
+        setInterval(() => appendFileSync(path.join(process.cwd(), step.scribble), 'x'), 10);
+        return new Promise(() => {});
+    }
     print({ type: 'system', subtype: 'init', session_id: 'fake' });
     print({
         type: 'assistant',

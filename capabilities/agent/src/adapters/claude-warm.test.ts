@@ -45,7 +45,7 @@ async function waitFor(what: string, check: () => boolean, ms = 5_000): Promise<
 async function setup(
     steps: Record<string, unknown>[],
     options: Partial<WarmRunnerOptions> = {},
-): Promise<{ runner: AgentRunner; log: string[]; logged: () => Logged[] }> {
+): Promise<{ runner: AgentRunner; log: string[]; logged: () => Logged[]; root: string }> {
     const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-warm-'));
     const plan = path.join(root, '..', `${path.basename(root)}.plan.json`);
     await writeFile(plan, JSON.stringify({ runs: steps }));
@@ -72,7 +72,7 @@ async function setup(
                   .filter(Boolean)
                   .map((l) => JSON.parse(l) as Logged)
             : [];
-    return { runner, log, logged };
+    return { runner, log, logged, root };
 }
 
 const invocation = (n: number, extra: Partial<AgentInvocation> = {}): AgentInvocation => ({
@@ -219,6 +219,47 @@ describe('the warm runner', () => {
         expect((await runner.run(invocation(1))).summary).toBe('Cold.');
         expect(log.some((l) => l.includes('a turn showed no sign of life'))).toBe(true);
         await waitFor('the silent process to end', () => !alive(logged()[0].pid));
+    });
+
+    /** The size of `late.txt` in the runner's root, now and a little later. */
+    const growth = async (root: string): Promise<[number, number]> => {
+        const size = (): number => (existsSync(path.join(root, 'late.txt')) ? readFileSync(path.join(root, 'late.txt'), 'utf8').length : 0);
+        const now = size();
+        await Bun.sleep(150);
+        return [now, size()];
+    };
+
+    test('a silent turn whose process still writes: the run ends only once the process is gone, with everything it wrote', async () => {
+        const { runner, logged, root } = await setup([{ scribble: 'late.txt' }, {}], { startTimeoutMs: 300 });
+        await runner.run(invocation(1));
+        expect(alive(logged()[0].pid)).toBe(false);
+        const [now, later] = await growth(root);
+        expect(now).toBeGreaterThan(0);
+        expect(later).toBe(now);
+    });
+
+    test('a cancel before the turn started, while its process writes: the run ends only once the process is gone', async () => {
+        const { runner, log, logged, root } = await setup([{ scribble: 'late.txt' }]);
+        const cancel = new AbortController();
+        const running = runner.run(invocation(1, { signal: cancel.signal }));
+        await waitFor('the writes', () => existsSync(path.join(root, 'late.txt')));
+        cancel.abort();
+        expect((await running).exitCode).toBe(-1);
+        expect(alive(logged()[0].pid)).toBe(false);
+        const [now, later] = await growth(root);
+        expect(later).toBe(now);
+        expect(log.some((l) => l.includes('killed (a turn was cancelled before it started)'))).toBe(true);
+    });
+
+    test('a turn that ignores the interrupt: the run ends only once the process is gone', async () => {
+        const { runner, logged } = await setup([{ hang: true, deaf: true }]);
+        const cancel = new AbortController();
+        const running = runner.run(invocation(1, { signal: cancel.signal }));
+        await waitFor('the turn', () => logged().length === 1);
+        await Bun.sleep(50);
+        cancel.abort();
+        await running;
+        expect(alive(logged()[0].pid)).toBe(false);
     });
 
     test('failures in a row: from then on every run is cold, said once', async () => {

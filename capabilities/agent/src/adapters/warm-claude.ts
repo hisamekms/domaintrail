@@ -161,6 +161,15 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
         return proc.exited;
     };
 
+    /** Kills a process's group at once (it may be mid-turn); its exit ends the turn. */
+    const kill = (proc: WarmProcess, why: string | undefined): void => {
+        if (current === proc) current = undefined;
+        if (!proc.retired && why) log(`the warm Claude Code process is killed (${why}); the next turn starts a fresh one`);
+        proc.retired = true;
+        proc.child.stdin.end();
+        killTree(proc.child.pid, 'SIGKILL');
+    };
+
     const failed = (why: string): void => {
         failures++;
         log(`the warm Claude Code process failed (${why})`);
@@ -241,26 +250,31 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
         new Promise<WarmTurnEnd>((resolve) => {
             const { signal } = w;
             let interrupted: ReturnType<typeof setTimeout> | undefined;
+            /**
+             * How the turn ends once its process is gone: the turn is never resolved while the process may still write
+             * files (the subscriber scans the workspace after it, and the next run may start), so a forced end kills
+             * the group at once and waits for the exit, which ends the turn as this.
+             */
+            let forced: WarmTurnEnd | undefined;
+            const force = (e: WarmTurnEnd, why: string | undefined): void => {
+                forced ??= e;
+                clearTimeout(silence);
+                kill(proc, why);
+            };
             const silence = setTimeout(() => {
                 failed('a turn showed no sign of life');
-                void retire(proc, undefined);
-                end({ kind: 'silent' });
+                force({ kind: 'silent' }, undefined);
             }, startTimeoutMs);
             const onAbort = (): void => {
-                if (!t.started) {
-                    // nothing of the turn yet: the process goes, the turn ends
-                    void retire(proc, 'a turn was cancelled before it started');
-                    end({ kind: 'cancelled' });
-                    return;
-                }
+                // nothing of the turn yet: the process goes
+                if (!t.started) return force({ kind: 'cancelled' }, 'a turn was cancelled before it started');
                 write(proc, { type: 'control_request', request_id: `dt-interrupt-${++requestIds}`, request: { subtype: 'interrupt' } });
-                interrupted = setTimeout(() => {
-                    void retire(proc, 'an interrupted turn did not stop');
-                    killTree(proc.child.pid, 'SIGKILL');
-                    end({ kind: 'cancelled' });
-                }, interruptGraceMs);
+                interrupted = setTimeout(() => force({ kind: 'cancelled' }, 'an interrupted turn did not stop'), interruptGraceMs);
             };
-            const end = (e: WarmTurnEnd): void => {
+            const end = (ended: WarmTurnEnd): void => {
+                // forced: only the exit ends the turn
+                if (forced && ended.kind !== 'exit') return;
+                const e = forced ?? ended;
                 if (proc.turn !== t) return;
                 proc.turn = undefined;
                 clearTimeout(silence);
