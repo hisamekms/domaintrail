@@ -7,7 +7,7 @@ import type { Messages } from '../i18n';
 import type { ChatActions } from './actions';
 import type { MessageMark } from './cards';
 import type { MarkIndex, MarkTargetData, Sign } from './marks';
-import type { ReplyDraft, ReplyReference } from './replies';
+import type { MessageReference, ReplyDraft, ReplyReference } from './replies';
 import type { RevisionTools } from './revisions';
 import type { ModelTarget } from './targets';
 import type { SessionData } from './useSession';
@@ -43,12 +43,14 @@ export interface ChatContextValue {
     readonly jump: (key: string) => void;
     /** Opens the participants at a person (a mention of them was clicked), their row marked for a moment. */
     readonly showPerson: (id: string) => void;
-    /** Replies to runs: the reply being written, starting one (from an AI turn) and what a posted reply names. */
+    /** Replies to runs and messages: the reply being written, starting one (from an AI turn or a message) and what a posted reply names. */
     readonly replies: {
         readonly draft: ReplyDraft | undefined;
         start(run: string): void;
+        startMessage(request: string): void;
         cancel(): void;
         referenceOf(run: string): ReplyReference | undefined;
+        messageReferenceOf(request: string): MessageReference | undefined;
     };
 }
 

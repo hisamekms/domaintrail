@@ -129,7 +129,7 @@ describe('the alternative picked from a run’s assumptions', () => {
     test('a run of a reply to it takes over without a pick: none', () => {
         const replying = {
             ...run('r', 5, [], { state: 'Queued' }),
-            input: { requests: [{ ...frozen('m7'), replyTo: 'd' }] },
+            input: { requests: [{ ...frozen('m7'), replyTo: { kind: 'Run', run: 'd' } }] },
         } as unknown as RunJson;
         expect(pickedAlternative(done, [done, replying])).toBeUndefined();
     });

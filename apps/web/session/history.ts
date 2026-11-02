@@ -122,7 +122,7 @@ function outcomeOf(run: RunJson, files: number | undefined): UnitOutcome {
 
 /**
  * The change units of a session, newest first (by when each last changed). A run joins the unit of the run it answers
- * (`answer.answerTo`) or picked an alternative of (`pick.pickOf`), or else the unit of a run its messages reply to (`replyTo`; the latest such unit when they reply
+ * (`answer.answerTo`) or picked an alternative of (`pick.pickOf`), or else the unit of a run its messages reply to (`replyTo` a run; the latest such unit when they reply
  * to runs of several), or else the latest unit whose latest run asked or completed with the same messages (queued
  * again with a note, an alternative picked, applied again); otherwise it starts a unit. A unit is one card of the chat.
  */
@@ -132,7 +132,8 @@ export function changeUnits(state: Pick<SessionStateBody, 'runs' | 'revisions'>)
     const groups: UnitRun[][] = [];
     runs.forEach((run, i) => {
         const continued = run.input.answer?.answerTo ?? run.input.pick?.pickOf;
-        const replied = new Set(run.input.requests.flatMap((r) => (r.replyTo === undefined ? [] : [r.replyTo])));
+        // a reply to a message joins no unit by it
+        const replied = new Set(run.input.requests.flatMap((r) => (r.replyTo?.kind === 'Run' ? [r.replyTo.run] : [])));
         const into =
             (continued !== undefined ? groups.find((g) => g.some((u) => u.run.id === continued)) : undefined) ??
             (replied.size > 0 ? groups.findLast((g) => g.some((u) => replied.has(u.run.id))) : undefined) ??

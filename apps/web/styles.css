@@ -4850,9 +4850,9 @@ del.was.block {
 .chat-message-main {
     position: relative;
 }
-/* at the right end of the message's name line: how it reads, its mark, the facilitator's tools, ☺+ (last). A continued
-   message has no name line: ☺+ alone sits in the body's room on the right; with more, they make a line of their own
-   above the body, so that they never cover its text nor narrow it */
+/* at the right end of the message's name line: how it reads, its mark, the facilitator's tools, ↩ and ☺+ (last). A
+   continued message has no name line: ↩ and ☺+ alone sit in the body's room on the right; with more, they make a line
+   of their own above the body, so that they never cover its text nor narrow it */
 .chat-message-side {
     margin-left: auto;
     align-self: center;
@@ -4865,7 +4865,7 @@ del.was.block {
 .chat-message.continued .chat-message-side {
     margin-block: 0 2px;
 }
-.chat-message.continued .chat-message-side:not(:has(> :not(.reaction-add))) {
+.chat-message.continued .chat-message-side:not(:has(> :not(.reaction-add, .run-card-reply))) {
     position: absolute;
     top: 0;
     right: 0;
@@ -5677,7 +5677,7 @@ del.was.block {
 }
 
 /* ---------- replies to runs ---------- */
-/* ↩ at the right end of an AI turn, just before ☺+: like ☺+, on hover or focus, always (faint) on touch */
+/* ↩ at the right end of an AI turn or a message, just before ☺+: like ☺+, on hover or focus, always (faint) on touch */
 .session-chat button.run-card-reply {
     width: 22px;
     height: 20px;
@@ -5687,6 +5687,8 @@ del.was.block {
 }
 .run-card:hover .run-card-reply,
 .run-card:focus-within .run-card-reply,
+.chat-row:hover .run-card-reply,
+.chat-row:focus-within .run-card-reply,
 .session-chat button.run-card-reply.active {
     opacity: 1;
 }

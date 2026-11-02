@@ -214,7 +214,7 @@ describe('the history of changes', () => {
             // a reply by someone else continues the chunk: it is still the first run's requesters' chunk
             const qd = request('qd', 'dev:d');
             const second = run('run2', 3, [qa, qb], completed(3, 'r1', 'r2'));
-            const third = run('run3', 8, [qd], completed(8, 'r2', 'r2'), { requests: [{ ...frozen(qd), replyTo: 'run2' }] });
+            const third = run('run3', 8, [qd], completed(8, 'r2', 'r2'), { requests: [{ ...frozen(qd), replyTo: { kind: 'Run', run: 'run2' } }] });
             const [unit] = changeUnits({ runs: [first, second, third], revisions });
             expect(unit.runs.map((r) => r.run.id)).toEqual(['run1', 'run2', 'run3']);
             expect(unit.requesters).toEqual(['dev:a', 'dev:b']);

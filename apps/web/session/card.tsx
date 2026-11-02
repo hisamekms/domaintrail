@@ -83,7 +83,7 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     <span className="run-card-tools">
                         {control && !compact && <CardMenu last={last.run} />}
                         {actions}
-                        {!compact && <ReplyButton run={last.run} />}
+                        {!compact && <ReplyButton to={{ kind: 'Run', run: last.run }} />}
                         {/* last: ☺+ at the right end of every row, messages and turns alike */}
                         {!compact && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
                     </span>
@@ -97,23 +97,25 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
 }
 
 /**
- * ↩ at the right end of an AI turn (just before ☺+) whose latest run ended (completed, failed, declined, cancelled; not a question,
- * which has its form): anyone starts a reply to it, shown on hover or focus (always, faint, on touch).
+ * ↩ just before ☺+: at the right end of an AI turn whose latest run ended (completed, failed, declined, cancelled; not a
+ * question, which has its form), and of every message. Anyone starts a reply to it, shown on hover or focus (always,
+ * faint, on touch).
  */
-function ReplyButton({ run }: { run: RunJson }) {
+export function ReplyButton({ to }: { to: { readonly kind: 'Run'; readonly run: RunJson } | { readonly kind: 'Message'; readonly request: string } }) {
     const { tx, session, replies } = useChat();
     const live = session.status === 'live' && session.state.session.state === 'Open';
-    if (!live || !isReplyable(run)) return null;
+    if (!live || (to.kind === 'Run' && !isReplyable(to.run))) return null;
     const r = tx.chat.replies;
-    const active = replies.draft?.run === run.id;
+    const draft = replies.draft;
+    const active = to.kind === 'Run' ? draft?.kind === 'Run' && draft.run === to.run.id : draft?.kind === 'Message' && draft.request === to.request;
     return (
         <button
             type="button"
             className={`icon-button run-card-reply${active ? ' active' : ''}`}
             aria-label={r.reply}
             aria-pressed={active}
-            data-tooltip={r.replyHint}
-            onClick={() => replies.start(run.id)}
+            data-tooltip={to.kind === 'Run' ? r.replyHint : r.messageReplyHint}
+            onClick={() => (to.kind === 'Run' ? replies.start(to.run.id) : replies.startMessage(to.request))}
         >
             <Reply size={14} aria-hidden />
         </button>

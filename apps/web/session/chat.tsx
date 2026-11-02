@@ -29,7 +29,7 @@ import { useDismiss } from '../shared/layout';
 import { useT } from '../i18n';
 import { useChatActions } from './actions';
 import { sessionApi } from './api';
-import { RunCard } from './card';
+import { ReplyButton, RunCard } from './card';
 import { AddReaction, ReactionRow, useMarking } from './mark-controls';
 import { messageMarks, updatedCards, type MarkState } from './cards';
 import { ChatProvider, useChat, type ChatContextValue, type Tx } from './chat-context';
@@ -54,7 +54,7 @@ import { useTargetNaming } from './naming';
 import { CollabMenu, CollabSummaryDialog, openPeople, useCollabSummary } from './collab-menu';
 import { Avatar, failure, MentionedText, TargetChips } from './parts';
 import { parseReplyText, referenceText } from './references';
-import { isReplyable, replyReference, replyTargets, type ReplyDraft } from './replies';
+import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { latestRevision } from './state';
 import {
@@ -172,7 +172,7 @@ export function SessionChat(props: {
         setSummaryShown(true);
         setSummaryOpen(true);
     }, [summary, summaryShown]);
-    // the reply being written (to an AI turn): its chip above the composer; the composer takes the focus when it starts
+    // the reply being written (to an AI turn or a message): its chip above the composer; the composer takes the focus when it starts
     const [replyDraft, setReplyDraft] = useState<ReplyDraft | undefined>();
     const [replyFocus, setReplyFocus] = useState(0);
     const replies = useMemo(
@@ -182,14 +182,24 @@ export function SessionChat(props: {
                 const run = state.runs.find((r) => r.id === id);
                 const ref = replyReference(units, id);
                 if (!run || !ref || !isReplyable(run)) return;
-                setReplyDraft({ run: id, name: ref.name });
+                setReplyDraft({ kind: 'Run', run: id, name: ref.name });
                 // the targets start with the replied run's requests' (editable as usual)
                 composer.setValue(addChips(composer.value, replyTargets(run)).value);
                 setView('chat');
                 setReplyFocus((n) => n + 1);
             },
+            startMessage: (id: string): void => {
+                const request = state.requests.find((r) => r.id === id);
+                if (!request) return;
+                setReplyDraft({ kind: 'Message', request: id, author: request.author });
+                // the targets start with the replied message's (editable as usual)
+                composer.setValue(addChips(composer.value, messageReplyTargets(request)).value);
+                setView('chat');
+                setReplyFocus((n) => n + 1);
+            },
             cancel: (): void => setReplyDraft(undefined),
             referenceOf: (run: string) => replyReference(units, run),
+            messageReferenceOf: (request: string) => messageReference(state.requests, request),
         }),
         [replyDraft, state, composer, units],
     );
@@ -556,8 +566,8 @@ const MARK_GLYPH: Record<MarkState, string> = {
 function MessageRow({ request: r, continues }: { request: RequestJson; continues: boolean }) {
     const { session, tx, nameOf, onNavigate, control, marks, classifications, selection, hovered, hover, actions, jump, showPerson } = useChat();
     const author = nameOf(r.author);
-    // it mentions me: a faint background in my stream only (it asks for my attention)
-    const toMe = mentionsMe(r, session.state, session.me.participant.id);
+    // it mentions me, or replies to my message: a faint background in my stream only (it asks for my attention)
+    const toMe = mentionsMe(r, session.state, session.me.participant.id) || repliesToMe(r, session.state.requests, session.state, session.me.participant.id);
     const mine = r.author === session.me.participant.id;
     const facilitator = isFacilitator(session.state, r.author);
     const statuses = session.targets?.statuses[r.id];
@@ -610,6 +620,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                     <MessageMenu id={r.id} applied={mark !== undefined} talk={talk} onNote={() => setNote('')} />
                 </span>
             )}
+            {/* ↩ just before ☺+, as on an AI turn */}
+            {!selection.active && <ReplyButton to={{ kind: 'Message', request: r.id }} />}
             {/* last: ☺+ at the right end of every row, messages and turns alike */}
             {!selection.active && <AddReaction target={{ kind: 'Message', request: r.id }} />}
         </div>
@@ -635,7 +647,8 @@ function MessageRow({ request: r, continues }: { request: RequestJson; continues
                 className={`chat-bubble-request${mine ? ' mine' : ''}`}
                 side={side}
             >
-                {r.replyTo !== undefined && <ReplyReferenceLine run={r.replyTo} />}
+                {r.replyTo?.kind === 'Run' && <ReplyReferenceLine run={r.replyTo.run} />}
+                {r.replyTo?.kind === 'Message' && <MessageReferenceLine request={r.replyTo.request} />}
                 <TargetChips targets={r.targets} statuses={statuses} onNavigate={onNavigate} tx={tx} />
                 <Clamped tx={tx}>
                     <MentionedText
@@ -700,6 +713,22 @@ function ReplyReferenceLine({ run }: { run: string }) {
     return (
         <button className="chat-reply-ref" onClick={() => jump(`card:${ref.card}`)} data-tooltip={r.referenceHint(ref.name)}>
             <span className="chat-reply-ref-run">↩ {r.reference(ref.name)}:</span> <span className="chat-reply-ref-head">{head}</span>
+        </button>
+    );
+}
+
+/**
+ * The message a reply replies to, on one muted line at the top of the reply: `↩ <its author>: the head of its body`;
+ * a click goes to the message (scrolled to and flashed). Nothing when the session does not hold it.
+ */
+function MessageReferenceLine({ request }: { request: string }) {
+    const { session, tx, nameOf, jump, replies } = useChat();
+    const ref = replies.messageReferenceOf(request);
+    if (!ref) return null;
+    const who = speakerName(ref.author, session.me.participant.id, nameOf, tx.chat.you);
+    return (
+        <button className="chat-reply-ref" onClick={() => jump(`message:${ref.request}`)} data-tooltip={tx.chat.replies.messageReferenceHint(who)}>
+            <span className="chat-reply-ref-run">↩ {who}:</span> <span className="chat-reply-ref-head">{ref.head}</span>
         </button>
     );
 }
@@ -1077,13 +1106,18 @@ function Composer(props: {
     candidates: readonly MentionCandidate[];
     focusPending: boolean;
     onFocused: () => void;
-    /** The run the message replies to, while a reply is written; `replyFocus` changes when one starts. */
+    /** The run or message the message replies to, while a reply is written; `replyFocus` changes when one starts. */
     reply: ReplyDraft | undefined;
     replyFocus: number;
     onReplyDone: () => void;
     tx: Tx;
 }) {
     const { session, composer, selectionTargets, tx, reply, onReplyDone } = props;
+    const personName = useChat().nameOf;
+    const replyingTo =
+        reply?.kind === 'Message'
+            ? tx.chat.replies.replyingToMessage(speakerName(reply.author, session.me.participant.id, personName, tx.chat.you))
+            : reply && tx.chat.replies.replyingTo(reply.name);
     const t = useT();
     const naming = useTargetNaming();
     const value = composer.value;
@@ -1163,7 +1197,7 @@ function Composer(props: {
         onFocused();
     }, [focusPending, onFocused]);
 
-    // a reply just started (↩ on an AI turn): the text takes the focus, the caret at its end
+    // a reply just started (↩ on an AI turn or a message): the text takes the focus, the caret at its end
     const { replyFocus } = props;
     useEffect(() => {
         const el = input.current;
@@ -1193,7 +1227,7 @@ function Composer(props: {
             await sessionApi.sendRequest({
                 targets: targets.map((t) => ({ ...t, sourceRevision: revision.id })),
                 body: value.text,
-                ...(reply && { replyTo: reply.run }),
+                ...(reply && { replyTo: replyTargetOf(reply) }),
                 ...(value.people.length > 0 && { mentions: value.people }),
             });
             await composer.clear();
@@ -1216,7 +1250,7 @@ function Composer(props: {
             <ComposerResizer {...size} label={tx.chat.resizeInput} />
             {reply && (
                 <div className="chat-reply-chip motion-pop motion-pop-up" role="status">
-                    <span className="chat-reply-chip-text">↩ {tx.chat.replies.replyingTo(reply.name)}</span>
+                    <span className="chat-reply-chip-text">↩ {replyingTo}</span>
                     <button className="chat-chip-remove" onClick={onReplyDone} aria-label={tx.chat.replies.cancel} data-tooltip={tx.chat.replies.cancel}>
                         <X size={12} aria-hidden />
                     </button>
