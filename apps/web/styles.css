@@ -6497,14 +6497,15 @@ button.add-to-request.added:hover {
     color: var(--red-text);
     background: var(--red-tint);
 }
-/* この作業の変更: narrow for the elements, as wide as the comparison once the source diff is open */
+/* この作業の変更: one size and place whether or not the source diff is open — as wide as a diff reads well, its top
+   fixed below the viewport's so that growing only extends it downward, and its body scrolling under the header */
 .session-dialog.session-changes {
-    width: min(30rem, calc(100vw - 32px));
+    width: min(44rem, calc(100vw - 32px));
+    max-height: 80vh;
+    margin-top: 10vh;
+    margin-bottom: auto;
     font-size: var(--fs-body);
     line-height: var(--lh-body);
-}
-.session-dialog.session-changes:has(.session-changes-source[open]) {
-    width: min(68.75rem, calc(100vw - 32px));
 }
 .session-changes .settings-dialog-header {
     align-items: flex-start;
