@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
-import type { Editor, TLCamera } from 'tldraw';
 import type { DisplayMode, Lang } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { renderGraph, withWriteAccess } from '../render';
+import { buildScene } from '../render';
 import { cameraMove, fitAll, fitReadable } from './canvas';
+import type { Camera, DiagramCanvas } from './diagram';
 import type { ViewGraph } from './graph';
 import { isCanvas, type View } from './navigation';
 import type { ViewSettings } from './settings';
@@ -14,7 +14,7 @@ import type { ViewSettings } from './settings';
  * (a storming view: each time it is shown).
  */
 export function useViewCamera(
-    editor: Editor | null,
+    canvas: DiagramCanvas | null,
     current: ViewPayload | null,
     view: View,
     settings: ViewSettings,
@@ -25,29 +25,29 @@ export function useViewCamera(
     const { structureLevel, mapAll } = settings;
     const { graph, graphFor, cameraKey, focusKey, focusGraph, noneChecked, stormingShown } = viewGraph;
     const { mode, lang } = display;
-    const cameras = useRef(new Map<string, TLCamera>());
+    const cameras = useRef(new Map<string, Camera>());
     const shownView = useRef<string | null>(null);
 
     useEffect(() => {
-        if (!editor || !current || !isCanvas(view)) return;
+        if (!canvas || !current || !isCanvas(view)) return;
         const key = cameraKey(view);
-        if (shownView.current && shownView.current !== key) cameras.current.set(shownView.current, editor.getCamera());
+        if (shownView.current && shownView.current !== key) cameras.current.set(shownView.current, canvas.getCamera());
         const switched = shownView.current !== key;
         if (!graph) {
             // not marked as shown, so that the graph is fitted once it arrives (focused views load on request)
-            withWriteAccess(editor, () => editor.deleteShapes([...editor.getCurrentPageShapeIds()]));
+            canvas.clear();
             return;
         }
         // ghosts of removed elements need the baseline's version of the same graph; focused graphs are not kept
         const before = focusKey && view.kind === 'structure' ? undefined : (graphFor(base, view) ?? undefined);
-        renderGraph(editor, graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
+        canvas.show(buildScene(graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang }));
         const saved = cameras.current.get(key);
         const move = cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
-        if (move === 'restore' && saved) editor.setCamera(saved);
-        else if (move === 'fitAll') fitAll(editor, graph);
+        if (move === 'restore' && saved) canvas.setCamera(saved);
+        else if (move === 'fitAll') fitAll(canvas, graph);
         // larger text (overview) allows zooming further out while staying readable
-        else if (move === 'fitReadable') fitReadable(editor, graph.textScale ?? 1);
+        else if (move === 'fitReadable') fitReadable(canvas, graph.textScale ?? 1);
         shownView.current = key;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [editor, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang, stormingShown]);
+    }, [canvas, current, base, view, mode, structureLevel, focusKey, focusGraph, mapAll, noneChecked, lang, stormingShown]);
 }

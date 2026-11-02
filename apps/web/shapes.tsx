@@ -1,5 +1,6 @@
-import { Fragment } from 'react';
-import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
+// The tldraw shapes that draw the scene's items (`scene.ts`): thin wrappers around the library-neutral components of
+// `diagram-items.tsx`, with tldraw's geometry, selection outline and options. Only this file and `view/tldraw-canvas.tsx`
+// know tldraw (see apps/web/canvas-boundary.test.ts).
 import {
     BaseBoxShapeUtil,
     HTMLContainer,
@@ -15,68 +16,32 @@ import {
     type TLShape,
     type TLShapeId,
 } from 'tldraw';
-
-export type ChangeMark = 'none' | 'added' | 'changed' | 'removed';
-export type DiagMark = 'none' | 'warning' | 'error';
+import {
+    BADGE,
+    badgeWidth,
+    DIAG_RADIUS,
+    EdgeContent,
+    edgeClassName,
+    EdgeMarks,
+    GroupContent,
+    groupClassName,
+    groupStyle,
+    InternalContent,
+    internalClassName,
+    internalStyle,
+    markScale,
+    NodeContent,
+    nodeClassName,
+    nodeStyle,
+} from './diagram-items';
+import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps } from './scene';
 
 declare module '@tldraw/tlschema' {
     interface TLGlobalShapePropsMap {
-        'domain-node': {
-            w: number;
-            h: number;
-            kind: string;
-            label: string;
-            stereotype: string;
-            /** Text size factor (1 = normal; the Structure overview uses larger text). */
-            scale: number;
-            /** Body rows; `v` is empty for rows without a value column; `c`: the row's change from the baseline. */
-            rows: { k: string; v: string; o?: string; c?: string }[];
-            /** Height of the internal transitions' compartment at the bottom (0 = none); its rows are shapes of their own. */
-            compartment: number;
-            change: ChangeMark;
-            /** The change badge's text (in the Live View's language), empty without one. */
-            badge: string;
-            diag: DiagMark;
-        };
-        'domain-internal': {
-            w: number;
-            h: number;
-            /** The command or its events, and a smaller second line (the events under the command), if any. */
-            label: string;
-            sub: string;
-            /** The command shown in place of missing events. */
-            faded: boolean;
-            scale: number;
-            change: ChangeMark;
-            diag: DiagMark;
-        };
-        'domain-edge': {
-            /** Route relative to the shape origin, as computed by the layout engine. */
-            points: { x: number; y: number }[];
-            kind: string;
-            label: string;
-            /** A smaller second line of the label (a transition's events), and whether the label is faded (a transition's command in place of missing events). */
-            sub: string;
-            faded: boolean;
-            scale: number;
-            /** Label box relative to the shape origin; w = 0 when there is no label. */
-            lx: number;
-            ly: number;
-            lw: number;
-            lh: number;
-            tone: EdgeTone;
-        };
-        'domain-group': {
-            w: number;
-            h: number;
-            kind: string;
-            label: string;
-            /** Description rows under the label (contexts at the aggregates level). */
-            lines: string[];
-            scale: number;
-            change: ChangeMark;
-            diag: DiagMark;
-        };
+        'domain-node': NodeProps;
+        'domain-internal': InternalProps;
+        'domain-edge': EdgeProps;
+        'domain-group': GroupProps;
     }
 }
 
@@ -84,15 +49,11 @@ export type DomainNodeShape = TLShape<'domain-node'>;
 export type DomainGroupShape = TLShape<'domain-group'>;
 export type DomainEdgeShape = TLShape<'domain-edge'>;
 export type DomainInternalShape = TLShape<'domain-internal'>;
-export type EdgeTone = 'normal' | 'added' | 'changed';
 
 const changeMark = T.literalEnum('none', 'added', 'changed', 'removed');
 const diagMark = T.literalEnum('none', 'warning', 'error');
 
-/**
- * Whether a shape is selected, to draw the local selection as a ring outside it (`.dn-selected`): tldraw's own outline
- * runs on the node's edge, where it is lost against an edge of the same hue (an aggregate root's indigo, a command's blue).
- */
+/** Whether a shape is selected, to draw the local selection as a ring outside it (see `nodeClassName`). */
 const useSelected = (editor: Editor, id: TLShapeId): boolean => useValue('selected', () => editor.getSelectedShapeIds().includes(id), [editor, id]);
 
 /** A model element (aggregate root, entity, value object, state). Read-only in the MVP. */
@@ -128,41 +89,8 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
         const p = shape.props;
         const selected = useSelected(this.editor, shape.id);
         return (
-            <HTMLContainer
-                className={`dn dn-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`}
-                style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}
-            >
-                {p.kind === 'initial' ? (
-                    <div className="dn-initial">{p.label}</div>
-                ) : (
-                    <>
-                        <div className="dn-head">
-                            {p.stereotype && <div className="dn-stereo">{p.stereotype}</div>}
-                            <div className="dn-label">{p.label}</div>
-                        </div>
-                        {p.rows.length > 0 && (
-                            <div className="dn-body">
-                                {p.rows.map((r, i) =>
-                                    r.v ? (
-                                        <Fragment key={i}>
-                                            <span className={`dn-key${r.c ? ` dn-row-${r.c}` : ''}`}>{r.k}</span>
-                                            <span className={`dn-value${r.c ? ` dn-row-${r.c}` : ''}`}>
-                                                {r.v}
-                                                {r.o && <span className="dn-origin">{r.o}</span>}
-                                            </span>
-                                        </Fragment>
-                                    ) : (
-                                        <span key={i} className={`dn-key dn-full${r.c ? ` dn-row-${r.c}` : ''}`}>
-                                            {r.k}
-                                        </span>
-                                    ),
-                                )}
-                            </div>
-                        )}
-                        {p.compartment > 0 && <div className="dn-compartment" style={{ height: p.compartment }} />}
-                        {(p.badge || p.diag !== 'none') && <EdgeMarks badge={p.badge} diag={p.diag} />}
-                    </>
-                )}
+            <HTMLContainer className={nodeClassName(p, selected)} style={nodeStyle(p)}>
+                <NodeContent p={p} Marks={ZoomedMarks} />
             </HTMLContainer>
         );
     }
@@ -171,7 +99,7 @@ export class DomainNodeUtil extends BaseBoxShapeUtil<DomainNodeShape> {
     getIndicatorPath(shape: DomainNodeShape) {
         const p = shape.props;
         if (p.kind === 'initial' || (!p.badge && p.diag === 'none')) return roundRect(p.w, p.h, 8);
-        return outlineAround(p.w, p.h, 8, p.badge ? badgeWidth(p.badge) : 0, p.diag !== 'none', markScale(this.editor));
+        return outlineAround(p.w, p.h, 8, p.badge ? badgeWidth(p.badge) : 0, p.diag !== 'none', markScale(this.editor.getZoomLevel()));
     }
 }
 
@@ -201,10 +129,8 @@ export class DomainInternalUtil extends BaseBoxShapeUtil<DomainInternalShape> {
     component(shape: DomainInternalShape) {
         const p = shape.props;
         return (
-            <HTMLContainer className={`di di-change-${p.change} di-diag-${p.diag}`} style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}>
-                <div className={`di-main${p.faded ? ' di-faded' : ''}`}>↻ {p.label}</div>
-                {p.sub && <div className="di-sub">{p.sub}</div>}
-                {p.diag !== 'none' && <div className="di-diag">{p.diag === 'error' ? '✕' : '!'}</div>}
+            <HTMLContainer className={internalClassName(p)} style={internalStyle(p)}>
+                <InternalContent p={p} />
             </HTMLContainer>
         );
     }
@@ -241,18 +167,8 @@ export class DomainGroupUtil extends BaseBoxShapeUtil<DomainGroupShape> {
         const p = shape.props;
         const selected = useSelected(this.editor, shape.id);
         return (
-            <HTMLContainer
-                className={`dg dg-${p.kind} dn-change-${p.change} dn-diag-${p.diag}${selected ? ' dn-selected' : ''}`}
-                style={{ width: p.w, height: p.h, ['--s' as string]: p.scale }}
-            >
-                <div className="dg-label">{p.label}</div>
-                {p.lines.length > 0 && (
-                    <div className="dg-desc">
-                        {p.lines.map((l, i) => (
-                            <div key={i}>{l}</div>
-                        ))}
-                    </div>
-                )}
+            <HTMLContainer className={groupClassName(p, selected)} style={groupStyle(p)}>
+                <GroupContent p={p} />
             </HTMLContainer>
         );
     }
@@ -304,19 +220,10 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
     }
 
     component(shape: DomainEdgeShape) {
-        const { points, kind, label, sub, faded, lx, ly, lw, lh, tone, scale } = shape.props;
-        if (points.length < 2) return null;
-        const d = points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
-        const [a, b] = [points[points.length - 2], points[points.length - 1]];
-        const [s0, s1] = [points[0], points[1]];
+        if (shape.props.points.length < 2) return null;
         return (
-            <SVGContainer className={`de de-${kind} de-tone-${tone}`}>
-                <path d={d} className="de-hit" />
-                <path d={d} className="de-line" />
-                {kind === 'owns' ? <path d={diamond(s0, s1)} className="de-head de-diamond" /> : null}
-                {/* every edge points from the dependent to its dependency */}
-                {kind === 'esHotspot' ? null : <path d={arrowHead(a, b)} className="de-head" />}
-                {label && lw > 0 && <EdgeLabel {...{ label, sub, faded, lx, ly, lw, lh, scale }} />}
+            <SVGContainer className={edgeClassName(shape.props)}>
+                <EdgeContent p={shape.props} />
             </SVGContainer>
         );
     }
@@ -328,118 +235,21 @@ export class DomainEdgeUtil extends ShapeUtil<DomainEdgeShape> {
     }
 }
 
-/** An edge's label, centred in its box; a second, smaller line (a transition's events) goes under the first. */
-function EdgeLabel({
-    label,
-    sub,
-    faded,
-    lx,
-    ly,
-    lw,
-    lh,
-    scale,
-}: Pick<DomainEdgeShape['props'], 'label' | 'sub' | 'faded' | 'lx' | 'ly' | 'lw' | 'lh' | 'scale'>) {
-    const x = lx + lw / 2;
-    const top = ly + (lh - (TRANSITION_LINE_HEIGHT + (sub ? TRANSITION_SUB_LINE_HEIGHT : 0)) * scale) / 2;
-    return (
-        <>
-            <text
-                x={x}
-                y={top + (TRANSITION_LINE_HEIGHT / 2) * scale}
-                className={`de-label${faded ? ' de-faded' : ''}`}
-                style={{ fontSize: 13 * scale }}
-                textAnchor="middle"
-                dominantBaseline="central"
-            >
-                {label}
-            </text>
-            {sub && (
-                <text
-                    x={x}
-                    y={top + (TRANSITION_LINE_HEIGHT + TRANSITION_SUB_LINE_HEIGHT / 2) * scale}
-                    className="de-label de-sub"
-                    style={{ fontSize: 13 * TRANSITION_SUB_SIZE * scale }}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                >
-                    {sub}
-                </text>
-            )}
-        </>
-    );
-}
-
-type P = { x: number; y: number };
-
-function unit(from: P, to: P): P {
-    const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
-    return { x: (to.x - from.x) / len, y: (to.y - from.y) / len };
-}
-
-const ARROW_LENGTH = 13;
-
-/** Filled triangle ending at `tip`, pointing along from -> tip. */
-function arrowHead(from: P, tip: P): string {
-    const u = unit(from, tip);
-    const n = { x: -u.y, y: u.x };
-    const base = { x: tip.x - u.x * ARROW_LENGTH, y: tip.y - u.y * ARROW_LENGTH };
-    const w = ARROW_LENGTH / 2;
-    return `M${tip.x},${tip.y} L${base.x + n.x * w},${base.y + n.y * w} L${base.x - n.x * w},${base.y - n.y * w} Z`;
-}
-
-/** UML composition diamond at `start`, pointing away from the owner. */
-function diamond(start: P, next: P): string {
-    const u = unit(start, next);
-    const n = { x: -u.y, y: u.x };
-    const mid = { x: start.x + u.x * 7, y: start.y + u.y * 7 };
-    const end = { x: start.x + u.x * 14, y: start.y + u.y * 14 };
-    return `M${start.x},${start.y} L${mid.x + n.x * 4.5},${mid.y + n.y * 4.5} L${end.x},${end.y} L${mid.x - n.x * 4.5},${mid.y - n.y * 4.5} Z`;
-}
-
 function roundRect(w: number, h: number, r: number): Path2D {
     const p = new Path2D();
     p.roundRect(0, 0, w, h, r);
     return p;
 }
 
-/** Where the change badge and the diagnostic mark sit on a node's edge (see .dn-badge and .dn-diag), and the gap the outline leaves around them. */
-const BADGE = { left: 8, bottom: 7, height: 17, padding: 6, cjk: 12, latin: 7.2 };
-const DIAG_RADIUS = 9;
+/** The gap the outline leaves around the change badge and the diagnostic mark. */
 const OUTLINE_GAP = 2;
-/** The marks grow when zoomed out, to stay about their size on the screen, up to this factor. */
-const MAX_MARK_SCALE = 3;
 
-/** How much the change badge and the diagnostic mark are enlarged at the editor's zoom (1 from 100% up). */
-const markScale = (editor: Editor): number => Math.min(MAX_MARK_SCALE, Math.max(1, 1 / editor.getZoomLevel()));
-
-/**
- * The change badge and the diagnostic mark on a node's edge, enlarged when zoomed out (a component of its own, so that
- * only nodes with marks follow the zoom). The badge grows from its bottom-left corner, the mark from its centre.
- */
-function EdgeMarks({ badge, diag }: { badge: string; diag: DiagMark }) {
+/** The marks at the editor's zoom (a component of its own, so that only nodes with marks follow the zoom). */
+function ZoomedMarks({ badge, diag }: { badge: string; diag: DiagMark }) {
     const editor = useEditor();
-    const k = useValue('mark scale', () => markScale(editor), [editor]);
-    const grow = k === 1 ? undefined : `scale(${k})`;
-    return (
-        <>
-            {badge && (
-                // sized as the outline expects it
-                <div className="dn-badge" style={{ width: badgeWidth(badge), transform: grow }}>
-                    {badge}
-                </div>
-            )}
-            {diag !== 'none' && (
-                <div className="dn-diag" style={{ transform: grow }}>
-                    {diag === 'error' ? '✕' : '!'}
-                </div>
-            )}
-        </>
-    );
+    const k = useValue('mark scale', () => markScale(editor.getZoomLevel()), [editor]);
+    return <EdgeMarks badge={badge} diag={diag} scale={k} />;
 }
-
-/** The badge's width, from its text (12px: full-width characters 12px, others about 7px) and padding. */
-const badgeWidth = (text: string): number =>
-    2 * BADGE.padding + text.split('').reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? BADGE.cjk : BADGE.latin), 0);
 
 /**
  * A rounded rectangle whose top edge steps out around the badge (`badge` wide, when there is one) and whose top-right

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Box, LayoutGrid, LayoutList, type LucideIcon } from 'lucide-react';
-import { Tldraw, type Editor } from 'tldraw';
 import { type DisplayMode, type Lang, STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
 import { Catalog, CatalogFilters, CatalogSearch, useCatalogFilter } from '../catalog';
@@ -8,25 +7,26 @@ import { ContextList } from '../context-picker';
 import { useT } from '../i18n';
 import { contextLabels } from '../model-utils';
 import type { LegendView } from '../legend';
-import { shapeUtils } from '../shapes';
 import { StormingToolbar } from '../storming';
 import { applyTheme, type Theme } from '../theme';
 import { useViewCamera } from './camera';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
-import { fitAll, usePointerCursor } from './canvas';
+import { fitAll } from './canvas';
+import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation } from './navigation';
 import { useViewSettings, type ViewSettings } from './settings';
+import { TldrawCanvas } from './tldraw-canvas';
 import { FilterPopover, FilterSection, LevelSwitch, ToolbarEnd, ToolbarSubject } from './toolbar';
 
 const LEVEL_ICONS: Record<StructureLevel, LucideIcon> = { detail: LayoutList, overview: LayoutGrid, aggregates: Box };
 
-/** The state of the view workspace: the tldraw editor, the current view with its navigation, settings and graph. */
+/** The state of the view workspace: the canvas, the current view with its navigation, settings and graph. */
 export interface Workspace {
-    editor: Editor | null;
-    onMount: (editor: Editor) => void;
+    canvas: DiagramCanvas | null;
+    onMount: (canvas: DiagramCanvas) => void;
     stormings: readonly StormingView[];
     nav: Navigation;
     settings: ViewSettings;
@@ -35,33 +35,28 @@ export interface Workspace {
 
 /**
  * The view workspace: the current view, the navigation between views and selections with its history, and the canvas
- * (its editor, its camera and the graph drawn on it, in the page's theme).
+ * (its camera and the graph drawn on it, in the page's theme).
  */
 export function useViewWorkspace(current: ViewPayload | null, display: { mode: DisplayMode; lang: Lang; theme: Theme }): Workspace {
     const { mode, lang, theme } = display;
-    const [editor, setEditor] = useState<Editor | null>(null);
+    const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
     const stormings = useMemo(() => current?.stormings ?? [], [current?.stormings]);
-    const nav = useNavigation(editor, current, stormings);
+    const nav = useNavigation(canvas, current, stormings);
     const settings = useViewSettings();
     const viewGraph = useViewGraph(current, nav.view, settings, stormings);
     useOpenOnStormings(current, nav.setView);
-    useViewCamera(editor, current, nav.view, settings, viewGraph, { mode, lang });
+    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang });
 
     useEffect(() => {
-        applyTheme(theme, editor);
-    }, [theme, editor]);
+        applyTheme(theme, canvas);
+    }, [theme, canvas]);
 
-    useSelectOnCanvas(editor, nav.select);
-    usePointerCursor(editor);
-    useCenterOnResize(editor);
+    useSelectOnCanvas(canvas, nav.select);
+    useCenterOnResize(canvas);
 
-    const onMount = useCallback((e: Editor) => {
-        e.updateInstanceState({ isReadonly: true });
-        Object.assign(window, { __domaintrailEditor: e }); // for debugging / e2e checks
-        setEditor(e);
-    }, []);
+    const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
 
-    return { editor, onMount, stormings, nav, settings, viewGraph };
+    return { canvas, onMount, stormings, nav, settings, viewGraph };
 }
 
 /** The center of the page: the view tabs, the current view's toolbar, and the canvas (or the catalog). */
@@ -75,7 +70,7 @@ export function ViewWorkspace(props: {
     overlay?: ReactNode;
 }) {
     const { workspace, current, mode, legendOpen, onLegendToggle } = props;
-    const { editor, onMount, stormings, nav, settings, viewGraph } = workspace;
+    const { canvas, onMount, stormings, nav, settings, viewGraph } = workspace;
     const { view, setView, selected, select } = nav;
     const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
     const { checked, hidden, focusKey, noneChecked, graph } = viewGraph;
@@ -94,9 +89,9 @@ export function ViewWorkspace(props: {
                 : `${structureLevel === 'aggregates' ? 'aggregates' : 'structure'}${focusKey ? 'Focus' : ''}`;
     /** Fits the whole view: a storming view like when it is shown (its graph, never zoomed in past normal size). */
     const fitView = (): void => {
-        if (!editor) return;
-        if (view.kind === 'storming' && graph) fitAll(editor, graph, true);
-        else editor.zoomToFit({ animation: { duration: 200 } });
+        if (!canvas) return;
+        if (view.kind === 'storming' && graph) fitAll(canvas, graph, true);
+        else canvas.fitContent({ animate: true });
     };
 
     return (
@@ -180,17 +175,18 @@ export function ViewWorkspace(props: {
                 </div>
             </div>
             <div className="view-area">
-                <Tldraw shapeUtils={shapeUtils} hideUi onMount={onMount} />
+                {/* `expose`: the canvas library's editor on `window.__domaintrailEditor`, for debugging / e2e checks */}
+                <TldrawCanvas onMount={onMount} expose />
                 {isCanvas(view) && props.overlay}
                 {isCanvas(view) && (
                     <CanvasControls
-                        editor={editor}
+                        canvas={canvas}
                         fitAll={fitView}
                         legend={legendView && { view: legendView, open: legendOpen, onToggle: onLegendToggle }}
                         keys
                     />
                 )}
-                <EdgeHint editor={editor} view={legendView} />
+                <EdgeHint canvas={canvas} view={legendView} />
                 {current && !graph && isCanvas(view) && (
                     <div className="empty">
                         {current.status === 'empty'

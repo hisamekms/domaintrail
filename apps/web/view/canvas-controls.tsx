@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BookOpen, ChevronsLeft, ChevronsRight, Focus, Maximize, Minus, Plus } from 'lucide-react';
-import { useValue, type Editor } from 'tldraw';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
+import { useCanvasValue, type DiagramCanvas } from './diagram';
 
-const ANIMATION = { animation: { duration: 200 } };
-
-/** Fits the canvas's selection (the camera never moves when nothing is selected). */
-function fitSelection(editor: Editor): void {
-    if (editor.getSelectedShapeIds().length > 0) editor.zoomToSelection(ANIMATION);
-}
+const ANIMATE = { animate: true };
 
 /**
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
@@ -18,46 +13,45 @@ function fitSelection(editor: Editor): void {
  * which opens it upward, and « , which collapses all of it into a » in the same corner (as `U` does, remembered).
  */
 export function CanvasControls(props: {
-    editor: Editor | null;
+    canvas: DiagramCanvas | null;
     fitAll: () => void;
     /** The legend of what the canvas shows, if it shows something. */
     legend: { view: LegendView; open: boolean; onToggle: () => void } | null;
     /** Whether the canvas's keys are this canvas's (the main canvas; not the inspector's diagram). */
     keys?: boolean;
 }) {
-    const { editor, fitAll, legend } = props;
+    const { canvas, fitAll, legend } = props;
     const t = useT();
     const { collapsed, toggle } = useCanvasControls();
-    const zoom = useValue('zoom level', () => editor?.getZoomLevel() ?? 1, [editor]);
-    const selection = useValue('has selection', () => (editor?.getSelectedShapeIds().length ?? 0) > 0, [editor]);
+    const zoom = useCanvasValue(canvas, (c) => c?.getZoom() ?? 1, []);
+    const selection = useCanvasValue(canvas, (c) => (c?.selectedIds().length ?? 0) > 0, []);
 
-    useCanvasKeys(props.keys === true && editor !== null, (action) => {
-        if (!editor) return;
+    useCanvasKeys(props.keys === true && canvas !== null, (action) => {
+        if (!canvas) return;
         if (action === 'fitAll') fitAll();
-        else if (action === 'fitSelection') fitSelection(editor);
+        else if (action === 'fitSelection') canvas.fitSelection(ANIMATE);
         else toggle();
     });
 
-    if (!editor) return null;
-    const center = editor.getViewportScreenCenter();
+    if (!canvas) return null;
     const pct = formatZoom(zoom);
     return (
         <div className={`canvas-controls${collapsed ? ' collapsed' : ''}`}>
             {legend && !collapsed && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
             <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label} aria-hidden={collapsed} inert={collapsed}>
                 <div className="canvas-controls-group">
-                    <ControlButton label={t.canvasControls.zoomOut} onClick={() => editor.zoomOut(center, ANIMATION)}>
+                    <ControlButton label={t.canvasControls.zoomOut} onClick={() => canvas.zoomOut(ANIMATE)}>
                         <Minus size={14} aria-hidden />
                     </ControlButton>
                     <button
                         className="canvas-control canvas-zoom-level"
-                        onClick={() => editor.resetZoom(center, ANIMATION)}
+                        onClick={() => canvas.resetZoom(ANIMATE)}
                         data-tooltip={t.canvasControls.resetZoom}
                         aria-label={t.canvasControls.zoomLevel(pct)}
                     >
                         {pct}
                     </button>
-                    <ControlButton label={t.canvasControls.zoomIn} onClick={() => editor.zoomIn(center, ANIMATION)}>
+                    <ControlButton label={t.canvasControls.zoomIn} onClick={() => canvas.zoomIn(ANIMATE)}>
                         <Plus size={14} aria-hidden />
                     </ControlButton>
                 </div>
@@ -67,7 +61,7 @@ export function CanvasControls(props: {
                 <ControlButton
                     label={selection ? t.canvasControls.fitSelection : t.canvasControls.fitSelectionNone}
                     disabled={!selection}
-                    onClick={() => fitSelection(editor)}
+                    onClick={() => canvas.fitSelection(ANIMATE)}
                 >
                     <Focus size={14} aria-hidden />
                 </ControlButton>
@@ -119,8 +113,8 @@ function ControlButton(props: { label: string; onClick: () => void; disabled?: b
 }
 
 /**
- * The canvas's keys (`canvasShortcut`), taken before tldraw's own: its `Shift+1` / `Shift+2` would fit differently.
- * The inspector's state diagram keeps tldraw's while it has the focus.
+ * The canvas's keys (`canvasShortcut`), taken before the canvas library's own (tldraw's `Shift+1` / `Shift+2` would fit
+ * differently). The inspector's state diagram keeps the library's while it has the focus.
  */
 function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): void {
     const latest = useRef(run);
@@ -145,25 +139,25 @@ function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): 
 const HINT_DELAY_MS = 300;
 
 /**
- * What the edge under the pointer means, as the legend of the view says it, next to the pointer (tldraw hit-tests the
- * shapes itself: DOM hover never reaches them). Hidden while the pointer is pressed (a pan, a click).
+ * What the edge under the pointer means, as the legend of the view says it, next to the pointer (the canvas tells the
+ * item under it: DOM hover may not reach the items). Hidden while the pointer is pressed (a pan, a click).
  */
-export function EdgeHint({ editor, view }: { editor: Editor | null; view: LegendView | null }) {
+export function EdgeHint({ canvas, view }: { canvas: DiagramCanvas | null; view: LegendView | null }) {
     const t = useT();
     const rows = view ? legendRows(view, t.legendRows) : [];
-    const hint = useValue(
-        'edge hint',
-        () => {
-            if (!editor || rows.length === 0 || editor.inputs.getIsPointing()) return null;
-            const id = editor.getHoveredShapeId();
-            const shape = id ? editor.getShape(id) : undefined;
-            if (shape?.type !== 'domain-edge') return null;
-            const text = rows.find((r) => r.kind === (shape.props as { kind: string }).kind)?.text;
+    const hint = useCanvasValue(
+        canvas,
+        (c) => {
+            if (!c || rows.length === 0 || c.isPointing()) return null;
+            const id = c.hoveredId();
+            const item = id ? c.item(id) : undefined;
+            if (item?.type !== 'edge') return null;
+            const text = rows.find((r) => r.kind === item.kind)?.text;
             if (!text) return null;
-            const p = editor.inputs.getCurrentScreenPoint();
-            return { id: shape.id, text, x: p.x, y: p.y };
+            const p = c.pointer();
+            return { id: item.id, text, x: p.x, y: p.y };
         },
-        [editor, rows.map((r) => r.text).join('\n')],
+        [rows.map((r) => r.text).join('\n')],
     );
     const [shownId, setShownId] = useState<string | null>(null);
     const hintId = hint?.id ?? null;
@@ -173,7 +167,7 @@ export function EdgeHint({ editor, view }: { editor: Editor | null; view: Legend
         return () => clearTimeout(timer);
     }, [hintId]);
     if (!hint || shownId !== hint.id) return null;
-    const box = editor?.getViewportScreenBounds();
+    const box = canvas?.viewportScreenBounds();
     return (
         <div className="edge-hint" role="tooltip" style={{ left: hint.x + (box?.x ?? 0) + 14, top: hint.y + (box?.y ?? 0) + 18 }}>
             {hint.text}
