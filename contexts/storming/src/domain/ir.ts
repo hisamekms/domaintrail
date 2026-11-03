@@ -135,7 +135,7 @@ export const DESIGN_LEVEL = 'design';
 
 /**
  * Whether an element is an event shown at Design Level only (`level design`, spec §6). Without the clause, or with an
- * invalid one (reported by the validator, S004/S006/S015), it is shown at both levels: a typo never hides an event.
+ * invalid one (reported by the validator, S004/S006/S016), it is shown at both levels: a typo never hides an event.
  */
 export const isDesignLevelOnly = (el: NodeElement): boolean => el.kind === 'event' && el.clauses.find((c) => c.type === 'level')?.value === DESIGN_LEVEL;
 

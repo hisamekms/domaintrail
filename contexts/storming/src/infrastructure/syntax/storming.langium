@@ -1,7 +1,7 @@
 // The Event Storming DSL `.dtes` (docs/dtes-v0.1.md, ADR 0024). Every rule and type starts with `Es`, so the AST types
 // generated next to the `.dt` ones never collide. The grammar is permissive where the validator gives better messages:
 // every element may have a body and every body takes every clause; which clauses an element may have, how many, and the
-// kinds of their targets are rules S003–S009 and S015 (domain/validate.ts), not syntax errors.
+// kinds of their targets are rules S003–S009 and S016 (domain/validate.ts), not syntax errors.
 grammar EventStorming
 
 entry EsFile:
@@ -68,7 +68,7 @@ EsStatusClause:
 EsResolutionClause:
     'resolution' text=STRING;
 
-// `level design`: an event shown at Design Level only. Any word, hyphens included: only `design` is valid (S015), and
+// `level design`: an event shown at Design Level only. Any word, hyphens included: only `design` is valid (S016), and
 // `big-picture` gets a message of its own rather than a syntax error.
 EsLevelClause:
     'level' value=EsLevelValue;

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { type Storming } from '@domaintrail/storming';
+import { STICKY_NOTE, type Storming } from '@domaintrail/storming';
 import { analyze } from '@domaintrail/analysis';
 import type { ViewOptions } from './ir.js';
 import { matchRenderNodes, projectView } from './render.js';
@@ -104,6 +104,34 @@ describe('an Event Storming view as a graph', () => {
         const words = graphOf(storming, { level: 'design-level' }).nodes.flatMap((n) => (n.stereotype ? [n.stereotype.ja.name] : []));
         expect(words.length).toBeGreaterThan(0);
         expect(words.filter((w) => /[A-Za-z]/.test(w))).toEqual([]);
+    });
+
+    test('draws every note as the same square, however long its label (the canvas fits the label to it)', async () => {
+        const long = 'マイナンバーカードの暗証番号を三回間違えてロックされたので市役所の窓口で再設定の手続きをした';
+        const storming = await parse(`storming S {
+  event Short "届いた"
+  event Long "${long}"
+  command Unlabelled {
+    emits Long
+  }
+  hotspot Question "${long}？" {
+    on Long
+  }
+  timeline T {
+    Short
+    group G {
+      Long
+    }
+  }
+}`);
+        for (const options of [{ level: 'design-level' }, { level: 'design-level', timelineId: 'T' }] satisfies ViewOptions[]) {
+            const graph = graphOf(storming, options);
+            const notes = graph.nodes.filter((n) => n.kind !== 'esGroup');
+            expect(notes.length).toBeGreaterThanOrEqual(3);
+            for (const n of notes) expect([n.width, n.height]).toEqual([STICKY_NOTE.side, STICKY_NOTE.side]);
+            expect(notes.find((n) => n.elementId === 'es/S/Long')?.label.ja.label).toBe(long);
+            expectReadable(await engine.layout(graph));
+        }
     });
 });
 
