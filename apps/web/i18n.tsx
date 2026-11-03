@@ -890,6 +890,8 @@ const ja = {
                 journey: '道のり',
                 here: 'いまここ',
                 done: '済み',
+                // an earlier step not done: a judgment nobody marked yet
+                unconfirmed: '未確認',
                 mark: '済みにする',
                 unmark: '済みを外す',
                 marked: '人が済みにした',
@@ -1933,6 +1935,7 @@ const en: Messages = {
                 journey: 'Journey',
                 here: 'You are here',
                 done: 'Done',
+                unconfirmed: 'Not confirmed',
                 mark: 'Mark done',
                 unmark: 'Unmark',
                 marked: 'Marked done by a person',

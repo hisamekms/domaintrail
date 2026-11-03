@@ -74,7 +74,8 @@ export function journeyOverview(workspace: GuideWorkspace, chosen: string | unde
                 : guideJourneyMap(workspace, goal, summary.key, marks);
         // the map as the page reads a kept snapshot's (its JSON: the same shape, the brands plain)
         const json: GuideMapJson | undefined = map && asJson(map);
-        const here = json?.steps.find((s) => s.state === 'Here')?.key;
+        // here: the step after the last done; with every later step done, the earliest not confirmed
+        const here = (json?.steps.find((s) => s.state === 'Here') ?? json?.steps.find((s) => s.state === 'Unconfirmed'))?.key;
         const goalStep = json?.steps.find((s) => s.goal)?.key;
         const reached = json !== undefined && json.steps.filter((s) => !s.after).every((s) => s.state === 'Done');
         return { summary, map: json, here, goal: goalStep, reached, missing: json?.missing === true };

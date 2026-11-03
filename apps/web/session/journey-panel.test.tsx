@@ -117,8 +117,9 @@ describe('the chip', () => {
     test('none: ゴールを決める; the current journey · the step here → the goal; reached; a missing subject dashed', () => {
         expect(text(render(<JourneyChipButton />, chat('f', null)))).toBe('ゴールを決める');
         const shop = render(<JourneyChipButton />, chat('f', FILE, 'shop'));
-        expect(text(shop)).toBe('ショップ·ES を見直す→不変条件');
-        expect(shop).toContain('aria-label="いまの旅: ショップ、いま ES を見直す、ゴール 不変条件（旅程を開く）"');
+        // 📍 after the last step done (BC を切り出す, 集約 are): ES を見直す, not marked, is unconfirmed, not here
+        expect(text(shop)).toBe('ショップ·コマンド→不変条件');
+        expect(shop).toContain('aria-label="いまの旅: ショップ、いま コマンド、ゴール 不変条件（旅程を開く）"');
         expect(shop).toContain('lucide-compass');
         expect(shop).toContain('lucide-map-pin');
         expect(shop).toContain('lucide-flag');
@@ -210,6 +211,17 @@ describe('the journeys panel', () => {
         const reached: JourneyFile = { ...FILE, stormings: { Returns: { ...FILE.stormings.Returns!, marks: ['exceptions', 'questions'] } } };
         const html = render(<JourneysPanel onClose={() => {}} />, chat('f', reached, 'es:Returns'));
         expect(text(html)).toContain('ゴールに着きました。ここからモデリングへ/model:start');
+    });
+
+    test("the panel's map: an earlier step nobody confirmed has a dashed ring and 未確認; its ✓ stays; もと names the storming by its label", () => {
+        const html = render(<JourneysPanel onClose={() => {}} />, chat('f', FILE, 'shop'));
+        expect(html).toMatch(
+            /<li class="guide-step unconfirmed"><span class="guide-dot" data-tooltip="未確認"><\/span><span class="guide-step-label">ES を見直す<\/span>/,
+        );
+        expect(html).toContain('aria-label="ES を見直す: 済みにする"');
+        expect(html).toMatch(/<li class="guide-step here" aria-current="step">.*?コマンド/);
+        expect(text(html)).toContain('もとES「返品」');
+        expect(html).toMatch(/class="guide-path" style="grid-template-columns:repeat\(5, minmax\(0, 1fr\)\)"/);
     });
 
     test('ゴールを変える: the ES levels, or the goals of the pattern, the current one checked', () => {

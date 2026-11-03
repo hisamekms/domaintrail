@@ -2681,7 +2681,6 @@ select,
     color: var(--guide-goal);
 }
 .session-chat button.guide-journey-button {
-    margin-left: var(--space-1);
     color: var(--brand);
 }
 .session-chat button.guide-goal-button:hover,
@@ -8382,10 +8381,11 @@ label.proposal-option {
     font: inherit;
     font-size: var(--fs-small);
 }
+/* the path: one row, a column per step (its count set inline); a label wraps within its column, so a 5–6-step path fits
+   the default chat width and no connector is left at a line's end */
 .guide-path {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2) 0;
+    display: grid;
+    grid-auto-flow: column;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -8396,12 +8396,14 @@ label.proposal-option {
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    min-width: 3.75rem;
-    padding: 0 3px;
+    min-width: 0;
+    padding: 0 2px;
     font-size: 0.6875rem;
     line-height: 1.25;
     text-align: center;
-    white-space: nowrap;
+    /* a label breaks at its spaces first (「BC を / 切り出す」), anywhere only when a word is too long */
+    word-break: keep-all;
+    overflow-wrap: anywhere;
     color: var(--muted);
 }
 /* the line between two steps: each draws its half, from its dot to its edge */
@@ -8455,6 +8457,11 @@ label.proposal-option {
 .guide-step.after {
     opacity: 0.45;
 }
+/* an earlier step not done (a judgment nobody marked): a hollow dashed ring, 未確認 */
+.guide-step.unconfirmed .guide-dot {
+    border-style: dashed;
+    background: transparent;
+}
 .session-chat button.guide-mark,
 .session-chat .guide-mark {
     display: inline-flex;
@@ -8478,13 +8485,27 @@ label.proposal-option {
 .session-chat .guide-mark:disabled {
     cursor: default;
 }
+/* the goal, the journey's name and a missing subject: each whole, on a line of its own when they do not fit together */
 .guide-goal {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-1);
+    gap: 2px var(--space-2);
     margin: 0;
     font-size: var(--fs-small);
     color: var(--guide-goal);
+}
+.guide-goal > * {
+    flex: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.guide-goal-text {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
 }
 .guide-journey {
     color: var(--muted);

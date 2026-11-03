@@ -224,7 +224,9 @@ function Current({ item, onClose }: { readonly item: JourneyItem; readonly onClo
     const s = item.summary;
     const [goalOpen, setGoalOpen] = useState(false);
     const live = session.status === 'live' && session.state.session.state === 'Open';
-    const source = s.kind === 'model' ? (s.stormings?.length ? s.stormings.map((x) => `ES「${x}」`).join('、') : s.context) : undefined;
+    // the storming by its label, as the detail and the navigator name it
+    const stormingLabel = (id: string): string => journeys.workspace.stormings.find((x) => x.id === id)?.label ?? id;
+    const source = s.kind === 'model' ? (s.stormings?.length ? s.stormings.map((x) => `ES「${stormingLabel(x)}」`).join(t.separator) : s.context) : undefined;
     const act = (a: JourneyAct): void => journeys.act(a);
     return (
         <div className="journeys-current">

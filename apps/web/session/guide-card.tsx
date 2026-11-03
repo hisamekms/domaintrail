@@ -100,10 +100,14 @@ export function GuideCard({ command: c, continues }: { readonly command: SlashCo
     );
 }
 
-/** A step's dot: ✓ done, 📍 here, 🏁 the goal to reach, else empty. */
-function StepDot({ step }: { readonly step: GuideStepJson }): ReactElement {
+/** A step's dot: ✓ done, 📍 here, 🏁 the goal to reach, a dashed ring not confirmed, else empty. */
+function StepDot({ step, unconfirmed }: { readonly step: GuideStepJson; readonly unconfirmed?: string }): ReactElement {
     const Icon = step.state === 'Done' ? Check : step.state === 'Here' ? MapPin : step.goal ? Flag : undefined;
-    return <span className="guide-dot">{Icon && <Icon size={12} aria-hidden />}</span>;
+    return (
+        <span className="guide-dot" {...(step.state === 'Unconfirmed' && unconfirmed !== undefined && { 'data-tooltip': unconfirmed })}>
+            {Icon && <Icon size={12} aria-hidden />}
+        </span>
+    );
 }
 
 /** The goal's name: the event storming's level, or the modeling step it ends at. */
@@ -152,17 +156,18 @@ export function GuideMapView({
     const title = item?.summary.name ?? map.journeyName ?? map.storming;
     return (
         <div className="guide-map">
-            <ol className="guide-path">
+            {/* one row, a column per step (the labels wrap within their column): no connector dangles at a line's end */}
+            <ol className="guide-path" style={{ gridTemplateColumns: `repeat(${map.steps.length + (setGoal ? 1 : 0)}, minmax(0, 1fr))` }}>
                 {map.steps.map((s) => {
                     const label = t.steps[s.key] ?? s.key;
-                    const state = s.state === 'Done' ? t.done : s.state === 'Here' ? t.here : undefined;
+                    const state = s.state === 'Done' ? t.done : s.state === 'Here' ? t.here : s.state === 'Unconfirmed' ? t.unconfirmed : undefined;
                     return (
                         <li
                             key={s.key}
                             className={`guide-step ${s.state.toLowerCase()}${s.goal ? ' goal' : ''}${s.after ? ' after' : ''}`}
                             {...(s.state === 'Here' && { 'aria-current': 'step' as const })}
                         >
-                            <StepDot step={s} />
+                            <StepDot step={s} unconfirmed={t.unconfirmed} />
                             <span className="guide-step-label">{label}</span>
                             {state && <span className="visually-hidden">{state}</span>}
                             {s.markable && marker && (
@@ -205,10 +210,10 @@ export function GuideMapView({
                         {goal ? t.goal(goal) : t.noGoal}
                     </button>
                 ) : (
-                    <>
+                    <span className="guide-goal-text">
                         <Flag size={12} aria-hidden />
                         {goal ? t.goal(goal) : t.noGoal}
-                    </>
+                    </span>
                 )}
                 {title !== undefined &&
                     (heading && live ? (
@@ -217,7 +222,7 @@ export function GuideMapView({
                             {title}
                         </button>
                     ) : (
-                        <span className="guide-journey muted"> · {title}</span>
+                        <span className="guide-journey muted">{title}</span>
                     ))}
                 {map.missing === true && (
                     <span className="guide-missing">

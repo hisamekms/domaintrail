@@ -2,7 +2,7 @@
 // which is the latest; the snapshot's map as the latest card shows it, the person's ✓ marks as they are now laid over
 // it (a card in history keeps its map as it was; the marks are the journey file's, `journey-view.ts`); a finding's
 // view as the page opens it; and the message 「聞くことをメモ」 sends.
-import type { GuideMarkKey } from '@domaintrail/collaboration';
+import { placeSteps, type GuideMarkKey } from '@domaintrail/collaboration';
 import type { SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { mentionName } from './mentions';
 import type { SlashCommandJson } from './slash';
@@ -35,10 +35,10 @@ export function guideAnswers(state: Pick<SessionStateBody, 'slashCommands'>): Re
     return new Set((state.slashCommands ?? []).flatMap((c) => (isGuide(c) && c.state === 'Answered' ? [c.answer] : [])));
 }
 
-/** The steps placed again: the first not done up to the goal is here. */
+/** The steps placed again (`placeSteps`): here after the last done, the earlier not done unconfirmed. */
 function replaced(steps: readonly GuideStepJson[]): GuideStepJson[] {
-    const here = steps.findIndex((s) => s.state !== 'Done' && !s.after);
-    return steps.map((s, i): GuideStepJson => ({ ...s, state: s.state === 'Done' ? 'Done' : i === here ? 'Here' : 'Todo' }));
+    const places = placeSteps(steps.map((s) => ({ done: s.state === 'Done', after: s.after })));
+    return steps.map((s, i): GuideStepJson => ({ ...s, state: places[i] ?? 'Todo' }));
 }
 
 /**

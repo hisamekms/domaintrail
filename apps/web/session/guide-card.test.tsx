@@ -227,8 +227,9 @@ describe('what the card reads and does', () => {
             { journey: 'j', step: 'contexts', context: 'Sales' },
             { journey: 'other', step: 'contextMap' },
         ]);
-        // subdomains no longer marked: to do again, and here; bcSplit marked now; another journey's mark counts not
-        expect(now.steps.map((s) => `${s.key}:${s.state}`)).toEqual(['terms:Done', 'subdomains:Here', 'bcSplit:Done', 'contextMap:Todo']);
+        // subdomains no longer marked: before bcSplit, marked now, it is unconfirmed; here moves after the last done step;
+        // another journey's mark counts not
+        expect(now.steps.map((s) => `${s.key}:${s.state}`)).toEqual(['terms:Done', 'subdomains:Unconfirmed', 'bcSplit:Done', 'contextMap:Here']);
         expect(now.contexts[0]).toMatchObject({ state: 'Done', marked: true });
         expect(withMarks({ ...map, journey: undefined } as GuideMapJson, [])).toEqual({ ...map, journey: undefined } as GuideMapJson);
     });
