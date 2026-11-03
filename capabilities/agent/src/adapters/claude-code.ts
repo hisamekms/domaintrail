@@ -275,7 +275,7 @@ export interface ClaudeCodeOptions {
 /** The real path of the workspace (the agent may name files by it), or the path as given when it cannot be resolved. */
 export function realpathOr(root: string): string {
     try {
-        return realpathSync(root);
+        return realpathSync.native(root);
     } catch {
         return root;
     }

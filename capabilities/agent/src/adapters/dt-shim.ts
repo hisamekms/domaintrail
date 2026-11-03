@@ -33,7 +33,7 @@ const checkWord = (w: string): void => {
 const real = (p: string): string => {
     const abs = path.resolve(p);
     try {
-        return realpathSync(abs);
+        return realpathSync.native(abs);
     } catch {
         const parent = path.dirname(abs);
         return parent === abs ? abs : path.join(real(parent), path.basename(abs));
@@ -195,7 +195,7 @@ export function launcherScript(dt: PinnedDt, root: string, cwd: string): string 
         "import { dirname, basename, join, relative, resolve, isAbsolute, sep } from 'node:path';",
         `const [command, ...pinned] = ${JSON.stringify([command.command, ...command.args])};`,
         `const root = ${JSON.stringify(real(root))};`,
-        'const real = (p) => { try { return realpathSync(p); } catch { const d = dirname(p); return d === p ? p : join(real(d), basename(p)); } };',
+        'const real = (p) => { try { return realpathSync.native(p); } catch { const d = dirname(p); return d === p ? p : join(real(d), basename(p)); } };',
         "const inside = (p) => { const r = relative(root, real(p)); return r === '' || (r !== '..' && !r.startsWith('..' + sep) && !isAbsolute(r)); };",
         `const usage = ${JSON.stringify(AGENT_DT_USAGE)};`,
         'const refuse = (m) => { console.error(`dt: ${m} ${usage}`); process.exit(2); };',

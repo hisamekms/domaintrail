@@ -27,7 +27,7 @@ const ownPart = (p: string): boolean => p.split(/[\\/]/).some((s) => foldedName(
 /** The real path of `p`, or `p` when it does not exist. */
 const realOr = (p: string): string => {
     try {
-        return realpathSync(p);
+        return realpathSync.native(p);
     } catch {
         return p;
     }
@@ -72,7 +72,7 @@ export function readTargets(paths: readonly string[], workspace: string): { read
     for (const configured of paths) {
         let real: string;
         try {
-            real = realpathSync(configured);
+            real = realpathSync.native(configured);
         } catch {
             skipped.push(`${configured} (not found)`);
             continue;
