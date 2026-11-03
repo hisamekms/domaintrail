@@ -693,7 +693,9 @@ describe('the candidate and answer commands of the `/` list', () => {
         expect((await stream.post(again.job, { kind: 'next', status: 'Big Picture: 通常フローまで', steps, durationMs: 2 })).status).toBe(200);
         const state = await ctx.state(ctx.bob);
         const answer = state.requests.find((r) => r.author === 'ai' && r.replyTo?.kind === 'Message' && r.replyTo.request === request.id);
-        expect(answer?.body).toBe('Big Picture: 通常フローまで\n\n1. **例外を洗い出す** — 例外がない `/es:exceptions`\n2. **専門家に聞く** — 未決のホットスポット');
+        expect(answer?.body).toBe(
+            'Big Picture: 通常フローまで\n\n1. **例外を洗い出す** — 例外がない `/es:exceptions`\n2. **専門家に聞く** — 未決のホットスポット',
+        );
         expect(state.slashCommands?.find((c) => c.id === command.id)).toMatchObject({
             state: 'Answered',
             answer: answer?.id,
