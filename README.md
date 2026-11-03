@@ -51,7 +51,7 @@ Check it, and watch it in the browser:
 
 ```bash
 npx dt check      # 1 file(s) checked: 0 error(s), 0 warning(s).
-npx dt view       # the Live View at http://127.0.0.1:4321, until Ctrl+C
+npx dt open       # the Live View at http://127.0.0.1:4321, with a chat to the AI, until Ctrl+C
 ```
 
 Then `npx dt generate ts` writes the TypeScript into `generated/domain`. The package installs the command as `dt` and
@@ -65,7 +65,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
   CLI, written for people and AI agents. Start with its [quick reference](docs/guide.md#quick-reference).
 - **[examples/shop](examples/shop/README.md)**: a complete example — the model, the generated code and the code an AI
   agent wrote against it, with the contract tests and a demo.
-- **[The Live View](docs/live-view.md)**: every pane and view of `dt view`.
+- **[The Live View](docs/live-view.md)**: every pane and view of `dt open`.
 - **[Changelog](CHANGELOG.md)** ([日本語](CHANGELOG.ja.md)): what changed in each version, and how to upgrade.
 - **[Design decisions](docs/adr)**: the ADRs behind the language.
 
@@ -82,7 +82,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 - **`dt fmt`**: one canonical layout for `.dt` and `.dtes` files, keeping every comment.
 - **`dt generate ts`**: types per context, command contracts and decisions for `decide`, checks of the invariants and
   requirements, constructors of domain primitives, and contract tests with fast-check (bun, vitest, jest, node).
-- **`dt view`**: the Live View — context map, structure, state transitions, behaviour, source and the changes since the
+- **`dt open`**: the Live View — context map, structure, state transitions, behaviour, source and the changes since the
   last save or a git revision, in Japanese or English; and each storming at Big Picture or Design Level, as a whole or
   one timeline at a time.
 - **`dt show`**: one element resolved, for people and agents, as text or JSON.
@@ -92,9 +92,10 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 
 ## Sessions
 
-`dt session start` shares the Live View with several people while an AI agent edits the model: participants send
-requests about `.dt` and `.dtes` elements from their browsers, the facilitator bundles them into runs that
-`dt session subscribe --agent claude` hands to Claude Code, and every run leaves a revision to compare or restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
+`dt open` gives you the Live View with a chat to the AI (Claude Code, started in the same process when it is
+installed). `dt collab` shares it with several people while the AI edits the model: participants send messages about
+`.dt` and `.dtes` elements from their browsers, the facilitator bundles them into runs that the agent hands to Claude
+Code (`dt agent` runs it alone, elsewhere), and every run leaves a revision to compare or restore. See [`dt guide session`](docs/guide.md#collaboration-sessions), [a first real run](docs/session-first-run.md)
 and, behind Cloudflare Access, [the access check](docs/session-access.md).
 
 ## Contributing

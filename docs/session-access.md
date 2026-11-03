@@ -1,6 +1,6 @@
 # Running a session behind Cloudflare Access: the end-to-end check
 
-`dt session start` with `identity: "access"` verifies Cloudflare Access tokens itself (signature with the team's
+`dt collab` with `identity: "access"` verifies Cloudflare Access tokens itself (signature with the team's
 keys, issuer, audience, expiry) and is tested against a local stand-in for Cloudflare
 (`test/session-access.test.ts`). Whether it works with the real Cloudflare Tunnel and Access is checked by a person,
 with this page. The decisions behind it are in [ADR 0026](adr/0026-collaboration-sessions.md#appendix-cloudflare-access-s8).
@@ -21,7 +21,7 @@ DomainTrail never creates, changes or deletes anything in Cloudflare: the tunnel
   that is signed in to nothing.
 - Node.js 22.13 or later and the `dt` of the version under test; a workspace with `.dt` and `.dtes` sources (e.g.
   `examples/shop`), committed to git so a restore can be checked against `git diff`.
-- For the run step: `dt session subscribe --agent claude` and Claude Code, as for a local session.
+- For the run step: Claude Code, as for a local session (`dt collab` starts the agent in its process, or `dt agent`).
 
 ## Configuration
 
@@ -29,7 +29,7 @@ In the workspace's `domaintrail.jsonc`:
 
 ```jsonc
 {
-  "session": {
+  "collab": {
     "identity": "access",
     "host": "127.0.0.1", // the default: only cloudflared reaches the server
     "port": 4321,
@@ -48,7 +48,7 @@ In the workspace's `domaintrail.jsonc`:
 }
 ```
 
-- `dt session start` refuses a `publicUrl` that is not https, whose host is not in `allowedHosts`, or whose origin is
+- `dt collab` refuses a `publicUrl` that is not https, whose host is not in `allowedHosts`, or whose origin is
   not in `allowedOrigins` (the tunnel's requests would all be refused).
 - Any other Host or Origin is refused (403), with or without a token. Loopback names are always allowed, for the
   facilitator's own browser on the machine.
@@ -58,15 +58,15 @@ In the workspace's `domaintrail.jsonc`:
 ## Start
 
 1. Start the tunnel: `cloudflared tunnel run <tunnel>` (or the service you installed).
-2. Start the session in the workspace: `dt session start`. It prints the Live View URL (`http://127.0.0.1:4321/`), the
+2. Start the session in the workspace: `dt collab`. It prints the Live View URL (`http://127.0.0.1:4321/`), the
    facilitator link and the agent API's address (on 127.0.0.1, credential in `.domaintrail/session/agent.json`).
    A line `Cloudflare Access keys are not fetched yet` means the JWKS
    (`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`) could not be fetched: check the team domain and the
    machine's network before going on.
 3. Claim the facilitator role: open `https://session.example.com/` in your browser and sign in through Access, then
    open the facilitator link, with its host changed to `session.example.com` (the path and the code stay). The link
-   works once, for 10 minutes; `dt session link` prints another. The role is never given by Access.
-4. Start the agent: `dt session subscribe --agent claude` in the workspace.
+   works once, for 10 minutes; `dt collab link` prints another. The role is never given by Access.
+4. The agent: `dt collab` starts it in its process when Claude Code is usable (it prints `AI: started …`, or why not); otherwise `dt agent` in the workspace.
 
 ## Checklist
 
@@ -130,7 +130,7 @@ Record, without tokens, cookies or e-mail addresses (they are personal data and 
 
 - the step, the time (with time zone) and what was expected and seen;
 - the domaintrail version (`npm ls domaintrail`, or the commit of a clone), Node's version, the OS, and the `cloudflared` version;
-- the `dt session start` output around that time (it never prints tokens or e-mail);
+- the `dt collab` output around that time (it never prints tokens or e-mail);
 - the HTTP status and the error `type` of the failing request (developer tools → Network), the WebSocket's close code;
 - whether the request carried a `Cf-Access-Jwt-Assertion` header at the origin (if you can see the request at the
   origin, only whether the header was there, not its value);

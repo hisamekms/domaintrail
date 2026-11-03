@@ -1,5 +1,5 @@
 /**
- * `dt session start` (ADR 0026, S4) over HTTP, the WebSocket and the agent API, on a temporary workspace with `.dt`
+ * The session server (`dt collab`; ADR 0026, S4) over HTTP, the WebSocket and the agent API, on a temporary workspace with `.dt`
  * and `.dtes` sources: without an identity nothing is served; Host and Origin are checked; participants cannot reach
  * the facilitator's routes or the agent API; the agent API needs its credential and is not on the public port; SSE
  * resumes with `Last-Event-ID`; claim and finish are idempotent; the watcher holds around a write; presence; revoke.
@@ -281,7 +281,7 @@ describe('a session in dev mode', () => {
         expect((await fetch(`${server.url}api/state`, { headers: { cookie: `dt_session=${'A'.repeat(43)}` } })).status).toBe(401);
     });
 
-    test('serves the Live View to a participant, as dt view does', async () => {
+    test('serves the Live View to a participant, as the read-only Live View does', async () => {
         const res = await fetch(`${server.url}api/state`, { headers: { cookie: bob } });
         expect(res.status).toBe(200);
         expect(((await res.json()) as ViewPayload).files).toEqual(['ordering.dtes', 'shop.dt']);

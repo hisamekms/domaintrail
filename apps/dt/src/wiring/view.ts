@@ -44,7 +44,7 @@ export interface ViewServer {
     stop(): Promise<void>;
 }
 
-/** The Live View's parts before anything listens or watches: shared by `dt view` and `dt session start`. */
+/** The Live View's parts before anything listens or watches: shared by the read-only Live View (`dt open --host`) and the session server (`dt open`, `dt collab`). */
 export interface LiveView {
     readonly view: ViewService;
     readonly git: GitRevisions;

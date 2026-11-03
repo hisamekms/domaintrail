@@ -97,7 +97,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
-- `dt view` — the Live View in the browser; it runs until Ctrl+C, so run it in the background.
+- `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
 
 **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration and
 change the DSL, not the implementation: never emit an event or set a field only to satisfy the types.
@@ -119,8 +119,9 @@ change the DSL, not the implementation: never emit an event or set a field only 
 6. With `generate.ts.tests` configured, run the generated contract tests against your implementation with your test
    runner (see [Generated tests](#generated-tests)).
 
-`dt view` starts the Live View, a browser page where people watch the model update as files are saved. It is a server
-that keeps running and never exits by itself (stop it with Ctrl+C), so do not wait for it to finish: run it in the
+`dt open` starts the Live View, a browser page where people watch the model update as files are saved (with a chat to
+the AI for the person who started it; see [Collaboration sessions](#collaboration-sessions)). It is a server that keeps
+running and never exits by itself (stop it with Ctrl+C), so do not wait for it to finish: run it in the
 background, or use `dt check` for a result.
 
 Event Storming files (`.dtes`) go through the same loop: `dt fmt`, then `dt check` until it exits 0 (see [Event
@@ -134,7 +135,7 @@ dt check                        # every *.dt and *.dtes file below the current d
 dt -r domain check              # below domain/ (or as configured by a domaintrail.jsonc found there or above)
 dt generate ts                  # into <root>/generated/domain
 dt generate ts --out src/domain/generated
-dt view --port 8080             # http://127.0.0.1:8080, until Ctrl+C
+dt open --port 8080             # http://127.0.0.1:8080, until Ctrl+C
 ```
 
 <!-- topic: layout -->
@@ -1825,7 +1826,7 @@ it, and no tool changes a `.dt` file because of it, or a `.dtes` file because of
   what is unclear as hotspots. Report the diagnostics (mechanical inconsistencies between the two files) apart from the
   business findings (improvements of the model, made only when people decide them).
 
-`dt check`, `dt fmt`, `dt view` and `dt lsp` take the `.dtes` files with the `.dt` files: the default `sources` find
+`dt check`, `dt fmt`, `dt open`, `dt collab` and `dt lsp` take the `.dtes` files with the `.dt` files: the default `sources` find
 both, and a config that sets `sources` lists a `.dtes` glob itself (see [Configuration](#configuration)). `dt check`
 fails on a `.dtes` error as on a `.dt` one. `dt generate ts` reads the `.dt` files only, and `.dtes` errors do not block
 it. `dt show` shows the `.dt` model only. Keep the stormings in a directory of their own, `stormings/<name>.dtes`.
@@ -2008,7 +2009,7 @@ make two occurrences the same happening, so read a path along one timeline's nam
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
-`dt view`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
+`dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
 its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
 
 <!-- topic: storming-rules -->
@@ -2540,33 +2541,49 @@ formatting, hover, an outline and go to definition.
 <!-- topic: session -->
 ## Collaboration sessions
 
-A **session** is the Live View shared by several people while an AI agent edits the model: the facilitator runs
-`dt session start` on their machine, the participants open the page in their browsers, see each other, and post
-**messages** in a chat, about elements of the `.dt` model or the `.dtes` stormings; the facilitator applies messages as
-**runs** (requests to the agent), and `dt session subscribe --agent claude` runs Claude Code on the facilitator's workspace, one run at a
-time. The edits reach every page through the Live View, and every run leaves a **revision** of all the `.dt` and
-`.dtes` sources that can be compared or restored. `dt view` is unchanged: it has no session, and its
-page no session chat. Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
+A **session** is the Live View with a chat to the AI, in one of two modes. **`dt open`** is for one person: on
+loopback, signed in as the facilitator by the one-time link it prints (no form), every message goes to the AI. **`dt collab`** is the
+Live View shared by several people while an AI agent edits the model: the facilitator runs it on their machine, the
+participants open the page in their browsers, see each other, and post **messages** in a chat, about elements of the
+`.dt` model or the `.dtes` stormings; the facilitator applies messages as **runs** (requests to the agent). In both,
+the agent (Claude Code) runs in the same process when `claude` is usable, on the facilitator's workspace, one run at a
+time (`dt agent` runs it alone, in another terminal or on another machine). The edits reach every page through the
+Live View, and every run leaves a **revision** of all the `.dt` and `.dtes` sources that can be compared or restored.
+Sessions need Node.js 22.13 or later (for `node:sqlite`). In the repository,
 `docs/session-first-run.md` walks through a first run with Claude Code, and ADR 0026 has the decisions behind them.
 
-**The commands.** All three find the workspace like `dt check` (`-r`, `-c`):
+**The commands.** All four find the workspace like `dt check` (`-r`, `-c`):
 
-- `dt session start` — the session server: the Live View as `dt view` serves it, plus the session, at
-  `http://127.0.0.1:4321` (`--port`, `--host`, or `session.port` / `session.host`; `--base <ref>` as in `dt view`),
-  until Ctrl+C or until the facilitator closes the session. A workspace has one open session: starting again resumes
-  it, with its sign-ins, requests, runs and revisions. It prints the page's URL, a one-time **facilitator link** and the
-  agent API's address.
-- `dt session link` — another facilitator link, for the server running on the workspace (each link works once, for 10
-  minutes).
-- `dt session subscribe --agent claude` — the agent: it connects to the running server through its agent API and runs
-  the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
+- `dt open` — the Live View and a chat for you alone, at `http://127.0.0.1:4321` (`--port`, `--host`, or `open.port` /
+  `open.host`; `--base <ref>` compares with a git revision), until Ctrl+C. It prints a one-time link instead of the
+  plain address: opened within 60 minutes, it signs that browser in as you, the facilitator (an HttpOnly cookie, kept
+  across restarts), with no join form; a browser or another program without that cookie is not let in, and no one else
+  joins. It answers loopback only (never `collab.access`'s hosts). The chat, runs and revisions are kept across restarts. It refuses a
+  workspace with an open collab session (resume it with `dt collab`, or end it from its collab menu). With `--host` on
+  a non-loopback address it serves the Live View read-only: no chat, no agent.
+- `dt collab` — the session server for several people, at `http://127.0.0.1:4321` (`--port`, `--host`, or
+  `collab.port` / `collab.host`; `--base <ref>`), until Ctrl+C or until the facilitator closes the session. A
+  workspace has one open session: starting again resumes it, with its sign-ins, requests, runs and revisions, and a
+  `dt open` session is continued as a collab one (its history kept; open the facilitator link to hold the role). It
+  prints the page's URL, a one-time **facilitator link** and the agent API's address.
+- `dt collab link` — another facilitator link, for the collab server running on the workspace (each link works once,
+  for 10 minutes).
+- `dt agent` — the agent alone: it connects to the running server (`dt open` or `dt collab`) through its agent API and
+  runs the queued runs one after another, until Ctrl+C or the session closes; `--once` handles one run and exits.
+  `--role run` or `--role answer` takes on one of its two roles (the runner, the read-only answerer); both by default.
+
+`dt open` and `dt collab` start the agent in their own process (as `dt agent` would, over loopback) when Claude Code is
+usable (`claude` on the `PATH`, answering `--version`, with the flags the agent needs); otherwise they start without
+it and print one line saying why (`AI: not started (…)`). `--no-agent` does not start it; `--agent claude` makes an
+unusable Claude Code an error. `dt view`, `dt session start`, `dt session link` and `dt session subscribe` were
+removed: each fails with the name of its replacement.
 
 **Roles.** Everyone signed in is a **participant**: they see the Live View and the session's chat, a pillar at the
 right end of the page — チャット: every message posted, one card per run, and the composer; AI の作業: everything sent to the AI,
 awaiting an answer, running, queued and finished — and post messages. Closed, the chat leaves a 💬 button at the bottom right of the canvas that shows whether the
 agent is running or waiting for an answer and how many messages and cards are new. The **facilitator** is whoever
 opened the facilitator link while signed in (never derived from Cloudflare Access); a new link moves the role (the
-collab menu's ファシリテーターを引き継ぐ issues one, as `dt session link` does), and the previous holder's pages reconnect as a participant. Only the
+collab menu's ファシリテーターを引き継ぐ issues one, as `dt collab link` does), and the previous holder's pages reconnect as a participant. Only the
 facilitator applies messages, answers the agent, stops and reverts runs, records and restores revisions, changes the
 shared 比較対象 (baseline) and closes the session (the collab menu's コラボを終える). The server checks every role; the page
 only hides what is not yours.
@@ -2686,7 +2703,7 @@ made from replies continues the replied run's card in place, quoting the replies
 that run extends the same card. The agent is given the replied run as context: its messages, how it ended, its reply
 (summary, per-message status, assumptions, questions) and what it changed — the unified diff of the sources between
 its base and result revisions, or only the list of the changed files when the diffs of all the replied runs together
-exceed `session.agent.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
+exceed `agent.run.maxPreviousRunDiff` (20480 characters by default). Answering a question gives the agent the run
 that asked in the same way. The current files stay the truth for the agent: other runs may have changed them since.
 
 **Replies to a message.** People answer each other too: ↩ just before ☺+ on any message (on hover, always on touch),
@@ -2717,7 +2734,7 @@ was picked shows ◉ on it, the others muted, and `選択 name · time` under it
 the same card); one
 left as it was (a later run without a pick) has nothing filled and keeps only its frozen votes. A pick is recognized by the note the page writes for it. On every message and
 every AI turn, anyone (the facilitator too) can **react** with an emoji: hover the message (on touch it is always
-there) and ☺+ at the end of its actions offers a row of quick emoji (`session.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
+there) and ☺+ at the end of its actions offers a row of quick emoji (`collab.quickReactions`, by default 👍 👀 🤔 🎉 ❤️ 🙏)
 and ＋, a small field where any one emoji can be typed or pasted (the OS emoji picker works there; Enter adds it, Escape
 closes the field), with who reacted under them. The app gives no emoji a meaning. A reaction is exactly one emoji — a
 ZWJ sequence (👨‍👩‍👧‍👦), a skin tone (👍🏽), a flag (🇯🇵) or a keycap (1️⃣) counts as one; text and two emoji are refused —
@@ -2786,7 +2803,7 @@ card is frozen into the next run as `answerTo` and `answer` (the question and th
 alternative picked is frozen as `pick` (the run, the assumption and the alternative as they were shown), with a note
 asking for it; the agent is given the run it assumed in, and the card shows the pick with ◉.
 
-**Classifying messages (opt-in).** With `session.classifier.enabled`, the session server asks Cloudflare Workers AI's
+**Classifying messages (opt-in).** With `classifier.enabled`, the session server asks Cloudflare Workers AI's
 Clef (`@cf/cloudflare/clef-flash`, or `clef`) whether each new message asks for a change to the model or is talk. The
 message appears at once; its classification follows, for the facilitator only, and shows only as whether the row has
 the AI に送る button: it is offered on requests, and on anything the classifier could not tell — a failure, a timeout or a
@@ -2804,7 +2821,7 @@ different views). An occurrence is only told apart in a timeline's view.
 
 **Privacy.** Pages show participants by name only: the name picked on the join form (`dev`), or the Access identity's
 name, else the part of the e-mail before `@` (`access`). The e-mail is never sent to any page, not even your own, and
-never logged; an avatar is shown only from the hosts in `session.access.avatarHosts`, else initials. The server's log
+never logged; an avatar is shown only from the hosts in `collab.access.avatarHosts`, else initials. The server's log
 has no token, cookie, link code or e-mail. A run's prompt carries the requests' text and their authors' names to the
 agent.
 
@@ -2812,7 +2829,7 @@ agent.
 `.gitignore` that ignores it all: `session.db` (SQLite: the session, requests, runs, revisions, the event outbox,
 sign-ins and facilitator links as hashes, the log of restores), `blobs/` (the revisions' file contents, by SHA-256),
 `agent.json` (the agent API's address and credential, mode 0600, removed when the server stops) and `server.json`
-(the page's URL, for `dt session link`). Drafts are in each browser; presence only in memory.
+(the page's URL, for `dt collab link`). Drafts are in each browser; presence only in memory.
 
 **Limitations.** The log of restores is in `session.db` only, not served over HTTP. In the `access` mode, leaving the
 session sends the page to Access's logout, but the server cannot see a sign-out made elsewhere: the person's other
@@ -2940,16 +2957,16 @@ around it (its ⋯ → 変更を見る).
 <!-- topic: session-agent -->
 ### The agent and its security
 
-`dt session subscribe --agent claude` runs `claude` from the `PATH` in the workspace's root, for each run, as
+The agent (`dt agent`, or in process) runs `claude` from the `PATH` in the workspace's root, for each run, as
 `claude --print --output-format json --no-session-persistence --strict-mcp-config --setting-sources user
---permission-mode dontAsk --tools … --allowedTools …`, with the rules of `session.agent.allowedTools` only (any other
+--permission-mode dontAsk --tools … --allowedTools …`, with the rules of `agent.run.allowedTools` only (any other
 tool is refused without asking, and no MCP server is loaded). The prompt tells it to read the related files, edit only
 the `.dt` and `.dtes` sources, keep a storming exploratory, and change no `.dt` when the requests are only about
 stormings; then `dt fmt` and `dt check` run, and the server records the result.
 
 - **The agent's `dt`.** The agent may run `dt fmt` and `dt check` (the default `allowedTools`), whatever is installed:
   for each run the subscriber puts a `dt` first on the agent's `PATH`, in a private temporary directory (0700) outside
-  the workspace. It runs `session.agent.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
+  the workspace. It runs `agent.run.dt` — `["node" | "bun" | "deno", "<script>"]` or `["<dt executable>"]`, e.g. a
   clone of DomainTrail next to the workspace while developing it — or, unset, the very `dt` running the subscriber.
   That command is read once when the subscriber starts (never again from the config file, which is in the workspace),
   pinned to absolute real paths (the runtime found on the `PATH`), refused when the script or executable is inside the
@@ -2968,7 +2985,7 @@ stormings; then `dt fmt` and `dt check` run, and the server records the result.
   other than a `.dt` or `.dtes` source was added, changed or removed (`.claude/` included, and files that `.gitignore`
   ignores), the run fails (`AgentError`) and the subscriber claims no further run. Its log names the files (`not
   claiming further runs: review … then restart the subscriber`). Review them and undo what you do not want, then start
-  `dt session subscribe --agent claude` again and queue the requests in a new run. A scan that fails stops it the same
+  `dt agent` (or `dt open` / `dt collab`) again and queue the requests in a new run. A scan that fails stops it the same
   way.
 - **The agent API** listens on 127.0.0.1 only, on its own port, with a bearer token in `.domaintrail/session/agent.json`
   (mode 0600); it refuses a request with an `Origin` or a `Host` other than loopback, and is never reachable through the page's port.

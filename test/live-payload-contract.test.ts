@@ -25,7 +25,7 @@ afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
 
-/** A view service over a copy of examples/shop (without its stormings if asked), as `dt view` wires it. */
+/** A view service over a copy of examples/shop (without its stormings if asked), as the Live View server wires it. */
 async function shop(stormings: boolean): Promise<{ dir: string; view: ViewService }> {
     const dir = await tempCopyOfExamples();
     dirs.push(dir);

@@ -8,7 +8,7 @@ import { send, type ApiRoutes } from './routes.js';
 /** The path of the WebSocket. */
 export const WS_PATH = '/ws';
 
-/** The API of a session, below `/api/session` (404 in `dt view`). */
+/** The API of a session, below `/api/session` (404 in the read-only Live View). */
 export const SESSION_API = '/api/session';
 
 /** The pages of a session that are not the Live View (the facilitator link, the join form), below `/session/`. */
@@ -39,7 +39,7 @@ export interface ViewHttpServerOptions {
     assets: Assets;
     /** The upgrade on `WS_PATH`. */
     upgrade: UpgradeHandler;
-    /** A session (`dt session start`): every request then needs an identity. Absent for `dt view`. */
+    /** A session (`dt open`, `dt collab`): every request then needs an identity. Absent for the read-only Live View. */
     session?: SessionSurface;
 }
 
@@ -51,7 +51,7 @@ const FACILITATOR_VIEW_API: ReadonlySet<string> = new Set(['/api/baseline']);
 
 /**
  * The Live View's HTTP server (not yet listening): the API, the WebSocket upgrade and the page. Every request and upgrade
- * enters through `checkAccess`. For `dt view` it guards the API's requests and the WebSocket's upgrade, and the page
+ * enters through `checkAccess`. For the read-only Live View it guards the API's requests and the WebSocket's upgrade, and the page
  * (and any other path) is served to anyone. In a session it guards everything: the page, the API, the session's API
  * and the WebSocket need an identity; without one a page request gets the session's sign-in answer, an API request 401.
  */

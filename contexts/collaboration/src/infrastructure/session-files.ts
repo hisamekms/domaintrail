@@ -1,6 +1,6 @@
 // The files a running session server leaves in `.domaintrail/session/` for local processes (ADR 0026, S4):
-// `agent.json`, the agent API's address and credential (for `dt session subscribe`), and `server.json`, the public
-// listener's address (for `dt session link`). Both are written 0600 through a temporary file renamed into place, never
+// `agent.json`, the agent API's address and credential (for `dt agent`), and `server.json`, the public
+// listener's address (for `dt collab link`). Both are written 0600 through a temporary file renamed into place, never
 // through a symbolic link, and removed when the server stops.
 import { lstat, readFile, unlink } from 'node:fs/promises';
 import * as path from 'node:path';

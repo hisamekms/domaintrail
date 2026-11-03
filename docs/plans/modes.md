@@ -497,6 +497,39 @@ M2 landed the model, the use cases, the store and the protocol types above, with
   the transaction that decides it; a run that answers a request (`answered`) overrides its triage as `Runner` when it
   finishes.
 
+### As built in M5
+
+M5 landed the commands and the config, with these details settled or changed:
+
+- **Commands**: `dt open`, `dt collab` (+ `dt collab link`), `dt agent [--role answer|run] [--once]`; `dt view` and
+  `dt session start|link|subscribe` are hidden commands that fail with the replacement's name (exit 2). `--no-agent`
+  and `--agent claude` share one option (`--agent claude` makes an unusable Claude Code an error, after which the
+  server is stopped). `dt open --host <non-loopback>` serves the read-only Live View (`--agent claude` with it is an
+  error).
+- **`dt open`'s sign-in** (security review): not "every loopback request is the facilitator". `dt open` prints a
+  one-time link (`/session/open?code=…`: a facilitator link's code, single use, 60 minutes) in place of the plain
+  address; opening it signs that browser in as the Solo identity (`dev:solo`) with the dev mode's cookie (`dt_session`,
+  HttpOnly, SameSite=Strict, stored in `session.db`, so it survives restarts) and redirects to the Live View. Without
+  the cookie a request is not identified (401; a page says to open the printed link, no join form), so another local
+  process or OS user is not the facilitator. The link is the only step. When `dt collab` continues the session, that
+  browser stays its facilitator (the claimed role is the Solo identity's).
+- **Loopback only**: `dt open` never reads `collab` beyond `quickReactions` (`open.port` / `open.host`, the dev
+  identity); its host policy admits loopback Hosts and Origins only, whatever `collab.access` allows.
+- **Fail closed and one server per workspace**: the Solo identities identify no one once the session is not open and
+  Solo (`dt collab` continuing it); `startSessionServer` refuses to start while another live server (`server.json`
+  with its process alive, or a server of the same process) serves the workspace, so a session's mode never changes
+  under a running server.
+- **The agent in process**: `checkClaudeCode` decides; the subscriber is the same as `dt agent`'s (loopback HTTP with
+  `agent.json`'s credential); Ctrl+C stops the agent before its server.
+- **Roles**: `--role` is parsed and passed on, both by default; the answerer is not in the agent yet (M4), so the
+  wiring takes on the runner only, and `--role answer` alone is an error until M4's answerer is connected there
+  (`wiring/subscriber.ts`).
+- **Config**: `agent.answer` also has `idleTimeout` (default 30) and `agent.triage` has `warm` (default false, Q12);
+  `agent.answer.timeout` is in seconds (default 120). The session server is given a `SessionSettings` composed from
+  `collab`, `agent.port`, `agent.run.{allowedTools,maxPreviousRunDiff}` and `classifier`.
+- **The seed** runs `dt collab --no-agent` (its scripted agent plays the runs); its requests are still queued with
+  the facilitator's runs route, until M4's addressing routes land.
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat
