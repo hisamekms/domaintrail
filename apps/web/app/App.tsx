@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Blocks, StickyNote, type LucideIcon } from 'lucide-react';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
 import { BaselineButton, BaselineMenu, baselineName } from '../baseline-picker';
@@ -10,7 +11,9 @@ import { fileSelection, inCatalog, inStructure, resolve, selectedFile } from '..
 import { StatesCanvas } from '../states-canvas';
 import { useSessionPage } from '../session/page';
 import { stageChoice, StormingDetails } from '../storming';
+import { NameSwitch } from '../view/toolbar';
 import { ViewWorkspace, useViewWorkspace } from '../view/workspace';
+import { WORLDS, type World } from '../view/worlds';
 import { usePanes } from './panes';
 import { SettingsDialog } from '../settings-dialog';
 import { usePreferences } from './preferences';
@@ -18,6 +21,8 @@ import { AppShell } from './shell';
 import { workspaceName } from './health';
 import { HealthButton } from './status';
 import { useViewSocket } from './useViewSocket';
+
+const WORLD_ICONS: Record<World, LucideIcon> = { model: Blocks, storming: StickyNote };
 
 /** An aggregate's name and label (its ID while the model does not have it). */
 function aggregateNames(model: DomainModel | null, id: string): { name: string; label?: string | undefined } {
@@ -42,9 +47,11 @@ export function App() {
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
     const toggleBaselineMenu = (anchor: HTMLElement) => setBaselineAnchor((a) => (a === anchor ? null : anchor));
     const closeBaselineMenu = useCallback(() => setBaselineAnchor(null), []);
+    /** The app bar's place for a session's controls of the whole page (the chat puts them there). */
+    const [sessionSlot, setSessionSlot] = useState<HTMLDivElement | null>(null);
 
     const workspace = useViewWorkspace(current, { mode, lang, theme });
-    const { stormings, nav, settings, viewGraph } = workspace;
+    const { stormings, nav, worlds, settings, viewGraph } = workspace;
     const { view, setView, selected, sourceFocus, setSourceFocus, select, backTo, goBack, reveal } = nav;
     const { shown, stormingShown } = viewGraph;
 
@@ -63,7 +70,7 @@ export function App() {
     };
 
     // in a session (dt session start) only: the session's chat, the facilitator's session pane and the others' cursors
-    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest });
+    const session = useSessionPage({ socket, current, workspace, panes, mode, openBest, barSlot: sessionSlot });
 
     const locate = (d: Diagnostic) => {
         // e.g. syntax errors belong to no element: only their file can show them
@@ -83,6 +90,18 @@ export function App() {
             <AppShell
                 panes={panes}
                 workspaceName={current ? workspaceName(current.root) : undefined}
+                world={
+                    <NameSwitch
+                        label={t.worldsLabel}
+                        className="world-switch"
+                        choices={WORLDS}
+                        value={worlds.world}
+                        icons={WORLD_ICONS}
+                        names={t.worlds}
+                        onChange={worlds.setWorld}
+                    />
+                }
+                sessionSlot={setSessionSlot}
                 health={<HealthButton current={current} connection={connection} />}
                 settings={
                     <SettingsDialog

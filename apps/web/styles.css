@@ -582,7 +582,14 @@ body,
 
 .app {
     display: flex;
+    flex-direction: column;
     height: 100%;
+}
+/* under the app bar, the pillars side by side */
+.app-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
 }
 
 .brand {
@@ -2155,9 +2162,105 @@ select,
     background: var(--panel);
     font-size: 0.875rem;
 }
-/* The left pane: its head (the brand and the workspace's name), the activity bar and the lists, and its foot (the
-   health and the settings). Collapsed, it is the 44px activity bar (BAR_WIDTH in app/shell.tsx): the brand's mark at
-   the top, the health and the settings at the bottom. */
+/* The app bar, the whole width: the brand and the workspace's name, the world switch, then at the right end what
+   concerns the whole page (問題, and a session's people, AI state and menu). On a narrow bar the world switch is its
+   icons (their names as tooltips). APP_BAR_HEIGHT in app/shell.tsx. */
+.app-bar {
+    container: app-bar / inline-size;
+    flex: none;
+    height: 44px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px 0 10px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.app-bar-brand {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+/* the logo (assets/brand: indigo on light, light indigo on dark, the amber dot in both), 24px tall in its 144:128
+   proportion; only the one for the page's theme shows */
+.brand-logo {
+    flex: none;
+    display: block;
+    height: 24px;
+    width: auto;
+    aspect-ratio: 144 / 128;
+}
+:root:not([data-theme='dark']) .brand-logo-dark,
+:root[data-theme='dark'] .brand-logo-light {
+    display: none;
+}
+.workspace-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-size: 0.8125rem;
+}
+.app-bar-space {
+    flex: 1;
+}
+.app-bar > .name-switch,
+.app-bar-problems {
+    flex: none;
+}
+/* the world switch: the chosen world filled with the text's colour (the views' switch below it has the accent) */
+.world-switch button.active {
+    background: var(--text);
+    color: var(--panel);
+}
+.app-bar-session {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+.app-bar-session:empty {
+    display: none;
+}
+/* the session's controls in the app bar (the chat's own look, `.session-chat`, laid out in a row); the collab menu's
+   popover opens leftward from the bar's right end */
+.session-chat.session-bar {
+    flex: none;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+}
+.session-bar .chat-status-slot {
+    margin-left: 0;
+}
+.session-bar .collab-menu-popover,
+.session-bar .collab-menu-note {
+    left: auto;
+    right: 0;
+}
+@container app-bar (max-width: 60rem) {
+    .world-switch .switch-label {
+        display: none;
+    }
+}
+@container app-bar (max-width: 40rem) {
+    .workspace-name {
+        display: none;
+    }
+}
+/* a switch's choice: its icon, then its name (hidden on a narrow bar) */
+.name-switch button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+/* The left pane: the activity bar and the lists, and its foot (the health and the settings). Collapsed, it is the
+   44px activity bar (BAR_WIDTH in app/shell.tsx), the health and the settings at the bottom. */
 .left {
     flex: none;
     display: flex;
@@ -2168,51 +2271,8 @@ select,
     border-right: 1px solid var(--border);
     transition: width var(--pane-duration) var(--pane-easing);
 }
-.left-head {
-    flex: none;
-    display: flex;
-    align-items: center;
-    height: 40px;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-}
-.brand-mark {
-    flex: none;
-    width: 43px;
-    display: grid;
-    place-items: center;
-    color: var(--brand-ink);
-}
-/* the logo (assets/brand: indigo on light, light indigo on dark, the amber dot in both), 24px tall in its 144:128
-   proportion, centred in the activity bar's cell; only the one for the page's theme shows */
-.brand-logo {
-    display: block;
-    height: 24px;
-    width: auto;
-    aspect-ratio: 144 / 128;
-}
-:root:not([data-theme='dark']) .brand-logo-dark,
-:root[data-theme='dark'] .brand-logo-light {
-    display: none;
-}
-.brand-text {
-    min-width: 0;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    padding-right: 10px;
-    transition: opacity var(--pane-duration) var(--pane-easing);
-}
-.left:not(.open) .brand-text,
 .left:not(.open) .left-pane {
     opacity: 0;
-}
-.workspace-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--muted);
-    font-size: 0.8125rem;
 }
 .left-main {
     flex: 1;
@@ -2641,64 +2701,38 @@ svg.chat-launcher-mark {
     white-space: nowrap;
 }
 
-/* main view tabs */
-
-.view-tabs {
-    display: flex;
-    flex-wrap: wrap; /* the toolbar goes below the tabs when they do not fit side by side */
-    align-items: center;
-    gap: 2px;
-    padding: 0 8px;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel);
-}
-/* the tabs stay on one line (scrolling if the pane is narrower than them) */
-.view-tab-list {
-    display: flex;
-    gap: 2px;
-    min-width: 0;
-    overflow-x: auto;
-}
-.view-tab-list > button {
-    padding: 8px 12px;
-    white-space: nowrap;
-    font: inherit;
-    font-size: 0.875rem;
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: none;
-    cursor: pointer;
-}
-.view-tab-list > button.active {
-    border-bottom-color: var(--accent);
-    color: var(--accent);
-    font-weight: 600;
-}
-.view-tab-list > button:disabled {
-    color: var(--disabled-text);
-    cursor: default;
-}
 /*
- * the view toolbar, its own row under the tabs and the same in every view: the subject and the level at the left, the
- * 絞り込み button and 書き出し (the catalog: 印刷) at the right end. A narrow pane cuts the subject's names short first; only when even
- * that is not enough does the right end go onto a second row. An empty view has no controls: the row keeps the height of
- * one (a .toolbar-button and the padding: the box is border-box), so the tabs do not move.
+ * the view bar, one row at the top of the canvas column and the same in every view: the domain model's view switch,
+ * the subject and the level at the left, the 絞り込み button and 書き出し (the catalog: 印刷) at the right end. As the
+ * bar narrows, the right end's buttons become icons first, then the view switch, then the levels; the subject's names
+ * are cut short last. An empty view has no controls: the row keeps the height of one (a .toolbar-button and the
+ * padding: the box is border-box).
  */
 .view-toolbar {
     container: view-toolbar / inline-size;
-    flex-basis: 100%;
+    flex: none;
     min-width: 0;
-    min-height: calc(1.625rem + 8px);
-    padding: 4px 0;
+    min-height: calc(1.625rem + 9px);
+    padding: 4px 8px;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 4px 8px;
+    gap: 8px;
     white-space: nowrap;
     font-size: 0.8125rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+}
+.view-toolbar > .view-switch {
+    flex: none;
+}
+/* the view chosen: marked by the accent's line, so that it reads apart from the level (filled) next to it */
+.view-switch button.active {
+    background: var(--selected-bg);
+    color: var(--accent);
+    box-shadow: inset 0 -2px 0 var(--accent);
 }
 .toolbar-subject {
-    flex: 1 1 12rem;
+    flex: 0 1 auto;
     min-width: 0;
     display: flex;
     align-items: center;
@@ -2714,11 +2748,28 @@ svg.chat-launcher-mark {
     align-items: center;
     gap: 6px;
 }
-/* a narrow toolbar: the right end's buttons as icons (their names as tooltips), so that the subject keeps its room */
-@container view-toolbar (max-width: 40rem) {
+/* a narrowing bar gives up words in this order (their names stay as tooltips): the right end's labels, the view
+   switch's, the levels'; then the subject's names are cut short */
+@container view-toolbar (max-width: 46rem) {
     .toolbar-end-label {
         display: none;
     }
+}
+@container view-toolbar (max-width: 38rem) {
+    .view-switch .switch-label {
+        display: none;
+    }
+}
+@container view-toolbar (max-width: 32rem) {
+    .level-label {
+        display: none;
+    }
+}
+/* a level with its short name: the icon and the name on one line */
+.segmented.level-switch button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 .toolbar-button {
     display: flex;
@@ -3370,7 +3421,6 @@ svg.chat-launcher-mark {
 @media (prefers-reduced-motion: reduce) {
     .left,
     .left-pane,
-    .brand-text,
     .dock,
     .dock > .pane,
     .dock > .rail,
@@ -4408,14 +4458,6 @@ del.was.block {
 .session-chat button {
     font: inherit;
 }
-.chat-header {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--border);
-}
 .chat-avatars {
     /* room for the facilitator's ring and the last avatar's overlap, without making the header taller */
     padding: var(--space-1);
@@ -5419,9 +5461,16 @@ button.add-to-request.added:hover {
 
 /* ---------- the conversation: チャット | AI の作業 ---------- */
 
-.chat-views {
+/* the chat's head: its two views, and ✕ closing it */
+.chat-head {
     flex: none;
-    margin: var(--space-2) var(--space-4) var(--space-1);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-2) var(--space-2) var(--space-1) var(--space-4);
+}
+.chat-views {
+    flex: 1;
 }
 .session-chat .chat-views button {
     flex: 1;
@@ -7867,11 +7916,13 @@ label.proposal-option {
     .conversation,
     .launcher-slot,
     .banners,
-    .view-tabs,
+    .app-bar,
+    .view-toolbar,
     .diagram-canvas,
     .canvas-controls {
         display: none !important;
     }
+    .app-body,
     .main,
     .canvas-pane,
     .center,

@@ -11,6 +11,8 @@ import type { LeftView, Panes } from './panes';
 
 /** Width of the activity bar (the collapsed left pane), and of the rail a closed dock leaves (its height below the canvas); see styles.css. */
 const BAR_WIDTH = 44;
+/** Height of the app bar, at the top of the page (styles.css). */
+const APP_BAR_HEIGHT = 44;
 const RAIL_SIZE = 28;
 /** What a resizer between two panes takes of the row (5px, overlapping both by 2px; see `.resizer-x` in styles.css). */
 const RESIZER_SPACE = 1;
@@ -36,17 +38,24 @@ export interface LeftList {
 
 const LIST_ICONS: Record<LeftView, LucideIcon> = { tree: FolderTree, problems: TriangleAlert, changes: Diff };
 const LISTS: readonly LeftView[] = ['tree', 'problems', 'changes'];
+/** The lists the activity bar picks; 問題 is opened from the app bar (it concerns the whole page). */
+const RAIL_LISTS: readonly LeftView[] = ['tree', 'changes'];
 
 /**
- * The page's layout, two pillars without a header: the workspace — the left pane (its activity bar and lists, the
- * brand and the workspace's name at its head, the health and the settings at its foot), the canvas with its banners,
- * and the dock (the inspector, right of or below the canvas) — and the conversation at the right end, when there is
- * one. What goes in each place is the caller's.
+ * The page's layout: the app bar across the top — the brand and the workspace's name, the world switch, then what
+ * concerns the whole page (問題, and a session's people, AI state and menu) — and under it two pillars: the workspace —
+ * the left pane (its activity bar and lists, the health and the settings at its foot), the canvas with its banners, and
+ * the dock (the inspector, right of or below the canvas) — and the conversation at the right end, when there is one.
+ * What goes in each place is the caller's.
  */
 export function AppShell(props: {
     panes: Panes;
     /** The workspace's name, after the brand. */
     workspaceName: string | undefined;
+    /** The world switch, after the workspace's name in the app bar. */
+    world: ReactNode;
+    /** Where a session puts its controls of the whole page, at the right end of the app bar. */
+    sessionSlot: (slot: HTMLDivElement | null) => void;
     lists: Record<LeftView, LeftList>;
     /** At the foot of the left pane (at the bottom of its activity bar when collapsed). */
     health: ReactNode;
@@ -87,131 +96,156 @@ export function AppShell(props: {
 
     return (
         <div className={`app motion-${motion}`}>
-            <div className={`left${leftOpen ? ' open' : ''}`} style={{ width: leftWidth }}>
-                <div className="left-head">
-                    {/* the logo for the theme (the other hidden by CSS); open, the text beside it names it, so the image is
-                        decorative; collapsed, the text is inert and the image names the brand */}
-                    <span className="brand-mark">
-                        <img className="brand-logo brand-logo-light" src={logoLight} alt={leftOpen ? '' : 'DomainTrail'} />
-                        <img className="brand-logo brand-logo-dark" src={logoDark} alt={leftOpen ? '' : 'DomainTrail'} />
-                    </span>
-                    <span className="brand-text" inert={!leftOpen}>
-                        <span className="brand">DomainTrail</span>
-                        {props.workspaceName && (
-                            <span className="workspace-name" data-tooltip={props.workspaceName}>
-                                {props.workspaceName}
-                            </span>
-                        )}
-                    </span>
-                </div>
-                <div className="left-main">
-                    <div className="activity-bar" role="tablist" aria-orientation="vertical" aria-label={t.listsLabel}>
-                        {LISTS.map((k) => {
-                            const Icon = LIST_ICONS[k];
-                            const active = leftOpen && leftView === k;
-                            const list = props.lists[k];
-                            return (
-                                <button
-                                    key={k}
-                                    role="tab"
-                                    aria-selected={active}
-                                    className={`activity${active ? ' active' : ''}`}
-                                    aria-label={t.listLabel(t.lists[k], list.count)}
-                                    data-tooltip={t.listHints[k]}
-                                    onClick={() => (active ? setExplorerOpen(false) : showLeft(k))}
-                                >
-                                    <Icon size={20} aria-hidden />
-                                    {list.badge}
-                                </button>
-                            );
-                        })}
+            <header className="app-bar">
+                <span className="app-bar-brand">
+                    {/* the logo for the theme (the other hidden by CSS), decorative: the text beside it names it */}
+                    <img className="brand-logo brand-logo-light" src={logoLight} alt="" />
+                    <img className="brand-logo brand-logo-dark" src={logoDark} alt="" />
+                    <span className="brand">DomainTrail</span>
+                    {props.workspaceName && (
+                        <span className="workspace-name" data-tooltip={props.workspaceName}>
+                            {props.workspaceName}
+                        </span>
+                    )}
+                </span>
+                {props.world}
+                <span className="app-bar-space" />
+                <ProblemsButton panes={panes} list={props.lists.problems} />
+                <div className="app-bar-session" ref={props.sessionSlot} />
+            </header>
+            <div className="app-body">
+                <div className={`left${leftOpen ? ' open' : ''}`} style={{ width: leftWidth }}>
+                    <div className="left-main">
+                        <div className="activity-bar" role="tablist" aria-orientation="vertical" aria-label={t.listsLabel}>
+                            {RAIL_LISTS.map((k) => {
+                                const Icon = LIST_ICONS[k];
+                                const active = leftOpen && leftView === k;
+                                const list = props.lists[k];
+                                return (
+                                    <button
+                                        key={k}
+                                        role="tab"
+                                        aria-selected={active}
+                                        className={`activity${active ? ' active' : ''}`}
+                                        aria-label={t.listLabel(t.lists[k], list.count)}
+                                        data-tooltip={t.listHints[k]}
+                                        onClick={() => (active ? setExplorerOpen(false) : showLeft(k))}
+                                    >
+                                        <Icon size={20} aria-hidden />
+                                        {list.badge}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <aside className="pane left-pane" style={{ width: explorerWidth }} inert={!leftOpen}>
+                            {/* every list stays mounted, so that switching keeps the tree's filter and the lists' scroll */}
+                            {LISTS.map((k) => (
+                                <div key={k} className="left-content" hidden={leftView !== k}>
+                                    {props.lists[k].content}
+                                </div>
+                            ))}
+                        </aside>
                     </div>
-                    <aside className="pane left-pane" style={{ width: explorerWidth }} inert={!leftOpen}>
-                        {/* every list stays mounted, so that switching keeps the tree's filter and the lists' scroll */}
-                        {LISTS.map((k) => (
-                            <div key={k} className="left-content" hidden={leftView !== k}>
-                                {props.lists[k].content}
-                            </div>
-                        ))}
-                    </aside>
-                </div>
-                <div className="left-foot">
-                    {props.health}
-                    {props.settings}
-                </div>
-            </div>
-            <Resizer
-                direction="x"
-                size={explorerWidth}
-                min={180}
-                max={480}
-                open={leftOpen}
-                collapsed={0}
-                onResize={setExplorerWidth}
-                onOpenChange={setExplorerOpen}
-            />
-            <div className={`main main-${dock}`}>
-                <div className="canvas-pane">
-                    <div className="banners">{props.banners}</div>
-                    {props.workspace}
-                    {conversation && !conversationOpen && <div className="launcher-slot">{conversation.launcher}</div>}
+                    <div className="left-foot">
+                        {props.health}
+                        {props.settings}
+                    </div>
                 </div>
                 <Resizer
-                    key={dock}
-                    direction={right ? 'x' : 'y'}
-                    size={dockSize}
-                    min={right ? 300 : 160}
-                    max={() => (right ? window.innerWidth - leftWidth - conversationSpace - MIN_CANVAS_WIDTH : window.innerHeight - MIN_CANVAS_HEIGHT)}
-                    invert
-                    open={dockOpen}
-                    collapsed={RAIL_SIZE}
-                    onResize={right ? setInspectorWidth : setInspectorHeight}
-                    onOpenChange={setDockOpen}
+                    direction="x"
+                    size={explorerWidth}
+                    min={180}
+                    max={480}
+                    open={leftOpen}
+                    collapsed={0}
+                    onResize={setExplorerWidth}
+                    onOpenChange={setExplorerOpen}
                 />
-                <div
-                    className={`dock dock-${dock}${dockOpen ? ' open' : ''}${panes.inspectorMoving ? ' moving' : ''}`}
-                    style={right ? { width: dockOpen ? dockSize : RAIL_SIZE } : { height: dockOpen ? dockSize : RAIL_SIZE }}
-                >
-                    <div className="rail" inert={dockOpen}>
-                        <button
-                            className="icon-button"
-                            onClick={() => panes.setInspectorOpen(true)}
-                            data-tooltip={t.openInspector}
-                            aria-label={t.openInspector}
-                        >
-                            {right ? <PanelRightOpen size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
-                        </button>
+                <div className={`main main-${dock}`}>
+                    <div className="canvas-pane">
+                        <div className="banners">{props.banners}</div>
+                        {props.workspace}
+                        {conversation && !conversationOpen && <div className="launcher-slot">{conversation.launcher}</div>}
                     </div>
-                    <aside className="pane" style={right ? { width: dockSize } : { width: bottomWidth, height: dockSize }} inert={!dockOpen}>
-                        {props.inspector(menu)}
-                    </aside>
-                </div>
-            </div>
-            {conversation && (
-                <>
-                    {conversationOpen && (
-                        <Resizer
-                            direction="x"
-                            size={conversationWidth}
-                            min={300}
-                            max={() => window.innerWidth - leftWidth - MIN_CANVAS_WIDTH}
-                            invert
-                            open={conversationOpen}
-                            collapsed={0}
-                            onResize={setConversationWidth}
-                            onOpenChange={setConversationOpen}
-                        />
-                    )}
-                    <div className={`conversation${conversationOpen ? ' open' : ''}`} style={{ width: conversationSpace }} inert={!conversationOpen}>
-                        <div className="pane conversation-inner" style={{ width: conversationWidth }}>
-                            {conversation.content}
+                    <Resizer
+                        key={dock}
+                        direction={right ? 'x' : 'y'}
+                        size={dockSize}
+                        min={right ? 300 : 160}
+                        max={() =>
+                            right
+                                ? window.innerWidth - leftWidth - conversationSpace - MIN_CANVAS_WIDTH
+                                : window.innerHeight - APP_BAR_HEIGHT - MIN_CANVAS_HEIGHT
+                        }
+                        invert
+                        open={dockOpen}
+                        collapsed={RAIL_SIZE}
+                        onResize={right ? setInspectorWidth : setInspectorHeight}
+                        onOpenChange={setDockOpen}
+                    />
+                    <div
+                        className={`dock dock-${dock}${dockOpen ? ' open' : ''}${panes.inspectorMoving ? ' moving' : ''}`}
+                        style={right ? { width: dockOpen ? dockSize : RAIL_SIZE } : { height: dockOpen ? dockSize : RAIL_SIZE }}
+                    >
+                        <div className="rail" inert={dockOpen}>
+                            <button
+                                className="icon-button"
+                                onClick={() => panes.setInspectorOpen(true)}
+                                data-tooltip={t.openInspector}
+                                aria-label={t.openInspector}
+                            >
+                                {right ? <PanelRightOpen size={16} aria-hidden /> : <PanelBottomOpen size={16} aria-hidden />}
+                            </button>
                         </div>
+                        <aside className="pane" style={right ? { width: dockSize } : { width: bottomWidth, height: dockSize }} inert={!dockOpen}>
+                            {props.inspector(menu)}
+                        </aside>
                     </div>
-                </>
-            )}
+                </div>
+                {conversation && (
+                    <>
+                        {conversationOpen && (
+                            <Resizer
+                                direction="x"
+                                size={conversationWidth}
+                                min={300}
+                                max={() => window.innerWidth - leftWidth - MIN_CANVAS_WIDTH}
+                                invert
+                                open={conversationOpen}
+                                collapsed={0}
+                                onResize={setConversationWidth}
+                                onOpenChange={setConversationOpen}
+                            />
+                        )}
+                        <div className={`conversation${conversationOpen ? ' open' : ''}`} style={{ width: conversationSpace }} inert={!conversationOpen}>
+                            <div className="pane conversation-inner" style={{ width: conversationWidth }}>
+                                {conversation.content}
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
             {props.overlays}
             <Tooltips />
         </div>
+    );
+}
+
+/** 問題 in the app bar: the number of errors (else warnings) as its badge; it opens the left pane on the problems, or closes it. */
+function ProblemsButton({ panes, list }: { panes: Panes; list: LeftList }) {
+    const t = useT();
+    const active = panes.explorerOpen && panes.leftView === 'problems';
+    return (
+        <button
+            className={`activity app-bar-problems${active ? ' active' : ''}`}
+            aria-pressed={active}
+            aria-label={t.listLabel(t.lists.problems, list.count)}
+            data-tooltip={t.listHints.problems}
+            onClick={() => (active ? panes.setExplorerOpen(false) : panes.showLeft('problems'))}
+        >
+            <TriangleAlert size={18} aria-hidden />
+            {list.badge}
+        </button>
     );
 }
 

@@ -39,8 +39,9 @@ const CRUMB = ' › ';
 const CONDITION = ' · ';
 
 /**
- * The line above a printed diagram (and an exported one, if asked): the workspace, the view and what in it is shown,
- * then the conditions it is shown in, e.g. `ws › イベントストーミング › 住民票 › コンビニでの発行 · デザインレベル · 例外を含む`.
+ * The line above a printed diagram (and an exported one, if asked): the workspace, the world, the view and what in it
+ * is shown, then the conditions it is shown in, e.g. `ws › ドメインモデル › 構造図 · 詳細` or
+ * `ws › イベントストーミング › 住民票 › コンビニでの発行 · デザインレベル · 例外を含む` (the storming world has one view).
  * Names follow the display mode, as on the screen.
  */
 export function sheetHeading(workspace: string | undefined, subject: SheetSubject, t: Messages, mode: DisplayMode): string {
@@ -49,16 +50,16 @@ export function sheetHeading(workspace: string | undefined, subject: SheetSubjec
     const conditions: string[] = [];
     switch (subject.view) {
         case 'contextMap':
-            crumbs.push(t.views.contextMap);
+            crumbs.push(t.worlds.model, t.views.contextMap);
             if (subject.all) conditions.push(t.sheet.allContexts);
             break;
         case 'structure':
-            crumbs.push(t.views.structure);
+            crumbs.push(t.worlds.model, t.views.structure);
             if (subject.contexts.length) crumbs.push(subject.contexts.map(name).join(', '));
             conditions.push(t.sheet.structureLevels[subject.level]);
             break;
         case 'storming': {
-            crumbs.push(t.views.storming, name(subject.storming));
+            crumbs.push(t.worlds.storming, name(subject.storming));
             const scope = subject.scope;
             if (scope?.kind === 'all') crumbs.push(t.allTimelines);
             else if (scope?.kind === 'stage') crumbs.push(name(scope.stage));
@@ -71,7 +72,7 @@ export function sheetHeading(workspace: string | undefined, subject: SheetSubjec
             break;
         }
         case 'states':
-            crumbs.push(t.tabs.states, nameIn(mode, subject.aggregate.name, subject.aggregate.label));
+            crumbs.push(t.worlds.model, t.tabs.states, nameIn(mode, subject.aggregate.name, subject.aggregate.label));
             break;
     }
     return [crumbs.join(CRUMB), ...conditions].join(CONDITION);

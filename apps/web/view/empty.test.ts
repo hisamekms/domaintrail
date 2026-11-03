@@ -3,7 +3,8 @@ import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
 import type { StormingView } from '@domaintrail/visualization/protocol';
 import { MESSAGES } from '../i18n';
-import { canvasShows, emptyLine, isEmptyView, VIEW_TABS } from './empty';
+import { canvasShows, emptyLine, isEmptyView } from './empty';
+import { MODEL_VIEWS } from './worlds';
 
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- only the number of BCs matters here
 const model = (contexts: number): DomainModel => ({ contexts: Array.from({ length: contexts }, () => ({})), elements: [] }) as unknown as DomainModel;
@@ -17,6 +18,7 @@ const error = (file: string): Diagnostic => ({
     code: 'SYNTAX',
     message: 'x',
 });
+const VIEWS = [...MODEL_VIEWS, 'storming'] as const;
 const payload = (p: { model?: DomainModel | null; stormings?: StormingView[]; diagnostics?: Diagnostic[] }): Parameters<typeof isEmptyView>[1] => ({
     model: p.model ?? null,
     stormings: p.stormings ?? [],
@@ -24,12 +26,8 @@ const payload = (p: { model?: DomainModel | null; stormings?: StormingView[]; di
 });
 
 describe('a view with nothing yet', () => {
-    test('every tab shows, the storming tab too, even without a storming', () => {
-        expect(VIEW_TABS).toEqual(['contextMap', 'structure', 'catalog', 'storming']);
-    });
-
     test('an empty workspace: every view is empty', () => {
-        for (const view of VIEW_TABS) expect(isEmptyView(view, payload({}))).toBe(true);
+        for (const view of VIEWS) expect(isEmptyView(view, payload({}))).toBe(true);
     });
 
     test("the model's views are empty without a BC, the storming view without a storming", () => {
@@ -51,7 +49,7 @@ describe('a view with nothing yet', () => {
 
     test("the canvas shows nothing under an empty view, never the previous view's graph", () => {
         // stormings only: from the storming view to the empty catalog, context map and structure
-        for (const view of VIEW_TABS) expect(canvasShows(view, true, false)).toBe('nothing');
+        for (const view of VIEWS) expect(canvasShows(view, true, false)).toBe('nothing');
         // a model only: the storming view has no graph either
         expect(canvasShows('storming', true, false)).toBe('nothing');
         // even a graph of an empty view (a context map of no BC) is not drawn
