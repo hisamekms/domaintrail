@@ -41,7 +41,9 @@ export type Clause =
     /** `status open`: the word as written (only `open` and `resolved` are valid). */
     | { type: 'status'; value: string; range: SourceRange }
     /** `resolution "..."`: the text without its quotes, escapes resolved. */
-    | { type: 'resolution'; text: string; range: SourceRange };
+    | { type: 'resolution'; text: string; range: SourceRange }
+    /** `level design`: the word as written, hyphens included (only `design`, on an event, is valid). */
+    | { type: 'level'; value: string; range: SourceRange };
 
 interface Declaration {
     /** Local ID, unique in the storming across kinds. */
@@ -127,6 +129,15 @@ export const RELATION_RULES: Readonly<Partial<Record<NodeElementKind, Readonly<P
 
 /** The element kinds that may have a `ref` to `.dt` (spec §5.1). */
 export const REF_KINDS: readonly NodeElementKind[] = ['event', 'aggregate', 'command'];
+
+/** The only valid value of a `level` clause. */
+export const DESIGN_LEVEL = 'design';
+
+/**
+ * Whether an element is an event shown at Design Level only (`level design`, spec §6). Without the clause, or with an
+ * invalid one (reported by the validator, S004/S006/S016), it is shown at both levels: a typo never hides an event.
+ */
+export const isDesignLevelOnly = (el: NodeElement): boolean => el.kind === 'event' && el.clauses.find((c) => c.type === 'level')?.value === DESIGN_LEVEL;
 
 // ---- IDs and diagnostics ----
 

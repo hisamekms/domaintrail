@@ -144,6 +144,27 @@ describe('formatStorming', () => {
         );
     });
 
+    test('`level`: no space around its hyphens, and the clauses keep their written order', () => {
+        const text = 'storming S { event A { level design ref X.A } event B { ref X.B level design } event C { level  big -  picture } }';
+        const out = lines(
+            'storming S {',
+            '  event A {',
+            '    level design',
+            '    ref X.A',
+            '  }',
+            '  event B {',
+            '    ref X.B',
+            '    level design',
+            '  }',
+            '  event C {',
+            '    level big-picture',
+            '  }',
+            '}',
+        );
+        expect(formatStorming(text)).toBe(out);
+        expect(formatStorming(out)).toBe(out);
+    });
+
     test('a syntax error throws FormatError', () => {
         expect(() => formatStorming('storming S { event }')).toThrow(FormatError);
         expect(() => formatStorming('storming S { timeline T { ref A.B } }')).toThrow(FormatError);

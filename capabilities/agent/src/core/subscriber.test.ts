@@ -203,6 +203,20 @@ describe('the prompt', () => {
     });
 });
 
+describe('events at Design Level only', () => {
+    test('rule 15 gives the syntax of `level design`; when to mark an event is the practice, not repeated in the rules', () => {
+        const prompt = buildPrompt(input([frozen({ kind: 'DtesStorming', storming: 'S' }, 'x')]), new Map(), 'n');
+        expect(prompt).toContain(
+            "15. `level design` is the last clause of a `.dtes` event's body and shows the event at Design Level only; removing\n   it shows the event at Big Picture too.",
+        );
+        expect(prompt).toContain('There is no other level (`level big-picture` is an error, S016). Never put\n   it on a business event of the Big Picture.');
+        expect(prompt).not.toContain('(a reservation, an authorisation');
+        // short labels: one clause citing the warning; the practice says how short
+        expect(prompt).toContain('Keep its\n   labels short (`dt check` warns, S015).');
+        expect(prompt).not.toContain('12 Japanese characters');
+    });
+});
+
 describe('the session so far, approved proposals and answering instead of editing (ADR 0030)', () => {
     const names = new Map([['dev:bob', 'Bob']]);
 

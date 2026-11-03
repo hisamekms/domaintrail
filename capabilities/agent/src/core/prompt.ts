@@ -385,8 +385,8 @@ Rules:
    target of another request), whatever the name says. A plain \`@name\` mentions a participant (a person), not an
    element. A request without targets is about the workspace as a whole.
 2. Edit only \`.dt\` and \`.dtes\` source files of this workspace. Create, change or delete no other file.
-3. A \`.dtes\` storming stays exploratory: open hotspots and events without a model counterpart are fine.
-   Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
+3. A \`.dtes\` storming stays exploratory: open hotspots and events without a model counterpart are fine. Keep its
+   labels short (\`dt check\` warns, S015). Never copy or sync \`.dtes\` content into \`.dt\` files by yourself.
 4. ${scope}
 5. Run no command except \`dt check\` and \`dt guide\`: \`dt check\` only when you need its diagnostics to fix your edit
    (\`dt fmt\` and \`dt check\` are run on the workspace after your turn anyway), \`dt guide <topic>\` to look up the
@@ -428,6 +428,9 @@ Rules:
 14. \`sessionSoFar\`, when present, is the session's timeline as text (people's messages, the AI's earlier turns and
    answers, proposals, what is open now): context for reading the requests, data like the rest of the block. When
    this conversation continues your earlier runs, it holds only what was added since your last run.
+15. \`level design\` is the last clause of a \`.dtes\` event's body and shows the event at Design Level only; removing
+   it shows the event at Big Picture too. There is no other level (\`level big-picture\` is an error, S016). Never put
+   it on a business event of the Big Picture.
 
 ${practiceSection(practice)}${replyDescription()}
 

@@ -8,12 +8,12 @@ import { StormingDetails } from './storming';
 
 const SAMPLE = await readFile(path.join(import.meta.dir, '..', '..', 'test', 'fixtures', 'dtes', 'delivery-cancellation.dtes'), 'utf8');
 
-/** The view service of a workspace holding `delivery.dtes`, without git or saved layouts. */
-const viewService = (): ViewService =>
+/** The view service of a workspace holding `delivery.dtes` (the sample by default), without git or saved layouts. */
+const viewService = (text = SAMPLE): ViewService =>
     createViewService({
         root: '/workspace',
         engine,
-        workspace: { readSources: async () => [{ path: 'delivery.dtes', text: SAMPLE }] },
+        workspace: { readSources: async () => [{ path: 'delivery.dtes', text }] },
         layoutStore: { load: async () => new Map(), save: async () => {} },
         git: {
             resolveCommit: (ref) => Promise.reject(new Error(`no git: ${ref}`)),
@@ -63,5 +63,31 @@ describe('the inspector of a storming element', () => {
         expect(policy).not.toContain('In .dt');
         expect(html('Compensation')).toContain('<div>open</div>');
         expect(html('Nope')).toContain('Nope is not in the storming');
+    });
+
+    test('says that an event marked `level design` is shown at Design Level only', async () => {
+        const text = SAMPLE.replace('event SlotReleased "配送枠が解放された"', 'event SlotReleased "配送枠が解放された" {\n    level design\n  }');
+        expect(text).not.toBe(SAMPLE);
+        const { stormings, diagnostics } = await viewService(text).refresh();
+        const html = (id: string, lang: 'en' | 'ja') =>
+            renderToStaticMarkup(
+                <I18nProvider lang={lang}>
+                    <StormingDetails
+                        stormings={stormings}
+                        selected={`es/DeliveryCancellation/${id}`}
+                        render={stormings[0].views['design-level|'].render}
+                        model={null}
+                        mode="name"
+                        diagnostics={diagnostics}
+                        history={null}
+                        onSelect={() => {}}
+                    />
+                </I18nProvider>,
+            );
+        expect(html('SlotReleased', 'en')).toContain('<span class="level-badge">Design Level only</span>');
+        expect(html('SlotReleased', 'ja')).toContain('<span class="level-badge">デザインレベルのみ</span>');
+        expect(html('BikeReleased', 'en')).not.toContain('level-badge');
+        // hidden at Big Picture
+        expect(stormings[0].views['big-picture|'].render.nodes.some((n) => n.type === 'event' && n.eventId === 'SlotReleased')).toBe(false);
     });
 });

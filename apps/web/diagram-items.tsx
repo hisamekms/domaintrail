@@ -2,9 +2,11 @@
 // size of an item's box, what goes in it, and the outline drawn around it while it is hovered or selected. A canvas
 // wraps each in its own container (React Flow's custom nodes and edges in `view/flow-canvas.tsx`), at the item's place
 // on the page.
-import { Fragment, type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useLayoutEffect, useReducer, useRef, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from 'react';
 import { TRANSITION_LINE_HEIGHT, TRANSITION_SUB_LINE_HEIGHT, TRANSITION_SUB_SIZE } from '@domaintrail/visualization';
 import type { DiagMark, EdgeProps, GroupProps, InternalProps, NodeProps, Point } from './scene';
+import { fitKey, fitLabel, fontLoadCount, NOTE_KINDS, rememberedFit, rememberFit, subscribeFonts, type LabelFit } from './note-fit';
+import { TOOLTIP_ATTR } from './tooltip';
 
 /** A box's size and text scale (`--s`), as its CSS expects them. */
 const boxStyle = (p: { w: number; h: number; scale: number }): CSSProperties => ({ width: p.w, height: p.h, ['--s' as string]: p.scale });
@@ -27,7 +29,7 @@ export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent 
         <>
             <div className="dn-head">
                 {p.stereotype && <div className="dn-stereo">{p.stereotype}</div>}
-                <div className="dn-label">{p.label}</div>
+                {NOTE_KINDS.has(p.kind) ? <NoteLabel p={p} /> : <div className="dn-label">{p.label}</div>}
             </div>
             {p.rows.length > 0 && (
                 <div className="dn-body">
@@ -52,6 +54,65 @@ export function NodeContent({ p, Marks }: { p: NodeProps; Marks: MarksComponent 
             {(p.badge || p.diag !== 'none') && <Marks badge={p.badge} diag={p.diag} />}
         </>
     );
+}
+
+/**
+ * A sticky note's label, fitted to the note (`note-fit.ts`): measured once per label, note size and fonts loaded, as
+ * the browser wraps it, and not again on pan or zoom. Clamped, it shows the whole label on hover.
+ */
+function NoteLabel({ p }: { p: NodeProps }): ReactNode {
+    const ref = useRef<HTMLDivElement>(null);
+    const fonts = useSyncExternalStore(subscribeFonts, fontLoadCount, fontLoadCount);
+    const [, measured] = useReducer((n: number) => n + 1, 0);
+    const key = fitKey(p.label, p.w, p.h, p.scale, fonts);
+    useLayoutEffect(() => {
+        if (!ref.current || rememberedFit(key)) return;
+        const fit = measureLabel(ref.current, p.scale);
+        if (!fit) return;
+        rememberFit(key, fit);
+        measured();
+    }, [key, p.scale]);
+    const fit = rememberedFit(key);
+    const style: CSSProperties | undefined = fit && {
+        fontSize: fit.fontSize,
+        lineHeight: `${fit.lineHeight}px`,
+        ...(fit.clamp ? { WebkitLineClamp: fit.clamp } : {}),
+    };
+    return (
+        <div ref={ref} className={fit?.clamp ? 'dn-label dn-label-clamped' : 'dn-label'} style={style} {...(fit?.clamp ? { [TOOLTIP_ATTR]: p.label } : {})}>
+            {p.label}
+        </div>
+    );
+}
+
+/**
+ * The fit of a note's label (`label`, in its `.dn-head`), measured on a hidden copy of it as wide as it is: its room is
+ * the head's height less its padding and the stereotype. None while the note is not laid out (a hidden view).
+ */
+function measureLabel(label: HTMLElement, scale: number): LabelFit | undefined {
+    const head = label.parentElement;
+    if (!head || head.clientHeight === 0 || label.clientWidth === 0) return undefined;
+    const padding = getComputedStyle(head);
+    const stereotype = label.previousElementSibling instanceof HTMLElement ? label.previousElementSibling.offsetHeight : 0;
+    const room = head.clientHeight - parseFloat(padding.paddingTop) - parseFloat(padding.paddingBottom) - stereotype;
+    const probe = document.createElement('div');
+    probe.className = 'dn-label';
+    probe.textContent = label.textContent;
+    Object.assign(probe.style, { position: 'absolute', visibility: 'hidden', left: '0', top: '0', width: `${label.clientWidth}px` });
+    head.appendChild(probe);
+    try {
+        return fitLabel(
+            (fontSize, lineHeight) => {
+                probe.style.fontSize = `${fontSize}px`;
+                probe.style.lineHeight = `${lineHeight}px`;
+                return probe.scrollHeight;
+            },
+            room,
+            scale,
+        );
+    } finally {
+        probe.remove();
+    }
 }
 
 export const internalClassName = (p: InternalProps): string => `di di-change-${p.change} di-diag-${p.diag}`;

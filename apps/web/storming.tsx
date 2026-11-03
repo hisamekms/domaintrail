@@ -7,6 +7,7 @@ import {
     declarations,
     type EventOccurrence,
     firstDeclarations,
+    isDesignLevelOnly,
     type NodeElement,
     type Storming,
     stormingTimelines,
@@ -207,6 +208,7 @@ export function StormingDetails({
                 {history}
                 <div className="inspector-row">
                     <span className={`kind kind-es-${item.kind ?? 'storming'}`}>{item.kind ? t.esKinds[item.kind] : t.inStorming}</span>
+                    {declaration?.kind === 'event' && isDesignLevelOnly(declaration) && <span className="level-badge">{t.designLevelOnly}</span>}
                 </div>
                 <div className="inspector-title">
                     <h2>{mode === 'both' ? labelOrName({ name: item.id, label: item.label }) : nameIn(mode, item.id, item.label)}</h2>

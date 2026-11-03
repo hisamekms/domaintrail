@@ -1893,6 +1893,9 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     ref Billing.InvoicePaid
   }
   event PaymentFailed "支払に失敗した"
+  event PaymentAuthorized "与信が通った" {
+    level design // a detail of the mechanism: shown at Design Level only
+  }
 
   actor Customer "顧客"
   external PaymentService "決済サービス" // an external system that issues a command, not one that is called
@@ -1934,6 +1937,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
     OrderPlaced
     OrderConfirmed
     InvoiceIssued
+    PaymentAuthorized // hidden at Big Picture: InvoiceIssued is then followed by InvoicePaid
     InvoicePaid
   }
   timeline PaymentRetry "支払の再試行" {
@@ -1966,7 +1970,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 
 | Element | What it is | Its clauses |
 |---|---|---|
-| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event` |
+| `event` | something that happened in the business, a fact in the past tense | `ref Context.Event`, `level design` |
 | `actor` | a person or role that may issue commands | none |
 | `external` | an external system that may issue commands | none |
 | `command` | an operation someone attempts | `ref Context.Aggregate.command`, `actor`, `reads`, `target` (at most one), `emits` |
@@ -1989,6 +1993,10 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
 - **Timelines** hold event IDs and groups only. A timeline is partial and proves no causality; an event may appear in
   several timelines and several times in one, each an occurrence of its own; timelines are never merged into one global
   order. A group is a set: its order and ID carry no meaning. An event in no timeline is fine.
+- **Design Level only.** An event with `level design` is a detail of the mechanism (a reservation, an authorisation,
+  an internal failure or retry) rather than a business fact: Big Picture leaves it out, and Design Level shows it.
+  Without the clause, an event is shown at both levels; `level design` is the only level (S016), on events only, and
+  its place is the last clause, after the `ref`. To show such an event at Big Picture too, remove the clause.
 - **Hotspots** are `open` unless `status resolved`, which needs a `resolution "…"`. Resolved means the business agreed,
   not that the `.dt` model has it. Keep the resolved hotspots that matter (an exception, a boundary, an invariant) and
   delete the trivial ones: git keeps the history.
@@ -1996,7 +2004,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   completeness (events in no timeline or not referenced, commands without `emits`, elements without `ref`), timeline
   order against the causal relations, and policies across contexts.
 - `dt fmt` formats a storming: 2 spaces per level, each element, clause, timeline step and group event on its own line,
-  an element without clauses on one line, comments kept.
+  an element without clauses on one line, comments kept. It never reorders clauses.
 
 <!-- topic: storming-refs -->
 ### References to the model (`ref`)
@@ -2036,8 +2044,11 @@ hotspot is a decision to model (an error, a requirement, an invariant). Then add
 A storming is viewed along two independent axes, neither of which changes the `.dtes`:
 
 - **Level.** *Big Picture* shows the events, the timelines' order, groups and hotspots. *Design Level* adds actors,
-  external systems, commands, policies, aggregates, read models and the relations. Big Picture hides the details of
-  the same file; it is not an earlier version, and the events are all there.
+  external systems, commands, policies, aggregates, read models and the relations, and the events marked
+  `level design`. Big Picture hides the details of the same file; it is not an earlier version, and every event
+  without `level design` is there. A timeline's order there skips the hidden events (their neighbours are joined),
+  a group of hidden events only is not drawn, timelines that differ only in hidden events share their start, and a
+  hotspot on a hidden event is shown without its line.
 - **Scope.** The *integrated canvas* shows every timeline, the events in no timeline and every element. *One timeline*
   shows its events, plus each one-hop path event → policy → command → event whose two events are both in that timeline
   (with the command's actors, read models and target), and the hotspots on its events. Longer chains are not followed,
@@ -2049,14 +2060,17 @@ to its note. One timeline draws each occurrence of an event, and a group as a fr
 make two occurrences the same happening, so read a path along one timeline's name. Solid arrows are type-level causal
 relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the other relations (`actor`, `reads`,
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
+Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
+«…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
 The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
 `dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
-its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in.
+its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
+デザインレベルのみ for an event marked `level design`).
 
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S016 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID.
 
@@ -2102,7 +2116,7 @@ storming Checkout {
 }
 ```
 
-**S004**: more than one `target`, `ref`, hotspot `on`, `status` or `resolution`. Keep one; a command with two main
+**S004**: more than one `target`, `ref`, hotspot `on`, `status`, `resolution` or `level`. Keep one; a command with two main
 aggregates is two commands, or a hotspot.
 
 ```dtes
@@ -2134,7 +2148,7 @@ storming Checkout {
 ```
 
 **S006**: a clause the element does not take: relations belong to commands (`actor`, `reads`, `target`, `emits`),
-policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots. Move it to the element it
+policies (`on`, `issues`) and hotspots (`on`), `status` and `resolution` to hotspots, `level` to events. Move it to the element it
 belongs to (an event's outcome is the command's `emits`).
 
 ```dtes
@@ -2260,6 +2274,30 @@ storming Checkout {
 }
 ```
 
+**S015** (warning): a label too long for its sticky note. Every note is the same size; its label is drawn smaller to
+fit, down to a floor, and one that does not fit even then is cut short with «…» (the whole label shows on hover and in
+the inspector). Shorten it, to about 12 Japanese characters (an event in the past tense), and put the details in a
+`///` comment. An element without a label shows its ID, which is checked the same way.
+
+```dtes
+// S015
+storming Errands {
+  event CertificateReissued "マイナンバーカードの暗証番号を三回間違えてロックされたので市役所の窓口で再設定の手続きをしてから改めてコンビニのマルチコピー機で住民票の写しを発行し直した"
+}
+```
+
+**S016**: a `level` other than `design`. `level big-picture` is not written: an event without `level` is already shown
+at both levels. Remove it, or write `level design` for an event to show at Design Level only.
+
+```dtes
+// S016
+storming Checkout {
+  event PaymentAuthorized {
+    level big-picture
+  }
+}
+```
+
 <!-- topic: storming-practice -->
 ### Event Storming with DomainTrail
 
@@ -2339,9 +2377,9 @@ storming](#diagnostics-of-a-storming).
 | S001 | `.dtes`: the IDs of a storming's declarations are unique across kinds (groups and timelines included), and storming IDs are unique in the workspace |
 | S002 | `.dtes`: a relation target or timeline step names a declaration of its storming |
 | S003 | `.dtes`: a reference names a declaration of the right kind (`target` an aggregate, `reads` a read model, `actor` an actor or external, `emits` / `on` and timeline steps an event, `issues` a command) |
-| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status` and `resolution` per element |
+| S004 | `.dtes`: at most one `target`, `ref`, hotspot `on`, `status`, `resolution` and `level` per element |
 | S005 | `.dtes`: only events, aggregates and commands have a `ref` |
-| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots |
+| S006 | `.dtes`: an element has only the clauses of its kind: relations in commands, policies and hotspots, `status` / `resolution` in hotspots, `level` in events |
 | S007 | `.dtes`: an event appears at most once in a group |
 | S008 | `.dtes`: a policy has at least one `on` and one `issues` |
 | S009 | `.dtes`: a hotspot's `status` is `open` or `resolved`; `resolved` needs a `resolution`, `open` has none |
@@ -2350,6 +2388,8 @@ storming](#diagnostics-of-a-storming).
 | S012 | (warning) `.dtes`: a command's `ref` is a command of the aggregate that its `target`'s `ref` names |
 | S013 | (warning) `.dtes`: a command `emits` no event whose `ref` its `.dt` command never emits (`.dt` `emits` is exhaustive) |
 | S014 | (warning) `.dtes`: a type-level cycle policy → command → event → policy (possible, not an infinite loop) |
+| S015 | (warning) `.dtes`: a label fits its sticky note (one too long even at the smallest font is cut short with «…») |
+| S016 | `.dtes`: an event's `level` is `design` (Design Level only); without `level`, it is shown at both levels |
 
 <!-- topic: show -->
 ## Looking up one element

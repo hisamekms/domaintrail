@@ -19,6 +19,9 @@ storming OrderToCash "注文から入金まで" {
     ref Billing.InvoicePaid
   }
   event PaymentFailed "支払に失敗した" // an exception the .dt model does not have yet
+  event PaymentAuthorized "与信が通った" {
+    level design // how the payment service works, not a business fact: hidden at Big Picture
+  }
 
   actor Customer "顧客"
   external PaymentService "決済サービス"
@@ -84,6 +87,7 @@ storming OrderToCash "注文から入金まで" {
     ItemAdded
     OrderConfirmed
     InvoiceIssued
+    PaymentAuthorized
     InvoicePaid
   }
   timeline PaymentRetry "支払の再試行" {
