@@ -987,6 +987,11 @@ about, and the AI, when such a reply is sent to it, gets the original's words.
   can be removed. The posted reply shows `↩ 田中: <head of the body>` on one muted line at its top (the body on one
   line, elements and people by name, cut to the room); a click jumps to the message and flashes it. When the original
   is not in the session's state, nothing shows, as for a run.
+  A reply right under what it replies to, a person's or the AI's (`web/session/threads.ts`), shows no such line: it
+  hangs, indented, on a thin decorative line from that row's avatar (visually hidden 「返信: 田中」 for screen readers),
+  and the replies right after it to the same row or to a reply on it hang on the same line; with anything in between,
+  the line quoting it shows. A reply to a run hangs on its card the same way; in Solo the AI's card under a message,
+  and the answer or the run card in its place, hang on the message.
 - **Attention.** A reply to my message (`repliesToMe`: it replies to a message of mine, and is not mine) is
   highlighted in my stream only, as a message that mentions me is (`mentions-me`). Nothing else notifies: the
   launcher's `@ n` counts mentions only.
