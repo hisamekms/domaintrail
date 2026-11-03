@@ -6,6 +6,7 @@ import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
 import type { Messages } from '../i18n';
 import { SessionApiError } from './api';
+import { isAiAuthor } from './ai';
 import { parseBody } from './mentions';
 import { useTargetNaming } from './naming';
 import { initials, participantColor } from './presence';
@@ -128,7 +129,8 @@ export function MentionedText(props: {
                     const id = mentions[seg.index];
                     const name = `@${props.nameOf?.(id) ?? seg.name}`;
                     const { onPerson } = props;
-                    return onPerson ? (
+                    // the AI is no one to show among the participants
+                    return onPerson && !isAiAuthor(id) ? (
                         <a key={i} className="chat-mention person" data-person={id} onClick={() => onPerson(id)}>
                             {name}
                         </a>

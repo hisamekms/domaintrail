@@ -77,7 +77,7 @@ export function quoteDisplay(runs: readonly CardRun[], i: number): QuoteDisplay 
 }
 
 /** What an applied message shows of its latest run. */
-export type MarkState = 'queued' | 'running' | 'clarification' | 'done' | 'partial' | 'skipped' | 'question' | 'declined' | 'failed' | 'cancelled';
+export type MarkState = 'queued' | 'running' | 'clarification' | 'done' | 'partial' | 'skipped' | 'question' | 'answered' | 'declined' | 'failed' | 'cancelled';
 
 export interface MessageMark {
     readonly state: MarkState;
@@ -85,8 +85,8 @@ export interface MessageMark {
     readonly card: string;
 }
 
-// `Answered` (ADR 0030: the run answered instead of editing) shows as done until M6 draws it as a reply bubble
-const PROGRESS: Record<RequestProgress, MarkState> = { Done: 'done', Partial: 'partial', Skipped: 'skipped', Question: 'question', Answered: 'done' };
+// `Answered` (ADR 0030): the run judged the message a question and answered it instead of editing
+const PROGRESS: Record<RequestProgress, MarkState> = { Done: 'done', Partial: 'partial', Skipped: 'skipped', Question: 'question', Answered: 'answered' };
 
 /** The state of a message in a run: the run's, or for an ended run with a reply, what it says of the message. */
 function markState(run: RunJson, request: string): MarkState {

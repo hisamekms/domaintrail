@@ -27,13 +27,14 @@ const paths = (value: unknown): string[] =>
         .sort();
 
 /**
- * Latin words allowed in Japanese messages: abbreviations, the DSL's keywords and file names, which are written as
+ * Latin words allowed in Japanese messages: abbreviations, the DSL's keywords and file names, product names (`Clef`), which are written as
  * they are in Japanese too (the workspace's `.domaintrail` directory among them), git's (`git`, and the refs `main` and `HEAD` given as examples), and the names of keys on
  * the keyboard. `X` is the sample argument.
  */
 const LATIN_IN_JA = new Set([
     'AI',
     'BC',
+    'Clef',
     'DSL',
     'ID',
     'OS',

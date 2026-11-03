@@ -7192,3 +7192,148 @@ button.add-to-request.added:hover {
     border-color: var(--border-strong);
     color: var(--text);
 }
+
+/* ---- the AI as a participant (ADR 0030) ---- */
+/* an addressed message the AI is reading: its mark in small and a quiet "…" breathing, in the status slot */
+.chat-ai-working {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.chat-ai-working > .session-avatar,
+.chat-composer-ai > .session-avatar {
+    --avatar-size: calc(var(--fs-small) * 4 / 3);
+}
+.chat-ai-working > .session-avatar > svg,
+.chat-composer-ai > .session-avatar > svg {
+    width: calc(var(--avatar-size) * 0.62);
+    height: calc(var(--avatar-size) * 0.62);
+}
+.chat-ai-dots {
+    animation: chat-blink 1.2s ease-in-out infinite;
+}
+/* the AI gave up answering: one small line in the danger's ink under the text */
+.chat-ai-given-up {
+    margin: 0;
+    color: var(--status-danger-ink);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+/* the composer: the AI's mark beside 送る while the message will reach it */
+.chat-composer-ai {
+    display: inline-flex;
+    opacity: 0.85;
+}
+/* the header: the AI not connected, in the warning (nothing while it is) */
+.chat-status.status-ai-missing {
+    background: var(--status-warning-bg);
+    color: var(--status-warning-ink);
+}
+/* a run that answered a question but changed files: flagged in the warning */
+.reply-answered-changed {
+    color: var(--status-warning-ink);
+    font-size: var(--fs-small);
+}
+/* a change proposal: the AI's bubble holding a faint surface, headed small and strong, its fields as label and text */
+.proposal {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: 10px;
+    background: var(--surface-muted);
+}
+.proposal-label {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    font-weight: var(--fw-strong);
+}
+.proposal-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+}
+.proposal-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.proposal-field > dd {
+    margin: 0;
+    white-space: pre-wrap;
+}
+.proposal-key {
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.proposal-edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+.proposal-edit textarea {
+    width: 100%;
+    margin: 0;
+    font: inherit;
+    resize: vertical;
+}
+.proposal .chat-apply-note {
+    margin: 0;
+}
+.chat-state.proposal-state-Open {
+    color: var(--status-warning-ink);
+}
+/* withdrawn: muted as a whole */
+.proposal-row.state-Withdrawn .proposal {
+    opacity: 0.6;
+}
+/* the facilitator's record of a triage: small muted lines under the message, the stage that decided strong */
+.triage-record {
+    margin-top: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: 8px;
+    background: var(--surface-muted);
+    color: var(--muted);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+}
+.triage-record-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-1);
+}
+.triage-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.triage-step-line {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--space-2);
+    font-variant-numeric: tabular-nums;
+}
+.triage-stage {
+    color: var(--text-secondary);
+}
+.triage-step.decided .triage-stage,
+.triage-step.decided .triage-verdict {
+    color: var(--text);
+    font-weight: var(--fw-strong);
+}
+.triage-reason {
+    display: block;
+    white-space: pre-wrap;
+}

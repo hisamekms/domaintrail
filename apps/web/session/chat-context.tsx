@@ -4,6 +4,7 @@
 import { createContext, useContext } from 'react';
 import type { Messages } from '../i18n';
 import type { ChatActions, QuestionChoice } from './actions';
+import type { TriageJson } from './ai';
 import type { MessageMark } from './cards';
 import type { MarkIndex, MarkTargetData, Sign } from './marks';
 import type { MessageReference, ReplyDraft, ReplyReference } from './replies';
@@ -23,6 +24,14 @@ export interface ChatContextValue {
     readonly onNavigate: (target: ModelTarget) => void;
     /** The facilitator, in an open session: the actions are offered. */
     readonly control: boolean;
+    /** The session is `dt open`'s (one person, every message to the AI): what only makes sense with others is hidden. */
+    readonly solo: boolean;
+    /** The triage of each message addressed to the AI, by the message's ID (ADR 0030). */
+    readonly triages: ReadonlyMap<string, TriageJson>;
+    /** The triages whose answer or proposal the server gave up. */
+    readonly givenUp: ReadonlySet<string>;
+    /** The open change proposals the facilitator chose to approve together (one run). */
+    readonly proposalPicks: { readonly ids: ReadonlySet<string>; toggle(id: string): void; clear(): void };
     readonly actions: ChatActions;
     /** The facilitator cancels a unit's running or queued run (`ChangeUnit.key`): a dialog asks first. */
     readonly confirmCancel: (unit: string) => void;

@@ -6,6 +6,7 @@ import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { listedParticipants, type Peers } from './presence';
 import { changeUnits, type ChangeUnit } from './history';
 import { timeline } from './timeline';
+import { AI_CANDIDATE, AI_NAME, AI_PARTICIPANT, isSolo, type ProposalJson } from './ai';
 import type { PersonCandidate } from './mentions';
 import { targetKey, targetName, targetShortName, type NamingContext, type TargetDraft } from './targets';
 
@@ -29,6 +30,8 @@ export interface ReplyRequest {
  */
 export interface ReplyView {
     readonly summary: string;
+    /** The answer, when the run judged a request a question and answered it instead of editing (ADR 0030). */
+    readonly answer?: string;
     readonly requests: readonly { readonly request: ReplyRequest; readonly status: RequestProgress; readonly note?: string }[];
     readonly questions: readonly {
         readonly id: string;
@@ -75,6 +78,7 @@ export function replyView(input: RunJson['input'], reply: ReplyJson): ReplyView 
     const resolve = (ids: readonly string[]): ReplyRequest[] => ids.flatMap((id) => byId.get(id) ?? []);
     return {
         summary: reply.summary,
+        ...(reply.answer !== undefined && { answer: reply.answer }),
         requests: reply.requests.flatMap((r) => {
             const request = byId.get(r.request);
             return request ? [{ request, status: r.status, ...(r.note !== undefined && { note: r.note }) }] : [];
@@ -108,6 +112,8 @@ export type StreamItem =
     | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
     | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
     | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
+    /** A change proposal the AI wrote for a participant's 依頼 (ADR 0030), where it was made. */
+    | { readonly kind: 'proposal'; readonly key: string; readonly at: string; readonly proposal: ProposalJson }
     | {
           readonly kind: 'restored';
           readonly key: string;
@@ -187,10 +193,11 @@ export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLoo
 }
 
 /**
- * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the facilitator
- * applies some), one card per change unit where its first run was queued (`history.ts`), and the revisions restored.
+ * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the AI's answers
+ * among them), one card per change unit where its first run was queued (`history.ts`), the change proposals where
+ * they were made, and the revisions restored.
  */
-export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests'>): StreamItem[] {
+export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests' | 'proposals'>): StreamItem[] {
     const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
     const byId = new Map(state.revisions.map((r) => [r.id, r]));
     const items: StreamItem[] = [];
@@ -205,6 +212,7 @@ export function streamItems(state: Pick<SessionStateBody, 'runs' | 'revisions' |
     }
     for (const request of state.requests) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
     for (const unit of changeUnits(state)) items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+    for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
     // by time; items at the same moment keep the order they were pushed in (a message before the card applying it)
     return items
         .map((item, i) => ({ item, i }))
@@ -283,6 +291,7 @@ export function participantNames(state: Pick<SessionStateBody, 'session' | 'faci
     for (const p of listedParticipants(state)) names.set(p.id, p.name);
     for (const p of peers.values()) names.set(p.participant.id, p.participant.name);
     names.set(me.participant.id, me.participant.name);
+    names.set(AI_PARTICIPANT, AI_NAME);
     return names;
 }
 
@@ -390,17 +399,20 @@ export function arrivedBelow(
 }
 
 /**
- * The people `@` offers: everyone in the session but me, online first then away, by name within each (the order of
- * the header). The facilitator is one of them; no one else in the session: none.
+ * The people `@` offers: the AI first (ADR 0030), then everyone in the session but me, online first then away, by name
+ * within each (the order of the header). The facilitator is one of them. In Solo (`dt open`) every message goes to the
+ * AI already: none.
  */
 export function mentionablePeople(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): PersonCandidate[] {
+    if (isSolo(state)) return [];
     // holding the facilitator's role, I am the facilitator's row too
     const holding = me.participant.id === state.facilitatorHolder;
-    return headerParticipants(state, peers, me).flatMap((p): PersonCandidate[] =>
+    const people = headerParticipants(state, peers, me).flatMap((p): PersonCandidate[] =>
         p.me || (holding && p.id === state.session.facilitator)
             ? []
             : [{ id: p.id, name: p.name, role: p.role, online: p.online, ...(p.avatarUrl && { avatarUrl: p.avatarUrl }) }],
     );
+    return [AI_CANDIDATE, ...people];
 }
 
 /** When the stream last changed (its latest change), for `unreadCount`. */

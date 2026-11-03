@@ -7,11 +7,7 @@ import { changeUnits, shownUnits, unitName, type ChangeUnit } from './history';
 import { listedParticipants, type Peers } from './presence';
 import { participantAvatars, participantNames } from './stream';
 
-/**
- * An action of the collab menu (below its list of participants). Today the page is only ever in a collab (`dt session
- * start`); a solo page (`dt view`, one person) would get a menu of its own here, 「👤 1 人 ▾」 with `start` (コラボを始める),
- * once the page can start one.
- */
+/** An action of the collab menu (below its list of participants). */
 export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'end' | 'leave';
 
 /**
@@ -19,10 +15,12 @@ export type CollabMenuItem = 'invite' | 'record' | 'restore' | 'hand-over' | 'en
  * restores an earlier state of it (the last resort: a unit of work is reverted from its card), hands the role over and
  * ends the collab; a participant leaves. The facilitator has no 退出: leaving would leave the
  * collab without anyone to apply, answer or end it — they hand the role over first (and can leave then, as a
- * participant), or end it. `live` false (ended, or signed out): only the list.
+ * participant), or end it. `live` false (ended, or signed out): only the list. In Solo (`dt open`): only the
+ * workspace's record and restore — no one to invite or hand over to, and the session goes on with the next `dt open`.
  */
-export function collabMenuItems(role: Me['participant']['role'], live: boolean): CollabMenuItem[] {
+export function collabMenuItems(role: Me['participant']['role'], live: boolean, solo = false): CollabMenuItem[] {
     if (!live) return [];
+    if (solo) return role === 'facilitator' ? ['record', 'restore'] : [];
     return role === 'facilitator' ? ['invite', 'record', 'restore', 'hand-over', 'end'] : ['invite', 'leave'];
 }
 

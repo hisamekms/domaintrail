@@ -4,6 +4,8 @@ import type {
     AddressedBody,
     ApproveBody,
     ApprovedBody,
+    ApproveProposalsBody,
+    ProposalsApprovedBody,
     ComparisonBody,
     ErrorBody,
     MarkSetBody,
@@ -80,6 +82,13 @@ export const sessionApi = {
     sendRequest: (body: SendRequestBody): Promise<unknown> => call('requests', { method: 'POST', body }),
     /** The facilitator's 「AI に送る」: addresses the messages to the AI (their triages open). */
     address: (requests: readonly string[]): Promise<AddressedBody> => call('requests/address', { method: 'POST', body: { requests } }),
+    /** Approves open change proposals (the facilitator), each as is or edited: approved together, one run. */
+    approveProposals: (body: ApproveProposalsBody): Promise<ProposalsApprovedBody> => call('proposals/approve', { method: 'POST', body }),
+    /** Rejects an open change proposal (the facilitator), with a note to the requester if any. */
+    rejectProposal: (id: string, note?: string): Promise<unknown> =>
+        call(`proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: note ? { note } : {} }),
+    /** Withdraws my open change proposal (its requester). */
+    withdrawProposal: (id: string): Promise<unknown> => call(`proposals/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
     /** Another one-time facilitator link, to hand the role over. */
     facilitatorLink: (): Promise<{ link: string; expiresAt: string }> => call('facilitator/link', { method: 'POST', body: {} }),
     close: (): Promise<unknown> => call('close', { method: 'POST', body: {} }),

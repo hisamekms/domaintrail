@@ -15,6 +15,7 @@ export const STATE_GLYPH: Record<MarkState, string> = {
     running: '●',
     clarification: '?',
     question: '?',
+    answered: '↩',
     done: '✓',
     partial: '◐',
     skipped: '–',

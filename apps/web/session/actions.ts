@@ -1,9 +1,11 @@
-// The facilitator's actions in the chat (ADR 0026, amendment: messages and apply): applying messages (one, with a
-// note, or several as one run), answering a run's questions by choosing, picking another alternative of an assumption,
-// approving an assumption (recorded, nothing queued), cancelling a run, and the short undo after applying (a cancel of
-// the run while it is still queued). Every action queues at once: there is no tray. The server checks the role anyway.
+// The actions in the chat (ADR 0026, amendment: messages and apply; ADR 0030): the facilitator addresses messages to the
+// AI (「AI に送る」, one or several: each one's triage decides what follows), approves change proposals (several
+// together: one run, each as is or edited) or rejects them, answers a run's questions by choosing, picks another
+// alternative of an assumption, approves an assumption (recorded, nothing queued), cancels a run, and has the short undo
+// after an answer or a pick (a cancel of the run while it is still queued); a participant withdraws their own proposal.
+// Every action acts at once: there is no tray. The server checks the role anyway.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AnswerBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import type { AnswerBody, ProposalBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { sessionApi } from './api';
 import { failure } from './parts';
 
@@ -52,8 +54,12 @@ export const requestsOf = (run: RunJson): string[] => run.input.requests.map((r)
 export interface ChatActions {
     /** The facilitator's 「AI に送る」 (ADR 0030): addresses the messages to the AI; each one's triage decides what follows. */
     address(requests: readonly string[]): Promise<boolean>;
-    /** Queues the messages as one run, with the note if any; the undo is offered then. */
-    apply(requests: readonly string[], note?: string): Promise<boolean>;
+    /** Approves open change proposals, each as is or edited (`edited`): approved together, they are one run. */
+    approveProposals(proposals: readonly { readonly proposal: string; readonly edited?: ProposalBody }[]): Promise<boolean>;
+    /** Rejects an open change proposal, with a note to its requester if any. */
+    rejectProposal(proposal: string, note?: string): Promise<boolean>;
+    /** Withdraws my open change proposal. */
+    withdrawProposal(proposal: string): Promise<boolean>;
     /** Queues the run's requests again with the answer to its questions. */
     answer(run: RunJson, answer: AnswerBody): Promise<boolean>;
     /**
@@ -106,7 +112,9 @@ export function useChatActions(): ChatActions {
     );
     return {
         address: (requests) => act(() => sessionApi.address([...requests])),
-        apply: (requests, note) => queue({ requests: [...requests], ...(note?.trim() && { note: note.trim() }) }),
+        approveProposals: (proposals) => act(() => sessionApi.approveProposals({ proposals: [...proposals] })),
+        rejectProposal: (proposal, note) => act(() => sessionApi.rejectProposal(proposal, note?.trim() || undefined)),
+        withdrawProposal: (proposal) => act(() => sessionApi.withdrawProposal(proposal)),
         answer: (run, answer) => queue({ requests: requestsOf(run), answerTo: run.id, answer }),
         pick: (run, assumption, alternative, note) => queue({ requests: requestsOf(run), note, pick: { pickOf: run.id, assumption, alternative } }),
         approve: (run, assumption) => act(() => sessionApi.approve({ run: run.id, assumption })),

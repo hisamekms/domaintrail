@@ -96,8 +96,8 @@ export function RunCard({ unit, compact = false, actions }: { unit: ChangeUnit; 
                     <RowActions>
                         {control && <CardMenu last={last.run} about={about} name={title.text} />}
                         <ReplyButton to={{ kind: 'Run', run: last.run }} />
-                        {/* last: ☺+ at the right end of every row, messages and turns alike */}
-                        <AddReaction target={{ kind: 'Turn', run: last.run.id }} />
+                        {/* last: ☺+ at the right end of every row, messages and turns alike; alone in Solo, no one else reacts */}
+                        {!chat.solo && <AddReaction target={{ kind: 'Turn', run: last.run.id }} />}
                     </RowActions>
                 )}
                 {runs.map((r, i) => (
@@ -379,6 +379,24 @@ function AgentBody({ message: m }: { message: AgentMessage }) {
                 </ReplySection>
             );
         case 'completed':
+            // a run that answered a question instead of editing (ADR 0030): its answer is what it says; its summary too
+            // when it changed files after all, which is flagged
+            if (m.reply?.answer !== undefined) {
+                const changed = (m.files ?? (m.changed ? 1 : 0)) > 0;
+                return (
+                    <>
+                        {changed && (
+                            <p className="chat-text reply-summary">
+                                <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
+                            </p>
+                        )}
+                        <p className="chat-text reply-answer">
+                            <ReplyText text={m.reply.answer} onNavigate={onNavigate} />
+                        </p>
+                        {changed && <p className="chat-text reply-answered-changed">{tx.chat.ai.answeredChanged}</p>}
+                    </>
+                );
+            }
             return m.reply ? (
                 <p className="chat-text reply-summary">
                     <ReplyText text={m.reply.summary} onNavigate={onNavigate} />
@@ -801,7 +819,7 @@ function Assumptions({ run, reply, offer, compact }: { run: RunJson; reply: Repl
  * Who decided and when, small and muted under what was decided (`回答 ooyama_F · 23:47`); when the decision queued a
  * run (a pick), its time is a link to that run (it continues the same card, so it has no number to show).
  */
-function DecidedLine({ label, by, at, run, hint }: { label: string; by: string; at: string; run?: string; hint?: string }) {
+export function DecidedLine({ label, by, at, run, hint }: { label: string; by: string; at: string; run?: string; hint?: string }) {
     const { tx, nameOf, jump } = useChat();
     return (
         <p className="decided-line">

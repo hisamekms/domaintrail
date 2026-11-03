@@ -280,6 +280,8 @@ export interface PersonCandidate {
     readonly role: 'facilitator' | 'participant';
     readonly online: boolean;
     readonly avatarUrl?: string;
+    /** The AI (ADR 0030): offered first, drawn with its own mark. */
+    readonly ai?: boolean;
 }
 
 /**

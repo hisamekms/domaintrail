@@ -4,10 +4,10 @@
 // the chat), hands the role over and ends the collab (asked first, with what is unfinished); a participant leaves.
 // Once it ended, everyone sees its summary (`CollabSummaryDialog`). What the menu offers to whom is in `collab.ts`.
 //
-// Only the collab state exists today (`dt session start`). A solo state — 「👤 1 人 ▾」 with 「コラボを始める」 under
-// `dt view` — would be another button and list here, chosen by the page's state, with the same popover.
+// In Solo (`dt open`, one person) the button is a plain ⋯ and the popover holds no people, only the workspace's
+// record and restore: the invite, the hand-over, the end and 退出 make sense only with others.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown, Ellipsis, X } from 'lucide-react';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { sessionApi } from './api';
@@ -38,6 +38,8 @@ export function openPeople(participantId?: string): void {
 const focusables = (root: HTMLElement): HTMLElement[] => [...root.querySelectorAll<HTMLElement>('button:not(:disabled), li[tabindex]')];
 
 export function CollabMenu(props: {
+    /** The session is Solo: no people, only the workspace's tools. */
+    solo: boolean;
     session: SessionData;
     location: ViewLocation;
     scope: ViewScope;
@@ -81,7 +83,7 @@ export function CollabMenu(props: {
     const rows = participantRows(session.state, session.peers, session.me, props.location);
     const online = rows.filter((r) => r.where !== 'away').length;
     const label = tx.chat.participantsOnline(online, rows.length);
-    const items = collabMenuItems(session.me.participant.role, live);
+    const items = collabMenuItems(session.me.participant.role, live, props.solo);
 
     const pick = (f: () => void | Promise<void>) => (): void => {
         close();
@@ -133,6 +135,8 @@ export function CollabMenu(props: {
         wasOpen.current = open;
     }, [open]);
 
+    // alone with nothing to offer (ended): no menu
+    if (props.solo && items.length === 0) return null;
     return (
         <div className="collab-menu" ref={root}>
             <button
@@ -140,35 +144,45 @@ export function CollabMenu(props: {
                 className="collab-menu-button"
                 aria-haspopup="dialog"
                 aria-expanded={open}
-                aria-label={`${tx.collab.menu}: ${label}`}
+                aria-label={props.solo ? tx.collab.menu : `${tx.collab.menu}: ${label}`}
                 data-tooltip={tx.collab.menu}
                 onClick={() => (open ? close() : setOpen(true))}
             >
-                <span className="chat-avatars">
-                    {rows.slice(0, AVATARS).map((r) => (
-                        <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
-                            <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
+                {props.solo ? (
+                    <Ellipsis size={15} aria-hidden />
+                ) : (
+                    <>
+                        <span className="chat-avatars">
+                            {rows.slice(0, AVATARS).map((r) => (
+                                <span key={r.id} className={`chat-avatar${r.where === 'away' ? ' away' : ''}`}>
+                                    <Avatar id={r.id} name={r.name} {...(r.avatarUrl && { url: r.avatarUrl })} facilitator={r.role === 'facilitator'} />
+                                </span>
+                            ))}
                         </span>
-                    ))}
-                </span>
-                <span className="chat-online">{tx.chat.onlineCount(online, rows.length)}</span>
-                <ChevronDown size={13} aria-hidden className="collab-menu-chevron" />
+                        <span className="chat-online">{tx.chat.onlineCount(online, rows.length)}</span>
+                        <ChevronDown size={13} aria-hidden className="collab-menu-chevron" />
+                    </>
+                )}
             </button>
             {open && (
                 <div ref={popover} className="collab-menu-popover motion-pop" role="dialog" aria-label={tx.collab.menu} onKeyDown={onKeyDown}>
                     {/* the people need no heading: the actions are set apart by a rule */}
-                    <p className="visually-hidden" id="collab-menu-people">
-                        {tx.collab.people}
-                    </p>
-                    <ParticipantsList
-                        rows={rows}
-                        scope={props.scope}
-                        focus={focus}
-                        onOpenView={(target) => {
-                            props.onOpenView(target);
-                            close();
-                        }}
-                    />
+                    {!props.solo && (
+                        <>
+                            <p className="visually-hidden" id="collab-menu-people">
+                                {tx.collab.people}
+                            </p>
+                            <ParticipantsList
+                                rows={rows}
+                                scope={props.scope}
+                                focus={focus}
+                                onOpenView={(target) => {
+                                    props.onOpenView(target);
+                                    close();
+                                }}
+                            />
+                        </>
+                    )}
                     {items.length > 0 && (
                         <div className="collab-menu-actions" role="menu" aria-label={tx.collab.actions}>
                             {items.map((item) => (
