@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 /** A file of `dt generate ts`: `path` relative to the root (`/`-separated), `file` absolute. */
@@ -80,10 +80,14 @@ async function symlinkOnPath(root: string, target: string): Promise<string | und
     return undefined;
 }
 
-/** Writes via a fresh temp file and rename, so an existing symlink is replaced rather than followed. */
-async function writeNew(file: string, content: string): Promise<void> {
+/**
+ * Writes via a fresh temp file and rename, so an existing symlink is replaced rather than followed. With `mode`, the
+ * file gets exactly those permissions, whatever the umask.
+ */
+async function writeNew(file: string, content: string, mode?: number): Promise<void> {
     const temp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
-    await writeFile(temp, content, { flag: 'wx' });
+    await writeFile(temp, content, { flag: 'wx', ...(mode !== undefined && { mode }) });
+    if (mode !== undefined) await chmod(temp, mode);
     await rename(temp, file);
 }
 
@@ -123,9 +127,11 @@ async function writeManifest(root: string, files: string[]): Promise<boolean> {
     const dir = path.dirname(target);
     const existing = await lstat(dir).catch(() => undefined);
     if (existing && (existing.isSymbolicLink() || !existing.isDirectory())) return false;
-    await mkdir(dir, { recursive: true });
+    // `.domaintrail` is the user's alone (0700) and so is the manifest (0600), whatever the umask
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await chmod(dir, 0o700);
     const manifest: Manifest = { version: 1, files: [...files].sort() };
-    await writeNew(target, `${JSON.stringify(manifest, null, 2)}\n`);
+    await writeNew(target, `${JSON.stringify(manifest, null, 2)}\n`, 0o600);
     return true;
 }
 

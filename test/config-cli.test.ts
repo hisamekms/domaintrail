@@ -277,6 +277,16 @@ describe('generated output safety', () => {
         expect(await readdir(dir)).toEqual(['s.dt']);
     });
 
+    test.skipIf(process.platform === 'win32')('generated.json is private to the user: 0600 in a .domaintrail of 0700', async () => {
+        const { chmod, lstat } = await import('node:fs/promises');
+        const dir = await project({ 's.dt': MODEL });
+        await mkdir(path.join(dir, '.domaintrail'));
+        await chmod(path.join(dir, '.domaintrail'), 0o755);
+        expect((await run('-r', dir, 'generate', 'ts')).code).toBe(0);
+        expect((await lstat(path.join(dir, '.domaintrail'))).mode & 0o777).toBe(0o700);
+        expect((await lstat(path.join(dir, '.domaintrail', 'generated.json'))).mode & 0o777).toBe(0o600);
+    });
+
     test('generated.json entries outside the root or through a symlink are never deleted', async () => {
         const { symlink } = await import('node:fs/promises');
         const { existsSync } = await import('node:fs');

@@ -31,7 +31,7 @@ export interface ServerAddress {
 async function writeJson(root: string, name: string, value: object): Promise<string> {
     const file = path.join(await sessionDirectory(root), name);
     await checkPlain(file, 'file');
-    await replaceFile(file, `${JSON.stringify(value, null, 2)}\n`, 0o600);
+    await replaceFile(file, `${JSON.stringify(value, null, 2)}\n`);
     return file;
 }
 

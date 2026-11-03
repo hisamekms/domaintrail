@@ -2,7 +2,7 @@
 // queue's claim, lease and serial rule, the session directory and its blobs, never through a symbolic link.
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -10,6 +10,7 @@ import { Collaboration as C } from '../generated/index.js';
 import type { Stores } from '../application/ports.js';
 import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
+import { writeServerAddress } from './session-files.js';
 import { UnsafeSessionPath } from './session-dir.js';
 import { MIGRATIONS, NewerSchema, createUnitOfWork, decodeJson, encodeJson, openDatabase, openSessionDatabase } from './sqlite.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from '../domain/ids.js';
@@ -283,6 +284,65 @@ describe('the session directory and blobs', () => {
         expect(await thrown(blobs.get('../x'))).toMatchObject(errorLike('Not a SHA-256'));
         await writeFile(path.join(dir, hash.slice(0, 2), hash), 'tampered');
         expect(await blobs.get(hash)).toBeUndefined();
+    });
+});
+
+/** The permission bits of `p` (not following a link). */
+const modeOf = async (p: string): Promise<number> => (await lstat(p)).mode & 0o777;
+
+describe('the session is private to the user', () => {
+    const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
+    test.skipIf(process.platform === 'win32')('its directories are 0700 and its files 0600, whatever the umask', async () => {
+        const root = await tempDir();
+        const umask = process.umask(0o000);
+        try {
+            const db = await openSessionDatabase(root);
+            db.exec('CREATE TABLE IF NOT EXISTS probe (x)');
+            const blobs = await openSessionBlobs(root);
+            const bytes = new TextEncoder().encode('context A {}');
+            await blobs.put([{ hash: sha(bytes), bytes }]);
+            await writeServerAddress(root, { url: 'http://127.0.0.1:1', session: 's', pid: process.pid });
+            const top = path.join(root, '.domaintrail');
+            const session = path.join(top, 'session');
+            const blobDir = path.join(session, 'blobs', sha(bytes).slice(0, 2));
+            for (const dir of [top, session, path.join(session, 'blobs'), blobDir]) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
+            const files = [
+                path.join(top, '.gitignore'),
+                path.join(session, '.gitignore'),
+                path.join(session, 'session.db'),
+                path.join(session, 'session.db-wal'),
+                path.join(session, 'session.db-shm'),
+                path.join(session, 'server.json'),
+                path.join(blobDir, sha(bytes)),
+            ];
+            for (const file of files) expect({ file, mode: await modeOf(file) }).toEqual({ file, mode: 0o600 });
+            db.close();
+        } finally {
+            process.umask(umask);
+        }
+    });
+
+    test.skipIf(process.platform === 'win32')('directories and files an older version left readable by others are tightened when opened', async () => {
+        const root = await tempDir();
+        const old = await openSessionDatabase(root);
+        const blobs = await openSessionBlobs(root);
+        const bytes = new TextEncoder().encode('context B {}');
+        await blobs.put([{ hash: sha(bytes), bytes }]);
+        old.close();
+        const top = path.join(root, '.domaintrail');
+        const session = path.join(top, 'session');
+        const blobDir = path.join(session, 'blobs', sha(bytes).slice(0, 2));
+        const dirs = [top, session, path.join(session, 'blobs'), blobDir];
+        const files = [path.join(top, '.gitignore'), path.join(session, '.gitignore'), path.join(session, 'session.db'), path.join(blobDir, sha(bytes))];
+        for (const dir of dirs) await chmod(dir, 0o755);
+        for (const file of files) await chmod(file, 0o644);
+
+        const db = await openSessionDatabase(root);
+        await openSessionBlobs(root);
+        db.close();
+        for (const dir of dirs) expect({ dir, mode: await modeOf(dir) }).toEqual({ dir, mode: 0o700 });
+        for (const file of files) expect({ file, mode: await modeOf(file) }).toEqual({ file, mode: 0o600 });
     });
 });
 

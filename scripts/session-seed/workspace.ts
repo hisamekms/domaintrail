@@ -94,7 +94,8 @@ export async function copyWorkspace(source: string, dir: string, options: { port
 /** Writes who was seeded, with their cookies, for the person and the browser checks (private: mode 600). */
 export async function writeSeedFile(dir: string, data: object): Promise<string> {
     const file = path.join(dir, '.domaintrail', 'seed.json');
-    await mkdir(path.dirname(file), { recursive: true });
+    await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    await chmod(path.dirname(file), 0o700);
     await writeFile(file, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
     await chmod(file, 0o600);
     return file;

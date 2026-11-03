@@ -2,6 +2,7 @@
 // Aggregates are stored whole as JSON next to the columns the queries and constraints need; the outbox is a table
 // appended in the transaction that saves the aggregates. Every transaction is BEGIN IMMEDIATE, one at a time.
 // Only node:sqlite's DatabaseSync is used (no Bun API), so the same code runs in the CLI under Node and in the tests under Bun as well.
+import { writeFile } from 'node:fs/promises';
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite';
 import * as path from 'node:path';
 import type { Collaboration } from '../generated/index.js';
@@ -28,7 +29,7 @@ import type {
     UnitOfWork,
 } from '../application/ports.js';
 import { upgradeEvent, upgradeRequest, upgradeRun, upgradeSession } from './legacy.js';
-import { DATABASE_FILE, checkPlain, sessionDirectory } from './session-dir.js';
+import { DATABASE_FILE, PRIVATE_FILE, checkPlain, restrict, sessionDirectory } from './session-dir.js';
 
 /**
  * The schema, one migration per entry: the database's `user_version` is the number applied. Never edit an applied
@@ -305,13 +306,28 @@ export function openDatabase(file: string): DatabaseSync {
 /**
  * Opens the session database of a workspace, `.domaintrail/session/session.db`, making the directory (with its
  * `.gitignore`) if needed. Refuses (`UnsafeSessionPath`) when the directory, the database or its WAL files are
- * symbolic links.
+ * symbolic links. The database and its WAL files are 0600: an absent database is made empty (a valid one) 0600 before
+ * SQLite opens it, since SQLite gives its WAL files the database's permissions; existing ones are tightened.
  */
 export async function openSessionDatabase(root: string): Promise<DatabaseSync> {
     const dir = await sessionDirectory(root);
     const file = path.join(dir, DATABASE_FILE);
-    for (const f of [file, `${file}-wal`, `${file}-shm`]) await checkPlain(f, 'file');
-    return openDatabase(file);
+    const files = [file, `${file}-wal`, `${file}-shm`];
+    for (const f of files) await checkPlain(f, 'file');
+    await writeFile(file, '', { flag: 'wx', mode: PRIVATE_FILE }).catch((e: unknown) => {
+        // there already (or made at the same time by another process): checked again below
+        if (!(e instanceof Error && 'code' in e && e.code === 'EEXIST')) throw e;
+    });
+    for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
+    const db = openDatabase(file);
+    try {
+        // the WAL files SQLite made, should the umask have loosened them
+        for (const f of files) if ((await checkPlain(f, 'file')) === 'present') await restrict(f, PRIVATE_FILE);
+    } catch (e) {
+        db.close();
+        throw e;
+    }
+    return db;
 }
 
 // ---- Rows and JSON ----
