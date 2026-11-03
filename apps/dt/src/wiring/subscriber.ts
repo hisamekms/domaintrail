@@ -43,9 +43,10 @@ import {
     type WorkspaceView,
 } from '@domaintrail/agent';
 import { type AgentCredential, readServerAddress } from '@domaintrail/collaboration';
-import { DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
+import { analyze, DEFAULT_SOURCES, sourceSelection } from '@domaintrail/analysis';
+import { isStormingFile } from '@domaintrail/storming';
 import { SessionError } from '../cli/ports.js';
-import { findDomainFiles, GitIgnore, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles } from '@domaintrail/workspace';
+import { createWorkspaceReader, findDomainFiles, GitIgnore, gitIgnoredEntries, gitNestedRepositories, gitReadableFiles } from '@domaintrail/workspace';
 import { configFileRules, configGuardScan } from './config-guard.js';
 import { processAlive } from './process.js';
 import { answererExtraViews, runnerReadScope } from './read-scope.js';
@@ -156,6 +157,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
 
     const roles = new Set<AgentRole>(taken);
+    const sources = options.sources ?? DEFAULT_SOURCES;
+    const respectGitignore = options.respectGitignore ?? true;
     const scan = (): Promise<ReadonlyMap<string, string>> => scanWorkspace(root);
     const owner = `${options.agent}@${
         hostname()
@@ -204,6 +207,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                           log,
                       }),
                       workspace: { scan },
+                      diagnostics: () => stormingDiagnostics(createWorkspaceReader(root, sourceSelection(sources, respectGitignore))),
                       clock: systemClock,
                       nonce: randomNonce,
                       log,
@@ -254,8 +258,6 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         await answerer?.stop();
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
-    const sources = options.sources ?? DEFAULT_SOURCES;
-    const respectGitignore = options.respectGitignore ?? true;
     const subscriber: Subscriber = subscribe(
         {
             api,
@@ -294,6 +296,15 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
             return why;
         },
     };
+}
+
+/**
+ * `dt check`'s findings on the `.dtes` files of the workspace now, one line each (`file:line:column severity code:
+ * message`): what `/es:names` and `/es:next` read.
+ */
+export async function stormingDiagnostics(reader: { readSources(): Promise<readonly { path: string; text: string }[]> }): Promise<readonly string[]> {
+    const a = await analyze(await reader.readSources());
+    return a.diagnostics.filter((d) => isStormingFile(d.file)).map((d) => `${d.file}:${d.start.line}:${d.start.column} ${d.severity} ${d.code}: ${d.message}`);
 }
 
 /**

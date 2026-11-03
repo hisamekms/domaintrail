@@ -276,7 +276,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the aggregates become their JSON when encoded
                 command: job.command as unknown as AgentCommandJobBody['command'],
                 name: slashCommandName(job.command.kind),
-                type: slashCommandSpec(job.command.kind).type,
+                type: slashCommandSpec(job.command.kind).reply,
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- as above
                 request: job.request as unknown as AgentCommandJobBody['request'],
                 author: names.get(job.command.startedBy) ?? 'a participant',
@@ -454,7 +454,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         }
         const { model: _m, durationMs: _d, ...reply } = raw;
         // the use case refuses the kind of result the command does not take
-        const read = readCommandReply(reply, reply.kind === 'answer' ? 'answer' : 'candidates');
+        const read = readCommandReply(reply, reply.kind === 'answer' ? 'answer' : reply.kind === 'next' ? 'next' : 'candidates');
         if (!read.ok) {
             failedOnce(h, `invalid output (${read.error.path})`);
             return r.fail(400, 'InvalidReply', read.error.message, { field: read.error.path });
@@ -462,7 +462,7 @@ export function createAnswerDispatcher(deps: AnswerDispatcherDeps): AnswerDispat
         if (read.value.kind === 'candidates') return r.done(await use.listCandidates({ command, candidates: read.value.candidates }));
         const text = Collaboration.makeText(read.value.answer);
         if (!text.ok) return r.fail(400, 'InvalidReply', 'Not a text.', { field: 'answer' });
-        return r.done(await use.answerCommand({ command, answer: text.value }));
+        return r.done(await use.answerCommand({ command, answer: text.value, ...(read.value.next && { next: read.value.next }) }));
     };
 
     /** A job's result as a step, a message, an override or a proposal; the HTTP answer. */
