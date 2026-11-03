@@ -177,6 +177,7 @@ twice each. Times from writing the prompt to `result` (warm) or to process exit 
 | `dt collab [--port] [--host] [--base <ref>] [--no-agent] [--agent claude]` | Collaboration session (dev or Access identity), agent in process | `dt session start` |
 | `dt collab link` | Another one-time facilitator link | `dt session link` |
 | `dt agent [--agent claude] [--once]` | The AI runner alone, against the server running on the workspace (`agent.json`) | `dt session subscribe` |
+| `dt export sources [-o <file.zip>\|-]` | The `.dt`, `.dtes` and config files as one ZIP (see [As built: the sources as one ZIP](#as-built-the-sources-as-one-zip)) | — |
 
 - `--agent claude` stays the only agent and the default; it is accepted so that later agents fit.
 - "Claude Code is usable" (decision 5): `claude` is on the `PATH`, `claude --version` answers within 5 s, and
@@ -1145,3 +1146,32 @@ A user asked to close up the gaps between sticky notes when printing (decided 20
 - **Pinned** by `apps/web/palette.test.ts`: the text, secondary and muted tokens, resolved from `styles.css`, against
   bg, surface and surface-muted in both themes (APCA 0.0.98G-4g and WCAG 4.5:1), and dark muted at least Lc 10 below
   the secondary text.
+
+### As built: the sources as one ZIP
+
+- **Decided by the user**: someone without git should be able to take the model and run `dt` elsewhere. The sources
+  are exported as one ZIP, from the CLI (`dt export sources`) and from the Live View's collab menu
+  (ソース一式をダウンロード / Download sources (.zip)) for everyone on the page: Solo, the facilitator and the
+  participants. No README in it, only the sources.
+- **What it holds** (`platform/workspace` `sourceArchiveFiles`): the files `dt check` analyzes (`findDomainFiles` with
+  the config's `sources`), `.dt` and `.dtes` files only whatever the globs match, and the project's config file when it
+  is a plain file in the root; paths relative to the root below one folder named after the root's directory
+  (`shop/sales/order.dt`; characters Windows refuses become `-`). Never: the local override (`*.local.json[c]`),
+  `.domaintrail`, `.git`, `node_modules`, generated output, symlinks (the walk neither follows nor lists them; a
+  config file that is a symlink is left out), and, where git speaks for the root, any file `git ls-files -co
+  --exclude-standard` does not list (`gitReadableFiles`), even with `respectGitignore: false`; so the files of a
+  nested repository or submodule are left out too.
+- **The ZIP** (`platform/workspace` `zip`, no dependency): local headers, the central directory and its end record, no
+  ZIP64 (more than 65,535 files or 4 GiB is an error); every name in NFC with the UTF-8 flag (bit 11); CRC-32;
+  raw DEFLATE (`node:zlib`) unless storing is smaller; DOS date and time from each file's mtime (local time); made by
+  Unix with mode 0644. Checked by a reader of the tests' own (central directory, local headers, inflate, CRC) and by
+  `unzip -t` and extraction where `unzip` is installed.
+- **CLI**: `dt export sources` writes `<workspace>-sources.zip` in the current directory, `-o <file>` elsewhere,
+  `-o -` to stdout (the summary on stderr); honors `-r` / `-c`; exits 1 when there is no `.dt` or `.dtes` file
+  (a config file alone included), 2 on an invalid config. In `dt --help` and `dt guide export`.
+- **Live View**: `GET /api/export/sources.zip` on the Live View's API, made from the files on disk at each request,
+  `application/zip`, `Content-Disposition: attachment; filename="…"; filename*=UTF-8''…` (an ASCII fallback
+  `sources.zip` for a non-ASCII name), `Cache-Control: no-store`; 404 without sources, 405 for anything but GET/HEAD.
+  Behind the access check of the view's API: in a session the page's identity (the dev cookie, or Access's JWT;
+  none: 401) for every role; in the read-only Live View (`dt open --host`) the Host/Origin check only, like the view
+  itself. The page fetches it, so that a failure is told in the menu, then saves it under the server's name.

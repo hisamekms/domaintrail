@@ -144,6 +144,18 @@ layout when the page has it (詰めて表示 on, or printed before), else in the
 印刷 in the canvas's controls is the surer way: it gets the compact layout first (the button spins meanwhile), then opens
 the print dialog. The catalog prints as a page: its list, without the panes around it.
 
+## Downloading the sources
+
+ソース一式をダウンロード (en: Download sources (.zip)), in the collab menu (under `dt open`, its ⋯), is for everyone on
+the page: the facilitator and every participant. It saves `<workspace>-sources.zip`, the same archive as
+[`dt export sources`](guide.md#sharing-the-sources): the `.dt` and `.dtes` files `dt check` analyzes and the config
+file, below a folder named after the workspace, made from the files on disk when it is clicked — never the local
+override, `.domaintrail`, `.git`, generated output, symlinks or files git ignores. The server serves it at
+`GET /api/export/sources.zip` behind the page's own sign-in (no identity: 401; a Host or Origin not allowed: 403), as
+an attachment (`Content-Disposition` with the UTF-8 `filename*`), never cached; 404 when the workspace has no
+sources, told in the menu. The read-only Live View (`dt open --host <address>`) serves the same path to whoever it
+serves the view, but has no menu.
+
 ## Inspector (right or below)
 
 The selected item — name, description, diagnostics, a back button naming the item it returns to (「〇〇 に戻る」), and
@@ -211,7 +223,7 @@ See [ADR 0001](adr/0001-mvp-implementation-decisions.md) for the design decision
 
 Under `dt collab` (and `dt open`, for one person) the session's chat is a pillar at the right end of the page, the whole height,
 the same for everyone and open when the page joins. Its head shows the collab menu (the avatars and the participants online ▾: who is where, the invite link,
-退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
+ソース一式をダウンロード, 退出, and the facilitator's actions; see [`dt guide session`](guide.md#collaboration-sessions)) and
 the agent's status at a glance (running and for how long, waiting for an answer, or queued; nothing when idle), with ✕ to
 close it. A click on the status (AI の作業を見る) switches to AI の作業 and opens the card it stands for — the running one,
 else the next to run, else the one waiting longest for an answer — scrolled to and marked for a moment, besides those
@@ -278,7 +290,7 @@ The chat has two views:
   もう一度 for the facilitator. The facilitator opens a message's 仕分けの記録 from its … (how it was addressed, each stage's
   answer, confidence, model, time and reason). A run that answered a question instead of editing shows its answer,
   flagged when it changed files all the same. The head says AI 接続なし (with n 件待ち) while no agent is connected, and
-  nothing once it is. Under `dt open` the collab menu is a ⋯ with the workspace's record and restore only, and
+  nothing once it is. Under `dt open` the collab menu is a ⋯ with the workspace's record, restore and download only, and
   reactions, votes, `@` and AI に送る are gone: every message goes to the AI as it is sent. How long a run takes is
   mostly the model and effort it runs with: `agent.run.model` / `agent.run.effort` (and `agent.answer.*` for answers)
   are the biggest lever.
