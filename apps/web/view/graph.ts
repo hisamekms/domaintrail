@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LaidOutGraph } from '@domaintrail/visualization';
 import type { BaseView, StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
+import { fetchServer } from '../app/sign-in';
 import { shownStorming, stormingGraph } from '../storming';
 import { useCompactGraph } from './compact';
 import { isCanvas, type View } from './navigation';
@@ -76,7 +77,7 @@ export function useViewGraph(current: ViewPayload | null, view: View, settings: 
             hide: hidden.join(','),
             ...(compact && { spacing: 'compact' }),
         });
-        fetch(`/api/focus?${params}`)
+        fetchServer(`/api/focus?${params}`)
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the response of our own server's api/focus
             .then((r) => (r.ok ? (r.json() as Promise<LaidOutGraph>) : null))
             .then((graph) => {

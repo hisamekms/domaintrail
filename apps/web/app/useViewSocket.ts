@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ClientMessage, SessionServerMessage } from '@domaintrail/collaboration/protocol';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import { reloadForSignIn, signInRequired } from './sign-in';
 
 export type Connection = 'connecting' | 'open' | 'closed';
 
@@ -21,7 +22,13 @@ export interface ViewSocket extends ViewState {
 
 type ServerMessage = ViewPayload | SessionServerMessage;
 
-/** Subscribes to model updates from the view server, reconnecting when the server restarts. */
+/** Failed connections in a row retried as they are; from the next one on, the page first asks whether the edge in front (Access) wants a sign-in. */
+const SIGN_IN_PROBE_AFTER = 2;
+
+/**
+ * Subscribes to model updates from the view server, reconnecting when the server restarts. When it cannot connect
+ * again because the edge in front (Cloudflare Access) answers the handshake with its sign-in, it reloads instead.
+ */
 export function useViewSocket(): ViewSocket {
     const [state, setState] = useState<ViewState>({ current: null, connection: 'connecting' });
     const retry = useRef(0);
@@ -52,7 +59,17 @@ export function useViewSocket(): ViewSocket {
                 if (disposed) return;
                 for (const listener of closeListeners.current) listener(ev.code);
                 setState((s) => ({ ...s, connection: 'closed' }));
-                timer = setTimeout(connect, Math.min(5000, 500 * 2 ** retry.current++));
+                const delay = Math.min(5000, 500 * 2 ** retry.current++);
+                if (retry.current <= SIGN_IN_PROBE_AFTER) {
+                    timer = setTimeout(connect, delay);
+                    return;
+                }
+                // a handshake does not tell why it failed: the server down (try again), or Access wanting a sign-in
+                // (only a reload gets one; reconnecting would fail the same way)
+                void signInRequired().then((required) => {
+                    if (disposed || (required && reloadForSignIn())) return;
+                    timer = setTimeout(connect, delay);
+                });
             };
         };
         connect();

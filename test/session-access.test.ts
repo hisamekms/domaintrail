@@ -1,7 +1,9 @@
 /**
  * The `access` identity mode (ADR 0026, S8) against a local stand-in for Cloudflare: RSA keys made with `node:crypto`,
  * a JWKS and `get-identity` served from a local HTTP server, tokens signed here. The session server in access mode (no
- * identity, no answer; roles; Host and Origin; e-mail never sent; pages closed at the token's expiry and on leaving).
+ * identity, no answer; roles; Host and Origin; e-mail never sent; pages closed at the token's expiry and on leaving),
+ * and what the page meets behind the edge once the Access session ran out (Access's redirect to its sign-in; the
+ * page's handling of it: apps/web/session/api.test.ts, apps/web/app/sign-in.test.ts).
  * The verifier and the Identity API: contexts/collaboration/src/infrastructure/identity.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -421,5 +423,97 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         } finally {
             await other.stop();
         }
+    });
+});
+
+/**
+ * Access in front of the server, as the page meets it: while the participant's Access session lasts, each request goes
+ * to the origin with the application token; once it ran out, Access answers itself with a 302 to the team's login,
+ * and the origin never sees the request (so never answers its 401).
+ */
+interface MockEdge {
+    readonly url: string;
+    signedIn: boolean;
+    originRequests: number;
+    close(): Promise<void>;
+}
+
+async function mockEdge(origin: string, token: () => string): Promise<MockEdge> {
+    const edge: Omit<MockEdge, 'url' | 'close'> = { signedIn: true, originRequests: 0 };
+    const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+        if (!edge.signedIn) {
+            const login = `${ISSUER}/cdn-cgi/access/login/session.example.com?kid=${AUD}&redirect_url=${encodeURIComponent(req.url ?? '/')}`;
+            return void res.writeHead(302, { location: login }).end();
+        }
+        edge.originRequests++;
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const headers: Record<string, string> = { 'Cf-Access-Jwt-Assertion': token() };
+        if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+        const answer = await fetch(new URL(req.url ?? '/', origin), {
+            method: req.method,
+            headers,
+            ...(chunks.length && { body: Buffer.concat(chunks) }),
+            redirect: 'manual',
+        });
+        res.writeHead(answer.status, Object.fromEntries(answer.headers)).end(Buffer.from(await answer.arrayBuffer()));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- listening on TCP
+    const port = (server.address() as AddressInfo).port;
+    return Object.assign(edge, {
+        url: `http://127.0.0.1:${port}`,
+        close: () =>
+            new Promise<void>((resolve) => {
+                server.closeAllConnections();
+                server.close(() => resolve());
+            }),
+    });
+}
+
+describe('behind Access, once the Access session runs out (what the page meets)', () => {
+    const k1 = newKey('k1');
+    let mock: MockCloudflare;
+    let server: SessionServer;
+    let edge: MockEdge;
+    /** As the page calls its server (apps/web/app/sign-in.ts `SAME_ORIGIN`): a redirect is answered, not followed. */
+    const page = (p: string, init: RequestInit = {}): Promise<Response> =>
+        fetch(`${edge.url}/${p}`, { ...init, credentials: 'same-origin', redirect: 'manual' });
+    const post = (p: string, body: unknown): Promise<Response> =>
+        page(p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    beforeAll(async () => {
+        mock = await mockCloudflare([k1]);
+        server = await startSessionServer({
+            root: await workspace(),
+            debounceMs: 30,
+            session: sessionConfig(accessConfig()),
+            accessAdapter: adapter(mock, { clockSkewS: 0 }),
+        });
+        await server.ready;
+        edge = await mockEdge(server.url, () => token(claims('ada'), k1));
+    });
+    afterAll(async () => {
+        await edge?.close();
+        await server?.stop();
+        await mock.close();
+    });
+
+    test('signed in, the page’s calls reach the server through the edge', async () => {
+        const me = await page('api/session/me');
+        expect(me.status).toBe(200);
+        expect(((await me.json()) as Me).participant.name).toBe('ada');
+        expect((await post('api/session/runs', { requests: [] })).status).toBe(403);
+        expect(edge.originRequests).toBe(2);
+    });
+
+    test('expired, Access answers each call itself with a 302 to its login (never the origin’s 401); the origin is not asked', async () => {
+        edge.signedIn = false;
+        const before = edge.originRequests;
+        for (const res of [await page('api/session/me'), await post('api/session/runs', { requests: [] }), await page('api/state')]) {
+            expect(res.status).toBe(302);
+            expect(res.headers.get('location')).toStartWith(`${ISSUER}/cdn-cgi/access/login/`);
+        }
+        expect(edge.originRequests).toBe(before);
     });
 });

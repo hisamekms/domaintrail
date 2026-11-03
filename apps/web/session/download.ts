@@ -1,6 +1,8 @@
 // 「ソース一式をダウンロード」 (the menu's item for everyone in the session): the workspace's sources and its config file as
 // one ZIP archive, made by the server from the files on disk (`GET /api/export/sources.zip`, behind the session's sign-in).
 
+import { fetchServer } from '../app/sign-in';
+
 /** Where the server serves the archive. */
 export const SOURCES_ZIP = '/api/export/sources.zip';
 
@@ -23,7 +25,7 @@ export function attachmentName(disposition: string | null): string | undefined {
  * broken download, then saved under the name the server gives. Rejects with the server's message or the network's.
  */
 export async function downloadSources(): Promise<void> {
-    const res = await fetch(SOURCES_ZIP, { credentials: 'same-origin' });
+    const res = await fetchServer(SOURCES_ZIP);
     if (!res.ok) throw new Error(`${res.status} ${(await res.text().catch(() => '')).trim() || res.statusText}`.trim());
     const url = URL.createObjectURL(await res.blob());
     try {

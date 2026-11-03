@@ -2,6 +2,7 @@ import { GitCompare } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { GitRefs } from '@domaintrail/visualization';
 import type { Baseline, BaselineSpec } from '@domaintrail/visualization/protocol';
+import { fetchServer } from './app/sign-in';
 import { useT } from './i18n';
 
 /** How the baseline is named in the header: the previous save, or the ref with its commit. */
@@ -91,7 +92,7 @@ export function BaselineMenu({ baseline, anchor, onClose }: { baseline: Baseline
     useEffect(() => {
         let cancelled = false;
         const timer = setTimeout(() => setWaited(true), REFS_WAIT_MS);
-        fetch('/api/git/refs')
+        fetchServer('/api/git/refs')
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the response of our own server's api/git/refs
             .then((r) => (r.ok ? (r.json() as Promise<GitRefs>) : null))
             .then((r) => !cancelled && setRefs(r ?? { branches: [], tags: [], commits: [] }))
@@ -103,7 +104,7 @@ export function BaselineMenu({ baseline, anchor, onClose }: { baseline: Baseline
     }, []);
 
     const choose = async (spec: BaselineSpec) => {
-        const r = await fetch('/api/baseline', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(spec) });
+        const r = await fetchServer('/api/baseline', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(spec) });
         if (r.ok) onClose();
         else setError(await r.text());
     };
