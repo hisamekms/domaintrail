@@ -389,6 +389,11 @@ Rules:
    body: it is then shown at Design Level only. Mark so the fine-grained events you add while detailing a storming
    with commands, policies and aggregates, and never the business events. To show an event at Big Picture too
    ("promote" it), remove its \`level design\`; there is no other level (\`level big-picture\` is an error).
+16. A \`.dtes\` storming that goes through several phases is organised in \`stage\`s, in time order, each \`after\`
+   the one before it (\`stage Issuance "発行" after Preparation { … }\`). In a stage (or a storming without stages),
+   the normal flow is a \`timeline\`, written first; each exception is an \`exception\` that starts with the event of
+   the flow it branches off at (written again) and, when it returns to the flow, ends with \`then <Event>\`. Another
+   normal path is another \`timeline\` that starts at its branch event too.
 
 ${replyDescription()}
 
