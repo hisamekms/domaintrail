@@ -2,7 +2,7 @@ import { CornerDownRight, PanelLeftClose, Search, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { DisplayMode } from '@domaintrail/visualization';
 import type { StormingView } from '@domaintrail/visualization/protocol';
-import { Collapse, indent, Section, Twisty } from './explorer';
+import { Collapse, groupCount, indent, Section, Twisty } from './explorer';
 import { useT } from './i18n';
 import { nameIn } from './model-utils';
 import { usePersistentState } from './shared/layout';
@@ -133,7 +133,8 @@ export function StormingNavigator(props: {
         const selected = shown?.stormingId === node.stormingId && shown.scope === node.scope;
         const open = isOpen(node.key);
         const hasChildren = node.children.length > 0;
-        const timelines = node.kind === 'stage' ? node.children.length : 0;
+        // a stage counts its timelines only while collapsed, when its rows do not tell it, as the model tree's groups do
+        const count = node.kind === 'stage' && hasChildren && !open;
         return (
             <div key={node.key}>
                 <div
@@ -154,8 +155,10 @@ export function StormingNavigator(props: {
                             <CornerDownRight size={12} aria-hidden />
                         </span>
                     )}
-                    <span className="tree-text">{node.name}</span>
-                    {timelines > 0 && <span className="muted storming-nav-count">{timelines}</span>}
+                    <span className="tree-text">
+                        {node.name}
+                        {count && <span className="muted tree-count"> {groupCount(node.children.length)}</span>}
+                    </span>
                 </div>
                 {hasChildren && <Collapse open={open}>{node.children.map((c) => row(c, depth + 1, visible && open))}</Collapse>}
             </div>
