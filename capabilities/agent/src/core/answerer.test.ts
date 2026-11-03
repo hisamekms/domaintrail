@@ -147,6 +147,9 @@ describe('the answerer role', () => {
         push({ kind: 'job', job: job('answer', 1, { sessionSoFar: { text: 'FULL-1', last: 3 }, readRevision: REVISION }) });
         await waitFor(() => results.length === 1);
         expect(results[0].result).toMatchObject({ kind: 'answer', answer: 'Order は注文です。', readRevision: REVISION });
+        // the answer is Markdown for a narrow column: one heading level, short, no links or images
+        expect(agent.turns[0].turn.prompt).toContain('use at most one heading level (`#`), and no links or');
+        expect(agent.turns[0].turn.prompt).toContain('Keep it short');
         // a fresh process: the whole session so far, no continued prompt
         expect(agent.turns[0].turn.prompt).toContain('FULL-1');
         expect(agent.turns[0].turn.continuedPrompt).toBeUndefined();

@@ -57,7 +57,7 @@ export function cardRuns(unit: ChangeUnit, lookup: ReturnType<typeof revisionLoo
 export interface QuoteDisplay {
     /**
      * Their quotes: not when the run before on the card applied the same messages (its quotes say it), unless this run
-     * says what it did of them (the quotes carry that).
+     * says what it did of them (the quotes carry that); never in Solo, where the only person asked them all.
      */
     readonly quotes: boolean;
     /** The reply's note on each message: only for several; one message's is what the summary says. */
@@ -67,11 +67,11 @@ export interface QuoteDisplay {
 const sameRequests = (a: CardRun, b: CardRun): boolean =>
     a.quotes.length === b.quotes.length && a.quotes.every((q, i) => q.request.request === b.quotes[i]?.request.request);
 
-/** What the `i`-th run of a card shows of the messages it applied. */
-export function quoteDisplay(runs: readonly CardRun[], i: number): QuoteDisplay {
+/** What the `i`-th run of a card shows of the messages it applied (in Solo, none of them). */
+export function quoteDisplay(runs: readonly CardRun[], i: number, solo = false): QuoteDisplay {
     const run = runs[i];
     const before = i > 0 ? runs[i - 1] : undefined;
-    if (!run) return { quotes: false, perRequest: false };
+    if (!run || solo) return { quotes: false, perRequest: false };
     const outcomes = run.quotes.some((q) => q.progress !== undefined);
     return { quotes: !before || !sameRequests(before, run) || outcomes, perRequest: run.quotes.length > 1 };
 }
