@@ -39,8 +39,8 @@ export interface ClaudeRunOptions {
 }
 
 /**
- * What no agent reads or edits inside its working directory, whatever its tools: the session's own state (the agent
- * API's credential is in `.domaintrail/session/agent.json`) and git's, at any depth (a nested repository's `.git/`, a
+ * What no agent reads or edits inside its working directory, whatever its tools: the session's own state (its
+ * database, the seed's cookies; the agent API's credential is in memory only since M5) and git's, at any depth (a nested repository's `.git/`, a
  * submodule's or worktree's `.git` file, a nested workspace's `.domaintrail/`). `**` matches at any depth, the top
  * included (measured with Claude Code 2.1.317: `sub/.git/config`, `deep/a/.git/HEAD`, `mod/.git` and
  * `sub/.domaintrail/x` refused); the `./` rules are kept as well.
