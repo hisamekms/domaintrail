@@ -880,3 +880,50 @@ After M6 (the composer is reworked there), a separate task **M8** adds templates
 - The list depends on what is open and selected: Event Storming (Big Picture / Design Level), the structure or catalog
   with an element selected, a state view, or nothing selected. A selected element goes in as the `#` target.
 - Built-in templates, plus a team's own in `domaintrail.jsonc` (a section to name in M8), shown after the built-in ones.
+
+## `/` commands: ways of working with the AI (decided, round 5, 2026-11-03)
+
+This widens M8. Typing `/` lists **commands** next to the templates. A command starts a way of working with the AI.
+A template only puts text in the composer.
+
+- **Two kinds of command:**
+  - **Interview.** The AI asks one question at a time, digs into vague answers, and ends with a brief that the user
+    confirms (確定), edits and confirms, or drops.
+  - **Review.** The AI reads the model, lists candidate changes, and the user checks the ones to apply; they become a
+    run. This reuses the proposal options, with several picked instead of one.
+- **First set:**
+  - Interviews: `/es` (start an event storming) and `/model` (start modeling a context), plus the templates.
+  - Next, a review: `/levels`, once events can carry `level design`. It suggests which events are Design Level only
+    and which to promote.
+  - Later: other reviews (terms, hotspots, from a storming to `.dt`), then a team's own commands defined in the
+    repository.
+- **Interview contents:**
+  - `/es`: the business in scope; the first and last events; the purpose (learn the current flow / improve / design
+    anew); what the result is for (align people / lead into modeling); how far to go (Big Picture / Design Level);
+    who takes part.
+  - `/model`: the context; whether a storming feeds it; what the generated code is for; constraints (existing
+    systems, fixed terms); how far to go.
+- **Routing:** while an interview runs, the messages of the person who started it go to the interviewer without
+  triage. Replies to an interview would otherwise come out "neither". Only the facilitator can start one in Collab;
+  the others' messages are triaged as usual.
+- **Where the brief goes:** the `///` description right above the `storming` (for `/es`) or the `context` (for
+  `/model`). Four or five lines with conventional heads:
+
+  ```text
+  /// 目的: …
+  /// 範囲: …
+  /// 使い道: …
+  /// レベル: …
+  ```
+
+  A run writes it. A storming that does not exist yet is created with the brief. Being a description, the brief shows
+  in the inspector, and the AI reads it with the model. The grammar does not change; dedicated clauses can come later
+  if the AI or the tools need the items as data.
+- **Languages:** the app is Japanese and English.
+  - Each command has a stable English ID (`es`, `model`, `levels`) and a name in each UI language: 「ES を始める」 /
+    "Start event storming".
+  - Filtering after `/` matches the ID and the name in the current language.
+  - The questions, the brief and the AI's replies follow the UI language, or the language the user writes in.
+  - The brief is written once, in the language of the interview; it is not duplicated in both languages.
+  - A command is defined once, independently of language. Templates have both languages.
+- **Empty workspace:** the empty-canvas line points to `/es` instead of only "ask in the chat".
