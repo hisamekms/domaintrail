@@ -68,6 +68,10 @@ aggregate root (`--model-aggregate`); each has its own name so that one can chan
 
 ### 2. Theme (issue #33 §3.1, plus disabled)
 
+> The neutral primitives were later tinted to the brand's hue and the dark `--muted` raised to `--p-slate-350`
+> (docs/plans/modes.md, "As built: the neutrals tinted to the brand's hue"). The slate and night hex values in the
+> tables below are the earlier, untinted ones; the contrast ratios of the unchanged roles moved by less than 0.1.
+
 | Token | Light | Dark | Role | Used by |
 | --- | --- | --- | --- | --- |
 | `--brand-ink` | `#4338CA` | `#A5B4FC` | the logo's ink on this theme | `.brand-mark` (the logo files carry their own ink; the token stays for anything drawn in CSS around them) |

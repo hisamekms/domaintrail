@@ -21,29 +21,32 @@
     --p-brand-indigo: #4338ca;
     --p-brand-indigo-dark: #a5b4fc;
     --p-brand-amber: #fbbf24;
-    /* slate, and the blue-black neutrals of the dark theme */
+    /* the neutrals: slate, and the blue-black night of the dark theme, both tinted to the brand's hue: each keeps the
+       OKLCH lightness of Tailwind's slate (and of the earlier night steps) with the hue of --p-brand-indigo (277°)
+       and 1.25× the chroma; slate-350 is the OKLCH midpoint of slate-300 and slate-400, tinted the same way */
     --p-white: #ffffff;
-    --p-slate-50: #f8fafc;
-    --p-slate-100: #f1f5f9;
-    --p-slate-200: #e2e8f0;
-    --p-slate-300: #cbd5e1;
-    --p-slate-400: #94a3b8;
-    --p-slate-450: #8492a6;
-    --p-slate-500: #64748b;
-    --p-slate-550: #5e6b7f;
-    --p-slate-600: #475569;
-    --p-slate-700: #334155;
-    --p-slate-800: #1e293b;
-    --p-slate-900: #0f172a;
-    --p-night-500: #64708a;
-    --p-night-600: #465066;
-    --p-night-650: #343b4f;
-    --p-night-700: #2e3547;
-    --p-night-750: #2a3042;
-    --p-night-800: #252b3b;
-    --p-night-850: #242a3b;
-    --p-night-900: #191d2b;
-    --p-night-950: #10131d;
+    --p-slate-50: #f9fafd;
+    --p-slate-100: #f3f4fa;
+    --p-slate-200: #e4e7f2;
+    --p-slate-300: #cfd3e5;
+    --p-slate-350: #b5b9d1;
+    --p-slate-400: #9aa0be;
+    --p-slate-450: #8a8fab;
+    --p-slate-500: #6b7091;
+    --p-slate-550: #636884;
+    --p-slate-600: #4d526e;
+    --p-slate-700: #393e5a;
+    --p-slate-800: #23263f;
+    --p-slate-900: #12152e;
+    --p-night-500: #686e90;
+    --p-night-600: #494e6b;
+    --p-night-650: #363a53;
+    --p-night-700: #30344b;
+    --p-night-750: #2b2f46;
+    --p-night-800: #272a3e;
+    --p-night-850: #25293f;
+    --p-night-900: #1a1c2e;
+    --p-night-950: #10121f;
     /* indigo */
     --p-indigo-50: #eef2ff;
     --p-indigo-100: #e0e7ff;
@@ -199,13 +202,13 @@
     --disabled-border: var(--p-slate-200);
     /* hovers: a colourless tint that only says "this one" (indigo is for what is chosen) */
     --hover: var(--p-slate-100);
-    --row-hover: rgba(15, 23, 42, 0.045);
+    --row-hover: color-mix(in srgb, var(--p-slate-900) 4.5%, transparent);
     /* the hover of toolbar buttons: a grey that shows on the panel and on the canvas */
     --hover-strong: var(--p-slate-200);
     --neutral-tint: var(--p-slate-200);
-    --shadow: rgba(15, 23, 42, 0.12);
+    --shadow: color-mix(in srgb, var(--p-slate-900) 12%, transparent);
     /* behind a modal dialog (the same in both themes) */
-    --backdrop: rgba(15, 23, 42, 0.35);
+    --backdrop: color-mix(in srgb, var(--p-slate-900) 35%, transparent);
     --legend-bg: rgba(255, 255, 255, 0.92);
     --resizer: color-mix(in srgb, var(--action) 35%, transparent);
     /* the source view's syntax colours (AA on the surface and on the error, warning and selected rows) */
@@ -401,7 +404,8 @@
     --surface-muted: var(--p-night-800);
     --text: var(--p-slate-100);
     --text-secondary: var(--p-slate-300);
-    --muted: var(--p-slate-400);
+    /* a step lighter than slate-400 (APCA Lc 50 on the surfaces) for Lc 60 on bg, surface and surface-muted */
+    --muted: var(--p-slate-350);
     --border: var(--p-night-700);
     --border-strong: var(--p-night-500);
     --action: var(--p-indigo-300);
@@ -413,11 +417,11 @@
     --disabled-text: var(--p-night-500);
     --disabled-border: var(--p-night-650);
     --hover: var(--p-night-750);
-    --row-hover: rgba(241, 245, 249, 0.05);
+    --row-hover: color-mix(in srgb, var(--p-slate-100) 5%, transparent);
     --hover-strong: var(--p-night-650);
     --neutral-tint: var(--p-night-700);
     --shadow: rgba(0, 0, 0, 0.5);
-    --legend-bg: rgba(25, 29, 43, 0.92);
+    --legend-bg: color-mix(in srgb, var(--p-night-900) 92%, transparent);
     --syntax-keyword: var(--p-violet-300);
     --syntax-type: var(--p-blue-300);
     --syntax-primitive: var(--p-teal-300);
