@@ -2,7 +2,7 @@
 // key of a rate limit, which trusts a forwarded address only from loopback and only when this process started the
 // quick tunnel (its own cloudflared).
 import { describe, expect, test } from 'bun:test';
-import { changesState, checkAccess, clientKey, isLoopbackAddress, sessionHostPolicy } from './access.js';
+import { addressKey, changesState, checkAccess, clientKey, isLoopbackAddress, sessionHostPolicy } from './access.js';
 
 describe('the client key', () => {
     test('is the forwarded CF-Connecting-IP only from loopback, with the tunnel this process started', () => {
@@ -12,15 +12,25 @@ describe('the client key', () => {
         expect(clientKey('::ffff:127.0.0.1', forwarded, true)).toBe('203.0.113.7');
         expect(clientKey('192.0.2.1', forwarded, true)).toBe('192.0.2.1');
         expect(clientKey('10.0.0.5', { 'cf-connecting-ip': '127.0.0.1' }, true)).toBe('10.0.0.5');
-        // a self-managed proxy (no --tunnel): the header is never read
-        expect(clientKey('127.0.0.1', forwarded)).toBe('127.0.0.1');
-        expect(clientKey('127.0.0.1', forwarded, false)).toBe('127.0.0.1');
+        // a self-managed proxy (no --tunnel): the header is never read, and loopback tells no client from another
+        expect(clientKey('127.0.0.1', forwarded)).toBeUndefined();
+        expect(clientKey('127.0.0.1', forwarded, false)).toBeUndefined();
+    });
+
+    test('IPv6 counts by its /64; an IPv4-mapped address as its IPv4', () => {
+        expect(addressKey('2001:db8:1:2:aaaa::1')).toBe('2001:db8:1:2::/64');
+        expect(addressKey('2001:DB8:1:2:bbbb:cccc:dddd:eeee')).toBe('2001:db8:1:2::/64');
+        expect(addressKey('2001:db8::1')).toBe('2001:db8:0:0::/64');
+        expect(addressKey('::ffff:203.0.113.7')).toBe('203.0.113.7');
+        expect(addressKey('203.0.113.7')).toBe('203.0.113.7');
+        expect(clientKey('127.0.0.1', { 'cf-connecting-ip': '2001:db8:1:2::99' }, true)).toBe('2001:db8:1:2::/64');
+        expect(clientKey('2001:db8:1:2::5', {})).toBe('2001:db8:1:2::/64');
     });
 
     test('ignores a forwarded value that is not an address, and falls back to the socket', () => {
-        expect(clientKey('127.0.0.1', { 'cf-connecting-ip': 'evil, 1.2.3.4' }, true)).toBe('127.0.0.1');
-        expect(clientKey('127.0.0.1', {})).toBe('127.0.0.1');
-        expect(clientKey(undefined, {})).toBe('unknown');
+        expect(clientKey('127.0.0.1', { 'cf-connecting-ip': 'evil, 1.2.3.4' }, true)).toBeUndefined();
+        expect(clientKey('127.0.0.1', {}, true)).toBeUndefined();
+        expect(clientKey(undefined, {})).toBeUndefined();
     });
 
     test('loopback addresses', () => {

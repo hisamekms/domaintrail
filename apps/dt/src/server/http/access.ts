@@ -101,17 +101,46 @@ export const isLoopbackAddress = (address: string | undefined): boolean =>
 /** The header the local `cloudflared` puts the visitor's address in. */
 const CONNECTING_IP = 'cf-connecting-ip';
 
+/** The eight 16-bit groups of an IPv6 address (`::` expanded), or undefined when it is not one. */
+function ipv6Groups(address: string): string[] | undefined {
+    const [head = '', tail, ...more] = address.split('::');
+    if (more.length) return undefined;
+    const part = (s: string): string[] => (s ? s.split(':') : []);
+    const left = part(head);
+    const right = part(tail ?? '');
+    const missing = 8 - left.length - right.length;
+    if (tail === undefined ? missing !== 0 : missing < 1) return undefined;
+    const groups = [...left, ...Array<string>(missing).fill('0'), ...right];
+    return groups.every((g) => /^[0-9a-f]{1,4}$/i.test(g)) ? groups.map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')) : undefined;
+}
+
 /**
- * Who a request comes from, as a key for a rate limit: the socket's remote address, unless `trustForwarded` (this
- * process started the `cloudflared` quick tunnel itself: `dt collab --tunnel`), that address is this machine and the
- * request carries `CF-Connecting-IP` (the visitor's address, as that `cloudflared` forwards it). Otherwise the header is
- * never read: a local reverse proxy or any other local client could say anything in it.
+ * An address as a rate limit counts it: IPv4 as it is (an IPv4-mapped IPv6 address as its IPv4), IPv6 by its /64 (one
+ * host usually has a whole /64 to pick addresses from).
  */
-export function clientKey(remoteAddress: string | undefined, headers: IncomingHttpHeaders, trustForwarded = false): string {
+export function addressKey(address: string): string {
+    const plain = address
+        .trim()
+        .toLowerCase()
+        .replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
+    if (!plain.includes(':')) return plain;
+    const groups = ipv6Groups(plain);
+    return groups ? `${groups.slice(0, 4).join(':')}::/64` : plain;
+}
+
+/**
+ * Who a request comes from, as a key for a rate limit (`addressKey`): the socket's remote address when it is not this
+ * machine. From this machine, the visitor's address in `CF-Connecting-IP` when `trustForwarded` (this process started
+ * the `cloudflared` quick tunnel itself: `dt collab --tunnel`); else undefined: behind a reverse proxy of one's own
+ * every client comes from loopback, and the header could say anything (any local client may send it), so clients
+ * cannot be told apart and only the limits that need no key hold.
+ */
+export function clientKey(remoteAddress: string | undefined, headers: IncomingHttpHeaders, trustForwarded = false): string | undefined {
+    if (remoteAddress === undefined) return undefined;
+    if (!isLoopbackAddress(remoteAddress)) return addressKey(remoteAddress);
     const forwarded = headers[CONNECTING_IP];
-    if (trustForwarded && isLoopbackAddress(remoteAddress) && typeof forwarded === 'string' && /^[0-9a-f.:]{2,45}$/i.test(forwarded.trim()))
-        return forwarded.trim().toLowerCase();
-    return remoteAddress ?? 'unknown';
+    if (trustForwarded && typeof forwarded === 'string' && /^[0-9a-f.:]{2,45}$/i.test(forwarded.trim())) return addressKey(forwarded);
+    return undefined;
 }
 
 /**
