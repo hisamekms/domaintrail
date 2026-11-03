@@ -216,6 +216,32 @@ describe('the session so far, approved proposals and answering instead of editin
     });
 });
 
+describe("an interview's confirmed brief (the `/` commands)", () => {
+    test('the brief is data in the block, its lines as they go above the storming; rule 15 says where and when to replace', () => {
+        const message = frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'まずビッグピクチャーで');
+        const run: Json<Collaboration.RunInput> = {
+            ...input([{ ...message, targets: [] }]),
+            brief: {
+                interview: crypto.randomUUID(),
+                command: 'Es',
+                brief: { name: 'Returns', label: '返品', isNew: true, replaces: false, text: '目的: 返金を早める\n範囲: 申請から返金まで' },
+            },
+        };
+        const prompt = buildPrompt(run, new Map(), 'n');
+        expect((block(prompt, 'n') as { confirmedBrief: unknown }).confirmedBrief).toEqual({
+            for: 'storming',
+            name: 'Returns',
+            label: '返品',
+            create: true,
+            replaceExistingDescription: false,
+            lines: ['目的: 返金を早める', '範囲: 申請から返金まで'],
+        });
+        expect(prompt).toContain('15. `confirmedBrief`, when present');
+        expect(prompt).toContain('Replace an existing description only when');
+        expect(block(buildPrompt(input([message]), new Map(), 'n'), 'n')).not.toHaveProperty('confirmedBrief');
+    });
+});
+
 describe('the prompt of a warm agent', () => {
     const names = new Map([['dev:bob', 'Bob']]);
     const run = input([frozen({ kind: 'Workspace' }, 'x')]);
