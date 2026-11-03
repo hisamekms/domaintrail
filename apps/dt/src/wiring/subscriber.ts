@@ -290,7 +290,8 @@ export function answererView(root: string, env?: NodeJS.ProcessEnv): WorkspaceVi
  * What git ignores, kept from the runner (it works in the workspace itself) as deny rules, asked at each run's start:
  * the nested repositories and submodules as a whole, then git's ignored entries (`git ls-files -o -i --exclude-standard
  * --directory`) where it speaks for the root, else a walk with `GitIgnore` and the user's excludes file (a directory
- * holding a `.git` denied as a whole); at most `MAX_IGNORED_ENTRIES` (the ADR's residual risk).
+ * holding a `.git` denied as a whole). More than `MAX_IGNORED_ENTRIES` refuses the run (`TooManyDeniedEntries`), never
+ * a list cut short.
  */
 export function runnerDeniedPaths(root: string, env?: NodeJS.ProcessEnv): Promise<string[]> {
     let gitignore: GitIgnore | undefined;

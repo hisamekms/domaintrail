@@ -93,13 +93,18 @@ describe('the read scope of the agents, as wired', () => {
         // a submodule: a gitlink (mode 160000) in the index, its directory checked out with a .git file
         await put(root, { 'mod/.git': 'gitdir: ../.git/modules/mod', 'mod/.env': 'SUBMODULE_ENV_CANARY', 'mod/b.md': 'b' });
         git(root, 'update-index', '--add', '--cacheinfo', `160000,${'1'.repeat(40)},mod`);
+        // a gitlink whose directory is not there: nothing to deny
+        git(root, 'update-index', '--add', '--cacheinfo', `160000,${'2'.repeat(40)},gone`);
+        // an ignored case variant of ours: not covered by the static rules (exact names), so it keeps its own rule
+        await put(root, { '.gitignore': '.DomainTrail/\n', 'sub/.DomainTrail/x': 'CASE_CANARY', 'sub/notes.md': 'n' });
         const view = answererView(root, env);
         try {
-            expect(await listed(await view.refresh())).toEqual(['README.md']);
+            expect(await listed(await view.refresh())).toEqual(['.gitignore', 'README.md', 'sub/notes.md']);
         } finally {
             await view.dispose();
         }
-        expect((await runnerDeniedPaths(root, env)).sort()).toEqual(['mod', 'vendor/lib']);
+        // the nested repositories first, then git's ignored entries in its order
+        expect(await runnerDeniedPaths(root, env)).toEqual(['mod', 'vendor/lib', 'sub/.DomainTrail']);
     });
 
     test('no git repository: GitIgnore with the user excludes file; nested .git and .domaintrail never in the view', async () => {

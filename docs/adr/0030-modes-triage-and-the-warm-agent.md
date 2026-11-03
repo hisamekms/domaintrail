@@ -207,6 +207,13 @@ holding a `.git` — since git applies none of their own ignores for the root's 
 otherwise be readable). They were already out of the view (git lists none of their files; the walk no longer descends
 into them). This replaces the residual risk above that the runner can read their files; a directory with a `.git` that
 is no valid repository is, to git, part of the root's and is treated as such.
+A second look settled two more points. The runner's deny list **fails closed**: more than 500 entries (nested
+repositories first, then git's ignored entries, in git's order) refuse the run — it fails as `AgentError`, the
+agent's log saying to ignore whole directories or move nested repositories out — instead of running with the rest
+unprotected (this replaces the cap of the residual risk above); a gitlink whose directory is absent is not listed.
+And only the exact `.git` and `.domaintrail` are left out of the deny list (the static rules cover them); a case
+variant (`.GIT/x`, `sub/.DomainTrail`) keeps a rule of its own rather than rely on the matcher's case handling, while
+what goes into the answerer's view still leaves out every case variant.
 
 ### 11. The CLI and the config as built (M5)
 

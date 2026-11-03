@@ -31,11 +31,11 @@ export const foldedName = (name: string): string => name.normalize('NFC').toLowe
 /** Whether `name` is one of `NEVER` in any case or Unicode form. */
 const neverName = (name: string): boolean => NEVER.has(foldedName(name));
 
-/** Whether `name` is `.git` or `.domaintrail` (git's or ours) in any case or Unicode form: never given to the runner. */
-export const ownName = (name: string): boolean => {
-    const folded = foldedName(name);
-    return folded === '.git' || folded === '.domaintrail';
-};
+/**
+ * Whether `name` is exactly `.git` or `.domaintrail`: what the runner's static deny rules (`READ_DENIED`) already cover
+ * at any depth. A case variant (`.GIT`) is not: it keeps a rule of its own in the deny list.
+ */
+const coveredName = (name: string): boolean => name === '.git' || name === '.domaintrail';
 
 /** Whether the directory `dir` holds a `.git` (a nested repository, a submodule, a worktree), in any case. */
 async function holdsRepository(dir: string): Promise<boolean> {
@@ -200,8 +200,19 @@ async function readRegular(file: string, maxBytes: number): Promise<Buffer | und
     }
 }
 
-/** Most ignored entries `ignoredEntries` gives (deny rules of the runner's process). */
+/** Most entries `ignoredEntries` gives (deny rules of the runner's process); more is refused, never truncated. */
 export const MAX_IGNORED_ENTRIES = 500;
+
+/** The runner's deny list would exceed `MAX_IGNORED_ENTRIES`: its run is refused rather than given a partial list. */
+export class TooManyDeniedEntries extends Error {
+    constructor() {
+        super(
+            `The workspace has more than ${MAX_IGNORED_ENTRIES} ignored files, ignored directories and nested repositories for the agent's deny list: ` +
+                'ignore whole directories (e.g. `dist/` rather than the files in it) or move nested repositories out of the workspace, then run again.',
+        );
+        this.name = 'TooManyDeniedEntries';
+    }
+}
 
 /** Where the runner's ignored entries come from: git's list when it speaks for the root, else a walk with `ignores`. */
 export interface IgnoredSource {
@@ -216,26 +227,31 @@ export interface IgnoredSource {
 /**
  * The runner works in the workspace itself (it edits it), so what git ignores is kept from it by deny rules
  * (`deniedRules`): the nested repositories and submodules as a whole (git does not apply their own ignores for us), then
- * the topmost ignored files and directories present now (relative, `/`-separated; nothing below an ignored directory,
- * nor anything in `.domaintrail` and `.git`, in any case, which are always denied at any depth). Past
- * `MAX_IGNORED_ENTRIES`, the rest is left out (the ADR's residual risk).
+ * the topmost ignored files and directories present now, in git's order (relative, `/`-separated; nothing below an
+ * ignored directory, nor anything below an exact `.domaintrail` or `.git`, which the static rules deny at any depth; a
+ * case variant such as `.GIT` keeps its own rule). More than `MAX_IGNORED_ENTRIES` is refused (`TooManyDeniedEntries`):
+ * the run fails rather than run with some of them unprotected.
  */
 export async function ignoredEntries(root: string, source: IgnoredSource): Promise<string[]> {
     const listed = await source.list?.();
     if (listed) {
-        return [...new Set(listed.map((p) => p.replace(/\/$/, '')))].filter((p) => p && !p.split('/').some(ownName)).slice(0, MAX_IGNORED_ENTRIES);
+        const entries = [...new Set(listed.map((p) => p.replace(/\/$/, '')))].filter((p) => p && !p.split('/').some(coveredName));
+        if (entries.length > MAX_IGNORED_ENTRIES) throw new TooManyDeniedEntries();
+        return entries;
     }
     const out: string[] = [];
     const walk = async (from: string, rel: string): Promise<void> => {
-        for (const entry of await readdir(from, { withFileTypes: true })) {
-            if (out.length >= MAX_IGNORED_ENTRIES) return;
-            if (ownName(entry.name)) continue;
+        // in a fixed order: the same workspace, the same list
+        const entries = (await readdir(from, { withFileTypes: true })).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        for (const entry of entries) {
+            if (coveredName(entry.name)) continue;
             const full = path.join(from, entry.name);
             const relPath = rel ? `${rel}/${entry.name}` : entry.name;
             const directory = entry.isDirectory();
             // a nested repository or a submodule as a whole: its own ignores are not ours to read
             if (source.ignores(full, directory) || (directory && (await holdsRepository(full)))) {
                 out.push(relPath);
+                if (out.length > MAX_IGNORED_ENTRIES) throw new TooManyDeniedEntries();
                 continue;
             }
             if (directory) await walk(full, relPath);

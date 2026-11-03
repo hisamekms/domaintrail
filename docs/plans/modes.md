@@ -563,6 +563,8 @@ M4 landed the triage and the answers end to end on the server and in `capabiliti
 - **After M4b** (its review; ADR 0030 "As built after M4b"): `.git` / `.domaintrail` recognised in any case and
   Unicode form, the view copying a listed file only under the names `readdir` gives; nested repositories and
   submodules (gitlinks, untracked repositories; walked: a directory holding a `.git`) denied to the runner as a whole.
+  The runner's deny list fails closed past 500 entries (the run fails, the agent's log says how to reduce them); case
+  variants of `.git` / `.domaintrail` keep their own deny rule (only the exact names are left to the static rules).
 - **Config**: no key was added in M4. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
   `validateTriageConfig` and their defaults are exported by `@domaintrail/agent`; M5's config module places them under
   `agent.answer` / `agent.triage` (see "Connected after M4 and M5").

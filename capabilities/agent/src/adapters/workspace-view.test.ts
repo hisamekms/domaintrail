@@ -179,34 +179,38 @@ describe('what git ignores, kept from the runner by deny rules', () => {
         await mkdir(path.join(root, '.domaintrail'));
         const ignored = new Set(['dist', '.env', 'a*.log', '.domaintrail']);
         expect((await ignoredEntries(root, { ignores: (p) => ignored.has(path.relative(root, p)) })).sort()).toEqual(['.env', 'a*.log', 'dist']);
-        // git's list when it speaks for the root (no walk): its directories without the trailing /, nothing of .git or
-        // .domaintrail at any depth, at most MAX_IGNORED_ENTRIES
-        const { MAX_IGNORED_ENTRIES } = await import('./workspace-view.js');
+        // git's list when it speaks for the root (no walk), in its order: its directories without the trailing /, nothing
+        // below an exact .git or .domaintrail (the static rules), a case variant kept with a rule of its own
+        const { MAX_IGNORED_ENTRIES, TooManyDeniedEntries } = await import('./workspace-view.js');
+        const notWalked = (): boolean => {
+            throw new Error('not walked');
+        };
         const fromGit = await ignoredEntries(root, {
-            list: async () => [
-                '.env',
-                'dist/',
-                'sub/.git/',
-                'sub/.domaintrail/',
-                '.GIT/x',
-                'Sub/.DomainTrail/',
-                ...Array.from({ length: 600 }, (_, i) => `f${i}`),
-            ],
-            ignores: () => {
-                throw new Error('not walked');
-            },
+            list: async () => ['.env', 'dist/', 'sub/.git/', 'sub/.domaintrail/', '.GIT/x', 'Sub/.DomainTrail/', 'dist/'],
+            ignores: notWalked,
         });
-        expect(fromGit.slice(0, 3)).toEqual(['.env', 'dist', 'f0']);
-        expect(fromGit).toHaveLength(MAX_IGNORED_ENTRIES);
+        expect(fromGit).toEqual(['.env', 'dist', '.GIT/x', 'Sub/.DomainTrail']);
+        // more than MAX_IGNORED_ENTRIES: refused (fail closed), never a list cut short
+        const many = Array.from({ length: MAX_IGNORED_ENTRIES + 1 }, (_, i) => `f${i}`);
+        expect(await ignoredEntries(root, { list: async () => many.slice(0, MAX_IGNORED_ENTRIES), ignores: notWalked })).toHaveLength(MAX_IGNORED_ENTRIES);
+        const refused = await ignoredEntries(root, { list: async () => many, ignores: notWalked }).catch((e: unknown) => e);
+        expect(refused).toBeInstanceOf(TooManyDeniedEntries);
+        expect(String(refused)).toContain('ignore whole directories');
         // git does not speak for the root: walked; a directory holding a .git (in any case) denied as a whole
         await mkdir(path.join(root, 'vendor', 'lib', '.GIT'), { recursive: true });
         await writeFile(path.join(root, 'vendor', 'lib', '.env'), 'NESTED_CANARY');
-        expect((await ignoredEntries(root, { list: async () => undefined, ignores: (p) => ignored.has(path.relative(root, p)) })).sort()).toEqual([
+        expect(await ignoredEntries(root, { list: async () => undefined, ignores: (p) => ignored.has(path.relative(root, p)) })).toEqual([
             '.env',
             'a*.log',
             'dist',
             'vendor/lib',
         ]);
+        // walked past the bound: refused as well
+        const wide = await scratch();
+        for (let i = 0; i <= MAX_IGNORED_ENTRIES; i++) await writeFile(path.join(wide, `f${i}.log`), 'x');
+        expect(await ignoredEntries(wide, { list: async () => undefined, ignores: (p) => p.endsWith('.log') }).catch((e: unknown) => e)).toBeInstanceOf(
+            TooManyDeniedEntries,
+        );
         expect(deniedRules(['.env', 'a*.log', '../x', '/abs'])).toEqual([
             'Read(./.env)',
             'Edit(./.env)',
