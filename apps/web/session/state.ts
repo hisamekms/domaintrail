@@ -239,6 +239,13 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         case 'ProposalApproved':
         case 'ProposalRejected':
         case 'ProposalWithdrawn':
+        // the interviews of the `/` commands: the state holds them whole
+        case 'InterviewStarted':
+        case 'InterviewAnswered':
+        case 'InterviewQuestionAsked':
+        case 'InterviewBriefed':
+        case 'InterviewConfirmed':
+        case 'InterviewStopped':
             return { state: at, refetch: true };
     }
 }

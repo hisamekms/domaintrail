@@ -17,6 +17,7 @@ import type {
     SentBody,
     SessionStateBody,
     SetMarkBody,
+    StartInterviewBody,
     RevertRequestedBody,
 } from '@domaintrail/collaboration/protocol';
 import type { TargetStatus } from '@domaintrail/collaboration';
@@ -90,6 +91,13 @@ export const sessionApi = {
         call(`proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: note ? { note } : {} }),
     /** Hands the AI's answer or proposal for a message out again, once the server gave it up (the facilitator). */
     retryAnswer: (request: string): Promise<unknown> => call(`requests/${encodeURIComponent(request)}/retry-answer`, { method: 'POST', body: {} }),
+    /** Starts the `/es` or `/model` interview (the facilitator; in Solo, the person). */
+    startInterview: (body: StartInterviewBody): Promise<unknown> => call('interviews', { method: 'POST', body }),
+    /** Confirms an interview's brief, as is or with its text edited (its starter): a run writes it. */
+    confirmInterview: (id: string, text?: string): Promise<unknown> =>
+        call(`interviews/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: text === undefined ? {} : { text } }),
+    /** Stops an interview (its starter). */
+    stopInterview: (id: string): Promise<unknown> => call(`interviews/${encodeURIComponent(id)}/stop`, { method: 'POST', body: {} }),
     /** Withdraws my open change proposal (its requester). */
     withdrawProposal: (id: string): Promise<unknown> => call(`proposals/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
     /** Another one-time facilitator link, to hand the role over. */

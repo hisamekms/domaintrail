@@ -41,7 +41,7 @@ export interface SessionPage {
     readonly baselineLocked: boolean;
     /** The collab ended: the server is gone for good, so the page does not say it waits to reconnect (the summary says it ended). */
     readonly ended: boolean;
-    /** An AI is connected to the live chat (every role): an empty view says that asking there makes it. */
+    /** An AI is connected to the live chat (every role) and the person may start `/es`: an empty view points to it. */
     readonly aiReady: boolean;
 }
 
@@ -128,6 +128,23 @@ export function useSessionPage(input: {
         [session !== undefined, input.mode, model, stormings, sources],
     );
 
+    // what `/` lists depends on the view (a storming at its level, a `.dt` view) and the element selected
+    const level = viewGraph.shown?.options.level;
+    const slash = useMemo(
+        () => ({
+            view:
+                view.kind === 'storming'
+                    ? ({ kind: 'storming', level: level ?? 'big-picture' } as const)
+                    : view.kind === 'catalog' || view.kind === 'structure' || view.kind === 'contextMap'
+                      ? ({ kind: 'model' } as const)
+                      : ({ kind: 'other' } as const),
+            selected: selectionTarget,
+        }),
+        // the selection is covered by its key
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [view.kind, level, selectionTarget && targetKey(selectionTarget.target)],
+    );
+
     const storage = useMemo(defaultDraftStorage, []);
     const scope = session && { session: session.me.session, participant: session.me.participant.id };
     const composer = useComposerDraft(storage, scope);
@@ -205,9 +222,11 @@ export function useSessionPage(input: {
             if (!storming) return;
             const { [target.storming]: _, ...others } = stormingChoice.timelines;
             if (target.kind === 'DtesStorming') {
-                // the whole storming: its integrated canvas, at the level chosen
+                // the whole storming: its integrated canvas, at the level chosen, the storming in the inspector (its
+                // description: an interview's brief)
                 setStormingChoice({ stormingId: target.storming, level: stormingChoice.level, timelines: others });
                 setView({ kind: 'storming' });
+                select(`es/${target.storming}`, { highlight: false });
                 return;
             }
             if (target.kind === 'DtesElement') {
@@ -287,7 +306,8 @@ export function useSessionPage(input: {
     return {
         baselineLocked: !facilitator,
         ended,
-        aiReady: !ended && aiPresence(session.state.agent).kind === 'connected',
+        // the empty view points to `/es`: only for who may start it
+        aiReady: !ended && facilitator && aiPresence(session.state.agent).kind === 'connected',
         canvasOverlay: (
             <>
                 <PeerCursors canvas={canvas} cursors={cursorsOn(session.peers, location)} />
@@ -306,6 +326,7 @@ export function useSessionPage(input: {
                         onFocused={onFocused}
                         location={location}
                         viewScope={viewScope}
+                        slash={slash}
                         onOpenView={openView}
                         onNavigate={navigate}
                         onClose={() => setConversationOpen(false)}

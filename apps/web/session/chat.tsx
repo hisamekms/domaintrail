@@ -26,6 +26,7 @@ import {
     LoaderCircle,
     MessagesSquare,
     SendHorizontal,
+    Sparkles,
     Ban,
     X,
     type LucideIcon,
@@ -33,7 +34,7 @@ import {
 import type { SendRequestBody, ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useSwap } from '../shared/motion';
-import { useT } from '../i18n';
+import { useLang, useT } from '../i18n';
 import { useChatActions, type QuestionChoice } from './actions';
 import { ActivityLine } from './activity';
 import {
@@ -80,6 +81,8 @@ import { AiAvatar, ProposalCard } from './proposal';
 import { chosenIndex } from './proposal-view';
 import { parseReplyText, referenceText } from './references';
 import { TriageRecordPanel } from './triage-record';
+import { InterviewPanel, interviewSlot } from './interview';
+import { runningInterview, selectedOf, slashItems, slashQuery, templateValue, type SlashItem, type SlashScope } from './slash';
 import { isReplyable, messageReference, messageReplyTargets, repliesToMe, replyReference, replyTargetOf, replyTargets, type ReplyDraft } from './replies';
 import { useRevisionTools } from './revisions';
 import { CancelButton, CancelDialog, RowActions, StatusSizer, StatusSlot, TurnLink } from './status-slot';
@@ -186,6 +189,8 @@ export function SessionChat(props: {
     onOpenView: (target: ViewTarget) => void;
     /** What view names are made of, and which views this page can open. */
     viewScope: ViewScope;
+    /** What is open and selected, for what `/` lists. */
+    slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
     onClose: () => void;
 }) {
     const { session, composer, focusPending } = props;
@@ -238,7 +243,9 @@ export function SessionChat(props: {
         const waiting = settled.waiting.map((o): StreamItem => ({ kind: 'message', key: `message:${o.local}`, at: o.request.sentAt, request: o.request }));
         const slots = new Map<string, AiSlot>();
         for (const r of state.requests) {
-            const slot = aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id));
+            // a message of an interview: the AI's question under it, or pending while the interviewer thinks
+            const inInterview = solo ? interviewSlot(state, r) : undefined;
+            const slot = inInterview === 'none' ? undefined : (inInterview ?? aiSlot(solo, r, triages.get(r.id), givenUp, settled.sent.has(r.id)));
             if (slot) slots.set(r.id, slot);
         }
         for (const o of settled.waiting) slots.set(o.local, { kind: 'pending' });
@@ -501,6 +508,7 @@ export function SessionChat(props: {
                         {actions.undo && <UndoBar />}
                         {control && selection.active && <SelectionBar />}
                         {control && proposalPicks.ids.size > 0 && <ProposalsBar />}
+                        <InterviewPanel session={session} live={live} />
                     </div>
                     {live && (
                         <Composer
@@ -513,6 +521,7 @@ export function SessionChat(props: {
                             replyFocus={replyFocus}
                             onReplyDone={() => setReplyDraft(undefined)}
                             outgoing={solo ? outgoingTools : undefined}
+                            slash={props.slash}
                             tx={tx}
                         />
                     )}
@@ -1501,6 +1510,8 @@ function Composer(props: {
     onReplyDone: () => void;
     /** Solo: the message is shown at once as it is sent, the AI's card under it. */
     outgoing: OutgoingTools | undefined;
+    /** What is open and selected, for what `/` lists. */
+    slash: { readonly view: SlashScope['view']; readonly selected: TargetDraft | undefined };
     tx: Tx;
 }) {
     const { session, composer, tx, reply, onReplyDone, outgoing } = props;
@@ -1528,7 +1539,27 @@ function Composer(props: {
     // `@` offers the others in the session: with no one else (or no session), it offers nothing and stays closed
     const people = useMemo(() => mentionablePeople(session.state, session.peers, session.me), [session.state, session.peers, session.me]);
     const queryKey = query && `${query.node}:${query.start}`;
-    const open = query !== undefined && queryKey !== dismissed && (query.sign === '#' || people.length > 0);
+    // `/` alone in the composer (then its query): the commands and the templates, instead of `#` and `@`
+    const lang = useLang();
+    const slashText = slashQuery(value.text);
+    const slashKey = slashText === undefined ? undefined : 'slash';
+    const slashOpen = slashText !== undefined && dismissed !== slashKey;
+    const running = runningInterview(session.state);
+    const scope = useMemo(
+        (): SlashScope => ({ view: props.slash.view, selected: selectedOf(props.slash.selected, props.candidates) }),
+        [props.slash.view, props.slash.selected, props.candidates],
+    );
+    const slashed: readonly SlashItem[] = slashOpen
+        ? slashItems({
+              query: slashText,
+              lang,
+              scope,
+              commandNames: tx.chat.slash.commands,
+              canStart: session.me.participant.role === 'facilitator' && !running,
+              ...(session.state.templates && { team: session.state.templates }),
+          })
+        : [];
+    const open = !slashOpen && query !== undefined && queryKey !== dismissed && (query.sign === '#' || people.length > 0);
     const matches: readonly Suggestion[] = !open
         ? []
         : query.sign === '#'
@@ -1548,7 +1579,7 @@ function Composer(props: {
         return names[c.kind.kind] ?? c.kind.kind;
     };
 
-    useEffect(() => setActive(0), [query?.start, query?.query]);
+    useEffect(() => setActive(0), [query?.start, query?.query, slashText]);
     // the active candidate stays in view when the keys move it (wrapping too); a hover moves it where the pointer
     // already is, so it never scrolls the list under the pointer
     const list = useRef<HTMLUListElement | null>(null);
@@ -1560,16 +1591,16 @@ function Composer(props: {
         if (hovered.current) return;
         const item = ul.querySelector<HTMLElement>(`[data-index="${active}"]`);
         if (item) keepInView(ul, item);
-    }, [active, open, matches.length, size.rows]);
+    }, [active, open, slashOpen, matches.length, slashed.length, size.rows]);
     // the window resized (or the pane): the list still fits above the text
     useEffect(() => {
-        if (!open) return;
+        if (!open && !slashOpen) return;
         const refit = (): void => {
             if (list.current) fitAbove(list.current);
         };
         window.addEventListener('resize', refit);
         return () => window.removeEventListener('resize', refit);
-    }, [open]);
+    }, [open, slashOpen]);
     // the selection added with 💬 or `C`: the text takes the focus, the caret at its end
     const { focusPending, onFocused } = props;
     useEffect(() => {
@@ -1594,6 +1625,28 @@ function Composer(props: {
             return setNotice(c.kind === 'element' ? tx.chat.targetsLimit(MAX_REQUEST_TARGETS) : tx.chat.mentionsLimit(MAX_REQUEST_MENTIONS));
         setNotice(undefined);
         editor.current?.pick(query, mention);
+    };
+
+    /** A `/` item picked: a template's text into the composer (to edit), or a command started (an interview). */
+    const pickSlash = async (item: SlashItem | undefined): Promise<void> => {
+        if (!item) return;
+        if (item.kind === 'template') {
+            composer.setValue(templateValue(item.template, lang, scope.selected));
+            setError(undefined);
+            requestAnimationFrame(() => editor.current?.focusEnd());
+            return;
+        }
+        setSending(true);
+        try {
+            const focus = scope.selected?.target.target;
+            await sessionApi.startInterview({ command: item.id, body: tx.chat.slash.commands[item.id], language: lang, ...(focus && { focus }) });
+            await composer.clear();
+            setError(undefined);
+        } catch (e) {
+            setError(failure(e));
+        } finally {
+            setSending(false);
+        }
     };
 
     const send = async (): Promise<void> => {
@@ -1655,6 +1708,34 @@ function Composer(props: {
                 </div>
             )}
             <div className="chat-composer-input">
+                {slashOpen && (
+                    <ul className="chat-mentions chat-slash motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.slash.hint} ref={list}>
+                        {slashed.length === 0 && <li className="chat-mention-none muted">{tx.chat.slash.noMatch}</li>}
+                        {slashed.map((c, i) => (
+                            <li
+                                key={`${c.kind}:${c.id}`}
+                                data-index={i}
+                                role="option"
+                                aria-selected={i === active}
+                                className={`chat-mention-option chat-slash-option ${c.kind}${i === active ? ' active' : ''}`}
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    void pickSlash(c);
+                                }}
+                                onMouseEnter={() => {
+                                    hovered.current = true;
+                                    setActive(i);
+                                }}
+                            >
+                                {c.kind === 'command' && <Sparkles size={13} aria-hidden className="chat-slash-icon" />}
+                                <span className="chat-mention-name">{c.name}</span>
+                                {c.kind === 'command' && <span className="chat-slash-what muted">{tx.chat.slash.command}</span>}
+                                {c.kind === 'template' && c.template.team && <span className="chat-mention-kind">{tx.chat.slash.team}</span>}
+                                <span className="chat-mention-where muted">/{c.id}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
                 {open && (
                     <ul className="chat-mentions motion-pop motion-pop-up" role="listbox" aria-label={tx.chat.mentionHint} ref={list}>
                         {matches.length === 0 && (
@@ -1701,9 +1782,22 @@ function Composer(props: {
                     rows={size.rows}
                     input={input}
                     api={editor}
-                    onBlur={() => setDismissed(queryKey)}
+                    onBlur={() => setDismissed(slashOpen ? slashKey : queryKey)}
                     onFocus={() => setDismissed(undefined)}
                     onKeyDown={(e) => {
+                        if (slashOpen) {
+                            const action = composerKey(e, slashed.length > 0);
+                            if (action === 'none') {
+                                if (e.key === 'Escape') setDismissed(slashKey);
+                                return false;
+                            }
+                            hovered.current = false;
+                            if (action === 'next') setActive((a) => (a + 1) % slashed.length);
+                            else if (action === 'previous') setActive((a) => (a - 1 + slashed.length) % slashed.length);
+                            else if (action === 'pick' || action === 'send') void pickSlash(slashed[active]);
+                            else if (action === 'close') setDismissed(slashKey);
+                            return true;
+                        }
                         const action = composerKey(e, open && matches.length > 0);
                         if (action === 'none') {
                             if (e.key === 'Escape' && open) setDismissed(queryKey);
@@ -1733,7 +1827,7 @@ function Composer(props: {
                 />
                 <div className="chat-composer-actions">
                     {/* in Collab, the AI's mark when the message will reach it (`@AI`, a reply to the AI); in Solo every message does */}
-                    {!isSolo(session.state) && willAddress(session.state, value.people, reply) && (
+                    {!isSolo(session.state) && (willAddress(session.state, value.people, reply) || running?.startedBy === session.me.participant.id) && (
                         <span className="chat-composer-ai" role="img" aria-label={tx.chat.ai.willRead} data-tooltip={tx.chat.ai.willRead}>
                             <AiAvatar />
                         </span>
