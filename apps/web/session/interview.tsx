@@ -1,6 +1,7 @@
 // A `/es` or `/model` interview in the chat (the plan's round 5): a bar above the composer while it runs — the command's
 // name, whether the AI is thinking, and 中止 for its starter and the facilitator — and, once the AI wrote its brief, the
-// brief as a card: where it goes (a new storming or context, or that it replaces the current description), its lines
+// brief as a card: where it goes (a new storming or journey, or that it replaces the journey's brief), how far the
+// journey goes (the ES level and use; the pattern, goal and subject), its lines
 // with their heads, and for the facilitator 確定 / 編集して確定 / 中止 (their own interview) or 承認 / 編集して承認 / 却下
 // (a participant's, 却下 with an optional note); the others read it with 承認待ち (its starter can still stop it). A
 // rejected brief tells its starter so, with the note, until closed. The questions themselves are the AI's
@@ -8,7 +9,7 @@
 // interview awaits, its starter gets its choices as buttons (`InterviewChoices`): one pressed is sent as the answer at
 // once, or — when several make one answer — checked and sent together; the last, その他, takes them to the composer.
 import { useState, type ReactElement } from 'react';
-import { Check, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-react';
+import { Check, Flag, LoaderCircle, Pencil, Send, Sparkles, X } from 'lucide-react';
 import { briefLines, commandId } from '@domaintrail/collaboration';
 import type { SendRequestBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { useLang } from '../i18n';
@@ -68,6 +69,33 @@ export function rejectedOfMine(state: Pick<SessionStateBody, 'interviews'>, me: 
 }
 
 /** The running interview's bar and brief, above the composer; or my brief rejected. */
+/** A brief's title: the storming's label and ID, or the journey's name. */
+const briefTitle = (brief: NonNullable<Extract<InterviewJson, { state: 'Briefed' }>['brief']>): string => {
+    const name = brief.journey?.journeyName ?? brief.label;
+    return name ? `${name} · ${brief.name}` : brief.name;
+};
+
+/** How far the brief's journey goes, in one line: the ES level and use, or the pattern, goal and subject. */
+function BriefHowFar({ journey: j }: { readonly journey: NonNullable<Extract<InterviewJson, { state: 'Briefed' }>['brief']['journey']> }): ReactElement {
+    const { tx } = useChat();
+    const g = tx.chat.guide;
+    const parts =
+        j.level !== undefined
+            ? [g.levels[j.level] ?? j.level, j.use !== undefined ? tx.chat.journeys.uses[j.use === 'Modeling' ? 'modeling' : 'align'] : undefined]
+            : [
+                  j.pattern !== undefined ? (g.patterns[j.pattern] ?? j.pattern) : undefined,
+                  j.goal !== undefined ? g.goal(g.steps[j.goal] ?? j.goal) : undefined,
+                  j.stormings.length > 0 ? j.stormings.map((x) => `ES「${x}」`).join('、') : undefined,
+                  j.context,
+              ];
+    return (
+        <p className="chat-brief-howfar">
+            <Flag size={12} aria-hidden />
+            {parts.filter((x) => x !== undefined).join(' · ')}
+        </p>
+    );
+}
+
 export function InterviewPanel(props: { session: SessionData; live: boolean }) {
     const { tx } = useChat();
     const t = tx.chat.interview;
@@ -143,10 +171,11 @@ export function InterviewPanel(props: { session: SessionData; live: boolean }) {
             {brief && (
                 <div className="chat-brief">
                     <div className="chat-brief-target">
-                        <span className="chat-brief-name">{brief.label ? `${brief.label} · ${brief.name}` : brief.name}</span>
-                        {brief.isNew && <span className="chat-brief-flag">{interview.command === 'Es' ? t.newStorming : t.newContext}</span>}
+                        <span className="chat-brief-name">{briefTitle(brief)}</span>
+                        {brief.isNew && <span className="chat-brief-flag">{interview.command === 'Es' ? t.newStorming : t.newJourney}</span>}
                         {brief.replaces && <span className="chat-brief-flag warn">{t.replaces}</span>}
                     </div>
+                    {brief.journey && <BriefHowFar journey={brief.journey} />}
                     {editing === undefined ? (
                         <dl className="chat-brief-lines">
                             {briefLines(brief.text).map((l, i) => (

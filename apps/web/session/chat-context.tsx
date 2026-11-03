@@ -12,6 +12,9 @@ import type { RevisionTools } from './revisions';
 import type { ModelTarget } from './targets';
 import type { SessionData } from './useSession';
 import type { ViewTarget } from './views';
+import type { JourneyAct, GuideWorkspace } from '@domaintrail/collaboration';
+import type { JourneyBody } from '@domaintrail/collaboration/protocol';
+import type { JourneyOverview } from './journey-view';
 
 export type Tx = Messages['session'];
 
@@ -82,6 +85,24 @@ export interface ChatContextValue {
     readonly putCommand: (id: string) => void;
     /** Gives the composer the focus (in the chat), what it holds kept: an interview's その他. */
     readonly focusComposer: () => void;
+    /**
+     * The journeys (the journey file the server sent, each journey's map as the files tell it now, the session's
+     * current journey), the panel open or not, and the acts: done at once for the facilitator, a request for anyone
+     * else (`notice` says which, or what failed).
+     */
+    readonly journeys: {
+        readonly body: JourneyBody;
+        readonly workspace: GuideWorkspace;
+        readonly overview: JourneyOverview;
+        readonly open: boolean;
+        setOpen(open: boolean): void;
+        act(act: JourneyAct): void;
+        choose(journey: string | null): void;
+        decide(id: string, decision: 'approve' | 'deny' | 'withdraw'): void;
+        /** ガイドを見る: the latest guide shown, or a new one started. */
+        seeGuide(): void;
+        readonly notice: { readonly text: string; readonly error: boolean } | undefined;
+    };
     /** Replies to runs and messages: the reply being written, starting one (from an AI turn or a message) and what a posted reply names. */
     readonly replies: {
         readonly draft: ReplyDraft | undefined;

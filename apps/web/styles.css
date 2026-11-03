@@ -2394,6 +2394,352 @@ select,
     left: auto;
     right: 0;
 }
+/* the current journey's chip, after the world switch (a session's): 🧭 the journey · 📍 here → 🏁 the goal, narrowed
+   to 🧭 and the journey, then 🧭 alone, as the bar narrows; it opens the journeys panel under it */
+.app-bar-journey {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+}
+.app-bar-journey:empty {
+    display: none;
+}
+.journey-chip-wrap.session-chat {
+    position: relative;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    height: auto;
+    background: transparent;
+}
+.journey-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 13px;
+    background: var(--brand-wash);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-small);
+    white-space: nowrap;
+    cursor: pointer;
+}
+.journey-chip:hover,
+.journey-chip[aria-expanded='true'] {
+    border-color: var(--brand);
+}
+.journey-chip:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+.journey-chip-compass {
+    flex: none;
+    color: var(--brand);
+}
+.journey-chip-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: var(--fw-strong);
+    color: var(--brand);
+}
+.journey-chip.empty .journey-chip-name {
+    font-weight: normal;
+}
+.journey-chip.missing {
+    border-style: dashed;
+}
+.journey-chip-where {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+.journey-chip-sep {
+    color: var(--muted);
+}
+.journey-chip-here,
+.journey-chip-goal {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+.journey-chip-here {
+    color: var(--brand);
+    font-weight: var(--fw-strong);
+}
+.journey-chip-goal {
+    color: var(--guide-goal);
+}
+.journey-chip-badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--brand);
+    color: var(--on-brand);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    text-align: center;
+    box-sizing: border-box;
+}
+@container app-bar (max-width: 72rem) {
+    .journey-chip-where {
+        display: none;
+    }
+}
+@container app-bar (max-width: 48rem) {
+    .journey-chip-name {
+        display: none;
+    }
+    .journey-chip {
+        padding: 0 7px;
+    }
+}
+/* the journeys panel: the current journey (its brief, its map, its actions), the other journeys, the new ones, the
+   archived; the participants' requests at the top */
+.journeys-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 45;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 26rem;
+    max-width: calc(100vw - 24px);
+    max-height: min(40rem, calc(100vh - 70px));
+    overflow: auto;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px var(--shadow);
+    font-size: var(--fs-small);
+    line-height: var(--lh-small);
+    white-space: normal;
+    color: var(--text);
+}
+.journeys-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--brand);
+}
+.journeys-head strong {
+    font-size: var(--fs-body);
+    color: var(--text);
+}
+.journeys-who {
+    margin-left: auto;
+}
+.journeys-panel .journeys-close {
+    margin-left: var(--space-1);
+}
+.journeys-current {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border: 1px solid var(--brand-wash-border);
+    border-radius: 8px;
+    background: var(--brand-wash);
+}
+.journeys-current-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+.journeys-current-head strong {
+    font-size: var(--fs-body);
+}
+.journey-kind {
+    flex: none;
+    padding: 0 5px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    color: var(--muted);
+}
+.journey-missing,
+.guide-missing {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--warning);
+}
+.journeys-brief {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 2px var(--space-2);
+    margin: 0;
+}
+.journeys-brief dt {
+    color: var(--muted);
+}
+.journeys-brief dd {
+    margin: 0;
+}
+.journeys-actions,
+.journeys-goals,
+.journeys-new,
+.journeys-next {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+}
+.journeys-next {
+    color: var(--guide-goal);
+}
+.journeys-subhead {
+    margin: 0 0 2px;
+    font-weight: var(--fw-strong);
+    color: var(--muted);
+}
+.journeys-others ul,
+.journeys-archived ul,
+.journeys-requests {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.journeys-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 3px var(--space-1);
+    border-radius: 6px;
+}
+.journeys-row:hover {
+    background: var(--brand-wash);
+}
+.journeys-row-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.journeys-row-where {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+.journeys-row.done .journeys-row-name {
+    color: var(--muted);
+}
+.journeys-new {
+    color: var(--muted);
+}
+.journeys-none,
+.journeys-notice,
+.journeys-problem {
+    margin: 0;
+}
+.journeys-problem {
+    color: var(--warning);
+}
+.journeys-request {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--brand);
+    border-radius: 6px;
+}
+.journeys-request-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: auto;
+}
+/* the guide card's heading: the goal (🏁: change it) and the journey (opens the panel) */
+.session-chat button.guide-goal-button,
+.session-chat button.guide-journey-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0 4px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+}
+.session-chat button.guide-goal-button {
+    color: var(--guide-goal);
+}
+.session-chat button.guide-journey-button {
+    margin-left: var(--space-1);
+    color: var(--brand);
+}
+.session-chat button.guide-goal-button:hover,
+.session-chat button.guide-journey-button:hover {
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+}
+.chat-brief-howfar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0;
+    font-size: var(--fs-small);
+    color: var(--guide-goal);
+}
+/* the journeys in the detail: a storming's ES journey, a context's modeling journeys; a row opens the panel */
+.journey-detail {
+    margin: var(--space-2) 0 0;
+}
+.journey-detail-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0 0 2px;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-strong);
+    color: var(--muted);
+}
+.journey-detail ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.journey-detail-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    width: 100%;
+    padding: 3px 6px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--fs-small);
+    text-align: left;
+    cursor: pointer;
+}
+.journey-detail-row.current {
+    border-color: var(--brand-wash-border);
+    background: var(--brand-wash);
+}
+.journey-detail-where {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
 @container app-bar (max-width: 60rem) {
     .world-switch .switch-label {
         display: none;

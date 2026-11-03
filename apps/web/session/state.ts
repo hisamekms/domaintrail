@@ -227,6 +227,10 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
         }
         case 'SessionCollaborated':
             return { state: session({ ...state.session, mode: 'Collab' }), refetch: false };
+        case 'JourneyChosen': {
+            const { currentJourney: _was, ...rest } = state.session;
+            return { state: session(e.journey === undefined ? rest : { ...rest, currentJourney: e.journey }), refetch: false };
+        }
         // the triages and proposals (ADR 0030): the state is fetched again to hold them (a participant's page gets the
         // triages' events without their records, and an event does not carry the triage or the proposal whole)
         case 'TriageOpened':

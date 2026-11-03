@@ -4,14 +4,15 @@
 // soon as the command starts (the server kept them on the command); then the AI's advice: a spinner while it thinks,
 // then a status and one to three steps with their reasons and actions — the command (into the composer), the places
 // (shown on the canvas), 「聞くことをメモ」 (a message asking the AI for a hotspot: a participant's is approved by the
-// facilitator). With several modeling journeys, a picker (each viewer's choice remembered). The latest card lays the
-// person's ✓ marks as they are now over its map, and the facilitator sets them there; a card in history keeps its map
-// as it was, with a note.
+// facilitator). The card draws the session's current journey (its name opens the journeys panel, its 🏁 changes the
+// goal); the latest card draws it as the files and the journey file tell it now, marks included (a ✓ set there is the
+// facilitator's, a participant's a request); a card in history keeps its map as it was, with a note.
 import { useState, type ReactElement } from 'react';
 import {
     Box,
     Check,
     CircleX,
+    Compass,
     CornerDownLeft,
     Eye,
     FileText,
@@ -27,6 +28,8 @@ import {
 } from 'lucide-react';
 import { suggestedCommandId } from '@domaintrail/collaboration';
 import { useT } from '../i18n';
+import { GoalMenu } from './journey-panel';
+import { pageGuideMarks } from './journey-view';
 import { AI_NAME } from './ai';
 import { sessionApi } from './api';
 import { Bubble } from './bubble';
@@ -35,7 +38,6 @@ import { GuideMark } from './guide';
 import {
     askBody,
     latestGuide,
-    pageGuideMarks,
     viewTargetOfShown,
     withMarks,
     type GuideAdviceJson,
@@ -53,24 +55,6 @@ import type { SlashCommandJson } from './slash';
 import { latestRevision } from './state';
 import { targetKey, type ModelTarget } from './targets';
 
-/** Where each viewer's choice of journey is remembered. */
-const JOURNEY_KEY = 'domaintrail.guide.journey';
-
-const remembered = (): string | undefined => {
-    try {
-        return localStorage.getItem(JOURNEY_KEY) ?? undefined;
-    } catch {
-        return undefined;
-    }
-};
-const remember = (id: string): void => {
-    try {
-        localStorage.setItem(JOURNEY_KEY, id);
-    } catch {
-        // not kept: the first journey next time
-    }
-};
-
 /** The icon of each kind of finding. */
 const FINDING_ICONS: Readonly<Record<string, LucideIcon>> = {
     StormingWithoutBrief: FileText,
@@ -86,17 +70,15 @@ const FINDING_ICONS: Readonly<Record<string, LucideIcon>> = {
 };
 
 export function GuideCard({ command: c, continues }: { readonly command: SlashCommandJson; readonly continues: boolean }): ReactElement {
-    const { tx, session } = useChat();
+    const { tx, session, journeys } = useChat();
     const t = tx.chat.guide;
     const live = session.status === 'live' && session.state.session.state === 'Open';
     const latest = latestGuide(session.state)?.id === c.id;
     const maps = c.guide?.maps ?? [];
-    const [chosen, setChosen] = useState<string | undefined>(remembered);
-    const map = maps.find((m) => m.journey === chosen) ?? maps[0];
-    const choose = (id: string): void => {
-        setChosen(id);
-        remember(id);
-    };
+    // the session's current journey: drawn now on the latest card, as kept on the others
+    const current = journeys.overview.current;
+    const now = live && latest && current?.map ? current.map : undefined;
+    const map = now ?? maps.find((m) => m.journey !== undefined && m.journey === current?.summary.key) ?? maps[0];
     return (
         <div className={`chat-row guide-row state-${c.state}`}>
             <Bubble
@@ -109,16 +91,7 @@ export function GuideCard({ command: c, continues }: { readonly command: SlashCo
             >
                 <section className="guide-card" aria-label={t.answer}>
                     {!latest && <p className="guide-older muted">{t.older}</p>}
-                    {maps.length > 1 && (
-                        <select className="guide-journeys" aria-label={t.journey} value={map?.journey ?? ''} onChange={(e) => choose(e.target.value)}>
-                            {maps.map((m) => (
-                                <option key={m.journey ?? ''} value={m.journey ?? ''}>
-                                    {m.journeyName ?? m.journey}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                    {map && <GuideMapView map={map} live={live && latest} />}
+                    {map && <GuideMapView map={map} live={live && latest} heading />}
                     {c.guide && c.guide.findings.length > 0 && <AtOnce findings={c.guide.findings} />}
                     <Advice command={c} live={live} />
                 </section>
@@ -143,14 +116,27 @@ function goalName(map: GuideMapJson, t: ReturnType<typeof useChat>['tx']['chat']
     return pattern ? `${step}（${pattern}）` : step;
 }
 
-/** The map: the steps on a wrapping line, the goal, the BC rows; the facilitator marks the steps the files cannot tell. */
-export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; readonly live: boolean }): ReactElement {
-    const { tx, session, marking, putCommand } = useChat();
+/**
+ * The map: the steps on a wrapping line, the goal, the BC rows; a person marks the steps the files cannot tell (the
+ * facilitator's mark is set at once, a participant's is a request). With `heading`, the journey's name (it opens the
+ * journeys panel) and its 🏁 (it changes the goal).
+ */
+export function GuideMapView({
+    map: kept,
+    live,
+    heading = false,
+}: {
+    readonly map: GuideMapJson;
+    readonly live: boolean;
+    readonly heading?: boolean;
+}): ReactElement {
+    const { tx, session, journeys, putCommand } = useChat();
     const t = tx.chat.guide;
-    const store = pageGuideMarks(session.state, (target, sign, placed) => marking.set(target, sign, placed));
+    const store = pageGuideMarks(journeys.body.file, (act) => journeys.act(act));
     // the latest card: the marks as they are now
     const map = live ? withMarks(kept, store.read()) : kept;
-    const facilitator = live && session.me.participant.role === 'facilitator';
+    // anyone marks on a live map: the facilitator's mark is set, a participant's asked of the facilitator
+    const marker = live;
     const journey = map.journey;
     const toggle = (step: string, on: boolean, context?: string): void => {
         if (journey === undefined) return;
@@ -161,6 +147,9 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
     const goal = goalName(map, t);
     const starts =
         map.world === 'Storming' ? (['es:start'] as const) : map.world === 'Model' ? (['model:start'] as const) : (['es:start', 'model:start'] as const);
+    const item = [journeys.overview.current, ...journeys.overview.others].find((j) => j && j.summary.key === journey);
+    const [goalOpen, setGoalOpen] = useState(false);
+    const title = item?.summary.name ?? map.journeyName ?? map.storming;
     return (
         <div className="guide-map">
             <ol className="guide-path">
@@ -176,7 +165,7 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
                             <StepDot step={s} />
                             <span className="guide-step-label">{label}</span>
                             {state && <span className="visually-hidden">{state}</span>}
-                            {s.markable && facilitator && (
+                            {s.markable && marker && (
                                 <button
                                     type="button"
                                     className={`guide-mark${s.marked ? ' on' : ''}`}
@@ -188,7 +177,7 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
                                     <Check size={10} aria-hidden />
                                 </button>
                             )}
-                            {s.markable && !facilitator && s.marked && (
+                            {s.markable && !marker && s.marked && (
                                 <span className="guide-mark on" role="img" aria-label={t.marked} data-tooltip={t.marked}>
                                     <Check size={10} aria-hidden />
                                 </span>
@@ -204,10 +193,39 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
                 )}
             </ol>
             <p className="guide-goal">
-                <Flag size={12} aria-hidden />
-                {goal ? t.goal(goal) : t.noGoal}
-                {map.journeyName && <span className="guide-journey muted"> · {map.journeyName}</span>}
+                {heading && live && item && !setGoal ? (
+                    <button
+                        type="button"
+                        className="guide-goal-button"
+                        aria-expanded={goalOpen}
+                        data-tooltip={t.changeGoal}
+                        onClick={() => setGoalOpen(!goalOpen)}
+                    >
+                        <Flag size={12} aria-hidden />
+                        {goal ? t.goal(goal) : t.noGoal}
+                    </button>
+                ) : (
+                    <>
+                        <Flag size={12} aria-hidden />
+                        {goal ? t.goal(goal) : t.noGoal}
+                    </>
+                )}
+                {title !== undefined &&
+                    (heading && live ? (
+                        <button type="button" className="guide-journey-button" data-tooltip={t.openJourneys} onClick={() => journeys.setOpen(true)}>
+                            <Compass size={12} aria-hidden />
+                            {title}
+                        </button>
+                    ) : (
+                        <span className="guide-journey muted"> · {title}</span>
+                    ))}
+                {map.missing === true && (
+                    <span className="guide-missing">
+                        <TriangleAlert size={12} aria-hidden /> {t.missing}
+                    </span>
+                )}
             </p>
+            {goalOpen && item && <GoalMenu item={item} onDone={() => setGoalOpen(false)} />}
             {setGoal && live && (
                 <p className="guide-actions">
                     {starts.map((id) => (
@@ -249,7 +267,7 @@ export function GuideMapView({ map: kept, live }: { readonly map: GuideMapJson; 
                                 <td>{r.commands}</td>
                                 <td>{r.invariants}</td>
                                 <td>
-                                    {facilitator && map.contextsAt !== undefined ? (
+                                    {marker && map.contextsAt !== undefined ? (
                                         <button
                                             type="button"
                                             className={`guide-mark${r.state === 'Done' ? ' on' : ''}`}

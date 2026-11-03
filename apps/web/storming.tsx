@@ -251,6 +251,8 @@ export interface StormingDetailSession {
     readonly openRun: (run: string) => void;
     /** AI の作業, at the unit of a run. */
     readonly openRuns: (run: string) => void;
+    /** The storming's journey, in brief (the whole storming selected). */
+    readonly journeys?: (storming: string) => ReactNode;
 }
 
 /** A row of the detail: a grey icon naming it (its name as the tooltip), and its content. */
@@ -373,6 +375,7 @@ export function StormingDetails({
                     </div>
                 ))}
                 {item.doc && <p className="doc">{item.doc}</p>}
+                {declaration === undefined && session?.journeys?.(storming.id)}
                 {declaration?.kind === 'event' && (
                     <EventRows
                         storming={storming}

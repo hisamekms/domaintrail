@@ -137,6 +137,10 @@ import { replyLooks, threadLines, type ReplyLook } from './threads';
 import { continued, isMac } from './views';
 import type { SentView, ViewScope, ViewTarget } from './views';
 import type { ComposerDraft, SessionData } from './useSession';
+import type { GuideWorkspace, JourneyAct } from '@domaintrail/collaboration';
+import { JourneyChip } from './journey-panel';
+import { journeyOverview } from './journey-view';
+import { latestGuide } from './guide-view';
 
 type RequestJson = SessionData['state']['requests'][number];
 /** A unit to open and reveal in AI の作業 (the header status clicked); `n` tells a click on the same unit again apart. */
@@ -228,6 +232,13 @@ export function SessionChat(props: {
     onClose: () => void;
     /** The app bar's place for the collab menu and the AI's state (they concern the whole page). */
     barSlot: HTMLElement | null;
+    /** The app bar's place for the current journey's chip, after the world switch. */
+    journeySlot: HTMLElement | null;
+    /** What the guide reads of the workspace as the page holds it (the view's model, stormings, findings; the journey file). */
+    guideWorkspace: GuideWorkspace;
+    /** The journeys panel open (it is opened from the detail too). */
+    journeysOpen: boolean;
+    setJourneysOpen: (open: boolean) => void;
     /** A place of the chat or of AI の作業 to show (asked from elsewhere on the page). */
     goTo?: ChatGoTo | undefined;
 }) {
@@ -513,6 +524,37 @@ export function SessionChat(props: {
         [history],
     );
 
+    // the journeys: the overview computed live, the panel, the acts (a participant's become requests)
+    const lang = useLang();
+    const { journeysOpen, setJourneysOpen } = props;
+    const [journeyNotice, setJourneyNotice] = useState<{ readonly text: string; readonly error: boolean } | undefined>();
+    const overview = useMemo(() => journeyOverview(props.guideWorkspace, state.session.currentJourney), [props.guideWorkspace, state.session.currentJourney]);
+    const journeyDone = (r: { readonly done: boolean }): void => setJourneyNotice(r.done ? undefined : { text: tx.chat.journeys.requested, error: false });
+    const journeyFailed = (e: unknown): void => setJourneyNotice({ text: failure(e), error: true });
+    const journeys: ChatContextValue['journeys'] = {
+        body: session.journey,
+        workspace: props.guideWorkspace,
+        overview,
+        open: journeysOpen,
+        setOpen: (open) => {
+            setJourneysOpen(open);
+            if (!open) setJourneyNotice(undefined);
+        },
+        act: (act: JourneyAct) => void sessionApi.journeyAct(act).then(journeyDone, journeyFailed),
+        choose: (journey) => void sessionApi.chooseJourney(journey).then(journeyDone, journeyFailed),
+        decide: (id, decision) => void sessionApi.decideJourneyRequest(id, decision).then(() => setJourneyNotice(undefined), journeyFailed),
+        seeGuide: () => {
+            props.onOpen();
+            const latest = latestGuide(state);
+            if (latest && latest.state === 'Working') return jump(`command:${latest.id}`);
+            void startGuide(sessionApi, { body: tx.chat.slash.commands.guide, language: lang, viewedAt: props.viewedAt }).then(
+                () => setView('chat'),
+                journeyFailed,
+            );
+        },
+        notice: journeyNotice,
+    };
+
     const context: ChatContextValue = {
         session,
         tx,
@@ -539,10 +581,12 @@ export function SessionChat(props: {
         putCommand,
         focusComposer,
         replies,
+        journeys,
     };
 
     return (
         <ChatProvider value={context}>
+            <JourneyChip slot={props.journeySlot} />
             <div className="session-chat" ref={root}>
                 <SessionBar
                     slot={props.barSlot}

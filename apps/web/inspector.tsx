@@ -92,6 +92,8 @@ export interface InspectorProps {
     onClose: () => void;
     /** Placed next to the selected element's name (in a session, the 💬 that adds it as a request's target). */
     headingAction?: ReactNode;
+    /** A selected context's modeling journeys, in brief (in a session). */
+    contextJourneys?: (context: string) => ReactNode;
 }
 
 /** Tabs that make sense for a selected item, in display order. */
@@ -237,6 +239,7 @@ export function Inspector(props: InspectorProps) {
                             </p>
                         )}
                         {head.doc && <p className="doc">{head.doc}</p>}
+                        {r.kind === 'context' && props.contextJourneys?.(r.name)}
                         {revealTargets(r).length > 0 && (
                             <div className="reveal">
                                 <span className="muted small">{tx.showIn}</span>
