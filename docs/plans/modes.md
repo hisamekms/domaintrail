@@ -464,6 +464,39 @@ In `contexts/collaboration` (the `.dt` model, its generated code, use cases, per
   the one path to the AI for every message, the facilitator's own included: the route's `apply` is removed (the model
   keeps what older sessions need to load).
 
+### As built in M2
+
+M2 landed the model, the use cases, the store and the protocol types above, with these details settled or changed:
+
+- **Session**: `mode: SessionMode` (`Solo` | `Collab`); `collaborate` turns an open Solo session into a Collab one
+  (`SessionCollaborated`); `join` refuses everyone else in a Solo session (`SoloSession`). The use case `openSession`
+  applies decision 13 (`CollabSessionOpen` for `dt open` on an open Collab session). `startSession` takes the mode
+  (Collab when not given) until M5 moves the CLI to `openSession`.
+- **The AI**: `domain/ai.ts` (`AI_PARTICIPANT` = `ai`); its answers are written by a create command `Request.answer`
+  (author `ai`, a reply to the answered message); `sendRequest` / `sendMessage` refuse `ai` as the author. `Request` is
+  labelled メッセージ.
+- **Triage**: the stages are `Mechanical`, `Clef`, `Model` (the cascade, `record`), `Answerer`, `Runner` (overrides,
+  `override`) and `Facilitator` (`readdress`: the facilitator sends a "neither" again, plan Q6, recorded as a step and
+  turning the triage into one addressed by the facilitator). The outcome is a field of `Decided`, set once by
+  `conclude`: `Answer { answer, readRevision? }`, `Proposal { proposal }` or `Run { run }`. The answerer overrides only
+  a 相談 it has not answered. Verdicts and confidences are recorded as each stage judged them; the thresholds (Q5) are
+  applied before recording (`clefVerdict`, `modelVerdict` with `TRIAGE_THRESHOLDS`). Stage 1 runs in the transaction
+  that opens the triage. Stage 2 is recorded by the server even when Clef is not configured (a `Clef` step `Unknown`
+  with that reason): a triage job for the answerer is due once a `Clef` step is recorded (`answerJobOf`).
+- **ChangeProposal**: `content { what, where, how }` (`PROPOSAL_LIMITS`: 300 / 500 / 2000), `requestedBy`; `Approved
+  { approvedBy, approvedAt, edited?, run }`, `Rejected { rejectedBy, rejectedAt, note? }`, `Withdrawn { withdrawnAt }`
+  (by the requester only, `NotTheRequester`).
+- **Run input**: the approved proposals are `proposals: ApprovedProposals?` (`{ approved: ApprovedProposal[1..*] }`): the
+  DSL has no optional list, and the runs stored before keep loading as they are.
+- **Success rule**: `RunReport.formatted` / `checked` are `ToolOutcome` (`Ran` | `Failed` | `Skipped`); a run succeeds
+  when neither failed and, if it changed files, both ran. The agent API's finish body takes `'ran' | 'failed' |
+  'skipped'` and still the booleans of today's subscriber. The runs stored before are read with `Ran` / `Failed`
+  (`legacy.ts`), as a session without a mode is read as `Collab`; migration 11 adds only the tables `triages` (one per
+  message) and `proposals`.
+- **Queueing**: a decided 依頼 that goes to the queue (the facilitator's, Solo, addressed by the facilitator) is queued in
+  the transaction that decides it; a run that answers a request (`answered`) overrides its triage as `Runner` when it
+  finishes.
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat

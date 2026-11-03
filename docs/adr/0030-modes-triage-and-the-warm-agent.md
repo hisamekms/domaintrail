@@ -144,6 +144,14 @@ ran, what each answered with its confidence and reason, which stage decided, and
 facilitator sees it from the message; participants see only the outcome; the log has one line per triage without the
 text.
 
+### 9. The model as built (M2)
+
+*Proposed* (M2, where the plan left the detail open; see the plan's "As built in M2"): a Solo session refuses other
+participants; the facilitator's re-address of a "neither" is a triage step of its own stage (`Facilitator`); a triage
+records where it went (an answer, a proposal or a run) once; the approved proposals are an optional group of the run's
+input; `dt fmt` / `dt check` report `Ran`, `Failed` or `Skipped`, and stored rows of the former shape are read in the new
+one rather than rewritten.
+
 ## Alternatives considered
 
 - **The user marks 相談 or 依頼** (a choice at send time, or a prefix). The kind would be known for certain, but it is a
