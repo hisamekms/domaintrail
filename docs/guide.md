@@ -127,6 +127,10 @@ background, or use `dt check` for a result.
 Event Storming files (`.dtes`) go through the same loop: `dt fmt`, then `dt check` until it exits 0 (see [Event
 Storming](#event-storming-dtes)). They are not generated: `dt generate ts` writes the `.dt` model only.
 
+How to work, beyond the rules of the languages: `dt guide storming-practice` for running a storming (Big Picture, then
+Design Level) and `dt guide modeling-practice` for growing the `.dt` model (terms, aggregates by their invariants,
+commands as contracts, small steps).
+
 `dt --help` and `dt <command> --help` list the options with examples.
 
 ```bash
@@ -1149,6 +1153,43 @@ export function billingPolicies({ loadOrder, newInvoiceId }: PolicyDeps): Billin
     };
 }
 ```
+
+<!-- topic: modeling-practice -->
+### Modeling with DomainTrail
+
+How to grow the `.dt` model, for people and AI agents. The rules of the language are in [DSL](#dsl); this is the way
+of working.
+
+**Start from the brief.** The `///` description above a `context` says its purpose, scope, what the generated code is
+for and how far to go (`/model` in the chat writes it). Keep to that context; ask before changing another one.
+
+**One context at a time, terms first.**
+- Agree on the words before the structure: the context's `terms` with their labels, and a `///` for any term people
+  could read two ways.
+- Name things in the business's words. A label is what people say; the ID is its stable English name.
+
+**Aggregates by their invariants.**
+- An aggregate is what must stay consistent in one decision. Draw its boundary around an invariant you can state,
+  not around a screen, a table or a noun.
+- Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
+  a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
+- States (a union of states) when the allowed commands depend on where the thing is in its life.
+
+**Commands as contracts.**
+- A command says what it needs (`requires`), what it changes, and exactly which events it emits (`emits` is exhaustive:
+  see [Command events](#command-events)). A failure is a named error, and it emits nothing.
+- Reactions between aggregates or contexts are `policy`s on events, not commands calling commands.
+- The DSL holds structure and contracts only. Business logic is written by hand in `decide` against the generated
+  types; do not try to encode it in the model.
+
+**From a storming.** When a storming feeds the context (its brief says so), take the Design Level's commands,
+aggregates and events as the starting point, not as the answer: the model has to state invariants the storming did
+not. Then add `ref`s in the `.dtes` to the new `.dt` symbols that resolve. Open hotspots are questions to ask, not
+gaps to fill by guessing.
+
+**Small steps.** Change a little, run `dt fmt` and `dt check` until it exits 0, and keep the model valid between
+steps. Do not rename or remove what the people did not ask to change: other files, generated code and the chat refer
+to the IDs.
 
 <!-- topic: generated -->
 ## Generated TypeScript
@@ -2218,6 +2259,45 @@ storming Checkout {
   }
 }
 ```
+
+<!-- topic: storming-practice -->
+### Event Storming with DomainTrail
+
+How to run a storming in `.dtes` files, for people and AI agents. The rules of the language are in [Event
+Storming](#event-storming-dtes); this is the way of working.
+
+**Start from the brief.** The `///` description above a `storming` says its purpose, scope, what the result is for
+and how far to go (`/es` in the chat writes it). Keep to that scope; ask before going beyond it. With no brief, ask
+for the purpose and the first and last events before writing much.
+
+**Big Picture first.**
+- Events first, and mostly events: what happened in the business, in the past tense, in the words the business uses
+  (「注文を受け付けた」, not 「注文受付処理」 or 「OrderService が保存した」). One fact per event.
+- Short labels: about 12 Japanese characters or 4–5 English words. A long label is usually two events or a
+  description; put the detail in `///`.
+- Order them in `timeline`s: the usual flow first, then the variations (failures, cancellations, exceptions) as their
+  own timelines rather than one tangled line. A step that happens together goes in a `group`.
+- Anything unclear, disputed or risky becomes a `hotspot` on the events it concerns, worded as a question. Do not
+  settle it by guessing; an open hotspot is a good result.
+- No commands, policies, aggregates or read models yet, and no `ref`s.
+
+**Design Level next**, once the flow is agreed (the brief says how far to go):
+- For each event, what caused it: a `command` (and the `actor` or `external` system that issues it), or a `policy`
+  reacting to an earlier event (「〜したら〜する」).
+- What a command needs to decide: the `readmodel` it `reads`, and the `aggregate` it `target`s, which decides and
+  emits the events.
+- Fine-grained events found here (reservations, authorisations, internal failures, retries) get `level design`, so
+  that Big Picture keeps the flow people agreed on. An event the people want to see at Big Picture loses it.
+- Keep hotspots for what is still open; set `status resolved` with its `resolution "…"` only when the people settle
+  one.
+
+**Model references.** Add `ref` only to an element that has a counterpart in the `.dt` model and resolves; never
+invent a `.dt` symbol to make a `ref` work. A storming does not change the `.dt` files: moving from a storming to the
+model is modeling (see [Modeling with DomainTrail](#modeling-with-domaintrail)).
+
+**Keep it a storming.** It records what people found, including the doubts: do not tidy it into a design document,
+do not delete hotspots or events because they look redundant, and keep the IDs stable (people and the chat refer to
+them).
 
 <!-- topic: rules -->
 ## Rules

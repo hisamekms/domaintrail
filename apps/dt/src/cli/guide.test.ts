@@ -87,4 +87,17 @@ describe('dt guide topics', () => {
         expect(m022.out).toContain('| M022 | (warning) a field of an event or error');
         expect(m022.out).toContain('Explained in: `dt guide requires`, `dt guide events`, `dt guide verified`.');
     });
+
+    test('the ways of working are topics of their language: storming-practice in storming, modeling-practice in dsl', async () => {
+        const list = (await runGuide()).out;
+        expect(list).toMatch(/^ {4}storming-practice +Event Storming with DomainTrail$/m);
+        expect(list).toMatch(/^ {4}modeling-practice +Modeling with DomainTrail$/m);
+        expect((await runGuide('storming')).out).toContain('### Event Storming with DomainTrail');
+        expect((await runGuide('dsl')).out).toContain('### Modeling with DomainTrail');
+        expect((await runGuide('storming-practice')).out.startsWith('### Event Storming with DomainTrail\n\n')).toBe(true);
+        expect((await runGuide('modeling-practice')).out.startsWith('### Modeling with DomainTrail\n\n')).toBe(true);
+        const workflow = (await runGuide('workflow')).out;
+        expect(workflow).toContain('`dt guide storming-practice`');
+        expect(workflow).toContain('`dt guide modeling-practice`');
+    });
 });
