@@ -16,6 +16,7 @@ import {
     type CliDeps,
     SessionError,
     type SessionSettings,
+    type SourcesExportOptions,
     type StartedAgent,
     type StartedSession,
 } from './ports.js';
@@ -26,12 +27,15 @@ import guide from '../../../../docs/guide.md' with { type: 'text' };
 export interface CliIO {
     out: (line: string) => void;
     err: (line: string) => void;
+    /** Bytes to stdout (`dt export sources -o -`); absent where there is no binary output. */
+    bytes?: (data: Uint8Array) => Promise<void>;
 }
 
 /** Lines to stdout and stderr. */
 export const consoleIO: CliIO = {
     out: (l) => console.log(l),
     err: (l) => console.error(l),
+    bytes: (data) => new Promise<void>((resolve, reject) => void process.stdout.write(data, (e) => (e ? reject(e) : resolve()))),
 };
 
 /** An expected failure: printed as one line on stderr, exiting with `exitCode`. */
@@ -116,6 +120,7 @@ Examples:
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
+  dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
 
 New to dt, or an AI agent? Run \`dt guide\` first: the workflow, the DSL at a glance and the commands, then the list
 of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when you need one.`,
@@ -318,6 +323,44 @@ Examples:
             exitCode = broken.size || (opts.check && changed) ? 1 : 0;
         });
 
+    program
+        .command('export')
+        .description('Export the model: its sources as one ZIP archive.')
+        .command('sources')
+        .description('Write the .dt and .dtes files and the config file as one ZIP archive, folders kept.')
+        .option('-o, --out <file>', 'the archive to write, `-` for stdout (default: <workspace>-sources.zip in the current directory)')
+        .addHelpText(
+            'after',
+            `
+Archives the files \`dt check\` analyzes (only .dt and .dtes files) and the config file (domaintrail.jsonc / .json),
+below one folder named after the workspace (the root's directory): \`shop/sales/order.dt\`. Never the local override
+(domaintrail.local.jsonc), .domaintrail or .git, generated output, symlinks, or, in a git repository, files git ignores.
+Unzip it anywhere and run \`dt check\` in the folder: no git needed. An existing file is replaced.
+Exits 0 when written, 1 when the workspace has no .dt or .dtes file, 2 on an invalid config.
+
+Examples:
+  dt export sources                     writes shop-sources.zip
+  dt export sources -o /tmp/model.zip
+  dt export sources -o - > model.zip
+  dt -r domain export sources`,
+        )
+        .action(async (opts: { out?: string }) => {
+            const cfg = await config();
+            const archive = await deps.exportSources(workspaceOf(cfg));
+            if (!archive.sources) throw new CliError(noSourcesMessage(cfg));
+            const summary = (where: string): string => `${archive.files.length} file(s) written to ${where}`;
+            if (opts.out === '-') {
+                if (!io.bytes) throw new CliError('Cannot write the archive to stdout here.');
+                await io.bytes(archive.zip);
+                io.err(summary('stdout'));
+                return;
+            }
+            const file = path.resolve(opts.out ?? `${archive.name}-sources.zip`);
+            await writeFile(file, archive.zip);
+            const rel = path.relative(process.cwd(), file);
+            io.out(summary(rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : file));
+        });
+
     const serveOptions = (command: Command, section: 'open' | 'collab', hostHelp: string): Command =>
         command
             .option('-p, --port <port>', `port to listen on (default: ${section}.port, else 4321)`, parsePort)
@@ -367,9 +410,7 @@ Examples:
         if (!isLoopback(host)) {
             // what remains of `dt view`: the Live View alone, read-only, for others to look at
             if (opts.agent === 'claude') throw new CliError(`No agent with a read-only Live View: ${host} is not a loopback address.`);
-            const server = await deps
-                .startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, base: opts.base, log: io.out })
-                .catch(base);
+            const server = await deps.startViewServer({ ...workspaceOf(cfg), port, host, base: opts.base, log: io.out }).catch(base);
             await printConfig(cfg, []);
             io.out(`Live View (read-only: ${host} is not a loopback address; the chat and the agent are on loopback only): ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
@@ -377,9 +418,7 @@ Examples:
         }
         const server = await deps
             .startSessionServer({
-                root: cfg.root,
-                sources: cfg.sources,
-                respectGitignore: cfg.respectGitignore,
+                ...workspaceOf(cfg),
                 base: opts.base,
                 mode: 'Solo',
                 session: openSettings(cfg, port, host),
@@ -429,9 +468,7 @@ Examples:
         const settings = sessionSettings(cfg, cfg.collab, opts);
         const server = await deps
             .startSessionServer({
-                root: cfg.root,
-                sources: cfg.sources,
-                respectGitignore: cfg.respectGitignore,
+                ...workspaceOf(cfg),
                 base: opts.base,
                 mode: 'Collab',
                 session: settings,
@@ -894,6 +931,11 @@ function removed(parent: Command, name: string, message: string): Command {
         .action(() => {
             throw new CliError(message, 2);
         });
+}
+
+/** The workspace as the servers and the export see it: the root, the sources and the config file. */
+function workspaceOf(cfg: ResolvedConfig): SourcesExportOptions {
+    return { root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, ...(cfg.file !== undefined && { configFile: cfg.file }) };
 }
 
 function noSourcesMessage(cfg: ResolvedConfig): string {
