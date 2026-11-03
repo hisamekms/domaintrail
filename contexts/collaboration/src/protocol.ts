@@ -7,10 +7,9 @@ import type { FileComparison, FileStatus, LineDiff } from './domain/compare.js';
 import type { PreviousRunChanges } from './domain/previous-runs.js';
 import type { RevertChanges, RevertFile } from './domain/revert.js';
 import type { Collaboration } from './generated/index.js';
-import type { Classification } from './application/classifier.js';
 import type { RunActivity, RunActivityPhase } from './domain/activity.js';
 
-export type { Classification, RunActivity, RunActivityPhase, RevertChanges, RevertFile };
+export type { RunActivity, RunActivityPhase, RevertChanges, RevertFile };
 
 /** A branded string or number of the generated code as plain JSON: the brand is a promise checked on the server. */
 type Unbranded<T> = T extends string & { readonly __domain: string } ? string : T extends number & { readonly __domain: string } ? number : T;
@@ -47,12 +46,13 @@ export interface SessionStateBody {
     readonly approvals: Json<readonly Collaboration.AssumptionApproval[]>;
     /**
      * The triages of the messages addressed to the AI, in the order they were opened (ADR 0030; absent from a server
-     * before them). M4 sends each page the outcome and the facilitator the record.
+     * before them): the facilitator gets each one's record (`Json<Triage>`: its steps, who decided), a participant only
+     * its outcome (`TriageOutcomeBody`, plan decision 8).
      */
-    readonly triages?: Json<readonly Collaboration.Triage[]>;
+    readonly triages?: readonly TriageBody[];
     /** The change proposals, in the order they were made (absent from a server before them). */
     readonly proposals?: Json<readonly Collaboration.ChangeProposal[]>;
-    /** Whether an agent is connected, per role, and how many triages, answers and runs wait for one (M4). */
+    /** Whether an agent is connected, per role, and how many triages, answers and runs wait for one. */
     readonly agent?: AgentPresence;
     /** The emoji the add-reaction popover offers first (`session.quickReactions`), in the form reactions are kept. */
     readonly quickReactions: readonly string[];
@@ -64,6 +64,26 @@ export interface SessionStateBody {
      */
     readonly facilitatorHolder?: string;
 }
+
+/**
+ * A triage as a participant sees it (plan decision 8): how the message was addressed, whether it is decided, as what,
+ * and where it went — not the stages, their reasons and models, nor which stage decided.
+ */
+export interface TriageOutcomeBody {
+    readonly id: string;
+    readonly session: string;
+    readonly request: string;
+    readonly addressedBy: Collaboration.AddressedBy;
+    readonly addressedByParticipant: string;
+    readonly openedAt: string;
+    readonly state: 'Pending' | 'Decided';
+    readonly kind?: Collaboration.TriageVerdict;
+    readonly decidedAt?: string;
+    readonly outcome?: Json<Collaboration.TriageOutcome>;
+}
+
+/** A triage on the wire: the record (the facilitator's) or the outcome only (a participant's). */
+export type TriageBody = Json<Collaboration.Triage> | TriageOutcomeBody;
 
 /**
  * Where a participant is looking: a `.dt` view (`viewKey` of the page's navigation) or a storming at a level, in a
@@ -151,15 +171,31 @@ export type SessionServerMessage =
     | { readonly type: 'presence.snapshot'; readonly peers: readonly Presence[] }
     | { readonly type: 'presence.update'; readonly presence: Presence }
     | { readonly type: 'presence.leave'; readonly connection: string }
-    // the facilitator's only (ADR 0026, amendment): how the chat's messages read, when a classifier is configured.
-    // Superseded by the triage (ADR 0030): kept for today's page until M4/M6 remove it
+    // a participant's page gets the triages' events without what only the facilitator sees (`ParticipantTriageMessage`)
+    | ParticipantTriageMessage
+    // the agents connected per role and the work waiting for one (ADR 0030): on connect, then on each change
     | { readonly type: 'agent.presence'; readonly agent: AgentPresence }
-    | { readonly type: 'session.classifications'; readonly classifications: Readonly<Record<string, Classification>> }
-    | { readonly type: 'session.classification'; readonly request: string; readonly classification: Classification }
     // what the running runs are doing (ADR 0026, amendment): transient, never an event; every activity held on connect,
     // then each change. A page shows a run's only while the run is `Running`
     | { readonly type: 'session.activities'; readonly activities: Readonly<Record<string, RunActivity>> }
     | { readonly type: 'run.activity'; readonly run: string; readonly activity: RunActivity };
+
+/**
+ * The triages' events as a participant's page gets them (plan decision 8): `triage.step_recorded` is not sent at all;
+ * `triage.decided` comes without the stage that decided, `triage.overridden` without the step (only the new kind). The
+ * facilitator's pages get the events as they are (`EventMessage`).
+ */
+export type ParticipantTriageMessage =
+    | {
+          readonly type: 'triage.decided';
+          readonly seq: number;
+          readonly event: { readonly type: 'TriageDecided'; readonly triageId: string; readonly kind: Collaboration.TriageVerdict; readonly decidedAt: string };
+      }
+    | {
+          readonly type: 'triage.overridden';
+          readonly seq: number;
+          readonly event: { readonly type: 'TriageOverridden'; readonly triageId: string; readonly kind: Collaboration.TriageVerdict };
+      };
 
 /** The agents connected to a session, per role, and the work waiting for one (ADR 0030; the chat header's AI status). */
 export interface AgentPresence {
@@ -189,7 +225,11 @@ export interface ClaimBody {
 }
 
 /**
- * `POST /api/session/requests`: 0 to 20 targets, each once, none of them the whole workspace (no target: the whole
+ * `POST /api/session/requests` (any participant): a message. It is addressed to the AI when the session is Solo, when it
+ * mentions the AI (`@AI[pN]`, the AI's ID `ai` among `mentions`), or when it replies to a run or to a message of the AI;
+ * its triage is then opened (→ 201 `SentBody` with `triage`). Otherwise it is talk between people: nothing is sent to any
+ * model. The former `apply` is gone (`InvalidInput`): the facilitator's 「AI に送る」 is `POST
+ * /api/session/requests/address`. 0 to 20 targets, each once, none of them the whole workspace (no target: the whole
  * workspace); `#name[n]` in the body mentions target n (`@name[n]`, as bodies were written before, too), `@name[pN]`
  * the N-th of `mentions`: 0 to 20 participants of the session, each once (`MentionedNotAParticipant`,
  * `TooManyMentions`, `DuplicateMention` 400 otherwise). The former body with one `target` is still taken. `replyTo`:
@@ -204,9 +244,26 @@ export interface SendRequestBody {
     readonly mentions?: readonly string[];
 }
 
-/** `POST /api/session/requests/:id/address` and `POST /api/session/requests/address` (the facilitator's 「AI に送る」, ADR 0030): the messages. */
+/** `POST /api/session/requests` → 201: the message, and its triage when it is addressed to the AI (as the sender's role sees it). */
+export interface SentBody {
+    readonly request: Json<Collaboration.SentRequest>;
+    readonly triage?: TriageBody;
+}
+
+/**
+ * `POST /api/session/requests/address` (the facilitator's 「AI に送る」, one message or several; ADR 0030): each message
+ * not addressed yet gets a triage addressed by the facilitator; one judged "neither" is addressed again as 相談 (plan Q6).
+ * `POST /api/session/requests/:id/address` is the same for one message (an empty body). Refused with `FacilitatorOnly`
+ * (403), `RequestNotFound` / `RequestOfAnotherSession` (404), `RequestNotAddressable` (409: the AI's own message, a
+ * revert) and `RequestAlreadyAddressed` (409). → 201 `AddressedBody`.
+ */
 export interface AddressBody {
     readonly requests: readonly string[];
+}
+
+/** `POST /api/session/requests/address` → 201: the triages opened (or addressed again), in the order of the messages. */
+export interface AddressedBody {
+    readonly triages: readonly Json<Collaboration.Triage>[];
 }
 
 /** A change proposal's text: what, where (elements as `#name`), how (`PROPOSAL_LIMITS` of `domain/proposals.ts`). */
@@ -225,7 +282,16 @@ export interface ApproveProposalsBody {
     readonly note?: string;
 }
 
-/** `POST /api/session/proposals/:id/reject` (the facilitator): an optional note to the requester. */
+/** `POST /api/session/proposals/approve` → 201: the run queued, and the proposals approved with it. */
+export interface ProposalsApprovedBody {
+    readonly run: Json<Collaboration.QueuedAgentRun>;
+    readonly proposals: readonly Json<Collaboration.ApprovedChangeProposal>[];
+}
+
+/**
+ * `POST /api/session/proposals/:id/reject` (the facilitator): an optional note to the requester. → 200 `{ proposal }`.
+ * `POST /api/session/proposals/:id/withdraw` (its requester, an empty body) → 200 `{ proposal }` (`NotTheRequester` 403).
+ */
 export interface RejectProposalBody {
     readonly note?: string;
 }
@@ -470,6 +536,25 @@ export interface AgentStartedBody {
     readonly baseRevision: Json<Collaboration.Revision>;
     readonly previousRuns: readonly AgentPreviousRun[];
     readonly revert?: readonly AgentRevertedRun[];
+    /** The session so far (`sessionSoFar`), whole: for a fresh process (absent from a server before it). */
+    readonly sessionSoFar?: AgentSessionSoFar;
+    /** The session so far after the entry `since` of the start's body: for a warm process that saw it up to there. */
+    readonly sessionSoFarSince?: AgentSessionSoFar;
+}
+
+/**
+ * `POST /agent/runs/:id/start`: the lease token, and `since`, the last entry of the session so far the runner's warm
+ * process was given (its previous run's `sessionSoFar.last`), for `sessionSoFarSince`.
+ */
+export interface AgentStartBody extends AgentLeaseBody {
+    readonly since?: number;
+}
+
+/** The session so far as an agent gets it: the text, the number of its last entry, and the entry it starts after. */
+export interface AgentSessionSoFar {
+    readonly text: string;
+    readonly last: number;
+    readonly since?: number;
 }
 
 /**
@@ -545,21 +630,25 @@ export interface AgentFailBody extends AgentLeaseBody {
     readonly reason: 'AgentError' | 'Interrupted';
 }
 
-// ---- Agent API: the answerer role (ADR 0030, decision 6). Types only: the routes are M4's ----
+// ---- Agent API: the answerer role (ADR 0030, decision 6) ----
 
 /** The two roles of an agent: the read-only answerer (triage, answers, proposals) and the runner (runs). */
 export const AGENT_ROLES = ['answer', 'run'] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
 
 /**
- * The SSE stream `GET /agent/answers/events` (the answerer role; no claim, no lease, no workspace lock): `event:` one of
- * these, `data:` an `AgentAnswerJobBody` (`answer.job`), `{ job }` (`answer.job_withdrawn`: handed to another answerer or
- * no longer needed), or the `EventMessage` of `session.closed`. Each job is handed to one connected answerer; one not
- * answered within its timeout, or whose answerer disconnects, is handed to another or waits.
+ * The SSE stream `GET /agent/answers/events` (the answerer role; no claim, no lease, no workspace lock; no `id:`, nothing
+ * to resume: the jobs waiting are handed again to whoever connects): `event:` one of these, `data:` an
+ * `AgentAnswerJobBody` (`answer.job`), `{ job }` (`answer.job_withdrawn`: it timed out, or is no longer needed), `{}`
+ * (`revision.restored`: the files a warm answerer remembers were replaced), or `{}` (`session.closed`, then the stream
+ * ends). Each job is handed to one connected answerer that has none in hand; one not answered within its timeout, or
+ * whose answerer disconnects, is handed to another or waits. A connected stream counts as one answerer in
+ * `AgentPresence`.
  */
 export const AGENT_ANSWER_EVENT_TYPES = {
     job: 'answer.job',
     withdrawn: 'answer.job_withdrawn',
+    restored: 'revision.restored',
     closed: 'session.closed',
 } as const;
 
@@ -584,12 +673,17 @@ export interface AgentAnswerJobBody {
     readonly chat?: readonly string[];
     /** A triage job: the open change proposals, so that 「それでお願いします」 reads as a 依頼. */
     readonly openProposals?: Json<readonly Collaboration.OpenChangeProposal[]>;
-    /** An answer or propose job: the session so far (`sessionSoFar`), whole or since the answerer's last entry. */
-    readonly sessionSoFar?: { readonly text: string; readonly last: number; readonly since?: number };
+    /** An answer or propose job: the session so far (`sessionSoFar`), whole (for a fresh process). */
+    readonly sessionSoFar?: AgentSessionSoFar;
+    /**
+     * An answer or propose job handed to a stream that answered one before: the session so far after the last entry that
+     * job was given (for a warm process that took it).
+     */
+    readonly sessionSoFarSince?: AgentSessionSoFar;
+    /** The latest revision when the job was handed out: what an answer reads (recorded with it). */
+    readonly readRevision?: string;
     /** An answer or propose job: the runs the message replies to, with what they changed. */
     readonly previousRuns?: readonly AgentPreviousRun[];
-    /** An answer job: the files changed since the answerer's previous job ended (for a warm process). */
-    readonly changedSinceYourLastAnswer?: readonly string[];
 }
 
 /** `POST /agent/answers/:job` for a triage job: stage 3's answer (`readTriageAnswer` of `domain/answers.ts`), or why it failed. */

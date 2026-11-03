@@ -533,6 +533,11 @@ export interface CollaborationUseCases extends ConversationUseCases {
      * a unified diff while the diffs of all of them fit `maxDiff` characters, else the files it changed. Measured now, from the revisions (for the run's start).
      */
     previousRuns(input: { readonly run: AgentRunId; readonly maxDiff: number }): Promise<Result<readonly PreviousRun[], NotFound>>;
+    /**
+     * The run a message replies to (a reply to a run), with what it changed as `previousRuns` gives it: for the answerer
+     * role's answer and propose jobs. None for a message that replies to no run.
+     */
+    repliedRuns(input: { readonly request: Collaboration.RequestId; readonly maxDiff: number }): Promise<Result<readonly PreviousRun[], NotFound>>;
     /** The restores attempted in the session, in order. */
     restoreOperations(input: { readonly session: SessionId }): Promise<readonly RestoreOperation[]>;
     sessionState(input: { readonly session: SessionId }): Promise<Result<SessionState, NotFound>>;
@@ -754,6 +759,35 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
     };
     const analysisKept = (r: Collaboration.Revision): Promise<Result<ValidationResult, BlobMissing>> =>
         kept(analysesKept, r.id, ANALYSES_KEPT, () => analysisOf(deps, r));
+
+    /** What each run changed from its base to its result revision, bounded together by `maxDiff` characters of diff. */
+    const changesOfRuns = async (found: readonly Collaboration.AgentRun[], maxDiff: number): Promise<PreviousRun[]> => {
+        const compared: (ComparedChange[] | undefined)[] = [];
+        for (const p of found) {
+            const base = 'baseRevision' in p ? p.baseRevision : undefined;
+            const result = 'resultRevision' in p ? p.resultRevision : undefined;
+            if (!base || !result) {
+                compared.push(undefined);
+                continue;
+            }
+            const c = await useCases.compareRevisions({ session: p.session, before: base, after: result });
+            if (c.ok) {
+                compared.push(
+                    c.value.files.flatMap((f) => (f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status, ...(f.diff && { diff: f.diff }) }])),
+                );
+                continue;
+            }
+            // the bytes are gone (or the revisions): the files by hash, without their diff
+            const revisions = await uow.transaction((stores) => ({ a: stores.revisions.load(base), b: stores.revisions.load(result) }));
+            compared.push(
+                revisions.a && revisions.b
+                    ? compareFiles(revisions.a.files, revisions.b.files).flatMap((f) => (f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status }]))
+                    : undefined,
+            );
+        }
+        const changes = boundChanges(compared, maxDiff);
+        return found.map((p, i) => ({ run: p, changes: changes[i] }));
+    };
 
     const useCases: Omit<CollaborationUseCases, keyof ConversationUseCases> = {
         async startSession({ facilitator, name, mode = 'Collab' }) {
@@ -1510,33 +1544,18 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 });
             });
             if (!found) return err(notFound('AgentRun', run));
-            const compared: (ComparedChange[] | undefined)[] = [];
-            for (const p of found) {
-                const base = 'baseRevision' in p ? p.baseRevision : undefined;
-                const result = 'resultRevision' in p ? p.resultRevision : undefined;
-                if (!base || !result) {
-                    compared.push(undefined);
-                    continue;
-                }
-                const c = await useCases.compareRevisions({ session: p.session, before: base, after: result });
-                if (c.ok) {
-                    compared.push(
-                        c.value.files.flatMap((f) => (f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status, ...(f.diff && { diff: f.diff }) }])),
-                    );
-                    continue;
-                }
-                // the bytes are gone (or the revisions): the files by hash, without their diff
-                const revisions = await uow.transaction((stores) => ({ a: stores.revisions.load(base), b: stores.revisions.load(result) }));
-                compared.push(
-                    revisions.a && revisions.b
-                        ? compareFiles(revisions.a.files, revisions.b.files).flatMap((f) =>
-                              f.status === 'unchanged' ? [] : [{ path: f.path, status: f.status }],
-                          )
-                        : undefined,
-                );
-            }
-            const changes = boundChanges(compared, maxDiff);
-            return ok(found.map((p, i) => ({ run: p, changes: changes[i] })));
+            return ok(await changesOfRuns(found, maxDiff));
+        },
+
+        async repliedRuns({ request, maxDiff }) {
+            const found = await uow.transaction((stores) => {
+                const r = stores.requests.load(request);
+                if (!r) return undefined;
+                const to = r.replyTo?.kind === 'Run' ? stores.runs.load(r.replyTo.run)?.run : undefined;
+                return to && to.session === r.session ? [to] : [];
+            });
+            if (!found) return err(notFound('Request', request));
+            return ok(await changesOfRuns(found, maxDiff));
         },
 
         async restoreOperations({ session }) {

@@ -147,7 +147,8 @@ describe('refused requests of a session in dev mode', () => {
             'POST facilitator/link, participant': await call(bob, 'facilitator/link', {}),
             'POST close, participant': await call(bob, 'close', {}),
             // rules the handlers hold
-            'POST requests apply, participant': await call(bob, 'requests', { targets: [], body: 'Do it now.', apply: true }),
+            'POST requests apply (gone), participant': await call(bob, 'requests', { targets: [], body: 'Do it now.', apply: true }),
+            'POST requests/address, participant': await call(bob, 'requests/address', { requests: [request] }),
             'POST marks Vote, facilitator': await call(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Vote' }, placed: true }),
             // what the use cases refuse
             'POST marks Vote on a message, participant': await call(bob, 'marks', {

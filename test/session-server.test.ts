@@ -187,12 +187,18 @@ async function refused(server: SessionServer, headers: Record<string, string>): 
     return result;
 }
 
-describe('messages applied, and classified for the facilitator', () => {
+describe('messages addressed to the AI, and the former apply', () => {
     let root: string;
     let server: SessionServer;
     let ada: string;
     let bob: string;
-    const classifier = { classify: async (text: string) => (text.startsWith('Add') ? 0.9 : 0.1) };
+    const asked: string[] = [];
+    const classifier = {
+        classify: async (text: string) => {
+            asked.push(text);
+            return { consultation: 0.1, changeRequest: text.includes('Add') ? 0.95 : 0.1, neither: 0.1 };
+        },
+    };
 
     beforeAll(async () => {
         root = await workspace();
@@ -204,31 +210,29 @@ describe('messages applied, and classified for the facilitator', () => {
     });
     afterAll(() => server?.stop());
 
-    test("the facilitator's pages learn how each message reads; the participants' never do", async () => {
-        const a = await socket(server, ada);
-        const b = await socket(server, bob);
-        try {
-            expect(await a.next('session.classifications')).toMatchObject({ classifications: {} });
-            const sent = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command.' })).json()) as { request: { id: string } };
-            await api(server, bob, 'requests', { targets: [], body: 'nice!' });
-            const first = await a.next('session.classification');
-            const second = await a.next('session.classification');
-            expect([first, second].map((m) => (m.classification as { kind: string }).kind).sort()).toEqual(['chat', 'request']);
-            expect([first, second].find((m) => m.request === sent.request.id)).toMatchObject({ classification: { kind: 'request', probability: 0.9 } });
-            await Bun.sleep(100);
-            expect(b.received.some((m) => m.type.startsWith('session.classification'))).toBe(false);
-        } finally {
-            a.ws.close();
-            b.ws.close();
+    test('talk between people is never sent to Clef; a mention of the AI is, and Clef decides', async () => {
+        const talk = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command, Ada?' })).json()) as { triage?: unknown };
+        expect(talk.triage).toBeUndefined();
+        const res = await api(server, ada, 'requests', { targets: [], body: '@AI[p1] Add a total.', mentions: ['ai'] });
+        expect(res.status).toBe(201);
+        const sent = (await res.json()) as { request: { id: string }; triage: { state: string; steps: { stage: string }[] } };
+        expect(sent.triage).toMatchObject({ state: 'Pending', steps: [{ stage: 'Mechanical' }] });
+        let state: SessionStateBody | undefined;
+        for (let i = 0; i < 100; i++) {
+            state = (await (await api(server, ada, 'state')).json()) as SessionStateBody;
+            if (state.runs.length) break;
+            await Bun.sleep(20);
         }
+        // the facilitator's own 依頼, decided by Clef: queued at once
+        expect(asked).toEqual(['AI Add a total.']);
+        expect(state?.runs.map((r) => r.state)).toEqual(['Queued']);
+        expect(state?.triages?.[0]).toMatchObject({ state: 'Decided', kind: 'ChangeRequest', decidedBy: 'Clef', outcome: { kind: 'Run' } });
     });
 
-    test('the facilitator sends and applies at once, with a note; a new facilitator link to hand the role over', async () => {
+    test('the former apply is refused; a new facilitator link to hand the role over', async () => {
         const res = await api(server, ada, 'requests', { targets: [], body: 'Add a total.', apply: { note: 'Keep it short.' } });
-        expect(res.status).toBe(201);
-        const body = (await res.json()) as { request: { id: string }; run: { state: string; input: { requests: { request: string }[]; note: string } } };
-        expect(body.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: body.request.id }], note: 'Keep it short.' } });
-        expect((await api(server, ada, 'requests', { targets: [], body: 'x', apply: { other: 1 } })).status).toBe(400);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: { field: string } }).error.field).toBe('apply');
         const link = await api(server, ada, 'facilitator/link', {});
         expect(link.status).toBe(201);
         expect(((await link.json()) as { link: string }).link).toContain('/session/facilitator?code=');
@@ -342,8 +346,8 @@ describe('a session in dev mode', () => {
             const res = await api(server, bob, p, body);
             expect([p, res.status, ((await res.json()) as { error: { type: string } }).error.type]).toEqual([p, 403, 'FacilitatorOnly']);
         }
-        // applying a message on sending it is the facilitator's; dismissing is gone (messages are chat)
-        const applied = await api(server, bob, 'requests', { targets: [], body: 'Do it now.', apply: true });
+        // addressing any message to the AI is the facilitator's; dismissing is gone (messages are chat)
+        const applied = await api(server, bob, 'requests/address', { requests: [adas.request.id] });
         expect([applied.status, ((await applied.json()) as { error: { type: string } }).error.type]).toEqual([403, 'FacilitatorOnly']);
         expect((await api(server, bob, `requests/${adas.request.id}/dismiss`, {})).status).toBe(404);
     });

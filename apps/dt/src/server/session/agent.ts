@@ -5,7 +5,9 @@
 // starts it (and gets the runs it continues, with what they changed, and the runs it reverts), heartbeats, and ends it (finish with its facts and the agent's reply, ask for clarification, decline,
 // fail) or releases it. The server computes the rest (S3's use cases); the reply is validated and kept, never a fact.
 // While a run runs, its holder also reports what it is doing (an activity, ADR 0026, amendment): held in memory and
-// sent to the pages, never stored.
+// sent to the pages, never stored. Since ADR 0030 (decision 6) these are the runner role's; the answerer role has an
+// entry point of its own beside them (`/agent/answers/events`, `POST /agent/answers/:job`: `answers.ts`). Each stream
+// open is an agent of its role connected (the page's AI status).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import {
@@ -18,9 +20,10 @@ import {
     readToolOutcome,
     type RunActivity,
 } from '@domaintrail/collaboration';
-import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody } from '@domaintrail/collaboration/protocol';
+import { AGENT_EVENT_TYPES, type AgentParticipantsBody, type AgentSessionBody, type AgentSessionSoFar } from '@domaintrail/collaboration/protocol';
 import { isLoopbackHost } from '../http/access.js';
 import { BodyError, readJson, sendError, sendJson } from '../http/json.js';
+import { type AnswerDispatcher, createAnswerDispatcher } from './answers.js';
 import { agentReply, body, text, uuid, MAX_NOTE } from './input.js';
 import { eventMessage } from './relay.js';
 import { statusOf } from './routes.js';
@@ -50,6 +53,11 @@ export interface AgentApiDeps {
     readonly activity: (run: Collaboration.AgentRunId, activity: RunActivity) => void;
     /** Lets the server take a revert at the head of the queue (a claim found one it has not tried yet). */
     readonly reverts?: () => void;
+    /** The most milliseconds an answer job may take (`agent.answer.timeout`). */
+    readonly answerTimeoutMs: number;
+    /** The agents connected changed (a stream of either role opened or closed). */
+    readonly onPresence?: () => void;
+    readonly log?: (line: string) => void;
 }
 
 export interface AgentApi {
@@ -59,6 +67,10 @@ export interface AgentApi {
     wake(): void;
     /** Ends every stream (the server stops). */
     close(): void;
+    /** The answerer role's entry point: its jobs handed out, its streams. */
+    readonly answers: AnswerDispatcher;
+    /** How many agents of each role are connected: answer streams, and run streams (`/agent/events`). */
+    connected(): { readonly answer: number; readonly run: number };
 }
 
 /** The SSE event name of an outbox event for the agent, if the agent is told about it. */
@@ -84,6 +96,17 @@ interface Stream {
 export function createAgentApi(deps: AgentApiDeps): AgentApi {
     const { session, collaboration: use } = deps;
     const streams = new Set<Stream>();
+    const answers = createAnswerDispatcher({
+        session,
+        collaboration: use,
+        timeoutMs: deps.answerTimeoutMs,
+        maxPreviousRunDiff: deps.maxPreviousRunDiff,
+        maxStreams: deps.maxStreams,
+        pump: deps.pump,
+        ...(deps.onPresence && { onConnections: deps.onPresence }),
+        token: deps.token,
+        log: deps.log ?? (() => {}),
+    });
 
     const endStream = (stream: Stream): void => {
         if (stream.closed) return;
@@ -149,9 +172,11 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         res.write(': stream\n\n');
         const stream: Stream = { cursor: Number(resumeFrom), res, running: false, again: false, closed: false };
         streams.add(stream);
+        deps.onPresence?.();
         res.on('close', () => {
             stream.closed = true;
             streams.delete(stream);
+            deps.onPresence?.();
         });
         void drain(stream).catch((e: unknown) => {
             console.error(`Agent stream failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -191,14 +216,24 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         sendJson(res, 200, body(result.value));
     };
 
+    /** Whether a reply of the agent carries the agent's own credential (it would reach the pages). */
+    const leaks = (v: unknown): boolean => v !== undefined && JSON.stringify(v).includes(deps.token);
+    const refuseLeak = (res: ServerResponse, run: Collaboration.AgentRunId): void => {
+        deps.log?.(`run ${run}: refused a reply that contains the agent credential`);
+        sendError(res, 400, 'CredentialInOutput', 'The reply contains the agent credential.');
+    };
+
     const runRoute = async (req: IncomingMessage, res: ServerResponse, rawId: string, action: string): Promise<void> => {
         const id = uuid(rawId, 'id');
         if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'id' });
         const run = knownAgentRunId(id.value);
         switch (action) {
             case 'start': {
-                const b = await input(req, res, ['token']);
+                const b = await input(req, res, ['token', 'since']);
                 if (!b) return;
+                if (b.since !== undefined && !(typeof b.since === 'number' && Number.isInteger(b.since) && b.since >= 0))
+                    return sendError(res, 400, 'InvalidInput', 'Expected the last entry of the session so far seen.', { field: 'since' });
+                const since = b.since;
                 const started = await use.startRun({ run, token: String(b.token) });
                 if (!started.ok) return answer(res, started, (v) => v);
                 // the runs it continues (replies, an answer) and what they changed, measured now (ADR 0026, "replies to runs")
@@ -207,7 +242,21 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                 // the runs it reverts and what they changed, file by file (ADR 0026, amendment "revert a run")
                 const reverted = await use.revertedRuns({ run });
                 const revert = reverted.ok ? reverted.value : [];
-                return answer(res, started, (v) => ({ run: v.run, baseRevision: v.base, previousRuns, ...(revert.length > 0 && { revert }) }));
+                // the session so far (ADR 0030, round 3): whole, and since what the runner's warm process saw
+                const soFar = async (from?: number): Promise<AgentSessionSoFar | undefined> => {
+                    const s = await use.sessionSoFar({ session, ...(from !== undefined && { since: from }) });
+                    return s.ok ? { text: s.value.text, last: s.value.last, ...(from !== undefined && { since: from }) } : undefined;
+                };
+                const sessionSoFar = await soFar();
+                const sessionSoFarSince = typeof since === 'number' ? await soFar(since) : undefined;
+                return answer(res, started, (v) => ({
+                    run: v.run,
+                    baseRevision: v.base,
+                    previousRuns,
+                    ...(revert.length > 0 && { revert }),
+                    ...(sessionSoFar && { sessionSoFar }),
+                    ...(sessionSoFarSince && { sessionSoFarSince }),
+                }));
             }
             case 'heartbeat': {
                 const b = await input(req, res, ['token']);
@@ -241,6 +290,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'finish': {
                 const b = await input(req, res, ['token', 'exitCode', 'formatted', 'checked', 'reply']);
                 if (!b) return;
+                if (leaks(b.reply)) return refuseLeak(res, run);
                 const { exitCode, formatted, checked } = b;
                 if (typeof exitCode !== 'number' || !Number.isInteger(exitCode) || exitCode < -1024 || exitCode > 1024)
                     return sendError(res, 400, 'InvalidInput', 'Expected the exit code.', { field: 'exitCode' });
@@ -265,6 +315,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'clarification': {
                 const b = await input(req, res, ['token', 'question', 'reply']);
                 if (!b) return;
+                if (leaks(b.question) || leaks(b.reply)) return refuseLeak(res, run);
                 const question = text(b.question, 'question', MAX_NOTE);
                 if (!question.ok) return sendError(res, 400, 'InvalidInput', question.error.message, { field: 'question' });
                 const reply = b.reply === undefined ? undefined : agentReply(b.reply, 'clarification');
@@ -278,6 +329,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             case 'decline': {
                 const b = await input(req, res, ['token', 'reply']);
                 if (!b) return;
+                if (leaks(b.reply)) return refuseLeak(res, run);
                 const reply = agentReply(b.reply, 'declined');
                 if (!reply.ok) return sendError(res, 400, 'InvalidInput', reply.error.message, { field: reply.error.field });
                 return answer(res, await use.declineRun({ run, token: String(b.token), reply: reply.value }), (v) => v);
@@ -330,6 +382,21 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
             return sendJson(res, 200, answer);
         }
         if (path === '/agent/events' && req.method === 'GET') return events(req, url, res);
+        if (path === '/agent/answers/events' && req.method === 'GET') return answers.events(req, res);
+        const job = /^\/agent\/answers\/([^/]+)$/.exec(path);
+        if (job && job[1] !== 'events') {
+            if (req.method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');
+            const id = uuid(job[1], 'job');
+            if (!id.ok) return sendError(res, 400, 'InvalidInput', id.error.message, { field: 'job' });
+            let raw: unknown;
+            try {
+                raw = await readJson(req, MAX_AGENT_BODY);
+            } catch (e) {
+                if (!(e instanceof BodyError)) throw e;
+                return sendError(res, e.status, e.type, e.message);
+            }
+            return answers.result(res, id.value, raw);
+        }
         if (path === '/agent/runs/claim' && req.method === 'POST') {
             const b = await input(req, res, ['owner', 'capabilities']);
             if (!b) return;
@@ -374,6 +441,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         close() {
             clearInterval(keepalive);
             for (const stream of streams) endStream(stream);
+            answers.close(false);
         },
+        answers,
+        connected: () => ({ answer: answers.connected(), run: [...streams].filter((s) => !s.closed).length }),
     };
 }

@@ -1,6 +1,6 @@
 # ADR 0030: Modes (`dt open` / `dt collab` / `dt agent`), messages addressed to the AI, triage and a warm agent
 
-- Status: accepted (2026-11-03), not implemented; tasks M2–M7 of [the plan](../plans/modes.md). Every decision below
+- Status: accepted (2026-11-03), being implemented: M2–M4 landed; tasks M5–M7 of [the plan](../plans/modes.md). Every decision below
   was taken by the maintainer (marked *Decided by the maintainer*) except those marked *Proposed*, which the plan
   chose where the maintainer left the choice open; the plan's open questions are not decided here.
 - Date: 2026-11-03
@@ -151,6 +151,31 @@ participants; the facilitator's re-address of a "neither" is a triage step of it
 records where it went (an answer, a proposal or a run) once; the approved proposals are an optional group of the run's
 input; `dt fmt` / `dt check` report `Ran`, `Failed` or `Skipped`, and stored rows of the former shape are read in the new
 one rather than rewritten.
+
+### 10. The triage and the answers as built (M4)
+
+*Proposed* (M4, where the plan left the detail open; see the plan's "As built in M4"): the answers entry point holds
+what it handed out in memory (a job per answerer, withdrawn after its timeout; a failed stage 3 is a 相談, a failed
+answer or proposal is tried twice and then left until the server starts again); a participant's page gets the triages'
+outcomes without the stages, also in the events; Clef asks three questions in one call; the answerer and the triage
+model are reached through Claude Code only, the triage cold by default, the answers warm with one schema for answers and
+proposals; the session so far is given whole and since the last entry the same process saw (the runner asks for it at
+the start, the server tracks it per answer stream); `dt fmt` and `dt check` are skipped when a run changed no file.
+
+*Decided by the maintainer* (2026-11-03, after a security review of M4): the agents may read any file inside the
+workspace's root — not only the model — and nothing outside it, never `.domaintrail/` (our credential and session data,
+our responsibility) nor `.git/`, and no file `.gitignore` ignores; keeping secrets out of the repository is the user's
+responsibility. *Proposed* (how): `claude` loads no settings file, so that the user's allow rules cannot widen what it
+reads, and in `dontAsk` mode it then reads only inside its working directory (measured with Claude Code 2.1.317), with
+deny rules for `.domaintrail/` and `.git/`. Claude Code's rules cannot express "not ignored by git", so the answerer
+(whose input is any participant's message, without the facilitator) works in a private **view** of the workspace — a
+copy of the readable files only, refreshed before each turn — rather than with rules over the workspace: nothing it
+should not read exists where it can read. The runner must edit the workspace, so it works there, with the ignored
+entries present at its start as deny rules. The server refuses an output that contains the agent API's credential.
+*Residual risk*: the runner's deny list is computed when a run starts (a file ignored and created during the run is not
+in it) and capped at 500 entries; Claude Code's rule matching is best effort for `Grep`/`Glob` (measured to hold for
+these paths); a secret the user keeps in a file git does not ignore is readable by design; and the user's hooks and
+`apiKeyHelper` no longer run for the agents.
 
 ## Alternatives considered
 

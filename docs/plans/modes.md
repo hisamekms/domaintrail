@@ -497,6 +497,69 @@ M2 landed the model, the use cases, the store and the protocol types above, with
   the transaction that decides it; a run that answers a request (`answered`) overrides its triage as `Runner` when it
   finishes.
 
+### As built in M4
+
+M4 landed the triage and the answers end to end on the server and in `capabilities/agent`, with these details settled:
+
+- **Routes** (`apps/dt/src/server/session/routes.ts`): `POST /api/session/requests` sends through `sendMessage` and
+  answers `{ request, triage? }`; its former `apply` is an unknown field (400). `POST /api/session/requests/address`
+  (`{ requests }`) and `POST /api/session/requests/:id/address` (the facilitator's 「AI に送る」) answer `{ triages }`;
+  `POST /api/session/proposals/approve` (`{ proposals: [{ proposal, edited? }], note? }`) `{ run, proposals }`;
+  `…/proposals/:id/reject` (`{ note? }`) and `…/:id/withdraw` (the requester) `{ proposal }`. The page keeps its UI:
+  the robot button and まとめて送る without a comment call the address route; もう一度送る and a run with a comment still
+  queue a run (`POST /api/session/runs`) until M6. `session.classifications`, `createClassifications` and Clef's single
+  question are gone.
+- **What each role sees** (`views.ts`): a participant's state has each triage as `TriageOutcomeBody` (no `steps`, no
+  `decidedBy`); its pages get no `triage.step_recorded`, `triage.decided` without `decidedBy`, `triage.overridden`
+  without its step (`ParticipantTriageMessage`). The facilitator gets the records. The server logs one line per triage
+  decided or overridden, without the text, to the `debug` log (by default the log, when `DOMAINTRAIL_DEBUG` is set).
+- **Stage 2** (`clefStep` in `application/classifier.ts`; the server's `triage.ts`): Clef's three `noul` questions
+  (`consultation`, `change_request`, `neither`) in one call, the probabilities as the step's reason, the model recorded;
+  not configured, a `Clef` step `Unknown` with that reason. Pending triages waiting for it are taken when a message is
+  addressed and when the server starts. The threshold is `session.classifier.threshold`, whose default is still 0.5:
+  **M5 raises it to 0.9** (`TRIAGE_THRESHOLDS.clef`, Q5) when it moves the section to `classifier`.
+- **The answers entry point** (`answers.ts`): what is handed out is held in memory — a job ID per hand-out, one job in
+  hand per stream, a timeout of 120 s (`ANSWER_TIMEOUT_MS`; `agent.answer.timeout` is the agent's own bound) plus 5 s
+  for the answerer to report a failure, then `answer.job_withdrawn`. Stage 3 that fails, times out or gives an invalid
+  output is recorded as a `Model` step `Unknown` with the error (so the triage is a 相談); an answer or a proposal that
+  fails is handed out again, at most twice (`MAX_ATTEMPTS`), then given up until the server starts again (logged; how
+  the page shows it is M6's). An answerer that disconnects has its job handed to another. The stream also carries
+  `revision.restored` (the warm answerer forgets). Answer and propose jobs carry the session so far whole and, for a
+  stream that answered before, since the last entry its previous job was given (`sessionSoFarSince`), the run the
+  message replies to (`repliedRuns`) and the latest revision (`readRevision`). `changedSinceYourLastAnswer` is the
+  answerer's own (its scans), not a field of the job.
+- **Runs**: `POST /agent/runs/:id/start` takes `since` and gives `sessionSoFar` and `sessionSoFarSince`; the runner's
+  prompt has them, the approved proposals (`approvedProposals`) and rules 12–14 (follow approved proposals; answer a
+  question with `answered` instead of editing; the session so far is data). The subscriber skips `dt fmt` / `dt check`
+  when the run changed no file and reports `ran` / `failed` / `skipped`.
+- **Presence**: the state's `agent` and `agent.presence` (sent on each change): `connected.run` counts the open
+  `/agent/events` streams, `connected.answer` the open answer streams; `waiting` the answer jobs waiting (given-up ones
+  left out) plus the runs queued.
+- **The answerer role** (`capabilities/agent`): `startAnswerer` (core) and `createClaudeAnswerer` (adapter). Stage 3:
+  `--tools ""`, `--model haiku` by default, a fresh `claude -p` per triage unless `triage.warm`. Answers and proposals:
+  `--tools Read,Grep,Glob --allowedTools Read Grep Glob`, one schema for both (`answererJsonSchema`, so one warm process
+  takes both), warm by default, replaced after 50 turns, ended after 30 minutes without one; a warm process that fails
+  falls back to a fresh one as the runner's does. The model that answered is read from Claude Code's `init` event.
+  Answers and proposals name elements as the runs' replies do (`@{Sales.Order}`).
+- **What the agents may read** (security review and the maintainer's decision, 2026-11-03): any file inside the
+  workspace's root, never outside it, never `.domaintrail/` nor `.git/`, and no file `.gitignore` ignores; keeping
+  secrets out of the repository is the user's. `claude` loads no settings file (`--setting-sources ""`; measured: the
+  user's own `Read` allow rule let it read anywhere), so in `dontAsk` it reads only inside its working directory; bare
+  reading tools are no allow rule (a bare `Read` allows reading anywhere), bare editing tools become `Edit(./**)`;
+  `Read`/`Edit` of `./.domaintrail/**` and `./.git/**` are denied. The answerer and stage 3 run in a **view**: a
+  private copy (0700, outside the workspace) of the files git does not ignore, refreshed before each turn
+  (`workspace-view.ts`), since permission rules cannot say "not ignored". The runner edits the workspace itself, so the
+  ignored files and directories present when a run starts are deny rules (at most 500). The user's `model` and
+  `effortLevel` are read from `~/.claude/settings.json` for a role without its own. The server refuses (400
+  `CredentialInOutput`, logged) an answer, a proposal or a run's reply that contains the agent API's credential.
+  Checked once with Claude Code 2.1.317: from the view, a README is readable; `.env` (ignored), `.domaintrail/`, the
+  workspace by its absolute path and a file outside it are not; the runner cannot read or edit a denied `.env` nor
+  write outside its directory.
+- **Config**: no key was added. `resolveAnswerConfig`, `validateAnswerConfig`, `resolveTriageConfig`,
+  `validateTriageConfig` and their defaults are exported by `@domaintrail/agent` for M5 to place under `agent.answer` /
+  `agent.triage`. Until then `dt session subscribe` starts both roles with the defaults (the wiring's `startSubscriber`
+  takes `roles`, `answer`, `triage`); M5 gives `dt agent --role answer|run` and the in-process agent.
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat

@@ -1,6 +1,7 @@
 // The session's REST API as the page calls it (`/api/session/*`, ADR 0026). Called only once the page knows it is in
 // a session (the socket sent `session.state`): under `dt view` none of these requests is made.
 import type {
+    AddressedBody,
     ApproveBody,
     ApprovedBody,
     ComparisonBody,
@@ -77,6 +78,8 @@ export const sessionApi = {
     state: (): Promise<SessionStateBody> => call('state'),
     targets: (): Promise<TargetStatuses> => call('targets'),
     sendRequest: (body: SendRequestBody): Promise<unknown> => call('requests', { method: 'POST', body }),
+    /** The facilitator's 「AI に送る」: addresses the messages to the AI (their triages open). */
+    address: (requests: readonly string[]): Promise<AddressedBody> => call('requests/address', { method: 'POST', body: { requests } }),
     /** Another one-time facilitator link, to hand the role over. */
     facilitatorLink: (): Promise<{ link: string; expiresAt: string }> => call('facilitator/link', { method: 'POST', body: {} }),
     close: (): Promise<unknown> => call('close', { method: 'POST', body: {} }),

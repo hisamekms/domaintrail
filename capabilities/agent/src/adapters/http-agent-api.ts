@@ -1,8 +1,16 @@
 // The agent API over HTTP (ADR 0026, S4's `createAgentApi`): JSON calls with the bearer token of `agent.json`, and the
 // SSE stream parsed here (`id:`, `event:`, `data:`, comments), resumed with `Last-Event-ID`. The token is sent only to
 // the URL of `agent.json` (loopback) and never logged.
-import type { AgentClaimed, AgentLease, AgentParticipantsBody, AgentSessionBody, EventMessage } from '@domaintrail/collaboration/protocol';
-import { AgentApiError, type AgentApi, type ApiResult, type Started, type StreamItem } from '../core/ports.js';
+import {
+    AGENT_ANSWER_EVENT_TYPES,
+    type AgentAnswerJobBody,
+    type AgentClaimed,
+    type AgentLease,
+    type AgentParticipantsBody,
+    type AgentSessionBody,
+    type EventMessage,
+} from '@domaintrail/collaboration/protocol';
+import { AgentApiError, type AgentApi, type AnswerStreamItem, type ApiResult, type Started, type StreamItem } from '../core/ports.js';
 
 /** How long a call may take (a start or a finish takes a snapshot of the workspace on the server). */
 const CALL_TIMEOUT_MS = 120_000;
@@ -114,7 +122,7 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
             }
         },
         claim: (owner, capabilities) => call<AgentClaimed>('POST', 'runs/claim', { owner, capabilities }),
-        start: (run, token) => call<Started>('POST', runPath(run, 'start'), { token }),
+        start: (run, token, since) => call<Started>('POST', runPath(run, 'start'), { token, ...(since !== undefined && { since }) }),
         heartbeat: (run, token) => call<{ lease: AgentLease }>('POST', runPath(run, 'heartbeat'), { token }),
         activity: (run, token, activity) => call('POST', runPath(run, 'activity'), { token, ...activity }),
         finish: (run, token, facts) => call('POST', runPath(run, 'finish'), { token, ...facts }),
@@ -122,5 +130,38 @@ export function createHttpAgentApi(options: HttpAgentApiOptions): AgentApi {
         decline: (run, token, reply) => call('POST', runPath(run, 'decline'), { token, reply }),
         fail: (run, token, reason) => call('POST', runPath(run, 'fail'), { token, reason }),
         release: (run, token) => call('POST', runPath(run, 'release'), { token }),
+        async *answerEvents(signal): AsyncGenerator<AnswerStreamItem> {
+            const res = await fetch(`${base}agent/answers/events`, { headers: { authorization, accept: 'text/event-stream' }, signal });
+            if (!res.ok) throw new AgentApiError(res.status, await errorType(res));
+            if (!res.body) throw new Error('The answer stream has no body');
+            yield { kind: 'open' };
+            for await (const e of parseSse(res.body)) {
+                let data: unknown;
+                try {
+                    data = e.data ? JSON.parse(e.data) : {};
+                } catch (error) {
+                    throw new Error(`An answer event is not JSON: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+                }
+                switch (e.event) {
+                    case AGENT_ANSWER_EVENT_TYPES.job:
+                        if (!isObject(data) || typeof data.job !== 'string' || typeof data.kind !== 'string') throw new Error('An answer job without its ID');
+                        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a job as the server encodes it (protocol.ts), checked for its ID and kind above
+                        yield { kind: 'job', job: data as unknown as AgentAnswerJobBody };
+                        break;
+                    case AGENT_ANSWER_EVENT_TYPES.withdrawn:
+                        if (isObject(data) && typeof data.job === 'string') yield { kind: 'withdrawn', job: data.job };
+                        break;
+                    case AGENT_ANSWER_EVENT_TYPES.restored:
+                        yield { kind: 'restored' };
+                        break;
+                    case AGENT_ANSWER_EVENT_TYPES.closed:
+                        yield { kind: 'closed' };
+                        break;
+                    default:
+                    // an event of a later server: not this answerer's
+                }
+            }
+        },
+        answerResult: (job, result) => call('POST', `answers/${encodeURIComponent(job)}`, result),
     };
 }

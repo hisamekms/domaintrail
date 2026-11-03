@@ -234,6 +234,8 @@ async function subscribe(ctx: Context, planFile: string, extra: Partial<Subscrib
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
         run: { warm: false, restartAfter: 20, idleTimeout: 30 },
+        // the runner only: the answerer role (its own fake plan) has its tests in session-triage.test.ts
+        roles: ['run'],
         log: (l) => log.push(l),
         reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },
         ...extra,
@@ -341,11 +343,12 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
                 '--no-session-persistence',
                 '--strict-mcp-config',
                 '--setting-sources',
-                'user',
+                '',
                 '--permission-mode',
                 'dontAsk',
             ]);
-            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual([...DEFAULT_AGENT_TOOLS]);
+            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual(['Edit(./**)', 'Bash(dt fmt:*)', 'Bash(dt check:*)']);
+            expect(invocation.args).toContain('Read(./.domaintrail/**)');
             expect(invocation.args[invocation.args.indexOf('--tools') + 1]).toBe('Read,Edit,Write,Glob,Grep,Bash');
             const prompt = invocation.prompt;
             const nonce = /<requests-([0-9a-f]{32})>/.exec(prompt)?.[1];
@@ -614,7 +617,7 @@ describe('the pipeline', () => {
         await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: settings }] }, {}]));
         expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
         const args = (await ctx.invocations()).at(-1)?.args ?? [];
-        expect(args[args.indexOf('--setting-sources') + 1]).toBe('user');
+        expect(args[args.indexOf('--setting-sources') + 1]).toBe('');
     });
 
     integration('an agent that writes .claude/ settings and is cancelled: the run is cancelled, and no further run is claimed', async () => {

@@ -1,82 +1,52 @@
-// Telling a session's requests from its talk (ADR 0026, amendment: messages and apply). Each chat message is classified
-// once, after it is sent and without holding it up: the page shows it at once, and the facilitator learns later whether
-// it reads as a request. Opt-in; when the classifier fails, times out or is unsure, the message stays applicable (the
-// decision falls back to the facilitator). The results are the facilitator's only and are kept in memory: a server
-// started again classifies none of the earlier messages, which are applicable then.
+// Stage 2 of the triage (ADR 0030, decision 4; the plan's "Stage 2: Clef"): the classifier port, and the step it gives a
+// message addressed to the AI. Clef is asked three questions about the message (its body with its mentions as names);
+// one answer at or above the threshold decides (`clefVerdict`), anything else is unknown and the message goes on to the
+// light model. Without a classifier configured the step is still recorded, unknown with that reason: a triage job for
+// the answerer role is due once a `Clef` step is recorded (`answerJobOf`). A failure or a timeout is unknown, with why.
+// The message's text never reaches a log. (Clef's former role — tagging every message for the facilitator's 「AI に
+// 送る」 — is gone.)
+import { clefVerdict, type ClefProbabilities } from '../domain/triage.js';
+import type { TriageStepInput } from './conversation.js';
 
-/** What a message reads as: a request to change the model, talk, or not known (failed, unsure, not classified). */
-export type MessageKind = 'request' | 'chat' | 'unknown';
-
-export interface Classification {
-    readonly kind: MessageKind;
-    /** The probability that the message is a request, when the classifier gave one. */
-    readonly probability?: number;
-}
-
-/** The classifier port: the probability (0–1) that a message is a request to change the domain model. */
+/** The classifier port: Clef's probabilities for the three questions of stage 2. */
 export interface MessageClassifier {
-    classify(text: string, signal: AbortSignal): Promise<number>;
+    /** The model asked (recorded with the step). */
+    readonly model?: string;
+    classify(text: string, signal: AbortSignal): Promise<ClefProbabilities>;
 }
 
-/** How far from the threshold a probability must be to be trusted: closer, the message is `unknown` (applicable). */
-export const UNSURE_MARGIN = 0.1;
+/** The reason of a Clef step when no classifier is configured. */
+export const CLEF_NOT_CONFIGURED = 'Clef は設定されていない';
 
-/** The kind of a message from the probability that it is a request. */
-export function classificationOf(probability: number | undefined, threshold: number, margin = UNSURE_MARGIN): Classification {
-    if (probability === undefined || !Number.isFinite(probability)) return { kind: 'unknown' };
-    const kind: MessageKind = probability >= threshold + margin ? 'request' : probability < threshold - margin ? 'chat' : 'unknown';
-    return { kind, probability };
-}
+const shown = (p: number): string => (Number.isFinite(p) ? p.toFixed(2) : '?');
 
-/** Whether the facilitator is offered to apply a message: anything but talk. */
-export const applicable = (c: Classification | undefined): boolean => c?.kind !== 'chat';
-
-export interface Classifications {
-    /** Classifies a message in the background; `onClassified` tells the result. A message already classified is not again. */
-    classify(id: string, text: string): void;
-    /** Every result so far, by message ID. */
-    all(): Readonly<Record<string, Classification>>;
-    /** Resolves once the classifications under way have ended (tests, and a server stopping). */
-    settled(): Promise<void>;
-}
-
-export interface ClassificationsDeps {
-    readonly classifier: MessageClassifier;
-    readonly threshold: number;
-    readonly timeoutMs: number;
-    readonly onClassified: (id: string, classification: Classification) => void;
-    /** Told why a classification failed (never the message's text). */
-    readonly log: (line: string) => void;
-}
-
-export function createClassifications(deps: ClassificationsDeps): Classifications {
-    const results = new Map<string, Classification>();
-    const pending = new Set<Promise<void>>();
-    const asked = new Set<string>();
-    return {
-        classify(id, text) {
-            if (asked.has(id)) return;
-            asked.add(id);
-            const timeout = AbortSignal.timeout(deps.timeoutMs);
-            const work = deps.classifier
-                .classify(text, timeout)
-                .then(
-                    (p) => classificationOf(p, deps.threshold),
-                    (e: unknown) => {
-                        deps.log(`classifying a message failed: ${timeout.aborted ? 'timed out' : e instanceof Error ? e.message : String(e)}`);
-                        return { kind: 'unknown' } satisfies Classification;
-                    },
-                )
-                .then((c) => {
-                    results.set(id, c);
-                    deps.onClassified(id, c);
-                });
-            pending.add(work);
-            void work.finally(() => pending.delete(work));
-        },
-        all: () => Object.fromEntries(results),
-        settled: async () => {
-            await Promise.all(pending);
-        },
-    };
+/**
+ * Stage 2 for a message (`text`: its body with its mentions as names): Clef's verdict with the probabilities as its
+ * reason, unknown without a classifier, or unknown with the error when it fails or takes longer than `timeoutMs`.
+ */
+export async function clefStep(
+    classifier: MessageClassifier | undefined,
+    text: string,
+    options: { readonly threshold: number; readonly timeoutMs: number; readonly now?: () => number },
+): Promise<TriageStepInput> {
+    if (!classifier) return { stage: 'Clef', verdict: 'Unknown', reason: CLEF_NOT_CONFIGURED, durationMs: 0 };
+    const now = options.now ?? Date.now;
+    const started = now();
+    const timeout = AbortSignal.timeout(options.timeoutMs);
+    const model = classifier.model === undefined ? {} : { model: classifier.model };
+    try {
+        const p = await classifier.classify(text, timeout);
+        const { verdict, confidence } = clefVerdict(p, options.threshold);
+        return {
+            stage: 'Clef',
+            verdict,
+            ...(confidence !== undefined && { confidence }),
+            reason: `相談 ${shown(p.consultation)} / 依頼 ${shown(p.changeRequest)} / 不要 ${shown(p.neither)}`,
+            ...model,
+            durationMs: now() - started,
+        };
+    } catch (e) {
+        const error = timeout.aborted ? 'timed out' : e instanceof Error ? e.message : String(e);
+        return { stage: 'Clef', verdict: 'Unknown', ...model, durationMs: now() - started, error };
+    }
 }

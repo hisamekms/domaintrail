@@ -108,17 +108,14 @@ describe('the operations reserved to the facilitator', () => {
         ] as const) {
             expect([p, body, ...(await answer(await api(bob, p, body)))]).toEqual([p, body, 403, FACILITATOR_ONLY]);
         }
-        // applying a message is the facilitator's: refused before the message is sent, after `apply` is read
+        // addressing any message to the AI (「AI に送る」) is the facilitator's; the former `apply` is no field of a message
         const before = (await state()).requests.length;
-        expect(await answer(await api(bob, 'requests', { targets: [], body: 'Do it now.', apply: true }))).toEqual([
-            403,
-            { error: { type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' } },
-        ]);
-        expect(await answer(await api(bob, 'requests', { targets: [], body: 'Do it now.', apply: { note: 'x' } }))).toEqual([
-            403,
-            { error: { type: 'FacilitatorOnly', message: 'Only the facilitator applies messages.' } },
-        ]);
-        expect((await api(bob, 'requests', { targets: [], body: 'Do it now.', apply: 1 })).status).toBe(400);
+        const someone = (await state()).requests[0]?.id ?? UNKNOWN;
+        expect(await answer(await api(bob, 'requests/address', { requests: [someone] }))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(bob, `requests/${someone}/address`, {}))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(bob, 'proposals/approve', { proposals: [{ proposal: UNKNOWN }] }))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(bob, `proposals/${UNKNOWN}/reject`, {}))).toEqual([403, FACILITATOR_ONLY]);
+        expect((await api(bob, 'requests', { targets: [], body: 'Do it now.', apply: true })).status).toBe(400);
         expect((await state()).requests.length).toBe(before);
     });
 

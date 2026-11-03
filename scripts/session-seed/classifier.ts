@@ -46,7 +46,10 @@ export async function startMockClassifier(): Promise<MockClassifier> {
             // the server sends at most 4,000 characters of a message: a long one is looked up by its start
             const p = expected.get(state.slice(0, 4000)) ?? (REQUEST_WORDS.test(state) ? READS_AS.request : READS_AS.chat);
             res.writeHead(200, { 'content-type': 'application/json' });
-            res.end(JSON.stringify({ success: true, result: { answers: { request: { type: 'noul', noul: p } } } }));
+            // stage 2 of the triage asks three questions: a request reads as 依頼, talk as needing no answer, unsure as neither
+            const noul = (x: number): unknown => ({ type: 'noul', noul: x });
+            const answers = { consultation: noul(p === READS_AS.unsure ? 0.5 : 0.05), change_request: noul(p), neither: noul(1 - p) };
+            res.end(JSON.stringify({ success: true, result: { answers } }));
         });
     });
     await new Promise<void>((resolve, reject) => {
