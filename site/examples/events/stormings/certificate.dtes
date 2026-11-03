@@ -1,0 +1,18 @@
+/// 住民票をコンビニで取って、頼まれた先に出すまで。
+storming CertificateIssuance "住民票のコンビニ交付" {
+  event CertificateRequested "住民票を頼まれた"
+  event MethodResearched "取り方を調べた"
+  event CopiesConfirmed "部数を確かめた"
+  event LeftWithCard "カードを持って出た"
+  event StoreVisited "コンビニに行った"
+  event MenuSelected "行政サービスを選んだ"
+  event CardRead "カードを読み取った"
+  event PinEntered "暗証番号を入力した"
+  event OptionsSelected "種類と部数を選んだ"
+  event FeePaid "手数料を払った"
+  event CertificateIssued "証明書が発行された"
+  event CardCollected "カードを回収した"
+  event ContentChecked "内容を確かめた"
+  event CertificateSubmitted "証明書を提出した"
+  event CertificateAccepted "受け取ってもらえた"
+}
