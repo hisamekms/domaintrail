@@ -88,7 +88,7 @@ export interface PickerOption {
 /**
  * A dropdown that picks one thing to look at (a storming, a timeline). The button shows the choice, cut short with an
  * ellipsis when narrow (the whole of it as a tooltip); the list opens below it, moves with the arrow keys, and closes
- * on a choice, on Escape or on a click outside it. With one option it is the option's name, not a button.
+ * on a choice, on Escape or on a press outside it. With one option it is the option's name, not a button.
  */
 export function SubjectPicker(props: { label: string; value: string; options: PickerOption[]; onChange: (value: string) => void }) {
     const { label, value, options, onChange } = props;
