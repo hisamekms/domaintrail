@@ -455,7 +455,7 @@ class DomainNodeKindProvider extends DefaultNodeKindProvider {
         if (ast.isEventDecl(node) || stormingAst.isEsEvent(node)) return SymbolKind.Event;
         if (ast.isPolicy(node) || stormingAst.isEsPolicy(node)) return SymbolKind.Interface;
         if (ast.isCommand(node) || stormingAst.isEsCommand(node)) return SymbolKind.Method;
-        if (stormingAst.isEsStorming(node)) return SymbolKind.Namespace;
+        if (stormingAst.isEsStorming(node) || stormingAst.isEsStage(node)) return SymbolKind.Namespace;
         if (stormingAst.isEsAggregate(node)) return SymbolKind.Class;
         if (stormingAst.isEsTimeline(node) || stormingAst.isEsGroup(node)) return SymbolKind.Array;
         if (stormingAst.isEsActor(node) || stormingAst.isEsExternal(node) || stormingAst.isEsReadModel(node)) return SymbolKind.Object;
@@ -564,8 +564,9 @@ function stormingKindOf(node: AstNode): string | undefined {
     if (stormingAst.isEsAggregate(node)) return 'aggregate';
     if (stormingAst.isEsReadModel(node)) return 'read model';
     if (stormingAst.isEsHotspot(node)) return 'hotspot';
-    if (stormingAst.isEsTimeline(node)) return 'timeline';
+    if (stormingAst.isEsTimeline(node)) return node.exception ? 'exception' : 'timeline';
     if (stormingAst.isEsGroup(node)) return 'group';
+    if (stormingAst.isEsStage(node)) return 'stage';
     return undefined;
 }
 

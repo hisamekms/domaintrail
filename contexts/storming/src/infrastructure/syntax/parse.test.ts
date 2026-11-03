@@ -29,7 +29,7 @@ async function syntaxErrors(text: string) {
 
 const element = (s: Storming, id: string): NodeElement => {
     const el = s.elements.find((e) => e.id === id);
-    if (!el || el.kind === 'timeline') throw new Error(`no element ${id}`);
+    if (!el || el.kind === 'timeline' || el.kind === 'stage') throw new Error(`no element ${id}`);
     return el;
 };
 
