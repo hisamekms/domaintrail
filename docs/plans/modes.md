@@ -678,6 +678,17 @@ The maintainer's second design of the change proposal (2026-11-03; it replaces M
   「ファシリテーターの承認待ち」, and the requester 取り下げ. Approving several together takes each card's pick. Solo is
   unchanged (no proposals).
 
+### As built: the ways of working in the prompts
+
+- **Guide**: two topics, `storming-practice` (under `storming`) and `modeling-practice` (under `dsl`), with the
+  maintainer's text; `workflow` points to both.
+- **Push**: the runner's prompt and the answerer's answer and propose prompts give the topics of the languages the
+  request is about, as the guide has them (the CLI reads them from the guide it embeds and hands them to the agent;
+  no copy in the prompts): `.dtes` targets the storming's, `.dt` targets the modeling's, both or no target both. The
+  runner's prompt puts its rules first where they differ; the answerer's stays read-only.
+- **Pull**: the runner may run `dt guide` (alone, one topic or rule, or `--all`): `Bash(dt guide:*)` in the default
+  `allowedTools`, and the agent's `dt` takes it besides `fmt` and `check`. The answerer has no `dt`.
+
 ## The page
 
 - **Mode**: in solo the collab menu, invite, hand-over, leave, participants and reactions-of-others are hidden; the chat
