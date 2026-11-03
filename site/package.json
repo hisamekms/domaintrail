@@ -1,0 +1,19 @@
+{
+  "name": "domaintrail-site",
+  "private": true,
+  "type": "module",
+  "description": "The Event Storming guide for facilitators (Astro Starlight), published to GitHub Pages",
+  "scripts": {
+    "figures": "bun ./scripts/figures.ts",
+    "shots": "bun ./scripts/shots.ts",
+    "examples:check": "bun ./scripts/check-examples.ts",
+    "dev": "bun run figures && astro dev",
+    "build": "bun run figures && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.8",
+    "@lucide/astro": "1.62.0",
+    "astro": "7.4.4"
+  }
+}

@@ -1,0 +1,26 @@
+---
+// A phase's before and after: the example before the chapter and after it, each drawn by `dt export svg` (a figure) or
+// captured from the Live View (a shot).
+import Figure from './Figure.astro';
+
+type Kind = 'figure' | 'shot';
+
+interface Props {
+    before: string;
+    beforeKind?: Kind;
+    beforeLabel: string;
+    beforeAlt?: string;
+    after: string;
+    afterKind?: Kind;
+    afterLabel: string;
+    afterAlt?: string;
+    caption?: string;
+}
+
+const { before, beforeKind = 'figure', beforeLabel, beforeAlt, after, afterKind = 'figure', afterLabel, afterAlt, caption } = Astro.props;
+---
+
+<div class="ba not-content">
+    <Figure name={before} kind={beforeKind} label={beforeLabel} alt={beforeAlt ?? beforeLabel} />
+    <Figure name={after} kind={afterKind} label={afterLabel} alt={afterAlt ?? afterLabel} caption={caption} />
+</div>

@@ -1,0 +1,3 @@
+# the figures are drawn by scripts/figures.ts (bun run figures), never committed
+public/figures/
+.astro/

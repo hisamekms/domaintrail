@@ -1,0 +1,31 @@
+---
+// The four cards of a phase: 目的 / 人がすること / dt ですること / 終わったと言える状態. Each is a named slot, written in MDX.
+import Icon from './Icon.astro';
+
+interface Props {
+    /** what the app's guide map says when the step is done (its ✓); none for a step the map does not have */
+    map?: string;
+}
+
+const { map } = Astro.props;
+---
+
+<div class="four not-content">
+    <section class="fc">
+        <h3><Icon name="compass" size={18} /> 目的</h3>
+        <div class="b"><slot name="goal" /></div>
+    </section>
+    <section class="fc">
+        <h3><Icon name="users" size={18} /> 人がすること</h3>
+        <div class="b"><slot name="people" /></div>
+    </section>
+    <section class="fc">
+        <h3><Icon name="sparkles" size={18} /> dt ですること</h3>
+        <div class="b"><slot name="dt" /></div>
+    </section>
+    <section class="fc done">
+        <h3><Icon name="circle-check-big" size={18} /> 終わったと言える状態</h3>
+        <div class="b"><slot name="done" /></div>
+        {map && <p class="map">{map}</p>}
+    </section>
+</div>

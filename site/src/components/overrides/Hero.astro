@@ -1,0 +1,36 @@
+---
+// Starlight's Hero, as the approved preview has it: the title, the lead, who it is for, two actions, and the whole of
+// the example drawn from its workspace.
+import Icon from '../Icon.astro';
+import Figure from '../Figure.astro';
+import { withBase } from '../../journey';
+
+// Starlight's id of the page title (its constants are not exported)
+const PAGE_TITLE_ID = '_top';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero ?? {};
+const href = (link: string): string => (/^[a-z]+:/.test(link) ? link : withBase(link));
+---
+
+<div class="hero2">
+    <div>
+        <h1 id={PAGE_TITLE_ID} data-page-title set:html={title} />
+        {tagline && <p class="lead" set:html={tagline} />}
+        <div class="meta">
+            <span><Icon name="user-round" size={15} /> ファシリテーター向け</span>
+            <span><Icon name="clock" size={15} /> 2〜3時間 × 1〜3回</span>
+            <span><Icon name="users" size={15} /> 3〜8人</span>
+        </div>
+        <div class="cta">
+            {
+                actions.map((a, i) => (
+                    <a class={i === 0 ? 'p' : 's'} href={href(a.link)}>
+                        {a.text}
+                    </a>
+                ))
+            }
+        </div>
+    </div>
+    <Figure name="es-overall" alt="住民票のコンビニ交付のストーミング（段階と例外）" caption="このガイドの例：住民票のコンビニ交付" />
+</div>
