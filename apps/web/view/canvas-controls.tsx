@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, ChevronsLeft, ChevronsRight, Focus, FoldHorizontal, Maximize, Minus, Plus } from 'lucide-react';
+import { BookOpen, ChevronsLeft, ChevronsRight, Focus, FoldHorizontal, LoaderCircle, Maximize, Minus, Plus, Printer } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
@@ -10,8 +10,8 @@ const ANIMATE = { animate: true };
 /**
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
  * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection), the legend's button,
- * which opens it upward, 「詰めて表示」 (every diagram in its compact layout, remembered), and « , which collapses all of
- * it into a » in the same corner (as `U` does, remembered).
+ * which opens it upward, 「詰めて表示」 (every diagram in its compact layout, remembered), 印刷 (the diagram alone, on one
+ * page), and « , which collapses all of it into a » in the same corner (as `U` does, remembered).
  */
 export function CanvasControls(props: {
     canvas: DiagramCanvas | null;
@@ -22,6 +22,8 @@ export function CanvasControls(props: {
     keys?: boolean;
     /** 「詰めて表示」, if the canvas offers it (the main canvas). */
     compact?: { on: boolean; onToggle: () => void };
+    /** The 印刷 action, if the canvas offers it (the main canvas); `preparing` while it gets the compact layout. */
+    print?: { preparing: boolean; onPrint: () => void };
 }) {
     const { canvas, fitAll, legend } = props;
     const t = useT();
@@ -78,6 +80,11 @@ export function CanvasControls(props: {
                     >
                         <FoldHorizontal size={14} aria-hidden />
                     </button>
+                )}
+                {props.print && (
+                    <ControlButton label={props.print.preparing ? t.canvasControls.printing : t.canvasControls.print} onClick={props.print.onPrint}>
+                        {props.print.preparing ? <LoaderCircle size={14} className="spin" aria-hidden /> : <Printer size={14} aria-hidden />}
+                    </ControlButton>
                 )}
                 {legend && (
                     <button

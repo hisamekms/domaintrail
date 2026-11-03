@@ -2131,7 +2131,9 @@ relations (`on`, `issues`, `emits`: possible, not "happened"), dotted lines the 
 `target`; a hotspot's `on` without an arrowhead), dashed arrows the order of a timeline.
 Every note is a square of the same size: a long label is drawn smaller, and one too long even then is cut short with
 «…» (hovering it shows the whole label; S015 warns about it), so keep labels short (about 12 Japanese characters).
-The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`. In
+The layout is automatic, left to right; positions are kept in `.domaintrail/layout.json`, never in the `.dtes`.
+詰めて表示 in the canvas's controls closes up the gaps between the notes (every diagram, remembered per browser), and
+印刷 prints the diagram alone, fitted to one landscape page (Ctrl+P too). In
 `dt open`, the イベントストーミング tab shows one storming at a time, with the storming and the timeline picked as
 its toolbar's subject (a breadcrumb at the left) and the level next to them; selecting a note shows the element, its `ref` and relations, and the timelines an event appears in (and
 デザインレベルのみ for an event marked `level design`).

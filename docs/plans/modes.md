@@ -980,3 +980,22 @@ A template only puts text in the composer.
 - **Templates**: eight built in (both languages) and the team's in the top-level `templates` of `domaintrail.jsonc`
   (`{ id, name, text, when? }`, a name and a text as one string or `{ ja, en }`; at most 30), validated by
   Collaboration (`checkTemplates`) and in the JSON schema, used by `dt open` and `dt collab`.
+
+### As built: 詰めて表示 and printing
+
+A user asked to close up the gaps between sticky notes when printing (decided 2026-11-03):
+
+- **Layout**: a layout option `spacing` (`normal` | `compact`) reaches ELK (`SPACING_OPTIONS`: between layers 60 → 20,
+  nodes 40 → 12, edge–node 24 → 8, edge–edge 16 → 6, edge label 6 → 3; a container's sides 20 → 10) and the stages'
+  grid (`GRID_SPACING`: columns 72 → 32, stages 64 → 24, rows 72 → 52, before the loose notes 72 → 24, a frame's sides
+  40 → 12 and heading 46 → 40). Layout runs on the server; the page asks for a compact layout on demand
+  (`/api/compact?graph=<id>` for a pushed graph, `spacing=compact` on `/api/focus`), and the view service caches and
+  saves it under `<graph id>#compact` beside the normal one (a compact layout is canonical: no incremental hints).
+- **The page**: 詰めて表示 in the canvas's controls (remembered per browser, off by default) for every diagram,
+  the inspector's state diagrams included; its own camera, no ghosts, its own cursor location (`layoutKey` `~compact`).
+- **Printing**: a print sheet drawn into `<body>` while printing only: the scene in an `<svg>` whose viewBox is the
+  diagram's bounds (HTML boxes in a `foreignObject`, edges as SVG), so the browser fits it to any page; `@page { size:
+  landscape }` while it is drawn, the app hidden by `@media print`, the light theme from `beforeprint` to `afterprint`.
+  Ctrl+P draws the sheet synchronously in `beforeprint` (`flushSync`) with the compact layout if the page has it; the
+  印刷 action waits for the compact layout (at most 5 s) and the fonts, then calls `window.print()`. The catalog prints
+  as a page.

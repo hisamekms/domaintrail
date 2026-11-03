@@ -7666,3 +7666,89 @@ label.proposal-option {
 .chat-brief-waiting {
     margin: var(--space-2) 0 0;
 }
+
+/* ---------- printing (view/print.tsx) ---------- */
+
+/* the diagram as printed: drawn beside the app while printing, never seen on the screen (its notes' labels are still
+   laid out, to be fitted) */
+.print-sheet {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+}
+.print-sheet-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+.print-sheet-boxes {
+    position: relative;
+}
+
+@media print {
+    /* light colours on white paper, the sticky notes' colours kept */
+    html,
+    body,
+    #root {
+        height: auto;
+        background: #fff;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+    .tooltip,
+    .edge-hint {
+        display: none !important;
+    }
+
+    /* a diagram: its sheet alone, the whole of one page */
+    body:has(> .print-sheet) > :not(.print-sheet) {
+        display: none !important;
+    }
+    .print-sheet {
+        position: static;
+        visibility: visible;
+        width: 100%;
+        /* a hair less than the page, so that rounding never pushes it onto a second one */
+        height: calc(100vh - 2px);
+        z-index: auto;
+        overflow: hidden;
+        break-inside: avoid;
+    }
+
+    /* the catalog: its list as a page, without the panes, the tabs and the canvas around it */
+    .app {
+        display: block;
+        height: auto;
+    }
+    .left,
+    .resizer,
+    .dock,
+    .conversation,
+    .launcher-slot,
+    .banners,
+    .view-tabs,
+    .diagram-canvas,
+    .canvas-controls {
+        display: none !important;
+    }
+    .main,
+    .canvas-pane,
+    .center,
+    .view-area {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+    .catalog {
+        position: static;
+        overflow: visible;
+        padding: 0;
+    }
+}
