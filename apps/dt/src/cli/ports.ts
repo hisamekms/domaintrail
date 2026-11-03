@@ -45,6 +45,11 @@ export interface CliDeps {
     startAgent(options: AgentOptions): Promise<StartedAgent>;
     /** Starts the language server over stdio; resolves once it listens. */
     startLanguageServer(options: LanguageServerOptions): Promise<void>;
+    /**
+     * Whether git would commit the local override `file` (`tracked`, `unignored`), or not (`ignored`; `undefined`: no
+     * repository). Absent: never asked.
+     */
+    localConfigState?(file: string): Promise<'tracked' | 'unignored' | 'ignored' | undefined>;
 }
 
 /** What `dt open --host <non-loopback>` asks of the Live View. */

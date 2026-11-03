@@ -1,6 +1,7 @@
 // The configuration through the CLI: what check and generate read from it and write (loading it:
 // apps/dt/src/config/config.test.ts, the sections by their owners).
 import { afterEach, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -339,5 +340,59 @@ describe('.gitignore', () => {
         } finally {
             process.chdir(cwd);
         }
+    });
+});
+
+describe('CLI with a local override (domaintrail.local.jsonc)', () => {
+    test('check reads the merged configuration; a local file alone is the configuration', async () => {
+        const dir = await project({
+            'domaintrail.jsonc': '{ "sources": ["domain/**/*.dt"] }',
+            'domaintrail.local.jsonc': '{ "sources": ["mine/**/*.dt"] }',
+            'domain/s.dt': MODEL,
+            'mine/broken.dt': 'context {',
+        });
+        const merged = await run('-r', dir, 'check');
+        expect(merged.code).toBe(1);
+        expect(merged.err.join('\n')).toContain('broken.dt');
+        await rm(path.join(dir, 'domaintrail.jsonc'));
+        await writeFile(path.join(dir, 'domaintrail.local.jsonc'), '{ "sources": ["domain/**/*.dt"] }');
+        expect((await run('-r', dir, 'check')).out).toEqual(['1 file(s) checked: 0 error(s), 0 warning(s).']);
+        await writeFile(path.join(dir, 'domaintrail.local.jsonc'), '{ "nope": 1 }');
+        const bad = await run('-r', dir, 'check');
+        expect(bad.code).toBe(2);
+        expect(bad.err.join('\n')).toContain(`${path.join(dir, 'domaintrail.local.jsonc')}: unknown key 'nope'`);
+    });
+
+    test('-c <name>.<ext> merges <name>.local.<ext> beside it', async () => {
+        const dir = await project({
+            'conf/team.jsonc': '{ "sources": ["domain/**/*.dt"] }',
+            'conf/team.local.jsonc': '{ "sources": ["none/**/*.dt"] }',
+            'conf/domain/s.dt': MODEL,
+        });
+        const r = await run('-c', path.join(dir, 'conf', 'team.jsonc'), 'check');
+        expect(r.err.join('\n')).toContain('No .dt or .dtes files found');
+    });
+
+    test('the startup lines name both files, and warn when git would commit the local file', async () => {
+        const dir = await project({ 'domaintrail.jsonc': '{}', 'domaintrail.local.jsonc': '{}' });
+        const git = (...args: string[]): void => {
+            execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd: dir, stdio: 'ignore' });
+        };
+        git('init', '-q');
+        const rel = (f: string): string => path.relative(process.cwd(), path.join(dir, f));
+        const local = rel('domaintrail.local.jsonc');
+        // the agent prints them before pairing (which fails here: no server runs)
+        const unignored = await run('-r', dir, 'agent', '--code', 'x');
+        expect(unignored.code).toBe(1);
+        expect(unignored.out[0]).toBe(`Config: ${rel('domaintrail.jsonc')} + ${local}`);
+        expect(unignored.err[0]).toBe(
+            `Warning: ${local} is not ignored by git, and it is your own: add this line to ${rel('.gitignore')}: domaintrail.local.jsonc`,
+        );
+        await writeFile(path.join(dir, '.gitignore'), 'domaintrail.local.jsonc\n');
+        expect((await run('-r', dir, 'agent', '--code', 'x')).err.join('\n')).not.toContain('Warning');
+        git('add', '-f', 'domaintrail.local.jsonc');
+        expect((await run('-r', dir, 'agent', '--code', 'x')).err[0]).toBe(
+            `Warning: ${local} is tracked by git, and it is your own: \`git rm --cached domaintrail.local.jsonc\`, then add this line to ${rel('.gitignore')}: domaintrail.local.jsonc`,
+        );
     });
 });

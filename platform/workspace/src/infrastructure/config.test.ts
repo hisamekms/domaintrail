@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { type ConfigFileFormat, findConfigFile, loadConfig } from './config.js';
+import { type ConfigFileFormat, findConfigFile, findConfigFiles, loadConfig } from './config.js';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -54,5 +54,42 @@ describe('config file', () => {
         const e: unknown = await loadConfig({ start: dir, configPath: 'nope.json' }, format).catch((x: unknown) => x);
         expect(e).toBeInstanceOf(RangeError);
         expect(String(e)).toContain('missing nope.json');
+    });
+
+    test('the local override beside the file found, or alone in a directory: merged by the format', async () => {
+        const local: ConfigFileFormat<{ project?: string; local?: string; root?: string }> = {
+            files: FILES,
+            resolve: (text, file) => ({ project: `${file}:${text}` }),
+            localFiles: (file) => [path.join(path.dirname(file), 'domaintrail.local.jsonc'), path.join(path.dirname(file), 'domaintrail.local.json')],
+            resolveWithLocal: (project, l) => ({ ...(project && { project: `${project.file}:${project.text}` }), local: `${l.file}:${l.text}` }),
+            defaults: (root) => ({ root }),
+            notFound: (configPath) => new RangeError(`missing ${configPath}`),
+        };
+        const dir = await project({
+            'domaintrail.json': 'P',
+            'domaintrail.local.json': 'L2',
+            'domaintrail.local.jsonc': 'L',
+            'alone/domaintrail.local.json': 'A',
+            'alone/sub/x.txt': '',
+            'conf/team.jsonc': 'T',
+            'conf/domaintrail.local.jsonc': 'not-for-team',
+            'conf/team.local.jsonc': 'TL',
+        });
+        // .local.jsonc first, beside domaintrail.json too
+        expect(await loadConfig({ start: dir }, local)).toEqual({
+            project: `${path.join(dir, 'domaintrail.json')}:P`,
+            local: `${path.join(dir, 'domaintrail.local.jsonc')}:L`,
+        });
+        // a local file alone is the nearest configuration
+        expect(findConfigFiles({ start: path.join(dir, 'alone', 'sub') }, local)).toEqual({ local: path.join(dir, 'alone', 'domaintrail.local.json') });
+        expect(await loadConfig({ start: path.join(dir, 'alone', 'sub') }, local)).toEqual({ local: `${path.join(dir, 'alone', 'domaintrail.local.json')}:A` });
+        // -c: the format names the local file beside it
+        const team = { ...local, localFiles: (file: string) => [file.replace(/\.jsonc$/, '.local.jsonc')] };
+        expect(findConfigFiles({ start: dir, configPath: path.join(dir, 'conf', 'team.jsonc') }, team)).toEqual({
+            file: path.join(dir, 'conf', 'team.jsonc'),
+            local: path.join(dir, 'conf', 'team.local.jsonc'),
+        });
+        // a format without a local override reads the file alone
+        expect(await loadConfig({ start: dir }, format)).toEqual({ text: 'P', file: path.join(dir, 'domaintrail.json') });
     });
 });

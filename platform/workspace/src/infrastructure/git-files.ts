@@ -134,3 +134,20 @@ export async function gitNestedRepositories(root: string, options: GitFilesOptio
     }
     return found;
 }
+
+/**
+ * Whether git would commit the file `file` (absolute): `tracked`, `unignored` (untracked and not ignored: `git add .`
+ * takes it) or `ignored`; `undefined`: it is in no git repository. For the local override of the configuration, which
+ * must never be committed.
+ */
+export async function gitFileState(file: string, options: GitFilesOptions = {}): Promise<'tracked' | 'unignored' | 'ignored' | undefined> {
+    const dir = path.dirname(path.resolve(file));
+    if (!repositoryTop(dir)) return undefined;
+    const name = path.basename(file);
+    const tracked = await git(dir, ['ls-files', '--error-unmatch', '--', name], options);
+    if (tracked.code === 0) return 'tracked';
+    const ignored = await git(dir, ['check-ignore', '-q', '--', name], options);
+    if (ignored.code === 0) return 'ignored';
+    if (ignored.code === 1) return 'unignored';
+    throw new Error(`git check-ignore failed in ${dir}: ${ignored.stderr || `exit ${ignored.code}`}`);
+}

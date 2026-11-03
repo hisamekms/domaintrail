@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://domaintrail.dev/schema/domaintrail.schema.json",
-  "title": "DomainTrail configuration (domaintrail.jsonc / domaintrail.json)",
-  "description": "Paths are relative to this file. CLI options (--out, --port, --host) take precedence.",
+  "title": "DomainTrail configuration (domaintrail.jsonc / domaintrail.json, and the local override domaintrail.local.jsonc / domaintrail.local.json)",
+  "description": "Paths are relative to this file. CLI options (--out, --port, --host) take precedence. A local override beside it (domaintrail.local.jsonc, or .local.json; <name>.local.<ext> beside a -c <name>.<ext>) holds your own settings and is never committed: it is read after this file and merged into it (objects key by key, arrays and scalars replaced), any setting included, and validated against this same schema. Alone, without a project file, it is the configuration.",
   "type": "object",
   "additionalProperties": false,
   "properties": {

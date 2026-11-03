@@ -293,7 +293,11 @@ describe('dt agent', () => {
         const { deps, calls } = fakeDeps(USABLE);
         const both = await run(deps, '-r', dir, 'agent', '--code', 'c1', '--once');
         expect(both.code).toBe(0);
-        expect(both.out).toEqual(['Agent on session s1 with claude (roles answer, run) (one run); waiting.', 'Done.']);
+        expect(both.out).toEqual([
+            `Config: ${path.relative(process.cwd(), path.join(dir, 'domaintrail.jsonc'))}`,
+            'Agent on session s1 with claude (roles answer, run) (one run); waiting.',
+            'Done.',
+        ]);
         expect((await run(deps, '-r', dir, 'agent', '--code', 'c2', '--url', 'http://127.0.0.1:9/', '--role', 'run')).out.at(-1)).toBe('Session closed.');
         expect(calls.connects).toEqual([{ code: 'c1' }, { code: 'c2', url: 'http://127.0.0.1:9/' }]);
         // a standalone agent pairs with a code: there is no credential file to read

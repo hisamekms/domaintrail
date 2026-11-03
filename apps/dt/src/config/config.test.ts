@@ -13,8 +13,11 @@ import {
     CONFIG_KEYS,
     ConfigError,
     defaultConfig,
+    localConfigFiles,
+    mergeConfig,
     parseJsonc,
     resolveConfig,
+    resolveConfigWithLocal,
     type ResolvedAgentSection,
     type ResolvedCollabConfig,
     type ResolvedConfig,
@@ -297,6 +300,78 @@ describe('config file', () => {
     test('an explicit file that does not exist', () => {
         expect(CONFIG_FILE_FORMAT.notFound('nope.json')).toEqual(new ConfigError('Config file not found: nope.json'));
         expect(CONFIG_FILE_FORMAT.files).toEqual(['domaintrail.jsonc', 'domaintrail.json']);
+    });
+});
+
+describe('the local override (domaintrail.local.jsonc)', () => {
+    const LOCAL = path.join(ROOT, 'domaintrail.local.jsonc');
+    const withLocal = (project: string | undefined, local: string): ResolvedConfig =>
+        resolveConfigWithLocal(project === undefined ? undefined : { text: project, file: FILE }, { text: local, file: LOCAL });
+    const refused = (project: string | undefined, local: string): string => {
+        try {
+            withLocal(project, local);
+        } catch (e) {
+            expect(e).toBeInstanceOf(ConfigError);
+            return e instanceof Error ? e.message : String(e);
+        }
+        throw new Error('not refused');
+    };
+
+    test('merged into the project file: objects key by key, arrays and scalars replaced', () => {
+        expect(mergeConfig({ a: { b: 1, c: [1, 2] }, d: 'x' }, { a: { c: [3] }, d: null, e: true })).toEqual({ a: { b: 1, c: [3] }, d: null, e: true });
+        expect(mergeConfig({ a: { b: 1 } }, { a: [1] })).toEqual({ a: [1] });
+        expect(mergeConfig([1, 2], { a: 1 })).toEqual({ a: 1 });
+        const c = withLocal(
+            '{ "sources": ["domain/**/*.dt"], "agent": { "run": { "model": "sonnet", "allowedTools": ["Read", "Edit"] }, "answer": { "timeout": 60 } } }',
+            '// mine\n{ "agent": { "run": { "allowedTools": ["Read"] }, "answer": { "model": "opus" } }, "open": { "port": 4440 }, }',
+        );
+        expect(c.file).toBe(FILE);
+        expect(c.localFile).toBe(LOCAL);
+        expect(c.root).toBe(ROOT);
+        expect(c.sources).toEqual(['domain/**/*.dt']);
+        expect(c.open.port).toBe(4440);
+        expect(c.agent.run.allowedTools).toEqual(['Read']);
+        expect(c.agent.run.model).toBe('sonnet');
+        expect(c.agent.answer).toEqual({ ...AGENT_DEFAULTS.answer, timeout: 60, model: 'opus' });
+    });
+
+    test('a key named __proto__ is a key, never a prototype', () => {
+        const merged = mergeConfig({}, JSON.parse('{ "__proto__": { "polluted": true } }'));
+        expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+        expect(Object.keys(merged as object)).toEqual(['__proto__']);
+        expect(refused('{}', '{ "__proto__": { "x": 1 } }')).toBe(`${LOCAL}: unknown key '__proto__'`);
+    });
+
+    test("the project file's errors name it; the merge's name the local file", () => {
+        expect(refused('{ "nope": 1 }', '{}')).toBe(`${FILE}: unknown key 'nope'`);
+        expect(refused('{ "sources": [', '{}')).toStartWith(`${FILE}: invalid JSON`);
+        expect(refused('{}', '{ "agent": { "run": { "nope": 1 } } }')).toBe(`${LOCAL}: unknown key 'agent.run.nope'`);
+        expect(refused('{}', '{ "open": { "port": "x" } }')).toStartWith(`${LOCAL}: 'open.port'`);
+        expect(refused('{}', '[]')).toBe(`${LOCAL}: expected an object`);
+        expect(refused('{}', '{ "session": {} }')).toStartWith(`${LOCAL}: 'session' was renamed`);
+        // a setting the merge makes wrong: the local file's
+        expect(refused('{ "agent": { "run": { "warm": true } } }', '{ "agent": { "run": 3 } }')).toBe(`${LOCAL}: 'agent.run' must be an object`);
+        // the check that reads the disk, on the merge too
+        expect(refused('{}', '{ "agent": { "run": { "dt": ["node", "tools/dt.js"] } } }')).toStartWith(
+            `${LOCAL}: 'agent.run.dt' may not run anything inside the workspace`,
+        );
+    });
+
+    test('alone (no project file): it is the configuration, rooted at its directory', () => {
+        const c = withLocal(undefined, '{ "sources": ["m/*.dt"] }');
+        expect(c.file).toBeUndefined();
+        expect(c.localFile).toBe(LOCAL);
+        expect(c.root).toBe(ROOT);
+        expect(c.sources).toEqual(['m/*.dt']);
+        expect(refused(undefined, '{ "x": 1 }')).toBe(`${LOCAL}: unknown key 'x'`);
+    });
+
+    test('its names: domaintrail.local.jsonc then .local.json beside the default names; <name>.local.<ext> beside another (-c)', () => {
+        expect(localConfigFiles(FILE)).toEqual([path.join(ROOT, 'domaintrail.local.jsonc'), path.join(ROOT, 'domaintrail.local.json')]);
+        expect(localConfigFiles(path.join(ROOT, 'domaintrail.jsonc'))).toEqual([LOCAL, path.join(ROOT, 'domaintrail.local.json')]);
+        expect(localConfigFiles(path.join(ROOT, 'conf', 'team.jsonc'))).toEqual([path.join(ROOT, 'conf', 'team.local.jsonc')]);
+        expect(localConfigFiles(path.join(ROOT, 'team'))).toEqual([path.join(ROOT, 'team.local')]);
+        expect(CONFIG_FILE_FORMAT.localFiles).toBe(localConfigFiles);
     });
 });
 

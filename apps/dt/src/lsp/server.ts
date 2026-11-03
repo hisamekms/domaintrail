@@ -68,7 +68,7 @@ import { ast, docComment, DomainGeneratedModule, DomainModule, elementIdOf, form
 import { docComment as stormingDocComment, EventStormingGeneratedModule, EventStormingModule, formatStorming, stormingAst } from '@domaintrail/storming';
 import { analyze, DEFAULT_SOURCES } from '@domaintrail/analysis';
 import { type Diagnostic } from '@domaintrail/kernel';
-import { CONFIG_FILES, ConfigError, defaultConfig, type ResolvedConfig } from '../config/config.js';
+import { CONFIG_FILES, ConfigError, defaultConfig, LOCAL_CONFIG_FILES, type ResolvedConfig } from '../config/config.js';
 
 export interface LanguageServerOptions {
     /** Explicit `--root`: where to look for the config, instead of the client's workspace folder. */
@@ -124,7 +124,7 @@ export class DomainWorkspace {
         this.start = path.resolve(this.options.root ?? folder ?? process.cwd());
         try {
             this.config = await this.deps.loadConfig({ start: this.start, configPath: this.options.configPath });
-            this.adoptable = !this.config.file;
+            this.adoptable = !this.config.file && !this.config.localFile;
         } catch (e) {
             if (!(e instanceof ConfigError)) throw e;
             warn(`${e.message} (using the default sources ${DEFAULT_SOURCES.join(', ')} under ${this.start})`);
@@ -133,10 +133,14 @@ export class DomainWorkspace {
         this.scope = this.deps.sourceScope(this.config.root, this.config.sources, this.config.respectGitignore);
     }
 
-    /** Makes the config file `file` the workspace's. Returns false, after warning, when it is invalid. */
+    /**
+     * Makes the config file `file` the workspace's (with its local override; a local override alone: read from its
+     * directory). Returns false, after warning, when it is invalid.
+     */
     async adopt(file: string, warn: (message: string) => void): Promise<boolean> {
         try {
-            this.config = await this.deps.loadConfig({ start: this.start, configPath: file });
+            const local = (LOCAL_CONFIG_FILES as readonly string[]).includes(path.basename(file));
+            this.config = await this.deps.loadConfig(local ? { start: path.dirname(file) } : { start: this.start, configPath: file });
         } catch (e) {
             if (!(e instanceof ConfigError)) throw e;
             warn(e.message);
@@ -147,12 +151,15 @@ export class DomainWorkspace {
         return true;
     }
 
-    /** The config file nearest to `file`: in its directory or a parent, up to where the config was searched from. */
+    /**
+     * The config file nearest to `file`: in its directory or a parent, up to where the config was searched from (a
+     * local override alone in a directory counts as its config file).
+     */
     nearestConfig(file: string): string | undefined {
         const rel = path.relative(this.start, file);
         if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return undefined;
         for (let dir = path.dirname(file); ; dir = path.dirname(dir)) {
-            for (const name of CONFIG_FILES) {
+            for (const name of [...CONFIG_FILES, ...LOCAL_CONFIG_FILES]) {
                 const candidate = path.join(dir, name);
                 if (existsSync(candidate)) return candidate;
             }
@@ -232,14 +239,14 @@ class NearestConfig {
         await this.shared.workspace.WorkspaceManager.ready;
         if (uri.scheme !== 'file' || !this.shared.ServiceRegistry.hasServices(uri)) return;
         const file = this.workspace.nearestConfig(uri.fsPath);
-        if (!file || file === this.workspace.config.file) return;
+        if (!file || file === (this.workspace.config.file ?? this.workspace.config.localFile)) return;
         if (this.workspace.adoptable) {
             if (await this.workspace.adopt(file, this.warn)) await this.reload();
             return;
         }
         if (this.warned.has(file)) return;
         this.warned.add(file);
-        const active = this.workspace.config.file ?? `${this.workspace.config.root} (no config file)`;
+        const active = this.workspace.config.file ?? this.workspace.config.localFile ?? `${this.workspace.config.root} (no config file)`;
         this.warn(
             `${uri.fsPath} belongs to ${file}, not to the workspace of this session (${active}): its diagnostics are not computed. ` +
                 `Open ${path.dirname(file)} as its own project to check it.`,

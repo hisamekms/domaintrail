@@ -8,6 +8,7 @@ import { startLanguageServer } from './lsp/start.js';
 import {
     createGeneratedOutput,
     findDomainFiles as findSources,
+    gitFileState,
     hasCastLintRule,
     LINT_HINT,
     loadConfig as readConfig,
@@ -69,6 +70,7 @@ export function cliDeps(): CliDeps {
         issueAgentLink: async (root) => (await import('./wiring/session.js')).issueAgentLink(root),
         issueOpenLink: async (root) => (await import('./wiring/session.js')).issueOpenLink(root),
         checkAgent: async () => (await import('@domaintrail/agent')).checkClaudeCode(),
+        localConfigState: (file) => gitFileState(file),
         startAgent: async (options) => {
             // the agent's `dt` and `dt fmt` / `dt check` after it: `agent.run.dt`, else this very CLI, with the runtime
             // and the entry running it now

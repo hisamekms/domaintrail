@@ -98,7 +98,10 @@ export async function runCli(argv: readonly string[], io: CliIO, deps: CliDeps):
         .name('dt')
         .description('Domain Modeling DSL: check, generate TypeScript, and view models live.')
         .option('-r, --root <dir>', 'where to look for domaintrail.jsonc / domaintrail.json (and the workspace root without one)', '.')
-        .option('-c, --config <file>', 'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent)')
+        .option(
+            '-c, --config <file>',
+            'config file (default: domaintrail.jsonc / domaintrail.json in the root or a parent; <name>.local.<ext> beside it is merged in)',
+        )
         .exitOverride()
         .configureOutput({ writeOut: (s) => io.out(s.trimEnd()), writeErr: (s) => io.err(s.trimEnd()) })
         .addHelpText(
@@ -363,7 +366,7 @@ Examples:
             const server = await deps
                 .startViewServer({ root: cfg.root, sources: cfg.sources, respectGitignore: cfg.respectGitignore, port, host, base: opts.base, log: io.out })
                 .catch(base);
-            if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+            await printConfig(cfg);
             io.out(`Live View (read-only: ${host} is not a loopback address; the chat and the agent are on loopback only): ${server.url}`);
             await new Promise<void>(() => {}); // run until interrupted
             return;
@@ -382,7 +385,7 @@ Examples:
                 if (e instanceof SessionError) throw new CliError(e.message);
                 return base(e);
             });
-        if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+        await printConfig(cfg);
         // the printed link is the only step: opened once, it signs this browser in (a cookie) as the one person
         io.out(`Live View: ${server.facilitatorLink ?? server.url}`);
         io.out(`  (a link for you only: opened once within 60 minutes, it signs that browser in; then ${server.url}; \`dt open link\` prints another)`);
@@ -436,7 +439,7 @@ Examples:
                     throw new CliError(`Port ${settings.port} on ${settings.host} (or the agent port) is already in use; pick another with --port.`);
                 throw e;
             });
-        if (cfg.file) io.out(`Config: ${path.relative(process.cwd(), cfg.file) || cfg.file}`);
+        await printConfig(cfg);
         const opened = server.opened === 'collaborated' ? 'continued from dt open' : server.opened;
         io.out(`Session: ${server.session} (${opened}, identity ${settings.identity})`);
         io.out(`Live View: ${server.url}`);
@@ -549,6 +552,7 @@ Examples:
         )
         .action(async (opts: { agent: 'claude'; role?: AgentRole; once?: boolean; code: string; url?: string }) => {
             const cfg = await config();
+            await printConfig(cfg);
             const connect = { code: opts.code, ...(opts.url !== undefined && { url: opts.url }) };
             const agent = await deps
                 .startAgent({ ...agentOptions(cfg, opts.agent), connect, roles: opts.role ? [opts.role] : AGENT_ROLES, once: opts.once ?? false, log: io.out })
@@ -738,6 +742,27 @@ Examples:
         await agent?.stop();
         await server.stop();
         io.out('Session closed.');
+    };
+
+    /**
+     * The startup lines of a server or an agent: the config files (`Config: domaintrail.jsonc + domaintrail.local.jsonc`),
+     * and a warning when git would commit the local override (with the line for `.gitignore`).
+     */
+    const printConfig = async (cfg: ResolvedConfig): Promise<void> => {
+        const shown = (file: string): string => path.relative(process.cwd(), file) || file;
+        const files = [cfg.file, cfg.localFile].filter((f): f is string => f !== undefined);
+        if (files.length) io.out(`Config: ${files.map(shown).join(' + ')}`);
+        if (cfg.localFile) {
+            const state = await deps.localConfigState?.(cfg.localFile).catch(() => undefined);
+            const name = path.basename(cfg.localFile);
+            const ignoreFile = shown(path.join(path.dirname(cfg.localFile), '.gitignore'));
+            if (state === 'tracked')
+                io.err(
+                    `Warning: ${shown(cfg.localFile)} is tracked by git, and it is your own: \`git rm --cached ${name}\`, then add this line to ${ignoreFile}: ${name}`,
+                );
+            else if (state === 'unignored')
+                io.err(`Warning: ${shown(cfg.localFile)} is not ignored by git, and it is your own: add this line to ${ignoreFile}: ${name}`);
+        }
     };
 
     const config = async () => {
